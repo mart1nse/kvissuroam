@@ -1,7 +1,12 @@
 {
-  // Static site: `npm run build` writes the game to ./dist, Cloudflare serves it as assets.
+  // Static site: the game is built into ./dist and Cloudflare serves it as assets.
+  // The build step runs here as well, so a deploy works even if the dashboard's
+  // build command is left empty.
   "name": "kvissuroam",
-  "compatibility_date": "2026-11-01",
+  "compatibility_date": "2026-06-01",
+  "build": {
+    "command": "npm run build"
+  },
   "assets": {
     "directory": "./dist"
   }

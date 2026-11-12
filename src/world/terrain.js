@@ -64,7 +64,8 @@ export function createTerrain(world, renderer, opts) {
   const detail = makeDetailTexture();
   detail.anisotropy = Math.min(4, aniso);
 
-  const overview = loader.load(`${BASE}overview.jpg`);
+  const lows = [];
+  const overview = loader.load(`${BASE}overview.jpg`, () => { for (const t of lows) t.needsUpdate = true; });
   overview.colorSpace = THREE.SRGBColorSpace;
   overview.anisotropy = aniso;
 
@@ -113,6 +114,8 @@ export function createTerrain(world, renderer, opts) {
 
       // low-res fallback: a window into the overview image
       const low = overview.clone();
+      low.needsUpdate = false;
+      lows.push(low);
       low.repeat.set(tile / (2 * outer), tile / (2 * outer));
       low.offset.set((x0 + outer) / (2 * outer), 1 - (z0 + tile + outer) / (2 * outer));
       const matLow = groundMaterial(low, detail);
@@ -167,22 +170,25 @@ export function createTerrain(world, renderer, opts) {
   // ---- hi-res tile streaming around the camera
   let loading = 0;
   const rHi = opts.tileRadius;
+  function load(ch) {
+    ch.state = 'loading';
+    loading++;
+    loader.load(`${BASE}t_${ch.tx}_${ch.ty}.jpg`, (tex) => {
+      loading--;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = aniso;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      ch.matHi = groundMaterial(tex, detail);
+      ch.mesh.material = ch.matHi;
+      ch.state = 'hi';
+    }, undefined, () => { loading--; ch.state = 'failed'; });
+  }
   function update(camPos) {
+    const want = [];
     for (const ch of chunks) {
-      const d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
-      if (ch.state === 'low' && d < rHi && loading < 3) {
-        ch.state = 'loading';
-        loading++;
-        loader.load(`${BASE}t_${ch.tx}_${ch.ty}.jpg`, (tex) => {
-          loading--;
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.anisotropy = aniso;
-          tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-          ch.matHi = groundMaterial(tex, detail);
-          ch.mesh.material = ch.matHi;
-          ch.state = 'hi';
-        }, undefined, () => { loading--; ch.state = 'failed'; });
-      } else if (ch.state === 'hi' && d > rHi + 260) {
+      ch.d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
+      if (ch.state === 'low' && ch.d < rHi) want.push(ch);
+      else if (ch.state === 'hi' && ch.d > rHi + 260) {
         ch.mesh.material = ch.matLow;
         ch.matHi.map.dispose();
         ch.matHi.dispose();
@@ -190,6 +196,9 @@ export function createTerrain(world, renderer, opts) {
         ch.state = 'low';
       }
     }
+    // nearest first, a few at a time
+    want.sort((p, q) => p.d - q.d);
+    for (const ch of want) { if (loading >= 4) break; load(ch); }
   }
   return { group, update, pending: () => loading };
 }

@@ -192,7 +192,7 @@ function substep(car, input, world, dt) {
   const steerIn = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
   const maxLock = 0.6;
   const vS = Math.max(Math.abs(car.vx), 1);
-  const gripLock = Math.atan((1.55 * G * L) / (vS * vS));
+  const gripLock = Math.atan((1.25 * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
   const target = steerIn * lock;
   const rate = (steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25;
@@ -207,6 +207,8 @@ function substep(car, input, world, dt) {
 
   // ---- longitudinal forces
   let drive = engineForce(car, throttle, dt);
+  // ease off when the tail steps out, like a driver catching a slide
+  if (!input.handbrake && throttle > 0 && Math.abs(car.vx) > 6) drive *= Math.max(0.12, Math.min(1, 1 - (Math.abs(car.slipR || 0) - 0.07) / 0.13));
   let driveF = 0, driveR = 0;
   if (s.drive === 'rwd') driveR = drive;
   else if (s.drive === 'fwd') driveF = drive;
@@ -218,10 +220,15 @@ function substep(car, input, world, dt) {
   const hb = +input.handbrake || 0;
   if (hb) fxR = -vSign * sr.mu * fzR * 0.95;
   const capF = sf.mu * fzF, capR = sr.mu * fzR;
-  fxF = Math.max(-capF, Math.min(capF, fxF));
-  fxR = Math.max(-capR, Math.min(capR, fxR));
-  const latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.3 * capF) ** 2));
-  let latCapR = Math.sqrt(Math.max(capR * capR - fxR * fxR, (0.3 * capR) ** 2));
+  // Keyboard throttle is all-or-nothing, so the driven wheels keep a share of
+  // their grip for cornering (the way a careful right foot would).
+  const busy = Math.abs(car.vx) > 3 ? Math.min(1, Math.abs(car.steer) / 0.08 + Math.abs(car.slipR || 0) / 0.05) : 0;
+  const tc = brake > 0 || hb ? 1 : 1 - 0.3 * busy;
+  fxF = Math.max(-capF, Math.min(capF * tc, fxF));
+  fxR = Math.max(-capR, Math.min(capR * tc, fxR));
+  if (car.reversing) { fxF = Math.max(-capF * tc, fxF); fxR = Math.max(-capR * tc, fxR); }
+  const latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.55 * capF) ** 2));
+  let latCapR = Math.sqrt(Math.max(capR * capR - fxR * fxR, (0.55 * capR) ** 2));
   if (hb) latCapR *= 0.45;
 
   // ---- lateral tyre forces from slip angles
@@ -231,6 +238,7 @@ function substep(car, input, world, dt) {
   const vLatR = car.vy - car.b * car.yawRate;
   const slipF = Math.atan2(vLatF, Math.max(Math.abs(vLonF), v0));
   const slipR = Math.atan2(vLatR, Math.max(Math.abs(car.vx), v0));
+  car.slipR = slipR;
   const fyF = -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
   const fyR = -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
 
@@ -306,8 +314,8 @@ function substep(car, input, world, dt) {
   const ride = groundY;
   if (car.y < ride) car.y = ride; else car.y += (ride - car.y) * Math.min(1, dt * 18);
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);
-  const tPitch = car.groundPitch - car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x);
-  const tRoll = car.groundRoll + car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
+  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x);
+  const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
   car.pitch += (tPitch - car.pitch) * Math.min(1, dt * 9);
   car.roll += (tRoll - car.roll) * Math.min(1, dt * 9);
   car.wheelSpin += (car.vx / s.wheelRadius) * dt;

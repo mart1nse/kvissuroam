@@ -12,7 +12,7 @@ export function sunDirection(elevation = SUN_ELEVATION) {
   );
 }
 
-export const FOG_COLOR = new THREE.Color(0xd77fb4);
+export const FOG_COLOR = new THREE.Color(0xe08fb6);
 
 const skyVert = /* glsl */ `
 varying vec3 vDir;
@@ -51,7 +51,7 @@ void main() {
 
   // retro sun: big disc with horizontal slits in the lower half
   float ang = acos(clamp(dot(d, uSun), -1.0, 1.0));
-  float R = 0.135;
+  float R = 0.115;
   if (ang < R * 1.6) {
     float y = (d.y - uSun.y) / R;                // -1 .. 1 across the disc
     vec3 sunCol = mix(vec3(1.0, 0.25, 0.55), vec3(1.0, 0.92, 0.35), smoothstep(-0.9, 0.7, y));
@@ -124,10 +124,10 @@ export function createEnvironment(renderer) {
 }
 
 export function createLights(scene, shadowSize) {
-  const hemi = new THREE.HemisphereLight(0xb9a4ff, 0x6b3a6e, 1.15);
+  const hemi = new THREE.HemisphereLight(0xe2d6ff, 0x9a7f96, 1.5);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffc7a1, 2.3);
-  sun.position.copy(sunDirection(THREE.MathUtils.degToRad(17))).multiplyScalar(300);
+  const sun = new THREE.DirectionalLight(0xffd9bd, 2.6);
+  sun.position.copy(sunDirection(THREE.MathUtils.degToRad(26))).multiplyScalar(300);
   if (shadowSize) {
     sun.castShadow = true;
     sun.shadow.mapSize.set(shadowSize, shadowSize);

@@ -118,6 +118,7 @@ const PALETTE = {
   plastic: ['#0b0b0c', 0.62, 0.0],
   gloss: ['#040405', 0.18, 0.0],
   clad: ['#24262a', 0.78, 0.0],
+  bumper: ['#141517', 0.6, 0.0],
   rubber: ['#0a0a0a', 0.92, 0.0],
   chrome: ['#eeeeee', 0.07, 1.0],
   alloy: ['#c2c5c9', 0.28, 1.0],
@@ -520,14 +521,14 @@ export function cutArches(body, arches, { halfWidth, depth = 0.34 }) {
       const A = pts[i], B = pts[i + 1];
       const ay = a.y + (A[1] - a.y) * rI, az = a.z + (A[2] - a.z) * rI, by = a.y + (B[1] - a.y) * rI, bz = a.z + (B[2] - a.z) * rI;
       // tunnel strip (faces the wheel)
-      pv(A[0], ay, az, 0, -A[4], -A[3]); pv(B[0], by, bz, 0, -B[4], -B[3]); pv(xWall, ay, az, 0, -A[4], -A[3]);
-      pv(B[0], by, bz, 0, -B[4], -B[3]); pv(xWall, by, bz, 0, -B[4], -B[3]); pv(xWall, ay, az, 0, -A[4], -A[3]);
+      pv(A[0], ay, az, 0, -A[4], -A[3]); pv(xWall, ay, az, 0, -A[4], -A[3]); pv(B[0], by, bz, 0, -B[4], -B[3]);
+      pv(B[0], by, bz, 0, -B[4], -B[3]); pv(xWall, ay, az, 0, -A[4], -A[3]); pv(xWall, by, bz, 0, -B[4], -B[3]);
       // inner wall
-      pv(xWall, a.y, a.z, 1, 0, 0); pv(xWall, ay, az, 1, 0, 0); pv(xWall, by, bz, 1, 0, 0);
+      pv(xWall, a.y, a.z, 1, 0, 0); pv(xWall, by, bz, 1, 0, 0); pv(xWall, ay, az, 1, 0, 0);
     }
     if (pts.length > 2) {
       const A = pts[pts.length - 1], B = pts[0];
-      pv(xWall, a.y, a.z, 1, 0, 0); pv(xWall, A[1], A[2], 1, 0, 0); pv(xWall, B[1], B[2], 1, 0, 0);
+      pv(xWall, a.y, a.z, 1, 0, 0); pv(xWall, B[1], B[2], 1, 0, 0); pv(xWall, A[1], A[2], 1, 0, 0);
     }
     liner.add(half.sym());
   }
@@ -619,7 +620,7 @@ function windowHoles(shape, n, r1, r2, spokeHalf, round, phase = 0, innerHalf) {
   }
 }
 function faceSoup(shape, depth, x, pal, bevel = 0.003) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 20 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 7 });
   g.rotateY(Math.PI / 2); g.translate(x, 0, 0);
   return fromGeo(g, null, pal);
 }
@@ -726,8 +727,8 @@ export function assembleCar({ id, dims, parts, tex = {}, wheel }) {
   const group = new THREE.Group(); group.name = id;
   const mats = {
     paint: sh.paint, glass: sh.glass, pal: sh.pal,
-    tail: new THREE.MeshStandardMaterial({ map: tex.tailMap || null, emissiveMap: tex.tailGlow || null, emissive: 0xff1a10, emissiveIntensity: 0, roughness: 0.22, metalness: 0.1 }),
-    chmsl: new THREE.MeshStandardMaterial({ color: 0x4a0505, emissive: 0xff1a10, emissiveIntensity: 0, roughness: 0.25 }),
+    tail: new THREE.MeshStandardMaterial({ map: tex.tailMap || null, emissiveMap: tex.tailGlow || null, emissive: 0xff0000, emissiveIntensity: 0, roughness: 0.22, metalness: 0.1 }),
+    chmsl: new THREE.MeshStandardMaterial({ color: 0x4a0505, emissive: 0xff0000, emissiveIntensity: 0, roughness: 0.25 }),
     reverse: new THREE.MeshStandardMaterial({ color: 0xc9cdd0, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.18, metalness: 0.3 }),
     head: new THREE.MeshStandardMaterial({ map: tex.headMap || null, emissiveMap: tex.headGlow || null, emissive: 0xfff4dd, emissiveIntensity: 0, roughness: 0.12, metalness: 0.5 }),
     atlas: new THREE.MeshStandardMaterial({ map: tex.atlas || null, alphaTest: 0.5, roughness: 0.45, metalness: 0.15 }),
@@ -756,8 +757,8 @@ export function assembleCar({ id, dims, parts, tex = {}, wheel }) {
   const state = { brake: false, reverse: false, headlights: false };
   const setLights = (o = {}) => {
     Object.assign(state, o);
-    mats.tail.emissiveIntensity = state.brake ? 3.2 : state.headlights ? 0.75 : 0;
-    mats.chmsl.emissiveIntensity = state.brake ? 3.2 : 0;
+    mats.tail.emissiveIntensity = state.brake ? 1.2 : state.headlights ? 0.35 : 0;
+    mats.chmsl.emissiveIntensity = state.brake ? 1.2 : 0;
     mats.reverse.emissiveIntensity = state.reverse ? 2.2 : 0;
     mats.head.emissiveIntensity = state.headlights ? 2.4 : 0;
   };
@@ -768,4 +769,19 @@ export function assembleCar({ id, dims, parts, tex = {}, wheel }) {
     size: { length: dims.length, width: dims.width, height: dims.height },
     setLights, triangles,
   };
+}
+
+// ---------------------------------------------------------------- small shared helpers
+export const arcPts = (cz, cy, r, a0, a1, n = 14) => Array.from({ length: n + 1 }, (_, i) => { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; return [cz + r * Math.cos(a), cy + r * Math.sin(a)]; });
+// decal frame looking at the front corner: yaw 0 = straight front view, yaw > 0 turns toward the right side.
+// 2D coords: a = -(x cos) - (z - oz) sin (so inboard is toward 0, right side negative), b = y.
+export const frontYaw = (deg, oz) => { const a = deg * Math.PI / 180; return { u: [-Math.cos(a), 0, -Math.sin(a)], v: [0, 1, 0], out: [Math.sin(a), 0, -Math.cos(a)], origin: [0, 0, oz] }; };
+// rear wiper lying on the glass: from pivot (x0,y0) to tip (x1,y1), z probed on the body
+export function rearWiper(pr, x0, y0, x1, y1) {
+  const s = new Soup(), pts = [];
+  for (let i = 0; i <= 4; i++) { const x = x0 + (x1 - x0) * i / 4, y = y0 + (y1 - y0) * i / 4; pts.push([x, y, pr.rearZ(x, y) + 0.022]); }
+  s.add(tube(pts, 0.007, null, 'plastic', 5));
+  s.add(tube(pts.slice(2), 0.011, null, 'rubber', 5));
+  s.add(cyl(0.022, 0.026, 0.035, 12, { p: [x0, y0, pr.rearZ(x0, y0) + 0.012], r: [Math.PI / 2, 0, 0] }, 'plastic'));
+  return s;
 }

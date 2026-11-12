@@ -30,7 +30,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -58,7 +58,7 @@ ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground)
 const t0 = performance.now();
 const car = buildCarModel(id);
 const buildMs = performance.now() - t0;
-scene.add(car.group);
+scene.add(car.group); window.__car = car;
 car.setLights({ brake: q.get('brake') === '1', reverse: q.get('reverse') === '1', headlights: q.get('head') === '1' });
 if (q.get('steer')) { car.wheels.fl.steer.rotation.y = +q.get('steer'); car.wheels.fr.steer.rotation.y = +q.get('steer'); }
 if (q.get('spin')) for (const k in car.wheels) car.wheels[k].spin.rotation.x = +q.get('spin');

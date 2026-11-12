@@ -1,0 +1,8 @@
+{
+  // Static site: `npm run build` writes the game to ./dist, Cloudflare serves it as assets.
+  "name": "kvissuroam",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}

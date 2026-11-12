@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a0b3b" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="KvissuRoam: free driving in Kvissentali, Tartu." />
+  <title>KvissuRoam</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a0b3b'/%3E%3Ccircle cx='16' cy='17' r='9' fill='%23ff5fa2'/%3E%3Crect y='18' width='32' height='2' fill='%231a0b3b'/%3E%3Crect y='22' width='32' height='3' fill='%231a0b3b'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <div id="loading" class="screen">
+    <h1 class="logo"><span>KVISSU</span><span>ROAM</span></h1>
+    <p class="tag">TARTU · KVISSENTALI · 58.406°N 26.702°E</p>
+    <div class="bar"><i id="loadbar"></i></div>
+    <p id="loadmsg" class="small">Loading the neighbourhood…</p>
+  </div>
+
+  <div id="menu" class="screen hidden">
+    <h1 class="logo"><span>KVISSU</span><span>ROAM</span></h1>
+    <p class="tag">FREE DRIVE · KVISSENTALI, TARTU</p>
+    <div id="cards"></div>
+    <button id="drive" class="neon">DRIVE</button>
+    <p class="small keys desktop-only">Arrow keys to drive · R back to last dry spot · H back to the driveway · G garage · M sound</p>
+    <p class="small attribution" id="attribution"></p>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="topbar">
+      <button data-act="reset" title="Back to the last intact spot (R)">↺<small>LAST SPOT</small></button>
+      <button data-act="home" title="Back to the driveway (H)">⌂<small>START</small></button>
+      <button data-act="garage" title="Change car (G)">⛍<small>GARAGE</small></button>
+      <button data-act="sound" title="Sound (M)" id="soundbtn">♪<small>SOUND</small></button>
+    </div>
+    <canvas id="minimap" width="300" height="300"></canvas>
+    <div id="street"></div>
+    <div id="dash">
+      <div id="gear">D</div>
+      <div id="speed">0</div>
+      <div id="unit">km/h</div>
+      <div id="rpm"><i></i></div>
+      <div id="carname"></div>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div class="pad left">
+      <button data-ctl="left">◀</button>
+      <button data-ctl="right">▶</button>
+    </div>
+    <div class="pad right">
+      <button data-ctl="down" class="brake">▼<small>BRAKE / REVERSE</small></button>
+      <button data-ctl="up" class="gas">▲<small>GAS</small></button>
+    </div>
+  </div>
+
+  <div id="sunk" class="screen hidden">
+    <h2>GLUB GLUB GLUB</h2>
+    <p>Your car is at the bottom of the Emajõgi.</p>
+    <div class="row">
+      <button class="neon" data-act="reset">BACK TO DRY LAND</button>
+      <button class="neon alt" data-act="home">BACK TO THE DRIVEWAY</button>
+    </div>
+  </div>
+
+  <div id="rotate" class="screen">
+    <div class="phone">⟳</div>
+    <p>Turn your phone sideways to drive.</p>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

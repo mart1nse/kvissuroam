@@ -1,18 +1,22 @@
-import fiona, json, sys, zipfile, collections
-BB=(656200,6475550,659400,6478750)
-out={}
+"""Clip the national ETAK shapefiles to the game's scenery box -> etak_bbox.json.
+
+Run in the folder that holds the unzipped ETAK themes (etak/ and etak_e/).
+"""
 import glob
-for z in ['x']:
-    for n in sorted(glob.glob('etak/**/*.shp',recursive=True)):
-        key=n.split('/')[-1][:-4]
-        feats=[]
-        with fiona.open(n) as src:
-            for f in src.filter(bbox=BB):
-                feats.append({'p':dict(f['properties']),'g':f['geometry'].__geo_interface__ if hasattr(f['geometry'],'__geo_interface__') else dict(f['geometry'])})
-        out[key]=feats
-        c=collections.Counter()
-        for f in feats:
-            c[str(f['p'].get('tyyp_t') or f['p'].get('tyyp'))]+=1
-        print(key,len(feats),dict(c.most_common(8)))
-        if feats: print('   props',{k:v for k,v in feats[0]['p'].items()})
-json.dump(out,open('etak_bbox.json','w'),default=str)
+import json
+import os
+import sys
+
+import fiona
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import E0, N0, OUTER  # noqa
+
+BB = (E0 - OUTER, N0 - OUTER, E0 + OUTER, N0 + OUTER)
+out = {}
+for path in sorted(glob.glob('etak/**/*.shp', recursive=True) + glob.glob('etak_e/**/*.shp', recursive=True)):
+    key = os.path.basename(path)[:-4]
+    with fiona.open(path) as src:
+        out[key] = [{'p': dict(f['properties']), 'g': dict(f['geometry'].__geo_interface__)} for f in src.filter(bbox=BB)]
+    print(key, len(out[key]))
+json.dump(out, open('etak_bbox.json', 'w'), default=str)

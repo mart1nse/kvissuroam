@@ -7,7 +7,7 @@
   --sun: #ffd45e;
   --font: "Avenir Next", "Futura", "Century Gothic", "Trebuchet MS", system-ui, sans-serif;
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
 html, body {
   margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: #fff;
   font-family: var(--font); user-select: none; -webkit-user-select: none; touch-action: none;
@@ -114,6 +114,22 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 #toast { left: 50%; top: 16%; transform: translateX(-50%); font-size: clamp(13px, 2.2vw, 24px); font-style: italic; font-weight: 800; letter-spacing: .12em; color: var(--sun);
   text-shadow: 2px 2px 0 var(--hot), 0 0 16px rgba(255, 200, 80, .7); opacity: 0; transition: opacity .4s; white-space: nowrap; }
 #toast.show { opacity: 1; }
+
+/* ---- city map */
+#minimap { pointer-events: auto; cursor: pointer; }
+#bigmap { position: fixed; inset: 0; z-index: 8; background: #160735; }
+#bigmap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+.maphint {
+  position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); margin: 0; padding: .5em 1.1em;
+  font-size: clamp(10px, 1.5vw, 15px); font-style: italic; font-weight: 800; letter-spacing: .16em; white-space: nowrap; pointer-events: none;
+  color: var(--sun); background: rgba(18, 6, 43, .72); border: 1.5px solid rgba(255, 43, 214, .7); border-radius: 4px; text-shadow: 0 0 10px rgba(255, 180, 60, .7);
+}
+.mapbtns { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); display: flex; gap: 8px; }
+.mapbtns button {
+  width: clamp(44px, 6vw, 60px); height: clamp(44px, 6vw, 60px); font-size: clamp(20px, 2.8vw, 28px); line-height: 1; padding: 0;
+  background: rgba(18, 6, 43, .8); border: 1.5px solid rgba(47, 243, 255, .7); border-radius: 4px; color: var(--cyan); text-shadow: 0 0 8px var(--cyan);
+}
+body:not(.touch) .touch-only { display: none; }
 
 /* ---- touch pedals */
 #touch { position: fixed; inset: 0; pointer-events: none; z-index: 6; }

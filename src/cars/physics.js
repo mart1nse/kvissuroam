@@ -227,8 +227,18 @@ function substep(car, input, world, dt) {
   fxF = Math.max(-capF, Math.min(capF * tc, fxF));
   fxR = Math.max(-capR, Math.min(capR * tc, fxR));
   if (car.reversing) { fxF = Math.max(-capF * tc, fxF); fxR = Math.max(-capR * tc, fxR); }
-  const latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.55 * capF) ** 2));
+  let latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.55 * capF) ** 2));
   let latCapR = Math.sqrt(Math.max(capR * capR - fxR * fxR, (0.55 * capR) ** 2));
+  // Hard braking unloads the rear axle, so the front tyres would out-grip the
+  // rears and any small disturbance would swing the tail round. While the
+  // wheel is held straight the front lateral grip is trimmed to what the rear
+  // axle can balance; steering into a corner hands it back, so braking into a
+  // turn still rotates the car as before.
+  if (brake > 0 && !hb) {
+    const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock));
+    const balanced = (latCapR * car.b) / car.a;
+    if (balanced < latCapF) latCapF += (balanced - latCapF) * straight * brake;
+  }
   if (hb) latCapR *= 0.45;
 
   // ---- lateral tyre forces from slip angles

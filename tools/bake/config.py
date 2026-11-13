@@ -2,16 +2,52 @@
 
 World frame: x = east - E0, z = -(north - N0), y = height - H0 (metres).
 Projection: L-EST97 (EPSG:3301).
+
+The drivable area is the polygon in boundary.json (L-EST97 coordinates). It is
+cut into square sectors that the game streams in around the car.
 """
+import json
+import os
+
 E0, N0, H0 = 657800.0, 6477150.0, 34.0
-INNER = 800.0          # half-size of the drivable square (m)
-OUTER = 1600.0         # half-size of the scenery square (m)
-HM_RES = 2.0           # inner heightmap resolution (m)
-HM_OUTER_RES = 16.0    # outer heightmap resolution (m)
+SECTOR = 640.0         # sector size (m)
+GRID0 = -800.0         # sector (0,0) starts at x = z = GRID0
+HM_RES = 2.0           # sector heightmap resolution (m)
 SURF_RES = 1.0         # surface-class mask resolution (m)
 SDF_RES = 0.5          # obstacle distance field resolution (m)
-TILE = 160.0           # ortho tile size (m)
-TILE_PX = 1024
-OVERVIEW_PX = 2048
+TILE_PX = 1024         # orthophoto tile size in pixels
+# sectors with 4x4 orthophoto tiles (0.16 m/px) instead of 2x2 (0.31 m/px)
+HI_SECTORS = {(0, 0), (1, 0), (0, 1), (1, 1)}
+# coarse far-scenery grid (world x/z, metres)
+CX0, CX1, CZ0, CZ1 = -3808.0, 6432.0, -4768.0, 7264.0
+COARSE_RES = 32.0
+OVERVIEW_PX = (3488, 4096)
+MOSAIC_RES = 1.25      # working orthophoto mosaic for roof colours / driveway detection
 # start: driveway of Kvissentali tee 8, facing the street (north)
 START_E, START_N = 657870.0, 6477151.0
+
+BOUNDARY = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boundary.json')))
+
+
+def sectors():
+    """Sector indices (sx, sz) that touch the drivable polygon."""
+    from shapely.geometry import Polygon, box
+    poly = Polygon(BOUNDARY)
+    minx, miny, maxx, maxy = poly.bounds
+    out = []
+    sx0 = int((minx - E0 - GRID0) // SECTOR); sx1 = int((maxx - E0 - GRID0) // SECTOR)
+    sz0 = int((-(maxy - N0) - GRID0) // SECTOR); sz1 = int((-(miny - N0) - GRID0) // SECTOR)
+    for sz in range(sz0, sz1 + 1):
+        for sx in range(sx0, sx1 + 1):
+            x0 = GRID0 + sx * SECTOR; z0 = GRID0 + sz * SECTOR
+            if poly.intersects(box(E0 + x0, N0 - z0 - SECTOR, E0 + x0 + SECTOR, N0 - z0)):
+                out.append((sx, sz))
+    return out
+
+
+def detail_rect():
+    """World-space rectangle (x0, z0, x1, z1) covering all sectors."""
+    s = sectors()
+    xs = [a for a, _ in s]; zs = [b for _, b in s]
+    return (GRID0 + min(xs) * SECTOR, GRID0 + min(zs) * SECTOR,
+            GRID0 + (max(xs) + 1) * SECTOR, GRID0 + (max(zs) + 1) * SECTOR)

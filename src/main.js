@@ -16,9 +16,9 @@ document.body.classList.toggle('touch', isTouch);
 const params = new URLSearchParams(location.search);
 
 const quality = isTouch
-  ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 340, treeDetail: 0, treeShadows: false, skipFarTrees: true, anisotropy: 4, far: 2600 }
-  : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 520, treeDetail: 1, treeShadows: true, skipFarTrees: false, anisotropy: 8, far: 5200 };
-if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, skipFarTrees: true });
+  ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 380, treeDetail: 0, treeShadows: false, thinTrees: true, anisotropy: 4, far: 2600, loadRadius: 520 }
+  : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000 };
+if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
 
 const canvas = $('#view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
@@ -73,8 +73,22 @@ async function boot() {
   scene.add(terrain.group);
   bar.style.width = '88%';
   await new Promise((r) => setTimeout(r));
-  scene.add(createBuildings(world));
-  scene.add(createTrees(world, quality));
+  const buildBuildings = createBuildings();
+  const buildTrees = createTrees(quality);
+  world.onSectorLoad((s) => {
+    terrain.addSector(s);
+    s.bMesh = buildBuildings(s);
+    if (s.bMesh) scene.add(s.bMesh);
+    s.tree = buildTrees(s);
+    if (s.tree) scene.add(s.tree.group);
+  });
+  world.onSectorUnload((s) => {
+    terrain.removeSector(s);
+    if (s.bMesh) { scene.remove(s.bMesh); s.bMesh.geometry.dispose(); s.bMesh = null; }
+    if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
+  });
+  const s0 = world.meta.start;
+  await world.loadAround(s0.x, s0.z, 200);
   water = createWater(world);
   scene.add(water.group);
   edge = createEdgeGrid(world);
@@ -225,7 +239,8 @@ function frame() {
   elapsed += dt;
   if (!car) return;
 
-  stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
+  // hold the car still while the ground under it is still loading (after a jump across the map)
+  if (world.ready(car.x, car.z)) stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
 
   if (mode === 'drive') {
     // remember safe ground
@@ -298,7 +313,12 @@ function frame() {
   edge.mat.uniforms.uCam.value.copy(camera.position);
   edge.mat.uniforms.uTime.value = elapsed;
   tileTimer -= dt;
-  if (tileTimer <= 0) { tileTimer = 0.25; terrain.update(camera.position); }
+  if (tileTimer <= 0) {
+    tileTimer = 0.25;
+    world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500);
+    terrain.update(camera.position);
+    for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
+  }
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   audio.update(car, mode === 'drive');

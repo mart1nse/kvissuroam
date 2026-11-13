@@ -1,11 +1,18 @@
 // Loads the baked map data and answers "what is under this point" queries.
+// The map is cut into square sectors that are streamed in around the car.
 
 const BASE = `${import.meta.env.BASE_URL}data/`;
 
 async function fetchBuf(name) {
   const r = await fetch(BASE + name);
   if (!r.ok) throw new Error(`Failed to load ${name}`);
-  return r.arrayBuffer();
+  const buf = await r.arrayBuffer();
+  const u8 = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+  if (u8[0] === 0x1f && u8[1] === 0x8b) {       // gzip that the server did not unpack for us
+    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).arrayBuffer();
+  }
+  return buf;
 }
 
 async function fetchJson(name) {
@@ -14,119 +21,158 @@ async function fetchJson(name) {
   return r.json();
 }
 
-// Decode a greyscale PNG to one byte per pixel.
-async function fetchGrey(name, n) {
-  const r = await fetch(BASE + name);
-  if (!r.ok) throw new Error(`Failed to load ${name}`);
-  const blob = await r.blob();
-  let bmp;
-  try {
-    bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-  } catch {
-    bmp = await createImageBitmap(blob);
-  }
-  const out = new Uint8Array(n * n);
-  // draw in strips to keep the temporary RGBA buffer small on phones
-  const strip = 400;
-  const cv = document.createElement('canvas');
-  cv.width = n;
-  cv.height = strip;
-  const ctx = cv.getContext('2d', { willReadFrequently: true });
-  for (let y0 = 0; y0 < n; y0 += strip) {
-    const h = Math.min(strip, n - y0);
-    ctx.clearRect(0, 0, n, strip);
-    ctx.drawImage(bmp, 0, y0, n, h, 0, 0, n, h);
-    const px = ctx.getImageData(0, 0, n, h).data;
-    for (let i = 0, o = y0 * n; i < n * h; i++, o++) out[o] = px[i * 4];
-  }
-  bmp.close?.();
-  return out;
-}
-
 export const SURFACE = { GRASS: 0, PAVED: 1, GRAVEL: 2, DIRT: 3, WATER: 4 };
 
 export async function loadWorldData(onProgress = () => {}) {
   let done = 0;
-  const total = 8;
-  const tick = (p) => p.then((v) => { onProgress(++done / total); return v; });
-
-  const meta = await tick(fetchJson('meta.json'));
-  const [hBuf, hoBuf, surface, sdf, vectors, treesBuf, buildingsBuf] = await Promise.all([
-    tick(fetchBuf('height.bin')),
-    tick(fetchBuf('height_outer.bin')),
-    tick(fetchGrey('surface.png', meta.surface.n)),
-    tick(fetchGrey('sdf.png', meta.sdf.n)),
-    tick(fetchJson('vectors.json')),
-    tick(fetchBuf('trees.bin')),
-    tick(fetchBuf('buildings.bin')),
+  const tick = (p) => p.then((v) => { onProgress(++done / 3); return v; });
+  const [meta, coarseBuf, vectors] = await Promise.all([
+    tick(fetchJson('meta.json')), tick(fetchBuf('coarse.bin')), tick(fetchJson('vectors.json')),
   ]);
 
-  const H = new Uint16Array(hBuf);
-  const HO = new Uint16Array(hoBuf);
-  const { inner, outer } = meta;
+  const C = new Uint16Array(coarseBuf);
+  const co = meta.coarse;
+  const S = meta.sector.size, G0 = meta.sector.grid0;
   const hn = meta.height.n, hres = meta.height.res;
-  const on = meta.height.outerN, ores = meta.height.outerRes;
   const hs = meta.height.scale, hoff = meta.height.offset;
   const sn = meta.surface.n, sres = meta.surface.res;
   const dn = meta.sdf.n, dres = meta.sdf.res;
   const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
 
-  const world = {
-    meta, vectors, treesBuf, buildingsBuf, inner, outer,
-    heightRaw: H, heightOuterRaw: HO,
+  const key = (sx, sz) => (sx + 512) * 4096 + (sz + 512);
+  const sectors = new Map();
+  for (const [sx, sz, div] of meta.sector.list) {
+    const x0 = G0 + sx * S, z0 = G0 + sz * S;
+    sectors.set(key(sx, sz), { sx, sz, div, x0, z0, x1: x0 + S, z1: z0 + S, state: 'idle', d: 0 });
+  }
+  const onLoad = [], onUnload = [];
+  let last = null, loading = 0;
 
-    // Height of grid node (col,row) of the inner grid, metres.
-    nodeHeight(c, r) { return H[r * hn + c] * hs + hoff; },
-    outerNodeHeight(c, r) { return HO[r * on + c] * hs + hoff; },
+  function find(x, z) {
+    if (last !== null && x >= last.x0 && x < last.x1 && z >= last.z0 && z < last.z1) return last;
+    const s = sectors.get(key(Math.floor((x - G0) / S), Math.floor((z - G0) / S)));
+    if (s !== undefined && s.state === 'ready') { last = s; return s; }
+    return null;
+  }
+
+  function load(s) {
+    s.state = 'loading';
+    loading++;
+    s.promise = fetchBuf(`sec/${s.sx}_${s.sz}.kvs`).then((buf) => {
+      const head = new Uint32Array(buf, 0, 8);
+      const nv = head[4], nt = head[5];
+      let o = 32;
+      s.H = new Uint16Array(buf.slice(o, o + hn * hn * 2)); o += hn * hn * 2;
+      s.S = new Uint8Array(buf, o, sn * sn); o += sn * sn;
+      s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
+      s.buildings = { nv, buf, offset: o }; o += nv * 15;
+      s.trees = new Float32Array(buf.slice(o, o + nt * 24));
+      s.state = 'ready';
+      loading--;
+      for (const f of onLoad) f(s);
+    }, (err) => { loading--; s.state = 'failed'; console.warn(err); });
+    return s.promise;
+  }
+
+  function unload(s) {
+    for (const f of onUnload) f(s);
+    if (last === s) last = null;
+    s.H = s.S = s.D = s.buildings = s.trees = null;
+    s.state = 'idle';
+  }
+
+  const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
+
+  const world = {
+    meta, vectors, sectors, coarse: C,
+    onSectorLoad(f) { onLoad.push(f); },
+    onSectorUnload(f) { onUnload.push(f); },
+    pending: () => loading,
+
+    // Start loading sectors within rLoad of the point, drop those beyond rKeep.
+    update(x, z, rLoad, rKeep) {
+      const want = [];
+      for (const s of sectors.values()) {
+        s.d = rectDist(s, x, z);
+        if (s.state === 'idle' && s.d < rLoad) want.push(s);
+        else if (s.state === 'ready' && s.d > rKeep) unload(s);
+      }
+      want.sort((a, b) => a.d - b.d);
+      for (const s of want) { if (loading >= 3) break; load(s); }
+    },
+
+    // Load everything within r of the point and wait for it.
+    loadAround(x, z, r) {
+      const jobs = [];
+      for (const s of sectors.values()) {
+        if (rectDist(s, x, z) >= r) continue;
+        if (s.state === 'idle' || s.state === 'failed') jobs.push(load(s));
+        else if (s.state === 'loading') jobs.push(s.promise);
+      }
+      return Promise.all(jobs);
+    },
+
+    // True when the ground under the point is available in full detail (or never will be).
+    ready(x, z) {
+      if (find(x, z) !== null) return true;
+      const s = sectors.get(key(Math.floor((x - G0) / S), Math.floor((z - G0) / S)));
+      return s === undefined || s.state === 'failed';
+    },
+
+    coarseHeight(x, z) {
+      let fx = (Math.max(co.x0, Math.min(co.x1, x)) - co.x0) / co.res;
+      let fz = (Math.max(co.z0, Math.min(co.z1, z)) - co.z0) / co.res;
+      let c = Math.floor(fx), r = Math.floor(fz);
+      if (c >= co.nx - 1) c = co.nx - 2;
+      if (r >= co.nz - 1) r = co.nz - 2;
+      fx -= c; fz -= r;
+      const i = r * co.nx + c;
+      const a = C[i], b = C[i + 1], d = C[i + co.nx], e = C[i + co.nx + 1];
+      return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+    },
 
     // Terrain height (river bed included) at world x,z.
     heightAt(x, z) {
-      if (Math.abs(x) <= inner && Math.abs(z) <= inner) {
-        let fx = (x + inner) / hres, fz = (z + inner) / hres;
-        let c = Math.floor(fx), r = Math.floor(fz);
-        if (c >= hn - 1) c = hn - 2;
-        if (r >= hn - 1) r = hn - 2;
-        fx -= c; fz -= r;
-        const i = r * hn + c;
-        const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
-        return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
-      }
-      let fx = (Math.max(-outer, Math.min(outer, x)) + outer) / ores;
-      let fz = (Math.max(-outer, Math.min(outer, z)) + outer) / ores;
+      const s = find(x, z);
+      if (s === null) return this.coarseHeight(x, z);
+      let fx = (x - s.x0) / hres, fz = (z - s.z0) / hres;
       let c = Math.floor(fx), r = Math.floor(fz);
-      if (c >= on - 1) c = on - 2;
-      if (r >= on - 1) r = on - 2;
+      if (c >= hn - 1) c = hn - 2;
+      if (r >= hn - 1) r = hn - 2;
       fx -= c; fz -= r;
-      const i = r * on + c;
-      const a = HO[i], b = HO[i + 1], d = HO[i + on], e = HO[i + on + 1];
+      const H = s.H, i = r * hn + c;
+      const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
       return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
     },
 
     surfaceAt(x, z) {
-      const c = Math.floor((x + inner) / sres), r = Math.floor((z + inner) / sres);
-      if (c < 0 || r < 0 || c >= sn || r >= sn) return SURFACE.GRASS;
-      return surface[r * sn + c];
+      const s = find(x, z);
+      if (s === null) return SURFACE.GRASS;
+      let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);
+      if (c >= sn) c = sn - 1;
+      if (r >= sn) r = sn - 1;
+      return s.S[r * sn + c];
     },
 
     // Signed distance (m) to the nearest solid obstacle, including the map edge.
     sdfAt(x, z) {
-      const edge = inner - 8 - Math.max(Math.abs(x), Math.abs(z));
-      let fx = (x + inner) / dres - 0.5, fz = (z + inner) / dres - 0.5;
-      if (fx < 0) fx = 0; else if (fx > dn - 1.001) fx = dn - 1.001;
-      if (fz < 0) fz = 0; else if (fz > dn - 1.001) fz = dn - 1.001;
-      const c = Math.floor(fx), r = Math.floor(fz);
+      const s = find(x, z);
+      if (s === null) return 12;
+      let fx = (x - s.x0) / dres, fz = (z - s.z0) / dres;
+      let c = Math.floor(fx), r = Math.floor(fz);
+      if (c >= dn - 1) c = dn - 2;
+      if (r >= dn - 1) r = dn - 2;
       fx -= c; fz -= r;
-      const i = r * dn + c;
-      const v = (sdf[i] * (1 - fx) + sdf[i + 1] * fx) * (1 - fz) + (sdf[i + dn] * (1 - fx) + sdf[i + dn + 1] * fx) * fz;
-      const d = dmin + (v / 255) * dspan;
-      return d < edge ? d : edge;
+      const D = s.D, i = r * dn + c;
+      const v = (D[i] * (1 - fx) + D[i + 1] * fx) * (1 - fz) + (D[i + dn] * (1 - fx) + D[i + dn + 1] * fx) * fz;
+      return dmin + (v / 255) * dspan;
     },
 
     // Outward direction from the nearest obstacle (unit vector written to out[0..1]).
     sdfGrad(x, z, out) {
       const e = 0.35;
-      let gx = this.sdfAt(x + e, z) - this.sdfAt(x - e, z);
-      let gz = this.sdfAt(x, z + e) - this.sdfAt(x, z - e);
+      const gx = this.sdfAt(x + e, z) - this.sdfAt(x - e, z);
+      const gz = this.sdfAt(x, z + e) - this.sdfAt(x, z - e);
       const l = Math.hypot(gx, gz);
       if (l < 1e-6) { out[0] = 0; out[1] = 0; return out; }
       out[0] = gx / l; out[1] = gz / l;

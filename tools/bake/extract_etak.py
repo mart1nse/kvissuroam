@@ -1,4 +1,4 @@
-"""Clip the national ETAK shapefiles to the game's scenery box -> etak_bbox.json.
+"""Clip the national ETAK shapefiles to the game's sector rectangle -> etak_bbox.json.
 
 Run in the folder that holds the unzipped ETAK themes (etak/ and etak_e/).
 """
@@ -10,9 +10,10 @@ import sys
 import fiona
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import E0, N0, OUTER  # noqa
+from config import E0, N0, detail_rect  # noqa
 
-BB = (E0 - OUTER, N0 - OUTER, E0 + OUTER, N0 + OUTER)
+x0, z0, x1, z1 = detail_rect()
+BB = (E0 + x0 - 200, N0 - z1 - 200, E0 + x1 + 200, N0 - z0 + 200)
 out = {}
 for path in sorted(glob.glob('etak/**/*.shp', recursive=True) + glob.glob('etak_e/**/*.shp', recursive=True)):
     key = os.path.basename(path)[:-4]

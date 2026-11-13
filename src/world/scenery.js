@@ -2,11 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------- buildings
-export function createBuildings(world) {
-  const buf = world.buildingsBuf;
-  const nv = new DataView(buf).getUint32(0, true);
-  let o = 4;
-  const pq = new Int16Array(buf, o, nv * 3); o += nv * 6;
+function buildingGeometry(sector) {
+  const { nv, buf, offset } = sector.buildings;
+  let o = offset;
+  const pq = new Int16Array(buf.slice(o, o + nv * 6)); o += nv * 6;
   const nq = new Int8Array(buf, o, nv * 3); o += nv * 3;
   const cq = new Uint8Array(buf, o, nv * 3); o += nv * 3;
   const kind = new Uint8Array(buf, o, nv); o += nv;
@@ -28,7 +27,11 @@ export function createBuildings(world) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aKind', new THREE.BufferAttribute(aKind, 1));
   geo.setAttribute('aBase', new THREE.BufferAttribute(aBase, 1));
+  return geo;
+}
 
+// Returns build(sector) -> mesh of that sector's buildings (or null).
+export function createBuildings() {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.0 });
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -69,11 +72,16 @@ export function createBuildings(world) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += kWin * kLit * vec3(1.0, 0.62, 0.38) * 1.6;`);
   };
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.matrixAutoUpdate = false;
-  return mesh;
+  return (sector) => {
+    if (!sector.buildings.nv) return null;
+    const mesh = new THREE.Mesh(buildingGeometry(sector), mat);
+    mesh.position.set(sector.x0, 0, sector.z0);      // vertices are sector-relative
+    mesh.updateMatrix();
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    return mesh;
+  };
 }
 
 // ---------------------------------------------------------------- trees
@@ -102,51 +110,71 @@ function treeGeometries(detail) {
   return [dec, con];
 }
 
-export function createTrees(world, opts) {
-  const rec = new Float32Array(world.treesBuf);
-  const n = rec.length / 6;
-  const group = new THREE.Group();
-  const cellSize = 320;
+// Returns build(sector) -> { group, setNear(bool) } with that sector's trees.
+export function createTrees(opts) {
   const near = treeGeometries(opts.treeDetail);
   const far = treeGeometries(0);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const cells = new Map();
-  const limit = world.inner + 250;
-  for (let i = 0; i < n; i++) {
-    const x = rec[i * 6], z = rec[i * 6 + 2];
-    const isFar = Math.abs(x) > limit || Math.abs(z) > limit;
-    if (isFar && opts.skipFarTrees && (i % 2)) continue;
-    const key = `${Math.floor(x / cellSize)},${Math.floor(z / cellSize)},${rec[i * 6 + 5] | 0},${isFar ? 1 : 0}`;
-    let list = cells.get(key);
-    if (!list) cells.set(key, (list = []));
-    list.push(i);
-  }
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  let seed = 99;
-  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
-  for (const [key, list] of cells) {
-    const parts = key.split(',');
-    const type = +parts[2], isFar = parts[3] === '1';
-    const im = new THREE.InstancedMesh((isFar ? far : near)[type], mat, list.length);
-    list.forEach((i, k) => {
-      const h = rec[i * 6 + 3], c = rec[i * 6 + 4];
-      p.set(rec[i * 6], rec[i * 6 + 1] - 0.15, rec[i * 6 + 2]);
-      q.setFromAxisAngle(up, rnd() * 6.283);
-      s.set(c, h, c);
-      m.compose(p, q, s);
-      im.setMatrixAt(k, m);
-      const v = 0.78 + rnd() * 0.4;
-      col.setRGB(v, v * (0.95 + rnd() * 0.1), v * 0.9);
-      im.setColorAt(k, col);
-    });
-    im.instanceMatrix.needsUpdate = true;
-    im.castShadow = !isFar && opts.treeShadows;
-    im.computeBoundingSphere();
-    im.matrixAutoUpdate = false;
-    group.add(im);
-  }
-  return group;
+  return (sector) => {
+    const rec = sector.trees;
+    const n = rec.length / 6;
+    if (!n) return null;
+    const group = new THREE.Group();
+    const nearMeshes = [], farMeshes = [];
+    let seed = (sector.sx * 73856093) ^ (sector.sz * 19349663) ^ 99;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    for (let type = 0; type < 2; type++) {
+      const list = [];
+      for (let i = 0; i < n; i++) {
+        if ((rec[i * 6 + 5] | 0) !== type) continue;
+        if (opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0) continue;
+        list.push(i);
+      }
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(far[type], mat, list.length);
+      list.forEach((i, k) => {
+        const h = rec[i * 6 + 3], c = rec[i * 6 + 4];
+        p.set(rec[i * 6], rec[i * 6 + 1] - 0.15, rec[i * 6 + 2]);
+        q.setFromAxisAngle(up, rnd() * 6.283);
+        s.set(c, h, c);
+        m.compose(p, q, s);
+        im.setMatrixAt(k, m);
+        const v = 0.78 + rnd() * 0.4;
+        col.setRGB(v, v * (0.95 + rnd() * 0.1), v * 0.9);
+        im.setColorAt(k, col);
+      });
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.matrixAutoUpdate = false;
+      group.add(im);
+      farMeshes.push(im);
+      if (near[type] !== far[type] && opts.treeDetail) {
+        // same instances, detailed geometry: shown instead of the far mesh when close
+        const im2 = new THREE.InstancedMesh(near[type], mat, list.length);
+        im2.instanceMatrix = im.instanceMatrix;
+        im2.instanceColor = im.instanceColor;
+        im2.boundingSphere = im.boundingSphere;
+        im2.castShadow = opts.treeShadows;
+        im2.matrixAutoUpdate = false;
+        im2.visible = false;
+        group.add(im2);
+        nearMeshes.push(im2);
+      }
+    }
+    let isNear = false;
+    return {
+      group,
+      setNear(v) {
+        if (v === isNear || !nearMeshes.length) return;
+        isNear = v;
+        for (const x of nearMeshes) x.visible = v;
+        for (const x of farMeshes) x.visible = !v;
+      },
+      dispose() { for (const x of farMeshes) x.dispose(); },
+    };
+  };
 }
 
 // ---------------------------------------------------------------- water
@@ -210,13 +238,27 @@ export function createWater(world) {
       if (!w.river) {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         for (const [x, z] of poly.outer) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
-        ponds.push({ minX, maxX, minZ, maxZ, level: w.level });
+        ponds.push({ minX, maxX, minZ, maxZ, level: w.level, ring: poly.outer });
       }
     }
   }
-  // water level lookup used by the physics: ponds by bounding box, else the river
+  const inside = (ring, x, z) => {
+    let hit = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, zi] = ring[i], [xj, zj] = ring[j];
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) hit = !hit;
+    }
+    return hit;
+  };
+  // water level lookup used by the physics: the pond or stream under the point, else the river
   world.waterLevelAt = (x, z) => {
-    for (const p of ponds) if (x >= p.minX - 1 && x <= p.maxX + 1 && z >= p.minZ - 1 && z <= p.maxZ + 1) return p.level;
+    let near = null;
+    for (const p of ponds) {
+      if (x < p.minX - 2 || x > p.maxX + 2 || z < p.minZ - 2 || z > p.maxZ + 2) continue;
+      if (inside(p.ring, x, z)) return p.level;
+      near = near || p;
+    }
+    if (near && Math.abs(world.heightAt(x, z) - near.level) < Math.abs(world.heightAt(x, z) - world.meta.riverLevel)) return near.level;
     return world.meta.riverLevel;
   };
   const update = (t) => { normalMap.offset.set(t * 0.004, t * 0.012); };
@@ -225,17 +267,16 @@ export function createWater(world) {
 
 // ---------------------------------------------------------------- map edge
 export function createEdgeGrid(world) {
-  const e = world.inner - 8;
+  const ring = world.meta.boundary;
   const h = 40;
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
     uniforms: { uCam: { value: new THREE.Vector3() }, uTime: { value: 0 } },
-    vertexShader: /* glsl */ `varying vec3 vP; void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    vertexShader: /* glsl */ `attribute float aAlong; varying vec3 vP; varying float vAlong; void main() { vP = position; vAlong = aAlong; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
-      varying vec3 vP; uniform vec3 uCam; uniform float uTime;
+      varying vec3 vP; varying float vAlong; uniform vec3 uCam; uniform float uTime;
       void main() {
-        float along = abs(vP.x) > abs(vP.z) ? vP.z : vP.x;
-        vec2 g = vec2(along, vP.y - uTime * 1.5) / 4.0;
+        vec2 g = vec2(vAlong, vP.y - uTime * 1.5) / 4.0;
         vec2 f = abs(fract(g) - 0.5);
         float line = smoothstep(0.47, 0.5, max(f.x, f.y));
         float d = distance(vP.xz, uCam.xz);
@@ -244,23 +285,26 @@ export function createEdgeGrid(world) {
         gl_FragColor = vec4(col, a);
       }`,
   });
-  const group = new THREE.Group();
-  for (let i = 0; i < 4; i++) {
-    const g = new THREE.PlaneGeometry(2 * e, h);
-    const m = new THREE.Mesh(g, mat);
-    m.position.y = h / 2 - 12;
-    if (i === 0) m.position.z = -e;
-    if (i === 1) m.position.z = e;
-    if (i === 2) { m.position.x = -e; m.rotation.y = Math.PI / 2; }
-    if (i === 3) { m.position.x = e; m.rotation.y = Math.PI / 2; }
-    m.updateMatrix();
-    // bake the transform so the shader sees world positions
-    g.applyMatrix4(m.matrix);
-    m.position.set(0, 0, 0); m.rotation.set(0, 0, 0); m.updateMatrix();
-    m.matrixAutoUpdate = false;
-    m.frustumCulled = false;
-    m.renderOrder = 5;
-    group.add(m);
+  // one tall quad per boundary segment, following the terrain
+  const n = ring.length - 1;
+  const pos = new Float32Array(n * 12), along = new Float32Array(n * 4), idx = new Uint32Array(n * 6);
+  let d = 0;
+  for (let i = 0; i < n; i++) {
+    const [x0, z0] = ring[i], [x1, z1] = ring[i + 1];
+    const y0 = world.coarseHeight(x0, z0) - 12, y1 = world.coarseHeight(x1, z1) - 12;
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    pos.set([x0, y0, z0, x1, y1, z1, x0, y0 + h, z0, x1, y1 + h, z1], i * 12);
+    along.set([d, d + len, d, d + len], i * 4);
+    d += len;
+    idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3], i * 6);
   }
-  return { group, mat };
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aAlong', new THREE.BufferAttribute(along, 1));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.matrixAutoUpdate = false;
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 5;
+  return { group: mesh, mat };
 }

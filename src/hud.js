@@ -27,6 +27,16 @@ export function createHud(world) {
     }
   });
 
+  const seen = new Set();
+  const waterPolys = [];
+  for (const w of world.vectors.water) {
+    for (const p of w.polys) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const [x, z] of p.outer) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+      waterPolys.push({ outer: p.outer, minX, maxX, minZ, maxZ });
+    }
+  }
+
   function streetAt(x, z) {
     let best = 14, name = '';
     const c = Math.floor(x / cell), r = Math.floor(z / cell);
@@ -58,18 +68,22 @@ export function createHud(world) {
     ctx.scale(scale, scale);
     ctx.translate(-car.x, -car.z);
     ctx.fillStyle = 'rgba(47,160,255,.85)';
-    for (const w of world.vectors.water) {
-      for (const p of w.polys) {
-        ctx.beginPath();
-        p.outer.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
-        ctx.closePath();
-        ctx.fill();
-      }
+    for (const p of waterPolys) {
+      if (p.minX > car.x + 420 || p.maxX < car.x - 420 || p.minZ > car.z + 420 || p.maxZ < car.z - 420) continue;
+      ctx.beginPath();
+      p.outer.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.lineCap = 'round';
-    for (const r of roads) {
-      const [ax, az] = r.pts[0];
-      if (Math.abs(ax - car.x) > 420 || Math.abs(az - car.z) > 420) continue;
+    seen.clear();
+    const c0 = Math.floor(car.x / cell), r0 = Math.floor(car.z / cell);
+    for (let dc = -7; dc <= 7; dc++) for (let dr = -7; dr <= 7; dr++) {
+      const l = grid.get(`${c0 + dc},${r0 + dr}`);
+      if (l) for (let k = 0; k < l.length; k += 2) seen.add(l[k]);
+    }
+    for (const ri of seen) {
+      const r = roads[ri];
       const path = r.type === 'Rada' || r.type === 'Kergliiklustee';
       ctx.strokeStyle = path ? 'rgba(255,95,162,.45)' : 'rgba(255,225,245,.92)';
       ctx.lineWidth = Math.max(r.w, path ? 2 : 5);
@@ -79,8 +93,9 @@ export function createHud(world) {
     }
     // map edge
     ctx.strokeStyle = '#2ff3ff'; ctx.lineWidth = 4;
-    const e = world.inner - 8;
-    ctx.strokeRect(-e, -e, 2 * e, 2 * e);
+    ctx.beginPath();
+    world.meta.boundary.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    ctx.stroke();
     ctx.restore();
     // car marker
     ctx.fillStyle = '#ffd45e';

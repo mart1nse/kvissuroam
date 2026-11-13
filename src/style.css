@@ -57,7 +57,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .bar { width: min(360px, 60vw); height: 10px; border: 2px solid var(--cyan); box-shadow: 0 0 14px rgba(47, 243, 255, .6); z-index: 1; }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--hot), var(--sun)); transition: width .2s; }
 
-#cards { display: flex; gap: clamp(8px, 2vw, 22px); align-items: stretch; justify-content: center; width: 100%; margin-top: auto; }
+#cards { display: flex; gap: clamp(6px, 1.2vw, 18px); align-items: stretch; justify-content: center; width: 100%; margin-top: auto; }
 .card {
   flex: 1 1 0; max-width: 300px; padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1.4vw, 18px); text-align: left;
   background: rgba(18, 6, 43, .62); border: 2px solid rgba(255, 95, 162, .55); border-radius: 4px;
@@ -65,11 +65,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 }
 .card.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 26px rgba(47, 243, 255, .55), inset 0 0 22px rgba(47, 243, 255, .12); transform: translateY(-6px); }
 .card .yr { font-size: clamp(9px, 1.2vw, 12px); letter-spacing: .25em; color: var(--sun); }
-.card h3 { margin: 2px 0 4px; font-size: clamp(12px, 1.9vw, 21px); font-style: italic; font-weight: 800; }
+.card h3 { margin: 2px 0 4px; font-size: clamp(11px, 1.45vw, 19px); font-style: italic; font-weight: 800; }
 .card p { margin: 0 0 6px; font-size: clamp(8px, 1.05vw, 11px); opacity: .8; letter-spacing: .04em; line-height: 1.35; }
 .card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 0; }
 .card dt { font-size: clamp(7px, .9vw, 10px); letter-spacing: .14em; color: var(--pink); }
-.card dd { margin: 0; font-size: clamp(11px, 1.6vw, 18px); font-weight: 800; }
+.card dd { margin: 0; font-size: clamp(10px, 1.2vw, 17px); font-weight: 800; white-space: nowrap; }
 
 .neon {
   font-size: clamp(14px, 2.4vw, 24px); font-style: italic; font-weight: 900; letter-spacing: .28em; padding: .55em 1.6em .55em 1.9em;

@@ -151,8 +151,8 @@ function buildMenu() {
   addEventListener('keydown', (e) => {
     if (mode !== 'menu') return;
     const i = CAR_ORDER.indexOf(carId);
-    if (e.code === 'ArrowRight') setCar(CAR_ORDER[(i + 1) % 3]);
-    else if (e.code === 'ArrowLeft') setCar(CAR_ORDER[(i + 2) % 3]);
+    if (e.code === 'ArrowRight') setCar(CAR_ORDER[(i + 1) % CAR_ORDER.length]);
+    else if (e.code === 'ArrowLeft') setCar(CAR_ORDER[(i + CAR_ORDER.length - 1) % CAR_ORDER.length]);
     else if (e.code === 'Enter' || e.code === 'Space') startDriving();
   });
 }

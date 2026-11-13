@@ -9,6 +9,7 @@ import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
+import { createStreetPhotos } from './world/streetphotos.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -102,6 +103,11 @@ async function boot() {
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
   hud = createHud(world);
+  if (params.get('photos') !== '0') {
+    photos = createStreetPhotos(renderer, world);
+    photos.load();
+    scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
+  }
   setCar(carId);
   camYaw = car.yaw;
   buildMenu();
@@ -127,7 +133,7 @@ function setCar(id) {
     model = buildPlaceholder(spec);
   }
   model.group.rotation.order = 'YXZ';
-  model.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+  model.group.traverse((o) => { o.layers.enable(1); if (o.isMesh) { o.castShadow = true; } });   // layer 1: drawn again over street photos
   scene.add(model.group);
   audio.setCar(spec);
   hud.setCar(spec);
@@ -233,6 +239,7 @@ document.addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- frame loop
 const clock = new THREE.Timer();
+let photos = null, treesHidden = false;
 let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0;
 const idle = {};
 
@@ -286,7 +293,9 @@ function frame() {
     let d = car.yaw - camYaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     camYaw += d * Math.min(1, dt * (3 + speed * 0.08));
-    const dist = 6.4 + Math.min(speed, 55) * 0.035, h = 2.35;
+    // a street photo is narrower than the game's view, so over photos the camera backs off and zooms in
+    const pm = photos?.mix ?? 0;
+    const dist = (6.4 + Math.min(speed, 55) * 0.035) * (1 + 0.45 * pm), h = 2.35;
     const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
     camPos.set(car.x - cx * dist, car.y + h + (car.inWater ? Math.min(3, car.waterTime) : 0), car.z - cz * dist);
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
@@ -296,7 +305,7 @@ function frame() {
     else camera.position.lerp(camPos, Math.min(1, dt * 10));
     const under = world.heightAt(camera.position.x, camera.position.z) + 0.7;
     if (camera.position.y < under) camera.position.y = under;
-    camera.fov += (58 + Math.min(speed, 60) * 0.22 - camera.fov) * Math.min(1, dt * 3);
+    camera.fov += ((58 + Math.min(speed, 60) * 0.22) * (1 - 0.3 * pm) - camera.fov) * Math.min(1, dt * 3);
   } else {
     menuAngle += dt * 0.16;
     const a = car.yaw + Math.PI + Math.sin(menuAngle) * 0.85;   // sweep around the rear three-quarters
@@ -327,7 +336,15 @@ function frame() {
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   audio.update(car, mode === 'drive');
 
-  renderer.render(scene, camera);
+  if (photos?.update(camera, dt)) {
+    const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it
+    for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = !hideTrees;
+    treesHidden = hideTrees;
+    photos.render(scene, camera, model.group);
+  } else {
+    if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
+    renderer.render(scene, camera);
+  }
 
   // ---- adaptive quality: drop resolution, then shadows, if the device struggles
   if (dt > 0.036) slowFrames++; else slowFrames = Math.max(0, slowFrames - 2);
@@ -342,7 +359,7 @@ function frame() {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, startDriving, renderer, scene, camera, terrain: () => terrain };
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, startDriving, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

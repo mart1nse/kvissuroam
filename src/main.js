@@ -10,6 +10,7 @@ import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
+import { createRoadMarkings } from './world/roads.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
 
@@ -80,6 +81,7 @@ async function boot() {
   const buildBuildings = createBuildings();
   const buildTrees = createTrees(quality);
   const buildLow = createLowObjects(world, quality);
+  const buildMarks = createRoadMarkings(world);
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
@@ -88,12 +90,15 @@ async function boot() {
     if (s.tree) scene.add(s.tree.group);
     s.low = buildLow(s);
     if (s.low) scene.add(s.low);
+    s.marks = buildMarks(s);
+    if (s.marks) scene.add(s.marks);
   });
   world.onSectorUnload((s) => {
     terrain.removeSector(s);
     if (s.bMesh) { scene.remove(s.bMesh); s.bMesh.geometry.dispose(); s.bMesh = null; }
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
     if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
+    if (s.marks) { scene.remove(s.marks); s.marks.geometry.dispose(); s.marks = null; }
   });
   const s0 = world.meta.start;
   await world.loadAround(s0.x, s0.z, 200);

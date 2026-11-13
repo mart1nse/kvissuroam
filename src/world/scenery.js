@@ -202,20 +202,38 @@ function paint(geo, hex) {
   return geo.index ? geo.toNonIndexed() : geo;
 }
 
+// Unit trees (height 1, crown diameter 1), one per species. Trees 0-3 are broadleaved, 4-5 conifers.
 function treeGeometries(detail) {
-  // unit trees: height 1, crown diameter 1
-  const trunk = (h) => paint(new THREE.CylinderGeometry(0.035, 0.05, h, 5, 1, true).translate(0, h / 2, 0), 0x4a3528);
-  const crownA = new THREE.IcosahedronGeometry(0.5, detail).scale(1, 0.62, 1).translate(0, 0.67, 0);
-  const crownB = new THREE.IcosahedronGeometry(0.34, detail).scale(1, 0.7, 1).translate(0.12, 0.5, 0.08);
-  const dec = mergeGeometries([trunk(0.45), paint(crownA, 0x4f8f3a), paint(crownB, 0x3f7a34)]);
+  const trunk = (h, r, hex) => paint(new THREE.CylinderGeometry(r * 0.7, r, h, 5, 1, true).translate(0, h / 2, 0), hex);
+  const blob = (r, sy, x, y, z, hex) => paint(new THREE.IcosahedronGeometry(r, detail).scale(1, sy, 1).translate(x, y, z), hex);
   const sides = detail ? 8 : 6;
-  const c1 = new THREE.ConeGeometry(0.5, 0.5, sides, 1, true).translate(0, 0.43, 0);
-  const c2 = new THREE.ConeGeometry(0.38, 0.42, sides, 1, true).translate(0, 0.67, 0);
-  const c3 = new THREE.ConeGeometry(0.24, 0.34, sides, 1, true).translate(0, 0.83, 0);
-  const con = mergeGeometries([trunk(0.3), paint(c1, 0x2c5f3a), paint(c2, 0x2f6a3e), paint(c3, 0x357444)]);
-  dec.computeVertexNormals();
-  con.computeVertexNormals();
-  return [dec, con];
+  const cone = (r, h, y, hex) => paint(new THREE.ConeGeometry(r, h, sides, 1, true).translate(0, y, 0), hex);
+  const out = [
+    // 0 lime or maple: full round crown
+    mergeGeometries([trunk(0.45, 0.05, 0x4a3528), blob(0.5, 0.62, 0, 0.67, 0, 0x4f8f3a), blob(0.34, 0.7, 0.12, 0.5, 0.08, 0x3f7a34)]),
+    // 1 birch: white stem, light airy crown
+    mergeGeometries([trunk(0.62, 0.03, 0xd9d6cf), blob(0.3, 1.05, 0, 0.68, 0, 0x7fae4a), blob(0.22, 0.9, -0.1, 0.5, 0.06, 0x8dba55)]),
+    // 2 oak: low and wide, several lobes
+    mergeGeometries([trunk(0.36, 0.07, 0x3d2c22), blob(0.36, 0.7, 0.16, 0.6, 0.05, 0x3f7434), blob(0.34, 0.72, -0.15, 0.62, -0.1, 0x47803a),
+      blob(0.3, 0.75, 0.0, 0.76, 0.12, 0x4f8b3f)]),
+    // 3 poplar: a tall column
+    mergeGeometries([trunk(0.3, 0.045, 0x574636), blob(0.24, 1.7, 0, 0.6, 0, 0x4c8640)]),
+    // 4 spruce: stacked cones to the ground
+    mergeGeometries([trunk(0.3, 0.04, 0x4a3528), cone(0.5, 0.5, 0.43, 0x2c5f3a), cone(0.38, 0.42, 0.67, 0x2f6a3e), cone(0.24, 0.34, 0.83, 0x357444)]),
+    // 5 pine: long bare reddish stem, flat crown at the top
+    mergeGeometries([trunk(0.72, 0.04, 0x9a5a3c), blob(0.42, 0.45, 0, 0.82, 0, 0x2f6642), blob(0.26, 0.5, 0.14, 0.7, -0.05, 0x37714a)]),
+  ];
+  for (const g of out) g.computeVertexNormals();
+  return out;
+}
+
+// species from what the lidar tells us: conifer or not, height, and how slim the crown is
+function treeSpecies(type, h, crown, r) {
+  if (type === 1) return h > 13 && r < 0.45 ? 5 : 4;
+  const slim = crown / h;
+  if (slim < 0.3) return r < 0.4 ? 3 : 1;
+  if (slim > 0.62 && h > 9) return 2;
+  return r < 0.28 ? 1 : 0;
 }
 
 // Returns build(sector) -> { group, setNear(bool) } with that sector's trees.
@@ -233,13 +251,14 @@ export function createTrees(opts) {
     const nearMeshes = [], farMeshes = [];
     let seed = (sector.sx * 73856093) ^ (sector.sz * 19349663) ^ 99;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
-    for (let type = 0; type < 2; type++) {
-      const list = [];
-      for (let i = 0; i < n; i++) {
-        if ((rec[i * 6 + 5] | 0) !== type) continue;
-        if (opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0) continue;
-        list.push(i);
-      }
+    const lists = near.map(() => []);
+    for (let i = 0; i < n; i++) {
+      if (opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0) continue;
+      const pick = Math.abs(Math.sin(rec[i * 6] * 12.9898 + rec[i * 6 + 2] * 78.233) * 43758.5453) % 1;
+      lists[treeSpecies(rec[i * 6 + 5] | 0, rec[i * 6 + 3], rec[i * 6 + 4], pick)].push(i);
+    }
+    for (let type = 0; type < lists.length; type++) {
+      const list = lists[type];
       if (!list.length) continue;
       const im = new THREE.InstancedMesh(far[type], mat, list.length);
       list.forEach((i, k) => {
@@ -249,8 +268,8 @@ export function createTrees(opts) {
         s.set(c, h, c);
         m.compose(p, q, s);
         im.setMatrixAt(k, m);
-        const v = 0.78 + rnd() * 0.4;
-        col.setRGB(v, v * (0.95 + rnd() * 0.1), v * 0.9);
+        const v = 0.78 + rnd() * 0.4, warm = type < 4 && rnd() < 0.12 ? 0.25 + rnd() * 0.3 : 0;   // a few already turning
+        col.setRGB(v * (1 + warm), v * (0.95 + rnd() * 0.1), v * (0.9 - warm * 0.6));
         im.setColorAt(k, col);
       });
       im.instanceMatrix.needsUpdate = true;

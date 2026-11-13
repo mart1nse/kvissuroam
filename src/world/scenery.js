@@ -177,6 +177,74 @@ export function createTrees(opts) {
   };
 }
 
+// ---------------------------------------------------------------- hedges, bushes and fences
+// Returns build(sector) -> group (or null). Cells come from laser-scan data on a 0.5 m grid.
+export function createLowObjects(world, opts) {
+  const res = world.meta.lowres || 0.5;
+  const bushGeo = new THREE.CylinderGeometry(0.34, 0.42, 1, 5, 1).translate(0, 0.5, 0);
+  const fenceGeo = new THREE.BoxGeometry(res * 1.25, 1, 0.07).translate(0, 0.5, 0);
+  const bushMat = new THREE.MeshLambertMaterial({ flatShading: true });
+  const fenceMat = new THREE.MeshLambertMaterial();
+  const FENCE = [0x4a3b30, 0x5d5f66, 0x8a7257, 0x2e2f35, 0x9a9690];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  return (sector) => {
+    const nb = sector.bushes.length / 3, nf = sector.fences.length / 3;
+    if (!nb && !nf) return null;
+    const group = new THREE.Group();
+    let seed = (sector.sx * 9176 + sector.sz * 31337 + 7) >>> 0;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    if (nb) {
+      const B = sector.bushes;
+      const step = opts.thinTrees ? 2 : 1;        // phones: every other cell, drawn fatter
+      const im = new THREE.InstancedMesh(bushGeo, bushMat, Math.ceil(nb / step));
+      let k = 0;
+      for (let i = 0; i < nb; i += step) {
+        const x = sector.x0 + (B[i * 3] + 0.5) * res, z = sector.z0 + (B[i * 3 + 1] + 0.5) * res;
+        const h = (B[i * 3 + 2] & 255) / 10;
+        p.set(x + (rnd() - 0.5) * 0.15, world.heightAt(x, z) - 0.1, z + (rnd() - 0.5) * 0.15);
+        q.setFromAxisAngle(up, rnd() * 6.283);
+        const w = (1.25 + rnd() * 0.35) * (step === 2 ? 1.5 : 1) * (res / 0.5);
+        sc.set(w, h * (0.92 + rnd() * 0.16) + 0.1, w);
+        m.compose(p, q, sc);
+        im.setMatrixAt(k, m);
+        const v = 0.75 + rnd() * 0.35;
+        col.setRGB(0.045 * v, 0.17 * v, 0.055 * v + rnd() * 0.015);
+        im.setColorAt(k++, col);
+      }
+      im.count = k;
+      im.castShadow = opts.treeShadows;
+      im.receiveShadow = true;
+      im.computeBoundingSphere();
+      im.matrixAutoUpdate = false;
+      group.add(im);
+    }
+    if (nf) {
+      const F = sector.fences;
+      const im = new THREE.InstancedMesh(fenceGeo, fenceMat, nf);
+      for (let i = 0; i < nf; i++) {
+        const x = sector.x0 + (F[i * 3] + 0.5) * res, z = sector.z0 + (F[i * 3 + 1] + 0.5) * res;
+        const h = (F[i * 3 + 2] & 255) / 10, ang = ((F[i * 3 + 2] >> 8) / 255) * Math.PI;
+        p.set(x, world.heightAt(x, z) - 0.05, z);
+        q.setFromAxisAngle(up, -ang);
+        sc.set(1, h, 1);
+        m.compose(p, q, sc);
+        im.setMatrixAt(i, m);
+        // one colour per plot-sized patch, so a fence keeps its colour along a garden
+        const hsh = (Math.floor(x / 28) * 73856093) ^ (Math.floor(z / 28) * 19349663);
+        col.setHex(FENCE[Math.abs(hsh) % FENCE.length]);
+        im.setColorAt(i, col);
+      }
+      im.castShadow = opts.treeShadows;
+      im.computeBoundingSphere();
+      im.matrixAutoUpdate = false;
+      group.add(im);
+    }
+    group.userData.dispose = () => { for (const c of group.children) c.dispose(); };
+    return group;
+  };
+}
+
 // ---------------------------------------------------------------- water
 function ripplesTexture() {
   const n = 256;

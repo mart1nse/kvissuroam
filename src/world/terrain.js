@@ -122,6 +122,7 @@ export function createTerrain(world, renderer, opts) {
 
   // ---- detailed sectors, split into one mesh per orthophoto tile
   const chunks = new Set();
+  const xSet = new Set(opts.xTiles ? meta.ortho.x || [] : []);   // tiles that have an extra-sharp version
   const indexCache = new Map();
   function indexFor(seg) {
     let a = indexCache.get(seg);
@@ -180,7 +181,8 @@ export function createTerrain(world, renderer, opts) {
         mesh.receiveShadow = true;
         mesh.matrixAutoUpdate = false;
         group.add(mesh);
-        const ch = { url: `${BASE}${s.sx}_${s.sz}_${tx}_${ty}.jpg`, mesh, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
+        const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
+        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
       }
@@ -194,6 +196,7 @@ export function createTerrain(world, renderer, opts) {
       group.remove(ch.mesh);
       ch.mesh.geometry.dispose();
       if (ch.matHi) { ch.matHi.map.dispose(); ch.matHi.dispose(); }
+      if (ch.matX) { ch.matX.map.dispose(); ch.matX.dispose(); }
     }
     s.chunks = null;
   }
@@ -215,12 +218,36 @@ export function createTerrain(world, renderer, opts) {
       ch.state = 'hi';
     }, undefined, () => { loading--; ch.state = 'failed'; });
   }
+  // extra-sharp version of a tile, swapped in only close to the camera
+  function loadX(ch) {
+    ch.xstate = 'loading';
+    loading++;
+    loader.load(ch.xurl, (tex) => {
+      loading--;
+      if (ch.gone || ch.state !== 'hi' || ch.xstate !== 'loading') { tex.dispose(); if (ch.xstate === 'loading') ch.xstate = 'none'; return; }
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = aniso;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      ch.matX = groundMaterial(tex, detail);
+      ch.mesh.material = ch.matX;
+      ch.xstate = 'on';
+    }, undefined, () => { loading--; ch.xstate = 'failed'; });
+  }
+  function dropX(ch) {
+    if (ch.matX) { ch.mesh.material = ch.matHi || matLow; ch.matX.map.dispose(); ch.matX.dispose(); ch.matX = null; }
+    if (ch.xstate !== 'failed') ch.xstate = 'none';
+  }
   function update(camPos) {
     const want = [];
     for (const ch of chunks) {
       ch.d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
+      if (ch.xurl) {
+        if (ch.state === 'hi' && ch.xstate === 'none' && ch.d < 200 && loading < 4) loadX(ch);
+        else if (ch.xstate === 'on' && ch.d > 300) dropX(ch);
+      }
       if (ch.state === 'low' && ch.d < rHi) want.push(ch);
       else if (ch.state === 'hi' && ch.d > rHi + 260) {
+        dropX(ch);
         ch.mesh.material = matLow;
         ch.matHi.map.dispose();
         ch.matHi.dispose();

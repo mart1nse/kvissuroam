@@ -60,13 +60,15 @@ export async function loadWorldData(onProgress = () => {}) {
     loading++;
     s.promise = fetchBuf(`sec/${s.sx}_${s.sz}.kvs`).then((buf) => {
       const head = new Uint32Array(buf, 0, 8);
-      const nv = head[4], nt = head[5];
+      const nv = head[4], nt = head[5], nb = head[6], nf = head[7];
       let o = 32;
       s.H = new Uint16Array(buf.slice(o, o + hn * hn * 2)); o += hn * hn * 2;
       s.S = new Uint8Array(buf, o, sn * sn); o += sn * sn;
       s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
-      s.trees = new Float32Array(buf.slice(o, o + nt * 24));
+      s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
+      s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
+      s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
       s.state = 'ready';
       loading--;
       for (const f of onLoad) f(s);
@@ -77,7 +79,7 @@ export async function loadWorldData(onProgress = () => {}) {
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
-    s.H = s.S = s.D = s.buildings = s.trees = null;
+    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = null;
     s.state = 'idle';
   }
 

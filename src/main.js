@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
-import { createBuildings, createTrees, createWater, createEdgeGrid } from './world/scenery.js';
+import { createBuildings, createTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER } from './cars/specs.js';
 import { createCar, stepCar, resetCar, speedKmh } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
@@ -16,8 +16,8 @@ document.body.classList.toggle('touch', isTouch);
 const params = new URLSearchParams(location.search);
 
 const quality = isTouch
-  ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 380, treeDetail: 0, treeShadows: false, thinTrees: true, anisotropy: 4, far: 2600, loadRadius: 520 }
-  : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000 };
+  ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 380, treeDetail: 0, treeShadows: false, thinTrees: true, anisotropy: 4, far: 2600, loadRadius: 520, xTiles: false }
+  : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000, xTiles: true };
 if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
 
 const canvas = $('#view');
@@ -75,17 +75,21 @@ async function boot() {
   await new Promise((r) => setTimeout(r));
   const buildBuildings = createBuildings();
   const buildTrees = createTrees(quality);
+  const buildLow = createLowObjects(world, quality);
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
     if (s.bMesh) scene.add(s.bMesh);
     s.tree = buildTrees(s);
     if (s.tree) scene.add(s.tree.group);
+    s.low = buildLow(s);
+    if (s.low) scene.add(s.low);
   });
   world.onSectorUnload((s) => {
     terrain.removeSector(s);
     if (s.bMesh) { scene.remove(s.bMesh); s.bMesh.geometry.dispose(); s.bMesh = null; }
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
+    if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
   });
   const s0 = world.meta.start;
   await world.loadAround(s0.x, s0.z, 200);

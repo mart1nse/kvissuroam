@@ -7,17 +7,29 @@ const ZF = -2.335, ZR = 2.47, HZ = DIMS.wheelbase / 2;
 
 function lampTextures() {
   const tail = (glow) => (g, w, h) => {
-    // u: 0 = inboard, 1 = outboard. Dark lens, bright ring outboard with a light blade running inboard.
-    g.fillStyle = glow ? '#1c0000' : '#5e070b'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = glow ? '#ffffff' : '#ff2626'; g.fillStyle = g.strokeStyle;
-    const cx = w * 0.7, cy = h * 0.5, r = h * 0.3;
-    g.lineWidth = h * 0.15; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke();
-    g.fillRect(w * 0.02, h * 0.36, cx - r - w * 0.02, h * 0.2);
-    g.fillRect(cx + r, h * 0.42, w * 0.2, h * 0.14);
+    // u: 0 = inboard tip on the tailgate, 1 = outboard, round the corner. Smoked deep-red lens
+    // with the Mazda signature: a ring outboard and a thin light blade running inboard from it.
+    const cx = w * 0.47, cy = h * 0.5, r = h * 0.31;
+    if (glow) {
+      g.fillStyle = '#240000'; g.fillRect(0, 0, w, h);
+    } else {
+      const bg = g.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, '#4a0508'); bg.addColorStop(0.5, '#7a0a10'); bg.addColorStop(1, '#3a0406');
+      g.fillStyle = bg; g.fillRect(0, 0, w, h);
+      // darker smoked housing around the ring and at the outer end
+      g.fillStyle = 'rgba(20,0,2,.55)';
+      g.beginPath(); g.arc(cx, cy, r * 1.45, 0, 7); g.fill();
+    }
+    const lit = glow ? '#ffffff' : '#ff3030';
+    g.strokeStyle = lit; g.fillStyle = lit; g.lineCap = 'round';
+    g.lineWidth = h * 0.11; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke();
+    g.lineWidth = h * 0.085;
+    g.beginPath(); g.moveTo(w * 0.05, cy); g.lineTo(cx - r * 1.5, cy); g.stroke();      // blade towards the emblem
+    g.beginPath(); g.moveTo(cx + r * 1.5, cy); g.lineTo(w * 0.9, cy); g.stroke();       // blade outboard, round the corner
     if (!glow) {
-      g.fillStyle = '#2a0204'; g.beginPath(); g.arc(cx, cy, r * 0.5, 0, 7); g.fill();
-      g.fillStyle = '#d8d4d0'; g.fillRect(w * 0.04, h * 0.66, w * 0.4, h * 0.18);
-      g.strokeStyle = '#120000'; g.lineWidth = 4; g.strokeRect(0, 0, w, h);
+      g.fillStyle = '#1c0103'; g.beginPath(); g.arc(cx, cy, r * 0.62, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,120,110,.22)'; g.fillRect(0, h * 0.06, w, h * 0.07);       // lens highlight
+      g.strokeStyle = '#0c0000'; g.lineWidth = 5; g.strokeRect(0, 0, w, h);
     }
   };
   const head = (glow) => (g, w, h) => {
@@ -36,17 +48,17 @@ function atlasTex() {
     g.clearRect(0, 0, AW, AH);
     drawPlate(g, 0, 0, 832, 181, '619 MZD');
     // Mazda winged "M" in an oval
-    const cx = 90, cy = 275, r = 84, col = '#e2e4e6';
-    g.strokeStyle = col; g.lineWidth = 13; g.lineJoin = 'round';
+    const cx = 90, cy = 275, r = 84, col = '#eef0f2';
+    g.strokeStyle = col; g.lineWidth = 17; g.lineJoin = 'round';
     g.beginPath(); g.ellipse(cx, cy, r - 7, r * 0.8 - 7, 0, 0, 7); g.stroke();
-    g.lineWidth = 12;
+    g.lineWidth = 15;
     g.beginPath(); g.moveTo(cx - r * 0.86, cy - r * 0.12); g.quadraticCurveTo(cx - r * 0.3, cy - r * 0.5, cx, cy + r * 0.32);
     g.quadraticCurveTo(cx + r * 0.3, cy - r * 0.5, cx + r * 0.86, cy - r * 0.12); g.stroke();
     g.beginPath(); g.moveTo(cx - r * 0.36, cy - r * 0.68); g.quadraticCurveTo(cx - r * 0.1, cy - r * 0.3, cx, cy + r * 0.32);
     g.quadraticCurveTo(cx + r * 0.1, cy - r * 0.3, cx + r * 0.36, cy - r * 0.68); g.stroke();
-    g.fillStyle = '#dfe1e3'; g.textBaseline = 'middle'; g.textAlign = 'center';
+    g.fillStyle = '#f2f3f4'; g.textBaseline = 'middle'; g.textAlign = 'center';
     g.font = 'bold 80px Arial, Helvetica, sans-serif'; g.fillText('MAZDA6', 415, 248);
-    g.font = 'italic bold 60px Arial, Helvetica, sans-serif'; g.fillText('SKYACTIV-D AWD', 510, 357);
+    g.font = 'italic bold 60px Arial, Helvetica, sans-serif'; g.fillText('SKYACTIV-G', 510, 357);
   });
 }
 
@@ -102,16 +114,15 @@ export function buildMazda6() {
 
   // --- slim tail lamps joined by a chrome blade, emblem, lettering, plate
   const ty = dc.yaw(32), to = { minFacing: 0.02, origin: [0, 0, 2.31], ...fr };
-  const lampPoly = rpoly([[0.3, 0.9], [0.62, 0.878], [0.94, 0.872], [0.985, 0.935], [0.92, 0.99], [0.6, 0.985], [0.3, 0.955]], 0.012, 3);
+  const lampPoly = rpoly([[0.25, 0.912], [0.6, 0.892], [0.9, 0.87], [0.99, 0.895], [1.0, 0.965], [0.94, 1.004], [0.6, 0.992], [0.25, 0.95]], 0.014, 3);
   tail.add(ty(lampPoly, { offset: 0.005, ...to }));
   tail.add(tail.mirrored());
-  reverse.add(ty(rect(0.33, 0.925, 0.5, 0.943, 0.005), { offset: 0.0065, ...to }).sym());
-  pal.add(dc.rear(rect(-0.47, 0.9, 0.47, 0.918, 0.004), { offset: 0.006, ...fr }).pal('chrome'));
-  pal.add(ty(rect(0.3, 0.903, 0.5, 0.915), { offset: 0.007, ...to }).pal('chrome').sym());
+  reverse.add(ty(rect(0.3, 0.916, 0.42, 0.93, 0.004), { offset: 0.0065, ...to }).sym());
+  pal.add(dc.rear(rect(-0.3, 0.916, 0.3, 0.936, 0.005), { offset: 0.006, ...fr }).pal('chrome'));       // chrome wing between the lamps
   chmsl.add(dc.rear(rect(-0.26, 1.298, 0.26, 1.314, 0.005), { offset: 0.004, minFacing: 0.1, ...fr }));
-  atlas.add(dc.rear(rect(-0.058, 0.925, 0.058, 1.02), { offset: 0.007, minFacing: 0.05, ...fr }).uvRect(A_LOGO));
-  atlas.add(dc.rear(rect(-0.62, 0.7, -0.38, 0.75), { offset: 0.007, ...fr }).uvRect(A_M6));
-  atlas.add(dc.rear(rect(0.36, 0.705, 0.64, 0.745), { offset: 0.007, ...fr }).uvRect(A_SKY));
+  atlas.add(dc.rear(rect(-0.062, 0.948, 0.062, 1.05), { offset: 0.007, minFacing: 0.05, ...fr }).uvRect(A_LOGO));
+  atlas.add(dc.rear(rect(-0.64, 0.7, -0.36, 0.759), { offset: 0.007, ...fr }).uvRect(A_M6));
+  atlas.add(dc.rear(rect(0.34, 0.705, 0.64, 0.749), { offset: 0.007, ...fr }).uvRect(A_SKY));
   const pl = plate([0, 0.8, pr.rearZ(0, 0.8) + 0.008], A_PLATE, { tilt: 0.1 });
   atlas.add(pl.face); pal.add(pl.back);
   pal.add(rearWiper(pr, 0.0, 1.075, 0.34, 1.11));
@@ -141,5 +152,5 @@ export function buildMazda6() {
 
   const wheel = { soup: buildWheel({ R: DIMS.wheelRadius, width: 0.225, rimR: 0.245, style: 'spoke5' }) };
   const car = assembleCar({ id: 'mazda6', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
-  return tintPaint(car, 'mazda6', 0x3b3e44, { metalness: 0.7, roughness: 0.36 });
+  return tintPaint(car, 'mazda6', 0x44474d, { metalness: 0.7, roughness: 0.36 });
 }

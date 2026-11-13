@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------- buildings
+// The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
+// a base height are one building, which is enough to measure it and pick a facade style for it:
+//   0 detached house (boards or plaster)   1 apartment block (panels or brick)   2 shop, hall or shed (cladding)
 function buildingGeometry(sector) {
   const { nv, buf, offset } = sector.buildings;
   let o = offset;
@@ -12,14 +15,31 @@ function buildingGeometry(sector) {
   const base = new Int16Array(buf.slice(o, o + nv * 2));
 
   const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
-  const aKind = new Float32Array(nv), aBase = new Float32Array(nv);
+  const aKind = new Float32Array(nv), aBase = new Float32Array(nv), aInfo = new Float32Array(nv * 3);
   const c = new THREE.Color();
+  const groups = new Map();
   for (let i = 0; i < nv; i++) {
-    pos[i * 3] = pq[i * 3] * 0.05; pos[i * 3 + 1] = pq[i * 3 + 1] * 0.01; pos[i * 3 + 2] = pq[i * 3 + 2] * 0.05;
+    const x = pos[i * 3] = pq[i * 3] * 0.05, y = pos[i * 3 + 1] = pq[i * 3 + 1] * 0.01, z = pos[i * 3 + 2] = pq[i * 3 + 2] * 0.05;
     nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
     c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     aKind[i] = kind[i]; aBase[i] = base[i] * 0.01;
+    let g = groups.get(base[i]);
+    if (!g) groups.set(base[i], (g = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9 }));
+    if (x < g.x0) g.x0 = x; if (x > g.x1) g.x1 = x;
+    if (z < g.z0) g.z0 = z; if (z > g.z1) g.z1 = z;
+    if (y > g.top) g.top = y;
+    if (kind[i] === 1 && y < g.eaves) g.eaves = y;       // lowest roof point
+  }
+  for (const [b, g] of groups) {
+    const h = g.top - b * 0.01, area = (g.x1 - g.x0) * (g.z1 - g.z0);
+    g.eavesH = Math.min(h, g.eaves > 1e8 ? h : g.eaves - b * 0.01);
+    g.style = h >= 10.5 ? 1 : area > 420 ? 2 : 0;
+    g.seed = Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
+  }
+  for (let i = 0; i < nv; i++) {
+    const g = groups.get(base[i]);
+    aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -27,6 +47,7 @@ function buildingGeometry(sector) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aKind', new THREE.BufferAttribute(aKind, 1));
   geo.setAttribute('aBase', new THREE.BufferAttribute(aBase, 1));
+  geo.setAttribute('aInfo', new THREE.BufferAttribute(aInfo, 3));
   return geo;
 }
 
@@ -36,41 +57,128 @@ export function createBuildings() {
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute float aKind; attribute float aBase;
-        varying float vKind; varying float vBase; varying vec3 vWP; varying vec3 vWN;`)
+        attribute float aKind; attribute float aBase; attribute vec3 aInfo;
+        varying float vKind; varying float vBase; varying vec3 vInfo; varying vec3 vWP; varying vec3 vWN;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vKind = aKind; vBase = aBase; vWP = position; vWN = normal;`);
+        vKind = aKind; vBase = aBase; vInfo = aInfo; vWP = position; vWN = normal;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying float vKind; varying float vBase; varying vec3 vWP; varying vec3 vWN;
-        float bHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }`)
+        varying float vKind; varying float vBase; varying vec3 vInfo; varying vec3 vWP; varying vec3 vWN;
+        float bHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+        // 1 inside [a, b], with edges softened by e
+        float bBox(float x, float a, float b, float e) { return smoothstep(a - e, a + e, x) * (1.0 - smoothstep(b - e, b + e, x)); }
+        // thin dark line every "period", fading out before it turns into noise in the distance
+        float bLine(float x, float period, float width) {
+          float w = fwidth(x) / period, f = abs(fract(x / period) - 0.5);
+          return (1.0 - smoothstep(width, width + w * 1.5 + 0.01, 0.5 - f)) * (1.0 - smoothstep(0.15, 0.45, w));
+        }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        float kWin = 0.0; float kLit = 0.0;
-        if (vKind > 1.5) {
-          vec3 wn = normalize(vWN);
+        float kWin = 0.0; float kLit = 0.0; float kRough = 0.0;
+        vec3 wn = normalize(vWN);
+        float h = vWP.y - vBase;
+        float seed = vInfo.z, style = vInfo.y, eaves = max(vInfo.x, 2.4);
+        float sq = floor(seed * 1023.0 + 0.5);      // exact per building, safe to hash
+        if (vKind > 0.5 && vKind < 1.5) {
+          // ---- roof: seams or tiles running down the slope, plain felt when flat
+          if (wn.y < 0.985) {
+            vec2 across = normalize(vec2(-wn.z, wn.x) + vec2(1e-5));
+            float tile = step(0.5, seed);
+            float seam = bLine(dot(vWP.xz, across), mix(0.48, 0.24, tile), 0.06);
+            float rows = bLine(vWP.y / max(1.0 - wn.y * wn.y, 0.05), 0.34, 0.07) * tile;
+            diffuseColor.rgb *= 1.0 - 0.28 * max(seam, rows);
+            kRough = mix(-0.35, 0.0, tile);
+          }
+          diffuseColor.rgb *= 0.9 + 0.2 * bHash(floor(vWP.xz * 0.7) + mod(sq, 13.0));
+        } else if (abs(wn.y) < 0.35) {
           vec2 tg = normalize(vec2(-wn.z, wn.x) + vec2(1e-5));
           float u = dot(vWP.xz, tg);
-          float h = vWP.y - vBase;
-          vec2 cell = vec2(floor(u / 2.6), floor(h / 2.9));
-          vec2 f = vec2(fract(u / 2.6), fract(h / 2.9));
-          float rnd = bHash(cell + floor(vBase * 7.0));
-          kWin = step(0.2, f.x) * step(f.x, 0.8) * step(0.3, f.y) * step(f.y, 0.78)
-               * step(0.42, rnd) * step(abs(wn.y), 0.3) * step(0.3, h);
-          // mullion
-          kWin *= 1.0 - step(abs(f.x - 0.5), 0.02) * step(0.6, rnd);
-          kLit = step(0.86, rnd);
-          vec3 glass = mix(vec3(0.04, 0.05, 0.09), vec3(0.10, 0.07, 0.16), f.y);
-          diffuseColor.rgb = mix(diffuseColor.rgb, glass, kWin);
-        } else if (vKind < 0.5) {
-          // slight weathering towards the ground
-          diffuseColor.rgb *= 0.88 + 0.12 * smoothstep(0.0, 1.2, vWP.y - vBase);
+          vec3 wall = diffuseColor.rgb;
+          // wall material
+          if (style < 0.5) {
+            // houses: pastel paint over boards, or plaster
+            vec3 tint = 0.5 + 0.5 * cos(6.2831 * (seed * 3.0 + vec3(0.0, 0.33, 0.67)));
+            wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6);
+            float boards = seed > 0.7 ? bLine(u, 0.16, 0.05) : seed > 0.35 ? bLine(h, 0.15, 0.06) : 0.0;
+            wall *= 1.0 - 0.22 * boards;
+          } else if (style < 1.5) {
+            if (seed > 0.55) {
+              // brick
+              float row = floor(h / 0.085);
+              float mortar = max(bLine(h, 0.085, 0.08), bLine(u + mod(row, 2.0) * 0.13, 0.26, 0.04));
+              wall = mix(wall, vec3(0.42, 0.2, 0.15) * (0.85 + 0.3 * bHash(vec2(floor((u + mod(row, 2.0) * 0.13) / 0.26), row))), 0.75);
+              wall = mix(wall, vec3(0.62, 0.58, 0.55), mortar * 0.6);
+            } else {
+              // concrete panels
+              wall *= 1.0 - 0.3 * max(bLine(u, 3.0, 0.012), bLine(h, 2.8, 0.012));
+              wall *= 0.93 + 0.1 * bHash(vec2(floor(u / 3.0), floor(h / 2.8)) + mod(sq, 29.0));
+            }
+          } else {
+            // halls and shops: ribbed metal cladding with a coloured band under the eaves
+            wall *= 1.0 - 0.16 * bLine(u, 0.3, 0.1);
+            vec3 band = 0.5 + 0.5 * cos(6.2831 * (seed * 5.0 + vec3(0.1, 0.45, 0.8)));
+            wall = mix(wall, band * 0.8, step(eaves - 0.9, h) * step(h, eaves - 0.15) * step(0.4, seed) * 0.8);
+            kRough = -0.3;
+          }
+          // plinth, grime at the ground, shade under the eaves
+          wall = mix(wall, vec3(0.3, 0.29, 0.3), (1.0 - smoothstep(0.42, 0.46, h)) * 0.75);
+          wall *= 0.8 + 0.2 * smoothstep(0.0, 1.6, h);
+          wall *= 0.86 + 0.14 * (1.0 - smoothstep(eaves - 0.5, eaves - 0.05, h) * step(h, eaves));
+          diffuseColor.rgb = wall;
+
+          if (vKind > 1.5) {
+            // ---- windows and doors on a grid that follows the storeys
+            vec2 size = style < 0.5 ? vec2(2.5, 2.8) : style < 1.5 ? vec2(3.0, 2.8) : vec2(4.2, 3.6);
+            vec2 cell = vec2(floor(u / size.x), floor((h - 0.45) / size.y));
+            vec2 f = vec2(fract(u / size.x), fract((h - 0.45) / size.y)) * size;      // metres inside the cell
+            float rnd = bHash(cell + mod(sq, 61.0));
+            vec2 e = vec2(fwidth(u), fwidth(h)) + 0.004;
+            vec2 wc = vec2(size.x * 0.5, style < 1.5 ? 1.6 : 1.9);                   // window centre
+            vec2 wh = style < 0.5 ? vec2(0.55, 0.65) : style < 1.5 ? vec2(0.85, 0.7) : vec2(1.75, 0.75);
+            float have = style < 0.5 ? step(0.3, rnd) : style < 1.5 ? step(0.06, rnd) : step(0.45, rnd);
+            float inWall = step(0.45, h) * step(h + 0.25, floor((eaves - 0.45) / size.y + 0.35) * size.y + 0.45);
+            have *= inWall;
+            float door = step(cell.y, 0.5) * step(0.5, cell.y + 1.0) * step(0.88, rnd) * inWall;
+            // door: taller opening that starts at the plinth
+            vec2 dc = vec2(size.x * 0.5, 1.05), dh = vec2(style > 1.5 ? 1.1 : 0.5, 1.05);
+            vec2 c0 = mix(wc, dc, door), hs = mix(wh, dh, door);
+            float frame = bBox(f.x, c0.x - hs.x - 0.07, c0.x + hs.x + 0.07, e.x) * bBox(f.y, c0.y - hs.y - 0.07, c0.y + hs.y + 0.07, e.y);
+            float glass = bBox(f.x, c0.x - hs.x, c0.x + hs.x, e.x) * bBox(f.y, c0.y - hs.y, c0.y + hs.y, e.y);
+            float sill = bBox(f.x, c0.x - hs.x - 0.14, c0.x + hs.x + 0.14, e.x) * bBox(f.y, c0.y - hs.y - 0.13, c0.y - hs.y - 0.06, e.y) * (1.0 - door);
+            // glazing bars
+            float bars = max(1.0 - smoothstep(0.0, 0.025 + e.x, abs(f.x - c0.x)), (1.0 - smoothstep(0.0, 0.025 + e.y, abs(f.y - c0.y - hs.y * 0.35))) * step(style, 0.5));
+            frame *= have; glass *= have; sill *= have;
+            vec3 frameCol = mix(vec3(0.93, 0.92, 0.9), vec3(0.2, 0.19, 0.2), step(0.6, fract(seed * 7.3)));
+            vec3 doorCol = 0.35 + 0.3 * cos(6.2831 * (seed * 9.0 + vec3(0.0, 0.2, 0.5)));
+            diffuseColor.rgb = mix(diffuseColor.rgb, frameCol, max(frame, sill));
+            float pane = glass * (1.0 - bars * (1.0 - door));
+            float solidDoor = door * step(fract(rnd * 31.0), 0.6) * step(style, 1.5);
+            diffuseColor.rgb = mix(diffuseColor.rgb, doorCol, glass * solidDoor);
+            kWin = pane * (1.0 - solidDoor);
+            // balconies on some columns of apartment blocks
+            if (style > 0.5 && style < 1.5) {
+              float col2 = bHash(vec2(cell.x, mod(sq, 17.0)));
+              float rail = step(0.62, col2) * inWall * step(0.5, cell.y) * bBox(f.y, 0.25, 1.25, e.y) * bBox(f.x, 0.25, size.x - 0.25, e.x);
+              vec3 railCol = mix(vec3(0.8, 0.8, 0.82), 0.5 + 0.5 * cos(6.2831 * (seed * 4.0 + vec3(0.0, 0.33, 0.67))), 0.45);
+              diffuseColor.rgb = mix(diffuseColor.rgb, railCol * (0.9 - 0.25 * bLine(u, 0.12, 0.12)), rail);
+              kWin *= 1.0 - rail;
+            }
+            float litRnd = bHash(cell * 1.7 + mod(sq, 23.0));
+            kLit = step(0.74, litRnd) * (1.0 - door);
+            vec3 glassCol = mix(vec3(0.04, 0.05, 0.09), vec3(0.10, 0.07, 0.16), f.y / size.y);
+            // a hint of curtains and rooms in lit windows
+            float curtain = step(0.5, bHash(cell + 5.0)) * (1.0 - bBox(f.x, c0.x - hs.x * 0.5, c0.x + hs.x * 0.5, 0.02));
+            diffuseColor.rgb = mix(diffuseColor.rgb, glassCol, kWin);
+            kLit *= 1.0 - 0.45 * curtain;
+            vLitTint = mix(vec3(1.0, 0.62, 0.38), mix(vec3(1.0, 0.82, 0.55), vec3(0.55, 0.7, 1.0), step(0.93, litRnd)), step(0.84, litRnd));
+          }
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.06, kWin);`)
+        roughnessFactor = mix(clamp(roughnessFactor + kRough, 0.05, 1.0), 0.06, kWin);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-        metalnessFactor = mix(metalnessFactor, 0.85, kWin);`)
+        metalnessFactor = mix(metalnessFactor, 0.85, kWin * (1.0 - kLit));`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += kWin * kLit * vec3(1.0, 0.62, 0.38) * 1.6;`);
+        totalEmissiveRadiance += kWin * kLit * vLitTint * 1.5;`);
+    sh.fragmentShader = sh.fragmentShader.replace('float bHash(vec2 p)', 'vec3 vLitTint = vec3(1.0, 0.62, 0.38);\n        float bHash(vec2 p)');
   };
   return (sector) => {
     if (!sector.buildings.nv) return null;

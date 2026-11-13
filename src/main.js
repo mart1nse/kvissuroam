@@ -10,6 +10,8 @@ import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
+import { createSkidMarks } from './skidmarks.js';
+import { createBigMap } from './bigmap.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -49,7 +51,8 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud;
+let world, terrain, water, edge, hud, skids, bigmap;
+let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
 let mode = 'loading';            // loading | menu | drive
@@ -103,6 +106,9 @@ async function boot() {
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
   hud = createHud(world);
+  skids = createSkidMarks(world);
+  scene.add(skids.mesh);
+  bigmap = createBigMap(world, { onPick: dropAt, onClose: closeMap });
   if (params.get('photos') !== '0') {
     photos = createStreetPhotos(renderer, world);
     photos.load();
@@ -180,6 +186,7 @@ function startDriving() {
 
 function openGarage() {
   if (mode !== 'drive') return;
+  closeMap();
   mode = 'menu';
   input.enable(false);
   $('#menu').classList.remove('hidden');
@@ -217,16 +224,68 @@ function goLastSpot() {
   hud.toast('BACK ON DRY LAND');
 }
 
+// ---------------------------------------------------------------- city map
+function openMap() {
+  if (mode !== 'drive' || car.inWater) return;
+  bigmap.show(car);
+}
+
+function closeMap() {
+  bigmap?.hide();
+}
+
+function insideBoundary(x, z) {
+  const b = world.meta.boundary;
+  let inside = false;
+  for (let i = 0, j = b.length - 1; i < b.length; j = i++) {
+    const [xi, zi] = b[i], [xj, zj] = b[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+const freeGround = (x, z) => world.surfaceAt(x, z) !== SURFACE.WATER && world.sdfAt(x, z) > 1.6;
+
+// Drop the car where the map was tapped: on the street if the tap was on or
+// next to one (facing along it, in the right-hand lane), otherwise exactly on
+// the spot. If the spot is a building or the river, the nearest street is used.
+async function dropAt(x, z) {
+  if (dropping || mode !== 'drive') return;
+  if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
+  const onRoad = (maxD) => {
+    const r = bigmap.nearestRoad(x, z, maxD);
+    if (!r) return null;
+    const o = Math.min(r.w / 4, 1.7);
+    return { x: r.x + Math.cos(r.yaw) * o, z: r.z + Math.sin(r.yaw) * o, yaw: r.yaw, name: r.name };
+  };
+  dropping = true;
+  try {
+    await world.loadAround(x, z, 260);
+    let pose = onRoad(22);
+    if (!pose && freeGround(x, z)) pose = { x, z, yaw: car.yaw };
+    if (!pose) pose = onRoad(250);
+    if (!pose || !freeGround(pose.x, pose.z)) { hud.toast('NO ROOM FOR THE CAR THERE', 1800); return; }
+    closeMap();
+    history.length = 0;
+    place(pose);
+    hud.toast(pose.name ? pose.name.toUpperCase() : 'DROPPED IN', 2200);
+  } finally {
+    dropping = false;
+  }
+}
+
 function toggleSound() {
   audio.setMuted(!audio.muted);
   $('#soundbtn').classList.toggle('off', audio.muted);
 }
 
-input.on('KeyR', goLastSpot);
-input.on('KeyH', goHome);
-input.on('Home', goHome);
+const unlessMap = (fn) => () => { if (!bigmap?.isOpen) fn(); };
+input.on('KeyR', unlessMap(goLastSpot));
+input.on('KeyH', unlessMap(goHome));
+input.on('Home', unlessMap(goHome));
 input.on('KeyG', openGarage);
-input.on('Escape', openGarage);
+input.on('KeyT', () => (bigmap.isOpen ? closeMap() : openMap()));
+input.on('Escape', () => (bigmap.isOpen ? closeMap() : openGarage()));
 input.on('KeyM', toggleSound);
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
@@ -234,8 +293,32 @@ document.addEventListener('click', (e) => {
   if (act === 'reset') goLastSpot();
   else if (act === 'home') goHome();
   else if (act === 'garage') openGarage();
+  else if (act === 'map') openMap();
   else if (act === 'sound') toggleSound();
 });
+
+// ---------------------------------------------------------------- no page zoom
+// iOS Safari ignores user-scalable=no, so a stray second finger could pinch
+// the whole page into a zoom there is no way out of. Block the gestures, and
+// if the page ever does end up zoomed, snap it back.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault());
+if (window.visualViewport) {
+  const vp = document.querySelector('meta[name="viewport"]');
+  const content = vp.content;
+  let pending = 0;
+  visualViewport.addEventListener('resize', () => {
+    if (visualViewport.scale <= 1.01 || pending) return;
+    pending = setTimeout(() => {
+      pending = 0;
+      vp.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1';
+      requestAnimationFrame(() => { vp.content = content; });
+    }, 60);
+  });
+}
 
 // ---------------------------------------------------------------- frame loop
 const clock = new THREE.Timer();
@@ -251,7 +334,11 @@ function frame() {
   if (!car) return;
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
-  if (world.ready(car.x, car.z)) stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
+  // (and while the city map is open)
+  if (world.ready(car.x, car.z) && !bigmap.isOpen) {
+    stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
+    skids.update(car);
+  }
 
   if (mode === 'drive') {
     // remember safe ground
@@ -334,7 +421,7 @@ function frame() {
   }
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
-  audio.update(car, mode === 'drive');
+  audio.update(car, mode === 'drive' && !bigmap.isOpen);
 
   if (photos?.update(camera, dt)) {
     const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it
@@ -359,7 +446,7 @@ function frame() {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, startDriving, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

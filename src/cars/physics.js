@@ -111,6 +111,7 @@ export function stepCar(car, input, world, dtFrame) {
 }
 
 function substep(car, input, world, dt) {
+  car.skidF = car.skidR = 0;
   const s = car.spec;
   const m = s.mass, L = s.wheelbase;
   const up = +input.up || 0, down = +input.down || 0;
@@ -220,6 +221,7 @@ function substep(car, input, world, dt) {
   const hb = +input.handbrake || 0;
   if (hb) fxR = -vSign * sr.mu * fzR * 0.95;
   const capF = sf.mu * fzF, capR = sr.mu * fzR;
+  const askF = Math.abs(fxF) / capF, askR = hb ? 2 : Math.abs(fxR) / capR;   // demand over grip, for the skid marks only
   // Keyboard throttle is all-or-nothing, so the driven wheels keep a share of
   // their grip for cornering (the way a careful right foot would).
   const busy = Math.abs(car.vx) > 3 ? Math.min(1, Math.abs(car.steer) / 0.08 + Math.abs(car.slipR || 0) / 0.05) : 0;
@@ -249,6 +251,13 @@ function substep(car, input, world, dt) {
   const slipF = Math.atan2(vLatF, Math.max(Math.abs(vLonF), v0));
   const slipR = Math.atan2(vLatR, Math.max(Math.abs(car.vx), v0));
   car.slipR = slipR;
+  // How hard each axle is sliding, 0..1. Read by the skid marks and the tyre
+  // sound; nothing in the dynamics depends on it.
+  if (speed > 2.5) {
+    const lon = (x) => Math.max(0, Math.min(1, (x - 1.3) / 0.4));
+    car.skidF = Math.max(lon(askF), Math.min(1, Math.max(0, (Math.abs(slipF) - 0.12) / 0.1)));
+    car.skidR = Math.max(lon(askR), Math.min(1, Math.max(0, (Math.abs(slipR) - 0.12) / 0.1)));
+  } else car.skidF = car.skidR = 0;
   const fyF = -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
   const fyR = -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
 

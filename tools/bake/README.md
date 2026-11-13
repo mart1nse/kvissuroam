@@ -36,3 +36,8 @@ Detail area: `detail_area.json` outlines a zone (Kvissentali) that gets extra-sh
 tiles (`ortho/x/`, 0.10 m/px, swapped in close to the car) and, from the low-altitude lidar
 point clouds (Elevation data → Raw LiDAR data, 1:2000 sheets `476657 476658 477657 477658`,
 saved as `las_<sheet>.laz`), hedges, bushes and garden fences. These are drawn but not solid.
+
+Buildings and trees only: `python3 tools/bake/repack.py SRC public/data` rebuilds the buildings
+(`buildings.py`) and re-applies the tree rules (`trees.py`) in the existing sector files. It needs
+only the building OBJ files from step 3. Tree crown points that fall on a paved or gravel road are
+moved to the verge when it is within reach of the crown, and dropped otherwise.

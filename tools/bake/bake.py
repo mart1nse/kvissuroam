@@ -36,6 +36,8 @@ from shapely.strtree import STRtree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *  # noqa
+import buildings
+import trees as tree_rules
 
 Image.MAX_IMAGE_PIXELS = None
 SRC, OUT = sys.argv[1], sys.argv[2]
@@ -298,7 +300,10 @@ del trees
 T = T[(T[:, 0] > X0) & (T[:, 0] < X1 - 0.01) & (T[:, 1] > Z0) & (T[:, 1] < Z1 - 0.01)]
 tsurf = surf[(T[:, 1] - Z0).astype(int), (T[:, 0] - X0).astype(int)]
 T = T[tsurf != WATER]
-tsurf = tsurf[tsurf != WATER]
+# crown points over a street: move the tree to the verge, or drop it
+n_all = len(T)
+T, t_moved = tree_rules.clear_roads(T, surf, X0, Z0, blocked=rast([g for p, g in buildings_fp], X0, Z0, W1, H1, 1.0, all_touched=True) > 0)
+print(' trees over roads: moved', int(t_moved.sum()), 'dropped', n_all - len(T))
 t_ground = ground(T[:, 0], T[:, 1])
 t_sec = np.stack([np.floor((T[:, 0] - GRID0) / SECTOR), np.floor((T[:, 1] - GRID0) / SECTOR)], 1).astype(int)
 print(' trees', len(T))
@@ -327,137 +332,20 @@ if os.path.exists(f'{SRC}/bushes.npz'):
 print('buildings')
 
 
-def roof_colour(minx, miny, maxx, maxy):
+def roof_colour(bv, tris):
     """Median orthophoto colour inside a footprint box."""
     k = MOSAIC_RES
-    c0, c1 = int((minx - E0 - X0) / k), int((maxx - E0 - X0) / k) + 1
-    r0, r1 = int((N0 - maxy - Z0) / k), int((N0 - miny - Z0) / k) + 1
+    c0, c1 = int((bv[:, 0].min() - E0 - X0) / k), int((bv[:, 0].max() - E0 - X0) / k) + 1
+    r0, r1 = int((N0 - bv[:, 1].max() - Z0) / k), int((N0 - bv[:, 1].min() - Z0) / k) + 1
     patch = mos[max(r0, 0):max(r1, 1), max(c0, 0):max(c1, 1)]
     if patch.size == 0 or patch.max() == 0:
         return (120, 120, 125)
     return tuple(np.median(patch.reshape(-1, 3), 0))
 
 
-def load_obj(path):
-    off = [float(l.split()[3]) for l in open(path[:-4] + '.fwt').read().strip().splitlines()]
-    verts = []
-    groups = {}
-    cur = None
-    with open(path) as fh:
-        for line in fh:
-            if line.startswith('v '):
-                _, x, y, z = line.split()
-                verts.append((float(x) + off[0], float(y) + off[1], float(z) + off[2]))
-            elif line.startswith('usemtl'):
-                cur = groups.setdefault(line.split()[1], [])
-            elif line.startswith('f '):
-                idx = [int(t.split('/')[0]) - 1 for t in line.split()[1:]]
-                for i in range(1, len(idx) - 1):
-                    cur.append((idx[0], idx[i], idx[i + 1]))
-    return np.array(verts), groups
-
-
-WALLS = [(236, 234, 228), (222, 218, 208), (200, 198, 196), (168, 160, 150), (120, 96, 78),
-         (90, 92, 98), (232, 222, 196), (190, 170, 150), (245, 245, 245), (150, 110, 90)]
-bsec = {}          # sector -> list of (pos(m,3,3), nrm(m,3), col(m,3), kind(m), base(m))
-
-
-def emit(key, V, tris, wall_rgb, roof_rgb, extend=2.0, slab=None):
-    """V: (n,3) E,N,H. Stores flat-shaded triangles in game coordinates."""
-    V = V.copy()
-    T_ = np.asarray(tris)
-    zmin, zmax = V[:, 2].min(), V[:, 2].max()
-    area = (V[:, 0].max() - V[:, 0].min()) * (V[:, 1].max() - V[:, 1].min())
-    windows = slab is None and extend >= 2.0 and (zmax - zmin) > 3.3 and area > 45
-    if slab is not None:                       # keep only a thin roof slab
-        V[:, 2] = np.maximum(V[:, 2], zmax - slab)
-    else:
-        V[V[:, 2] < zmin + 0.05, 2] -= extend  # push the base into the ground
-    P = np.stack([V[:, 0] - E0, V[:, 2] - H0, -(V[:, 1] - N0)], 1)
-    pa, pb, pc = P[T_[:, 0]], P[T_[:, 1]], P[T_[:, 2]]
-    n = -np.cross(pb - pa, pc - pa)            # E,N,H -> x,y,z flips handedness
-    l = np.linalg.norm(n, axis=1)
-    ok = l > 1e-9
-    n = n / np.maximum(l, 1e-12)[:, None]
-    if slab is None:
-        ok &= n[:, 1] >= -0.7                  # drop floors
-    roof = n[:, 1] > 0.25
-    col = np.where(roof[:, None], np.array(roof_rgb, 'float32'), np.array(wall_rgb, 'float32'))
-    kind = np.where(roof, 1, 2 if windows else 0)
-    pos = np.stack([pa, pc, pb], 1)
-    m = int(ok.sum())
-    bsec.setdefault(key, []).append((pos[ok], n[ok], col[ok], kind[ok], np.full(m, zmin - H0)))
-
-
-def sector_of(e, n_):
-    return (int((e - E0 - GRID0) // SECTOR), int((N0 - n_ - GRID0) // SECTOR))
-
-
-n_b = n_c = 0
-for name in ('Tartu_linn', 'Tartu_vald'):
-    V, groups = load_obj(f'{SRC}/hooned_lod2-{name}.obj')
-    for mtl, tris in groups.items():
-        if not tris:
-            continue
-        t = np.array(tris)
-        ids = np.unique(t)
-        bv = V[ids]
-        key = sector_of(bv[:, 0].mean(), bv[:, 1].mean())
-        if key not in SECSET:
-            continue
-        t2 = np.searchsorted(ids, t)
-        cx, cy = bv[:, 0].mean(), bv[:, 1].mean()
-        emit(key, bv, t2, WALLS[(int(cx * 7) ^ int(cy * 13)) % len(WALLS)],
-             roof_colour(bv[:, 0].min(), bv[:, 1].min(), bv[:, 0].max(), bv[:, 1].max()))
-        n_b += 1
-    del V, groups
-    V, groups = load_obj(f'{SRC}/katusealused_lod1-{name}.obj')
-    for mtl, tris in groups.items():
-        if not tris:
-            continue
-        t = np.array(tris)
-        ids = np.unique(t)
-        bv = V[ids]
-        key = sector_of(bv[:, 0].mean(), bv[:, 1].mean())
-        if key not in SECSET:
-            continue
-        emit(key, bv, np.searchsorted(ids, t), (70, 70, 74), (70, 70, 74), slab=0.22)
-        n_c += 1
-        zmin, zmax = bv[:, 2].min(), bv[:, 2].max()
-        rect = MultiPoint([(x, y) for x, y, _ in bv]).minimum_rotated_rectangle
-        if rect.geom_type != 'Polygon':
-            continue
-        ctr = rect.centroid
-        for x, y in list(rect.exterior.coords)[:4]:      # corner posts, pulled slightly inside
-            x += (ctr.x - x) * 0.06; y += (ctr.y - y) * 0.06
-            s = 0.07
-            pv = np.array([[x - s, y - s, zmin], [x + s, y - s, zmin], [x + s, y + s, zmin], [x - s, y + s, zmin],
-                           [x - s, y - s, zmax - 0.2], [x + s, y - s, zmax - 0.2], [x + s, y + s, zmax - 0.2], [x - s, y + s, zmax - 0.2]])
-            pt = [(0, 1, 5), (0, 5, 4), (1, 2, 6), (1, 6, 5), (2, 3, 7), (2, 7, 6), (3, 0, 4), (3, 4, 7)]
-            emit(key, pv, pt, (60, 60, 64), (60, 60, 64), extend=1.0)
-    del V, groups
+bsec, n_b, n_c = buildings.build(SRC, SECSET, roof_colour)
 print(' lod2 buildings', n_b, 'roofed areas', n_c)
 del mos
-
-
-def pack_buildings(key, sx0, sz0):
-    parts = bsec.get(key)
-    if not parts:
-        return 0, b''
-    pos = np.concatenate([p[0] for p in parts]).reshape(-1, 3).astype('float32')
-    nrm = np.repeat(np.concatenate([p[1] for p in parts]), 3, 0)
-    col = np.repeat(np.concatenate([p[2] for p in parts]), 3, 0)
-    kind = np.repeat(np.concatenate([p[3] for p in parts]), 3, 0).astype('uint8')
-    base = np.repeat(np.concatenate([p[4] for p in parts]), 3, 0)
-    nv = len(pos)
-    pq = np.zeros((nv, 3), '<i2')
-    pq[:, 0] = np.clip(np.round((pos[:, 0] - sx0) / 0.05), -32767, 32767)     # sector-relative
-    pq[:, 1] = np.clip(np.round(pos[:, 1] / 0.01), -32767, 32767)
-    pq[:, 2] = np.clip(np.round((pos[:, 2] - sz0) / 0.05), -32767, 32767)
-    nq = np.clip(np.round(nrm * 127), -127, 127).astype('i1')
-    cq = np.clip(col, 0, 255).astype('u1')
-    bq = np.clip(np.round(base / 0.01), -32767, 32767).astype('<i2')
-    return nv, pq.tobytes() + nq.tobytes() + cq.tobytes() + kind.tobytes() + bq.tobytes()
 
 
 # ---------------------------------------------------------------- sectors
@@ -465,9 +353,8 @@ print('sectors')
 solid = [g for p, g in buildings_fp if p.get('tyyp_t') != 'Vundament']
 solid += [g.buffer(0.12) for p, g in feats('E_405_piire_j')]
 solid_tree = STRtree(solid)
-hard = (tsurf == PAVED) | (tsurf == GRAVEL)      # trees "on" roads are canopy overhang: no trunk there
-trunk_tree = cKDTree(T[~hard][:, :2])
-trunk_h = T[~hard][:, 2]
+trunk_tree = cKDTree(T[:, :2])
+trunk_h = T[:, 2]
 S, FINE, MARGIN = int(SECTOR), 0.25, 16.0
 nf = int((SECTOR + 2 * MARGIN) / FINE)
 total = 0
@@ -504,7 +391,7 @@ for k, (sx, sz) in enumerate(SECS):
     rec = np.zeros(int(m.sum()), dtype=[('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('h', '<f4'), ('c', '<f4'), ('k', '<f4')])
     rec['x'] = T[m, 0]; rec['z'] = T[m, 1]; rec['y'] = t_ground[m] - H0
     rec['h'] = T[m, 2]; rec['c'] = np.clip(T[m, 3], 1.5, 16); rec['k'] = T[m, 4]
-    nv, bbytes = pack_buildings((sx, sz), x0, z0)
+    nv, bbytes = buildings.pack(bsec, (sx, sz), x0, z0)
     bush, fence = low_obj.get((sx, sz), (np.zeros((0, 3), '<u2'),) * 2)
     head = struct.pack('<4s7I', b'KVS1', hq.shape[0], sf.shape[0], nd, nv, len(rec), len(bush), len(fence))
     blob = gzip.compress(head + hq.tobytes() + sf.tobytes() + sdq.tobytes() + bbytes + rec.tobytes()

@@ -62,8 +62,24 @@ function groundMaterial(map, detail, overview, mask) {
         diffuseColor.rgb *= mix(1.0, (dA * 0.75 + dB * 0.55) * 1.02, k * 0.85);
         #ifdef USE_MASK
           vec4 mk = texture2D(uMask, (vWxz - uSec.xy) / uSec.z);
+          // asphalt: the aerial photo gives the tone and the painted lines, a generated surface gives the grain
+          float grain = texture2D(uDetail, vWxz * 2.3).r;
+          vec3 asphalt = vec3(0.2, 0.2, 0.225) * (0.55 + 0.6 * grain) * (0.8 + 0.4 * dB);
+          float lum = dot(diffuseColor.rgb, vec3(0.33));
+          asphalt *= 0.8 + 0.5 * smoothstep(0.45, 0.9, lum);       // keep painted markings and light patches readable
+          diffuseColor.rgb = mix(diffuseColor.rgb, asphalt, 0.82 * smoothstep(0.45, 0.6, mk.r));
+          // kerb stone where paving meets anything else
+          float kerb = smoothstep(0.86, 1.0, mk.r * (1.0 - mk.r) * 4.0) * (1.0 - smoothstep(40.0, 110.0, dist));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.5) * (0.8 + 0.3 * grain), kerb * 0.8);
+          // gravel and dirt
+          vec3 gravel = mix(vec3(0.4, 0.36, 0.31), vec3(0.3, 0.27, 0.24), dB) * (0.6 + 0.7 * grain);
+          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.55 * smoothstep(0.45, 0.6, mk.b));
+          // grass: blades and clumps on whatever is left
+          float soft = (1.0 - smoothstep(0.3, 0.5, mk.r)) * (1.0 - smoothstep(0.3, 0.5, mk.b));
+          float blades = texture2D(uDetail, vWxz * vec2(4.3, 1.1)).r * texture2D(uDetail, vWxz.yx * vec2(3.7, 0.9) + 0.37).r;
+          float green = smoothstep(0.0, 0.06, diffuseColor.g - max(diffuseColor.r, diffuseColor.b) + 0.03);
+          diffuseColor.rgb *= mix(1.0, 0.72 + 1.3 * blades, soft * green * k);
           diffuseColor.rgb *= mix(0.55, 1.0, mk.g);                 // contact shadow along walls
-          diffuseColor.rgb *= mix(1.0, 0.7, mk.r);                  // asphalt is darker than the sun-bleached aerial photo
           gWet = mk.r * (0.55 + 0.9 * (dB - 0.5));                  // damp asphalt, patchy
         #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -184,6 +200,17 @@ export function createTerrain(world, renderer, opts) {
           px[k * 4 + 1] = Math.max(0, Math.min(255, Math.round((d / 2.2) * 255)));
           px[k * 4 + 2] = c === 2 || c === 3 ? 255 : 0;
           px[k * 4 + 3] = 255;
+        }
+      }
+      for (const ch of [0, 2]) {            // soften the 1 m steps of the surface grid
+        const src = new Uint8Array(sn * sn);
+        for (let k = 0; k < sn * sn; k++) src[k] = px[k * 4 + ch];
+        for (let j = 1; j < sn - 1; j++) {
+          for (let i = 1; i < sn - 1; i++) {
+            const k = j * sn + i;
+            px[k * 4 + ch] = (src[k] * 4 + (src[k - 1] + src[k + 1] + src[k - sn] + src[k + sn]) * 2
+              + src[k - sn - 1] + src[k - sn + 1] + src[k + sn - 1] + src[k + sn + 1]) >> 4;
+          }
         }
       }
       const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);

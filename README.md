@@ -1,7 +1,7 @@
 # KvissuRoam
 
 A free-driving browser game set in Kvissentali, Tartu, Estonia. You start in a driveway on
-Kvissentali tee and can roam about 1.6 km × 1.6 km of real streets, lawns and the bank of the
+Kvissentali tee and can roam about 37 km² of greater Tartu: real streets, lawns and the bank of the
 Emajõgi in one of three black cars.
 
 | Car | Power | 0–100 km/h (factory / in game) | Top speed (factory / in game) |

@@ -103,7 +103,7 @@ async function boot() {
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
   hud = createHud(world);
-  if (params.get('photos') !== '0') {
+  if (params.get('photos') === '1') {     // street photo projection: an experiment, off unless asked for
     photos = createStreetPhotos(renderer, world);
     photos.load();
     scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
@@ -314,6 +314,7 @@ function frame() {
     camera.position.copy(camPos);
     camera.fov = isTouch ? 40 : 46;
   }
+  if (window.__cam) { camera.position.fromArray(window.__cam, 0); camLook.fromArray(window.__cam, 3); camera.fov = window.__cam[6] ?? 55; }   // test hook
   camera.updateProjectionMatrix();
   camera.lookAt(camLook);
 

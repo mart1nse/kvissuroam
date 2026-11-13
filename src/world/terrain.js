@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { sunDirection } from './sky.js';
 
 const BASE = `${import.meta.env.BASE_URL}data/ortho/`;
+
+const SUN = sunDirection();
 
 function makeDetailTexture() {
   // tiling grain that hides the blur of the aerial photo up close
@@ -32,28 +35,48 @@ function makeDetailTexture() {
   return t;
 }
 
-function groundMaterial(map, detail, overview) {
+// mask: per-sector texture (R paved, G openness near walls, B gravel or dirt) with its sector origin
+function groundMaterial(map, detail, overview, mask) {
   // overview: sample the map by world position inside the scenery rectangle instead of by uv
   const mat = new THREE.MeshLambertMaterial({ map });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uDetail = { value: detail };
+    shader.uniforms.uMask = { value: mask ? mask.tex : null };
+    shader.uniforms.uSec = { value: mask ? new THREE.Vector3(mask.x0, mask.z0, mask.size) : new THREE.Vector3() };
+    shader.uniforms.uSunDir = { value: SUN };
+    if (mask) shader.defines = { ...(shader.defines || {}), USE_MASK: '' };
     shader.uniforms.uRect = { value: overview || new THREE.Vector4() };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vWxz;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWxz = position.xz;');
+      .replace('#include <common>', '#include <common>\nvarying vec2 vWxz;\nvarying float vWy;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWxz = position.xz;\nvWy = position.y;');
     const sample = overview
       ? `diffuseColor *= texture2D(map, vec2((vWxz.x - uRect.x) / uRect.z, 1.0 - (vWxz.y - uRect.y) / uRect.w));`
       : '#include <map_fragment>';
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform vec4 uRect;\nvarying vec2 vWxz;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying float vWy;\nfloat gWet = 0.0;')
       .replace('#include <map_fragment>', `${sample}
         float dA = texture2D(uDetail, vWxz * 0.9).r;
         float dB = texture2D(uDetail, vWxz * 0.11).r;
         float dist = length(vViewPosition);
         float k = 1.0 - smoothstep(25.0, 90.0, dist);
-        diffuseColor.rgb *= mix(1.0, (dA * 0.75 + dB * 0.55) * 1.02, k * 0.85);`);
+        diffuseColor.rgb *= mix(1.0, (dA * 0.75 + dB * 0.55) * 1.02, k * 0.85);
+        #ifdef USE_MASK
+          vec4 mk = texture2D(uMask, (vWxz - uSec.xy) / uSec.z);
+          diffuseColor.rgb *= mix(0.55, 1.0, mk.g);                 // contact shadow along walls
+          diffuseColor.rgb *= mix(1.0, 0.7, mk.r);                  // asphalt is darker than the sun-bleached aerial photo
+          gWet = mk.r * (0.55 + 0.9 * (dB - 0.5));                  // damp asphalt, patchy
+        #endif`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        #ifdef USE_MASK
+          vec3 wV = normalize(cameraPosition - vec3(vWxz.x, vWy, vWxz.y));
+          float fres = pow(1.0 - clamp(wV.y, 0.0, 1.0), 5.0);
+          vec3 wR = reflect(-wV, vec3(0.0, 1.0, 0.0));
+          float sunUp = max(dot(wR, uSunDir), 0.0);
+          vec3 skyRef = mix(vec3(0.62, 0.36, 0.78), vec3(1.0, 0.52, 0.45), pow(sunUp, 3.0));
+          totalEmissiveRadiance += gWet * (skyRef * fres * 0.32 + vec3(1.0, 0.62, 0.42) * pow(sunUp, 90.0) * 1.1);
+        #endif`);
   };
-  mat.customProgramCacheKey = () => (overview ? 'ground-overview' : 'ground-tile');
+  mat.customProgramCacheKey = () => (overview ? 'ground-overview' : mask ? 'ground-tile-mask' : 'ground-tile');
   return mat;
 }
 
@@ -149,6 +172,25 @@ export function createTerrain(world, renderer, opts) {
     const seg = per / stride, nv = seg + 1;
     const hAt = (c, r) => H[r * hn + c] * hs + hoff;
     s.chunks = [];
+    {
+      const sn = meta.surface.n, dn = meta.sdf.n, step = (dn - 1) / sn;
+      const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
+      const px = new Uint8Array(sn * sn * 4);
+      for (let j = 0; j < sn; j++) {
+        for (let i = 0; i < sn; i++) {
+          const k = j * sn + i, c = s.S[k];
+          const d = dmin + (s.D[Math.round((j + 0.5) * step) * dn + Math.round((i + 0.5) * step)] / 255) * dspan;
+          px[k * 4] = c === 1 ? 255 : 0;
+          px[k * 4 + 1] = Math.max(0, Math.min(255, Math.round((d / 2.2) * 255)));
+          px[k * 4 + 2] = c === 2 || c === 3 ? 255 : 0;
+          px[k * 4 + 3] = 255;
+        }
+      }
+      const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);
+      tex.magFilter = tex.minFilter = THREE.LinearFilter;
+      tex.needsUpdate = true;
+      s.mask = { tex, x0: s.x0, z0: s.z0, size: S };
+    }
     for (let ty = 0; ty < s.div; ty++) {
       for (let tx = 0; tx < s.div; tx++) {
         const pos = new Float32Array(nv * nv * 3);
@@ -182,7 +224,7 @@ export function createTerrain(world, renderer, opts) {
         mesh.matrixAutoUpdate = false;
         group.add(mesh);
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
-        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
+        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, mask: s.mask, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
       }
@@ -199,6 +241,7 @@ export function createTerrain(world, renderer, opts) {
       if (ch.matX) { ch.matX.map.dispose(); ch.matX.dispose(); }
     }
     s.chunks = null;
+    if (s.mask) { s.mask.tex.dispose(); s.mask = null; }
   }
 
   // ---- hi-res tile streaming around the camera
@@ -213,7 +256,7 @@ export function createTerrain(world, renderer, opts) {
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = aniso;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      ch.matHi = groundMaterial(tex, detail);
+      ch.matHi = groundMaterial(tex, detail, null, ch.mask);
       ch.mesh.material = ch.matHi;
       ch.state = 'hi';
     }, undefined, () => { loading--; ch.state = 'failed'; });
@@ -228,7 +271,7 @@ export function createTerrain(world, renderer, opts) {
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = aniso;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      ch.matX = groundMaterial(tex, detail);
+      ch.matX = groundMaterial(tex, detail, null, ch.mask);
       ch.mesh.material = ch.matX;
       ch.xstate = 'on';
     }, undefined, () => { loading--; ch.xstate = 'failed'; });

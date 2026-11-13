@@ -16,8 +16,8 @@ HM_RES = 2.0           # sector heightmap resolution (m)
 SURF_RES = 1.0         # surface-class mask resolution (m)
 SDF_RES = 0.5          # obstacle distance field resolution (m)
 TILE_PX = 1024         # orthophoto tile size in pixels
-# sectors with 4x4 orthophoto tiles (0.16 m/px) instead of 2x2 (0.31 m/px)
-HI_SECTORS = {(0, 0), (1, 0), (0, 1), (1, 1)}
+XTILE_PX = 1536        # extra-sharp tiles (0.10 m/px) inside detail_area.json, shown close to the car
+BUSH_RES = 0.5         # lidar bush/hedge grid (m)
 # coarse far-scenery grid (world x/z, metres)
 CX0, CX1, CZ0, CZ1 = -3808.0, 6432.0, -4768.0, 7264.0
 COARSE_RES = 32.0
@@ -26,7 +26,33 @@ MOSAIC_RES = 1.25      # working orthophoto mosaic for roof colours / driveway d
 # start: driveway of Kvissentali tee 8, facing the street (north)
 START_E, START_N = 657870.0, 6477151.0
 
-BOUNDARY = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boundary.json')))
+_here = os.path.dirname(os.path.abspath(__file__))
+BOUNDARY = json.load(open(os.path.join(_here, 'boundary.json')))
+DETAIL_AREA = json.load(open(os.path.join(_here, 'detail_area.json')))   # extra-detail zone (Kvissentali)
+
+
+def _detail():
+    from shapely.geometry import Polygon, box
+    poly = Polygon(DETAIL_AREA)
+    hi, xt = set(), []
+    minx, miny, maxx, maxy = poly.bounds
+    for sz in range(int((-(maxy - N0) - GRID0) // SECTOR), int((-(miny - N0) - GRID0) // SECTOR) + 1):
+        for sx in range(int((minx - E0 - GRID0) // SECTOR), int((maxx - E0 - GRID0) // SECTOR) + 1):
+            x0 = GRID0 + sx * SECTOR; z0 = GRID0 + sz * SECTOR
+            if poly.intersection(box(E0 + x0, N0 - z0 - SECTOR, E0 + x0 + SECTOR, N0 - z0)).area < 4000:
+                continue
+            hi.add((sx, sz))
+            t = SECTOR / 4
+            for j in range(4):
+                for i in range(4):
+                    if poly.intersects(box(E0 + x0 + i * t, N0 - z0 - (j + 1) * t, E0 + x0 + (i + 1) * t, N0 - z0 - j * t)):
+                        xt.append((sx, sz, i, j))
+    return hi, xt
+
+
+# sectors with 4x4 orthophoto tiles (0.16 m/px) instead of 2x2 (0.31 m/px), and the extra-sharp tiles
+HI_SECTORS, XTILES = _detail()
+HI_SECTORS |= {(0, 0), (1, 0), (0, 1), (1, 1)}
 
 
 def sectors():

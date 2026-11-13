@@ -17,6 +17,7 @@ Then:
 cd SRC && python3 /path/to/repo/tools/bake/extract_etak.py     # writes etak_bbox.json
 cd /path/to/repo
 python3 tools/bake/fetch_ortho.py public/data/ortho SRC        # orthophoto tiles from the public WMS
+python3 tools/bake/lidar_bushes.py SRC      # optional: hedges, bushes, fences (needs laspy[lazrs])
 python3 tools/bake/bake.py SRC public/data
 ```
 
@@ -30,3 +31,8 @@ Bridges: the terrain model has bridges removed, so roads that ETAK marks as elev
 across water, and ramps cut into the embankments where they cross dry land (the map is a single
 height field, so there are no real underpasses).
 World frame: x = east − E0, z = −(north − N0), y = height − H0, in L-EST97 metres.
+
+Detail area: `detail_area.json` outlines a zone (Kvissentali) that gets extra-sharp orthophoto
+tiles (`ortho/x/`, 0.10 m/px, swapped in close to the car) and, from the low-altitude lidar
+point clouds (Elevation data → Raw LiDAR data, 1:2000 sheets `476657 476658 477657 477658`,
+saved as `las_<sheet>.laz`), hedges, bushes and garden fences. These are drawn but not solid.

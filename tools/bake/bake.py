@@ -9,7 +9,8 @@ Inputs (see tools/bake/README.md for where to download them), expected in SRC:
   ortho_mosaic.npy                    written by fetch_ortho.py (run it first)
 
 Outputs in OUT: meta.json, vectors.json, coarse.bin and one sec/{sx}_{sz}.kvs
-per sector (gzip: height, surface classes, obstacle distance field, buildings, trees).
+per sector (gzip: height, surface classes, obstacle distance field, buildings, trees,
+and in the detail area hedges/bushes and fences from lidar_bushes.py).
 
 Usage: python3 tools/bake/bake.py SRC_DIR public/data
 """
@@ -302,6 +303,26 @@ t_ground = ground(T[:, 0], T[:, 1])
 t_sec = np.stack([np.floor((T[:, 0] - GRID0) / SECTOR), np.floor((T[:, 1] - GRID0) / SECTOR)], 1).astype(int)
 print(' trees', len(T))
 
+# ---------------------------------------------------------------- hedges, bushes and fences (lidar, detail area only)
+low_obj = {}          # sector -> (bush records, fence records), each (n,3) uint16: ix, iz, height dm | angle << 8
+if os.path.exists(f'{SRC}/bushes.npz'):
+    bz = np.load(f'{SRC}/bushes.npz')
+    bx0, bz0, bres = float(bz['x0']), float(bz['z0']), float(bz['res'])
+    inside = rast([Polygon(DETAIL_AREA)], bx0, bz0, bz['h'].shape[1], bz['h'].shape[0], bres) > 0
+    for kind, arr in ((0, bz['h']), (1, bz['fh'])):
+        rr, cc = np.nonzero((arr > 0) & inside)
+        wx, wz = bx0 + (cc + 0.5) * bres, bz0 + (rr + 0.5) * bres
+        sc = surf[np.clip((wz - Z0).astype(int), 0, H1 - 1), np.clip((wx - X0).astype(int), 0, W1 - 1)]
+        ok = (sc == GRASS) | (sc == DIRT)                   # nothing on roads, drives or water
+        rr, cc, wx, wz = rr[ok], cc[ok], wx[ok], wz[ok]
+        val = arr[rr, cc].astype('uint16') | ((bz['fa'][rr, cc].astype('uint16') << 8) if kind else 0)
+        sxs, szs = np.floor((wx - GRID0) / SECTOR).astype(int), np.floor((wz - GRID0) / SECTOR).astype(int)
+        for key in set(zip(sxs.tolist(), szs.tolist())):
+            m = (sxs == key[0]) & (szs == key[1])
+            rec = np.stack([(wx[m] - (GRID0 + key[0] * SECTOR)) / bres, (wz[m] - (GRID0 + key[1] * SECTOR)) / bres, val[m]], 1).astype('<u2')
+            low_obj.setdefault(key, [np.zeros((0, 3), '<u2'), np.zeros((0, 3), '<u2')])[kind] = rec
+        print(' lidar', 'fence' if kind else 'bush', 'cells', len(rr))
+
 # ---------------------------------------------------------------- buildings
 print('buildings')
 
@@ -484,8 +505,10 @@ for k, (sx, sz) in enumerate(SECS):
     rec['x'] = T[m, 0]; rec['z'] = T[m, 1]; rec['y'] = t_ground[m] - H0
     rec['h'] = T[m, 2]; rec['c'] = np.clip(T[m, 3], 1.5, 16); rec['k'] = T[m, 4]
     nv, bbytes = pack_buildings((sx, sz), x0, z0)
-    head = struct.pack('<4s7I', b'KVS1', hq.shape[0], sf.shape[0], nd, nv, len(rec), 0, 0)
-    blob = gzip.compress(head + hq.tobytes() + sf.tobytes() + sdq.tobytes() + bbytes + rec.tobytes(), 6)
+    bush, fence = low_obj.get((sx, sz), (np.zeros((0, 3), '<u2'),) * 2)
+    head = struct.pack('<4s7I', b'KVS1', hq.shape[0], sf.shape[0], nd, nv, len(rec), len(bush), len(fence))
+    blob = gzip.compress(head + hq.tobytes() + sf.tobytes() + sdq.tobytes() + bbytes + rec.tobytes()
+                         + bush.tobytes() + fence.tobytes(), 6)
     open(f'{OUT}/sec/{sx}_{sz}.kvs', 'wb').write(blob)
     total += len(blob)
     sec_meta.append([sx, sz, 4 if (sx, sz) in HI_SECTORS else 2])
@@ -527,7 +550,8 @@ meta = {
     'height': {'res': HM_RES, 'n': S // int(HM_RES) + 1, 'scale': Q, 'offset': -100.0},
     'surface': {'res': SURF_RES, 'n': S, 'classes': ['grass', 'paved', 'gravel', 'dirt', 'water']},
     'sdf': {'res': SDF_RES, 'n': int(SECTOR / SDF_RES) + 1, 'min': -4.0, 'max': 12.0},
-    'ortho': {'px': TILE_PX},
+    'ortho': {'px': TILE_PX, 'x': ['%d_%d_%d_%d' % t for t in XTILES]},
+    'lowres': BUSH_RES,
     'boundary': [[round(x - E0, 1), round(-(y - N0), 1)] for x, y in bnd.exterior.coords],
     'riverLevel': round(river_level - H0, 2),
     'start': {'x': START_E - E0, 'z': -(START_N - N0), 'heading': 0.0},

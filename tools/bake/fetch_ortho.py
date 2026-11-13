@@ -60,7 +60,25 @@ def run(job):
     path = f'{OUT}/{sx}_{sz}_{i}_{j}.jpg'
     if not os.path.exists(path):
         fetch(x0, z0, x0 + t, z0 + t, TILE_PX, TILE_PX).save(path, quality=80)
+    if (sx, sz, i, j) in XSET and not os.path.exists(f'{OUT}/x/{sx}_{sz}_{i}_{j}.jpg'):
+        # fetched as 2x2 quarters to stay at the server's native 0.1 m/px sampling
+        h = XTILE_PX // 2
+        im = Image.new('RGB', (XTILE_PX, XTILE_PX))
+        for b in range(2):
+            for a in range(2):
+                im.paste(fetch(x0 + a * t / 2, z0 + b * t / 2, x0 + (a + 1) * t / 2, z0 + (b + 1) * t / 2, h, h), (a * h, b * h))
+        im.save(f'{OUT}/x/{sx}_{sz}_{i}_{j}.jpg', quality=82)
     return job
+
+
+XSET = set(XTILES)
+os.makedirs(f'{OUT}/x', exist_ok=True)
+# a sector that changed its tile grid: drop the tiles of the old grid
+for sx, sz in HI_SECTORS:
+    if os.path.exists(f'{OUT}/{sx}_{sz}_0_0.jpg') and not os.path.exists(f'{OUT}/{sx}_{sz}_3_3.jpg'):
+        for j in range(2):
+            for i in range(2):
+                os.remove(f'{OUT}/{sx}_{sz}_{i}_{j}.jpg')
 
 
 x0, z0, x1, z1 = detail_rect()

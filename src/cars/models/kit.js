@@ -785,3 +785,24 @@ export function rearWiper(pr, x0, y0, x1, y1) {
   s.add(cyl(0.022, 0.026, 0.035, 12, { p: [x0, y0, pr.rearZ(x0, y0) + 0.012], r: [Math.PI / 2, 0, 0] }, 'plastic'));
   return s;
 }
+// Per-car paint colour: swaps the shared paint material on an assembled car for a tinted clone
+// (one clone per car id, reused across rebuilds). props are extra material properties.
+const _tints = new Map();
+export function tintPaint(car, id, color, props = {}) {
+  const mesh = car.group.getObjectByName(`${id}_paint`);
+  if (!mesh) return car;
+  let m = _tints.get(id);
+  if (!m) { m = mesh.material.clone(); m.color.set(color); Object.assign(m, props); _tints.set(id, m); }
+  mesh.material = m;
+  return car;
+}
+// Roof rail on the right side (sym() it): a tube following the roof at lateral position x from z0 to z1,
+// standing h above the surface and dipping into the roof at both ends.
+export function roofRail(pr, x, z0, z1, h = 0.04, pal = 'plastic', r = 0.013) {
+  const pts = [], n = 12;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, z = z0 + (z1 - z0) * t, k = smooth(Math.min(1, Math.min(t, 1 - t) * 8));
+    pts.push([x, pr.topY(x, z) + h * k - 0.006 * (1 - k), z]);
+  }
+  return tube(pts, r, null, pal, 6);
+}

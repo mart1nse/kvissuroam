@@ -1,4 +1,4 @@
-// Real-world data for the three cars. Performance comes out of the physics
+// Real-world data for the cars. Performance comes out of the physics
 // (torque curve, gearing, mass, drag); the "ref" block holds the factory
 // figures the simulation is calibrated against (see tools/perf-test.mjs).
 
@@ -95,6 +95,99 @@ export const CARS = {
     limiter: 160,
     ref: { zeroTo100: 6.9, top: 160, powerKw: 195 },
   },
+  rav4: {
+    id: 'rav4',
+    name: 'Toyota RAV4 2.0 4WD',
+    short: 'RAV4 2.0',
+    year: 2020,
+    blurb: 'XA50 · 2.0 R4 · 129 kW · Multidrive S automatic · all-wheel drive',
+    mass: 1700,                 // kerb about 1625 kg + driver
+    wheelbase: 2.69,
+    track: 1.605,
+    cgFront: 0.42,
+    cgHeight: 0.66,
+    wheelRadius: 0.364,
+    cdA: 0.33 * 2.62,
+    drive: 'awd',
+    engine: {
+      type: 'ice',
+      idle: 750,
+      redline: 6900,
+      shiftRpm: 6650,
+      // M20A-FKS: 208 Nm @ 4300-5200, 129 kW @ 6600
+      torque: [[750, 140], [1500, 170], [2500, 190], [3500, 202], [4300, 208], [5200, 208], [6000, 198], [6600, 186.6], [6900, 172], [7300, 120]],
+      stallRpm: 2500,
+      converterGain: 1.8,
+    },
+    // the CVT with its launch gear, driven as six stepped ratios
+    gears: [3.38, 2.24, 1.62, 1.22, 0.93, 0.70],
+    reverse: 3.1,
+    finalDrive: 4.014,
+    efficiency: 0.75,
+    shiftTime: 0.3,
+    limiter: null,
+    ref: { zeroTo100: 10.7, top: 190, powerKw: 129 },
+  },
+  mazda6: {
+    id: 'mazda6',
+    name: 'Mazda 6 Wagon 2.0',
+    short: 'Mazda 6 2.0',
+    year: 2019,
+    blurb: 'GL · 2.0 R4 Skyactiv-G · 121 kW · 6-speed automatic · front-wheel drive',
+    mass: 1575,                 // kerb about 1500 kg + driver
+    wheelbase: 2.75,
+    track: 1.59,
+    cgFront: 0.40,
+    cgHeight: 0.54,
+    wheelRadius: 0.343,
+    cdA: 0.28 * 2.30,
+    drive: 'fwd',
+    engine: {
+      type: 'ice',
+      idle: 700,
+      redline: 6600,
+      shiftRpm: 6300,
+      // PE-VPS: 213 Nm @ 4000, 121 kW @ 6000
+      torque: [[700, 145], [1500, 180], [2500, 200], [3500, 210], [4000, 213], [5000, 208], [6000, 192.6], [6600, 170], [7000, 120]],
+      stallRpm: 2300,
+      converterGain: 1.8,
+    },
+    gears: [3.552, 2.022, 1.452, 1.0, 0.708, 0.599],
+    reverse: 3.893,
+    finalDrive: 4.325,
+    efficiency: 0.75,
+    shiftTime: 0.35,
+    limiter: null,
+    ref: { zeroTo100: 10.5, top: 207, powerKw: 121 },
+  },
+  bz4x: {
+    id: 'bz4x',
+    name: 'Toyota bZ4X Touring AWD',
+    short: 'bZ4X Touring',
+    year: 2026,
+    blurb: 'e-TNGA · two electric motors · 280 kW · single speed · all-wheel drive',
+    mass: 2255,                 // kerb about 2180 kg + driver
+    wheelbase: 2.85,
+    track: 1.605,
+    cgFront: 0.50,
+    cgHeight: 0.58,
+    wheelRadius: 0.37,
+    cdA: 0.30 * 2.70,
+    drive: 'awd',
+    engine: {
+      type: 'ev',
+      maxPowerKw: 280,
+      maxWheelForce: 17500,
+      maxRpm: 16000,
+    },
+    gears: [12.0],
+    reverse: 12.0,
+    finalDrive: 1.0,
+    efficiency: 0.9,
+    shiftTime: 0,
+    limiter: 180,
+    ref: { zeroTo100: 4.5, top: 180, powerKw: 280 },
+  },
 };
 
-export const CAR_ORDER = ['w201', 'crv', 'enyaq'];
+export const CAR_ORDER = ['w201', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x'];

@@ -1,7 +1,8 @@
 // Small synthesised engine / wind sound. Starts on the first user gesture.
 
 export function createAudio() {
-  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain;
+  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain, skidGain, skidFilt;
+  let skid = 0;
   let muted = false, ev = false;
 
   function start() {
@@ -32,7 +33,12 @@ export function createAudio() {
     const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
     windFilt = ctx.createBiquadFilter(); windFilt.type = 'bandpass'; windFilt.frequency.value = 600; windFilt.Q.value = 0.5;
     windGain = ctx.createGain(); windGain.gain.value = 0;
-    noise.connect(windFilt).connect(windGain).connect(master); noise.start();
+    noise.connect(windFilt).connect(windGain).connect(master);
+    // tyre scrub: the same noise through a narrow band, kept very quiet
+    skidFilt = ctx.createBiquadFilter(); skidFilt.type = 'bandpass'; skidFilt.frequency.value = 1300; skidFilt.Q.value = 5;
+    skidGain = ctx.createGain(); skidGain.gain.value = 0;
+    noise.connect(skidFilt).connect(skidGain).connect(master);
+    noise.start();
   }
 
   function update(car, active) {
@@ -56,6 +62,11 @@ export function createAudio() {
     const loose = car.surface !== 1 ? 1.8 : 1;
     windFilt.frequency.setTargetAtTime(car.surface !== 1 ? 320 : 700 + v * 12, t, 0.1);
     windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, v * 0.0045 * loose), t, 0.1);
+    // only on paving, and only audible once the slide is well under way
+    const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);
+    skid += (k - skid) * 0.2;
+    skidFilt.frequency.setTargetAtTime(1050 + Math.min(v, 35) * 16, t, 0.08);
+    skidGain.gain.setTargetAtTime(Math.max(0, skid - 0.15) * 0.07, t, 0.07);
   }
 
   return {

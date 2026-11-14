@@ -100,6 +100,7 @@ function engineForce(car, throttle, dt) {
 }
 
 const tmpG = [0, 0];
+const tmpR = [0, 0, 0];
 
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1)
 export function stepCar(car, input, world, dtFrame) {
@@ -145,8 +146,12 @@ function substep(car, input, world, dt) {
   const pFRx = car.x + fx * car.a + rx * hw, pFRz = car.z + fz * car.a + rz * hw;
   const pRLx = car.x - fx * car.b - rx * hw, pRLz = car.z - fz * car.b - rz * hw;
   const pRRx = car.x - fx * car.b + rx * hw, pRRz = car.z - fz * car.b + rz * hw;
-  const hFL = world.heightAt(pFLx, pFLz), hFR = world.heightAt(pFRx, pFRz);
-  const hRL = world.heightAt(pRLx, pRLz), hRR = world.heightAt(pRRx, pRRz);
+  // (groundAt knows about bridge decks; a plain test world only needs heightAt)
+  const gy = car.y + 0.4;
+  const hFL = world.groundAt ? world.groundAt(pFLx, pFLz, gy) : world.heightAt(pFLx, pFLz);
+  const hFR = world.groundAt ? world.groundAt(pFRx, pFRz, gy) : world.heightAt(pFRx, pFRz);
+  const hRL = world.groundAt ? world.groundAt(pRLx, pRLz, gy) : world.heightAt(pRLx, pRLz);
+  const hRR = world.groundAt ? world.groundAt(pRRx, pRRz, gy) : world.heightAt(pRRx, pRRz);
   const groundY = (hFL + hFR + hRL + hRR) / 4;
   car.groundPitch = Math.atan2((hFL + hFR - hRL - hRR) / 2, L);       // nose-up positive
   car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
@@ -326,6 +331,18 @@ function substep(car, input, world, dt) {
         car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
         car.hit = Math.max(car.hit, -vn);
       }
+    }
+  }
+
+  // ---- bridge railings
+  if (world.railPush && world.railPush(car.x, car.z, car.y + 0.4, hwid, tmpR)) {
+    const nx = tmpR[0], nz = tmpR[1];
+    car.x += nx * tmpR[2]; car.z += nz * tmpR[2];
+    const vn = wvx * nx + wvz * nz;
+    if (vn < 0) {
+      wvx -= 1.1 * vn * nx; wvz -= 1.1 * vn * nz;
+      car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
+      car.hit = Math.max(car.hit, -vn);
     }
   }
 

@@ -27,9 +27,14 @@ gzip file `sec/{sx}_{sz}.kvs` (height grid, surface classes, obstacle distance f
 trees) plus 2x2 orthophoto tiles (4x4 for the sectors listed in `HI_SECTORS`), which the game
 streams in around the car. `coarse.bin` and `ortho/overview.jpg` are the far scenery.
 
-Bridges: the terrain model has bridges removed, so roads that ETAK marks as elevated get a deck
-across water, and ramps cut into the embankments where they cross dry land (the map is a single
-height field, so there are no real underpasses).
+Bridges and tunnels (`terrain.py`): the terrain model has bridges removed and tunnels filled in.
+Roads that ETAK marks as elevated get a causeway in the height field where they cross water, and
+a "deck" where they cross dry land: a ribbon above the height field, stored in `vectors.json`, that
+the game drives on when the car is level with it, so the road below stays open. Tunnels are cut
+through their embankment as a trench with a deck as the lid, which carries the road above.
+`python3 tools/bake/reheight.py SRC public/data` rebuilds only the heights and the decks of the
+existing sector files; it needs the terrain model sheets and `etak_bbox.json` (ETAK
+*Transportation* and *Waterbodies*).
 World frame: x = east − E0, z = −(north − N0), y = height − H0, in L-EST97 metres.
 
 Detail area: `detail_area.json` outlines a zone (Kvissentali) that gets extra-sharp orthophoto

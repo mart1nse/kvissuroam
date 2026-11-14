@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sunDirection } from './sky.js';
+import { deckTopGeometry } from './decks.js';
 
 const BASE = `${import.meta.env.BASE_URL}data/ortho/`;
 
@@ -250,6 +251,15 @@ export function createTerrain(world, renderer, opts) {
         mesh.receiveShadow = true;
         mesh.matrixAutoUpdate = false;
         group.add(mesh);
+        // bridge spans and tunnel lids in this tile share its material
+        const dg = deckTopGeometry(world, x0, z0, tile);
+        if (dg) {
+          const top = new THREE.Mesh(dg, matLow);
+          top.receiveShadow = true;
+          top.matrixAutoUpdate = false;
+          group.add(top);
+          mesh.userData.deck = top;
+        }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
         const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, mask: s.mask, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
@@ -264,12 +274,15 @@ export function createTerrain(world, renderer, opts) {
       chunks.delete(ch);
       group.remove(ch.mesh);
       ch.mesh.geometry.dispose();
+      if (ch.mesh.userData.deck) { group.remove(ch.mesh.userData.deck); ch.mesh.userData.deck.geometry.dispose(); }
       if (ch.matHi) { ch.matHi.map.dispose(); ch.matHi.dispose(); }
       if (ch.matX) { ch.matX.map.dispose(); ch.matX.dispose(); }
     }
     s.chunks = null;
     if (s.mask) { s.mask.tex.dispose(); s.mask = null; }
   }
+
+  const setMat = (ch, m) => { ch.mesh.material = m; if (ch.mesh.userData.deck) ch.mesh.userData.deck.material = m; };
 
   // ---- hi-res tile streaming around the camera
   let loading = 0;
@@ -284,7 +297,7 @@ export function createTerrain(world, renderer, opts) {
       tex.anisotropy = aniso;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       ch.matHi = groundMaterial(tex, detail, null, ch.mask);
-      ch.mesh.material = ch.matHi;
+      setMat(ch, ch.matHi);
       ch.state = 'hi';
     }, undefined, () => { loading--; ch.state = 'failed'; });
   }
@@ -299,12 +312,12 @@ export function createTerrain(world, renderer, opts) {
       tex.anisotropy = aniso;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       ch.matX = groundMaterial(tex, detail, null, ch.mask);
-      ch.mesh.material = ch.matX;
+      setMat(ch, ch.matX);
       ch.xstate = 'on';
     }, undefined, () => { loading--; ch.xstate = 'failed'; });
   }
   function dropX(ch) {
-    if (ch.matX) { ch.mesh.material = ch.matHi || matLow; ch.matX.map.dispose(); ch.matX.dispose(); ch.matX = null; }
+    if (ch.matX) { setMat(ch, ch.matHi || matLow); ch.matX.map.dispose(); ch.matX.dispose(); ch.matX = null; }
     if (ch.xstate !== 'failed') ch.xstate = 'none';
   }
   function update(camPos) {
@@ -318,7 +331,7 @@ export function createTerrain(world, renderer, opts) {
       if (ch.state === 'low' && ch.d < rHi) want.push(ch);
       else if (ch.state === 'hi' && ch.d > rHi + 260) {
         dropX(ch);
-        ch.mesh.material = matLow;
+        setMat(ch, matLow);
         ch.matHi.map.dispose();
         ch.matHi.dispose();
         ch.matHi = null;

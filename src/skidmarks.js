@@ -64,7 +64,7 @@ export function createSkidMarks(world) {
       if (surf === 4) { w.on = false; continue; }
       const paved = surf === 1;
       const a = (paved ? 0.62 : 0.3) * Math.min(1, k * 1.4);
-      const y = world.heightAt(x, z) + LIFT;
+      const y = world.groundAt(x, z, car.y + 0.4) + LIFT;
       // edge points across the direction of travel (across the car when starting a strip)
       let px = sx, pz = sz;
       if (w.on && d < 3) { px = -dz / d; pz = dx / d; }

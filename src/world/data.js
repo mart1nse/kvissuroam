@@ -83,10 +83,46 @@ export async function loadWorldData(onProgress = () => {}) {
     s.state = 'idle';
   }
 
+  // ---- decks: ribbons above the height field (overpass spans, lids over tunnels). See tools/bake/terrain.py
+  const decks = (vectors.decks || []).map((d) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const p of d.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
+    const m = d.hw + 2;
+    return { kind: d.k, hw: d.hw, pts: d.pts, rail: d.rail || null, x0: x0 - m, z0: z0 - m, x1: x1 + m, z1: z1 + m };
+  });
+  const hit = { y: 0, lat: 0, nx: 0, nz: 0, deck: null, seg: 0 };
+  // Deck over the point, if any: fills "hit" and returns true.
+  function deckAt(x, z) {
+    for (let k = 0; k < decks.length; k++) {
+      const d = decks[k];
+      if (x < d.x0 || x > d.x1 || z < d.z0 || z > d.z1) continue;
+      const P = d.pts;
+      for (let i = 0; i < P.length - 1; i++) {
+        const a = P[i], b = P[i + 1];
+        const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz;
+        let t = ((x - a[0]) * dx + (z - a[1]) * dz) / l2;
+        if (t < -0.2 || t > 1.2) continue;
+        const l = Math.sqrt(l2), nx = -dz / l, nz = dx / l;
+        const lat = (x - a[0]) * nx + (z - a[1]) * nz;
+        if (lat < -d.hw || lat > d.hw) continue;
+        if ((t < 0 && i > 0) || (t > 1 && i < P.length - 2)) { if (t < -0.02 || t > 1.02) continue; }   // the next segment has it
+        else if (t < 0 || t > 1) continue;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        // heights run from the left edge to the right edge of the deck
+        const m = a.length - 3, f = Math.min(m - 1e-6, ((d.hw - lat) / (2 * d.hw)) * m), j = 2 + Math.floor(f), u = f - Math.floor(f);
+        const ya = a[j] + (a[j + 1] - a[j]) * u, yb = b[j] + (b[j + 1] - b[j]) * u;
+        hit.y = ya + (yb - ya) * t; hit.lat = lat; hit.nx = nx; hit.nz = nz; hit.deck = d; hit.seg = i;
+        return true;
+      }
+    }
+    return false;
+  }
+  const UNDER = 1.6;        // a car lower than this below a deck is on the ground under it
+
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 
   const world = {
-    meta, vectors, sectors, coarse: C,
+    meta, vectors, sectors, coarse: C, decks,
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
@@ -145,6 +181,35 @@ export async function loadWorldData(onProgress = () => {}) {
       const H = s.H, i = r * hn + c;
       const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
       return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+    },
+
+    // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
+    groundAt(x, z, y) {
+      const t = this.heightAt(x, z);
+      if (decks.length === 0 || !deckAt(x, z)) return t;
+      return hit.y > t && y > hit.y - UNDER ? hit.y : t;
+    },
+
+    // Topmost surface for something drawn along a road. level: 1 on a bridge, -1 in a tunnel, 0 otherwise.
+    topAt(x, z, level = 0) {
+      const t = this.heightAt(x, z);
+      if (level < 0 || decks.length === 0 || !deckAt(x, z)) return t;
+      if (hit.deck.kind === 1 && level < 1 && hit.y - t > 1.5) return t;     // the road under a bridge
+      return Math.max(t, hit.y);
+    },
+
+    // Railing of a bridge span: when a car at height y is against it, writes the push direction and
+    // depth to out[0..2] and returns true.
+    railPush(x, z, y, halfWidth, out) {
+      if (decks.length === 0 || !deckAt(x, z)) return false;
+      const d = hit.deck;
+      if (d.rail === null || hit.seg < d.rail[0] || hit.seg >= d.rail[1] || y < hit.y - UNDER) return false;
+      const lim = Math.max(0.2, d.hw - 0.25 - halfWidth);
+      const over = Math.abs(hit.lat) - lim;
+      if (over <= 0) return false;
+      const sgn = hit.lat > 0 ? -1 : 1;
+      out[0] = hit.nx * sgn; out[1] = hit.nz * sgn; out[2] = over;
+      return true;
     },
 
     surfaceAt(x, z) {

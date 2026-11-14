@@ -11,6 +11,7 @@ import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
+import { buildDeckBodies } from './world/decks.js';
 import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
@@ -94,6 +95,8 @@ async function boot() {
     if (s.low) scene.add(s.low);
     s.marks = buildMarks(s);
     if (s.marks) scene.add(s.marks);
+    s.decks = buildDeckBodies(world, s);
+    if (s.decks) scene.add(s.decks);
     attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
   });
   world.onSectorUnload((s) => {
@@ -102,6 +105,7 @@ async function boot() {
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
     if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
     if (s.marks) { scene.remove(s.marks); s.marks.geometry.dispose(); s.marks = null; }
+    if (s.decks) { scene.remove(s.decks); s.decks.userData.dispose(); s.decks = null; }
     if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });
   const s0 = world.meta.start;
@@ -207,7 +211,7 @@ function openGarage() {
 }
 
 function place(pose) {
-  resetCar(car, { ...pose, y: world.heightAt(pose.x, pose.z) });
+  resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   camYaw = car.yaw;
   launch = null;
   $('#sunk').classList.add('hidden');
@@ -354,7 +358,7 @@ function frame() {
     histTimer -= dt;
     if (histTimer <= 0 && !car.inWater && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
-      history.push({ x: car.x, z: car.z, yaw: car.yaw, t: car.time });
+      history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time });
       if (history.length > 80) history.shift();
     }
     if (car.sunk) $('#sunk').classList.remove('hidden');
@@ -456,7 +460,7 @@ function frame() {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

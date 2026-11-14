@@ -12,8 +12,9 @@ export function createRoadMarkings(world) {
     const k = `${Math.floor(((x1 + x2) / 2 - G0) / S)}_${Math.floor(((z1 + z2) / 2 - G0) / S)}`;
     let a = bySector.get(k);
     if (!a) bySector.set(k, (a = []));
-    a.push(x1, z1, x2, z2);
+    a.push(x1, z1, x2, z2, level);
   };
+  let level = 0;                        // of the road being walked: 1 on a bridge, -1 in a tunnel
 
   // walk a polyline and emit strokes [from, to] (metres along it), shifted sideways by "side"
   function strokes(pts, side, on, off, skip) {
@@ -40,6 +41,7 @@ export function createRoadMarkings(world) {
     const main = MAIN.has(r.type);
     if (!main && r.type !== 'Tänav') continue;
     if (r.w < (main ? 5.5 : 6.4) || r.pts.length < 2) continue;
+    level = r.e || 0;
     if (r.w >= 11.5) {
       strokes(r.pts, 0, 4.5, 0, 10);                       // solid centre
       strokes(r.pts, r.w / 4, DASH, GAP, 12);
@@ -55,13 +57,13 @@ export function createRoadMarkings(world) {
   return (sector) => {
     const a = bySector.get(`${sector.sx}_${sector.sz}`);
     if (!a) return null;
-    const n = a.length / 4;
+    const n = a.length / 5;
     const pos = new Float32Array(n * 12), nor = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
     for (let i = 0; i < n; i++) {
-      const x1 = a[i * 4], z1 = a[i * 4 + 1], x2 = a[i * 4 + 2], z2 = a[i * 4 + 3];
+      const x1 = a[i * 5], z1 = a[i * 5 + 1], x2 = a[i * 5 + 2], z2 = a[i * 5 + 3], lv = a[i * 5 + 4];
       const l = Math.hypot(x2 - x1, z2 - z1) || 1, nx = -(z2 - z1) / l * WIDTH / 2, nz = (x2 - x1) / l * WIDTH / 2;
       const cl = (v, lo) => Math.min(Math.max(v, lo + 0.01), lo + S - 0.01);     // stay on this sector's height grid
-      const y1 = world.heightAt(cl(x1, sector.x0), cl(z1, sector.z0)) + 0.05, y2 = world.heightAt(cl(x2, sector.x0), cl(z2, sector.z0)) + 0.05;
+      const y1 = world.topAt(cl(x1, sector.x0), cl(z1, sector.z0), lv) + 0.06, y2 = world.topAt(cl(x2, sector.x0), cl(z2, sector.z0), lv) + 0.06;
       pos.set([x1 - nx, y1, z1 - nz, x1 + nx, y1, z1 + nz, x2 - nx, y2, z2 - nz, x2 + nx, y2, z2 + nz], i * 12);
       for (let k = 0; k < 4; k++) nor[i * 12 + k * 3 + 1] = 1;
       idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3], i * 6);

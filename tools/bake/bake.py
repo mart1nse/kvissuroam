@@ -37,6 +37,7 @@ from shapely.strtree import STRtree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *  # noqa
 import buildings
+import terrain as T
 import trees as tree_rules
 
 Image.MAX_IMAGE_PIXELS = None
@@ -48,63 +49,16 @@ SECSET = set(SECS)
 X0, Z0, X1, Z1 = detail_rect()
 W1, H1 = int(X1 - X0), int(Z1 - Z0)
 poly_en = Polygon(BOUNDARY)                      # drivable area, L-EST97
-etak = json.load(open(f'{SRC}/etak_bbox.json'))
 print('sectors', len(SECS), 'detail rect', (X0, Z0, X1, Z1))
 
 
-def wbox(x0, z0, x1, z1):
-    """World-space rectangle as an L-EST97 polygon."""
-    return box(E0 + x0, N0 - z1, E0 + x1, N0 - z0)
-
-
-detail_box = wbox(X0, Z0, X1, Z1)
-
-
-def feats(layer, clip=None):
-    out = []
-    for f in etak.get(layer, []):
-        g = shape(f['g'])
-        if not g.is_valid:
-            g = g.buffer(0)
-        if g.is_empty or (clip is not None and not g.intersects(clip)):
-            continue
-        out.append((f['p'], g))
-    return out
-
-
-def rast(shapes, x0, z0, nx, nz, res, all_touched=False):
-    """Rasterise L-EST97 shapes; out[r, c] is the cell at x0 + c*res, z0 + r*res."""
-    shapes = [(mapping(g), 1) for g in shapes if not g.is_empty]
-    if not shapes:
-        return np.zeros((nz, nx), 'uint8')
-    return rasterio.features.rasterize(shapes, out_shape=(nz, nx), transform=from_origin(E0 + x0, N0 - z0, res, res),
-                                       fill=0, dtype='uint8', all_touched=all_touched)
-
+T.setup(SRC)
+wbox, feats, rast, flat, road_width, detail_box = T.wbox, T.feats, T.rast, T.flat, T.road_width, T.detail_box
 
 # ---------------------------------------------------------------- terrain
 print('terrain')
 cw, chh = int(CX1 - CX0), int(CZ1 - CZ0)
-D = np.full((chh, cw), np.nan, 'float32')        # 1 m pixels over the coarse rectangle
-for path in sorted(glob.glob(f'{SRC}/dtm_*.tif')):
-    with rasterio.open(path) as ds:
-        b = ds.bounds
-        xa, xb = max(E0 + CX0, b.left), min(E0 + CX1, b.right)
-        ya, yb = max(N0 - CZ1, b.bottom), min(N0 - CZ0, b.top)
-        if xa >= xb or ya >= yb:
-            continue
-        a = ds.read(1, window=rasterio.windows.from_bounds(xa, ya, xb, yb, ds.transform)).astype('float32')
-        a[a < -100] = np.nan
-        c0, r0 = int(round(xa - (E0 + CX0))), int(round((N0 - CZ0) - yb))
-        D[r0:r0 + a.shape[0], c0:c0 + a.shape[1]] = a
-# sheets do not cover the far west/south of the scenery rectangle: extend the edges
-cols = np.nonzero(~np.isnan(D).all(0))[0]
-rows = np.nonzero(~np.isnan(D).all(1))[0]
-D[:, :cols[0]] = D[:, cols[0]:cols[0] + 1]
-D[:, cols[-1] + 1:] = D[:, cols[-1]:cols[-1] + 1]
-D[:rows[0]] = D[rows[0]]
-D[rows[-1] + 1:] = D[rows[-1]]
-if np.isnan(D).any():
-    D[np.isnan(D)] = np.nanmedian(D)
+D, hN = T.load_dtm(SRC)                          # 1 m pixels over the coarse rectangle, detail node heights
 
 Q = 0.01
 cs = int(COARSE_RES)
@@ -113,130 +67,21 @@ Ds = ndimage.uniform_filter(D, 17)
 ci = np.minimum(np.arange(cn_z) * cs, chh - 1)[:, None]
 cj = np.minimum(np.arange(cn_x) * cs, cw - 1)[None, :]
 np.clip(np.round((Ds[ci, cj] - H0 + 100.0) / Q), 0, 65535).astype('<u2').tofile(f'{OUT}/coarse.bin')
-del Ds
-
-# node heights of the detail rectangle: integer metres, mean of the 4 surrounding pixels
-ox, oz = int(X0 - CX0), int(Z0 - CZ0)
-hN = (D[oz - 1:oz + H1, ox - 1:ox + W1] + D[oz:oz + H1 + 1, ox - 1:ox + W1]
-      + D[oz - 1:oz + H1, ox:ox + W1 + 1] + D[oz:oz + H1 + 1, ox:ox + W1 + 1]) / 4.0
-assert hN.shape == (H1 + 1, W1 + 1)
-del D
+del Ds, D
 hG = hN.copy()                                   # untouched ground, for bridges and trees
 
 
 def ground(xs, zs, a=None):
-    a = hG if a is None else a
-    r = np.clip(np.round(np.asarray(zs) - Z0).astype(int), 0, H1)
-    c = np.clip(np.round(np.asarray(xs) - X0).astype(int), 0, W1)
-    return a[r, c]
+    return T.sample(hG if a is None else a, xs, zs)
 
 
 # ---- water: the Emajõgi at one level, everything else at its own level
-streams = feats('E_203_vooluveekogu_a')
-ponds = feats('E_202_seisuveekogu_a', detail_box)
-main = [g for p, g in streams if 'Emaj' in (p.get('nimetus') or '')]
-if not main:
-    main = [max((g for p, g in streams), key=lambda g: g.area)]
-river_u = unary_union(main)
-others = [g for p, g in streams if g.intersects(detail_box) and not g.intersects(river_u.buffer(-1))] + [g for p, g in ponds]
-others = [g for g in others if g.area > 12]
-other_u = unary_union(others)
-rv = rast([river_u], X0 - 0.5, Z0 - 0.5, W1 + 1, H1 + 1, 1.0)
-ot = rast([other_u], X0 - 0.5, Z0 - 0.5, W1 + 1, H1 + 1, 1.0)
-ot[rv > 0] = 0
-river_level = float(np.median(hN[rv > 0]))
+hN, wm, river_u, others, river_level = T.water(hN)
 print(' river level', river_level, 'other water bodies', len(others))
-wm = (rv > 0) | (ot > 0)
-dist = ndimage.distance_transform_edt(wm).astype('float32')
-depth = np.where(rv > 0, np.minimum(4.0, 0.45 * dist), np.minimum(1.2, 0.35 * dist))
-hN = np.where(wm, hN - depth, hN).astype('float32')
-del dist, depth
 
-# ---- bridges and underpasses: the terrain model has them removed
+# ---- bridges and tunnels: causeways over water, decks over dry land, lids over tunnels (terrain.py)
 roads = feats('E_501_tee_j', detail_box.buffer(100))
-
-
-def road_width(p):
-    w = float(p.get('laius') or 0)
-    return (w if w > 0 else 1.2) + 0.6               # kerb / shoulder
-
-
-def flat(g):
-    return [LineString([(x, y) for x, y, *_ in part.coords]) for part in (g.geoms if hasattr(g, 'geoms') else [g])]
-
-
-bridge_cells = np.zeros((H1 + 1, W1 + 1), bool)
-
-
-def carry(level):
-    segs, widths = [], []
-    for p, g in roads:
-        a, l = int(p.get('a_tasand') or 0), int(p.get('l_tasand') or 0)
-        if (level > 0 and max(a, l) > 0) or (level < 0 and min(a, l) < 0):
-            for part in flat(g):
-                segs.append(part); widths.append(road_width(p))
-    if not segs:
-        return 0
-    tree = STRtree(segs)
-    merged = linemerge(segs)
-    chains = list(merged.geoms) if hasattr(merged, 'geoms') else [merged]
-    for ch in chains:
-        if ch.length < 4:
-            continue
-        w = max(widths[i] for i in tree.query(ch) if segs[i].distance(ch) < 0.01) + 1.0
-        n = int(ch.length) + 1
-        pts = np.array([ch.interpolate(d).coords[0] for d in np.linspace(0, ch.length, n)])
-        px, pz = pts[:, 0] - E0, N0 - pts[:, 1]
-        p = ground(px, pz).astype('float64')
-        inwater = ground(px, pz, wm)
-        if level > 0:
-            c = ndimage.grey_closing(p, size=min(n, 260), mode='nearest')
-            gap = c - p > 1.2
-            lab, k = ndimage.label(gap)
-            deck = np.zeros(n, bool)
-            cone = np.full(n, 1e9)
-            for i in range(1, k + 1):
-                m = lab == i
-                if inwater[m].any():
-                    deck |= m
-                else:
-                    cone[m] = p[m]
-            # ramps cut into the embankments on both sides of a dry gap
-            for i in range(1, n):
-                cone[i] = min(cone[i], cone[i - 1] + 0.16)
-            for i in range(n - 2, -1, -1):
-                cone[i] = min(cone[i], cone[i + 1] + 0.16)
-            cut = cone < p - 0.2
-            deck = ndimage.binary_dilation(deck, iterations=3)
-            target = np.where(deck, c, cone)
-        else:
-            o = ndimage.grey_opening(p, size=min(n, 120), mode='nearest')
-            deck = np.zeros(n, bool)
-            cut = p - o > 1.0
-            cut = ndimage.binary_dilation(cut, iterations=4)
-            target = ndimage.uniform_filter1d(np.where(cut, o, p), 9, mode='nearest')
-        if not (deck.any() or cut.any()):
-            continue
-        cor = ch.buffer(w / 2, cap_style=2)
-        minx, miny, maxx, maxy = cor.bounds
-        c0, c1 = int(minx - E0 - X0) - 1, int(maxx - E0 - X0) + 2
-        r0, r1 = int(N0 - maxy - Z0) - 1, int(N0 - miny - Z0) + 2
-        c0, r0, c1, r1 = max(c0, 0), max(r0, 0), min(c1, W1 + 1), min(r1, H1 + 1)
-        if c1 <= c0 or r1 <= r0:
-            continue
-        m = rast([cor], X0 + c0 - 0.5, Z0 + r0 - 0.5, c1 - c0, r1 - r0, 1.0, all_touched=True) > 0
-        rr, cc = np.nonzero(m)
-        _, idx = cKDTree(np.stack([px, pz], 1)).query(np.stack([X0 + c0 + cc, Z0 + r0 + rr], 1))
-        sub = hN[r0:r1, c0:c1]
-        dk = deck[idx]
-        sub[rr[dk], cc[dk]] = np.maximum(sub[rr[dk], cc[dk]], target[idx[dk]])
-        bridge_cells[r0 + rr[dk], c0 + cc[dk]] = True
-        ct = cut[idx] & ~dk
-        sub[rr[ct], cc[ct]] = np.minimum(sub[rr[ct], cc[ct]], target[idx[ct]])
-    return len(chains)
-
-
-print(' bridge chains', carry(1), 'underpass chains', carry(-1), 'deck cells', int(bridge_cells.sum()))
+decks, bridge_cells = T.crossings(hN, hG, wm, roads)
 
 # ---------------------------------------------------------------- surface classes
 print('surface')
@@ -253,6 +98,7 @@ for p, g in roads:
         for part in flat(g):
             part = part.simplify(0.4)
             road_lines.append({
+                **({'e': T.road_level(p)} if T.road_level(p) else {}),     # on a bridge (1) or in a tunnel (-1)
                 'name': p.get('nimetus') or '',
                 'type': p.get('tyyp_t'),
                 'w': round(w, 1),
@@ -445,6 +291,6 @@ meta = {
     'attribution': 'Ortofoto, kõrgusmudel, ETAK, hoonete 3D mudel ja üksikpuud: Maa- ja Ruumiamet 2026',
 }
 json.dump(meta, open(f'{OUT}/meta.json', 'w'), ensure_ascii=False)
-json.dump({'water': water, 'roads': road_lines}, open(f'{OUT}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))
+json.dump({'water': water, 'roads': road_lines, 'decks': decks}, open(f'{OUT}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 for f in ('meta.json', 'vectors.json', 'coarse.bin'):
     print(f'  {f:14s} {os.path.getsize(os.path.join(OUT, f)) / 1e6:.2f} MB')

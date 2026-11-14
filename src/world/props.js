@@ -107,7 +107,7 @@ export function createProps(world, opts = {}) {
     if (!a) return null;
     const solid = new Batch(), glow = new Batch(), pool = new Batch(), sign = new Batch(), paint = new Batch();
     const S = world.meta.sector.size;
-    const hAt = (x, z) => world.heightAt(Math.min(Math.max(x, sector.x0 + 0.01), sector.x0 + S - 0.01), Math.min(Math.max(z, sector.z0 + 0.01), sector.z0 + S - 0.01));
+    const hAt = (x, z) => world.topAt(Math.min(Math.max(x, sector.x0 + 0.01), sector.x0 + S - 0.01), Math.min(Math.max(z, sector.z0 + 0.01), sector.z0 + S - 0.01));
     for (let i = 0; i < a.length; i += data.stride) {
       const kind = a[i], x = a[i + 1], z = a[i + 2], yaw = a[i + 3] * Math.PI / 180, extra = a[i + 4];
       // local +z points along the compass bearing "yaw" (0 = north = -z in the world)

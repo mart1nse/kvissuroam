@@ -12,6 +12,7 @@ import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
 import { buildDeckBodies } from './world/decks.js';
+import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
 
@@ -69,7 +70,7 @@ let launch = null;               // 0-100 km/h stopwatch
 async function boot() {
   const bar = $('#loadbar');
   world = await loadWorldData((p) => { bar.style.width = `${Math.round(p * 80)}%`; });
-  $('#attribution').textContent = `Map data: ${world.meta.attribution}`;
+  $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA`;
   try {
     ({ buildCarModel } = await import('./cars/models/index.js'));
   } catch (err) {
@@ -83,6 +84,7 @@ async function boot() {
   const buildTrees = createTrees(quality);
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);
+  const attachProps = createProps(world, { shadows: !isTouch });
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
@@ -95,6 +97,7 @@ async function boot() {
     if (s.marks) scene.add(s.marks);
     s.decks = buildDeckBodies(world, s);
     if (s.decks) scene.add(s.decks);
+    attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
   });
   world.onSectorUnload((s) => {
     terrain.removeSector(s);
@@ -103,6 +106,7 @@ async function boot() {
     if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
     if (s.marks) { scene.remove(s.marks); s.marks.geometry.dispose(); s.marks = null; }
     if (s.decks) { scene.remove(s.decks); s.decks.userData.dispose(); s.decks = null; }
+    if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });
   const s0 = world.meta.start;
   await world.loadAround(s0.x, s0.z, 200);

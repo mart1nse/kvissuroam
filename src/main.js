@@ -11,6 +11,7 @@ import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
+import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
 
@@ -82,6 +83,7 @@ async function boot() {
   const buildTrees = createTrees(quality);
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);
+  const attachProps = createProps(world, { shadows: !isTouch });
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
@@ -92,6 +94,7 @@ async function boot() {
     if (s.low) scene.add(s.low);
     s.marks = buildMarks(s);
     if (s.marks) scene.add(s.marks);
+    attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
   });
   world.onSectorUnload((s) => {
     terrain.removeSector(s);
@@ -99,6 +102,7 @@ async function boot() {
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
     if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
     if (s.marks) { scene.remove(s.marks); s.marks.geometry.dispose(); s.marks = null; }
+    if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });
   const s0 = world.meta.start;
   await world.loadAround(s0.x, s0.z, 200);

@@ -69,7 +69,7 @@ let launch = null;               // 0-100 km/h stopwatch
 async function boot() {
   const bar = $('#loadbar');
   world = await loadWorldData((p) => { bar.style.width = `${Math.round(p * 80)}%`; });
-  $('#attribution').textContent = `Map data: ${world.meta.attribution}`;
+  $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA`;
   try {
     ({ buildCarModel } = await import('./cars/models/index.js'));
   } catch (err) {

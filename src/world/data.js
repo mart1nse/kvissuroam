@@ -128,13 +128,14 @@ export async function loadWorldData(onProgress = () => {}) {
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
 
-    // Start loading sectors within rLoad of the point, drop those beyond rKeep.
-    update(x, z, rLoad, rKeep) {
+    // Start loading sectors within rLoad of the point, drop those beyond rKeep
+    // (but never those within hold.r of hold, e.g. the parked car while the intro drone flies elsewhere).
+    update(x, z, rLoad, rKeep, hold = null) {
       const want = [];
       for (const s of sectors.values()) {
         s.d = rectDist(s, x, z);
         if (s.state === 'idle' && s.d < rLoad) want.push(s);
-        else if (s.state === 'ready' && s.d > rKeep) unload(s);
+        else if (s.state === 'ready' && s.d > rKeep && !(hold && rectDist(s, hold.x, hold.z) < hold.r)) unload(s);
       }
       want.sort((a, b) => a.d - b.d);
       for (const s of want) { if (loading >= 3) break; load(s); }

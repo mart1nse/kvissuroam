@@ -53,3 +53,9 @@ The full bake of the 163 km2 area needs about 8 GB of memory and 10 minutes. The
 holes (for example a strip of Tartu vald between N 6479100 and 6480000, and Haage west of E 652000);
 those places have no trees in the game. Without `SRC/bushes.npz` the bake writes no hedges; the
 Kvissentali ones were carried over from the previous sector files.
+
+Real wall colours (`tools/realism/`): `list_images.py CACHE.jsonl` lists the Mapillary photos of the area,
+`colours.py CACHE.jsonl WORKDIR` samples the wall colour of every building a photo sees squarely and
+writes `public/data/walls.json`; the other buildings borrow the colour of a similar building nearby.
+It reads the buildings back from the sector files, so run it again after the sectors are re-baked.
+`sheet.py` makes a contact sheet for checking the result by eye.

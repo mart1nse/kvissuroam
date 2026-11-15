@@ -12,6 +12,7 @@ import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
 import { buildDeckBodies } from './world/decks.js';
+import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
@@ -84,6 +85,7 @@ async function boot() {
   const buildTrees = createTrees(quality);
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);
+  const buildWalls = createWalls(world);
   const attachProps = createProps(world, { shadows: !isTouch });
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -95,6 +97,8 @@ async function boot() {
     if (s.low) scene.add(s.low);
     s.marks = buildMarks(s);
     if (s.marks) scene.add(s.marks);
+    s.walls = buildWalls(s);
+    if (s.walls) scene.add(s.walls);
     s.decks = buildDeckBodies(world, s);
     if (s.decks) scene.add(s.decks);
     attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
@@ -105,6 +109,7 @@ async function boot() {
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
     if (s.low) { scene.remove(s.low); s.low.userData.dispose(); s.low = null; }
     if (s.marks) { scene.remove(s.marks); s.marks.geometry.dispose(); s.marks = null; }
+    if (s.walls) { scene.remove(s.walls); s.walls.geometry.dispose(); s.walls = null; }
     if (s.decks) { scene.remove(s.decks); s.decks.userData.dispose(); s.decks = null; }
     if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });

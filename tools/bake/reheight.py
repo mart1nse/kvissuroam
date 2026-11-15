@@ -26,7 +26,7 @@ meta = json.load(open(f'{OUT}/meta.json'))
 HN, Q = meta['height']['n'], meta['height']['scale']
 S = int(SECTOR)
 
-_, hN = T.load_dtm(SRC)
+hN = T.load_dtm(SRC)[1]
 roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)

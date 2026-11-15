@@ -31,7 +31,7 @@ near = poly_en.buffer(150)
 MARGIN = 16.0
 WATER, PAVED = 4, 1
 
-_, hN = T.load_dtm(SRC)
+hN = T.load_dtm(SRC)[1]
 roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)
@@ -40,7 +40,7 @@ _, bridge_cells = T.crossings(hN, hG, wm, roads)
 wet = wm[:-1, :-1] & wm[1:, 1:]
 bc = bridge_cells[:-1, :-1] | bridge_cells[1:, :-1] | bridge_cells[:-1, 1:] | bridge_cells[1:, 1:]
 wet &= ~bc
-del hN, hG, _
+del hN, hG
 
 solid = SF.solid_shapes(T.feats)
 tree = STRtree(solid)

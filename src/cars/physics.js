@@ -6,15 +6,22 @@
 // north. Body frame: vx forward, vy to the right, yawRate clockwise positive.
 
 const G = 9.81;
+const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
+const CASTER = 0.6;              // how far a released wheel follows the slide
+const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
+const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
 const RHO = 1.2;
 
 // grip, rolling resistance, tyre stiffness and bumpiness per surface class
+// kp / tail describe traction under wheelspin: grip peaks at slip ratio kp and
+// settles at `tail` of the peak when the wheel spins freely. Tarmac loses a
+// good part of its bite, loose ground hardly any (the tyre digs in).
 const SURF = [
-  { mu: 0.62, crr: 0.075, b: 5.5, bump: 1.0 },   // grass
-  { mu: 1.0, crr: 0.013, b: 10.0, bump: 0.0 },   // paved
-  { mu: 0.72, crr: 0.03, b: 7.0, bump: 0.35 },   // gravel
-  { mu: 0.62, crr: 0.045, b: 6.0, bump: 0.6 },   // dirt
-  { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0 },      // water (shallows)
+  { mu: 0.62, crr: 0.075, b: 5.5, bump: 1.0, kp: 0.25, tail: 0.95 },   // grass
+  { mu: 1.0, crr: 0.013, b: 10.0, bump: 0.0, kp: 0.12, tail: 0.87 },   // paved
+  { mu: 0.72, crr: 0.03, b: 7.0, bump: 0.35, kp: 0.3, tail: 0.97 },    // gravel
+  { mu: 0.62, crr: 0.045, b: 6.0, bump: 0.6, kp: 0.3, tail: 0.95 },    // dirt
+  { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
 
@@ -36,7 +43,8 @@ export function createCar(spec, pose) {
     x: pose.x, z: pose.z, y: pose.y ?? 0, yaw: pose.yaw ?? 0,
     vx: 0, vy: 0, yawRate: 0, vyBody: 0,
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
-    steer: 0, wheelSpin: 0,
+    steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
+    slipV: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
     gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false,
     throttle: 0, brake: 0,
     ax: 0, ay: 0,
@@ -56,15 +64,21 @@ export function speedKmh(car) {
 
 function engineForce(car, throttle, dt) {
   // Returns the drive force at the wheels (N, signed along vx) and updates rpm / gear.
+  // The engine turns with the driven wheels, so under wheelspin the revs follow
+  // the wheel speed (wAbs), not the road speed (vAbs). The gearbox shifts on
+  // road speed, so it holds its gear while the wheels spin.
   const s = car.spec, e = s.engine;
   const v = car.vx;
   const dir = car.reversing ? -1 : 1;
   const vAbs = Math.abs(v);
+  const wAbs = Math.abs(v + dir * car.slipV);
   if (e.type === 'ev') {
     const ratio = s.gears[0];
-    car.rpm = (vAbs / s.wheelRadius) * ratio * (60 / (2 * Math.PI));
+    car.rpm = (wAbs / s.wheelRadius) * ratio * (60 / (2 * Math.PI));
     car.gear = 1;
-    let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(vAbs, 0.5));
+    let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(wAbs, 0.5));
+    const wLim = (s.limiter || 180) / 3.6 * 1.15;      // motor speed limit
+    if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
     const lim = car.reversing ? 30 : s.limiter;
     if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
     // one-pedal style regeneration when lifting off
@@ -82,7 +96,7 @@ function engineForce(car, throttle, dt) {
     if (g !== car.gear) { car.gear = g; car.shiftTimer = s.shiftTime; }
   }
   if (car.shiftTimer > 0) car.shiftTimer -= dt;
-  const wheelRpm = rpmAt(car.gear);
+  const wheelRpm = (wAbs / s.wheelRadius) * ratioOf(car.gear) * (60 / (2 * Math.PI));
   // torque converter: engine speed never drops below stall while the throttle is open
   const stall = e.idle + (e.stallRpm - e.idle) * throttle;
   const rpm = Math.max(wheelRpm, stall);
@@ -94,12 +108,14 @@ function engineForce(car, throttle, dt) {
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
   }
   if (wheelRpm >= e.redline || (car.reversing && vAbs > 11)) return 0;
-  const cut = car.shiftTimer > 0 ? 0.25 : 1;
+  // soft rev limiter, only reached with spinning wheels (shifts come earlier)
+  const cut = (car.shiftTimer > 0 ? 0.25 : 1) * Math.min(1, (e.redline - wheelRpm) / 150);
   const tq = lerpTable(e.torque, rpm) * gain * throttle * cut;
   return (dir * tq * ratioOf(car.gear) * s.efficiency) / s.wheelRadius;
 }
 
 const tmpG = [0, 0];
+const tmpA = [0, 0];
 const tmpR = [0, 0, 0];
 
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1)
@@ -187,6 +203,7 @@ function substep(car, input, world, dt) {
     car.roll += (Math.sin(car.waterTime * 1.7) * 0.05 * (going ? 1 : 0.4) - car.roll) * Math.min(1, dt * 2);
     car.rpm *= Math.exp(-dt * 3);
     car.wheelSpin += (car.vx / s.wheelRadius) * dt;
+    car.wheelSpinF = car.wheelSpinR = car.wheelSpin; car.slipV = 0; car.spin = 0;
     car.steer *= Math.exp(-dt * 3);
     if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
     if (!car.sunk && car.waterTime > 9) car.sunk = true;
@@ -200,7 +217,13 @@ function substep(car, input, world, dt) {
   const vS = Math.max(Math.abs(car.vx), 1);
   const gripLock = Math.atan((1.25 * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
-  const target = steerIn * lock;
+  // In a slide the front wheels need the slide angle on top of the usual lock
+  // to point where the car is going, so the limit is centred on that angle;
+  // and like a real steering wheel let go of, a released wheel casters most
+  // of the way towards it.
+  const sliding = Math.max(0, Math.min(1, (Math.abs(car.slipR || 0) - 0.1) / 0.1));
+  const align = sliding > 0 && car.vx > 2 ? sliding * Math.atan2(car.vy + car.a * car.yawRate, car.vx) : 0;
+  const target = Math.max(-maxLock, Math.min(maxLock, steerIn * lock + align * (steerIn === 0 ? CASTER : 1)));
   const rate = (steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25;
   const ds = target - car.steer;
   car.steer += Math.sign(ds) * Math.min(Math.abs(ds), rate * dt);
@@ -211,29 +234,77 @@ function substep(car, input, world, dt) {
   const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer);
   const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer);
 
+  // ---- slip angles
+  const v0 = 2.0;
+  const vLatF = -car.vx * sd + (car.vy + car.a * car.yawRate) * cd;
+  const vLonF = car.vx * cd + (car.vy + car.a * car.yawRate) * sd;
+  const vLatR = car.vy - car.b * car.yawRate;
+  const slipF = Math.atan2(vLatF, Math.max(Math.abs(vLonF), v0));
+  const slipR = Math.atan2(vLatR, Math.max(Math.abs(car.vx), v0));
+  car.slipR = slipR;
+
   // ---- longitudinal forces
-  let drive = engineForce(car, throttle, dt);
-  // ease off when the tail steps out, like a driver catching a slide
-  if (!input.handbrake && throttle > 0 && Math.abs(car.vx) > 6) drive *= Math.max(0.12, Math.min(1, 1 - (Math.abs(car.slipR || 0) - 0.07) / 0.13));
-  let driveF = 0, driveR = 0;
-  if (s.drive === 'rwd') driveR = drive;
-  else if (s.drive === 'fwd') driveF = drive;
-  else { driveF = drive * (fzF / (fzF + fzR)); driveR = drive - driveF; }
+  const dir = car.reversing ? -1 : 1;
+  const hb = +input.handbrake || 0;
+  const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
+  const capF = sf.mu * fzF, capR = sr.mu * fzR;
+  // traction left on each driven axle once cornering has taken its share
+  const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
+  const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
+  const capX = lonF + lonR;
+  const drive = engineForce(car, throttle, dt);
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
   const brakeTotal = brake * 1.05 * m * G;
-  let fxF = driveF - vSign * brakeTotal * 0.66;
-  let fxR = driveR - vSign * brakeTotal * 0.34;
-  const hb = +input.handbrake || 0;
-  if (hb) fxR = -vSign * sr.mu * fzR * 0.95;
-  const capF = sf.mu * fzF, capR = sr.mu * fzR;
-  const askF = Math.abs(fxF) / capF, askR = hb ? 2 : Math.abs(fxR) / capR;   // demand over grip, for the skid marks only
-  // Keyboard throttle is all-or-nothing, so the driven wheels keep a share of
-  // their grip for cornering (the way a careful right foot would).
-  const busy = Math.abs(car.vx) > 3 ? Math.min(1, Math.abs(car.steer) / 0.08 + Math.abs(car.slipR || 0) / 0.05) : 0;
-  const tc = brake > 0 || hb ? 1 : 1 - 0.3 * busy;
-  fxF = Math.max(-capF, Math.min(capF * tc, fxF));
-  fxR = Math.max(-capR, Math.min(capR * tc, fxR));
-  if (car.reversing) { fxF = Math.max(-capF * tc, fxF); fxR = Math.max(-capR * tc, fxR); }
+  const brakeF = brakeTotal * 0.66, brakeR = brakeTotal * 0.34;
+  let fxF, fxR, askF, askR;       // ask = demand over grip, for the skid marks only
+  let fySpinF = null, fySpinR = null;
+  // Wheelspin. When the engine asks for more than the driven tyres can pass
+  // on, the surplus spins the wheels (and the engine with them) up instead of
+  // being trimmed away. slipV is how much faster the tread runs than the road.
+  // A spinning tyre pushes against the direction its contact patch slides in,
+  // with `tail` of its peak grip: the faster it spins, the more of that goes
+  // into driving the car on and the less is left to hold the car sideways.
+  // That is what lets the throttle hold or tighten a slide, and lifting end it.
+  const ts = drivenR ? (drivenF ? (sf.tail < sr.tail ? sf : sr) : sr) : sf;
+  const kappa = car.slipV / Math.max(Math.abs(car.vx), 3);
+  const demand = drive * dir - (drivenF ? brakeF : 0) - (drivenR ? brakeR : 0);
+  const spinning = throttle > 0 && !(hb && drivenR) && (demand > capX || kappa > ts.kp);
+  if (spinning) {
+    let sent = 0;
+    const axle = (surf, cap, alpha) => {
+      const sx = kappa / surf.kp, sy = Math.abs(Math.tan(alpha)) * surf.b / 2.3;
+      const sig = Math.hypot(sx, sy) + 1e-6;
+      const g = sig < 1 ? sig * (2 - sig) : surf.tail + (1 - surf.tail) * Math.exp(-(sig - 1) / 3);
+      const f = cap * g;
+      sent += (f * sx) / sig;
+      // (a little sideways bite always remains, so slides stay catchable)
+      tmpA[0] = dir * (f * sx) / sig;
+      tmpA[1] = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * cap * Math.min(1, sy));
+    };
+    if (drivenF) { axle(sf, capF, slipF); fxF = tmpA[0]; fySpinF = tmpA[1]; } else fxF = -vSign * Math.min(brakeF, capF);
+    if (drivenR) { axle(sr, capR, slipR); fxR = tmpA[0]; fySpinR = tmpA[1]; } else fxR = -vSign * Math.min(brakeR, capR);
+    // inertia of engine, driveline and wheels as felt at the tread
+    const e = s.engine;
+    const ratio = e.type === 'ev' ? s.gears[0] : (car.reversing ? s.reverse : s.gears[car.gear - 1]) * s.finalDrive;
+    const mEq = ((e.type === 'ev' ? 0.05 : 0.13) * ratio * ratio + (drivenF && drivenR ? 5 : 2.5)) / (s.wheelRadius * s.wheelRadius);
+    car.slipV = Math.max(0, car.slipV + ((demand - sent) / mEq - car.ax * dir) * dt);
+    car.spin = Math.max(0, Math.min(1, (kappa - ts.kp) / 0.6));
+    askF = drivenF ? 1.3 + 0.4 * car.spin : Math.abs(fxF) / capF;
+    askR = drivenR ? 1.3 + 0.4 * car.spin : Math.abs(fxR) / capR;
+  } else {
+    // gripping: the tread creeps just enough to carry the force
+    const d = throttle > 0 && capX > 0 ? Math.max(0, Math.min(1, demand / capX)) : 0;
+    const slipEq = (1 - Math.sqrt(1 - d)) * ts.kp * Math.max(Math.abs(car.vx), 3);
+    car.slipV += (slipEq - car.slipV) * Math.min(1, dt * 25);
+    car.spin = 0;
+    const shareF = throttle > 0 && capX > 0 ? lonF / capX : drivenF ? (drivenR ? fzF / (fzF + fzR) : 1) : 0;
+    fxF = drive * shareF - vSign * brakeF;
+    fxR = drive * (1 - shareF) - vSign * brakeR;
+    if (hb) fxR = -vSign * sr.mu * fzR * 0.95;
+    askF = Math.abs(fxF) / capF; askR = hb ? 2 : Math.abs(fxR) / capR;
+    fxF = Math.max(-capF, Math.min(capF, fxF));
+    fxR = Math.max(-capR, Math.min(capR, fxR));
+  }
   let latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.55 * capF) ** 2));
   let latCapR = Math.sqrt(Math.max(capR * capR - fxR * fxR, (0.55 * capR) ** 2));
   // Hard braking unloads the rear axle, so the front tyres would out-grip the
@@ -248,23 +319,16 @@ function substep(car, input, world, dt) {
   }
   if (hb) latCapR *= 0.45;
 
-  // ---- lateral tyre forces from slip angles
-  const v0 = 2.0;
-  const vLatF = -car.vx * sd + (car.vy + car.a * car.yawRate) * cd;
-  const vLonF = car.vx * cd + (car.vy + car.a * car.yawRate) * sd;
-  const vLatR = car.vy - car.b * car.yawRate;
-  const slipF = Math.atan2(vLatF, Math.max(Math.abs(vLonF), v0));
-  const slipR = Math.atan2(vLatR, Math.max(Math.abs(car.vx), v0));
-  car.slipR = slipR;
+  // ---- lateral tyre forces
   // How hard each axle is sliding, 0..1. Read by the skid marks and the tyre
   // sound; nothing in the dynamics depends on it.
-  if (speed > 2.5) {
+  if (speed > 2.5 || car.slipV > 2) {
     const lon = (x) => Math.max(0, Math.min(1, (x - 1.3) / 0.4));
     car.skidF = Math.max(lon(askF), Math.min(1, Math.max(0, (Math.abs(slipF) - 0.12) / 0.1)));
     car.skidR = Math.max(lon(askR), Math.min(1, Math.max(0, (Math.abs(slipR) - 0.12) / 0.1)));
   } else car.skidF = car.skidR = 0;
-  const fyF = -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
-  const fyR = -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
+  const fyF = fySpinF !== null ? fySpinF : -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
+  const fyR = fySpinR !== null ? fySpinR : -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
 
   // ---- resistances and slope
   const drag = 0.5 * RHO * s.cdA * car.vx * Math.abs(car.vx);
@@ -275,7 +339,16 @@ function substep(car, input, world, dt) {
 
   const FX = fxF * cd - fyF * sd + fxR - drag - roll + slopeX;
   const FY = fyF * cd + fxF * sd + fyR + slopeY - 0.5 * RHO * s.cdA * 1.6 * car.vy * Math.abs(car.vy);
-  const MZ = car.a * (fyF * cd + fxF * sd) - car.b * fyR;
+  let MZ = car.a * (fyF * cd + fxF * sd) - car.b * fyR;
+  // Spinning wheels never bite evenly left and right, so a hard launch tugs
+  // the car a touch off line, more so on rough ground.
+  if (car.spin > 0) {
+    const wob = Math.sin(car.time * 1.7 + 1.3) + 0.5 * Math.sin(car.time * 4.3 + car.x * 0.3);
+    MZ += hw * (fxF + fxR) * SPIN_YAW * car.spin * wob * (1 + ts.bump);
+  }
+  const uF = Math.min(1, Math.abs(fyF) / capF), uR = Math.min(1, Math.abs(fyR) / capR);
+  car.useF += (uF - car.useF) * Math.min(1, dt * 15);
+  car.useR += (uR - car.useR) * Math.min(1, dt * 15);
 
   const ax = FX / m, ay = FY / m;
   car.ax += (ax - car.ax) * Math.min(1, dt * 20);
@@ -354,13 +427,16 @@ function substep(car, input, world, dt) {
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
   car.pitch += (tPitch - car.pitch) * Math.min(1, dt * 9);
   car.roll += (tRoll - car.roll) * Math.min(1, dt * 9);
-  car.wheelSpin += (car.vx / s.wheelRadius) * dt;
+  const roll1 = (car.vx / s.wheelRadius) * dt, spin1 = ((car.reversing ? -1 : 1) * car.slipV / s.wheelRadius) * dt;
+  car.wheelSpin += roll1;
+  car.wheelSpinF += roll1 + (s.drive !== 'rwd' ? spin1 : 0);
+  car.wheelSpinR += roll1 + (s.drive !== 'fwd' ? spin1 : 0);
 }
 
 export function resetCar(car, pose) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.y = pose.y ?? car.y;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false;
+  car.steer = 0; car.slipV = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

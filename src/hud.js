@@ -117,7 +117,7 @@ export function createHud(world) {
       const ev = spec.engine.type === 'ev';
       elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `D${car.gear}`;
       const frac = ev
-        ? Math.min(1, Math.abs(car.vx) / (spec.limiter / 3.6)) * (car.throttle ? 1 : 0.4)
+        ? Math.min(1, (Math.abs(car.vx) + (car.slipV || 0)) / (spec.limiter / 3.6)) * (car.throttle ? 1 : 0.4)
         : car.rpm / spec.engine.redline;
       elRpm.style.width = `${Math.round(Math.min(1, frac) * 100)}%`;
       if (--streetTimer <= 0) {

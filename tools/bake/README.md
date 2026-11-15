@@ -46,3 +46,9 @@ Buildings and trees only: `python3 tools/bake/repack.py SRC public/data` rebuild
 (`buildings.py`) and re-applies the tree rules (`trees.py`) in the existing sector files. It needs
 only the building OBJ files from step 3. Tree crown points that fall on a paved or gravel road are
 moved to the verge when it is within reach of the crown, and dropped otherwise.
+
+Real wall colours (`tools/realism/`): `list_images.py CACHE.jsonl` lists the Mapillary photos of the area,
+`colours.py CACHE.jsonl WORKDIR` samples the wall colour of every building a photo sees squarely and
+writes `public/data/walls.json`; the other buildings borrow the colour of a similar building nearby.
+It reads the buildings back from the sector files, so run it again after the sectors are re-baked.
+`sheet.py` makes a contact sheet for checking the result by eye.

@@ -278,7 +278,6 @@ def estimate(B, heights, im, picks, folder):
         m = near[k]
         if m.sum() < 2 and not (votes[k][2] > 0.45 and votes[k][3] >= 150): continue
         mean = (labs[m] * w[m, None]).sum(0) / w[m].sum()
-        mean[0] = max(mean[0], 40.0)                 # walls in shade read too dark
         out[bi] = (mean, float(w[m].sum()), int(m.sum()))
     return out
 
@@ -299,7 +298,8 @@ def main():
     need = sorted({i for ch in picks for i, _, _ in ch})
     print(sum(1 for ch in picks if ch), 'buildings seen by a photo,', len(need), 'photos needed', flush=True)
     download(im, need, os.path.join(work, 'thumbs'))
-    est = estimate(B, heights, im, picks, os.path.join(work, 'thumbs'))
+    ep = os.path.join(work, 'est.pkl')
+    est = pickle.load(open(ep, 'rb')) if os.path.exists(ep) else estimate(B, heights, im, picks, os.path.join(work, 'thumbs'))
     print(len(est), 'buildings with a sampled colour', flush=True)
     pickle.dump(est, open(os.path.join(work, 'est.pkl'), 'wb'))
     write(B, est)
@@ -308,7 +308,15 @@ def main():
 def write(B, est):
     # borrow for the rest: one of the nearest sampled buildings of the same kind
     xy = np.array([[(b['x0'] + b['x1']) / 2, (b['z0'] + b['z1']) / 2] for b in B])
-    lab = {bi: v[0] for bi, v in est.items()}
+    lab = {bi: v[0].copy() for bi, v in est.items()}
+    # Dashcams expose for the sky, so walls come out far too dark and dull. Keep the order (a dark house stays
+    # darker than a pale one) but spread the lightness over the range painted walls really have.
+    Ls = np.array([v[0] for v in lab.values()])
+    src = np.percentile(Ls, [0, 5, 25, 50, 75, 95, 100])
+    dst = [30, 40, 56, 67, 77, 88, 93]
+    for v in lab.values():
+        v[0] = np.interp(v[0], src, dst)
+        v[1:] *= 1.35
     out, n_real, n_borrow = {}, 0, 0
     trees = {}
     for st in (0, 1, 2):

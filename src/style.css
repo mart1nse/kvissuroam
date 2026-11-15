@@ -161,3 +161,57 @@ body.touch .desktop-only { display: none; }
   .card p { display: none; }
   .keys { display: none; }
 }
+
+/* ---- race: lap panel, names over other cars, driver name, lap times board */
+#lap {
+  left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); min-width: 190px; padding: 6px 12px 7px;
+  background: rgba(18, 6, 43, .55); border: 1.5px solid rgba(255, 43, 214, .7); border-radius: 4px; box-shadow: 0 0 16px rgba(255, 43, 214, .35);
+  font-variant-numeric: tabular-nums; text-align: center;
+}
+#lap .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
+#lap .lt b { font-size: clamp(22px, 3.4vw, 34px); font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
+#lap.idle .lt b { opacity: .45; }
+#lap .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
+#lap .lb b { font-weight: 800; }
+#lap small { font-size: .8em; color: #fff; opacity: .85; margin-left: 4px; letter-spacing: .04em; }
+#lap ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 8px; justify-content: center; font-size: 10px; opacity: .85; }
+#lap ol li span { display: none; }
+#lap ol li:first-child b { color: var(--sun); }
+#lapmsg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; }
+body.touch #lap { left: max(10px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + clamp(96px, 15vw, 170px) + 30px); transform: none; min-width: 0; padding: 4px 8px; }
+body.touch #lap ol { display: none; }
+
+#names { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+.pname {
+  position: absolute; left: 0; top: 0; transform-origin: 50% 100%; white-space: nowrap; padding: 2px 8px; border-radius: 3px;
+  font-size: 14px; font-weight: 800; letter-spacing: .06em; color: #fff; background: rgba(18, 6, 43, .55); border: 1px solid rgba(47, 243, 255, .7);
+  text-shadow: 0 0 6px var(--cyan);
+}
+#menu.hidden ~ #names { display: block; }
+
+#menurow { display: flex; gap: clamp(8px, 1.6vw, 18px); align-items: center; justify-content: center; flex-wrap: wrap; z-index: 1; }
+#driver { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 9px; letter-spacing: .24em; color: var(--pink); }
+#drivername {
+  width: 12em; font: inherit; font-size: clamp(13px, 1.8vw, 18px); font-weight: 800; font-style: italic; letter-spacing: .06em; color: #fff;
+  background: rgba(18, 6, 43, .6); border: 1.5px solid rgba(47, 243, 255, .7); border-radius: 3px; padding: .35em .6em;
+  user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+#drivername:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 12px rgba(255, 212, 94, .5); }
+#boardbtn { font-size: clamp(11px, 1.6vw, 16px); letter-spacing: .2em; }
+
+#board { background: radial-gradient(circle at 50% 30%, rgba(58, 20, 112, .92), rgba(12, 4, 30, .97)); z-index: 12; justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
+#board h2 { margin: 6px 0 0; font-size: clamp(18px, 3.6vw, 34px); font-style: italic; font-weight: 900; color: var(--cyan); text-shadow: 2px 2px 0 var(--hot); letter-spacing: .06em; }
+#board .today { margin: 0; color: var(--sun); letter-spacing: .1em; font-size: clamp(11px, 1.5vw, 15px); }
+#board table { border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: min(560px, 92vw); }
+#board th, #board td { padding: 5px 12px; text-align: left; border-bottom: 1px solid rgba(255, 95, 162, .3); font-size: clamp(11px, 1.5vw, 15px); }
+#board thead th { font-size: 9px; letter-spacing: .22em; color: var(--pink); }
+#board tbody th { font-weight: 800; font-style: italic; }
+#board td b { margin-right: 8px; }
+#board td small { opacity: .8; }
+#board .none { opacity: .4; }
+#board .mine { font-size: 12px; }
+#board .mine span { font-size: 9px; letter-spacing: .22em; color: var(--pink); }
+#board .mine ol { margin: 4px 0 0; padding-left: 1.4em; text-align: left; }
+#board .mine small { opacity: .6; margin-left: 6px; }
+#board .row { align-items: center; }
+#board .dl { color: var(--cyan); }

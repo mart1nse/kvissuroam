@@ -8,6 +8,7 @@ export function createHud(world) {
   const map = $('#minimap');
   const ctx = map.getContext('2d');
   let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
+  let overlay = null;            // extra drawing in world coordinates (race track, other players)
 
   // spatial hash of named road segments for the street label
   const cell = 60;
@@ -96,6 +97,7 @@ export function createHud(world) {
     ctx.beginPath();
     world.meta.boundary.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
     ctx.stroke();
+    overlay?.(ctx, scale, car);
     ctx.restore();
     // car marker
     ctx.fillStyle = '#ffd45e';
@@ -105,6 +107,7 @@ export function createHud(world) {
   }
 
   return {
+    setOverlay(fn) { overlay = fn; },
     setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); },
     toast(text, ms = 3200) {
       elToast.textContent = text;

@@ -26,7 +26,9 @@ Driving into the Emajõgi (or a pond) sinks the car; use the reset buttons to ca
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # static site in ./dist
-node tools/perf-test.mjs
+node tools/perf-test.mjs    # 0-100 and top speed against factory figures
+node tools/brake-test.mjs   # straight-line braking stays stable
+node tools/spin-test.mjs    # wheelspin on launch and under power in a corner
 ```
 
 Useful URL flags: `?drive` skips the menu, `?q=low` forces low graphics quality.

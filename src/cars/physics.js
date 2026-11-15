@@ -7,7 +7,8 @@
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
-const CASTER = 0.6;              // how far a released wheel follows the slide
+const CASTER = 0.45;             // how far a released wheel follows the slide
+const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
 const RHO = 1.2;
@@ -266,7 +267,11 @@ function substep(car, input, world, dt) {
   // of the way towards it.
   const sliding = Math.max(0, Math.min(1, (Math.abs(car.slipR || 0) - 0.1) / 0.1));
   const align = sliding > 0 && car.vx > 2 ? sliding * Math.atan2(car.vy + car.a * car.yawRate, car.vx) : 0;
-  const target = Math.max(-maxLock, Math.min(maxLock, steerIn * lock + align * (steerIn === 0 ? CASTER : 1)));
+  // Steering against the slide gets the full angle, so opposite lock reaches
+  // far enough to catch it. Holding the wheel into the turn is the driver
+  // asking for the slide, so the wheels mostly stay where they are put.
+  const follow = steerIn === 0 ? CASTER : steerIn * align < 0 ? HOLD_FOLLOW : 1;
+  const target = Math.max(-maxLock, Math.min(maxLock, steerIn * lock + align * follow));
   const rate = (steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25;
   const ds = target - car.steer;
   car.steer += Math.sign(ds) * Math.min(Math.abs(ds), rate * dt);

@@ -65,6 +65,7 @@ let startPose;
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
 let camYaw = 0, menuAngle = 2.5;
+let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let launch = null;               // 0-100 km/h stopwatch
 
@@ -133,7 +134,7 @@ async function boot() {
     scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
   }
   setCar(carId);
-  camYaw = car.yaw;
+  camYaw = car.yaw; camSnap = true;
   buildMenu();
   bar.style.width = '100%';
   terrain.update(new THREE.Vector3(car.x, 0, car.z));
@@ -190,6 +191,7 @@ function buildMenu() {
 function startDriving() {
   if (mode === 'drive') return;
   mode = 'drive';
+  camSwoop = 0.9;
   $('#menu').classList.add('hidden');
   $('#hud').classList.remove('hidden');
   if (isTouch) {
@@ -199,7 +201,7 @@ function startDriving() {
   }
   audio.start();
   input.enable(true);
-  camYaw = car.yaw;
+  camYaw = car.yaw; camSnap = true;
 }
 
 function openGarage() {
@@ -217,7 +219,7 @@ function openGarage() {
 
 function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
-  camYaw = car.yaw;
+  camYaw = car.yaw; camSnap = true;
   launch = null;
   $('#sunk').classList.add('hidden');
 }
@@ -398,21 +400,38 @@ function frame() {
   // ---- camera
   const speed = Math.hypot(car.vx, car.vy);
   if (mode === 'drive') {
+    // Everything here eases a few rig numbers (heading, distance, height, slope) and then places the
+    // camera exactly from them. Easing the camera's position instead leaves it trailing the car by a
+    // length that depends on the frame time, so at speed every uneven frame nudged the view back or forth.
+    const ease = (rate) => 1 - Math.exp(-rate * dt);
     let d = car.yaw - camYaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    camYaw += d * Math.min(1, dt * (3 + speed * 0.08));
+    camYaw += d * ease(3 + speed * 0.08);
+    const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
     // a street photo is narrower than the game's view, so over photos the camera backs off and zooms in
     const pm = photos?.mix ?? 0;
-    const dist = (6.4 + Math.min(speed, 55) * 0.035) * (1 + 0.45 * pm), h = 2.35;
-    const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
-    camPos.set(car.x - cx * dist, car.y + h + (car.inWater ? Math.min(3, car.waterTime) : 0), car.z - cz * dist);
+    const wantDist = (6.4 + Math.min(speed, 55) * 0.035 + Math.min(speed, 70) * 0.075) * (1 + 0.45 * pm);
+    const top = car.y + (car.inWater ? Math.min(3, car.waterTime) : 0);
+    // how steeply the ground falls away ahead (positive downhill), read off the ground itself
+    if (!car.airborne && !car.inWater) {
+      const gy = car.y + 0.4;
+      const fall = (world.groundAt(car.x - cx * 4, car.z - cz * 4, gy) - world.groundAt(car.x + cx * 4, car.z + cz * 4, gy)) / 8;
+      camSlope += (Math.max(-0.3, Math.min(0.3, fall)) - camSlope) * ease(2.5);
+    }
+    if (camSnap) { camSnap = false; camDist = wantDist; camY = top; camSlope = 0; }
+    else {
+      camDist += (wantDist - camDist) * ease(5);
+      camY += (top - camY) * ease(10);
+      if (Math.abs(top - camY) > 6) camY = top;
+    }
+    // downhill the rig tips forward with the slope and a little past it, so the car does not hide the road
+    const down = Math.max(0, camSlope);
+    camPos.set(car.x - cx * camDist, camY + 2.35 + camDist * down * 1.35, car.z - cz * camDist);
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
     if (camPos.y < floor) camPos.y = floor;
-    camLook.set(car.x + cx * 2, car.y + 1.15, car.z + cz * 2);
-    if (camera.position.distanceToSquared(camPos) > 900) camera.position.copy(camPos);   // after a reset
-    else camera.position.lerp(camPos, Math.min(1, dt * 10));
-    const under = world.heightAt(camera.position.x, camera.position.z) + 0.7;
-    if (camera.position.y < under) camera.position.y = under;
+    camLook.set(car.x + cx * 2, camY + 1.15 - down * 3, car.z + cz * 2);
+    if (camSwoop > 0) { camSwoop -= dt; camera.position.lerp(camPos, ease(8)); }
+    else camera.position.copy(camPos);
     camera.fov += ((58 + Math.min(speed, 60) * 0.22) * (1 - 0.3 * pm) - camera.fov) * Math.min(1, dt * 3);
   } else {
     menuAngle += dt * 0.16;

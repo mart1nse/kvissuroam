@@ -30,10 +30,13 @@ open-country sectors in `rural_sectors.json`), which the game
 streams in around the car. `coarse.bin` and `ortho/overview.jpg` are the far scenery.
 
 Bridges and tunnels (`terrain.py`): the terrain model has bridges removed and tunnels filled in.
-Roads that ETAK marks as elevated get a causeway in the height field where they cross water, and
-a "deck" where they cross dry land: a ribbon above the height field, stored in `vectors.json`, that
-the game drives on when the car is level with it, so the road below stays open. Tunnels are cut
-through their embankment as a trench with a deck as the lid, which carries the road above.
+Roads that ETAK marks as elevated, and roads that run over the river, become a "deck": a ribbon
+above the height field, stored in `vectors.json`, that the game drives on when the car is level
+with it, so the road or the river below stays open. A deck over water is marked `w: 1` and, for the
+bridges of the Emajõgi listed in `BRIDGES`, carries the name and the look the game draws it with.
+Tunnels are cut through their embankment as a trench with a deck as the lid, which carries the road
+above. After that the terrain is levelled across every road (`grade_roads`), so road edges are
+straight on the 2 m grid of the game.
 `python3 tools/bake/reheight.py SRC public/data` rebuilds only the heights and the decks of the
 existing sector files; it needs the terrain model sheets and `etak_bbox.json` (ETAK
 *Transportation* and *Waterbodies*).
@@ -59,3 +62,10 @@ Real wall colours (`tools/realism/`): `list_images.py CACHE.jsonl` lists the Map
 writes `public/data/walls.json`; the other buildings borrow the colour of a similar building nearby.
 It reads the buildings back from the sector files, so run it again after the sectors are re-baked.
 `sheet.py` makes a contact sheet for checking the result by eye.
+
+Roads, obstacles and fences (`surface.py`): road lines in `vectors.json` carry the ETAK surface type
+(`s`: 1 stone, 2 gravel, 3 dirt, 4 wood) and `c`, the colour of that road in the orthophoto tiles,
+which the game uses for the shade of the tarmac. Car parks and squares are in `areas`. Fences
+(`Piirdeaed`) are not obstacles, because the game does not show them; walls are, and are drawn
+from `walls`. `python3 tools/bake/resurface.py SRC public/data` rebuilds the obstacle field and
+these lists in existing sector files; run it after `reheight.py`. It needs ETAK *Buildings* too.

@@ -89,7 +89,7 @@ export async function loadWorldData(onProgress = () => {}) {
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const p of d.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
     const m = d.hw + 2;
-    return { kind: d.k, hw: d.hw, pts: d.pts, rail: d.rail || null, x0: x0 - m, z0: z0 - m, x1: x1 + m, z1: z1 + m };
+    return { kind: d.k, hw: d.hw, pts: d.pts, rail: d.rail || null, w: d.w || 0, b: d.b || '', name: d.n || '', x0: x0 - m, z0: z0 - m, x1: x1 + m, z1: z1 + m };
   });
   const hit = { y: 0, lat: 0, nx: 0, nz: 0, deck: null, seg: 0 };
   // Deck over the point, if any: fills "hit" and returns true.
@@ -213,7 +213,9 @@ export async function loadWorldData(onProgress = () => {}) {
       return true;
     },
 
-    surfaceAt(x, z) {
+    // Surface class under the point. With y (a car's height), a bridge deck it is level with counts as paved.
+    surfaceAt(x, z, y) {
+      if (y !== undefined && decks.length !== 0 && deckAt(x, z) && y > hit.y - UNDER && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       const s = find(x, z);
       if (s === null) return SURFACE.GRASS;
       let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);

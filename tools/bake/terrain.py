@@ -16,7 +16,7 @@ import rasterio.windows
 from rasterio.transform import from_origin
 from scipy import ndimage
 from scipy.spatial import cKDTree
-from shapely.geometry import LineString, box, mapping, shape
+from shapely.geometry import LineString, Point, box, mapping, shape
 from shapely.ops import linemerge, unary_union
 from shapely.strtree import STRtree
 
@@ -26,6 +26,24 @@ X0, Z0, X1, Z1 = detail_rect()
 W1, H1 = int(X1 - X0), int(Z1 - Z0)
 CLEAR = 2.3            # a deck needs at least this much room under it (m)
 etak = {}
+# Bridges over the Emajõgi: world (x, z) of the middle, name, look (drawn by src/world/decks.js), and
+# the rise of the deck above a straight line between its ends where the real one is clearly humped.
+BRIDGES = [
+    (1370, 2146, 'Kroonuaia sild', 'girder', None),
+    (1485, 2282, 'Vabadussild', 'steelarch', None),
+    (1622, 2765, 'Kaarsild', 'arch', 1.0),
+    (1894, 2919, 'Võidu sild', 'victory', None),
+    (2303, 2995, 'Turusild', 'cable', 5.0),          # the hung span is 7.5 m above the water
+    (2630, 3805, 'Sõpruse sild', 'girder', None),
+    (3786, 6514, 'Ihaste sild', 'girder', None),
+]
+
+
+def known_bridge(x, z):
+    for b in BRIDGES:
+        if np.hypot(b[0] - x, b[1] - z) < 110:
+            return b
+    return None
 
 
 def setup(src):
@@ -74,6 +92,112 @@ def road_level(p):
     """1 for a road on a bridge, -1 for one in a tunnel, 0 otherwise."""
     a, l = int(p.get('a_tasand') or 0), int(p.get('l_tasand') or 0)
     return 1 if max(a, l) > 0 else -1 if min(a, l) < 0 else 0
+
+
+def grade_roads(hN, roads, wm, decks=(), also=None):
+    """Level the terrain across each road, so a road is flat from edge to edge like a built road.
+
+    The terrain model is right about the road, but the kerbs, ditches and banks beside it fall inside
+    the width the road data gives, and on the 2 m grid of the game they make the edge of the road
+    wander. Every node within the road and 2 m beyond takes the height of the centre line beside it;
+    over the next 2 m that fades into the terrain. Run it after crossings(): water and everything
+    within 12 m of a tunnel, and under or beside a deck, stay as they are. hN is changed in place, and
+    the same change is made to also (the dry ground that trees stand on).
+    """
+    spans = [LineString([(E0 + q[0], N0 - q[1]) for q in d['pts']]).buffer(d['hw'] + 3.0, cap_style=2) for d in decks]
+    span_u = unary_union(spans) if spans else None
+    sel = [(p, g) for p, g in roads if road_level(p) >= 0 and road_width(p) >= 4.5 and p.get('tyyp_t') not in ('Rada', 'Kergliiklustee')]
+    sel.sort(key=lambda r: road_width(r[0]))
+    st, corr = [], []                                    # stations: x, z, height, half width
+    for p, g in sel:
+        hw = road_width(p) / 2
+        for part in flat(g):
+            n = max(int(part.length), 2)
+            pts = np.array([part.interpolate(d).coords[0] for d in np.linspace(0, part.length, n)])
+            x, z = pts[:, 0] - E0, N0 - pts[:, 1]
+            y = ndimage.uniform_filter1d(bilinear(hN, x, z).astype('float64'), min(7, n), mode='nearest')
+            a = np.stack([x, z, y, np.full(n, hw)], 1)
+            if road_level(p) > 0 and span_u is not None:         # the part of a bridge road that is on the ground
+                a = a[[not span_u.contains(Point(q)) for q in pts]]
+            if len(a):
+                st.append(a)
+                corr.append(part.buffer(hw + 4.0, cap_style=2))
+    if not st:
+        return
+    st = np.concatenate(st)
+    tree, ctree = cKDTree(st[:, :2]), STRtree(corr)
+    keep = [g.buffer(road_width(p) / 2 + 12.0) for p, g in roads if road_level(p) < 0] + spans
+    ktree = STRtree(keep) if keep else None
+    B = 1024
+    for r0 in range(0, H1 + 1, B):
+        for c0 in range(0, W1 + 1, B):
+            nr, nc = min(B, H1 + 1 - r0), min(B, W1 + 1 - c0)
+            shapes = [corr[i] for i in ctree.query(wbox(X0 + c0 - 1, Z0 + r0 - 1, X0 + c0 + nc, Z0 + r0 + nr))]
+            if not shapes:
+                continue
+            rr, cc = np.nonzero(rast(shapes, X0 + c0 - 0.5, Z0 + r0 - 0.5, nc, nr, 1.0, all_touched=True))
+            dist, idx = tree.query(np.stack([X0 + c0 + cc, Z0 + r0 + rr], 1), distance_upper_bound=40)
+            ok = np.isfinite(dist)
+            rr, cc, dist, idx = rr[ok], cc[ok], dist[ok], idx[ok]
+            wgt = np.clip((st[idx, 3] + 4.0 - dist) / 2.0, 0, 1)
+            wgt[wm[r0 + rr, c0 + cc]] = 0
+            if ktree is not None:
+                ks = [keep[i] for i in ktree.query(wbox(X0 + c0 - 1, Z0 + r0 - 1, X0 + c0 + nc, Z0 + r0 + nr))]
+                if ks:
+                    wgt[rast(ks, X0 + c0 - 0.5, Z0 + r0 - 0.5, nc, nr, 1.0, all_touched=True)[rr, cc] > 0] = 0
+            sub = hN[r0:r0 + nr, c0:c0 + nc]
+            delta = ((st[idx, 2] - sub[rr, cc]) * wgt).astype(hN.dtype)
+            sub[rr, cc] += delta
+            if also is not None:
+                also[r0 + rr, c0 + cc] += delta
+
+
+def mark_water_crossings(roads, river_u):
+    """ETAK has some bridges at ground level (Kaarsild): a road that runs over the river is a bridge."""
+    k = 0
+    for p, g in roads:
+        if road_level(p) == 0 and g.intersects(river_u) and g.intersection(river_u).length > 30:
+            p['a_tasand'] = p['l_tasand'] = 1
+            k += 1
+    return k
+
+
+def merge_twin_decks(decks):
+    """Two carriageways of one bridge over water (Sõpruse sild, Kaarsild) become one wide deck."""
+    out, used = [], set()
+    wd = [i for i, d in enumerate(decks) if d.get('w')]
+    for i in wd:
+        if i in used:
+            continue
+        a = decks[i]
+        A = np.array(a['pts'])
+        for j in wd:
+            if j <= i or j in used:
+                continue
+            b = decks[j]
+            lb = LineString([p[:2] for p in b['pts']])
+            la = LineString([p[:2] for p in a['pts']])
+            near = np.array([lb.project(Point(p[:2])) for p in a['pts']])
+            q = np.array([lb.interpolate(t).coords[0] for t in near])
+            dist = np.hypot(A[:, 0] - q[:, 0], A[:, 1] - q[:, 1])
+            sep = float(np.median(dist))
+            if sep > a['hw'] + b['hw'] + 3 or not 0.6 < lb.length / la.length < 1.6:
+                continue
+            sb = np.array([lb.project(Point(p[:2])) for p in b['pts']])
+            if sb[0] > sb[-1]:
+                sb = sb[::-1]
+            yb = np.interp(near, sb, np.array(sorted(zip([lb.project(Point(p[:2])) for p in b['pts']], [p[2] for p in b['pts']])))[:, 1])
+            ok = dist < sep + 2
+            mid = np.where(ok[:, None], (A[:, :2] + q) / 2, np.nan)
+            off = np.nanmedian(mid - A[:, :2], 0)                    # past the end of the twin: keep the offset
+            mid = np.where(ok[:, None], mid, A[:, :2] + off)
+            y = np.where(ok, np.maximum(A[:, 2], yb), A[:, 2])
+            a = dict(a, hw=round(sep / 2 + max(a['hw'], b['hw']), 2),
+                     pts=[[round(float(m[0]), 2), round(float(m[1]), 2), round(float(v), 2), round(float(v), 2)] for m, v in zip(mid, y)])
+            A = np.array(a['pts'])
+            used.add(j)
+        decks[i] = a
+    return [d for k, d in enumerate(decks) if k not in used]
 
 
 def load_dtm(src):
@@ -182,8 +306,8 @@ def _ribbon(kind, px, pz, idx, half, ys, rail=None):
 def crossings(hN, hG, wm, roads):
     """Bridges and tunnels. The terrain model has bridges removed and tunnels filled in.
 
-    Over water a bridge becomes a causeway in the height field (hN is raised). Over dry land it
-    becomes a deck and the ground below is left alone. A tunnel is cut through its embankment as an
+    A bridge becomes a deck, over water (marked w: 1) as over dry land, and the ground or the river
+    bed below is left alone. Only a dip too low to drive under is levelled in the height field. A tunnel is cut through its embankment as an
     open trench, with a deck over it wherever there is headroom, carrying whatever crosses above.
 
     Returns (decks, bridge_cells); hN is changed in place.
@@ -191,12 +315,43 @@ def crossings(hN, hG, wm, roads):
     bridge_cells = np.zeros((H1 + 1, W1 + 1), bool)
     decks = []
 
+    cur = {'name': ''}
+    parts = [part for p, g in roads for part in flat(g)]
+    ptree = STRtree(parts)
+
+    def follow(ch, dist):
+        """World points (x, z) every metre along the roads that continue a chain, before and after it."""
+        def walk(pt, prev):
+            cur_, d0, got, seen, out = np.array(pt), np.array(pt) - np.array(prev), 0.0, set(), [np.array(pt)]
+            d0 = d0 / (np.linalg.norm(d0) + 1e-9)
+            while got < dist:
+                best = None
+                for i in ptree.query(Point(cur_).buffer(0.3)):
+                    c = np.array(parts[i].coords)
+                    for arr in (c, c[::-1]):
+                        if i not in seen and len(arr) > 1 and np.hypot(*(arr[0] - cur_)) < 0.3:
+                            d = arr[min(len(arr) - 1, 2)] - arr[0]
+                            d = d / (np.linalg.norm(d) + 1e-9)
+                            if best is None or d @ d0 > best[0]:
+                                best = (d @ d0, i, arr)
+                if best is None or best[0] < 0.75:
+                    break
+                seen.add(best[1]); out += list(best[2][1:]); got += parts[best[1]].length
+                d0 = best[2][-1] - best[2][-2]; d0 = d0 / (np.linalg.norm(d0) + 1e-9); cur_ = best[2][-1]
+            if len(out) < 2:
+                return np.zeros((0, 2))
+            ln = LineString(out)
+            pts = np.array([ln.interpolate(t).coords[0] for t in np.arange(1.0, min(ln.length, dist), 1.0)]).reshape(-1, 2)
+            return np.stack([pts[:, 0] - E0, N0 - pts[:, 1]], 1)
+        c = list(ch.coords)
+        return walk(c[0], c[1])[::-1], walk(c[-1], c[-2])
+
     def chains(level):
-        segs, widths = [], []
+        segs, widths, names = [], [], []
         for p, g in roads:
             if road_level(p) == level:
                 for part in flat(g):
-                    segs.append(part); widths.append(road_width(p))
+                    segs.append(part); widths.append(road_width(p)); names.append(p.get('nimetus') or '')
         if not segs:
             return
         tree = STRtree(segs)
@@ -204,7 +359,9 @@ def crossings(hN, hG, wm, roads):
         for ch in (list(merged.geoms) if hasattr(merged, 'geoms') else [merged]):
             if ch.length < 4:
                 continue
-            w = max(widths[i] for i in tree.query(ch) if segs[i].distance(ch) < 0.01) + 1.0
+            on = [i for i in tree.query(ch) if segs[i].distance(ch) < 0.01]
+            w = max(widths[i] for i in on) + 1.0
+            cur['name'] = max((names[i] for i in on), key=len)
             n = int(ch.length) + 1
             pts = np.array([ch.interpolate(d).coords[0] for d in np.linspace(0, ch.length, n)])
             yield ch, w, n, pts[:, 0] - E0, N0 - pts[:, 1]
@@ -237,18 +394,9 @@ def crossings(hN, hG, wm, roads):
     n_bridge = n_tunnel = 0
     for ch, w, n, px, pz in chains(1):
         n_bridge += 1
-        p = sample(hG, px, pz).astype('float64')
-        inwater = sample(wm, px, pz)
-        # water: fill the widest gaps to the level of the banks
-        c = ndimage.grey_closing(p, size=min(n, 260), mode='nearest')
         fill = np.zeros(n, bool)
-        for m in _runs(c - p > 1.2):
-            if inwater[m].any():
-                fill[m] = True
-        fill = ndimage.binary_dilation(fill, iterations=3)
-        target = c.copy()
-        # dry land: a span is a dip shorter than a long bridge, between the two abutments. The road
-        # is followed a little past both ends of the bridge, where the abutments often are.
+        target = sample(hG, px, pz).astype('float64')
+        # The road is followed a little past both ends of the bridge, where the abutments often are.
         E = 15
         ex = np.concatenate([px[0] + (px[0] - px[min(3, n - 1)]) / min(3, n - 1) * np.arange(E, 0, -1), px,
                              px[-1] + (px[-1] - px[-min(4, n)]) / min(3, n - 1) * np.arange(1, E + 1)])
@@ -256,7 +404,58 @@ def crossings(hN, hG, wm, roads):
                              pz[-1] + (pz[-1] - pz[-min(4, n)]) / min(3, n - 1) * np.arange(1, E + 1)])
         q = sample(hG, ex, ez).astype('float64')
         ne = len(q)
-        taken = np.concatenate([np.zeros(E, bool), fill, np.zeros(E, bool)])
+        taken = np.zeros(ne, bool)
+        # water: a span from bank to bank over the widest gaps, slightly humped like the real ones.
+        # The bed under it stays as water() dug it, so the river runs through.
+        if sample(wm, px, pz).any():
+            # The real bridge can be longer than the stretch ETAK marks: follow the road on both
+            # sides, and where the ground climbs an abutment face, the span runs up to its top.
+            pre, post = follow(ch, 400)
+            fx = np.concatenate([pre[:, 0], px, post[:, 0]]); fz = np.concatenate([pre[:, 1], pz, post[:, 1]])
+            fq = sample(hG, fx, fz).astype('float64')
+            fw = sample(wm, fx, fz)
+            Ea, nf = len(pre), len(fq)
+            lo, hi = max(Ea - E, 0), min(Ea + n + E, nf)
+            cw = np.zeros(nf); cw[lo:hi] = ndimage.grey_closing(fq[lo:hi], size=hi - lo, mode='nearest') - fq[lo:hi]
+            for m in _runs(cw > 1.2):
+                if not fw[m].any():
+                    continue
+                a, b = m[0], m[-1]
+                while a > 0 and (cw[a - 1] > 0.15 or fw[a - 1]):
+                    a -= 1
+                while b < nf - 1 and (cw[b + 1] > 0.15 or fw[b + 1]):
+                    b += 1
+                a, b = max(a - 2, 0), min(b + 2, nf - 1)
+                for i in range(a, 6, -1):                # abutment face on the near side
+                    if fq[i - 6] - fq[i] > 2.5 and fq[i - 6] > fq[a] + 3:
+                        a = i - 6
+                        k = 0
+                        while a > 0 and fq[a - 1] > fq[a] + 0.1 and k < 15:
+                            a -= 1; k += 1
+                        break
+                for i in range(b, nf - 6):               # and on the far side
+                    if fq[i + 6] - fq[i] > 2.5 and fq[i + 6] > fq[b] + 3:
+                        b = i + 6
+                        k = 0
+                        while b < nf - 1 and fq[b + 1] > fq[b] + 0.1 and k < 15:
+                            b += 1; k += 1
+                        break
+                idx = np.arange(a, b + 1)
+                t = (idx - a) / max(b - a, 1)
+                wet = np.nonzero(fw[idx])[0]
+                mid = idx[wet[len(wet) // 2]] if len(wet) else (a + b) // 2
+                kb = known_bridge(fx[mid], fz[mid])
+                hump = kb[4] if kb and kb[4] else min(1.2, 0.007 * (b - a))
+                y = np.interp(idx, [a, b], [fq[a], fq[b]]) + 4 * hump * t * (1 - t)
+                y = np.maximum(y, fq[idx])
+                ta, tb = a - Ea + E, b - Ea + E          # the same stretch on the short profile
+                taken[max(ta, 0):max(tb + 1, 0)] = True
+                d = _ribbon(1, fx, fz, idx, w / 2, np.stack([y, y], 1), rail=(y - fq[idx] > 0.7) | fw[idx])
+                d['w'] = 1                               # over water
+                d['n'] = kb[2] if kb else cur['name']
+                d['b'] = kb[3] if kb else 'girder'
+                decks.append(d)
+        # dry land: a span is a dip shorter than a long bridge, between the two abutments.
         c2 = ndimage.grey_closing(q, size=min(ne, 121), mode='nearest')
         for m in _runs((c2 - q > 1.2) & ~taken):
             if m[-1] < E or m[0] >= E + n:
@@ -308,5 +507,6 @@ def crossings(hN, hG, wm, roads):
             line = ys[:, :1] + (ys[:, -1:] - ys[:, :1]) * np.linspace(0, 1, len(lat))[None, :]
             ys[:, 1:-1] = np.maximum(ys[:, 1:-1], line[:, 1:-1]) + 0.04
             decks.append(_ribbon(0, px, pz, m, half, ys))
+    decks = merge_twin_decks(decks)
     print(' bridge chains', n_bridge, 'tunnel chains', n_tunnel, 'decks', len(decks), 'causeway cells', int(bridge_cells.sum()))
     return decks, bridge_cells

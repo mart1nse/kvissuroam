@@ -84,7 +84,7 @@ print(' river level', river_level, 'other water bodies', len(others))
 roads = feats('E_501_tee_j', detail_box.buffer(100))
 TR.mark_water_crossings(roads, river_u)
 decks, bridge_cells = TR.crossings(hN, hG, wm, roads)
-TR.grade_roads(hN, roads, wm, also=hG)           # roads level from edge to edge; trees beside them follow
+TR.grade_roads(hN, roads, wm, decks, also=hG)           # roads level from edge to edge; trees beside them follow
 
 # ---------------------------------------------------------------- surface classes
 print('surface')

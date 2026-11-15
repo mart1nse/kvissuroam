@@ -32,7 +32,7 @@ hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)
 T.mark_water_crossings(roads, river_u)
 decks, _ = T.crossings(hN, hG, wm, roads)
-T.grade_roads(hN, roads, wm, also=hG)            # roads level from edge to edge; trees beside them follow
+T.grade_roads(hN, roads, wm, decks, also=hG)            # roads level from edge to edge; trees beside them follow
 
 changed = 0
 for sx, sz, _ in meta['sector']['list']:

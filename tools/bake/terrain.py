@@ -94,17 +94,19 @@ def road_level(p):
     return 1 if max(a, l) > 0 else -1 if min(a, l) < 0 else 0
 
 
-def grade_roads(hN, roads, wm, also=None):
+def grade_roads(hN, roads, wm, decks=(), also=None):
     """Level the terrain across each road, so a road is flat from edge to edge like a built road.
 
     The terrain model is right about the road, but the kerbs, ditches and banks beside it fall inside
     the width the road data gives, and on the 2 m grid of the game they make the edge of the road
     wander. Every node within the road and 2 m beyond takes the height of the centre line beside it;
     over the next 2 m that fades into the terrain. Run it after crossings(): water and everything
-    within 12 m of a tunnel, and bridges themselves, stay as they are. hN is changed in place, and
+    within 12 m of a tunnel, and under or beside a deck, stay as they are. hN is changed in place, and
     the same change is made to also (the dry ground that trees stand on).
     """
-    sel = [(p, g) for p, g in roads if road_level(p) == 0 and road_width(p) >= 4.5 and p.get('tyyp_t') not in ('Rada', 'Kergliiklustee')]
+    spans = [LineString([(E0 + q[0], N0 - q[1]) for q in d['pts']]).buffer(d['hw'] + 3.0, cap_style=2) for d in decks]
+    span_u = unary_union(spans) if spans else None
+    sel = [(p, g) for p, g in roads if road_level(p) >= 0 and road_width(p) >= 4.5 and p.get('tyyp_t') not in ('Rada', 'Kergliiklustee')]
     sel.sort(key=lambda r: road_width(r[0]))
     st, corr = [], []                                    # stations: x, z, height, half width
     for p, g in sel:
@@ -114,13 +116,17 @@ def grade_roads(hN, roads, wm, also=None):
             pts = np.array([part.interpolate(d).coords[0] for d in np.linspace(0, part.length, n)])
             x, z = pts[:, 0] - E0, N0 - pts[:, 1]
             y = ndimage.uniform_filter1d(bilinear(hN, x, z).astype('float64'), min(7, n), mode='nearest')
-            st.append(np.stack([x, z, y, np.full(n, hw)], 1))
-            corr.append(part.buffer(hw + 4.0, cap_style=2))
+            a = np.stack([x, z, y, np.full(n, hw)], 1)
+            if road_level(p) > 0 and span_u is not None:         # the part of a bridge road that is on the ground
+                a = a[[not span_u.contains(Point(q)) for q in pts]]
+            if len(a):
+                st.append(a)
+                corr.append(part.buffer(hw + 4.0, cap_style=2))
     if not st:
         return
     st = np.concatenate(st)
     tree, ctree = cKDTree(st[:, :2]), STRtree(corr)
-    keep = [g.buffer(road_width(p) / 2 + (12.0 if road_level(p) < 0 else 1.5)) for p, g in roads if road_level(p) != 0]
+    keep = [g.buffer(road_width(p) / 2 + 12.0) for p, g in roads if road_level(p) < 0] + spans
     ktree = STRtree(keep) if keep else None
     B = 1024
     for r0 in range(0, H1 + 1, B):

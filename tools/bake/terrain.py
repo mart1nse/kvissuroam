@@ -102,8 +102,11 @@ def load_dtm(src):
         D[np.isnan(D)] = np.nanmedian(D)
     # node heights of the detail rectangle: integer metres, mean of the 4 surrounding pixels
     ox, oz = int(X0 - CX0), int(Z0 - CZ0)
-    hN = (D[oz - 1:oz + H1, ox - 1:ox + W1] + D[oz:oz + H1 + 1, ox - 1:ox + W1]
-          + D[oz - 1:oz + H1, ox:ox + W1 + 1] + D[oz:oz + H1 + 1, ox:ox + W1 + 1]) / 4.0
+    hN = D[oz - 1:oz + H1, ox - 1:ox + W1].copy()          # summed in place: the grids are large
+    hN += D[oz:oz + H1 + 1, ox - 1:ox + W1]
+    hN += D[oz - 1:oz + H1, ox:ox + W1 + 1]
+    hN += D[oz:oz + H1 + 1, ox:ox + W1 + 1]
+    hN *= 0.25
     assert hN.shape == (H1 + 1, W1 + 1)
     return D, hN
 
@@ -139,9 +142,20 @@ def water(hN):
     ot[rv > 0] = 0
     river_level = float(np.median(hN[rv > 0]))
     wm = (rv > 0) | (ot > 0)
-    dist = ndimage.distance_transform_edt(wm).astype('float32')
-    depth = np.where(rv > 0, np.minimum(4.0, 0.45 * dist), np.minimum(1.2, 0.35 * dist))
-    return np.where(wm, hN - depth, hN).astype('float32'), wm, river_u, others, river_level
+    # depth below the surface grows with the distance from the bank, up to 4 m (river) or 1.2 m.
+    # Done in blocks: only the first few metres from the bank matter.
+    B, P = 2048, 16
+    for r0 in range(0, wm.shape[0], B):
+        for c0 in range(0, wm.shape[1], B):
+            if not wm[r0:r0 + B, c0:c0 + B].any():
+                continue
+            ra, ca = max(r0 - P, 0), max(c0 - P, 0)
+            w = wm[ra:r0 + B + P, ca:c0 + B + P]
+            dist = ndimage.distance_transform_edt(w).astype('float32')[r0 - ra:r0 - ra + B, c0 - ca:c0 - ca + B]
+            w = wm[r0:r0 + B, c0:c0 + B]
+            depth = np.where(rv[r0:r0 + B, c0:c0 + B] > 0, np.minimum(4.0, 0.45 * dist), np.minimum(1.2, 0.35 * dist))
+            hN[r0:r0 + B, c0:c0 + B][w] -= depth[w].astype('float32')
+    return hN, wm, river_u, others, river_level
 
 
 def _runs(mask):

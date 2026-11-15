@@ -5,17 +5,18 @@ Needs Python 3 with `numpy scipy pillow rasterio fiona shapely pyproj`.
 
 Downloads (all from https://geoportaal.maaruum.ee, put them in one folder, `SRC` below):
 
-1. Elevation → DTM 1 m GeoTIFF, map sheets `54752 54754 54761 54763 54852 54861` → `dtm_<sheet>.tif`
+1. Elevation → DTM 1 m GeoTIFF, all four quarters of map sheets `5465 5466 5475 5476 5485 5486` (`54651` ... `54864`, 24 files) → `dtm_<sheet>.tif`
 2. Estonian Topographic Database → thematic SHP sets *Transportation*, *Waterbodies*, *Land use types*
    (unzip into `SRC/etak/`) and *Buildings* (unzip into `SRC/etak_e/`)
-3. 3D data → *Buildings LOD2* and *Roofed areas LOD1* as OBJ for Tartu linn and Tartu vald (unzip)
-4. 3D data → *Vegetation* GPKG for Tartu linn and Tartu vald (unzip)
+3. 3D data → *Buildings LOD2* and *Roofed areas LOD1* as OBJ for Tartu linn, Tartu vald, Kambja vald and Luunja vald (unzip)
+4. 3D data → *Vegetation* GPKG for the same four municipalities (unzip)
 
 Then:
 
 ```sh
 cd SRC && python3 /path/to/repo/tools/bake/extract_etak.py     # writes etak_bbox.json
 cd /path/to/repo
+python3 tools/bake/rural.py SRC                                # open-country sectors -> rural_sectors.json
 python3 tools/bake/fetch_ortho.py public/data/ortho SRC        # orthophoto tiles from the public WMS
 python3 tools/bake/lidar_bushes.py SRC      # optional: hedges, bushes, fences (needs laspy[lazrs])
 python3 tools/bake/bake.py SRC public/data
@@ -24,7 +25,8 @@ python3 tools/bake/bake.py SRC public/data
 The drivable area is the polygon in `boundary.json` (L-EST97 coordinates); origin, sector size and
 start position are in `config.py`. The area is cut into 640 m sectors. Each sector becomes one
 gzip file `sec/{sx}_{sz}.kvs` (height grid, surface classes, obstacle distance field, buildings,
-trees) plus 2x2 orthophoto tiles (4x4 for the sectors listed in `HI_SECTORS`), which the game
+trees) plus 2x2 orthophoto tiles (4x4 for the sectors listed in `HI_SECTORS`, one tile for the
+open-country sectors in `rural_sectors.json`), which the game
 streams in around the car. `coarse.bin` and `ortho/overview.jpg` are the far scenery.
 
 Bridges and tunnels (`terrain.py`): the terrain model has bridges removed and tunnels filled in.
@@ -46,6 +48,11 @@ Buildings and trees only: `python3 tools/bake/repack.py SRC public/data` rebuild
 (`buildings.py`) and re-applies the tree rules (`trees.py`) in the existing sector files. It needs
 only the building OBJ files from step 3. Tree crown points that fall on a paved or gravel road are
 moved to the verge when it is within reach of the crown, and dropped otherwise.
+
+The full bake of the 163 km2 area needs about 8 GB of memory and 10 minutes. The single-tree data has
+holes (for example a strip of Tartu vald between N 6479100 and 6480000, and Haage west of E 652000);
+those places have no trees in the game. Without `SRC/bushes.npz` the bake writes no hedges; the
+Kvissentali ones were carried over from the previous sector files.
 
 Real wall colours (`tools/realism/`): `list_images.py CACHE.jsonl` lists the Mapillary photos of the area,
 `colours.py CACHE.jsonl WORKDIR` samples the wall colour of every building a photo sees squarely and

@@ -19,9 +19,9 @@ TILE_PX = 1024         # orthophoto tile size in pixels
 XTILE_PX = 1536        # extra-sharp tiles (0.10 m/px) inside detail_area.json, shown close to the car
 BUSH_RES = 0.5         # lidar bush/hedge grid (m)
 # coarse far-scenery grid (world x/z, metres)
-CX0, CX1, CZ0, CZ1 = -3808.0, 6432.0, -4768.0, 7264.0
+CX0, CX1, CZ0, CZ1 = -9760.0, 10080.0, -12960.0, 13920.0
 COARSE_RES = 32.0
-OVERVIEW_PX = (3488, 4096)
+OVERVIEW_PX = (3024, 4096)
 MOSAIC_RES = 1.25      # working orthophoto mosaic for roof colours / driveway detection
 # start: driveway of Kvissentali tee 8, facing the street (north)
 START_E, START_N = 657870.0, 6477151.0
@@ -53,6 +53,14 @@ def _detail():
 # sectors with 4x4 orthophoto tiles (0.16 m/px) instead of 2x2 (0.31 m/px), and the extra-sharp tiles
 HI_SECTORS, XTILES = _detail()
 HI_SECTORS |= {(0, 0), (1, 0), (0, 1), (1, 1)}
+# open-country sectors (hardly any buildings) get a single tile (0.63 m/px); written by rural.py
+_rural = os.path.join(_here, 'rural_sectors.json')
+RURAL_SECTORS = {tuple(s) for s in json.load(open(_rural))} if os.path.exists(_rural) else set()
+
+
+def tile_div(sx, sz):
+    """Orthophoto tiles per sector side."""
+    return 4 if (sx, sz) in HI_SECTORS else 1 if (sx, sz) in RURAL_SECTORS else 2
 
 
 def sectors():

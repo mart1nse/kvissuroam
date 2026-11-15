@@ -4,6 +4,9 @@ The source meshes are closed solids, triangles wound counter-clockwise seen from
 in (E, N, H). The game frame (x, y, z) = (E, H, -N) is a rotation of that, so winding and
 normals carry over unchanged.
 """
+import glob
+import os
+
 import numpy as np
 from shapely.geometry import MultiPoint
 
@@ -72,8 +75,9 @@ def build(src, secset, roof_colour):
     """
     bsec = {}          # sector -> list of (pos(m,3,3), nrm(m,3), col(m,3), kind(m), base(m))
     n_b = n_c = 0
-    for name in ('Tartu_linn', 'Tartu_vald'):
-        V, groups = load_obj(f'{src}/hooned_lod2-{name}.obj')
+    for path in sorted(glob.glob(f'{src}/hooned_lod2-*.obj')):          # one file per municipality
+        name = os.path.basename(path)[len('hooned_lod2-'):-4]
+        V, groups = load_obj(path)
         for mtl, tris in groups.items():
             if not tris:
                 continue
@@ -88,6 +92,8 @@ def build(src, secset, roof_colour):
             emit(bsec, key, bv, t2, WALLS[(int(cx * 7) ^ int(cy * 13)) % len(WALLS)], roof_colour(bv, t2))
             n_b += 1
         del V, groups
+        if not os.path.exists(f'{src}/katusealused_lod1-{name}.obj'):
+            continue
         V, groups = load_obj(f'{src}/katusealused_lod1-{name}.obj')
         for mtl, tris in groups.items():
             if not tris:

@@ -297,9 +297,11 @@ input.on('KeyR', unlessMap(goLastSpot));
 input.on('KeyH', unlessMap(goHome));
 input.on('Home', unlessMap(goHome));
 input.on('KeyG', openGarage);
-input.on('KeyT', () => (bigmap.isOpen ? closeMap() : openMap()));
+const toggleMap = () => (bigmap.isOpen ? closeMap() : openMap());
+input.on('KeyM', toggleMap);
+input.on('KeyT', toggleMap);
 input.on('Escape', () => (bigmap.isOpen ? closeMap() : openGarage()));
-input.on('KeyM', toggleSound);
+input.on('KeyN', toggleSound);
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;

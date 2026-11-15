@@ -2,7 +2,7 @@
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain, skidGain, skidFilt;
-  let skid = 0;
+  let skid = 0, lastLanded = 0;
   let muted = false, ev = false;
 
   function start() {
@@ -41,11 +41,27 @@ export function createAudio() {
     noise.start();
   }
 
+  // dull thud of the suspension taking a landing; strength is the sink rate in m/s
+  function thump(strength) {
+    const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(95, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
+    g.gain.setValueAtTime(Math.min(0.9, 0.12 * strength), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g).connect(master);
+    o.start(t); o.stop(t + 0.25);
+  }
+
   function update(car, active) {
     if (!ctx) return;
     const t = ctx.currentTime;
+    const landed = car.landed || 0;
+    if (active && !car.inWater && landed > 1 && landed > lastLanded + 0.5) thump(landed);
+    lastLanded = landed;
     const v = Math.hypot(car.vx, car.vy);
     const dead = !active || car.inWater;
+    const flying = car.airborne && car.airTime > 0.1;
     // the driven wheels (and the motor with them) can run ahead of the road
     const vw = v + (car.slipV || 0);
     if (ev) {
@@ -63,7 +79,7 @@ export function createAudio() {
     }
     const loose = car.surface !== 1 ? 1.8 : 1;
     windFilt.frequency.setTargetAtTime(car.surface !== 1 ? 320 : 700 + v * 12, t, 0.1);
-    windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, (car.surface !== 1 ? vw : v) * 0.0045 * loose), t, 0.1);
+    windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, (car.surface !== 1 && !flying ? vw : v) * 0.0045 * (flying ? 0.5 : loose)), t, flying ? 0.03 : 0.1);
     // only on paving, and only audible once the slide is well under way
     const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);
     skid += (k - skid) * 0.2;

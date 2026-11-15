@@ -80,7 +80,7 @@ async function boot() {
   scene.add(terrain.group);
   bar.style.width = '88%';
   await new Promise((r) => setTimeout(r));
-  const buildBuildings = createBuildings();
+  const buildBuildings = createBuildings(world.walls);
   const buildTrees = createTrees(quality);
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);

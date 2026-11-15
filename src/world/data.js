@@ -25,9 +25,10 @@ export const SURFACE = { GRASS: 0, PAVED: 1, GRAVEL: 2, DIRT: 3, WATER: 4 };
 
 export async function loadWorldData(onProgress = () => {}) {
   let done = 0;
-  const tick = (p) => p.then((v) => { onProgress(++done / 3); return v; });
-  const [meta, coarseBuf, vectors] = await Promise.all([
+  const tick = (p) => p.then((v) => { onProgress(++done / 4); return v; });
+  const [meta, coarseBuf, vectors, walls] = await Promise.all([
     tick(fetchJson('meta.json')), tick(fetchBuf('coarse.bin')), tick(fetchJson('vectors.json')),
+    tick(fetchJson('walls.json').catch(() => null)),       // real wall colours, optional
   ]);
 
   const C = new Uint16Array(coarseBuf);
@@ -122,7 +123,7 @@ export async function loadWorldData(onProgress = () => {}) {
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 
   const world = {
-    meta, vectors, sectors, coarse: C, decks,
+    meta, vectors, walls, sectors, coarse: C, decks,
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,

@@ -37,6 +37,7 @@ from shapely.strtree import STRtree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *  # noqa
 import buildings
+import surface as SF
 import terrain as T
 import trees as tree_rules
 
@@ -81,29 +82,20 @@ print(' river level', river_level, 'other water bodies', len(others))
 
 # ---- bridges and tunnels: causeways over water, decks over dry land, lids over tunnels (terrain.py)
 roads = feats('E_501_tee_j', detail_box.buffer(100))
+T.mark_water_crossings(roads, river_u)
 decks, bridge_cells = T.crossings(hN, hG, wm, roads)
 
 # ---------------------------------------------------------------- surface classes
 print('surface')
 GRASS, PAVED, GRAVEL, DIRT, WATER = 0, 1, 2, 3, 4
 road_shapes = {PAVED: [], GRAVEL: [], DIRT: []}
-road_lines = []
 near = poly_en.buffer(150)
 for p, g in roads:
     kate = p.get('teekate_t')
     cls = GRAVEL if kate == 'Kruuskate' else DIRT if kate == 'Pinnas' else PAVED
-    w = road_width(p)
-    road_shapes[cls].append(g.buffer(w / 2, cap_style=1, join_style=1))
-    if g.intersects(near):
-        for part in flat(g):
-            part = part.simplify(0.4)
-            road_lines.append({
-                **({'e': T.road_level(p)} if T.road_level(p) else {}),     # on a bridge (1) or in a tunnel (-1)
-                'name': p.get('nimetus') or '',
-                'type': p.get('tyyp_t'),
-                'w': round(w, 1),
-                'pts': [[round(x - E0, 1), round(-(y - N0), 1)] for x, y in part.coords],
-            })
+    road_shapes[cls].append(g.buffer(road_width(p) / 2, cap_style=1, join_style=1))
+ortho = SF.Ortho(OUT)                            # the tiles fetch_ortho.py wrote
+road_lines = SF.road_lines(roads, near, ortho)
 surf = np.zeros((H1, W1), 'uint8')
 for cls in (DIRT, GRAVEL, PAVED):
     surf[rast(road_shapes[cls], X0, Z0, W1, H1, 1.0) > 0] = cls
@@ -141,18 +133,18 @@ for f in glob.glob(f'{SRC}/vegetatsioon-*.gpkg'):
             p = ft['properties']
             trees[int(p['puu_id'])] = (x - E0, N0 - y, float(p['korgus'] or 8), float(p['puukroon'] or 4),
                                        1.0 if p['puutyyp'] == 'Okaspuu' else 0.0)
-T = np.array(list(trees.values()), 'float64')
+TR = np.array(list(trees.values()), 'float64')
 del trees
-T = T[(T[:, 0] > X0) & (T[:, 0] < X1 - 0.01) & (T[:, 1] > Z0) & (T[:, 1] < Z1 - 0.01)]
-tsurf = surf[(T[:, 1] - Z0).astype(int), (T[:, 0] - X0).astype(int)]
-T = T[tsurf != WATER]
+TR = TR[(TR[:, 0] > X0) & (TR[:, 0] < X1 - 0.01) & (TR[:, 1] > Z0) & (TR[:, 1] < Z1 - 0.01)]
+tsurf = surf[(TR[:, 1] - Z0).astype(int), (TR[:, 0] - X0).astype(int)]
+TR = TR[tsurf != WATER]
 # crown points over a street: move the tree to the verge, or drop it
-n_all = len(T)
-T, t_moved = tree_rules.clear_roads(T, surf, X0, Z0, blocked=rast([g for p, g in buildings_fp], X0, Z0, W1, H1, 1.0, all_touched=True) > 0)
-print(' trees over roads: moved', int(t_moved.sum()), 'dropped', n_all - len(T))
-t_ground = ground(T[:, 0], T[:, 1])
-t_sec = np.stack([np.floor((T[:, 0] - GRID0) / SECTOR), np.floor((T[:, 1] - GRID0) / SECTOR)], 1).astype(int)
-print(' trees', len(T))
+n_all = len(TR)
+TR, t_moved = tree_rules.clear_roads(TR, surf, X0, Z0, blocked=rast([g for p, g in buildings_fp], X0, Z0, W1, H1, 1.0, all_touched=True) > 0)
+print(' trees over roads: moved', int(t_moved.sum()), 'dropped', n_all - len(TR))
+t_ground = ground(TR[:, 0], TR[:, 1])
+t_sec = np.stack([np.floor((TR[:, 0] - GRID0) / SECTOR), np.floor((TR[:, 1] - GRID0) / SECTOR)], 1).astype(int)
+print(' trees', len(TR))
 
 # ---------------------------------------------------------------- hedges, bushes and fences (lidar, detail area only)
 low_obj = {}          # sector -> (bush records, fence records), each (n,3) uint16: ix, iz, height dm | angle << 8
@@ -196,13 +188,11 @@ del mos
 
 # ---------------------------------------------------------------- sectors
 print('sectors')
-solid = [g for p, g in buildings_fp if p.get('tyyp_t') != 'Vundament']
-solid += [g.buffer(0.12) for p, g in feats('E_405_piire_j')]
+solid = SF.solid_shapes(feats)
 solid_tree = STRtree(solid)
-trunk_tree = cKDTree(T[:, :2])
-trunk_h = T[:, 2]
+trunk_tree = cKDTree(TR[:, :2])
+trunk_h = TR[:, 2]
 S, FINE, MARGIN = int(SECTOR), 0.25, 16.0
-nf = int((SECTOR + 2 * MARGIN) / FINE)
 total = 0
 sec_meta = []
 for k, (sx, sz) in enumerate(SECS):
@@ -217,26 +207,18 @@ for k, (sx, sz) in enumerate(SECS):
     cx, cz = x0 + SECTOR / 2, z0 + SECTOR / 2
     for i in trunk_tree.query_ball_point([cx, cz], (SECTOR / 2 + MARGIN) * 1.42):
         tx, tz = trunk_tree.data[i]
-        shapes.append(Point(E0 + tx, N0 - tz).buffer(min(0.45, max(0.14, 0.035 * trunk_h[i])), 6))
+        shapes.append(SF.trunk(tx, tz, trunk_h[i]))
     outside = wb.difference(poly_en)
     if not outside.is_empty:
         shapes.append(outside)
-    occ = rast(shapes, x0 - MARGIN, z0 - MARGIN, nf, nf, FINE, all_touched=True) > 0
-    if occ.any():
-        sd = (ndimage.distance_transform_edt(~occ) - ndimage.distance_transform_edt(occ)) * FINE
-    else:
-        sd = np.full(occ.shape, 99.0)
-    s4 = (sd[:-1, :-1] + sd[1:, :-1] + sd[:-1, 1:] + sd[1:, 1:]) / 4.0
-    b = int(MARGIN / FINE) - 1
-    nd = int(SECTOR / SDF_RES) + 1
-    sdn = s4[b:b + 2 * nd - 1:2, b:b + 2 * nd - 1:2]
-    sdq = np.clip(np.round((sdn + 4.0) / 16.0 * 255), 0, 255).astype('uint8')
-    assert sdq.shape == (nd, nd) and hq.shape == (S // int(HM_RES) + 1,) * 2
+    sdq = SF.sector_sdf(shapes, x0, z0, MARGIN, FINE)
+    nd = sdq.shape[0]
+    assert hq.shape == (S // int(HM_RES) + 1,) * 2
     # trees
     m = (t_sec[:, 0] == sx) & (t_sec[:, 1] == sz)
     rec = np.zeros(int(m.sum()), dtype=[('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('h', '<f4'), ('c', '<f4'), ('k', '<f4')])
-    rec['x'] = T[m, 0]; rec['z'] = T[m, 1]; rec['y'] = t_ground[m] - H0
-    rec['h'] = T[m, 2]; rec['c'] = np.clip(T[m, 3], 1.5, 16); rec['k'] = T[m, 4]
+    rec['x'] = TR[m, 0]; rec['z'] = TR[m, 1]; rec['y'] = t_ground[m] - H0
+    rec['h'] = TR[m, 2]; rec['c'] = np.clip(TR[m, 3], 1.5, 16); rec['k'] = TR[m, 4]
     nv, bbytes = buildings.pack(bsec, (sx, sz), x0, z0)
     bush, fence = low_obj.get((sx, sz), (np.zeros((0, 3), '<u2'),) * 2)
     head = struct.pack('<4s7I', b'KVS1', hq.shape[0], sf.shape[0], nd, nv, len(rec), len(bush), len(fence))
@@ -291,6 +273,6 @@ meta = {
     'attribution': 'Ortofoto, kõrgusmudel, ETAK, hoonete 3D mudel ja üksikpuud: Maa- ja Ruumiamet 2026',
 }
 json.dump(meta, open(f'{OUT}/meta.json', 'w'), ensure_ascii=False)
-json.dump({'water': water, 'roads': road_lines, 'decks': decks}, open(f'{OUT}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))
+json.dump({'water': water, 'roads': road_lines, 'areas': SF.areas(feats, near, ortho), 'walls': SF.walls(feats, near), 'decks': decks}, open(f'{OUT}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 for f in ('meta.json', 'vectors.json', 'coarse.bin'):
     print(f'  {f:14s} {os.path.getsize(os.path.join(OUT, f)) / 1e6:.2f} MB')

@@ -171,10 +171,10 @@ function substep(car, input, world, dt) {
   const groundY = (hFL + hFR + hRL + hRR) / 4;
   car.groundPitch = Math.atan2((hFL + hFR - hRL - hRR) / 2, L);       // nose-up positive
   car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
-  const surfF = world.surfaceAt(car.x + fx * car.a, car.z + fz * car.a);
-  const surfR = world.surfaceAt(car.x - fx * car.b, car.z - fz * car.b);
+  const surfF = world.surfaceAt(car.x + fx * car.a, car.z + fz * car.a, gy);
+  const surfR = world.surfaceAt(car.x - fx * car.b, car.z - fz * car.b, gy);
   const sf = SURF[surfF] || SURF[0], sr = SURF[surfR] || SURF[0];
-  car.surface = world.surfaceAt(car.x, car.z);
+  car.surface = world.surfaceAt(car.x, car.z, gy);
 
   // ---- water
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;

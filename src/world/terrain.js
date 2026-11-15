@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sunDirection } from './sky.js';
 import { deckTopGeometry } from './decks.js';
+import { createRoadPainter } from './roadtex.js';
 
 const BASE = `${import.meta.env.BASE_URL}data/ortho/`;
 
@@ -36,13 +37,17 @@ function makeDetailTexture() {
   return t;
 }
 
-// mask: per-sector texture (R paved, G openness near walls, B gravel or dirt) with its sector origin
+// mask: per-sector textures with their sector origin: tex (R paved yards and drives found in the aerial photo,
+// G openness near walls), and the painted roads of roadtex.js (cover, tone)
 function groundMaterial(map, detail, overview, mask) {
   // overview: sample the map by world position inside the scenery rectangle instead of by uv
   const mat = new THREE.MeshLambertMaterial({ map });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uDetail = { value: detail };
     shader.uniforms.uMask = { value: mask ? mask.tex : null };
+    shader.uniforms.uRoad = { value: mask ? mask.cover : null };
+    shader.uniforms.uTone = { value: mask ? mask.tone : null };
+    shader.uniforms.uKerb = { value: mask ? mask.kerb : 0.2 };
     shader.uniforms.uSec = { value: mask ? new THREE.Vector3(mask.x0, mask.z0, mask.size) : new THREE.Vector3() };
     shader.uniforms.uSunDir = { value: SUN };
     if (mask) shader.defines = { ...(shader.defines || {}), USE_MASK: '' };
@@ -54,7 +59,7 @@ function groundMaterial(map, detail, overview, mask) {
       ? `diffuseColor *= texture2D(map, vec2((vWxz.x - uRect.x) / uRect.z, 1.0 - (vWxz.y - uRect.y) / uRect.w));`
       : '#include <map_fragment>';
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying float vWy;\nfloat gWet = 0.0;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform sampler2D uRoad;\nuniform sampler2D uTone;\nuniform float uKerb;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying float vWy;\nfloat gWet = 0.0;')
       .replace('#include <map_fragment>', `${sample}
         float dA = texture2D(uDetail, vWxz * 0.9).r;
         float dB = texture2D(uDetail, vWxz * 0.11).r;
@@ -62,26 +67,47 @@ function groundMaterial(map, detail, overview, mask) {
         float k = 1.0 - smoothstep(25.0, 90.0, dist);
         diffuseColor.rgb *= mix(1.0, (dA * 0.75 + dB * 0.55) * 1.02, k * 0.85);
         #ifdef USE_MASK
-          vec4 mk = texture2D(uMask, (vWxz - uSec.xy) / uSec.z);
-          // asphalt: the aerial photo gives the tone and the painted lines, a generated surface gives the grain
+          vec2 suv = (vWxz - uSec.xy) / uSec.z;
+          vec4 mk = texture2D(uMask, suv);
+          vec4 rd = texture2D(uRoad, suv);
+          vec4 tn = texture2D(uTone, suv);
+          float road = smoothstep(0.4, 0.6, rd.r);
+          float paved = max(road, smoothstep(0.45, 0.65, mk.r));
+          float loose = smoothstep(0.4, 0.6, rd.b) * (1.0 - road);
+          float stone = smoothstep(0.4, 0.6, tn.b) * road;
+          // tarmac: the shade and warmth come from what this road looks like in the aerial photo,
+          // the grain is generated, and painted lines and light patches of the photo stay readable
           float grain = texture2D(uDetail, vWxz * 2.3).r;
-          vec3 asphalt = vec3(0.2, 0.2, 0.225) * (0.55 + 0.6 * grain) * (0.8 + 0.4 * dB);
+          float shade = clamp(pow(tn.r * 255.0 / 183.0, 1.25), 0.5, 1.3);
+          float warm = (tn.g - 0.5) * 0.8;
+          vec3 tint = vec3(1.0 + warm, 1.0, 1.0 - warm);
+          vec3 asphalt = vec3(0.235, 0.228, 0.232) * tint * shade * (0.6 + 0.55 * grain) * (0.85 + 0.3 * dB);
           float lum = dot(diffuseColor.rgb, vec3(0.33));
-          asphalt *= 0.8 + 0.5 * smoothstep(0.45, 0.9, lum);       // keep painted markings and light patches readable
-          diffuseColor.rgb = mix(diffuseColor.rgb, asphalt, 0.82 * smoothstep(0.45, 0.6, mk.r));
-          // kerb stone where paving meets anything else
-          float kerb = smoothstep(0.86, 1.0, mk.r * (1.0 - mk.r) * 4.0) * (1.0 - smoothstep(40.0, 110.0, dist));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.5) * (0.8 + 0.3 * grain), kerb * 0.8);
-          // gravel and dirt
-          vec3 gravel = mix(vec3(0.4, 0.36, 0.31), vec3(0.3, 0.27, 0.24), dB) * (0.6 + 0.7 * grain);
-          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.55 * smoothstep(0.45, 0.6, mk.b));
+          asphalt *= 0.85 + 0.4 * smoothstep(0.45, 0.9, lum);
+          // setts: rows of cut stones with dark joints, each stone its own shade
+          vec2 cp = vWxz * vec2(4.6, 7.2);
+          cp.x += 0.5 * mod(floor(cp.y), 2.0);
+          vec2 ci = floor(cp), cf = fract(cp);
+          float ch = fract(sin(dot(ci, vec2(127.1, 311.7))) * 43758.5453);
+          float joint = smoothstep(0.0, 0.14, cf.x) * smoothstep(1.0, 0.86, cf.x) * smoothstep(0.0, 0.2, cf.y) * smoothstep(1.0, 0.8, cf.y);
+          float nearK = 1.0 - smoothstep(14.0, 50.0, dist);
+          vec3 setts = mix(vec3(0.27, 0.25, 0.245), vec3(0.43, 0.39, 0.37), ch) * mix(0.42, 1.0, joint) * (0.8 + 0.3 * grain);
+          setts = mix(vec3(0.31, 0.285, 0.275) * (0.85 + 0.3 * dB), setts, nearK) * tint * mix(1.0, shade, 0.6);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(asphalt, setts, stone), mix(0.82, 0.92, stone) * paved);
+          // kerb stone along streets
+          float kerb = smoothstep(0.42 - uKerb, 0.42, rd.g) * (1.0 - smoothstep(0.42, 0.42 + uKerb, rd.g)) * (1.0 - smoothstep(60.0, 160.0, dist));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.49) * (0.8 + 0.3 * grain), kerb * 0.85);
+          // gravel and dirt roads: crushed stone, lighter where the wheels run dry
+          float pebble = texture2D(uDetail, vWxz * 5.1 + 0.31).r;
+          vec3 gravel = mix(vec3(0.42, 0.375, 0.315), vec3(0.3, 0.27, 0.235), dB) * (0.5 + 0.5 * grain + 0.45 * pebble * nearK);
+          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.8 * loose);
           // grass: blades and clumps on whatever is left
-          float soft = (1.0 - smoothstep(0.3, 0.5, mk.r)) * (1.0 - smoothstep(0.3, 0.5, mk.b));
+          float soft = (1.0 - smoothstep(0.3, 0.5, max(rd.r, mk.r))) * (1.0 - smoothstep(0.3, 0.5, rd.b));
           float blades = texture2D(uDetail, vWxz * vec2(4.3, 1.1)).r * texture2D(uDetail, vWxz.yx * vec2(3.7, 0.9) + 0.37).r;
           float green = smoothstep(0.0, 0.06, diffuseColor.g - max(diffuseColor.r, diffuseColor.b) + 0.03);
           diffuseColor.rgb *= mix(1.0, 0.72 + 1.3 * blades, soft * green * k);
           diffuseColor.rgb *= mix(0.55, 1.0, mk.g);                 // contact shadow along walls
-          gWet = mk.r * (0.55 + 0.9 * (dB - 0.5));                  // damp asphalt, patchy
+          gWet = paved * (1.0 - 0.6 * stone) * (0.55 + 0.9 * (dB - 0.5));   // damp asphalt, patchy
         #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         #ifdef USE_MASK
@@ -182,6 +208,64 @@ export function createTerrain(world, renderer, opts) {
     return a;
   }
 
+  // Ground mask of a sector, built when the first of its tiles comes close and shared by them.
+  const paint = createRoadPainter(world, opts.roadTex || 1024);
+  function acquireMask(s) {
+    if (s.mask) { s.mask.refs++; return s.mask; }
+    const road = paint(s);
+    const sn = meta.surface.n, dn = meta.sdf.n, step = (dn - 1) / sn;
+    const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
+    const px = new Uint8Array(sn * sn * 4);
+    // paving the bake found in the aerial photo, beside what the road data has. Thin slivers of it
+    // along a road are the wobble of a 1 m grid, not a yard: an opening removes them.
+    const a = new Uint8Array(sn * sn), b = new Uint8Array(sn * sn);
+    for (let j = 0; j < sn; j++) for (let i = 0; i < sn; i++) a[j * sn + i] = s.S[j * sn + i] === 1 && !road.hard(i, j) ? 1 : 0;
+    for (let j = 1; j < sn - 1; j++) {
+      for (let i = 1; i < sn - 1; i++) {
+        const k = j * sn + i;
+        b[k] = a[k] & a[k - 1] & a[k + 1] & a[k - sn] & a[k + sn];
+      }
+    }
+    for (let j = 1; j < sn - 1; j++) {
+      for (let i = 1; i < sn - 1; i++) {
+        const k = j * sn + i;
+        a[k] = b[k] | b[k - 1] | b[k + 1] | b[k - sn] | b[k + sn];
+      }
+    }
+    for (let j = 0; j < sn; j++) {
+      for (let i = 0; i < sn; i++) {
+        const k = j * sn + i;
+        const d = dmin + (s.D[Math.round((j + 0.5) * step) * dn + Math.round((i + 0.5) * step)] / 255) * dspan;
+        px[k * 4] = a[k] ? 255 : 0;
+        px[k * 4 + 1] = Math.max(0, Math.min(255, Math.round((d / 2.2) * 255)));
+        px[k * 4 + 3] = 255;
+      }
+    }
+    {                                       // soften the 1 m steps of the surface grid
+      const src = new Uint8Array(sn * sn);
+      for (let k = 0; k < sn * sn; k++) src[k] = px[k * 4];
+      for (let j = 1; j < sn - 1; j++) {
+        for (let i = 1; i < sn - 1; i++) {
+          const k = j * sn + i;
+          px[k * 4] = (src[k] * 4 + (src[k - 1] + src[k + 1] + src[k - sn] + src[k + sn]) * 2
+            + src[k - sn - 1] + src[k - sn + 1] + src[k + sn - 1] + src[k + sn + 1]) >> 4;
+        }
+      }
+    }
+    const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);
+    tex.magFilter = tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    const size = opts.roadTex || 1024;
+    s.mask = { tex, cover: road.cover, tone: road.tone, kerb: Math.min(0.3, (0.16 * size) / S), x0: s.x0, z0: s.z0, size: S, refs: 1 };
+    return s.mask;
+  }
+  function releaseMask(s) {
+    const m = s.mask;
+    if (!m || --m.refs > 0) return;
+    m.tex.dispose(); m.cover.dispose(); m.tone.dispose();
+    s.mask = null;
+  }
+
   function addSector(s) {
     const H = s.H;
     const tile = S / s.div;
@@ -189,36 +273,6 @@ export function createTerrain(world, renderer, opts) {
     const seg = per / stride, nv = seg + 1;
     const hAt = (c, r) => H[r * hn + c] * hs + hoff;
     s.chunks = [];
-    {
-      const sn = meta.surface.n, dn = meta.sdf.n, step = (dn - 1) / sn;
-      const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
-      const px = new Uint8Array(sn * sn * 4);
-      for (let j = 0; j < sn; j++) {
-        for (let i = 0; i < sn; i++) {
-          const k = j * sn + i, c = s.S[k];
-          const d = dmin + (s.D[Math.round((j + 0.5) * step) * dn + Math.round((i + 0.5) * step)] / 255) * dspan;
-          px[k * 4] = c === 1 ? 255 : 0;
-          px[k * 4 + 1] = Math.max(0, Math.min(255, Math.round((d / 2.2) * 255)));
-          px[k * 4 + 2] = c === 2 || c === 3 ? 255 : 0;
-          px[k * 4 + 3] = 255;
-        }
-      }
-      for (const ch of [0, 2]) {            // soften the 1 m steps of the surface grid
-        const src = new Uint8Array(sn * sn);
-        for (let k = 0; k < sn * sn; k++) src[k] = px[k * 4 + ch];
-        for (let j = 1; j < sn - 1; j++) {
-          for (let i = 1; i < sn - 1; i++) {
-            const k = j * sn + i;
-            px[k * 4 + ch] = (src[k] * 4 + (src[k - 1] + src[k + 1] + src[k - sn] + src[k + sn]) * 2
-              + src[k - sn - 1] + src[k - sn + 1] + src[k + sn - 1] + src[k + sn + 1]) >> 4;
-          }
-        }
-      }
-      const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);
-      tex.magFilter = tex.minFilter = THREE.LinearFilter;
-      tex.needsUpdate = true;
-      s.mask = { tex, x0: s.x0, z0: s.z0, size: S };
-    }
     for (let ty = 0; ty < s.div; ty++) {
       for (let tx = 0; tx < s.div; tx++) {
         const pos = new Float32Array(nv * nv * 3);
@@ -261,7 +315,7 @@ export function createTerrain(world, renderer, opts) {
           mesh.userData.deck = top;
         }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
-        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, mask: s.mask, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
+        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
       }
@@ -279,7 +333,7 @@ export function createTerrain(world, renderer, opts) {
       if (ch.matX) { ch.matX.map.dispose(); ch.matX.dispose(); }
     }
     s.chunks = null;
-    if (s.mask) { s.mask.tex.dispose(); s.mask = null; }
+    if (s.mask) { s.mask.refs = 1; releaseMask(s); }
   }
 
   const setMat = (ch, m) => { ch.mesh.material = m; if (ch.mesh.userData.deck) ch.mesh.userData.deck.material = m; };
@@ -296,6 +350,7 @@ export function createTerrain(world, renderer, opts) {
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = aniso;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      ch.mask = acquireMask(ch.sector);
       ch.matHi = groundMaterial(tex, detail, null, ch.mask);
       setMat(ch, ch.matHi);
       ch.state = 'hi';
@@ -335,6 +390,8 @@ export function createTerrain(world, renderer, opts) {
         ch.matHi.map.dispose();
         ch.matHi.dispose();
         ch.matHi = null;
+        releaseMask(ch.sector);
+        ch.mask = null;
         ch.state = 'low';
       }
     }

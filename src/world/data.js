@@ -212,7 +212,9 @@ export async function loadWorldData(onProgress = () => {}) {
       return true;
     },
 
-    surfaceAt(x, z) {
+    // Surface class under the point. With y (a car's height), a bridge deck it is level with counts as paved.
+    surfaceAt(x, z, y) {
+      if (y !== undefined && decks.length !== 0 && deckAt(x, z) && y > hit.y - UNDER && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       const s = find(x, z);
       if (s === null) return SURFACE.GRASS;
       let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);

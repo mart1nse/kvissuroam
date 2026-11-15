@@ -27,8 +27,9 @@ S = int(SECTOR)
 
 _, hN = T.load_dtm(SRC)
 hG = hN.copy()
-hN, wm, *_ = T.water(hN)
+hN, wm, river_u, *_ = T.water(hN)
 roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
+T.mark_water_crossings(roads, river_u)
 decks, _ = T.crossings(hN, hG, wm, roads)
 
 changed = 0

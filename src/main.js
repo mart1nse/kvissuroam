@@ -17,6 +17,9 @@ import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
+import { createRace, createTrack } from './race/race.js';
+import { createMultiplayer } from './net/multiplayer.js';
+import { createBoard } from './race/board.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -56,7 +59,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, bigmap;
+let world, terrain, water, edge, hud, skids, bigmap, race, mp, board;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -117,6 +120,9 @@ async function boot() {
     if (s.decks) { scene.remove(s.decks); s.decks.userData.dispose(); s.decks = null; }
     if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });
+  // the game starts on the race track, just before its last corner (Uueturu at the Ülikooli crossing)
+  const sp = createTrack().spawn;
+  world.meta.start = { x: sp.x + Math.cos(sp.yaw) * 1.5, z: sp.z + Math.sin(sp.yaw) * 1.5, heading: sp.yaw };
   const s0 = world.meta.start;
   const jobs = [world.loadAround(s0.x, s0.z, 200)];
   if (!params.has('drive') && !params.has('nointro')) {
@@ -136,7 +142,52 @@ async function boot() {
   hud = createHud(world);
   skids = createSkidMarks(world);
   scene.add(skids.mesh);
-  bigmap = createBigMap(world, { onPick: dropAt, onClose: closeMap });
+  mp = createMultiplayer({
+    scene, camera, toast: (t, ms) => hud.toast(t, ms),
+    buildModel: (id) => { try { return buildCarModel ? buildCarModel(id) : buildPlaceholder(CARS[id]); } catch { return buildPlaceholder(CARS[id]); } },
+    onBoard: () => { race?.refreshBest(); board?.render(); },
+  });
+  race = createRace({
+    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    onLap: (lap) => mp.submitLap(lap),
+    bestFor: (id) => {
+      const net = mp.bestFor(id);
+      let mine = null;
+      for (const l of race.laps) if (l.car === id && (!mine || l.ms < mine.ms)) mine = { ms: l.ms, name: mp.name };
+      return net && (!mine || net.ms <= mine.ms) ? net : mine;
+    },
+  });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER });
+  const trackPath = (ctx) => {
+    ctx.beginPath();
+    race.track.P.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    ctx.closePath();
+  };
+  hud.setOverlay((ctx, scale) => {
+    ctx.strokeStyle = 'rgba(255,43,214,.5)'; ctx.lineWidth = 16;
+    trackPath(ctx); ctx.stroke();
+    for (const p of mp.players()) {
+      ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2 / scale;
+      ctx.beginPath(); ctx.arc(p.x, p.z, 6 / scale, 0, 7); ctx.fill(); ctx.stroke();
+    }
+  });
+  bigmap = createBigMap(world, {
+    onPick: dropAt, onClose: closeMap,
+    drawUnder: (ctx, k) => { ctx.strokeStyle = 'rgba(255,43,214,.6)'; ctx.lineWidth = Math.max(5, 3 / k); trackPath(ctx); ctx.stroke(); },
+    drawOver: (ctx, mark) => {
+      const st = race.track.P[0], tg = race.track.tan[0];
+      mark(st[0], st[1], () => {
+        ctx.rotate(Math.atan2(tg[1], tg[0]));
+        ctx.fillStyle = '#fff'; ctx.fillRect(-2, -11, 4, 22);
+      });
+      ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center';
+      for (const p of mp.players()) mark(p.x, p.z, () => {
+        ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 3; ctx.strokeText(p.name, 0, -12); ctx.fillStyle = '#fff'; ctx.fillText(p.name, 0, -12);
+      });
+    },
+  });
   if (params.get('photos') === '1') {     // street photo projection: an experiment, off unless asked for
     photos = createStreetPhotos(renderer, world);
     photos.load();
@@ -171,6 +222,8 @@ function setCar(id) {
   scene.add(model.group);
   audio.setCar(spec);
   hud.setCar(spec);
+  mp?.setCar(id);
+  race?.cancel('LAP CANCELLED');
   document.querySelectorAll('.card').forEach((c) => c.classList.toggle('sel', c.dataset.id === id));
 }
 
@@ -189,7 +242,7 @@ function buildMenu() {
   }
   $('#drive').addEventListener('click', startDriving);
   addEventListener('keydown', (e) => {
-    if (mode !== 'menu') return;
+    if (mode !== 'menu' || board?.open) return;
     const i = CAR_ORDER.indexOf(carId);
     if (e.code === 'ArrowRight') setCar(CAR_ORDER[(i + 1) % CAR_ORDER.length]);
     else if (e.code === 'ArrowLeft') setCar(CAR_ORDER[(i + CAR_ORDER.length - 1) % CAR_ORDER.length]);
@@ -362,7 +415,8 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const flyQ = new THREE.Quaternion();
 const clock = new THREE.Timer();
 let photos = null, treesHidden = false;
-let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0;
+let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
+const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 
 function frame() {
@@ -376,8 +430,11 @@ function frame() {
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
+    mp.collide(car);
     skids.update(car);
   }
+  mp.update(car, dt, mode === 'drive');
+  if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
 
   if (mode === 'drive') {
     // remember safe ground
@@ -400,6 +457,7 @@ function frame() {
       }
     }
     if (launch?.done && kmh < 1) launch = null;
+    race.update(car, carId, s0Short());
   }
 
   // ---- car visuals
@@ -524,7 +582,8 @@ function frame() {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
+  race: () => race, mp: () => mp };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

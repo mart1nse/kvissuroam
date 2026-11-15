@@ -3,7 +3,7 @@
 
 const PATH = new Set(['Rada', 'Kergliiklustee']);
 
-export function createBigMap(world, { onPick, onClose }) {
+export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
   const root = document.querySelector('#bigmap');
   const cv = root.querySelector('canvas');
   const ctx = cv.getContext('2d');
@@ -76,6 +76,7 @@ export function createBigMap(world, { onPick, onClose }) {
       ctx.lineWidth = pass ? Math.max(6, 1.4 / k) : Math.max(2, 1 / k);
       ctx.stroke();
     }
+    drawUnder?.(ctx, k);
     ctx.restore();
 
     // street names when zoomed in
@@ -106,6 +107,7 @@ export function createBigMap(world, { onPick, onClose }) {
       ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(9, 0); ctx.lineTo(6, 0); ctx.lineTo(6, 8); ctx.lineTo(-6, 8); ctx.lineTo(-6, 0); ctx.lineTo(-9, 0); ctx.closePath();
       ctx.fill(); ctx.stroke();
     });
+    drawOver?.(ctx, mark);
     if (car) mark(car.x, car.z, () => {
       ctx.rotate(car.yaw);
       ctx.fillStyle = '#ffd45e'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
@@ -186,6 +188,7 @@ export function createBigMap(world, { onPick, onClose }) {
   return {
     nearestRoad,
     get isOpen() { return open; },
+    redraw() { if (open) redraw(); },
     show(c) {
       car = c; open = true;
       root.classList.remove('hidden');

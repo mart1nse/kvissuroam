@@ -1,13 +1,20 @@
 {
-  // Static site: the game is built into ./dist and Cloudflare serves it as assets.
-  // The build step runs here as well, so a deploy works even if the dashboard's
-  // build command is left empty.
+  // The game is built into ./dist and Cloudflare serves it as static assets. The build step
+  // runs here as well, so a deploy works even if the dashboard's build command is left empty.
+  // worker/index.js answers /api/* (multiplayer and lap times) with one Durable Object.
   "name": "kvissuroam",
+  "main": "worker/index.js",
   "compatibility_date": "2026-06-01",
   "build": {
     "command": "npm run build"
   },
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "LOBBY", "class_name": "Lobby" }]
+  },
+  // SQLite-backed Durable Objects are what the Workers free plan offers
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }]
 }

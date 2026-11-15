@@ -1,5 +1,5 @@
 // Vehicle dynamics: a planar single-track ("bicycle") model with load transfer,
-// friction circles, a simple automatic gearbox and SDF collisions. Pure logic,
+// a sprung body that can leave the ground, friction circles, a simple automatic gearbox and SDF collisions. Pure logic,
 // no rendering, so it also runs in Node for the performance calibration test.
 //
 // Frames: world x = east, z = south, y = up. Heading `yaw` is clockwise from
@@ -7,6 +7,16 @@
 
 const G = 9.81;
 const RHO = 1.2;
+
+// Body heave on the suspension, per kg of car: a 1.5 Hz spring with half-critical
+// damping that can push the car up but never pull it down. STATIC is how far
+// the springs are squeezed at rest, which is also how far the wheels can drop
+// before they leave the road.
+const SPRING = (2 * Math.PI * 1.5) ** 2;
+const DAMP = 2 * 0.5 * Math.sqrt(SPRING);
+const STATIC = G / SPRING;
+const BUMP = STATIC + 0.09;      // travel where the bump stops start
+const FLOOR = 0.13;              // the body never sits lower than this below its ride height
 
 // grip, rolling resistance, tyre stiffness and bumpiness per surface class
 const SURF = [
@@ -35,6 +45,11 @@ export function createCar(spec, pose) {
     spec,
     x: pose.x, z: pose.z, y: pose.y ?? 0, yaw: pose.yaw ?? 0,
     vx: 0, vy: 0, yawRate: 0, vyBody: 0,
+    // vertical motion: hy is the body height the dynamics use (y is what gets drawn),
+    // load is the weight on the tyres as a share of the car's own weight
+    hy: pose.y ?? 0, vyUp: 0, lastGround: null, load: 1,
+    airborne: false, airTime: 0, landed: 0,
+    pitchRate: 0, rollRate: 0,
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     steer: 0, wheelSpin: 0,
     gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false,
@@ -109,6 +124,7 @@ export function stepCar(car, input, world, dtFrame) {
   for (let i = 0; i < n; i++) substep(car, input, world, dt);
   car.time += dtFrame;
   car.hit *= Math.exp(-dtFrame * 4);
+  car.landed *= Math.exp(-dtFrame * 6);
 }
 
 function substep(car, input, world, dt) {
@@ -147,7 +163,7 @@ function substep(car, input, world, dt) {
   const pRLx = car.x - fx * car.b - rx * hw, pRLz = car.z - fz * car.b - rz * hw;
   const pRRx = car.x - fx * car.b + rx * hw, pRRz = car.z - fz * car.b + rz * hw;
   // (groundAt knows about bridge decks; a plain test world only needs heightAt)
-  const gy = car.y + 0.4;
+  const gy = car.hy + 0.4;
   const hFL = world.groundAt ? world.groundAt(pFLx, pFLz, gy) : world.heightAt(pFLx, pFLz);
   const hFR = world.groundAt ? world.groundAt(pFRx, pFRz, gy) : world.heightAt(pFRx, pFRz);
   const hRL = world.groundAt ? world.groundAt(pRLx, pRLz, gy) : world.heightAt(pRLx, pRLz);
@@ -163,7 +179,7 @@ function substep(car, input, world, dt) {
   // ---- water
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;
   const depth = car.surface === WATER ? wl - groundY : 0;
-  if (!car.inWater && depth > 0.55) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
+  if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
   if (car.inWater) {
     car.waterTime += dt;
     const k = Math.exp(-dt * 1.6);
@@ -191,8 +207,35 @@ function substep(car, input, world, dt) {
     if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
     if (!car.sunk && car.waterTime > 9) car.sunk = true;
     car.ax = 0; car.ay = 0;
+    car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1; car.airborne = false; car.airTime = 0;
     return;
   }
+
+  // ---- heave: the body rides the ground on its springs and flies when the ground drops away
+  // faster than it can fall
+  const vGround = car.lastGround === null ? 0 : (groundY - car.lastGround) / dt;
+  car.lastGround = groundY;
+  const comp = groundY + STATIC - car.hy;     // spring travel in use; below zero the wheels hang clear
+  let lift = 0;                               // upward acceleration from the suspension
+  if (comp > 0) {
+    // (a kerb or the lip of a deck is a step in the ground: the damper only sees so much of it)
+    lift = SPRING * comp + DAMP * Math.max(-4, Math.min(4, vGround - car.vyUp));
+    if (comp > BUMP) lift += 6 * SPRING * (comp - BUMP);
+    if (lift < 0) lift = 0;
+    if (car.airborne) {
+      if (car.airTime > 0.12) car.landed = Math.max(car.landed, Math.min(vGround, 0) - car.vyUp);
+      car.airborne = false; car.airTime = 0;
+    }
+  } else {
+    car.airborne = true; car.airTime += dt;
+  }
+  car.vyUp += (lift - G) * dt;
+  car.hy += car.vyUp * dt;
+  if (car.hy < groundY - FLOOR) { car.hy = groundY - FLOOR; if (car.vyUp < 0) car.vyUp = 0; }
+  // weight on the tyres: light over a crest, heavy in a dip, none in the air
+  if (car.airborne) car.load = 0;
+  else car.load += (Math.min(2.5, lift / G) - car.load) * Math.min(1, dt * 40);
+  const load = car.load;
 
   // ---- steering: fast at parking speeds, limited near the grip limit when quick
   const steerIn = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
@@ -208,8 +251,8 @@ function substep(car, input, world, dt) {
 
   // ---- vertical loads with longitudinal transfer
   const transfer = (m * car.ax * s.cgHeight) / L;
-  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer);
-  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer);
+  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * load;
+  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * load;
 
   // ---- longitudinal forces
   let drive = engineForce(car, throttle, dt);
@@ -218,15 +261,15 @@ function substep(car, input, world, dt) {
   let driveF = 0, driveR = 0;
   if (s.drive === 'rwd') driveR = drive;
   else if (s.drive === 'fwd') driveF = drive;
-  else { driveF = drive * (fzF / (fzF + fzR)); driveR = drive - driveF; }
+  else { driveF = load > 0 ? drive * (fzF / (fzF + fzR)) : 0; driveR = drive - driveF; }
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
-  const brakeTotal = brake * 1.05 * m * G;
+  const brakeTotal = brake * 1.05 * m * G * Math.min(1, load * 4);
   let fxF = driveF - vSign * brakeTotal * 0.66;
   let fxR = driveR - vSign * brakeTotal * 0.34;
   const hb = +input.handbrake || 0;
   if (hb) fxR = -vSign * sr.mu * fzR * 0.95;
   const capF = sf.mu * fzF, capR = sr.mu * fzR;
-  const askF = Math.abs(fxF) / capF, askR = hb ? 2 : Math.abs(fxR) / capR;   // demand over grip, for the skid marks only
+  const askF = capF > 0 ? Math.abs(fxF) / capF : 0, askR = capR > 0 ? (hb ? 2 : Math.abs(fxR) / capR) : 0;   // demand over grip, for the skid marks only
   // Keyboard throttle is all-or-nothing, so the driven wheels keep a share of
   // their grip for cornering (the way a careful right foot would).
   const busy = Math.abs(car.vx) > 3 ? Math.min(1, Math.abs(car.steer) / 0.08 + Math.abs(car.slipR || 0) / 0.05) : 0;
@@ -258,7 +301,7 @@ function substep(car, input, world, dt) {
   car.slipR = slipR;
   // How hard each axle is sliding, 0..1. Read by the skid marks and the tyre
   // sound; nothing in the dynamics depends on it.
-  if (speed > 2.5) {
+  if (speed > 2.5 && load > 0.15) {
     const lon = (x) => Math.max(0, Math.min(1, (x - 1.3) / 0.4));
     car.skidF = Math.max(lon(askF), Math.min(1, Math.max(0, (Math.abs(slipF) - 0.12) / 0.1)));
     car.skidR = Math.max(lon(askR), Math.min(1, Math.max(0, (Math.abs(slipR) - 0.12) / 0.1)));
@@ -270,8 +313,8 @@ function substep(car, input, world, dt) {
   const drag = 0.5 * RHO * s.cdA * car.vx * Math.abs(car.vx);
   const crr = (sf.crr * fzF + sr.crr * fzR);
   const roll = Math.abs(car.vx) > 0.1 ? Math.sign(car.vx) * crr : 0;
-  const slopeX = -m * G * Math.sin(car.groundPitch);
-  const slopeY = m * G * Math.sin(car.groundRoll);
+  const slopeX = -m * G * Math.sin(car.groundPitch) * load;     // the slope pushes through the tyres
+  const slopeY = m * G * Math.sin(car.groundRoll) * load;
 
   const FX = fxF * cd - fyF * sd + fxR - drag - roll + slopeX;
   const FY = fyF * cd + fxF * sd + fyR + slopeY - 0.5 * RHO * s.cdA * 1.6 * car.vy * Math.abs(car.vy);
@@ -285,11 +328,11 @@ function substep(car, input, world, dt) {
   car.yawRate += (MZ / car.iz) * dt;
 
   // ---- come to a clean stop instead of creeping on rounding noise
-  if (throttle === 0 && Math.abs(car.vx) < 0.25 && Math.abs(car.vy) < 0.25 && Math.abs(slopeX) < crr + brakeTotal + 0.02 * m * G) {
+  if (load > 0.2 && throttle === 0 && Math.abs(car.vx) < 0.25 && Math.abs(car.vy) < 0.25 && Math.abs(slopeX) < crr + brakeTotal + 0.02 * m * G) {
     car.vx *= Math.exp(-dt * 8); car.vy *= Math.exp(-dt * 12); car.yawRate *= Math.exp(-dt * 12);
     if (Math.abs(car.vx) < 0.02) { car.vx = 0; car.vy = 0; car.yawRate = 0; }
   }
-  if (speed < 1.5) { car.vy *= Math.exp(-dt * 6); }
+  if (speed < 1.5 && load > 0.2) { car.vy *= Math.exp(-dt * 6); }
 
   // ---- integrate pose
   let wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
@@ -347,18 +390,29 @@ function substep(car, input, world, dt) {
   }
 
   // ---- body attitude
-  const ride = groundY;
-  if (car.y < ride) car.y = ride; else car.y += (ride - car.y) * Math.min(1, dt * 18);
+  car.y = Math.max(car.hy, groundY - 0.06);     // the drawn wheels may sink a little, not through the road
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);
   const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x);
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
-  car.pitch += (tPitch - car.pitch) * Math.min(1, dt * 9);
-  car.roll += (tRoll - car.roll) * Math.min(1, dt * 9);
+  if (car.airborne) {
+    // nothing to turn the body in flight: it keeps the rotation it left the ground with
+    car.pitch += car.pitchRate * dt;
+    car.roll += car.rollRate * dt;
+  } else {
+    const p0 = car.pitch, r0 = car.roll;
+    car.pitch += (tPitch - car.pitch) * Math.min(1, dt * 9);
+    car.roll += (tRoll - car.roll) * Math.min(1, dt * 9);
+    const k = Math.min(1, dt * 12);
+    car.pitchRate += (Math.max(-0.7, Math.min(0.7, (car.pitch - p0) / dt)) - car.pitchRate) * k;
+    car.rollRate += (Math.max(-0.5, Math.min(0.5, (car.roll - r0) / dt)) - car.rollRate) * k;
+  }
   car.wheelSpin += (car.vx / s.wheelRadius) * dt;
 }
 
 export function resetCar(car, pose) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.y = pose.y ?? car.y;
+  car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
+  car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false;
   car.inWater = false; car.sunk = false; car.waterTime = 0;

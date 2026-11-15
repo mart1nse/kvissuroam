@@ -35,7 +35,9 @@ for (const [surf, name] of SURFS) {
       if (Math.abs(t - 1) < dt / 2) { rpm1 = car.rpm; v1 = speedKmh(car); }
       if (t50 === null && speedKmh(car) >= 50) t50 = t;
     }
-    if (!Number.isFinite(car.vx) || Math.abs(deg(car.yaw)) > 25) ok = false;
+    // nobody steers here, so only the first 4 s count: a launch may tug the car
+    // off line, but must not swing it round before a driver could react
+    if (!Number.isFinite(car.vx) || maxYaw > 15) ok = false;
     console.log(`    ${spec.short.padEnd(13)}${spec.drive} | wheels up to ${maxSlip.toFixed(0).padStart(3)} km/h faster than the road, spinning ${spinT.toFixed(1)} s | after 1 s: ${v1.toFixed(0)} km/h at ${rpm1.toFixed(0)} rpm | 0-50 ${t50 ? t50.toFixed(1) : '>12'} s | pulled ${maxYaw.toFixed(1)} deg off line`);
   }
 }

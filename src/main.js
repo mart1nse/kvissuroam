@@ -386,7 +386,8 @@ function frame() {
   model.group.rotation.set(car.pitch, -car.yaw, -car.roll);
   const w = model.wheels;
   w.fl.steer.rotation.y = w.fr.steer.rotation.y = -car.steer;
-  w.fl.spin.rotation.x = w.fr.spin.rotation.x = w.rl.spin.rotation.x = w.rr.spin.rotation.x = -car.wheelSpin;
+  w.fl.spin.rotation.x = w.fr.spin.rotation.x = -car.wheelSpinF;
+  w.rl.spin.rotation.x = w.rr.spin.rotation.x = -car.wheelSpinR;
   model.setLights({ brake: car.brake > 0, reverse: car.reversing, headlights: true });
 
   // ---- camera

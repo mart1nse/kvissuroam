@@ -62,10 +62,12 @@ export function createAudio() {
     const v = Math.hypot(car.vx, car.vy);
     const dead = !active || car.inWater;
     const flying = car.airborne && car.airTime > 0.1;
+    // the driven wheels (and the motor with them) can run ahead of the road
+    const vw = v + (car.slipV || 0);
     if (ev) {
       engGain.gain.setTargetAtTime(0, t, 0.05);
-      whine.frequency.setTargetAtTime(180 + v * 38, t, 0.05);
-      whineGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.05, 0.004 + v * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
+      whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
+      whineGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
     } else {
       whineGain.gain.setTargetAtTime(0, t, 0.05);
       const cyl = car.spec.engine.torque && car.spec.id === 'w201' ? 3 : 2;   // firing order pulses per rev
@@ -77,7 +79,7 @@ export function createAudio() {
     }
     const loose = car.surface !== 1 ? 1.8 : 1;
     windFilt.frequency.setTargetAtTime(car.surface !== 1 ? 320 : 700 + v * 12, t, 0.1);
-    windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, v * 0.0045 * (flying ? 0.5 : loose)), t, flying ? 0.03 : 0.1);
+    windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, (car.surface !== 1 && !flying ? vw : v) * 0.0045 * (flying ? 0.5 : loose)), t, flying ? 0.03 : 0.1);
     // only on paving, and only audible once the slide is well under way
     const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);
     skid += (k - skid) * 0.2;

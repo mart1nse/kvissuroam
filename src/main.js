@@ -16,6 +16,7 @@ import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
+import { createIntro } from './intro.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -67,6 +68,8 @@ let histTimer = 0;
 let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+let intro = null, introFocus = null;   // drone flyover behind the opening menu
+let flyIn = null;                // the one second flight from the drone to the chase camera
 let launch = null;               // 0-100 km/h stopwatch
 
 async function boot() {
@@ -115,7 +118,13 @@ async function boot() {
     if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
   });
   const s0 = world.meta.start;
-  await world.loadAround(s0.x, s0.z, 200);
+  const jobs = [world.loadAround(s0.x, s0.z, 200)];
+  if (!params.has('drive') && !params.has('nointro')) {
+    intro = createIntro(world);
+    introFocus = intro.start();
+    jobs.push(world.loadAround(introFocus.x, introFocus.z, 450));
+  }
+  await Promise.all(jobs);
   water = createWater(world);
   scene.add(water.group);
   edge = createEdgeGrid(world);
@@ -191,7 +200,12 @@ function buildMenu() {
 function startDriving() {
   if (mode === 'drive') return;
   mode = 'drive';
-  camSwoop = 0.9;
+  if (intro) {
+    // fly from wherever the drone is to the chase position behind the car
+    flyIn = { t: 0, from: camera.position.clone(), q0: camera.quaternion.clone(), fov: camera.fov };
+    intro = null;
+    terrain.update(new THREE.Vector3(car.x, 0, car.z));   // start the sharp ground tiles around the car loading now
+  } else camSwoop = 0.9;
   $('#menu').classList.add('hidden');
   $('#hud').classList.remove('hidden');
   if (isTouch) {
@@ -343,6 +357,9 @@ if (window.visualViewport) {
 }
 
 // ---------------------------------------------------------------- frame loop
+const FLY_IN = 1;                 // seconds from the drone to behind the car
+const smooth = (t) => t * t * (3 - 2 * t);
+const flyQ = new THREE.Quaternion();
 const clock = new THREE.Timer();
 let photos = null, treesHidden = false;
 let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0;
@@ -430,9 +447,22 @@ function frame() {
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
     if (camPos.y < floor) camPos.y = floor;
     camLook.set(car.x + cx * 2, camY + 1.15 - down * 3, car.z + cz * 2);
-    if (camSwoop > 0) { camSwoop -= dt; camera.position.lerp(camPos, ease(8)); }
+    const wantFov = (58 + Math.min(speed, 60) * 0.22) * (1 - 0.3 * pm);
+    if (flyIn) {
+      flyIn.t = Math.min(1, flyIn.t + dt / FLY_IN);
+      const k = smooth(flyIn.t), ky = smooth(Math.max(0, (flyIn.t - 0.12) / 0.88));   // stay up a moment, then drop in
+      camera.position.set(
+        flyIn.from.x + (camPos.x - flyIn.from.x) * k,
+        flyIn.from.y + (camPos.y - flyIn.from.y) * ky,
+        flyIn.from.z + (camPos.z - flyIn.from.z) * k);
+      camera.fov = flyIn.fov + (wantFov - flyIn.fov) * k;
+    } else if (camSwoop > 0) { camSwoop -= dt; camera.position.lerp(camPos, ease(8)); }
     else camera.position.copy(camPos);
-    camera.fov += ((58 + Math.min(speed, 60) * 0.22) * (1 - 0.3 * pm) - camera.fov) * Math.min(1, dt * 3);
+    if (!flyIn) camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 3);
+  } else if (intro) {
+    introFocus = intro.step(dt, camPos, camLook);
+    camera.position.copy(camPos);
+    camera.fov = isTouch ? 52 : 55;
   } else {
     menuAngle += dt * 0.16;
     const a = car.yaw + Math.PI + Math.sin(menuAngle) * 0.85;   // sweep around the rear three-quarters
@@ -444,11 +474,17 @@ function frame() {
   if (window.__cam) { camera.position.fromArray(window.__cam, 0); camLook.fromArray(window.__cam, 3); camera.fov = window.__cam[6] ?? 55; }   // test hook
   camera.updateProjectionMatrix();
   camera.lookAt(camLook);
+  if (flyIn) {
+    // turn from the drone's view to the chase view a little ahead of the move, so the car is in frame on arrival
+    camera.quaternion.slerpQuaternions(flyIn.q0, flyQ.copy(camera.quaternion), smooth(Math.min(1, flyIn.t / 0.8)));
+    if (flyIn.t >= 1) flyIn = null;
+  }
 
   // ---- world updates
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = elapsed;
-  lights.sun.target.position.set(car.x, car.y, car.z);
+  if (intro) lights.sun.target.position.copy(camLook);
+  else lights.sun.target.position.set(car.x, car.y, car.z);
   lights.sun.position.copy(lights.sun.target.position).add(lights.sunOffset);
   water.update(elapsed);
   edge.mat.uniforms.uCam.value.copy(camera.position);
@@ -456,7 +492,8 @@ function frame() {
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;
-    world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500);
+    if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
+    else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
     terrain.update(camera.position);
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
   }
@@ -487,7 +524,7 @@ function frame() {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

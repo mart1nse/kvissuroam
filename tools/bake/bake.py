@@ -3,9 +3,9 @@
 Inputs (see tools/bake/README.md for where to download them), expected in SRC:
   dtm_*.tif                           1 m terrain model sheets covering the area
   etak_bbox.json                      ETAK features clipped to the area (extract_etak.py)
-  hooned_lod2-Tartu_{linn,vald}.obj   LOD2 buildings (+ .fwt offsets)
-  katusealused_lod1-Tartu_{linn,vald}.obj  roofed areas (carports)
-  vegetatsioon-Tartu_{linn,vald}-*.gpkg    single trees
+  hooned_lod2-<municipality>.obj      LOD2 buildings (+ .fwt offsets), every municipality the area touches
+  katusealused_lod1-<municipality>.obj  roofed areas (carports)
+  vegetatsioon-<municipality>-*.gpkg  single trees
   ortho_mosaic.npy                    written by fetch_ortho.py (run it first)
 
 Outputs in OUT: meta.json, vectors.json, coarse.bin and one sec/{sx}_{sz}.kvs
@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *  # noqa
 import buildings
 import surface as SF
-import terrain as T
+import terrain as TR
 import trees as tree_rules
 
 Image.MAX_IMAGE_PIXELS = None
@@ -53,41 +53,38 @@ poly_en = Polygon(BOUNDARY)                      # drivable area, L-EST97
 print('sectors', len(SECS), 'detail rect', (X0, Z0, X1, Z1))
 
 
-T.setup(SRC)
-wbox, feats, rast, flat, road_width, detail_box = T.wbox, T.feats, T.rast, T.flat, T.road_width, T.detail_box
+TR.setup(SRC)
+wbox, feats, rast, flat, road_width, detail_box = TR.wbox, TR.feats, TR.rast, TR.flat, TR.road_width, TR.detail_box
 
 # ---------------------------------------------------------------- terrain
 print('terrain')
 cw, chh = int(CX1 - CX0), int(CZ1 - CZ0)
-D, hN = T.load_dtm(SRC)                          # 1 m pixels over the coarse rectangle, detail node heights
+D, hN = TR.load_dtm(SRC)                          # 1 m pixels over the coarse rectangle, detail node heights
 
 Q = 0.01
 cs = int(COARSE_RES)
 cn_x, cn_z = cw // cs + 1, chh // cs + 1
-Ds = ndimage.uniform_filter(D, 17)
-ci = np.minimum(np.arange(cn_z) * cs, chh - 1)[:, None]
-cj = np.minimum(np.arange(cn_x) * cs, cw - 1)[None, :]
-np.clip(np.round((Ds[ci, cj] - H0 + 100.0) / Q), 0, 65535).astype('<u2').tofile(f'{OUT}/coarse.bin')
+ci = np.minimum(np.arange(cn_z) * cs, chh - 1)
+cj = np.minimum(np.arange(cn_x) * cs, cw - 1)
+Ds = np.stack([ndimage.uniform_filter1d(D[max(r - 8, 0):r + 9].mean(0), 17, mode='nearest')[cj] for r in ci])   # 17 m box mean at the coarse nodes
+np.clip(np.round((Ds - H0 + 100.0) / Q), 0, 65535).astype('<u2').tofile(f'{OUT}/coarse.bin')
 del Ds, D
-roads = feats('E_501_tee_j', detail_box.buffer(100))
 hG = hN.copy()                                   # untouched ground, for bridges and trees
 
 
 def ground(xs, zs, a=None):
-    return T.sample(hG if a is None else a, xs, zs)
+    return TR.sample(hG if a is None else a, xs, zs)
 
 
 # ---- water: the Emajõgi at one level, everything else at its own level
-hN, wm, river_u, others, river_level = T.water(hN)
+hN, wm, river_u, others, river_level = TR.water(hN)
 print(' river level', river_level, 'other water bodies', len(others))
 
-# ---- bridges and tunnels: causeways over water, decks over dry land, lids over tunnels (terrain.py)
-T.mark_water_crossings(roads, river_u)
-decks, bridge_cells = T.crossings(hN, hG, wm, roads)
-hGr = hN.copy()
-hN = T.grade_roads(hN, roads, wm)                # roads level from edge to edge
-hG += hN - hGr                                   # trees beside a road follow it
-del hGr
+# ---- bridges and tunnels: decks over water and dry land, lids over tunnels (terrain.py)
+roads = feats('E_501_tee_j', detail_box.buffer(100))
+TR.mark_water_crossings(roads, river_u)
+decks, bridge_cells = TR.crossings(hN, hG, wm, roads)
+TR.grade_roads(hN, roads, wm, also=hG)           # roads level from edge to edge; trees beside them follow
 
 # ---------------------------------------------------------------- surface classes
 print('surface')
@@ -137,18 +134,18 @@ for f in glob.glob(f'{SRC}/vegetatsioon-*.gpkg'):
             p = ft['properties']
             trees[int(p['puu_id'])] = (x - E0, N0 - y, float(p['korgus'] or 8), float(p['puukroon'] or 4),
                                        1.0 if p['puutyyp'] == 'Okaspuu' else 0.0)
-TR = np.array(list(trees.values()), 'float64')
+T = np.array(list(trees.values()), 'float64')
 del trees
-TR = TR[(TR[:, 0] > X0) & (TR[:, 0] < X1 - 0.01) & (TR[:, 1] > Z0) & (TR[:, 1] < Z1 - 0.01)]
-tsurf = surf[(TR[:, 1] - Z0).astype(int), (TR[:, 0] - X0).astype(int)]
-TR = TR[tsurf != WATER]
+T = T[(T[:, 0] > X0) & (T[:, 0] < X1 - 0.01) & (T[:, 1] > Z0) & (T[:, 1] < Z1 - 0.01)]
+tsurf = surf[(T[:, 1] - Z0).astype(int), (T[:, 0] - X0).astype(int)]
+T = T[tsurf != WATER]
 # crown points over a street: move the tree to the verge, or drop it
-n_all = len(TR)
-TR, t_moved = tree_rules.clear_roads(TR, surf, X0, Z0, blocked=rast([g for p, g in buildings_fp], X0, Z0, W1, H1, 1.0, all_touched=True) > 0)
-print(' trees over roads: moved', int(t_moved.sum()), 'dropped', n_all - len(TR))
-t_ground = ground(TR[:, 0], TR[:, 1])
-t_sec = np.stack([np.floor((TR[:, 0] - GRID0) / SECTOR), np.floor((TR[:, 1] - GRID0) / SECTOR)], 1).astype(int)
-print(' trees', len(TR))
+n_all = len(T)
+T, t_moved = tree_rules.clear_roads(T, surf, X0, Z0, blocked=rast([g for p, g in buildings_fp], X0, Z0, W1, H1, 1.0, all_touched=True) > 0)
+print(' trees over roads: moved', int(t_moved.sum()), 'dropped', n_all - len(T))
+t_ground = ground(T[:, 0], T[:, 1])
+t_sec = np.stack([np.floor((T[:, 0] - GRID0) / SECTOR), np.floor((T[:, 1] - GRID0) / SECTOR)], 1).astype(int)
+print(' trees', len(T))
 
 # ---------------------------------------------------------------- hedges, bushes and fences (lidar, detail area only)
 low_obj = {}          # sector -> (bush records, fence records), each (n,3) uint16: ix, iz, height dm | angle << 8
@@ -194,8 +191,8 @@ del mos
 print('sectors')
 solid = SF.solid_shapes(feats)
 solid_tree = STRtree(solid)
-trunk_tree = cKDTree(TR[:, :2])
-trunk_h = TR[:, 2]
+trunk_tree = cKDTree(T[:, :2])
+trunk_h = T[:, 2]
 S, FINE, MARGIN = int(SECTOR), 0.25, 16.0
 total = 0
 sec_meta = []
@@ -221,8 +218,8 @@ for k, (sx, sz) in enumerate(SECS):
     # trees
     m = (t_sec[:, 0] == sx) & (t_sec[:, 1] == sz)
     rec = np.zeros(int(m.sum()), dtype=[('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('h', '<f4'), ('c', '<f4'), ('k', '<f4')])
-    rec['x'] = TR[m, 0]; rec['z'] = TR[m, 1]; rec['y'] = t_ground[m] - H0
-    rec['h'] = TR[m, 2]; rec['c'] = np.clip(TR[m, 3], 1.5, 16); rec['k'] = TR[m, 4]
+    rec['x'] = T[m, 0]; rec['z'] = T[m, 1]; rec['y'] = t_ground[m] - H0
+    rec['h'] = T[m, 2]; rec['c'] = np.clip(T[m, 3], 1.5, 16); rec['k'] = T[m, 4]
     nv, bbytes = buildings.pack(bsec, (sx, sz), x0, z0)
     bush, fence = low_obj.get((sx, sz), (np.zeros((0, 3), '<u2'),) * 2)
     head = struct.pack('<4s7I', b'KVS1', hq.shape[0], sf.shape[0], nd, nv, len(rec), len(bush), len(fence))
@@ -230,7 +227,7 @@ for k, (sx, sz) in enumerate(SECS):
                          + bush.tobytes() + fence.tobytes(), 6)
     open(f'{OUT}/sec/{sx}_{sz}.kvs', 'wb').write(blob)
     total += len(blob)
-    sec_meta.append([sx, sz, 4 if (sx, sz) in HI_SECTORS else 2])
+    sec_meta.append([sx, sz, tile_div(sx, sz)])
     if k % 20 == 0:
         print(f'  {k}/{len(SECS)}  {sx},{sz}  {len(blob) / 1e6:.2f} MB  trees {len(rec)}  tris {nv // 3}', flush=True)
 print(f' sector data {total / 1e6:.1f} MB')

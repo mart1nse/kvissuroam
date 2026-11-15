@@ -48,7 +48,7 @@ if not os.path.exists(f'{OUT}/overview.jpg'):
 
 jobs = []
 for sx, sz in sectors():
-    div = 4 if (sx, sz) in HI_SECTORS else 2
+    div = tile_div(sx, sz)
     t = SECTOR / div
     for j in range(div):
         for i in range(div):

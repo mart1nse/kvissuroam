@@ -5,7 +5,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 // The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
 // a base height are one building, which is enough to measure it and pick a facade style for it:
 //   0 detached house (boards or plaster)   1 apartment block (panels or brick)   2 shop, hall or shed (cladding)
-function buildingGeometry(sector) {
+// Real wall colours come from public/data/walls.json (tools/realism/colours.py): per sector a list of
+// base, x, z, colour for each building. Two buildings that share a base height by chance are told apart by it.
+function buildingGeometry(sector, walls) {
   const { nv, buf, offset } = sector.buildings;
   let o = offset;
   const pq = new Int16Array(buf.slice(o, o + nv * 6)); o += nv * 6;
@@ -14,31 +16,56 @@ function buildingGeometry(sector) {
   const kind = new Uint8Array(buf, o, nv); o += nv;
   const base = new Int16Array(buf.slice(o, o + nv * 2));
 
+  const known = new Map();          // base -> [{x, z, rgb, key}]
+  const list = walls && walls.sectors[`${sector.sx}_${sector.sz}`];
+  if (list) {
+    for (let i = 0; i < list.length; i += 4) {
+      let a = known.get(list[i]);
+      if (!a) known.set(list[i], (a = []));
+      a.push({ x: list[i + 1] * 0.1, z: list[i + 2] * 0.1, rgb: list[i + 3], key: list[i] * 64 + a.length + 1 });
+    }
+  }
+
   const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
   const aKind = new Float32Array(nv), aBase = new Float32Array(nv), aInfo = new Float32Array(nv * 3);
+  const gkey = new Float64Array(nv);
   const c = new THREE.Color();
   const groups = new Map();
-  for (let i = 0; i < nv; i++) {
-    const x = pos[i * 3] = pq[i * 3] * 0.05, y = pos[i * 3 + 1] = pq[i * 3 + 1] * 0.01, z = pos[i * 3 + 2] = pq[i * 3 + 2] * 0.05;
-    nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
-    c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
-    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    aKind[i] = kind[i]; aBase[i] = base[i] * 0.01;
-    let g = groups.get(base[i]);
-    if (!g) groups.set(base[i], (g = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9 }));
-    if (x < g.x0) g.x0 = x; if (x > g.x1) g.x1 = x;
-    if (z < g.z0) g.z0 = z; if (z > g.z1) g.z1 = z;
-    if (y > g.top) g.top = y;
-    if (kind[i] === 1 && y < g.eaves) g.eaves = y;       // lowest roof point
+  for (let t = 0; t < nv; t += 3) {
+    // one building per triangle: the known building with this base whose centre is nearest
+    let e = null;
+    const a = known.get(base[t]);
+    const shelter = cq[t * 3] === cq[t * 3 + 1] && (cq[t * 3] === 70 || cq[t * 3] === 60);     // carports and their posts
+    if (a && !shelter) {
+      const tx = (pq[t * 3] + pq[t * 3 + 3] + pq[t * 3 + 6]) * 0.05 / 3, tz = (pq[t * 3 + 2] + pq[t * 3 + 5] + pq[t * 3 + 8]) * 0.05 / 3;
+      let best = 1e18;
+      for (const k of a) { const d = (k.x - tx) ** 2 + (k.z - tz) ** 2; if (d < best) { best = d; e = k; } }
+    }
+    const key = e ? e.key : base[t] * 64;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { b: base[t], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9, real: e ? 1 : 0 }));
+    for (let i = t; i < t + 3; i++) {
+      const x = pos[i * 3] = pq[i * 3] * 0.05, y = pos[i * 3 + 1] = pq[i * 3 + 1] * 0.01, z = pos[i * 3 + 2] = pq[i * 3 + 2] * 0.05;
+      nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
+      if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);
+      else c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      aKind[i] = kind[i]; aBase[i] = base[i] * 0.01; gkey[i] = key;
+      if (x < g.x0) g.x0 = x; if (x > g.x1) g.x1 = x;
+      if (z < g.z0) g.z0 = z; if (z > g.z1) g.z1 = z;
+      if (y > g.top) g.top = y;
+      if (kind[i] === 1 && y < g.eaves) g.eaves = y;       // lowest roof point
+    }
   }
-  for (const [b, g] of groups) {
+  for (const g of groups.values()) {
+    const b = g.b;
     const h = g.top - b * 0.01, area = (g.x1 - g.x0) * (g.z1 - g.z0);
     g.eavesH = Math.min(h, g.eaves > 1e8 ? h : g.eaves - b * 0.01);
-    g.style = h >= 10.5 ? 1 : area > 420 ? 2 : 0;
+    g.style = (h >= 10.5 ? 1 : area > 420 ? 2 : 0) + g.real * 4;      // +4: the wall colour is the real one
     g.seed = Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
   for (let i = 0; i < nv; i++) {
-    const g = groups.get(base[i]);
+    const g = groups.get(gkey[i]);
     aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
   }
   const geo = new THREE.BufferGeometry();
@@ -52,7 +79,7 @@ function buildingGeometry(sector) {
 }
 
 // Returns build(sector) -> mesh of that sector's buildings (or null).
-export function createBuildings() {
+export function createBuildings(walls) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.0 });
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -76,7 +103,8 @@ export function createBuildings() {
         float kWin = 0.0; float kLit = 0.0; float kRough = 0.0;
         vec3 wn = normalize(vWN);
         float h = vWP.y - vBase;
-        float seed = vInfo.z, style = vInfo.y, eaves = max(vInfo.x, 2.4);
+        float real = step(3.5, vInfo.y);
+        float seed = vInfo.z, style = vInfo.y - 4.0 * real, eaves = max(vInfo.x, 2.4);
         float sq = floor(seed * 1023.0 + 0.5);      // exact per building, safe to hash
         if (vKind > 0.5 && vKind < 1.5) {
           // ---- roof: seams or tiles running down the slope, plain felt when flat
@@ -97,16 +125,19 @@ export function createBuildings() {
           if (style < 0.5) {
             // houses: pastel paint over boards, or plaster
             vec3 tint = 0.5 + 0.5 * cos(6.2831 * (seed * 3.0 + vec3(0.0, 0.33, 0.67)));
-            wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6);
+            wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6 * (1.0 - real));
             float boards = seed > 0.7 ? bLine(u, 0.16, 0.05) : seed > 0.35 ? bLine(h, 0.15, 0.06) : 0.0;
             wall *= 1.0 - 0.22 * boards;
           } else if (style < 1.5) {
-            if (seed > 0.55) {
+            // a real colour decides between brick and panels: brick is clearly red-brown
+            float bricky = real > 0.5 ? step(0.05, wall.r - wall.b) * step(wall.g, wall.r * 0.8) * step(wall.r, 0.45) : step(0.55, seed);
+            if (bricky > 0.5) {
               // brick
               float row = floor(h / 0.085);
               float mortar = max(bLine(h, 0.085, 0.08), bLine(u + mod(row, 2.0) * 0.13, 0.26, 0.04));
-              wall = mix(wall, vec3(0.42, 0.2, 0.15) * (0.85 + 0.3 * bHash(vec2(floor((u + mod(row, 2.0) * 0.13) / 0.26), row))), 0.75);
-              wall = mix(wall, vec3(0.62, 0.58, 0.55), mortar * 0.6);
+              vec3 brick = mix(vec3(0.42, 0.2, 0.15), wall, real);
+              wall = mix(wall, brick * (0.85 + 0.3 * bHash(vec2(floor((u + mod(row, 2.0) * 0.13) / 0.26), row))), 0.75);
+              wall = mix(wall, vec3(0.62, 0.58, 0.55), mortar * mix(0.6, 0.35, real));
             } else {
               // concrete panels
               wall *= 1.0 - 0.3 * max(bLine(u, 3.0, 0.012), bLine(h, 2.8, 0.012));
@@ -182,7 +213,7 @@ export function createBuildings() {
   };
   return (sector) => {
     if (!sector.buildings.nv) return null;
-    const mesh = new THREE.Mesh(buildingGeometry(sector), mat);
+    const mesh = new THREE.Mesh(buildingGeometry(sector, walls), mat);
     mesh.position.set(sector.x0, 0, sector.z0);      // vertices are sector-relative
     mesh.updateMatrix();
     mesh.castShadow = true;

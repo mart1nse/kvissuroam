@@ -32,9 +32,7 @@ hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)
 T.mark_water_crossings(roads, river_u)
 decks, _ = T.crossings(hN, hG, wm, roads)
-lift = -hN
-hN = T.grade_roads(hN, roads, wm)
-lift += hN                                       # what the grading of the roads changed
+T.grade_roads(hN, roads, wm, also=hG)            # roads level from edge to edge; trees beside them follow
 
 changed = 0
 for sx, sz, _ in meta['sector']['list']:
@@ -48,7 +46,7 @@ for sx, sz, _ in meta['sector']['list']:
     nv, nt = struct.unpack_from('<2I', b, 16)
     o_t = 32 + len(hq) + meta['surface']['n'] ** 2 + meta['sdf']['n'] ** 2 + nv * 15
     tr = np.frombuffer(b, '<f4', nt * 6, o_t).reshape(-1, 6).copy()
-    g = T.sample(hG, tr[:, 0], tr[:, 2]) + T.sample(lift, tr[:, 0], tr[:, 2]) - H0
+    g = T.sample(hG, tr[:, 0], tr[:, 2]) - H0
     tr[:, 1] = np.where(np.abs(g - tr[:, 1]) > 0.03, g, tr[:, 1])
     b = b[:o_t] + tr.astype('<f4').tobytes() + b[o_t + nt * 24:]
     if hq != b[32:32 + len(hq)]:

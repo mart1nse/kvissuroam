@@ -78,11 +78,18 @@ def download(cache):
             return
         for x in d:
             out[x['id']] = [x['object_value'], *x['geometry']['coordinates'], x.get('aligned_direction')]
+    # only the cells that touch the drivable area, a few at a time
+    from concurrent.futures import ThreadPoolExecutor
+    from shapely.geometry import Polygon, box
+    area = Polygon([TO_LL.transform(x, y) for x, y in b])
     nx, ny = math.ceil((e - w) / 0.012), math.ceil((n - s) / 0.007)
-    for j in range(ny):
-        for i in range(nx):
-            fetch(w + (e - w) * i / nx, s + (n - s) * j / ny, w + (e - w) * (i + 1) / nx, s + (n - s) * (j + 1) / ny)
-        print(f'row {j + 1}/{ny}: {len(out)} features', flush=True)
+    cells = [(w + (e - w) * i / nx, s + (n - s) * j / ny, w + (e - w) * (i + 1) / nx, s + (n - s) * (j + 1) / ny)
+             for j in range(ny) for i in range(nx)]
+    cells = [c for c in cells if area.intersects(box(*c))]
+    with ThreadPoolExecutor(4) as ex:
+        for k, _ in enumerate(ex.map(lambda c: fetch(*c), cells)):
+            if k % 20 == 0:
+                print(f'cell {k + 1}/{len(cells)}: {len(out)} features', flush=True)
     json.dump(out, open(cache, 'w'))
 
 

@@ -40,7 +40,7 @@ _, bridge_cells = T.crossings(hN, hG, wm, roads)
 wet = wm[:-1, :-1] & wm[1:, 1:]
 bc = bridge_cells[:-1, :-1] | bridge_cells[1:, :-1] | bridge_cells[:-1, 1:] | bridge_cells[1:, 1:]
 wet &= ~bc
-del hN, hG
+del hN, hG, _
 
 solid = SF.solid_shapes(T.feats)
 tree = STRtree(solid)

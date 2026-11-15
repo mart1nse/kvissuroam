@@ -94,14 +94,15 @@ def road_level(p):
     return 1 if max(a, l) > 0 else -1 if min(a, l) < 0 else 0
 
 
-def grade_roads(hN, roads, wm):
+def grade_roads(hN, roads, wm, also=None):
     """Level the terrain across each road, so a road is flat from edge to edge like a built road.
 
     The terrain model is right about the road, but the kerbs, ditches and banks beside it fall inside
     the width the road data gives, and on the 2 m grid of the game they make the edge of the road
     wander. Every node within the road and 2 m beyond takes the height of the centre line beside it;
     over the next 2 m that fades into the terrain. Run it after crossings(): water and everything
-    within 12 m of a tunnel, and bridges themselves, stay as they are.
+    within 12 m of a tunnel, and bridges themselves, stay as they are. hN is changed in place, and
+    the same change is made to also (the dry ground that trees stand on).
     """
     sel = [(p, g) for p, g in roads if road_level(p) == 0 and road_width(p) >= 4.5 and p.get('tyyp_t') not in ('Rada', 'Kergliiklustee')]
     sel.sort(key=lambda r: road_width(r[0]))
@@ -116,12 +117,11 @@ def grade_roads(hN, roads, wm):
             st.append(np.stack([x, z, y, np.full(n, hw)], 1))
             corr.append(part.buffer(hw + 4.0, cap_style=2))
     if not st:
-        return hN
+        return
     st = np.concatenate(st)
     tree, ctree = cKDTree(st[:, :2]), STRtree(corr)
     keep = [g.buffer(road_width(p) / 2 + (12.0 if road_level(p) < 0 else 1.5)) for p, g in roads if road_level(p) != 0]
     ktree = STRtree(keep) if keep else None
-    out = hN.copy()
     B = 1024
     for r0 in range(0, H1 + 1, B):
         for c0 in range(0, W1 + 1, B):
@@ -139,9 +139,11 @@ def grade_roads(hN, roads, wm):
                 ks = [keep[i] for i in ktree.query(wbox(X0 + c0 - 1, Z0 + r0 - 1, X0 + c0 + nc, Z0 + r0 + nr))]
                 if ks:
                     wgt[rast(ks, X0 + c0 - 0.5, Z0 + r0 - 0.5, nc, nr, 1.0, all_touched=True)[rr, cc] > 0] = 0
-            sub = out[r0:r0 + nr, c0:c0 + nc]
-            sub[rr, cc] = sub[rr, cc] * (1 - wgt) + st[idx, 2] * wgt
-    return out
+            sub = hN[r0:r0 + nr, c0:c0 + nc]
+            delta = ((st[idx, 2] - sub[rr, cc]) * wgt).astype(hN.dtype)
+            sub[rr, cc] += delta
+            if also is not None:
+                also[r0 + rr, c0 + cc] += delta
 
 
 def mark_water_crossings(roads, river_u):
@@ -218,8 +220,11 @@ def load_dtm(src):
         D[np.isnan(D)] = np.nanmedian(D)
     # node heights of the detail rectangle: integer metres, mean of the 4 surrounding pixels
     ox, oz = int(X0 - CX0), int(Z0 - CZ0)
-    hN = (D[oz - 1:oz + H1, ox - 1:ox + W1] + D[oz:oz + H1 + 1, ox - 1:ox + W1]
-          + D[oz - 1:oz + H1, ox:ox + W1 + 1] + D[oz:oz + H1 + 1, ox:ox + W1 + 1]) / 4.0
+    hN = D[oz - 1:oz + H1, ox - 1:ox + W1].copy()          # summed in place: the grids are large
+    hN += D[oz:oz + H1 + 1, ox - 1:ox + W1]
+    hN += D[oz - 1:oz + H1, ox:ox + W1 + 1]
+    hN += D[oz:oz + H1 + 1, ox:ox + W1 + 1]
+    hN *= 0.25
     assert hN.shape == (H1 + 1, W1 + 1)
     return D, hN
 
@@ -255,9 +260,20 @@ def water(hN):
     ot[rv > 0] = 0
     river_level = float(np.median(hN[rv > 0]))
     wm = (rv > 0) | (ot > 0)
-    dist = ndimage.distance_transform_edt(wm).astype('float32')
-    depth = np.where(rv > 0, np.minimum(4.0, 0.45 * dist), np.minimum(1.2, 0.35 * dist))
-    return np.where(wm, hN - depth, hN).astype('float32'), wm, river_u, others, river_level
+    # depth below the surface grows with the distance from the bank, up to 4 m (river) or 1.2 m.
+    # Done in blocks: only the first few metres from the bank matter.
+    B, P = 2048, 16
+    for r0 in range(0, wm.shape[0], B):
+        for c0 in range(0, wm.shape[1], B):
+            if not wm[r0:r0 + B, c0:c0 + B].any():
+                continue
+            ra, ca = max(r0 - P, 0), max(c0 - P, 0)
+            w = wm[ra:r0 + B + P, ca:c0 + B + P]
+            dist = ndimage.distance_transform_edt(w).astype('float32')[r0 - ra:r0 - ra + B, c0 - ca:c0 - ca + B]
+            w = wm[r0:r0 + B, c0:c0 + B]
+            depth = np.where(rv[r0:r0 + B, c0:c0 + B] > 0, np.minimum(4.0, 0.45 * dist), np.minimum(1.2, 0.35 * dist))
+            hN[r0:r0 + B, c0:c0 + B][w] -= depth[w].astype('float32')
+    return hN, wm, river_u, others, river_level
 
 
 def _runs(mask):

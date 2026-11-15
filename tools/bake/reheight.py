@@ -1,7 +1,7 @@
 """Rebuild the terrain heights and the bridge/tunnel decks of already baked sectors.
 
-Needs only the terrain model sheets and etak_bbox.json in SRC (see README.md). Everything else in
-the sector files is kept. Writes the decks into vectors.json and marks the road centre lines that
+Needs only the terrain model sheets and etak_bbox.json in SRC (see README.md). Trees are put back
+on the ground; everything else in the sector files is kept. Writes the decks into vectors.json and marks the road centre lines that
 run on a bridge (e: 1) or in a tunnel (e: -1).
 
 Usage: python3 tools/bake/reheight.py SRC_DIR public/data
@@ -9,6 +9,7 @@ Usage: python3 tools/bake/reheight.py SRC_DIR public/data
 import gzip
 import json
 import os
+import struct
 import sys
 
 import numpy as np
@@ -26,24 +27,36 @@ HN, Q = meta['height']['n'], meta['height']['scale']
 S = int(SECTOR)
 
 _, hN = T.load_dtm(SRC)
+roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)
-roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 T.mark_water_crossings(roads, river_u)
 decks, _ = T.crossings(hN, hG, wm, roads)
+lift = -hN
+hN = T.grade_roads(hN, roads, wm)
+lift += hN                                       # what the grading of the roads changed
 
 changed = 0
 for sx, sz, _ in meta['sector']['list']:
     path = f'{OUT}/sec/{sx}_{sz}.kvs'
-    b = gzip.open(path).read()
+    b = orig = gzip.open(path).read()
     c0, r0 = int(GRID0 + sx * SECTOR - T.X0), int(GRID0 + sz * SECTOR - T.Z0)
     hm = hN[r0:r0 + S + 1:int(HM_RES), c0:c0 + S + 1:int(HM_RES)]
     hq = np.clip(np.round((hm - H0 + 100.0) / Q), 0, 65535).astype('<u2').tobytes()
     assert len(hq) == HN * HN * 2
+    # trees stand on the ground as it is now
+    nv, nt = struct.unpack_from('<2I', b, 16)
+    o_t = 32 + len(hq) + meta['surface']['n'] ** 2 + meta['sdf']['n'] ** 2 + nv * 15
+    tr = np.frombuffer(b, '<f4', nt * 6, o_t).reshape(-1, 6).copy()
+    g = T.sample(hG, tr[:, 0], tr[:, 2]) + T.sample(lift, tr[:, 0], tr[:, 2]) - H0
+    tr[:, 1] = np.where(np.abs(g - tr[:, 1]) > 0.03, g, tr[:, 1])
+    b = b[:o_t] + tr.astype('<f4').tobytes() + b[o_t + nt * 24:]
     if hq != b[32:32 + len(hq)]:
         d = np.frombuffer(hq, '<u2').astype(int) - np.frombuffer(b, '<u2', HN * HN, 32)
         print(f'  {sx},{sz}: {int((d != 0).sum())} nodes, {d.min() * Q:+.1f} .. {d.max() * Q:+.1f} m')
-        open(path, 'wb').write(gzip.compress(b[:32] + hq + b[32 + len(hq):], 6))
+    new = b[:32] + hq + b[32 + len(hq):]
+    if new != orig:
+        open(path, 'wb').write(gzip.compress(new, 6))
         changed += 1
 print('sectors changed', changed)
 

@@ -32,9 +32,9 @@ MARGIN = 16.0
 WATER, PAVED = 4, 1
 
 _, hN = T.load_dtm(SRC)
+roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
 hN, wm, river_u, *_ = T.water(hN)
-roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 T.mark_water_crossings(roads, river_u)
 _, bridge_cells = T.crossings(hN, hG, wm, roads)
 wet = wm[:-1, :-1] & wm[1:, 1:]

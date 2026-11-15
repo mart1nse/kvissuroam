@@ -69,6 +69,7 @@ ci = np.minimum(np.arange(cn_z) * cs, chh - 1)[:, None]
 cj = np.minimum(np.arange(cn_x) * cs, cw - 1)[None, :]
 np.clip(np.round((Ds[ci, cj] - H0 + 100.0) / Q), 0, 65535).astype('<u2').tofile(f'{OUT}/coarse.bin')
 del Ds, D
+roads = feats('E_501_tee_j', detail_box.buffer(100))
 hG = hN.copy()                                   # untouched ground, for bridges and trees
 
 
@@ -81,9 +82,12 @@ hN, wm, river_u, others, river_level = T.water(hN)
 print(' river level', river_level, 'other water bodies', len(others))
 
 # ---- bridges and tunnels: causeways over water, decks over dry land, lids over tunnels (terrain.py)
-roads = feats('E_501_tee_j', detail_box.buffer(100))
 T.mark_water_crossings(roads, river_u)
 decks, bridge_cells = T.crossings(hN, hG, wm, roads)
+hGr = hN.copy()
+hN = T.grade_roads(hN, roads, wm)                # roads level from edge to edge
+hG += hN - hGr                                   # trees beside a road follow it
+del hGr
 
 # ---------------------------------------------------------------- surface classes
 print('surface')

@@ -38,7 +38,16 @@ export function createRoadPainter(world, size) {
   const line = (ctx, pts) => {
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    // the kinks of the digitised centre line are rounded off, up to 6 m either side of a vertex
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+      const la = Math.hypot(b[0] - a[0], b[1] - a[1]), lc = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      const d = Math.min(la, lc, 12) / 2;
+      if (d < 0.2) { ctx.lineTo(b[0], b[1]); continue; }
+      ctx.lineTo(b[0] + ((a[0] - b[0]) / la) * d, b[1] + ((a[1] - b[1]) / la) * d);
+      ctx.quadraticCurveTo(b[0], b[1], b[0] + ((c[0] - b[0]) / lc) * d, b[1] + ((c[1] - b[1]) / lc) * d);
+    }
+    ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
   };
   const ring = (ctx, a) => {
     ctx.beginPath();

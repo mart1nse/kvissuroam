@@ -26,6 +26,24 @@ X0, Z0, X1, Z1 = detail_rect()
 W1, H1 = int(X1 - X0), int(Z1 - Z0)
 CLEAR = 2.3            # a deck needs at least this much room under it (m)
 etak = {}
+# Bridges over the Emajõgi: world (x, z) of the middle, name, look (drawn by src/world/decks.js), and
+# the rise of the deck above a straight line between its ends where the real one is clearly humped.
+BRIDGES = [
+    (1370, 2146, 'Kroonuaia sild', 'girder', None),
+    (1485, 2282, 'Vabadussild', 'steelarch', None),
+    (1622, 2765, 'Kaarsild', 'arch', 1.0),
+    (1894, 2919, 'Võidu sild', 'victory', None),
+    (2303, 2995, 'Turusild', 'cable', 5.0),          # the hung span is 7.5 m above the water
+    (2630, 3805, 'Sõpruse sild', 'girder', None),
+    (3786, 6514, 'Ihaste sild', 'girder', None),
+]
+
+
+def known_bridge(x, z):
+    for b in BRIDGES:
+        if np.hypot(b[0] - x, b[1] - z) < 110:
+            return b
+    return None
 
 
 def setup(src):
@@ -74,6 +92,56 @@ def road_level(p):
     """1 for a road on a bridge, -1 for one in a tunnel, 0 otherwise."""
     a, l = int(p.get('a_tasand') or 0), int(p.get('l_tasand') or 0)
     return 1 if max(a, l) > 0 else -1 if min(a, l) < 0 else 0
+
+
+def grade_roads(hN, roads, wm):
+    """Level the terrain across each road, so a road is flat from edge to edge like a built road.
+
+    The terrain model is right about the road, but the kerbs, ditches and banks beside it fall inside
+    the width the road data gives, and on the 2 m grid of the game they make the edge of the road
+    wander. Every node within the road and 2 m beyond takes the height of the centre line beside it;
+    over the next 2 m that fades into the terrain. Run it after crossings(): water and everything
+    within 12 m of a tunnel, and bridges themselves, stay as they are.
+    """
+    sel = [(p, g) for p, g in roads if road_level(p) == 0 and road_width(p) >= 4.5 and p.get('tyyp_t') not in ('Rada', 'Kergliiklustee')]
+    sel.sort(key=lambda r: road_width(r[0]))
+    st, corr = [], []                                    # stations: x, z, height, half width
+    for p, g in sel:
+        hw = road_width(p) / 2
+        for part in flat(g):
+            n = max(int(part.length), 2)
+            pts = np.array([part.interpolate(d).coords[0] for d in np.linspace(0, part.length, n)])
+            x, z = pts[:, 0] - E0, N0 - pts[:, 1]
+            y = ndimage.uniform_filter1d(bilinear(hN, x, z).astype('float64'), min(7, n), mode='nearest')
+            st.append(np.stack([x, z, y, np.full(n, hw)], 1))
+            corr.append(part.buffer(hw + 4.0, cap_style=2))
+    if not st:
+        return hN
+    st = np.concatenate(st)
+    tree, ctree = cKDTree(st[:, :2]), STRtree(corr)
+    keep = [g.buffer(road_width(p) / 2 + (12.0 if road_level(p) < 0 else 1.5)) for p, g in roads if road_level(p) != 0]
+    ktree = STRtree(keep) if keep else None
+    out = hN.copy()
+    B = 1024
+    for r0 in range(0, H1 + 1, B):
+        for c0 in range(0, W1 + 1, B):
+            nr, nc = min(B, H1 + 1 - r0), min(B, W1 + 1 - c0)
+            shapes = [corr[i] for i in ctree.query(wbox(X0 + c0 - 1, Z0 + r0 - 1, X0 + c0 + nc, Z0 + r0 + nr))]
+            if not shapes:
+                continue
+            rr, cc = np.nonzero(rast(shapes, X0 + c0 - 0.5, Z0 + r0 - 0.5, nc, nr, 1.0, all_touched=True))
+            dist, idx = tree.query(np.stack([X0 + c0 + cc, Z0 + r0 + rr], 1), distance_upper_bound=40)
+            ok = np.isfinite(dist)
+            rr, cc, dist, idx = rr[ok], cc[ok], dist[ok], idx[ok]
+            wgt = np.clip((st[idx, 3] + 4.0 - dist) / 2.0, 0, 1)
+            wgt[wm[r0 + rr, c0 + cc]] = 0
+            if ktree is not None:
+                ks = [keep[i] for i in ktree.query(wbox(X0 + c0 - 1, Z0 + r0 - 1, X0 + c0 + nc, Z0 + r0 + nr))]
+                if ks:
+                    wgt[rast(ks, X0 + c0 - 0.5, Z0 + r0 - 0.5, nc, nr, 1.0, all_touched=True)[rr, cc] > 0] = 0
+            sub = out[r0:r0 + nr, c0:c0 + nc]
+            sub[rr, cc] = sub[rr, cc] * (1 - wgt) + st[idx, 2] * wgt
+    return out
 
 
 def mark_water_crossings(roads, river_u):
@@ -352,14 +420,18 @@ def crossings(hN, hG, wm, roads):
                         break
                 idx = np.arange(a, b + 1)
                 t = (idx - a) / max(b - a, 1)
-                y = np.interp(idx, [a, b], [fq[a], fq[b]]) + 4 * min(1.2, 0.007 * (b - a)) * t * (1 - t)
+                wet = np.nonzero(fw[idx])[0]
+                mid = idx[wet[len(wet) // 2]] if len(wet) else (a + b) // 2
+                kb = known_bridge(fx[mid], fz[mid])
+                hump = kb[4] if kb and kb[4] else min(1.2, 0.007 * (b - a))
+                y = np.interp(idx, [a, b], [fq[a], fq[b]]) + 4 * hump * t * (1 - t)
                 y = np.maximum(y, fq[idx])
                 ta, tb = a - Ea + E, b - Ea + E          # the same stretch on the short profile
                 taken[max(ta, 0):max(tb + 1, 0)] = True
                 d = _ribbon(1, fx, fz, idx, w / 2, np.stack([y, y], 1), rail=(y - fq[idx] > 0.7) | fw[idx])
                 d['w'] = 1                               # over water
-                if cur['name']:
-                    d['n'] = cur['name']
+                d['n'] = kb[2] if kb else cur['name']
+                d['b'] = kb[3] if kb else 'girder'
                 decks.append(d)
         # dry land: a span is a dip shorter than a long bridge, between the two abutments.
         c2 = ndimage.grey_closing(q, size=min(ne, 121), mode='nearest')

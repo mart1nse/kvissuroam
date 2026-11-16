@@ -169,7 +169,7 @@ body.touch .desktop-only { display: none; }
   font-variant-numeric: tabular-nums; text-align: center;
 }
 #lap .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
-#lap .lt b { font-size: clamp(22px, 3.4vw, 34px); font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
+#lap .lt b { font-size: clamp(36px, 5.6vw, 66px); line-height: 1; font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
 #lap.idle .lt b { opacity: .45; }
 #lap .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
 #lap .lb b { font-weight: 800; }
@@ -215,3 +215,11 @@ body.touch #lap ol { display: none; }
 #board .mine small { opacity: .6; margin-left: 6px; }
 #board .row { align-items: center; }
 #board .dl { color: var(--cyan); }
+
+/* desktop: a bigger map in the bottom left corner, the street name above it, a bigger lap panel */
+body:not(.touch) #minimap { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: clamp(170px, 24vw, 280px); height: clamp(170px, 24vw, 280px); }
+body:not(.touch) #street { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(170px, 24vw, 280px) + 10px); left: max(14px, env(safe-area-inset-left)); }
+body:not(.touch) #lap { min-width: 260px; padding: 8px 18px 9px; }
+body:not(.touch) #lap .lb { font-size: clamp(13px, 1.6vw, 17px); }
+body:not(.touch) #lap ol { font-size: 12px; }
+#lap .lt .lbl { vertical-align: 60%; }

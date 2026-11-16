@@ -3,7 +3,7 @@
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain, skidGain, skidFilt;
   let skid = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
-  let muted = false, ev = false, turbo = false;
+  let muted = false, ev = false, turbo = false, background = false;
 
   function start() {
     if (ctx) { ctx.resume?.(); return; }
@@ -118,7 +118,14 @@ export function createAudio() {
   return {
     start, update,
     setCar(spec) { ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0; },
-    setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.5, ctx.currentTime, 0.05); },
+    setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m || background ? 0 : 0.5, ctx.currentTime, 0.05); },
+    setBackground(b) {
+      background = b;
+      if (!ctx) return;
+      if (b) ctx.suspend?.().catch(() => {});
+      else ctx.resume?.().catch(() => {});
+      if (master) master.gain.setTargetAtTime(muted || b ? 0 : 0.5, ctx.currentTime, 0.05);
+    },
     get muted() { return muted; },
   };
 }

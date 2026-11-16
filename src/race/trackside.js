@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { findCorners } from './decor.js';
 
-const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11;
+const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
 // special corners; every other corner of the lap gets the default treatment (inside cleared, one sign left)
 const SPECIAL = {
@@ -45,7 +45,26 @@ const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };   
 const VANEMUISE = { bollards: [2276, 2299, 0.45], sign: [2262, 1.1] };
 const PLAYGROUND = [[1602, 3019, 5.2], [1616, 3031, 4.2]];     // landmarks.js, the Barclay park play area
 const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11 };
-const WALL = { i0: 878, i1: 934, side: -1, gap: 2.2, height: 1.0, thick: 0.45 };
+const WALL = { height: 1.0, thick: 0.45 };
+// the botanical garden wall, traced by Martin on the Maa-amet map (16 Nov): from the corner of Lai 40
+// along the back of the Lai pavement, round the corner and up Emajõe (game x, z)
+const WALL_PTS = [[1414.7, 2377.1], [1429.5, 2368.4], [1437.0, 2358.5], [1442.6, 2348.6], [1445.7, 2334.9], [1443.2, 2328.7], [1437.6, 2321.3]];
+
+// a smooth curve through the points (Catmull-Rom), about every `step` metres
+function spline(pts, step = 1.5) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const n = Math.max(1, Math.round(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / step));
+    for (let k = 0; k < n; k++) {
+      const t = k / n, t2 = t * t, t3 = t2 * t;
+      const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+    }
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
@@ -60,10 +79,27 @@ function lateral(track, i0, i1, x, z) {
   return { i: bi, lat: (x - track.P[bi][0]) * -tz + (z - track.P[bi][1]) * tx, d: Math.sqrt(best) };
 }
 
-// ids ("sx_sz:n") of the props to leave out
+// speed limits along the lap (Martin): 30 on Jakobi after von Baeri, 40 entering Lai, 30 on Kroonuaia.
+// Surveyed 50 signs in these stretches are repainted; one sign is added at each start.
+const LIMITS = [
+  { i0: 628, i1: 672, kind: SPEED30, at: 640 },       // up Jakobi after the right turn
+  { i0: 690, i1: 760, kind: SPEED40, at: 700 },       // entering Lai
+  { i0: 1036, i1: 1120, kind: SPEED30, at: 1046 },    // entering Kroonuaia
+];
+
+// ids ("sx_sz:n") of the props to leave out (and speed signs repainted in place)
 export function clearProps(data) {
   const track = createTrack();
   const out = new Set();
+  for (const [, a] of Object.entries(data.sectors)) {
+    for (let k = 0; k < a.length; k += data.stride) {
+      if (a[k] !== SPEED50) continue;
+      for (const L of LIMITS) {
+        const q = lateral(track, L.i0, L.i1, a[k + 1], a[k + 2]);
+        if (q.i > L.i0 && q.i < L.i1 && Math.abs(q.lat) < track.HW[q.i] + 8) a[k] = L.kind;
+      }
+    }
+  }
   // anything standing in the road itself, anywhere on the lap
   for (const [key, a] of Object.entries(data.sectors)) {
     for (let k = 0; k < a.length; k += data.stride) {
@@ -171,6 +207,11 @@ export function extraProps() {
   const track = createTrack();
   const out = [];
   const back = (i) => bearing(-track.tan[i % track.N][0], -track.tan[i % track.N][1]);      // facing oncoming cars
+  // speed limit signs at the start of each limited stretch, on the right
+  for (const L of LIMITS) {
+    const p = edgePoint(track, L.at, 1, 0.9);
+    out.push([L.kind, p[0], p[1], back(L.at)]);
+  }
   // 4. the 40 sign on the Jakobi -> Lai kerb
   const s40 = edgePoint(track, JAKOBI_APEX - 4, -1, SIGN40_OFF);
   out.push([SPEED40, s40[0], s40[1], back(JAKOBI_APEX - 12)]);
@@ -250,7 +291,7 @@ export function createTrackside(world, scene) {
   }
 
   // ---- 3. the low wall, as segments (for collisions) and boxes (to draw)
-  const wallLine = sideLine(track, WALL.i0, WALL.i1, WALL.side, WALL.gap);
+  const wallLine = spline(WALL_PTS);
   const segs = [];
   for (let i = 0; i < wallLine.length - 1; i++) segs.push([wallLine[i], wallLine[i + 1]]);
   let wallSegs = null;           // the ones clear of buildings, once the ground is loaded

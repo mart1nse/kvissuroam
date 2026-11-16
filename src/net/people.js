@@ -7,7 +7,7 @@ const NOTE_MS = 6000;
 export function createPeople({ mp, onFocus }) {
   const box = document.createElement('div');
   box.id = 'people';
-  box.innerHTML = '<div class="count hidden"><i></i><span></span></div><ul class="feed"></ul>';
+  box.innerHTML = '<div class="count hidden"><i></i><span></span></div><div class="me"></div><ul class="feed"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
 
@@ -23,8 +23,11 @@ export function createPeople({ mp, onFocus }) {
   });
   let shown = [], myCar = null;
 
+  const elMe = box.querySelector('.me');
   let last = -1;
   function refresh() {
+    const nm = mp.name ? `YOU: ${mp.name}` : '';
+    if (elMe.textContent !== nm) elMe.textContent = nm;
     const n = mp.online ? mp.count + 1 : 0;
     if (n === last) return;
     last = n;

@@ -64,7 +64,7 @@ export function createTrack() {
   }
   const sp = TRACK.spawn;
   return {
-    P, HW, N, tan, s, length: TRACK.length, nearest,
+    P, HW, N, tan, s, length: TRACK.length, nearest, spawnI: sp,
     checkpoints: TRACK.checkpoints.map((i) => ({ i, x: P[i][0], z: P[i][1] })),
     spawn: { x: P[sp][0], z: P[sp][1], yaw: Math.atan2(tan[sp][0], -tan[sp][1]) },
   };
@@ -194,6 +194,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
     const d = ref == null ? null : t - ref;
     split.className = d == null ? '' : d <= 0 ? 'ahead' : 'behind';
     split.innerHTML = `<span>${label}</span><b>${fmtTime(t)}</b>${d == null ? '' : `<i>${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</i>`}`;
+    st.lastSplit = `${label} · ${fmtTime(t)}${d == null ? '' : ` <i class="${d <= 0 ? 'ahead' : 'behind'}">${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</i>`}`;
     clearTimeout(splitTimer);
     splitTimer = setTimeout(() => split.classList.add('hidden'), 3200);
   }
@@ -260,11 +261,14 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
     if (offer) offerBack();
   }
 
-  function renderLast(carShort) {
-    elLast.innerHTML = laps.slice(-5).reverse()
-      .map((l) => `<li><b>${fmtTime(l.ms / 1000)}</b> <span>${l.carShort || ''}</span></li>`).join('');
+  // this browser's own best lap in the car being driven (the overall best is the line above)
+  let lastCar = null;
+  function renderLast(carId = lastCar) {
+    lastCar = carId;
+    let b = null;
+    for (const l of laps) if (l.car === carId && (!b || l.ms < b.ms)) b = l;
+    elLast.innerHTML = b ? `<li><em>YOUR BEST</em> <b>${fmtTime(b.ms / 1000)}</b></li>` : '';
   }
-  renderLast();
 
   let lastBestKey = '';
   function renderBest(carId, carShort) {
@@ -272,6 +276,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
     const key = `${carId}|${b?.ms}|${b?.name}`;
     if (key === lastBestKey) return;
     lastBestKey = key;
+    renderLast(carId);
     elCar.textContent = carShort;
     elBest.innerHTML = b ? `${fmtTime(b.ms / 1000)} <small>${escapeHtml(b.name)}</small>` : '<small>NO LAP YET</small>';
   }
@@ -282,6 +287,8 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
     get laps() { return laps; },
     cancel,
     teleported() { st.prev = null; cancel('LAP CANCELLED'); },
+    // back to the last spot (R): a short hop, the lap keeps running
+    hopped(x, z) { if (st.prev) st.prev = { x, z }; },
     refreshBest() { lastBestKey = ''; },
     // car: physics state; carId / carShort: which car is driving
     update(car, carId, carShort) {
@@ -322,7 +329,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                   onLap?.(lap);
                 } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
               } else toast('GO!', 1200);
-              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.splits = []; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
             }
           }
           if (st.running) {
@@ -358,6 +365,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
         renderBest(carId, carShort);
         if (!st.running && !elMsg.textContent) elMsg.textContent = 'CROSS THE LINE TO START';
         if (st.running && st.off > 60) elMsg.textContent = `OFF TRACK ${Math.round(st.off)} / ${OFF_LIMIT} M`;
+        else if (st.running && st.lastSplit) { if (elMsg.innerHTML !== st.lastSplit) elMsg.innerHTML = st.lastSplit; }
         else if (st.running) elMsg.textContent = `CHECKPOINTS ${st.cps.size}/${track.checkpoints.length}`;
       }
     },

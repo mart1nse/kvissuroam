@@ -1,6 +1,6 @@
 // 1987 Mercedes-Benz 190E 2.6 (W201), pre-facelift European car in black: compact three-box saloon with a
 // short, upright glasshouse, thick C-pillars, a high wedge-shaped boot, a waist fold rising to the ribbed
-// tail lamps, anthracite bumpers with a chrome top strip, narrow rubbing strips, chrome-framed grille and star.
+// tail lamps, anthracite bumpers, narrow black rubbing strips, chrome-framed grille and star.
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, raycast, clipSoup, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, arcPts } from './kit.js';
 
@@ -198,17 +198,18 @@ function gulliWheel(R, width, rimR) {
 }
 
 // ---------------------------------------------------------------- textures
-// Ribbed tail lens, u 0 = inboard (plate side) .. 1 = outboard, v 0 = bottom .. 1 = top.
-// Upper row: tail/brake inboard, amber indicator outboard. Lower row: rear fog inboard, reverse (its own
-// mesh), tail/brake outboard.
-const TAIL_SPLIT = 0.5, FOG_SPLIT = 0.29, RIBS = 8;
+// Ribbed tail lens, u 0 = inboard (plate side) .. 1 = outboard, v 0 = bottom .. 1 = top. One row, from the
+// plate outward: red (tail / fog), the clear reverse lamp over a red strip, red (tail / brake), then the
+// amber indicator that wraps round the body corner.
+const U_REV0 = 0.2, U_REV1 = 0.36, U_AMBER = 0.7, RIBS = 6, REV_BANDS = 4;
 function lampTextures() {
+  const vRev = 1 - REV_BANDS / RIBS;
   const cells = [
-    [0, TAIL_SPLIT, 0.5, 1, '#7c0204', true],
-    [TAIL_SPLIT, 1, 0.5, 1, '#d85800', false],
-    [0, FOG_SPLIT, 0, 0.5, '#6a0204', false],
-    [FOG_SPLIT, TAIL_SPLIT, 0, 0.5, '#d9dde0', false],
-    [TAIL_SPLIT, 1, 0, 0.5, '#7c0204', true],
+    [0, U_REV0, 0, 1, '#8f0509', true],
+    [U_REV0, U_REV1, 0, vRev, '#8f0509', true],
+    [U_REV0, U_REV1, vRev, 1, '#e4e7ea', false],
+    [U_REV1, U_AMBER, 0, 1, '#8f0509', true],
+    [U_AMBER, 1, 0, 1, '#e06f02', false],
   ];
   const tail = (glow) => (g, w, h) => {
     g.fillStyle = '#0d0202'; g.fillRect(0, 0, w, h);
@@ -220,13 +221,13 @@ function lampTextures() {
     for (let i = 0; i < RIBS; i++) {
       const y0 = i * p, gr = g.createLinearGradient(0, y0, 0, y0 + p);
       if (glow) { gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0.05)'); gr.addColorStop(1, 'rgba(0,0,0,0.45)'); }
-      else { gr.addColorStop(0, 'rgba(0,0,0,0.25)'); gr.addColorStop(0.2, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0.55)'); }
+      else { gr.addColorStop(0, 'rgba(255,255,255,0.05)'); gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0.1)'); gr.addColorStop(1, 'rgba(0,0,0,0.5)'); }
       g.fillStyle = gr; g.fillRect(0, y0, w, p);
     }
     // cell dividers and the dark rim of the housing
     g.fillStyle = '#080101';
-    g.fillRect(TAIL_SPLIT * w - 3, 0, 6, h); g.fillRect(FOG_SPLIT * w - 2, h / 2, 4, h / 2); g.fillRect(0, h / 2 - 2, w, 4);
-    g.strokeStyle = '#050101'; g.lineWidth = 8; g.strokeRect(0, 0, w, h);
+    for (const u of [U_REV0, U_REV1, U_AMBER]) g.fillRect(u * w - 2, 0, 4, h);
+    g.strokeStyle = '#050101'; g.lineWidth = 6; g.strokeRect(0, 0, w, h);
   };
   const head = (glow) => (g, w, h) => {
     // u 0 = inboard .. 1 = outboard: flat-glass headlamp with the amber indicator at the outer end
@@ -301,7 +302,8 @@ export function buildW201() {
 
   const arches = cutArches(raw, [{ z: -HZ, y: AY, r: AR }, { z: HZ, y: AY, r: AR }], { halfWidth: HW });
   // recessed number plate in the boot lid between the lamps
-  const RX = 0.282, RY0 = 0.608, RY1 = 0.802, RD = 0.03;
+  const LY0 = 0.612, LH = 0.15, LIN = 0.322;   // tail lamps: bottom, height, inner edge
+  const RX = 0.3, RY0 = LY0, RY1 = LY0 + LH + 0.004, RD = 0.014;
   let shell = clipSoup(arches.soup, (v) => Math.max(Math.abs(v[0]) - RX, RY0 - v[1], v[1] - RY1, 1.9 - v[2]));
   // decal frames bound to the parts of the shell they can land on (much faster than the whole shell)
   const dcS = decals(part(shell, (x) => x > 0.35)), dcR = decals(part(shell, (x, y, z) => z > 0.4));
@@ -330,8 +332,8 @@ export function buildW201() {
       q(P(-RX, y0, -0.001), P(-RX, y1, -0.001), P(-RX, y1, RD), P(-RX, y0, RD), [1, 0, 0]);
     }
     paint.add(s);
-    const zp = rz(0, 0.705) - RD;
-    const pl = plate([0, 0.705, zp + 0.007], A_PLATE, { tilt: 0 });
+    const zp = rz(0, 0.687) - RD;
+    const pl = plate([0, 0.687, zp + 0.007], A_PLATE, { tilt: 0 });
     atlas.add(pl.face); pal.add(pl.back);
     // plate lamps in the top of the recess
     for (const x of [-0.15, 0.15]) pal.add(box(0.05, 0.005, 0.016, { p: [x, RY1 - 0.003, rz(x, RY1) - 0.012] }, 'lens'));
@@ -350,10 +352,9 @@ export function buildW201() {
   pal.add(dcF.front(grow(ws, 0.02), { offset: 0.003, filter: (v) => v[2] > -1.0 }).pal('chrome'));
   pal.add(dcF.front(grow(ws, 0.009), { offset: 0.0042, filter: (v) => v[2] > -1.0 }).pal('rubber'));
   glass.add(dcF.front(ws, { offset: 0.0058, filter: (v) => v[2] > -1.0 }));
-  const rw = rpoly([[-0.57, 1.012], [0.57, 1.012], [0.48, 1.328], [-0.48, 1.328]], 0.065, 5);
+  const rw = rpoly([[-0.615, 1.004], [0.615, 1.004], [0.515, 1.342], [-0.515, 1.342]], 0.06, 5);
   const rwf = { filter: (v) => v[2] > 0.5 && v[2] < 1.4 };
-  pal.add(dcR.rear(grow(rw, 0.02), { offset: 0.003, ...rwf }).pal('chrome'));
-  pal.add(dcR.rear(grow(rw, 0.009), { offset: 0.0042, ...rwf }).pal('rubber'));
+  pal.add(dcR.rear(grow(rw, 0.014), { offset: 0.0042, ...rwf }).pal('rubber'));
   glass.add(dcR.rear(rw, { offset: 0.0058, ...rwf }));
 
   // --- shut lines
@@ -367,53 +368,59 @@ export function buildW201() {
   pal.add(dcT.top([...stroke([[0.705, -2.02], [0.715, -0.9]], lw), ...stroke([[-0.715, -0.9], [0.715, -0.9]], lw)], { ...lo, minFacing: 0.4 }).pal('line'));
   pal.add(dcT.top(stroke([[0.705, -2.02], [0.715, -0.9]], lw), { ...lo, minFacing: 0.4 }).pal('line').mirrored());
   // boot lid: deck sides, front edge behind the rear window, then down the tail and round the lamps
-  const lid = [[0.67, 1.38], [0.68, 2.22]];
-  pal.add(dcT.top([...stroke(lid, lw), ...stroke([[-0.67, 1.38], [0.67, 1.38]], lw)], { ...lo, minFacing: 0.4, filter: (v) => v[2] > 1.0 }).pal('line'));
+  const lid = [[0.705, 1.38], [0.72, 2.22]];
+  pal.add(dcT.top([...stroke(lid, lw), ...stroke([[-0.705, 1.38], [0.705, 1.38]], lw)], { ...lo, minFacing: 0.4, filter: (v) => v[2] > 1.0 }).pal('line'));
   pal.add(dcT.top(stroke(lid, lw), { ...lo, minFacing: 0.4, filter: (v) => v[2] > 1.0 }).pal('line').mirrored());
-  pal.add(dcR.rear(stroke([[0.68, 1.0], [0.68, 0.824], [0.352, 0.824], [0.352, 0.59]], lw), { ...lo, ...fr }).pal('line').sym());
+  pal.add(dcR.rear(stroke([[0.72, 1.0], [0.72, LY0 + LH + 0.016], [LIN - 0.014, LY0 + LH + 0.016]], lw), { ...lo, ...fr }).pal('line').sym());
   // fuel filler flap on the right rear wing
   const flap = rpoly([[1.56, 0.775], [1.68, 0.775], [1.68, 0.885], [1.56, 0.885]], 0.02, 3);
   pal.add(dcS.side(stroke([...flap, flap[0]], 0.005), { ...lo, minFacing: 0.3 }).pal('line'));
 
-  // --- rear lamps: ribbed lenses on a black housing
+  // --- rear lamps: one row of ribbed lenses on a black housing, from the plate panel round the corner
   const ln = planLine(rearP, 0.69, 1.3, 1, 0, 78);
-  const LY0 = 0.603, LH = 0.207, sIn = ln.where((p) => p.x - 0.37), sOut = ln.where((p) => p.nx - 0.86);
+  const sIn = ln.where((p) => p.x - LIN), sOut = ln.where((p) => p.nx - 0.9);
   const zOut = ln.at(sOut).z - 0.008;
-  pal.add(dcR.rear(rpoly([[0.358, LY0 - 0.009], [ln.at(sOut).x + 0.01, LY0 - 0.009], [ln.at(sOut).x + 0.01, LY0 + LH + 0.009], [0.358, LY0 + LH + 0.009]], 0.008), { offset: 0.0018, minFacing: 0.05, filter: (v) => v[2] > zOut }).pal('gloss').sym());
+  pal.add(dcR.rear(rpoly([[LIN - 0.01, LY0 - 0.008], [ln.at(sOut).x + 0.01, LY0 - 0.008], [ln.at(sOut).x + 0.01, LY0 + LH + 0.008], [LIN - 0.01, LY0 + LH + 0.008]], 0.008), { offset: 0.0018, minFacing: 0.05, filter: (v) => v[2] > zOut }).pal('gloss').sym());
   {
-    const p = LH / RIBS, dB = 0.0025, dep = 0.0085;
+    const p = LH / RIBS, dB = 0.0025, dep = 0.0095;
     const prof = [[dB, 0]];
     for (let k = 0; k < RIBS; k++) prof.push([dB + dep, k * p + 0.14 * p], [dB + dep * 0.72, (k + 0.97) * p], [dB, (k + 1) * p]);
-    const lower = prof.slice(0, RIBS / 2 * 3 + 1), upper = prof.slice(RIBS / 2 * 3);
+    const cut = (RIBS - REV_BANDS) * 3, lower = prof.slice(0, cut + 1), upper = prof.slice(cut);
     const sAt = (u) => sIn + (sOut - sIn) * u;
     const us = new Set(); for (let i = 0; i <= 20; i++) us.add(i / 20);
-    for (const u of [FOG_SPLIT, TAIL_SPLIT]) us.add(u);
+    for (const u of [U_REV0, U_REV1, U_AMBER]) us.add(u);
     const ul = [...us].sort((a, b) => a - b);
     const run = (prf, u0, u1) => {
       const steps = ul.filter((u) => u >= u0 - 1e-9 && u <= u1 + 1e-9).map(sAt);
       return sweep(ln, LY0, prf, { s0: sIn, s1: sOut, steps, uS: [sIn, sOut], vH: [0, LH], hard: true, taper: (t) => Math.min(1, t / 0.03, (1 - t) / 0.03) });
     };
-    tail.add(run(upper, 0, 1), run(lower, 0, FOG_SPLIT), run(lower, TAIL_SPLIT, 1));
-    reverse.add(run(lower, FOG_SPLIT, TAIL_SPLIT));
+    tail.add(run(prof, 0, U_REV0), run(lower, U_REV0, U_REV1), run(prof, U_REV1, 1));
+    reverse.add(run(upper, U_REV0, U_REV1));
     tail.add(tail.mirrored()); reverse.add(reverse.mirrored());
   }
 
-  // --- rear badges and the star on the boot lid
-  atlas.add(dcR.rear(rect(-0.64, 0.838, -0.425, 0.878), { offset: 0.0045, ...fr }).uvRect(A_190));
-  atlas.add(dcR.rear(rect(0.475, 0.838, 0.58, 0.878), { offset: 0.0045, ...fr }).uvRect(A_26));
-  pal.add(star3d(0.036, 'chrome').xform(new THREE.Matrix4().makeTranslation(0, 0.872, rz(0, 0.872) + 0.004)));
+  // --- rear badges, the star with the lock under it, and the grip strip over the plate
+  atlas.add(dcR.rear(rect(-0.635, 0.795, -0.415, 0.835), { offset: 0.0045, ...fr }).uvRect(A_190));
+  atlas.add(dcR.rear(rect(0.47, 0.795, 0.575, 0.835), { offset: 0.0045, ...fr }).uvRect(A_26));
+  pal.add(star3d(0.05, 'chrome').xform(new THREE.Matrix4().makeTranslation(0, 0.915, rz(0, 0.915) + 0.005)));
+  pal.add(cyl(0.011, 0.011, 0.008, 14, { p: [0, 0.845, rz(0, 0.845) + 0.003], r: [Math.PI / 2, 0, 0] }, 'chrome'));
+  for (let i = 0; i < 8; i++) {
+    const x0 = -0.36 + 0.72 * i / 8, x1 = x0 + 0.09, xm = (x0 + x1) / 2, y = RY1 + 0.012;
+    pal.add(box(Math.hypot(x1 - x0, rz(x1, y) - rz(x0, y)) + 0.002, 0.02, 0.022, { p: [xm, y, rz(xm, y) + 0.004], r: [0, Math.atan2(rz(x0, y) - rz(x1, y), x1 - x0), 0] }, 'plastic'));
+  }
 
-  // --- bumpers: black plastic with a chrome top strip, wrapping round to the wheel arches
+  // --- bumpers: anthracite plastic with a black top strip, wrapping round to the wheel arches
   const bumper = (lnB, yB, sEnd, profBlack, profChrome) => {
     const tp = (t) => Math.min(1, (1 - t) / 0.06) ** 0.5;
-    pal.add(sweep(lnB, yB, profBlack, { s1: sEnd, n: 40, taper: tp }).pal('clad').sym());
-    pal.add(sweep(lnB, yB, profChrome, { s1: sEnd, n: 40, taper: tp }).pal('chrome').sym());
+    pal.add(sweep(lnB, yB, profBlack, { s1: sEnd, n: 40, taper: tp }).pal('bumper').sym());
+    pal.add(sweep(lnB, yB, profChrome, { s1: sEnd, n: 40, taper: tp }).pal('plastic').sym());
   };
   {
     const yB = 0.47, lnB = planLine(rearP, yB, 1.3, 1, 0, 80, 160);
     const sEnd = lnB.where((p) => (HZ + archR + 0.012) - p.z);
-    const black = [[-0.03, -0.118], [0.008, -0.121], [0.026, -0.114], [0.04, -0.094], [0.05, -0.058], [0.054, -0.015], [0.054, 0.045], [0.053, 0.083]];
-    const chrome = [[0.053, 0.083], [0.0545, 0.094], [0.051, 0.108], [0.042, 0.118], [0.028, 0.122], [-0.03, 0.122]];
+    // square-shouldered: flat top ledge, upright face with a raised rubbing band, tucked-under valance
+    const black = [[-0.03, -0.118], [0.02, -0.12], [0.04, -0.108], [0.052, -0.085], [0.056, -0.05], [0.056, 0.012], [0.063, 0.02], [0.063, 0.064], [0.056, 0.072], [0.056, 0.1]];
+    const chrome = [[0.056, 0.1], [0.055, 0.112], [0.048, 0.12], [0.03, 0.123], [-0.03, 0.123]];
     bumper(lnB, yB, sEnd, black, chrome);
   }
   {
@@ -423,23 +430,23 @@ export function buildW201() {
     const chrome = [[0.059, 0.088], [0.0605, 0.099], [0.057, 0.112], [0.046, 0.122], [0.03, 0.126], [-0.03, 0.126]];
     bumper(lnB, yB, sEnd, black, chrome);
   }
-  // --- narrow side rubbing strips with a chrome insert (front wing, both doors)
+  // --- narrow black side rubbing strips (front wing, both doors)
   {
     const yS = 0.462;
     const blk = [[-0.004, -0.021], [0.006, -0.02], [0.011, -0.013], [0.013, 0], [0.011, 0.013], [0.006, 0.02], [-0.004, 0.021]];
     const chr = [[0.0115, -0.0055], [0.0145, -0.0045], [0.0158, 0], [0.0145, 0.0045], [0.0115, 0.0055]];
     for (const [z0, z1] of [[-0.95, -0.835], [-0.815, 0.127], [0.143, 0.945]]) {
       const l = sideLine(sideP, yS, z0, z1, 16), k = 30 * (z1 - z0), tp = (t) => Math.min(1, 0.25 + k * t, 0.25 + k * (1 - t));
-      pal.add(sweep(l, yS, blk, { n: 16, taper: tp }).pal('clad').sym());
-      pal.add(sweep(l, yS, chr, { n: 16, taper: tp }).pal('chrome').sym());
+      pal.add(sweep(l, yS, blk, { n: 16, taper: tp }).pal('bumper').sym());
+      pal.add(sweep(l, yS, chr, { n: 16, taper: tp }).pal('plastic').sym());
     }
   }
 
-  // --- exhaust: twin round tailpipes under the right-hand end of the bumper
-  for (const x of [0.4, 0.468]) {
-    const m = new THREE.Matrix4().makeTranslation(x, 0.27, ZR - 0.1).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.06));
-    pal.add(cyl(0.026, 0.026, 0.16, 16, m, 'chrome', true));
-    pal.add(cyl(0.021, 0.021, 0.15, 12, m, 'well'));
+  // --- exhaust: twin small tailpipes left of centre, just showing under the bumper
+  for (const x of [-0.43, -0.375]) {
+    const m = new THREE.Matrix4().makeTranslation(x, 0.285, ZR - 0.115).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.12));
+    pal.add(cyl(0.02, 0.02, 0.1, 14, m, 'steel', true));
+    pal.add(cyl(0.016, 0.016, 0.095, 10, m, 'well'));
   }
 
   // --- front: chrome-framed upright grille with vertical slats, stand-up star, flat-glass headlamps

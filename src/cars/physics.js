@@ -64,7 +64,7 @@ export function createCar(spec, pose) {
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
     slipV: 0, slipVF: 0, slipVR: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
-    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0, shaft: 0, carry: 0, csHold: 0, csDir: 0,
+    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0, shaft: 0, carry: 0, revCut: 0, csHold: 0, csDir: 0,
     throttle: 0, brake: 0,
     ax: 0, ay: 0,
     surface: 1,
@@ -80,6 +80,10 @@ export function createCar(spec, pose) {
 export function speedKmh(car) {
   return Math.hypot(car.vx, car.vy) * 3.6;
 }
+
+// rev limiter: the shortest ignition cut (s) and how far the revs must fall before it returns (rpm);
+// an engine can set its own with revCut and revCutDrop
+const REV_CUT_TIME = 0.03, REV_CUT_DROP = 120;
 
 function engineForce(car, throttle, dt) {
   // Returns the drive force at the wheels (N, signed along vx) and updates rpm / gear.
@@ -110,7 +114,9 @@ function engineForce(car, throttle, dt) {
   else if (car.shiftTimer <= 0) {
     // kick-down automatic: lowest gear that stays below the shift point
     let g = car.gear;
-    if (rpmAt(g) > e.shiftRpm && g < s.gears.length) g++;
+    // (it also shifts a little early rather than run into the rev limiter when the tyres are only just slipping)
+    const early = rpmAt(g) > e.shiftRpm * 0.88 && rpmAt(g) * wAbs >= e.redline * vAbs;
+    if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
     else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * (throttle > 0.5 ? 0.9 : 0.55)) g--;
     if (g !== car.gear) { car.gear = g; car.shiftTimer = s.shiftTime; }
   }
@@ -147,15 +153,24 @@ function engineForce(car, throttle, dt) {
   if (throttle <= 0) car.carry = car.lifted ? Math.max(0, car.carry - drop * dt) : Math.min(car.rpm, e.redline);
   else car.carry = Math.max(0, car.carry - drop * 1.2 * dt);
   car.lifted = throttle <= 0;
+  // Hard rev limiter, only reached with spinning wheels (shifts come earlier). At the redline the
+  // ignition is cut for a moment and stays off until the revs have fallen back, so an engine held flat
+  // out on spinning wheels (a donut, a burnout) bounces off the limiter instead of sitting on it.
+  // revCut > 0 is the cut in progress; the sound follows it.
+  if (throttle <= 0) car.revCut = 0;
+  else if (car.revCut > 0) {
+    car.revCut -= dt;
+    if (car.revCut <= 0) car.revCut = wheelRpm > e.redline - (e.revCutDrop ?? REV_CUT_DROP) ? 1e-4 : 0;
+  } else if (wheelRpm >= e.redline) car.revCut = e.revCut ?? REV_CUT_TIME;
   const rpmTo = Math.min(Math.max(rpm, car.carry), e.redline);
-  car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * 12);
+  // (the needle and the engine note follow the bounce closely)
+  car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * (wheelRpm > e.redline - 600 ? 40 : 12));
   if (throttle <= 0) {
     // engine braking through the converter
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
   }
-  if (wheelRpm >= e.redline || (car.reversing && vAbs > 11)) return 0;
-  // soft rev limiter, only reached with spinning wheels (shifts come earlier)
-  const cut = (car.shiftTimer > 0 ? 0.25 : 1) * Math.min(1, (e.redline - wheelRpm) / 150);
+  if (car.revCut > 0 || (car.reversing && vAbs > 11)) return 0;
+  const cut = car.shiftTimer > 0 ? 0.25 : 1;
   const rq = Math.max(rpm, car.carry);
   const full = lerpTable(e.torque, rq);
   const base = tb ? lerpTable(tb.torqueOff, rq) : full;
@@ -569,7 +584,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.csHold = 0; car.slipRPrev = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

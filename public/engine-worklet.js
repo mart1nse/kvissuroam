@@ -4,7 +4,8 @@
 // The sound is built the way a real engine makes it: the crank turns through its 720 degree cycle, every
 // cylinder fires at its own crank angle in firing order, and each firing sends a pressure pulse down its
 // bank's exhaust. The pulses ring through the pipes (feedback combs) and the silencers (resonators), with
-// intake roar, valvetrain / injector ticks, turbo hiss and overrun crackle on top. Firing order, bank
+// intake roar, valvetrain / injector ticks, turbo hiss and overrun crackle on top. On the rev limiter
+// the ignition is cut: the cylinders only pump air until it returns with a bark. Firing order, bank
 // layout, pipe lengths and the silencer tune come from the car's config (src/engine-sounds.js).
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -54,10 +55,10 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, on: 0, redline: 6500, idle: 800 };
+    this.in = { rpm: 800, throttle: 0, boost: 0, on: 0, redline: 6500, idle: 800, cut: 0 };
     this.rpm = 800; this.load = 0; this.boost = 0; this.on = 0; this.theta = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
-    this.n = 0; this.cfg = null;
+    this.n = 0; this.cfg = null; this.cutN = 0;
   }
 
   setConfig(c) {
@@ -72,8 +73,10 @@ export class EngineCore {
     this.lp1 = new Biquad(); this.lp2 = new Biquad();
     this.hp = new Biquad().set('hp', c.hp || 28, 0.7, sr);
     this.intakeBp = new Biquad().set('bp', c.intakeF, c.intakeQ || 1.2, sr);
-    this.tickHp = new Biquad().set('hp', c.tickF || 3500, 0.8, sr);
-    this.hissBp = new Biquad().set('bp', 2600, 0.9, sr);
+    // the roar is cut off above its band, or the noise skirt is heard as a hiss rather than a roar
+    this.intakeLp = new Biquad().set('lp', c.intakeF * 2, 0.6, sr);
+    this.tickBp = new Biquad().set('bp', c.tickF || 3500, 1.1, sr);
+    this.hissBp = new Biquad().set('bp', 1900, 1.2, sr);
     this.pulses.length = 0;
   }
 
@@ -84,6 +87,16 @@ export class EngineCore {
     const overrun = this.load < 0.05 && rpm > this.in.idle + 500;
     let amp = (c.base + (1 - c.base) * this.load) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough);
     let nz = c.noise * (0.6 + 0.8 * this.load), tauDeg = c.pulseDeg * (0.85 + 0.3 * this.load);
+    if (this.in.cut) {
+      // ignition cut on the rev limiter: the cylinder only pumps air, and on a hot, loud engine some of
+      // the unburnt charge goes off in the exhaust
+      this.cutN++;
+      amp *= c.cutAmp ?? 0.08; nz *= 0.5;
+      if (c.pops && n() < c.pops * 0.8) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
+    } else if (this.cutN) {
+      // the first firings after the cut light what collected meanwhile: the bark of an engine on its limiter
+      amp *= 1 + (c.limBark ?? 0.5) * Math.min(1, this.cutN / 3); this.cutN = Math.max(0, this.cutN - 3);
+    }
     if (overrun) {
       amp *= c.overrun ?? 0.8;
       // fuel cut on the overrun: unburnt mixture now and then lights in the hot exhaust
@@ -93,8 +106,10 @@ export class EngineCore {
     // no two combustions are alike: the pulse also lands a fraction of a degree early or late
     const late = Math.max(0, (n() * 2 - 1) * c.jitter / (rpm * 6) * this.sr);
     if (this.pulses.length < 24) this.pulses.push({ bank: ev.bank, amp, nz, tau, t: -late });
-    // valvetrain / injector tick for this cylinder
-    this.clicks = Math.round(this.sr * 0.00035); this.clickAmp = c.tick * (0.4 + 0.6 * rpm / this.in.redline);
+    // valvetrain / injector tick for this cylinder: heard at idle and low revs, then lost under the engine
+    // (kept up, the ticks run together into a sharp hiss)
+    const quiet = clamp(1 - (rpm - this.in.idle) / (0.3 * this.in.redline), 0, 1);
+    this.clicks = Math.round(this.sr * 0.00035); this.clickAmp = c.tick * (0.12 + 0.88 * quiet);
   }
 
   process(out) {
@@ -144,9 +159,9 @@ export class EngineCore {
       for (let k = 0; k < res.length; k++) r += res[k].f.run(y) * res[k].g;
       y = this.lp2.run(this.lp1.run(r));
       // induction roar follows the intake pulses
-      y += this.intakeBp.run(n() * 2 - 1) * env * intake;
+      y += this.intakeLp.run(this.intakeBp.run(n() * 2 - 1)) * env * intake;
       // ticks
-      if (this.clicks > 0) { this.clicks--; y += this.tickHp.run((n() * 2 - 1) * this.clickAmp); } else this.tickHp.run(0);
+      if (this.clicks > 0) { this.clicks--; y += this.tickBp.run((n() * 2 - 1) * this.clickAmp); } else y += this.tickBp.run(0);
       if (hiss > 0) y += this.hissBp.run(n() * 2 - 1) * hiss;
       y = this.hp.run(y);
       out[s] = Math.tanh(drive * y) / dn * gain;

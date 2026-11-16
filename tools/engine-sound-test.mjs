@@ -1,5 +1,6 @@
 // Renders each combustion car's engine sound to a WAV, driven by the real physics:
 // 2 s idle, a blip, full throttle from standstill for 12 s, lift off for 3 s, then a steady cruise.
+// Then a donut on the rev limiter (see limiter()).
 // Run: node tools/engine-sound-test.mjs [outdir] [carIds]
 // Also prints the strongest spectral peaks at a few rpm points so the firing frequency can be checked.
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -69,4 +70,33 @@ for (const id of ids) {
   const firing = (r) => (r / 60) * cfg.order.length / 2;
   console.log(`${id}: peak ${peak.toFixed(2)}`);
   for (const [tt, rpm, at] of marks) console.log(`  t ${tt.toFixed(1)} s  ${Math.round(rpm)} rpm  firing ${firing(rpm).toFixed(0)} Hz  peaks ${peaks(data, at, 4096).join(', ')}`);
+  limiter(id, spec, cfg);
+}
+
+// A donut: full throttle and full lock from standstill for 9 s, stepped at 60 Hz as in the game, so the
+// rear-wheel-drive cars spin their wheels up to the rev limiter. Writes <id>-limiter.wav and reports how
+// often the ignition is cut and how far the level falls during a cut.
+function limiter(id, spec, cfg) {
+  const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+  const core = new EngineCore(SR);
+  core.setConfig(reviveConfig({ ...cfg, banks: cfg.banks }));
+  const T = 9, FRAME = SR / 60, total = T * SR, data = new Float32Array(total), buf = new Float32Array(BLOCK);
+  let cuts = 0, was = false, first = 0, eCut = 0, nCut = 0, eFire = 0, nFire = 0;
+  for (let i = 0, next = 0; i < total; i += BLOCK) {
+    if (i >= next) {
+      next += FRAME;
+      stepCar(car, { up: 1, left: 1 }, flat, 1 / 60);
+      const cut = car.revCut > 0;
+      if (cut && !was) { cuts++; first ||= i / SR; }
+      was = cut;
+      core.set({ rpm: car.rpm, throttle: car.throttle, boost: car.boost || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: cut ? 1 : 0 });
+    }
+    core.process(buf);
+    data.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
+    if (first) for (const v of buf) { if (was) { eCut += v * v; nCut++; } else { eFire += v * v; nFire++; } }
+  }
+  if (!cuts) { console.log('  donut: never reaches the limiter'); return; }
+  wav(`${out}/${id}-limiter.wav`, data);
+  const db = (e, n) => (10 * Math.log10(e / Math.max(1, n) + 1e-12)).toFixed(1);
+  console.log(`  donut: limiter from ${first.toFixed(1)} s, ${(cuts / (T - first)).toFixed(1)} cuts/s, level firing ${db(eFire, nFire)} dB, during cuts ${db(eCut, nCut)} dB`);
 }

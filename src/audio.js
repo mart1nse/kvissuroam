@@ -6,7 +6,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 const ENGINE_LEVEL = 0.4;
 
 export function createAudio() {
-  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain, skidGain, skidFilt;
+  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt;
   let skid = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
   let muted = false, ev = false, turbo = false, background = false;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
@@ -39,8 +39,10 @@ export function createAudio() {
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
     windFilt = ctx.createBiquadFilter(); windFilt.type = 'bandpass'; windFilt.frequency.value = 600; windFilt.Q.value = 0.5;
+    // (a low-pass takes the sharp top off the noise: a rush of air, not a hiss)
+    windLp = ctx.createBiquadFilter(); windLp.type = 'lowpass'; windLp.frequency.value = 1800; windLp.Q.value = -3;
     windGain = ctx.createGain(); windGain.gain.value = 0;
-    noise.connect(windFilt).connect(windGain).connect(master);
+    noise.connect(windFilt).connect(windLp).connect(windGain).connect(master);
     // tyre scrub: the same noise through a narrow band, kept very quiet
     skidFilt = ctx.createBiquadFilter(); skidFilt.type = 'bandpass'; skidFilt.frequency.value = 1300; skidFilt.Q.value = 5;
     skidGain = ctx.createGain(); skidGain.gain.value = 0;
@@ -118,7 +120,7 @@ export function createAudio() {
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, on: dead ? 0 : 1, redline: e.redline, idle: e.idle } });
+        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0 } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev
@@ -130,10 +132,10 @@ export function createAudio() {
       }
     }
     // The same noise is gravel rumble on loose ground and wind on paving. The wind is kept
-    // noticeable as speed builds but not loud: halfway between the original level and the quietest one.
+    // noticeable as speed builds but not loud.
     const rumble = car.surface !== 1 && !flying;
     windFilt.frequency.setTargetAtTime(rumble ? 320 : 650 + Math.min(v, 50) * 9, t, 0.1);
-    const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.14, v * 0.003) * (flying ? 0.7 : 1);
+    const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.115, v * 0.0025) * (flying ? 0.7 : 1);
     windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
     // only on paving, and only audible once the slide is well under way
     const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);

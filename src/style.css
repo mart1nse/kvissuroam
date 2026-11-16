@@ -84,6 +84,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
 
 /* ---- HUD */
+/* high speed tunnel vision: a soft darkening at the edges, faded in from 150 km/h */
+#tunnel { position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0;
+  background: radial-gradient(ellipse 58% 62% at 50% 50%, transparent 50%, rgba(10, 4, 30, .2) 78%, rgba(10, 4, 30, .5) 100%); }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hud > * { position: absolute; }
 #topbar { top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); display: flex; gap: 8px; pointer-events: auto; }

@@ -3,10 +3,10 @@
 // signature and ŠKODA block lettering between them, black arch, sill and lower bumper cladding.
 // Fitted with black aero roof bars on the flush roof rails carrying two empty upright bike carriers.
 import * as THREE from 'three';
-import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, fromGeo, buildWheel, canvasTex, drawPlate, plate, assembleCar, arcPts, frontYaw, rearWiper } from './kit.js';
+import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, fromGeo, canvasTex, drawPlate, plate, assembleCar, arcPts, frontYaw, rearWiper } from './kit.js';
 
 // real car: 4649 x 1879 x 1616 mm, wheelbase 2765, track 1587 front / 1566 rear, overhangs 860 / 1024,
-// ground clearance 186 mm, 235/50 R20 front and 255/45 R20 rear on 8J x 20
+// ground clearance 186 mm, 235/45 R21 front and 255/40 R21 rear on 21-inch turbine wheels
 const DIMS = { length: 4.649, width: 1.879, height: 1.616, wheelbase: 2.765, track: 1.567, trackFront: 1.587, wheelRadius: 0.369, wheelRadiusFront: 0.3715 };
 const HZ = DIMS.wheelbase / 2, ZF = -HZ - 0.86, ZR = HZ + 1.024;
 const AY = 0.38, AR = 0.43;
@@ -108,6 +108,48 @@ function extrudeZ(pts, z0, z1, bevel = 0.002) {
   const g = new THREE.ExtrudeGeometry(shapeOf(pts), { depth: z1 - z0 - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 4 });
   g.translate(0, 0, z0 + bevel);
   return fromGeo(g);
+}
+
+// ------------------------------------------------------------------ wheel
+// 21-inch two-tone turbine wheel: five broad swept blades, each with a bright machined face and an
+// anthracite flank, over a dark barrel. Axis on X, outer face toward +X.
+function lathe(prof, pal, seg = 44) {
+  const g = new THREE.LatheGeometry(prof.map((p) => new THREE.Vector2(p[0], p[1])), seg);
+  g.rotateZ(-Math.PI / 2);
+  return fromGeo(g, null, pal);
+}
+function turbineWheel(R, width, rimR) {
+  const s = new Soup(), hw = width / 2, sh = R - rimR, rf = rimR - 0.012;
+  s.add(lathe([[rimR - 0.006, -hw * 0.8], [rimR + sh * 0.3, -hw * 0.98], [rimR + sh * 0.7, -hw], [R - 0.014, -hw * 0.94], [R - 0.003, -hw * 0.82], [R, -hw * 0.6], [R, hw * 0.6],
+    [R - 0.003, hw * 0.82], [R - 0.014, hw * 0.94], [rimR + sh * 0.7, hw], [rimR + sh * 0.3, hw * 0.98], [rimR - 0.006, hw * 0.8]], 'rubber'));
+  s.add(lathe([[rimR - 0.012, hw * 0.78], [rimR - 0.012, -hw * 0.7]], 'darkalloy', 36));
+  s.add(lathe([[rimR - 0.004, hw * 0.74], [rimR + 0.004, hw * 0.86], [rimR - 0.002, hw * 0.9], [rimR - 0.009, hw * 0.88], [rimR - 0.013, hw * 0.6]], 'alloy'));
+  s.add(fromGeo(new THREE.CircleGeometry(rimR - 0.008, 32), { p: [-hw * 0.5, 0, 0], r: [0, Math.PI / 2, 0] }, 'well'));
+  s.add(cyl(rimR * 0.7, rimR * 0.7, 0.024, 32, { p: [hw * 0.05, 0, 0], r: [0, 0, Math.PI / 2] }, 'disc'));
+  s.add(cyl(rf * 0.3, rf * 0.34, hw * 0.9, 20, { p: [hw * 0.25, 0, 0], r: [0, 0, -Math.PI / 2] }, 'darkalloy'));
+  const N = 5, r0 = rf * 0.16, r1 = rf * 0.995, twist = 0.44, steps = 10;
+  // blade edge at fraction e (-1 = leading edge .. 1 = trailing edge) of its width, as points from hub to rim
+  const edge = (i, e) => Array.from({ length: steps + 1 }, (_, k) => {
+    const t = k / steps, r = r0 + (r1 - r0) * t;
+    const a = Math.PI / 2 + i * Math.PI * 2 / N + twist * t ** 1.2 + e * (0.026 + 0.07 * t) / r;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  });
+  const face = (pts, depth, x, pal, bevel) => {
+    const g = new THREE.ExtrudeGeometry(shapeOf(pts), { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 4 });
+    g.rotateY(Math.PI / 2); g.translate(x, 0, 0);
+    return fromGeo(g, null, pal);
+  };
+  const xf = hw * 0.68;
+  for (let i = 0; i < N; i++) {
+    s.add(face([...edge(i, -1), ...edge(i, 0.25).reverse()], 0.016, xf + 0.006, 'alloy', 0.003));        // machined face
+    s.add(face([...edge(i, 0.25), ...edge(i, 1.1).reverse()], 0.016, xf - 0.004, 'darkalloy', 0.003));     // sunk anthracite flank
+    // slim gloss black fin filling part of the gap behind each blade
+    s.add(face([...edge(i, 1.1), ...edge(i, 1.85).reverse()].filter((p) => Math.hypot(p[0], p[1]) > rf * 0.45), 0.008, xf - 0.012, 'gloss', 0.002));
+  }
+  s.add(cyl(rf * 0.24, rf * 0.27, 0.03, 24, { p: [xf + 0.012, 0, 0], r: [0, 0, -Math.PI / 2] }, 'darkalloy'));
+  s.add(cyl(rf * 0.13, rf * 0.14, 0.008, 20, { p: [xf + 0.03, 0, 0], r: [0, 0, -Math.PI / 2] }, 'gloss'));
+  s.add(cyl(rf * 0.085, rf * 0.085, 0.004, 16, { p: [xf + 0.035, 0, 0], r: [0, 0, -Math.PI / 2] }, 'silver'));
+  return s;
 }
 
 // ------------------------------------------------------------------ textures
@@ -284,10 +326,13 @@ export function buildEnyaq() {
   const fr = { filter: (v) => v[2] > 1.7 }, ff = { filter: (v) => v[2] < -1.7 };
 
   // --- glazing: rising window line with the kinked rear quarter glass, chrome surround
-  const dlo = rpoly([[-0.86, 1.095], [0.2, 1.118], [1.15, 1.148], [1.5, 1.163, 0.04], [1.83, 1.355, 0.03], [1.86, 1.41, 0.02], [1.8, 1.432], [1.2, 1.478], [0.5, 1.5], [-0.02, 1.488]], 0.025, 3);
+  // the sill line rises gently all the way back and the top edge sweeps down to meet it: the quarter glass ends in a
+  // rounded point low over the back of the rear wheel, its rear edge leaning forward, leaving a broad body-colour
+  // pillar ahead of the tailgate
+  const dlo = rpoly([[-0.86, 1.095], [0.2, 1.118], [1.15, 1.152], [1.45, 1.178], [1.72, 1.224, 0.028], [1.53, 1.406, 0.11], [1.15, 1.45, 0.1], [0.5, 1.497], [-0.02, 1.488]], 0.025, 4);
   pal.add(dcS.side(grow(dlo, 0.013), { offset: 0.003 }).pal('chrome').sym());
   glass.add(dcS.side(dlo, { offset: 0.005 }).sym());
-  pal.add(dcS.side([rect(0.19, 1.1, 0.265, 1.51), rpoly([[1.13, 1.13], [1.19, 1.13], [1.2, 1.49], [1.14, 1.49]], 0.005)], { offset: 0.0065 }).pal('gloss').sym());
+  pal.add(dcS.side([rect(0.19, 1.1, 0.265, 1.51), rpoly([[1.13, 1.13], [1.19, 1.13], [1.2, 1.46], [1.14, 1.46]], 0.005)], { offset: 0.0065 }).pal('gloss').sym());
   const ws = rpoly([[-0.74, 1.115], [0.74, 1.115], [0.6, 1.528], [-0.6, 1.528]], 0.05);
   const dcW = decals(subSoup(shell, (x, y, z) => y > 1.0 && z < 0.2));
   pal.add(dcW.front(grow(ws, 0.016), { offset: 0.003 }).pal('gloss'));
@@ -403,7 +448,10 @@ export function buildEnyaq() {
   for (const zb of zBars) bike.add(box(0.06, 0.02, 0.1, { p: [0.3, yTray - 0.004, zb] }, 'gloss'));
   pal.add(bike.sym());
 
-  const wheelFront = { soup: buildWheel({ R: DIMS.wheelRadiusFront, width: 0.235, rimR: 0.254, style: 'aero' }) };
-  const wheel = { soup: buildWheel({ R: DIMS.wheelRadius, width: 0.255, rimR: 0.254, style: 'aero' }) };
+  // 21-inch wheels: 235/45 R21 front, 255/40 R21 rear. The visible rim runs out to the flange, about 15 mm
+  // beyond the 533 mm bead seat diameter.
+  const RIM21 = 0.282;
+  const wheelFront = { soup: turbineWheel(DIMS.wheelRadiusFront, 0.235, RIM21) };
+  const wheel = { soup: turbineWheel(DIMS.wheelRadius, 0.255, RIM21) };
   return assembleCar({ id: 'enyaq', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
 }

@@ -11,7 +11,7 @@ export const CARS = {
     blurb: 'W201 · 2.6 R6 · 118 kW · 4-speed automatic · rear-wheel drive',
     mass: 1305,                 // kerb 1230 kg (automatic) + driver
     wheelbase: 2.665,
-    track: 1.44,
+    track: 1.428,               // 1437 front / 1418 rear (185/65 R15 on 6J x 15)
     cgFront: 0.47,              // share of wheelbase behind the front axle -> 53 % front weight
     cgHeight: 0.52,
     wheelRadius: 0.303,
@@ -77,7 +77,7 @@ export const CARS = {
     blurb: 'MEB · two electric motors · 195 kW · single speed · all-wheel drive',
     mass: 2310,                 // kerb 2235 kg + driver
     wheelbase: 2.765,
-    track: 1.59,
+    track: 1.577,               // 1587 front / 1567 rear
     cgFront: 0.51,
     cgHeight: 0.56,
     wheelRadius: 0.37,

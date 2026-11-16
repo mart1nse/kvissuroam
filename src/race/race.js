@@ -165,7 +165,7 @@ function createEdges(track, world) {
     const topNear = (x, z, i) => {
       const [tx, tz] = tan[i];
       let y = -1e9;
-      for (const [a, b] of [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.45], [0, -0.45]]) y = Math.max(y, world.topAt(x + tx * a - tz * b, z + tz * a + tx * b, 0));
+      for (const [a, b] of [[0, 0], [0.8, 0], [-0.8, 0]]) y = Math.max(y, world.topAt(x + tx * a - tz * b, z + tz * a + tx * b, 0));
       return y + 0.09;
     };
     // heights along a line of points, then smoothed (a max over neighbours, then a mean) so the band
@@ -173,7 +173,7 @@ function createEdges(track, world) {
     const level = (pts) => {
       const raw = pts.map(([x, z, i]) => topNear(x, z, i)), n = raw.length;
       const mx = raw.map((_, j) => { let m = -1e9; for (let q = Math.max(0, j - 2); q <= Math.min(n - 1, j + 2); q++) m = Math.max(m, raw[q]); return m; });
-      return mx.map((_, j) => { let a = 0, w = 0; for (let q = Math.max(0, j - 2); q <= Math.min(n - 1, j + 2); q++) { a += mx[q]; w++; } return Math.max(raw[j], a / w); });
+      return mx.map((_, j) => { let a = 0, w = 0; for (let q = Math.max(0, j - 2); q <= Math.min(n - 1, j + 2); q++) { a += mx[q]; w++; } return Math.max(raw[j], Math.min(raw[j] + 0.2, a / w)); });
     };
     const strip = (k, inner, h, a0, a1) => {
       const base = pos.length / 3, c = colours[k];

@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
-const ENTRY_SIGN = 64;                       // lap index of the signs, right side against the wall (Martin's pink box)
-const STATUE = { at: [1500, 3019], minSdf: 2.0 };      // Martin's spot: the open paving left of Vallikraavi, before the pink house
+const ENTRY_SIGN = 90;                       // lap index of the signs, right side against the wall (Martin's pink box)
+const STATUE = { at: [1467, 3050], minSdf: 1.6 };      // Martin's spot: the open paving left of Vallikraavi, before the pink house
 const STEPS = { i0: 94, i1: 118, side: 1, off: 0.25, depth: 1.7, flight: [95, 104], rise: 0.17, top: 1.25 };
 const STONE = 0x8a7764, GRANITE = 0x9b8f8c, BRONZE = 0x4a3a2c, RAIL = 0x9aa0a8;
 

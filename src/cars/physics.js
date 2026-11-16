@@ -7,6 +7,9 @@
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
+const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
+const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
+const CATCH_T = 0.3;             // ...looking this far ahead (s)
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
@@ -61,7 +64,7 @@ export function createCar(spec, pose) {
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
     slipV: 0, slipVF: 0, slipVR: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
-    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0,
+    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0, shaft: 0, carry: 0, csHold: 0, csDir: 0,
     throttle: 0, brake: 0,
     ax: 0, ay: 0,
     surface: 1,
@@ -121,14 +124,31 @@ function engineForce(car, throttle, dt) {
   // spin the turbines, and it takes time to get there (turbo lag). It drops
   // almost at once when the throttle closes.
   const tb = e.turbo;
+  // Lifting dumps the boost pressure at once, but the turbine wheels keep
+  // spinning down for a second or two, so a quick lift and re-press builds
+  // boost again almost straight away; only a long lift brings the lag back.
   if (tb) {
-    const u = Math.max(0, Math.min(1, (rpm - tb.onRpm) / (tb.fullRpm - tb.onRpm)));
+    const rEff = Math.max(rpm, car.carry);
+    const u = Math.max(0, Math.min(1, (rEff - tb.onRpm) / (tb.fullRpm - tb.onRpm)));
     const want = throttle * u * u * (3 - 2 * u);
-    const k = want > car.boost ? tb.spool * (0.25 + 0.75 * Math.min(1, rpm / e.redline)) : tb.dump;
-    car.boost += (want - car.boost) * Math.min(1, dt * k);
+    const sk = want > car.shaft ? tb.spool * (0.25 + 0.75 * Math.min(1, rEff / e.redline)) : SHAFT_DECAY;
+    car.shaft += (want - car.shaft) * Math.min(1, dt * sk);
+    // pressure follows the turbine speed quickly, and dumps at once on a lift
+    const up = Math.min(want, car.shaft);
+    car.boost += (up - car.boost) * Math.min(1, dt * (up > car.boost ? 25 : tb.dump));
   }
   const gain = 1 + (e.converterGain - 1) * (1 - sr) ** 2;
-  car.rpm += (Math.min(rpm, e.redline) - car.rpm) * Math.min(1, dt * 12);
+  // Engine inertia: after a lift the engine spins down at the rate its
+  // flywheel and friction allow (revDrop rpm/s), not at once. Pressing again
+  // before it has dropped picks up from those revs, and the torque converter
+  // passes some of the stored flywheel energy on to the wheels as it pulls
+  // the engine back down.
+  const drop = e.revDrop ?? 3200;
+  if (throttle <= 0) car.carry = car.lifted ? Math.max(0, car.carry - drop * dt) : Math.min(car.rpm, e.redline);
+  else car.carry = Math.max(0, car.carry - drop * 1.2 * dt);
+  car.lifted = throttle <= 0;
+  const rpmTo = Math.min(Math.max(rpm, car.carry), e.redline);
+  car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * 12);
   if (throttle <= 0) {
     // engine braking through the converter
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
@@ -136,9 +156,11 @@ function engineForce(car, throttle, dt) {
   if (wheelRpm >= e.redline || (car.reversing && vAbs > 11)) return 0;
   // soft rev limiter, only reached with spinning wheels (shifts come earlier)
   const cut = (car.shiftTimer > 0 ? 0.25 : 1) * Math.min(1, (e.redline - wheelRpm) / 150);
-  const full = lerpTable(e.torque, rpm);
-  const base = tb ? lerpTable(tb.torqueOff, rpm) : full;
-  const tq = (base + (full - base) * (tb ? car.boost : 1)) * gain * throttle * cut;
+  const rq = Math.max(rpm, car.carry);
+  const full = lerpTable(e.torque, rq);
+  const base = tb ? lerpTable(tb.torqueOff, rq) : full;
+  const kick = 1 + 0.5 * Math.min(1, Math.max(0, (car.carry - rpm) / rpm));
+  const tq = (base + (full - base) * (tb ? car.boost : 1)) * gain * throttle * cut * kick;
   return (dir * tq * ratioOf(car.gear) * s.efficiency) / s.wheelRadius;
 }
 
@@ -283,8 +305,26 @@ function substep(car, input, world, dt) {
   // far enough to catch it. Holding the wheel into the turn is the driver
   // asking for the slide, so the wheels mostly stay where they are put.
   const follow = steerIn === 0 ? CASTER : steerIn * align < 0 ? HOLD_FOLLOW : 1;
-  const target = Math.max(-maxLock, Math.min(maxLock, steerIn * lock + align * follow));
-  const rate = (steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25;
+  // Catching a slide: held opposite lock points the wheels past the direction
+  // of travel, and once the tail swings back that extra lock keeps rotating
+  // the car, flinging it into a slide the other way (a tank-slapper). A driver
+  // unwinds the wheel as the tail comes back. Here the opposite lock eases off
+  // when the rear slip angle is on course to pass zero within CATCH_T, and
+  // stays eased for a moment afterwards while the same key is still held.
+  const sR = car.slipR || 0, dsR = (sR - (car.slipRPrev ?? sR)) / dt;
+  car.slipRPrev = sR;
+  let over = 0;
+  if (steerIn !== 0 && steerIn * align > 0 && Math.abs(sR) > 0.03) {
+    const pred = sR + dsR * CATCH_T;
+    if (pred * sR < 0) over = Math.min(1, -pred / sR);
+    car.csDir = Math.sign(steerIn);
+  }
+  if (steerIn === 0 || Math.sign(steerIn) !== car.csDir) car.csHold = 0;
+  else car.csHold = Math.max(over, car.csHold - dt * 1.5);
+  const ease = 1 - CATCH * car.csHold;
+  const target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow) * ease));
+  // (unwinding is quick: in a slide the wheel spins back through your hands)
+  const rate = ((steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * car.csHold);
   const ds = target - car.steer;
   car.steer += Math.sign(ds) * Math.min(Math.abs(ds), rate * dt);
   const sd = Math.sin(car.steer), cd = Math.cos(car.steer);
@@ -529,7 +569,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.csHold = 0; car.slipRPrev = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import TRACK from './track.json';
 import { createDecor } from './decor.js';
+import { createLandmarks } from './landmarks.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
@@ -146,6 +147,8 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
   scene.add(edges.group);
   const decor = createDecor(track, world);
   scene.add(decor.group, decor.fixed);
+  const landmarks = createLandmarks(world, track);
+  scene.add(landmarks.group);
   const laps = loadLocal();                    // this browser's laps, newest last
 
   const panel = document.createElement('div');
@@ -251,6 +254,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
       edges.update(x, z);
       edges.group.visible = show;
       decor.update(x, z, performance.now() / 1000);
+      landmarks.update(x, z);
       decor.group.visible = show;
       panel.classList.toggle('hidden', !show);
       if (show) {

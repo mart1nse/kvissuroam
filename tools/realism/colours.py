@@ -305,6 +305,24 @@ def main():
     write(B, est)
 
 
+# Landmarks whose colour is known better than street photos show it (checked on the Land Board's
+# oblique aerial photos): world x, z, radius (m), base height key (bq) -> 0xRRGGBB. Every part of
+# that building (it can be split between sectors) gets it.
+OVERRIDES = [
+    (1724, 3080, 60, 30, 0x55575d),      # Tartu Kaubamaja: dark grey cladding behind its white columns
+    (1532, 3135, 25, 911, 0x34373c),     # the black glass office block beside the race spawn (Vanemuise / Ülikooli)
+    (1532, 3135, 25, 889, 0x34373c),
+]
+
+
+def override_for(b):
+    x, z = G0 + b['sx'] * S + b['cx'], G0 + b['sz'] * S + b['cz']
+    for ox, oz, r, bq, rgb in OVERRIDES:
+        if (x - ox) ** 2 + (z - oz) ** 2 < r * r and b['bq'] == bq:
+            return rgb
+    return None
+
+
 def write(B, est):
     # borrow for the rest: one of the nearest sampled buildings of the same kind
     xy = np.array([[(b['x0'] + b['x1']) / 2, (b['z0'] + b['z1']) / 2] for b in B])
@@ -337,6 +355,10 @@ def write(B, est):
             d, j = np.atleast_1d(d), np.atleast_1d(j)
             ok = j[d < 400]
             if len(ok): c = lab[int(ids[ok[(int(xy[bi][0] * 7) ^ int(xy[bi][1] * 13)) % len(ok)]])]
+        ov = override_for(b)
+        if ov is not None:
+            out.setdefault(f"{b['sx']}_{b['sz']}", []).extend([b['bq'], int(round(b['cx'] * 10)), int(round(b['cz'] * 10)), ov | 0x1000000])
+            continue
         if c is None: continue
         r, g, bl = to_rgb(np.array([c]))[0]
         n_real += real; n_borrow += not real

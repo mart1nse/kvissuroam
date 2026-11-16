@@ -77,9 +77,12 @@ export function createAudio() {
       filt.frequency.setTargetAtTime(350 + car.rpm * 0.28 + car.throttle * 900, t, 0.05);
       engGain.gain.setTargetAtTime(dead ? 0 : 0.05 + car.throttle * 0.11, t, 0.06);
     }
-    const loose = car.surface !== 1 ? 1.8 : 1;
-    windFilt.frequency.setTargetAtTime(car.surface !== 1 ? 320 : 700 + v * 12, t, 0.1);
-    windGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.22, (car.surface !== 1 && !flying ? vw : v) * 0.0045 * (flying ? 0.5 : loose)), t, flying ? 0.03 : 0.1);
+    // The same noise is gravel rumble on loose ground and wind on paving. The wind is kept
+    // subtle: about a third of its old level, growing gently with speed and capped low.
+    const rumble = car.surface !== 1 && !flying;
+    windFilt.frequency.setTargetAtTime(rumble ? 320 : 600 + Math.min(v, 50) * 6, t, 0.1);
+    const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.06, v * 0.0015) * (flying ? 0.7 : 1);
+    windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
     // only on paving, and only audible once the slide is well under way
     const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);
     skid += (k - skid) * 0.2;

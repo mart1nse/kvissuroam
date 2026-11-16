@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { findCorners } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
+import { createValli, valliProps } from './valli.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -235,7 +236,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
-  out.push(...cornerProps());
+  out.push(...cornerProps(), ...valliProps());
   return out;
 }
 
@@ -453,6 +454,7 @@ export function createTrackside(world, scene) {
   }
 
   const corners = createCorners(world, group, merged);
+  const valli = createValli(world, group, merged);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -489,6 +491,7 @@ export function createTrackside(world, scene) {
   return {
     update(x, z) {
       corners.update(x, z);
+      valli.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();
@@ -498,6 +501,7 @@ export function createTrackside(world, scene) {
     // keep the car out of the wall and the tree trunks
     collide(car) {
       if (treeMesh) pushOutOfCircles(car, trees, 0.32);
+      valli.collide(car, pushOutOfCircles);
       if (!wallSegs || !wallSegs.length) return;
       const w0 = wallLine[0];
       if (Math.abs(car.x - w0[0]) > 160 || Math.abs(car.z - w0[1]) > 160) return;

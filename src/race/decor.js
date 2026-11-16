@@ -31,6 +31,28 @@ function chevronTex() {
   });
 }
 
+// the first board the player sees from the spawn: left chevrons with START · FINISH under them
+function startChevronTex() {
+  return canvasTex(512, 288, (g, w, h) => {
+    g.fillStyle = 'rgba(18,6,43,0.45)';
+    g.fillRect(0, 0, w, h);
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const [blur, col, lw] of [[28, 'rgba(255,43,214,0.9)', 30], [0, '#ffd6f4', 14]]) {
+      g.shadowColor = '#ff2bd6'; g.shadowBlur = blur;
+      g.strokeStyle = col; g.lineWidth = lw;
+      for (let k = 0; k < 3; k++) {
+        const x = w - 110 - k * 130;          // pointing left
+        g.beginPath(); g.moveTo(x, 36); g.lineTo(x - 70, 132); g.lineTo(x, 228 - 36); g.stroke();
+      }
+    }
+    g.font = 'italic 900 50px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = '#ff2bd6'; g.shadowBlur = 18;
+    g.fillStyle = '#2ff3ff';
+    g.fillText('START · FINISH', w / 2, 252);
+  });
+}
+
 function checkerTex(nx, ny) {
   return canvasTex(nx * 32, ny * 32, (g) => {
     for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
@@ -89,7 +111,13 @@ export function createDecor(track, world) {
   const boardGeo = new THREE.PlaneGeometry(4.2, 1.6);
 
   const items = [];
-  for (const c of findCorners(track)) {
+  // the first corner after the spawn gets the START · FINISH board
+  const corners = findCorners(track);
+  const sp = track.spawnI ?? 0;
+  const first = corners.reduce((b, c) => (((c.i - sp + N) % N) < ((b.i - sp + N) % N) ? c : b), corners[0]);
+  const matStart = glow(startChevronTex());
+  const startGeo = new THREE.PlaneGeometry(4.2, 2.36);
+  for (const c of corners) {
     // the board stands at the corner, over the outside kerb, facing the cars coming in
     const iin = (c.i - 14 + N) % N;
     const tin = tan[iin];
@@ -99,12 +127,12 @@ export function createDecor(track, world) {
     items.push({
       x: px + tin[0] * HW[c.i] * 0.6 + ox * off, z: pz + tin[1] * HW[c.i] * 0.6 + oz * off,
       yaw: Math.atan2(-tin[0], -tin[1]),     // plane normal (+z local) points back along the approach
-      mat: c.dir > 0 ? matR : matL, mesh: null, phase: c.i * 0.37,
+      mat: c === first && c.dir < 0 ? matStart : c.dir > 0 ? matR : matL, geo: c === first && c.dir < 0 ? startGeo : boardGeo, mesh: null, phase: c.i * 0.37,
     });
   }
 
   function buildBoard(it) {
-    const m = new THREE.Mesh(boardGeo, it.mat);
+    const m = new THREE.Mesh(it.geo, it.mat);
     it.y = world.topAt(it.x, it.z, 0) + 3.4;
     m.position.set(it.x, it.y, it.z);
     m.rotation.y = it.yaw;
@@ -161,7 +189,7 @@ export function createDecor(track, world) {
         it.mesh.position.y = it.y + Math.sin(time * 1.6 + it.phase) * 0.18;
       }
       const pulse = 0.75 + 0.25 * Math.sin(time * 3);
-      matR.opacity = matL.opacity = pulse;
+      matR.opacity = matL.opacity = matStart.opacity = pulse;
     },
   };
 }

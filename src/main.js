@@ -317,6 +317,7 @@ function goLastSpot() {
   if (!pick) return goHome();
   history.pop();
   place(pick);
+  race?.hopped(pick.x, pick.z);
   hud.toast('BACK ON DRY LAND');
 }
 
@@ -444,6 +445,7 @@ const idle = {};
 clock.connect?.(document);
 let settle = 0, dtSmooth = 1 / 60;
 document.addEventListener('visibilitychange', () => {
+  audio.setBackground?.(document.hidden);           // no engine noise from a tab or app in the background
   if (document.hidden) return;
   clock.reset?.();
   settle = 1.5; slowFrames = 0;

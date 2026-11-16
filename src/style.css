@@ -272,3 +272,9 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #lapsplit.behind i { color: #ff5a6e; text-shadow: 0 0 10px rgba(255, 90, 110, .7); }
 body.touch #lapsplit { top: 22%; }
 @keyframes splitin { from { opacity: 0; transform: translateX(-50%) scale(.9); } }
+
+#lapmsg i { font-style: normal; font-weight: 900; }
+#lapmsg i.ahead { color: #5dff9b; }
+#lapmsg i.behind { color: #ff5a6e; }
+#lap ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
+#people .me { margin-top: 2px; font-size: .9em; color: #fff; opacity: .75; letter-spacing: .12em; }

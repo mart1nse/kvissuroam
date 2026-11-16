@@ -1,4 +1,4 @@
-// Shared procedural car-building toolkit for KvissuRoam.
+// Shared procedural car-building toolkit for StreetLap.
 // Everything is generated in code: lofted body shells, surface-conforming decals
 // (glass, lamps, trim, shut lines), wheels, canvas textures.
 //

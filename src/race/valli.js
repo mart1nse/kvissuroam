@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
-const ENTRY_SIGN = 47;                       // lap index of the signs, right side
-const STATUE = { near: 33, side: -1, minSdf: 2.4, maxSdf: 3.6 };      // by the corner house, left of the entry
+const ENTRY_SIGN = 64;                       // lap index of the signs, right side against the wall (Martin's pink box)
+const STATUE = { at: [1500, 3019], minSdf: 2.0 };      // Martin's spot: the open paving left of Vallikraavi, before the pink house
 const STEPS = { i0: 94, i1: 118, side: 1, off: 0.25, depth: 1.7, flight: [95, 104], rise: 0.17, top: 1.25 };
 const STONE = 0x8a7764, GRANITE = 0x9b8f8c, BRONZE = 0x4a3a2c, RAIL = 0x9aa0a8;
 
@@ -23,7 +23,7 @@ function edgePoint(track, i, side, off) {
 export function valliProps() {
   const track = createTrack();
   const back = bearing(-track.tan[ENTRY_SIGN][0], -track.tan[ENTRY_SIGN][1]);
-  const a = edgePoint(track, ENTRY_SIGN, 1, 0.7), b = edgePoint(track, ENTRY_SIGN + 1, 1, 0.7);
+  const a = edgePoint(track, ENTRY_SIGN, 1, 0.35), b = edgePoint(track, ENTRY_SIGN + 1, 1, 0.35);
   return [[NO_ENTRY, a[0], a[1], back], [PROHIBIT, b[0], b[1], back]];
 }
 
@@ -35,12 +35,12 @@ export function createValli(world, group, merged) {
 
   function buildStatue() {
     // a spot about 3 m off the corner house, off the road, nearest the entry corner
-    const ref = edgePoint(track, STATUE.near, STATUE.side, 0);
+    const ref = STATUE.at;
     let best = null, bd = Infinity;
-    for (let dx = -16; dx <= 16; dx += 0.5) {
-      for (let dz = -16; dz <= 16; dz += 0.5) {
+    for (let dx = -8; dx <= 8; dx += 0.5) {
+      for (let dz = -8; dz <= 8; dz += 0.5) {
         const x = ref[0] + dx, z = ref[1] + dz, sd = world.sdfAt(x, z);
-        if (sd < STATUE.minSdf || sd > STATUE.maxSdf) continue;
+        if (sd < STATUE.minSdf) continue;
         const n = track.nearest(x, z);
         if (n.i >= 0 && n.d < track.HW[n.i] + 2.2) continue;
         const d = Math.hypot(dx, dz);
@@ -49,9 +49,10 @@ export function createValli(world, group, merged) {
     }
     if (!best) { statue = new THREE.Group(); return; }
     const [x, z] = best;
-    // face away from the house: down the gradient of the distance field
-    const e = 0.5, gx = world.sdfAt(x + e, z) - world.sdfAt(x - e, z), gz = world.sdfAt(x, z + e) - world.sdfAt(x, z - e);
-    const yaw = Math.atan2(gx, gz);
+    
+    // face the road
+    const nr = track.nearest(x, z), rp = track.P[Math.max(0, nr.i)];
+    const yaw = Math.atan2(rp[0] - x, rp[1] - z);
     const y = world.heightAt(x, z);
     const parts = [];
     const put = (g, lx, ly, lz, c) => {          // local: x across, z forward (away from the house)
@@ -144,7 +145,7 @@ export function createValli(world, group, merged) {
   }
 
   const near = (x, z, px, pz) => Math.hypot(px - x, pz - z) < 700;
-  const statueRef = edgePoint(track, STATUE.near, STATUE.side, 0);
+  const statueRef = STATUE.at;
   return {
     update(x, z) {
       if (!statue && near(x, z, ...statueRef) && world.ready(...statueRef)) buildStatue();

@@ -196,6 +196,49 @@ export const CARS = {
     limiter: 180,
     ref: { zeroTo100: 4.5, top: 180, powerKw: 280 },
   },
+  f40: {
+    id: 'f40',
+    name: 'Ferrari F40',
+    short: 'F40',
+    year: 1987,
+    blurb: 'F120A · 2.9 twin-turbo V8 · 352 kW (478 PS) · 5 speeds, driven as an automatic · rear-wheel drive',
+    mass: 1330,                 // about 1255 kg with fluids (1100 kg dry) + driver
+    wheelbase: 2.45,
+    track: 1.60,                // 1594 front / 1606 rear
+    cgFront: 0.58,              // mid-engined: 42 % front, 58 % rear
+    cgHeight: 0.42,
+    wheelRadius: 0.334,         // 335/35 ZR17 rear (245/40 ZR17 front)
+    cdA: 0.34 * 1.83,
+    drive: 'rwd',
+    grip: 1.12,                 // Pirelli P Zero, 245 front / 335 rear: far more rubber than the saloons
+    engine: {
+      type: 'ice',
+      idle: 1000,
+      redline: 7750,
+      shiftRpm: 7300,
+      pulses: 4,                // flat-plane V8: four firing pulses per revolution
+      // F120A on full boost (1.1 bar, two IHI turbos): 577 Nm @ 4000, 352 kW @ 7000
+      torque: [[1000, 300], [2000, 420], [3000, 530], [4000, 577], [5000, 568], [6000, 536], [7000, 480], [7750, 430], [8200, 300]],
+      // ...and off boost: a 2.9 litre V8 at 7.8:1 compression, before the turbos wake up
+      turbo: {
+        torqueOff: [[1000, 170], [2500, 215], [4000, 245], [5500, 250], [7000, 225], [7750, 200], [8200, 150]],
+        onRpm: 2400,            // boost starts building here...
+        fullRpm: 4300,          // ...and can reach 1.1 bar from here
+        spool: 1.6,             // spool-up rate (1/s) at the redline, slower at low revs: the famous lag
+        dump: 9,                // the wastegate / blow-off dumps boost almost at once when you lift
+      },
+      stallRpm: 3600,
+      converterGain: 1.7,
+    },
+    // the 5-speed transaxle's ratios; the final figure includes the drop gears
+    gears: [2.77, 1.71, 1.23, 0.96, 0.77],
+    reverse: 2.46,
+    finalDrive: 3.5,
+    efficiency: 0.86,
+    shiftTime: 0.3,
+    limiter: null,
+    ref: { zeroTo100: 4.1, top: 324, powerKw: 352 },
+  },
 };
 
-export const CAR_ORDER = ['w201', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x'];
+export const CAR_ORDER = ['w201', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'f40'];

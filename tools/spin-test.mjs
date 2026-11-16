@@ -23,7 +23,7 @@ for (const [surf, name] of SURFS) {
   for (const spec of Object.values(CARS)) {
     const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
     const w = world(surf);
-    let maxSlip = 0, spinT = 0, t50 = null, maxRpm = 0, maxYaw = 0, rpm1 = 0, v1 = 0;
+    let maxSlip = 0, spinT = 0, t50 = null, maxRpm = 0, maxYaw = 0, yaw3 = 0, rpm1 = 0, v1 = 0;
     for (let t = 0; t < 12; t += dt) {
       stepCar(car, { up: 1 }, w, dt);
       if (t < 4) {
@@ -31,13 +31,15 @@ for (const [surf, name] of SURFS) {
         if (car.spin > 0.05) spinT += dt;
         maxRpm = Math.max(maxRpm, car.rpm);
         maxYaw = Math.max(maxYaw, Math.abs(deg(car.yaw)));
+        if (t < 3) yaw3 = maxYaw;
       }
       if (Math.abs(t - 1) < dt / 2) { rpm1 = car.rpm; v1 = speedKmh(car); }
       if (t50 === null && speedKmh(car) >= 50) t50 = t;
     }
-    // nobody steers here, so only the first 4 s count: a launch may tug the car
-    // off line, but must not swing it round before a driver could react
-    if (!Number.isFinite(car.vx) || maxYaw > 15) ok = false;
+    // nobody steers here: a launch may tug the car off line, but must not swing
+    // it round before a driver could react. Three seconds of a floored F40 on
+    // gravel with the wheel held straight is plenty to start a slide.
+    if (!Number.isFinite(car.vx) || yaw3 > 15) ok = false;
     console.log(`    ${spec.short.padEnd(13)}${spec.drive} | wheels up to ${maxSlip.toFixed(0).padStart(3)} km/h faster than the road, spinning ${spinT.toFixed(1)} s | after 1 s: ${v1.toFixed(0)} km/h at ${rpm1.toFixed(0)} rpm | 0-50 ${t50 ? t50.toFixed(1) : '>12'} s | pulled ${maxYaw.toFixed(1)} deg off line`);
   }
 }

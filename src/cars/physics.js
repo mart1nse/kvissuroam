@@ -61,7 +61,7 @@ export function createCar(spec, pose) {
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
     slipV: 0, slipVF: 0, slipVR: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
-    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false,
+    gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0,
     throttle: 0, brake: 0,
     ax: 0, ay: 0,
     surface: 1,
@@ -117,6 +117,16 @@ function engineForce(car, throttle, dt) {
   const stall = e.idle + (e.stallRpm - e.idle) * throttle;
   const rpm = Math.max(wheelRpm, stall);
   const sr = Math.min(1, wheelRpm / rpm);
+  // Turbocharged engines: boost only builds once the exhaust flows enough to
+  // spin the turbines, and it takes time to get there (turbo lag). It drops
+  // almost at once when the throttle closes.
+  const tb = e.turbo;
+  if (tb) {
+    const u = Math.max(0, Math.min(1, (rpm - tb.onRpm) / (tb.fullRpm - tb.onRpm)));
+    const want = throttle * u * u * (3 - 2 * u);
+    const k = want > car.boost ? tb.spool * (0.25 + 0.75 * Math.min(1, rpm / e.redline)) : tb.dump;
+    car.boost += (want - car.boost) * Math.min(1, dt * k);
+  }
   const gain = 1 + (e.converterGain - 1) * (1 - sr) ** 2;
   car.rpm += (Math.min(rpm, e.redline) - car.rpm) * Math.min(1, dt * 12);
   if (throttle <= 0) {
@@ -126,7 +136,9 @@ function engineForce(car, throttle, dt) {
   if (wheelRpm >= e.redline || (car.reversing && vAbs > 11)) return 0;
   // soft rev limiter, only reached with spinning wheels (shifts come earlier)
   const cut = (car.shiftTimer > 0 ? 0.25 : 1) * Math.min(1, (e.redline - wheelRpm) / 150);
-  const tq = lerpTable(e.torque, rpm) * gain * throttle * cut;
+  const full = lerpTable(e.torque, rpm);
+  const base = tb ? lerpTable(tb.torqueOff, rpm) : full;
+  const tq = (base + (full - base) * (tb ? car.boost : 1)) * gain * throttle * cut;
   return (dir * tq * ratioOf(car.gear) * s.efficiency) / s.wheelRadius;
 }
 
@@ -297,7 +309,9 @@ function substep(car, input, world, dt) {
   const dir = car.reversing ? -1 : 1;
   const hb = +input.handbrake || 0;
   const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
-  const capF = sf.mu * fzF, capR = sr.mu * fzR;
+  // (wide performance tyres: spec.grip scales every surface)
+  const tyre = s.grip ?? 1;
+  const capF = sf.mu * tyre * fzF, capR = sr.mu * tyre * fzR;
   // traction left on each driven axle once cornering has taken its share
   const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
@@ -515,7 +529,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

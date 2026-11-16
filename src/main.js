@@ -77,6 +77,10 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let intro = null, introFocus = null;   // drone flyover behind the opening menu
 let flyIn = null;                // the one second flight from the drone to the chase camera
 let launch = null;               // 0-100 km/h stopwatch
+let tunnel = 0, tunnelShown = -1;  // high speed tunnel vision, 0..1
+const tunnelEl = document.createElement('div');
+tunnelEl.id = 'tunnel';
+document.body.appendChild(tunnelEl);
 
 async function boot() {
   const bar = $('#loadbar');
@@ -549,7 +553,11 @@ function frame(ts) {
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
     if (camPos.y < floor) camPos.y = floor;
     camLook.set(car.x + cx * 2, camY + 1.15 - down * 3, car.z + cz * 2);
-    const wantFov = (58 + Math.min(speed, 60) * 0.22) * (1 - 0.3 * pm);
+    // above 150 km/h the view stretches a touch more and the edges close in a little
+    const fast = Math.min(1, Math.max(0, (speed - 41.7) / 33));
+    const warp = fast * fast * (3 - 2 * fast);
+    const wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
+    tunnel += (warp - tunnel) * Math.min(1, dt * 2);
     if (flyIn) {
       flyIn.t = Math.min(1, flyIn.t + dt / FLY_IN);
       const k = smooth(flyIn.t), ky = smooth(Math.max(0, (flyIn.t - 0.12) / 0.88));   // stay up a moment, then drop in
@@ -573,6 +581,8 @@ function frame(ts) {
     camera.position.copy(camPos);
     camera.fov = isTouch ? 40 : 46;
   }
+  const tv = mode === 'drive' ? tunnel : 0;
+  if (Math.abs(tv - tunnelShown) > 0.004) { tunnelShown = tv; tunnelEl.style.opacity = tv.toFixed(3); }
   if (window.__cam) { camera.position.fromArray(window.__cam, 0); camLook.fromArray(window.__cam, 3); camera.fov = window.__cam[6] ?? 55; }   // test hook
   camera.updateProjectionMatrix();
   camera.lookAt(camLook);

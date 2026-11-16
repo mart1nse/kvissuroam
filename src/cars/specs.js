@@ -11,7 +11,7 @@ export const CARS = {
     blurb: 'W201 · 2.6 R6 · 118 kW · 4-speed automatic · rear-wheel drive',
     mass: 1305,                 // kerb 1230 kg (automatic) + driver
     wheelbase: 2.665,
-    track: 1.44,
+    track: 1.428,               // 1437 front / 1418 rear (185/65 R15 on 6J x 15)
     cgFront: 0.47,              // share of wheelbase behind the front axle -> 53 % front weight
     cgHeight: 0.52,
     wheelRadius: 0.303,

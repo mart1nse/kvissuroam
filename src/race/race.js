@@ -167,11 +167,51 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
-  function cancel(why) {
+  // after an off-track cancel: a button back to the start, which after a few seconds flies into
+  // the START button in the top bar so the player learns where to find it next time
+  const back = document.createElement('button');
+  back.id = 'lapback';
+  back.className = 'hidden';
+  back.dataset.act = 'home';
+  back.innerHTML = '⌂ RETURN TO LAP START';
+  document.querySelector('#hud').appendChild(back);
+  let backTimer = 0, backAnim = null;
+  function hideBack() {
+    clearTimeout(backTimer);
+    backAnim?.cancel(); backAnim = null;
+    back.classList.add('hidden');
+  }
+  function offerBack() {
+    hideBack();
+    back.classList.remove('hidden');
+    backTimer = setTimeout(() => {
+      const home = document.querySelector('#topbar [data-act="home"]');
+      const a = back.getBoundingClientRect(), b = home?.getBoundingClientRect();
+      if (!b || !b.width) { hideBack(); return; }
+      const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
+      const sc = Math.min(b.width / a.width, b.height / a.height);
+      const base = getComputedStyle(back).transform;
+      const from = base === 'none' ? '' : base;
+      backAnim = back.animate([
+        { transform: `${from} translate(0, 0) scale(1)`, opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px) ${from} scale(${sc})`, opacity: 0.15 },
+      ], { duration: 950, easing: 'cubic-bezier(.55,0,.35,1)', fill: 'forwards' });
+      backAnim.onfinish = () => {
+        hideBack();
+        home.classList.remove('beckon'); void home.offsetWidth;
+        home.classList.add('beckon');
+        setTimeout(() => home.classList.remove('beckon'), 3200);
+      };
+    }, 4500);
+  }
+  back.addEventListener('click', () => setTimeout(hideBack, 0));
+
+  function cancel(why, offer) {
     if (!st.running) return;
     st.running = false;
     elMsg.textContent = why;
-    toast(why, 2600);
+    toast(why, offer ? 4500 : 2600);
+    if (offer) offerBack();
   }
 
   function renderLast(carShort) {
@@ -234,14 +274,14 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                   onLap?.(lap);
                 } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
               } else toast('GO!', 1200);
-              st.running = true; st.t0 = tc; st.cps.clear(); st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.off = 0; elMsg.textContent = '';
             }
           }
           if (st.running) {
             for (const cp of track.checkpoints) if (!st.cps.has(cp.i) && Math.hypot(x - cp.x, z - cp.z) < track.HW[cp.i] + CP_RADIUS) st.cps.add(cp.i);
             if (!onTrack) {
               st.off += moved;
-              if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED');
+              if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED', true);
             }
           }
         }

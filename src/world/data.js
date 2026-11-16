@@ -143,6 +143,16 @@ export async function loadWorldData(onProgress = () => {}) {
   }
   const UNDER = 1.6;        // a car lower than this below a deck is on the ground under it
 
+  const bumps = [];
+  function bumpAt(x, z) {
+    let h = 0;
+    for (let k = 0; k < bumps.length; k++) {
+      const b = bumps[k];
+      if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) h += b.at(x, z);
+    }
+    return h;
+  }
+
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 
   const world = {
@@ -211,8 +221,13 @@ export async function loadWorldData(onProgress = () => {}) {
       fx -= c; fz -= r;
       const H = s.H, i = r * hn + c;
       const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
-      return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      const h = ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      return bumps.length === 0 ? h : h + bumpAt(x, z);
     },
+
+    // Small raised shapes on top of the height field (kerbs finer than its 2 m grid): each is
+    // { x0, z0, x1, z1, at(x, z) -> metres }.
+    addBump(b) { bumps.push(b); },
 
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {

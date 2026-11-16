@@ -5,16 +5,24 @@
 //     10 cm mountable kerb with rounded edges.
 //  3. The end of Lai at the Emajõgi: the clutter of signs and posts thinned to a few, and a low
 //     plastered wall along the inside of the left turn (the botanical garden wall).
-// Everything left standing can be knocked over (src/world/props.js).
+//  4. Jakobi -> Lai again (Martin, 16 Nov): the kept sign is a 40 sign standing on the kerb, the kerb
+//     has sharper edges, and a bush (drive-through) grows on the inside by the house.
+//  5. Pepleri -> Vanemuise (left): a raised cobble kerb, low black bollards and the parking bays
+//     on the inside of the corner (street view, 12 Pepleri).
+//  6. Vanemuise before Ülikooli: the right-hand kerb and pavement, bollards where it curves out, and
+//     a parking sign (street view, 6 Vanemuise).
+//  7. The start/finish straight on Küüni: lamp posts and a row of trees on the right.
+// Everything left standing can be knocked over (src/world/props.js); the new trees are solid.
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { findCorners } from './decor.js';
 
-const SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7;
+const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11;
 
 // special corners; every other corner of the lap gets the default treatment (inside cleared, one sign left)
 const SPECIAL = {
   628: { side: 1, out: 12, keep: (k) => k === CROSSING, keepN: 1 },                      // von Baeri -> Jakobi
+  687: { keepN: 0 },                                                                       // Jakobi -> Lai: our own 40 sign instead
   920: { i0: 870, i1: 965, side: 0, out: 16, keep: (k) => k >= SIGN0, keepN: 4, spacing: 15 },   // Lai at the Emajõgi
 };
 function zones(track) {
@@ -25,7 +33,18 @@ function zones(track) {
   }
   return out;
 }
-const KERB = { i0: 672, i1: 702, side: -1, width: 5, height: 0.1 };
+// mountable kerbs: from the road edge (+off) inwards `width` metres, `height` high, with edges `edge`
+// (towards the road) and `back` (the far side) wide; sharp edges make the car hop
+const KERBS = [
+  { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.12, edge: 0.07, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
+  { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.14, edge: 0.05, back: 0.35, colour: 0x8f8a99 },   // Pepleri corner
+  { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.13, edge: 0.04, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
+];
+const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
+const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };    // bollards: i0, i1, off; pad: i0, i1, off0, off1
+const VANEMUISE = { bollards: [2276, 2299, 0.45], sign: [2262, 1.1] };
+const PLAYGROUND = [[1602, 3019, 5.2], [1616, 3031, 4.2]];     // landmarks.js, the Barclay park play area
+const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11 };
 const WALL = { i0: 878, i1: 934, side: -1, gap: 2.2, height: 1.0, thick: 0.45 };
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -113,63 +132,129 @@ function polyDist(pts, x, z) {
   return { d: best, lat, along, total };
 }
 
+// a point `off` metres beyond the road edge on one side of track point i (side +1 right, -1 left)
+function edgePoint(track, i, side, off) {
+  const k = ((i % track.N) + track.N) % track.N;
+  const [tx, tz] = track.tan[k], o = track.HW[k] + off;
+  return [track.P[k][0] - tz * side * o, track.P[k][1] + tx * side * o];
+}
+const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
+
+// points every `step` metres along a polyline
+function walk(pts, step, from = step / 2) {
+  const out = [];
+  let need = from;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    while (need <= l) { const t = need / l; out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); need += step; }
+    need -= l;
+  }
+  return out;
+}
+
+// sideLine for index ranges that may run past the end of the lap
+function sideLineWrap(track, i0, i1, side, extra) {
+  const pts = [];
+  let prev = null;
+  for (let j = i0; j <= i1; j++) {
+    const i = j % track.N;
+    const [tx, tz] = track.tan[i];
+    const p = edgePoint(track, i, side, extra);
+    if (prev && (p[0] - prev[0]) * tx + (p[1] - prev[1]) * tz < 0.3) continue;
+    pts.push(p); prev = p;
+  }
+  return pts;
+}
+
+// hand-placed street furniture for the props layer: [kind, x, z, bearing]
+export function extraProps() {
+  const track = createTrack();
+  const out = [];
+  const back = (i) => bearing(-track.tan[i % track.N][0], -track.tan[i % track.N][1]);      // facing oncoming cars
+  // 4. the 40 sign on the Jakobi -> Lai kerb
+  const s40 = edgePoint(track, JAKOBI_APEX - 4, -1, SIGN40_OFF);
+  out.push([SPEED40, s40[0], s40[1], back(JAKOBI_APEX - 12)]);
+  // 5. Pepleri corner bollards
+  const [b0, b1, bo] = PEPLERI.bollards;
+  for (const [x, z] of walk(sideLine(track, b0, b1, -1, bo), 1.8)) out.push([BOLLARD, x, z, 0]);
+  // 6. Vanemuise: bollards where the kerb curves out, and the parking sign
+  const [v0, v1, vo] = VANEMUISE.bollards;
+  for (const [x, z] of walk(sideLine(track, v0, v1, 1, vo), 1.8)) out.push([BOLLARD, x, z, 0]);
+  const [si, so] = VANEMUISE.sign;
+  const ps = edgePoint(track, si, 1, so);
+  out.push([PARKING, ps[0], ps[1], back(si)]);
+  // 7. lamp posts along the right of the start/finish straight, lamps over the road
+  const st = STRAIGHT;
+  const lampLine = sideLineWrap(track, st.i0, st.i1, st.side, st.lampOff);
+  const s0 = track.P[0];
+  for (const [x, z] of walk(lampLine, st.lampEvery, 6)) {
+    if (Math.hypot(x - s0[0], z - s0[1]) < 6) continue;          // keep clear of the gantry posts
+    const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
+    out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
+  }
+  return out;
+}
+
 export function createTrackside(world, scene) {
   const track = createTrack();
   const group = new THREE.Group();
   scene.add(group);
+  const lambert = (colour, extra = {}) => new THREE.MeshLambertMaterial({ color: colour, ...extra });
 
-  // ---- 2. the mountable kerb: physics through world.addBump, drawn as a low rounded slab
-  const kerb = sideLine(track, KERB.i0, KERB.i1, KERB.side, 0);
-  // the road is on the right of the line for a left-side kerb (lat < 0 inward means away from the road)
-  const inward = KERB.side < 0 ? -1 : 1;
-  const kb = kerb.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
-  const kerbProfile = (d, along, total) => KERB.height * smooth(d / 0.3) * smooth((KERB.width - d) / 0.5) * smooth(along / 1.5) * smooth((total - along) / 1.5);
-  world.addBump({
-    x0: kb[0] - KERB.width - 1, z0: kb[1] - KERB.width - 1, x1: kb[2] + KERB.width + 1, z1: kb[3] + KERB.width + 1,
-    at(x, z) {
-      const q = polyDist(kerb, x, z);
-      const d = q.lat * inward;
-      if (d <= 0 || d >= KERB.width || q.d > KERB.width + 0.1) return 0;
-      return kerbProfile(d, q.along, q.total);
-    },
+  // ---- mountable kerbs: physics through world.addBump, drawn as raised slabs
+  const kerbs = KERBS.map((K) => {
+    const line = sideLine(track, K.i0, K.i1, K.side, K.off);
+    const inward = K.side < 0 ? -1 : 1;
+    const bb = line.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
+    const profile = (d, along, total) => K.height * smooth(d / K.edge) * smooth((K.width - d) / K.back) * smooth(along / 1.2) * smooth((total - along) / 1.2);
+    world.addBump({
+      x0: bb[0] - K.width - 1, z0: bb[1] - K.width - 1, x1: bb[2] + K.width + 1, z1: bb[3] + K.width + 1,
+      at(x, z) {
+        const q = polyDist(line, x, z);
+        const d = q.lat * inward;
+        if (d <= 0 || d >= K.width || q.d > K.width + 0.1) return 0;
+        return profile(d, q.along, q.total);
+      },
+    });
+    return { K, line, inward, profile, mesh: null };
   });
 
-  // ---- 3. the low wall, as segments (for collisions) and boxes (to draw)
-  const wallLine = sideLine(track, WALL.i0, WALL.i1, WALL.side, WALL.gap);
-  const segs = [];
-  for (let i = 0; i < wallLine.length - 1; i++) segs.push([wallLine[i], wallLine[i + 1]]);
-  let wallSegs = null;           // the ones clear of buildings, once the ground is loaded
-
-  let kerbMesh = null, wallMesh = null;
-  function buildKerb() {
-    // cross-section across the kerb, from the road edge inwards, heights from the profile
-    const D = [0, 0.1, 0.2, 0.3, 0.6, KERB.width - 0.5, KERB.width - 0.25, KERB.width];
+  function buildKerb(k) {
+    const { K, line, inward, profile } = k;
+    // cross-section across the kerb, from the road edge inwards
+    const D = [0, K.edge * 0.5, K.edge, K.edge + 0.12, K.width / 2, K.width - K.back, K.width - K.back / 2, K.width].sort((a, b) => a - b);
     const pos = [], idx = [];
     let total = 0;
     const along = [0];
-    for (let i = 1; i < kerb.length; i++) { total += Math.hypot(kerb[i][0] - kerb[i - 1][0], kerb[i][1] - kerb[i - 1][1]); along.push(total); }
-    for (let i = 0; i < kerb.length; i++) {
-      const a = kerb[Math.max(0, i - 1)], b = kerb[Math.min(kerb.length - 1, i + 1)];
+    for (let i = 1; i < line.length; i++) { total += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); along.push(total); }
+    for (let i = 0; i < line.length; i++) {
+      const a = line[Math.max(0, i - 1)], b = line[Math.min(line.length - 1, i + 1)];
       const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
       const nx = (dz / l) * inward, nz = (-dx / l) * inward;     // away from the road
       for (const d of D) {
-        const x = kerb[i][0] + nx * d, z = kerb[i][1] + nz * d;
-        const base = world.heightAt(x, z) - kerbProfile(d, along[i], total);
-        pos.push(x, base + kerbProfile(d, along[i], total) + 0.02, z);
+        const x = line[i][0] + nx * d, z = line[i][1] + nz * d;
+        pos.push(x, world.heightAt(x, z) + 0.02, z);
       }
       if (i) {
         const n = D.length, r0 = (i - 1) * n, r1 = i * n;
-        for (let k = 0; k < n - 1; k++) idx.push(r0 + k, r1 + k, r0 + k + 1, r0 + k + 1, r1 + k, r1 + k + 1);
+        for (let q = 0; q < n - 1; q++) idx.push(r0 + q, r1 + q, r0 + q + 1, r0 + q + 1, r1 + q, r1 + q + 1);
       }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
-    kerbMesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xbdb6c8, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-    kerbMesh.receiveShadow = true;
-    group.add(kerbMesh);
+    k.mesh = new THREE.Mesh(g, lambert(K.colour, { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    k.mesh.receiveShadow = true;
+    group.add(k.mesh);
   }
+
+  // ---- 3. the low wall, as segments (for collisions) and boxes (to draw)
+  const wallLine = sideLine(track, WALL.i0, WALL.i1, WALL.side, WALL.gap);
+  const segs = [];
+  for (let i = 0; i < wallLine.length - 1; i++) segs.push([wallLine[i], wallLine[i + 1]]);
+  let wallSegs = null;           // the ones clear of buildings, once the ground is loaded
+  let wallMesh = null;
 
   function buildWall() {
     wallSegs = segs.filter(([a, b]) => world.sdfAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) > 0.8);
@@ -180,45 +265,178 @@ export function createTrackside(world, scene) {
       const box = new THREE.BoxGeometry(l + WALL.thick * 0.6, WALL.height + 0.3, WALL.thick);
       box.rotateY(-Math.atan2(dz, dx));
       box.translate((a[0] + b[0]) / 2, y + (WALL.height + 0.3) / 2 - 0.3, (a[1] + b[1]) / 2);
-      geos.push(box.toNonIndexed());
+      geos.push([box, 0xe9b9a6]);
       const cap = new THREE.BoxGeometry(l + WALL.thick * 0.6 + 0.1, 0.1, WALL.thick + 0.12);
       cap.rotateY(-Math.atan2(dz, dx));
       cap.translate((a[0] + b[0]) / 2, y + WALL.height + 0.05, (a[1] + b[1]) / 2);
-      geos.push(cap.toNonIndexed());
+      geos.push([cap, 0xc79888]);
     }
-    if (!geos.length) return;
-    // merge by hand (no BufferGeometryUtils import needed for two attributes)
+    wallMesh = merged(geos);
+    if (wallMesh) { wallMesh.castShadow = wallMesh.receiveShadow = true; group.add(wallMesh); }
+  }
+
+  // merge [geometry, colour] pairs into one vertex-coloured mesh
+  function merged(list, mat) {
+    if (!list.length) return null;
+    const flat = list.map(([g, c]) => [g.index ? g.toNonIndexed() : g, new THREE.Color(c)]);
     let n = 0;
-    for (const g of geos) n += g.attributes.position.count;
+    for (const [g] of flat) n += g.attributes.position.count;
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
     let o = 0;
-    const plaster = new THREE.Color(0xe9b9a6), capC = new THREE.Color(0xc79888);
-    geos.forEach((g, k) => {
+    for (const [g, c] of flat) {
       pos.set(g.attributes.position.array, o * 3);
       nor.set(g.attributes.normal.array, o * 3);
-      const c = k % 2 ? capC : plaster;
       for (let v = 0; v < g.attributes.position.count; v++) col.set([c.r, c.g, c.b], (o + v) * 3);
       o += g.attributes.position.count;
       g.dispose();
-    });
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    wallMesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
-    wallMesh.castShadow = wallMesh.receiveShadow = true;
-    group.add(wallMesh);
+    return new THREE.Mesh(g, mat || new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  }
+
+  // ---- 4. the bush on the inside of Jakobi -> Lai (no collision: the car pushes through it)
+  const bushAt = edgePoint(track, JAKOBI_APEX, -1, BUSH_OFF);
+  let bush = null;
+  function buildBush() {
+    const [bx, bz] = bushAt, y = world.heightAt(bx, bz);
+    const greens = [0x3f7a2e, 0x4f8f35, 0x37692a, 0x5c9a3c, 0x456f2c];
+    const parts = [];
+    let seed = 7;
+    const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let k = 0; k < 9; k++) {
+      const a = r() * Math.PI * 2, d = r() * 1.1, s = 0.55 + r() * 0.5;
+      const g = new THREE.IcosahedronGeometry(s, 0);
+      g.scale(1, 0.8 + r() * 0.3, 1);
+      g.translate(bx + Math.cos(a) * d, y + 0.35 + s * 0.7 + r() * 0.35, bz + Math.sin(a) * d);
+      parts.push([g, greens[k % greens.length]]);
+    }
+    for (let k = 0; k < 3; k++) {          // a few woody stems at the bottom
+      const g = new THREE.CylinderGeometry(0.03, 0.05, 0.6, 5);
+      g.translate(bx + (r() - 0.5) * 0.8, y + 0.3, bz + (r() - 0.5) * 0.8);
+      parts.push([g, 0x5a4330]);
+    }
+    bush = merged(parts);
+    bush.castShadow = true;
+    group.add(bush);
+  }
+
+  // ---- 5. parking bays on the inside of the Pepleri corner
+  let pad = null;
+  function buildPad() {
+    const [i0, i1, o0, o1] = PEPLERI.pad;
+    const near = sideLine(track, i0, i1, -1, o0), far = sideLine(track, i0, i1, -1, o1);
+    const n = Math.min(near.length, far.length);
+    const pos = [], idx = [];
+    for (let i = 0; i < n; i++) {
+      for (const p of [near[i], far[i]]) pos.push(p[0], world.heightAt(p[0], p[1]) + 0.03, p[1]);
+      if (i) { const a = (i - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const asphalt = new THREE.Mesh(g, lambert(0x4a4654, { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+    asphalt.receiveShadow = true;
+    // white bay lines across the pad every 2.6 m, and one along the far end
+    const lines = [];
+    const marks = walk(near, 2.6, 0.3);
+    for (const [x, z] of marks) {
+      const L = lateral(track, i0, i1, x, z), [tx, tz] = track.tan[L.i];
+      const nx = tz, nz = -tx;                // left of travel
+      const a = [x, z], b = [x + nx * (o1 - o0) * 0.9, z + nz * (o1 - o0) * 0.9];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const line = new THREE.BoxGeometry(0.12, 0.02, len);
+      line.rotateY(Math.atan2(b[0] - a[0], b[1] - a[1]));
+      line.translate((a[0] + b[0]) / 2, Math.max(world.heightAt(...a), world.heightAt(...b)) + 0.05, (a[1] + b[1]) / 2);
+      lines.push([line, 0xf2eff7]);
+    }
+    pad = new THREE.Group();
+    pad.add(asphalt);
+    const lm = merged(lines, new THREE.MeshBasicMaterial({ vertexColors: true }));
+    if (lm) pad.add(lm);
+    group.add(pad);
+  }
+
+  // ---- 7. trees on the right of the start/finish straight (solid trunks)
+  const trees = [];
+  {
+    const st = STRAIGHT, s0 = track.P[0];
+    const line = sideLineWrap(track, st.i0, st.i1, st.side, st.treeOff);
+    let seed = 3;
+    const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (const [x, z] of walk(line, st.treeEvery, 3)) {
+      if (Math.hypot(x - s0[0], z - s0[1]) < 7) continue;
+      if (PLAYGROUND.some(([px, pz, pr]) => Math.hypot(x - px, z - pz) < pr + 1.5)) continue;
+      trees.push({ x, z, h: 5.5 + r() * 2, s: 2.1 + r() * 0.8, tint: r() });
+    }
+  }
+  let treeMesh = null;
+  function buildTrees() {
+    const keep = trees.filter((t) => world.sdfAt(t.x, t.z) > 1.2);
+    trees.length = 0;
+    trees.push(...keep);
+    const parts = [];
+    for (const t of trees) {
+      const y = world.heightAt(t.x, t.z);
+      const trunk = new THREE.CylinderGeometry(0.13, 0.2, t.h * 0.55, 6);
+      trunk.translate(t.x, y + t.h * 0.275, t.z);
+      parts.push([trunk, 0x6b4a33]);
+      const crown = new THREE.IcosahedronGeometry(t.s, 0);
+      crown.scale(1, 1.15, 1);
+      crown.translate(t.x, y + t.h * 0.55 + t.s * 0.75, t.z);
+      parts.push([crown, t.tint < 0.5 ? 0x4c8a37 : 0x5f9a3e]);
+    }
+    treeMesh = merged(parts);
+    if (treeMesh) { treeMesh.castShadow = true; group.add(treeMesh); }
   }
 
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
+  const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
+
+  // push the car's corners and sides out of circles (tree trunks)
+  function pushOutOfCircles(car, circles, rad) {
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    for (const c of circles) {
+      const dx = c.x - car.x, dz = c.z - car.z;
+      if (dx * dx + dz * dz > 30) continue;
+      // circle centre in the car's frame, clamped to the body box: nearest point of the car
+      const lf = dx * fx + dz * fz, lr = dx * rx + dz * rz;
+      const cf = Math.max(-car.halfLen, Math.min(car.halfLen, lf)), cr = Math.max(-car.halfWid, Math.min(car.halfWid, lr));
+      const ox = (lf - cf), or = (lr - cr), d = Math.hypot(ox, or);
+      if (d >= rad) continue;
+      let nf, nr, pen;
+      if (d > 1e-6) { nf = -ox / d; nr = -or / d; pen = rad - d; }
+      else {                      // centre inside the box: out the nearest face
+        const pf = car.halfLen - Math.abs(lf), pr = car.halfWid - Math.abs(lr);
+        if (pf < pr) { nf = -Math.sign(lf); nr = 0; pen = pf + rad; } else { nf = 0; nr = -Math.sign(lr); pen = pr + rad; }
+      }
+      const nx = nf * fx + nr * rx, nz = nf * fz + nr * rz;          // world direction to push the car
+      car.x += nx * pen; car.z += nz * pen;
+      const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
+      const vn = wvx * nx + wvz * nz;
+      if (vn < 0) {
+        const nvx = wvx - 1.3 * vn * nx, nvz = wvz - 1.3 * vn * nz;
+        car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
+        car.yawRate *= 0.5;
+        car.hit = Math.max(car.hit, -vn);
+      }
+    }
+  }
 
   return {
     update(x, z) {
-      if (!kerbMesh && Math.hypot(kerb[0][0] - x, kerb[0][1] - z) < 800 && readyAll(kerb)) buildKerb();
-      if (!wallMesh && wallSegs === null && Math.hypot(wallLine[0][0] - x, wallLine[0][1] - z) < 800 && readyAll(wallLine)) buildWall();
+      for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
+      if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
+      if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();
+      if (!pad && near(edgePoint(track, PEPLERI.pad[0], -1, 4), x, z) && readyAll(sideLine(track, PEPLERI.pad[0], PEPLERI.pad[1], -1, PEPLERI.pad[3]))) buildPad();
+      if (!treeMesh && trees.length && near([trees[0].x, trees[0].z], x, z) && trees.every((t) => world.ready(t.x, t.z))) buildTrees();
     },
-    // keep the car out of the wall
+    // keep the car out of the wall and the tree trunks
     collide(car) {
+      if (treeMesh) pushOutOfCircles(car, trees, 0.32);
       if (!wallSegs || !wallSegs.length) return;
       const w0 = wallLine[0];
       if (Math.abs(car.x - w0[0]) > 160 || Math.abs(car.z - w0[1]) > 160) return;

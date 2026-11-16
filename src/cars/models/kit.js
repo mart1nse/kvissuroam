@@ -722,7 +722,7 @@ export function plate(p, uvr, { front = false, tilt = 0, w = 0.52, h = 0.113 } =
 // ---------------------------------------------------------------- assembly
 // parts: soups keyed by material: paint, glass, pal, tail, chmsl, reverse, head, atlas
 // tex: { tailMap, tailGlow, headMap, headGlow, atlas }
-export function assembleCar({ id, dims, parts, tex = {}, wheel }) {
+export function assembleCar({ id, dims, parts, tex = {}, wheel, wheelFront = null }) {
   const sh = sharedMaterials();
   const group = new THREE.Group(); group.name = id;
   const mats = {
@@ -742,17 +742,22 @@ export function assembleCar({ id, dims, parts, tex = {}, wheel }) {
     mesh.name = `${id}_${k}`; mesh.castShadow = true; mesh.receiveShadow = k === 'paint';
     group.add(mesh); triangles += s.tris;
   }
+  // Optional per-axle wheels: wheelFront (soup) at dims.wheelRadiusFront / dims.trackFront; `wheel` and
+  // dims.wheelRadius / dims.track are the rear (and the default for both axles).
   const wgeo = wheel.soup.toGeometry();
+  const wgeoF = wheelFront ? wheelFront.soup.toGeometry() : wgeo;
   const wheels = {};
-  const hz = dims.wheelbase / 2, hx = dims.track / 2;
-  for (const [name, x, z] of [['fl', -hx, -hz], ['fr', hx, -hz], ['rl', -hx, hz], ['rr', hx, hz]]) {
-    const steer = new THREE.Object3D(); steer.name = `${id}_steer_${name}`; steer.position.set(x, dims.wheelRadius, z);
+  const hz = dims.wheelbase / 2, hx = dims.track / 2, hxF = (dims.trackFront || dims.track) / 2;
+  const rF = dims.wheelRadiusFront || dims.wheelRadius;
+  for (const [name, x, z] of [['fl', -hxF, -hz], ['fr', hxF, -hz], ['rl', -hx, hz], ['rr', hx, hz]]) {
+    const front = z < 0, wg = front ? wgeoF : wgeo;
+    const steer = new THREE.Object3D(); steer.name = `${id}_steer_${name}`; steer.position.set(x, front ? rF : dims.wheelRadius, z);
     const spin = new THREE.Object3D(); spin.name = `${id}_spin_${name}`;
-    const mesh = new THREE.Mesh(wgeo, sh.pal); mesh.name = `${id}_wheel_${name}`; mesh.castShadow = true;
+    const mesh = new THREE.Mesh(wg, sh.pal); mesh.name = `${id}_wheel_${name}`; mesh.castShadow = true;
     if (x < 0) mesh.rotation.y = Math.PI;
     spin.add(mesh); steer.add(spin); group.add(steer);
     wheels[name] = { steer, spin };
-    triangles += wheel.soup.tris;
+    triangles += (front && wheelFront ? wheelFront : wheel).soup.tris;
   }
   const state = { brake: false, reverse: false, headlights: false };
   const setLights = (o = {}) => {

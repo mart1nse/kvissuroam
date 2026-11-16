@@ -217,6 +217,7 @@ export const CARS = {
       redline: 7750,
       shiftRpm: 7300,
       pulses: 4,                // flat-plane V8: four firing pulses per revolution
+      revDrop: 5500,            // light flywheel: revs fall fast when you lift
       // F120A on full boost (1.1 bar, two IHI turbos): 577 Nm @ 4000, 352 kW @ 7000
       torque: [[1000, 300], [2000, 420], [3000, 530], [4000, 577], [5000, 568], [6000, 536], [7000, 480], [7750, 430], [8200, 300]],
       // ...and off boost: a 2.9 litre V8 at 7.8:1 compression, before the turbos wake up

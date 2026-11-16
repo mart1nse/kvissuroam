@@ -22,7 +22,7 @@ import { createRace, createTrack } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
-import { createTrackside, clearProps } from './race/trackside.js';
+import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -97,7 +97,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: extraProps });
   const attachSigns = createSigns(world);
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -359,7 +359,15 @@ async function dropAt(x, z) {
   dropping = true;
   try {
     await world.loadAround(x, z, 260);
-    let pose = onRoad(22);
+    // on or next to the race track: on its centre line, facing the way the lap goes
+    const tn = race.track.nearest(x, z);
+    let pose = null;
+    if (tn.i >= 0 && tn.d < race.track.HW[tn.i] + 15) {
+      const T = race.track, i = tn.i, t = T.tan[i];
+      const tx = T.P[i][0] + (T.P[(i + 1) % T.N][0] - T.P[i][0]) * tn.t, tz = T.P[i][1] + (T.P[(i + 1) % T.N][1] - T.P[i][1]) * tn.t;
+      if (freeGround(tx, tz)) pose = { x: tx, z: tz, yaw: Math.atan2(t[0], -t[1]), name: bigmap.nearestRoad(tx, tz, 20)?.name };
+    }
+    if (!pose) pose = onRoad(22);
     if (!pose && freeGround(x, z)) pose = { x, z, yaw: car.yaw };
     if (!pose) pose = onRoad(250);
     if (!pose || !freeGround(pose.x, pose.z)) { hud.toast('NO ROOM FOR THE CAR THERE', 1800); return; }
@@ -430,17 +438,39 @@ let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 
-function frame() {
+// Coming back from another tab: the first frames arrive late and unevenly while the browser warms
+// up again. Don't count them as a struggling device, and ease the step size back in instead of
+// letting the physics and camera jump between long and short steps.
+clock.connect?.(document);
+let settle = 0, dtSmooth = 1 / 60;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  clock.reset?.();
+  settle = 1.5; slowFrames = 0;
+});
+
+function frame(ts) {
   requestAnimationFrame(frame);
-  clock.update();
-  const dt = Math.min(clock.getDelta(), 0.05);
+  clock.update(ts);
+  let dt = Math.min(clock.getDelta(), 0.05);
+  if (settle > 0) {
+    settle -= dt;
+    dtSmooth += (Math.min(dt, 1 / 30) - dtSmooth) * 0.15;
+    dt = dtSmooth;
+  } else dtSmooth = dt;
   elapsed += dt;
   if (!car) return;
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
-    stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
+    if (mode === 'drive') stepCar(car, input.state, world, dt);
+    else {
+      // choosing a car: let it settle on its springs but not roll or creep away
+      const x = car.x, z = car.z, yaw = car.yaw;
+      stepCar(car, idle, world, dt);
+      car.x = x; car.z = z; car.yaw = yaw; car.vx = car.vy = car.yawRate = 0;
+    }
     mp.collide(car);
     trackside.collide(car);
     props.update(car, dt);
@@ -585,7 +615,8 @@ function frame() {
   }
 
   // ---- adaptive quality: drop resolution, then shadows, if the device struggles
-  if (dt > 0.036) slowFrames++; else slowFrames = Math.max(0, slowFrames - 2);
+  if (settle > 0) slowFrames = 0;
+  else if (dt > 0.036) slowFrames++; else slowFrames = Math.max(0, slowFrames - 2);
   if (slowFrames > 120) {
     slowFrames = 0;
     if (renderer.getPixelRatio() > 1) renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.5));

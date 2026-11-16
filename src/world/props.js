@@ -5,8 +5,8 @@
 // where they came to rest for the rest of the browser session (sessionStorage) and are back next time.
 import * as THREE from 'three';
 
-const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, SIGN0 = 10;
-const FACES = 10;
+const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, SIGN0 = 10;
+const FACES = 12;
 
 function part(geo, hex) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -25,6 +25,8 @@ const SOLID = {
   [BIN]: [cyl(0.24, 0.85, 0, 0.43, 0, 0x2d4a3c, 8)],
   [RACK]: [box(1.6, 0.05, 0.05, 0, 0.8, 0, 0x8a8a94), box(0.05, 0.8, 0.05, -0.78, 0.4, 0, 0x8a8a94), box(0.05, 0.8, 0.05, 0.78, 0.4, 0, 0x8a8a94), box(0.05, 0.8, 0.05, 0, 0.4, 0, 0x8a8a94)],
   [BOX]: [box(0.8, 1.15, 0.35, 0, 0.58, 0, 0x7d8a84)],
+  // short black street bollard with a reflective band
+  [BOLLARD]: [cyl(0.075, 0.82, 0, 0.41, 0, 0x16161b, 8), cyl(0.08, 0.07, 0, 0.7, 0, 0xd8dde6, 8), cyl(0.09, 0.05, 0, 0.84, 0, 0x16161b, 8)],
   sign: [cyl(0.035, 2.9, 0, 1.45, 0, 0x8a8a94, 5)],
 };
 const GLOW = {
@@ -33,7 +35,8 @@ const GLOW = {
 const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.07, 1.75), 0xffffff);
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
 
-// sign faces in one strip: speed, prohibit, no entry, mandatory, warning, yield, priority, crossing, info, stop
+// sign faces in one strip: speed, prohibit, no entry, mandatory, warning, yield, priority, crossing, info, stop,
+// speed 40, parking
 function signAtlas() {
   const S = 96, cv = document.createElement('canvas');
   cv.width = S * FACES; cv.height = S;
@@ -52,6 +55,8 @@ function signAtlas() {
   at(7); c.fillStyle = blue; c.fillRect(-42, -42, 84, 84); poly([[0, -30], [32, 28], [-32, 28]], white); c.fillStyle = '#18161c'; c.fillRect(-4, -8, 8, 22); disc(0, '#000'); c.beginPath(); c.arc(0, -14, 5, 0, 7); c.fill();
   at(8); c.fillStyle = blue; c.fillRect(-42, -42, 84, 84); c.fillStyle = white; c.font = 'bold 54px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('i', 0, 4);
   at(9); poly([[-19, -46], [19, -46], [46, -19], [46, 19], [19, 46], [-19, 46], [-46, 19], [-46, -19]], red); c.fillStyle = white; c.font = 'bold 26px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STOP', 0, 2);
+  at(10); disc(44, red); disc(33, white); c.fillStyle = '#18161c'; c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('40', 0, 2);
+  at(11); c.fillStyle = blue; c.fillRect(-40, -44, 80, 88); c.fillStyle = white; c.font = 'bold 62px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('P', 0, 4);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -94,8 +99,8 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, sign: 10 };
-const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, sign: 0.08 };
+const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, sign: 10 };
+const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, sign: 0.08 };
 const KNOCK_KEY = 'streetlap.knocked';
 const G = 9.81;
 
@@ -384,6 +389,15 @@ export function createProps(world, opts = {}) {
   fetch(`${import.meta.env.BASE_URL}data/props.json`).then((r) => r.json()).then((d) => {
     data = d;
     if (opts.clear) cleared = opts.clear(d);
+    // hand-placed extras ([kind, x, z, bearing in degrees]) go at the end of their sector's list,
+    // so the ids of the surveyed props (and what was knocked this session) stay the same
+    if (opts.extra) {
+      const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
+      for (const [kind, x, z, yaw, extra = 0] of opts.extra()) {
+        const key = `${Math.floor((x - G0) / S)}_${Math.floor((z - G0) / S)}`;
+        (d.sectors[key] ||= []).push(kind, x, z, yaw, extra);
+      }
+    }
     for (const f of waiting.splice(0)) f();
   }).catch(() => { /* no props baked: play without them */ });
 

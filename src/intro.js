@@ -18,13 +18,18 @@ const PATH = [
 ];
 const SPEED = 15;        // m/s along the loop
 const LOOK_AHEAD = 150;  // metres ahead along the loop the camera looks at, down on the ground
+// gentle climbs and dips on top of the path heights: [metres up/down, metres along the loop per wave]
+const SWELL = [[26, 760], [11, 270]];
 
 export function createIntro(world) {
   const ground = (x, z) => Math.max(world.meta.riverLevel ?? -2.5, world.coarseHeight(x, z));
   const curve = new THREE.CatmullRomCurve3(
     PATH.map(([x, z, h]) => new THREE.Vector3(x, ground(x, z) + h, z)), true, 'centripetal');
   const len = curve.getLength();
-  let dist = 0;
+  // a different starting point and a different climb-and-dip pattern every time the game opens
+  let dist = Math.random() * len;
+  const phase = SWELL.map(() => Math.random() * Math.PI * 2);
+  const swell = (d) => SWELL.reduce((h, [a, w], i) => h + a * Math.sin((d / w) * Math.PI * 2 + phase[i]), 0);
   const p = new THREE.Vector3(), q = new THREE.Vector3();
   const focus = { x: 0, z: 0 };
 
@@ -35,6 +40,7 @@ export function createIntro(world) {
     step(dt, pos, look) {
       dist += dt * SPEED;
       at(dist, pos);
+      pos.y += swell(dist);
       at(dist + LOOK_AHEAD, q);
       look.set(q.x, ground(q.x, q.z) + 6, q.z);
       // keep at least 40 m over whatever is below (Toomemägi, the hospital blocks)
@@ -43,6 +49,6 @@ export function createIntro(world) {
       return focus;
     },
     // the point to stream map sectors around before the drone gets there
-    start() { at(0, p); at(LOOK_AHEAD, q); return { x: (p.x + q.x) / 2, z: (p.z + q.z) / 2 }; },
+    start() { at(dist, p); at(dist + LOOK_AHEAD, q); return { x: (p.x + q.x) / 2, z: (p.z + q.z) / 2 }; },
   };
 }

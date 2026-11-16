@@ -112,24 +112,26 @@ function extrudeZ(pts, z0, z1, bevel = 0.002) {
 
 // ------------------------------------------------------------------ textures
 function lampTextures() {
-  // Tail lamp, u: 0 = inboard tip (on the tailgate) .. 1 = outboard end wrapping round the corner; canvas top = lamp top.
+  // Tail lamp, u: 0 = inboard end (on the tailgate) .. 1 = the tip on the flank; canvas top = lamp top.
+  // A red light bar runs along the top and round the corner; under it the tailgate part is a clear strip
+  // (indicator / reverse, its own mesh) and the flank part is dark red crystal.
   const tail = (glow) => (g, w, h) => {
-    g.fillStyle = glow ? '#222' : '#2a0305'; g.fillRect(0, 0, w, h);
-    // crystalline field: rows of small cut facets
+    g.fillStyle = glow ? '#1c1c1c' : '#3a0407'; g.fillRect(0, 0, w, h);
     for (let y = 0; y < h; y += 8) for (let x = (y / 8) % 2 ? 6 : 0; x < w; x += 12) {
       const v = Math.abs((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1);
-      g.fillStyle = glow ? `rgb(${110 + v * 90 | 0},${110 + v * 90 | 0},${110 + v * 90 | 0})` : `rgb(${55 + v * 70 | 0},${5 + v * 8 | 0},${8 + v * 8 | 0})`;
+      g.fillStyle = glow ? `rgb(${70 + v * 70 | 0},${70 + v * 70 | 0},${70 + v * 70 | 0})` : `rgb(${70 + v * 70 | 0},${6 + v * 8 | 0},${10 + v * 8 | 0})`;
       g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x + 6, y); g.lineTo(x + 12, y + 4); g.lineTo(x + 6, y + 8); g.closePath(); g.fill();
     }
-    // the C: a light guide along the top edge, closed round the outer end and returning inboard along the slanted lower edge
     const P = (pts) => { g.beginPath(); pts.forEach(([u, v], i) => (i ? g.lineTo(u * w, v * h) : g.moveTo(u * w, v * h))); g.stroke(); };
-    g.strokeStyle = glow ? '#fff' : '#d8302a'; g.lineJoin = 'miter'; g.lineCap = 'round'; g.lineWidth = h * 0.13;
-    P([[0.03, 0.13], [0.94, 0.1], [0.965, 0.42], [0.9, 0.84], [0.78, 0.81], [0.57, 0.47]]);
-    g.strokeStyle = glow ? '#eee' : '#b01c16'; g.lineWidth = h * 0.05;
-    P([[0.5, 0.3], [0.86, 0.28], [0.88, 0.45], [0.84, 0.66], [0.76, 0.64], [0.66, 0.46]]);
+    // the light bar: along the top, hooking down at the corner and back inboard (the C signature)
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = glow ? '#fff' : '#e0261f'; g.lineWidth = h * 0.3;
+    P([[0.02, 0.2], [0.97, 0.2]]);
+    g.strokeStyle = glow ? '#eee' : '#c81d18'; g.lineWidth = h * 0.12;
+    P([[0.5, 0.36], [0.47, 0.62], [0.56, 0.84]]);
     if (!glow) {
-      g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(0, 0, w, h * 0.08);
-      g.strokeStyle = '#140000'; g.lineWidth = 6; g.strokeRect(0, 0, w, h);
+      g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(0, h * 0.06, w, h * 0.07);
+      g.strokeStyle = '#140000'; g.lineWidth = 5; g.strokeRect(0, 0, w, h);
     }
   };
   // Headlamp, u: 0 = inboard (by the grille) .. 1 = outboard; DRL along the top, crystal modules and an arrow inside.
@@ -153,6 +155,7 @@ function lampTextures() {
 const AW = 1024, AH = 512;
 const uvr = (x, y, w, h) => [x / AW, 1 - (y + h) / AH, (x + w) / AW, 1 - y / AH];
 const A_PLATE = uvr(0, 0, 832, 181), A_SKODA = uvr(0, 196, 1024, 128), A_80X = uvr(0, 340, 230, 100), A_LOGO = uvr(250, 336, 170, 170);
+const A_ENYAQ = uvr(440, 340, 420, 84), A_IV = uvr(880, 340, 130, 100);
 function skodaLogo(g, cx, cy, r, col) {
   g.save(); g.translate(cx, cy);
   g.strokeStyle = col; g.lineWidth = r * 0.14; g.beginPath(); g.arc(0, 0, r * 0.9, 0, 7); g.stroke();
@@ -167,22 +170,25 @@ function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
     drawPlate(g, 0, 0, 832, 181, '023 ENQ');
-    // ŠKODA block lettering, wide-set
-    g.fillStyle = '#e4e6e8'; g.textBaseline = 'alphabetic'; g.textAlign = 'center';
-    // chrome letters with a dark edge, so they read against both the black paint and bright reflections
-    g.font = 'bold 124px Arial, Helvetica, sans-serif'; g.lineJoin = 'miter';
-    for (const [col, lw] of [['#2a2c30', 15], ['#e4e6e8', 7]]) {
-      g.strokeStyle = col; g.fillStyle = '#e4e6e8'; g.lineWidth = lw;
-      'ŠKODA'.split('').forEach((c, i) => { g.save(); g.translate(96 + i * 208, 316); g.scale(1.3, 1); g.strokeText(c, 0, 0); if (lw < 10) g.fillText(c, 0, 0); g.restore(); });
-    }
-    g.font = 'bold 92px Arial, Helvetica, sans-serif'; g.textBaseline = 'middle';
-    g.save(); g.translate(115, 392); g.scale(1.1, 1); g.strokeStyle = '#2a2c30'; g.lineWidth = 10; g.strokeText('80x', 0, 0);
-    g.strokeStyle = '#e4e6e8'; g.lineWidth = 4; g.fillText('80x', 0, 0); g.strokeText('80x', 0, 0); g.restore();
+    // chrome lettering with a thin dark edge, so it reads against both the black paint and bright reflections
+    const chrome = (txt, x, y, font, sx, edge) => {
+      g.save(); g.translate(x, y); g.scale(sx, 1); g.font = font; g.lineJoin = 'round';
+      g.strokeStyle = '#1d1f22'; g.lineWidth = edge; g.strokeText(txt, 0, 0);
+      const gr = g.createLinearGradient(0, -50, 0, 50);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, '#c4c8cc'); gr.addColorStop(1, '#eef0f2');
+      g.fillStyle = gr; g.fillText(txt, 0, 0); g.restore();
+    };
+    g.textBaseline = 'middle'; g.textAlign = 'center';
+    // ŠKODA: slim, widely spaced block letters
+    'ŠKODA'.split('').forEach((c, i) => chrome(c, 96 + i * 208, 266, '600 92px Arial, Helvetica, sans-serif', 1.35, 8));
+    chrome('80x', 115, 392, 'bold 80px Arial, Helvetica, sans-serif', 1.1, 8);
+    'ENYAQ'.split('').forEach((c, i) => chrome(c, 482 + i * 84, 384, 'bold 70px Arial, Helvetica, sans-serif', 1.25, 7));
+    chrome('iV', 945, 392, 'italic bold 84px Arial, Helvetica, sans-serif', 1.0, 8);
     skodaLogo(g, 335, 421, 80, '#d9dcdf');
   });
 }
 
-// ------------------------------------------------------------------ roof rack: aero bars on the flush rails + two upright bike carriers
+// ------------------------------------------------------------------ roof rack: aero bars on the flush rails + two bike carriers with their arms folded down
 function aerofoil(c, t, n = 10) {
   // closed (z, y) section, leading edge toward -z, flat-ish bottom
   const up = [], lo = [];
@@ -217,7 +223,7 @@ function roofRack(pr, railX, zBars) {
   }
   return { soup: s, barTop: tops };
 }
-// Upright bike carrier (wheel tray along z, frame-holder arm), centred at x = xc; arm on the side armSide.
+// Roof bike carrier (wheel tray along z, frame-holder arm folded down), centred at x = xc; arm on the side armSide.
 function bikeCarrier(xc, zc, yBase, armSide) {
   const s = new Soup(), L = 1.45, z0 = zc - L / 2, z1 = zc + L / 2;
   // wheel tray: a shallow black U-channel, gently curving up at both ends into the wheel holders
@@ -236,24 +242,25 @@ function bikeCarrier(xc, zc, yBase, armSide) {
     s.add(sweep(st, rrect(0.024, 0.003, 0.001, 1), { up: [0, 0, 1] }).pal('rubber'));
     s.add(box(0.022, 0.04, 0.03, { p: [xc + 0.045, yw + 0.05, zw + dir * 0.02] }, 'darkalloy'));
   }
-  // frame holder: pivot block on the tray, black arm leaning forward, claw head with torque knob over the tray centre
-  const xa = xc + armSide * 0.05, za = zc - 0.02, lean = 0.2, H = 0.56;
+  // frame holder folded down: pivot block near the front of the tray, the black arm lying back along it,
+  // claw head with its torque knob resting just above the tray
+  const xa = xc + armSide * 0.05, za = zc - 0.4, lean = -1.47, H = 0.56;
+  const dY = Math.cos(lean), dZ = -Math.sin(lean);          // arm direction (y, z)
   s.add(box(0.06, 0.04, 0.09, { p: [xc + armSide * 0.03, yBase + 0.045, za] }, 'gloss'));
-  const top = [xa, yBase + 0.04 + H * Math.cos(lean), za - H * Math.sin(lean)];
-  s.add(sweep([[xa, yBase + 0.04, za], top], rrect(0.03, 0.04, 0.008, 2).map(([a, b]) => [a, b - 0.02]), { up: [0, 0, -1] }).pal('plastic'));
-  s.add(box(0.075, 0.06, 0.07, { p: [xa - armSide * 0.035, top[1] + 0.01, top[2]], r: [-lean, 0, 0] }, 'plastic'));
-  s.add(box(0.03, 0.05, 0.05, { p: [xc, top[1] - 0.035, top[2] - 0.035], r: [-lean, 0, 0] }, 'rubber'));
-  s.add(box(0.03, 0.05, 0.05, { p: [xc, top[1] - 0.035, top[2] + 0.035], r: [-lean, 0, 0] }, 'rubber'));
-  s.add(cyl(0.032, 0.032, 0.03, 16, { p: [xa + armSide * 0.012, top[1] + 0.012, top[2]], r: [0, 0, Math.PI / 2] }, 'plastic'));
-  s.add(cyl(0.012, 0.012, 0.034, 10, { p: [xa + armSide * 0.014, top[1] + 0.012, top[2]], r: [0, 0, Math.PI / 2] }, 'steel'));
+  const y0a = yBase + 0.062, top = [xa, y0a + H * dY, za + H * dZ];
+  s.add(sweep([[xa, y0a, za], top], rrect(0.03, 0.04, 0.008, 2).map(([a, b]) => [a, b - 0.02])).pal('plastic'));
+  s.add(box(0.075, 0.06, 0.07, { p: [xa - armSide * 0.035, top[1] + 0.01 * dY, top[2] + 0.01 * dZ], r: [-lean, 0, 0] }, 'plastic'));
+  for (const e of [-0.035, 0.035]) s.add(box(0.03, 0.05, 0.05, { p: [xc, top[1] - 0.035 * dY - e * dZ, top[2] - 0.035 * dZ + e * dY], r: [-lean, 0, 0] }, 'rubber'));
+  s.add(cyl(0.032, 0.032, 0.03, 16, { p: [xa + armSide * 0.012, top[1] + 0.012 * dY, top[2] + 0.012 * dZ], r: [0, 0, Math.PI / 2] }, 'plastic'));
+  s.add(cyl(0.012, 0.012, 0.034, 10, { p: [xa + armSide * 0.014, top[1] + 0.012 * dY, top[2] + 0.012 * dZ], r: [0, 0, Math.PI / 2] }, 'steel'));
   return s;
 }
 
 export function buildEnyaq() {
   const body = buildBody({
     top: [[ZF, 0.54], [ZF + 0.005, 0.64, 0.03], [-2.225, 0.76, 0.05], [-2.196, 0.845, 0.05], [-2.14, 0.905, 0.07], [-2.0, 0.952, 0.12], [-1.5, 1.025, 0.25], [-0.97, 1.09, 0.06],
-      [-0.08, 1.545, 0.25], [0.45, 1.598, 1.0], [1.6, 1.558, 0.4], [1.98, 1.525, 0.03], [2.05, 1.515, 0.012], [2.055, 1.482, 0.01], [2.32, 1.13, 0.04],
-      [2.37, 1.05, 0.04], [2.395, 0.88, 0.05], [ZR - 0.003, 0.68, 0.03], [ZR, 0.52]],
+      [-0.08, 1.545, 0.25], [0.45, 1.598, 1.0], [1.6, 1.558, 0.4], [1.98, 1.525, 0.03], [2.05, 1.515, 0.012], [2.055, 1.482, 0.01], [2.335, 1.095, 0.04],
+      [2.38, 1.0, 0.04], [2.395, 0.88, 0.05], [ZR - 0.003, 0.68, 0.03], [ZR, 0.52]],
     bottom: [[ZF, 0.54], [ZF + 0.006, 0.42, 0.03], [-2.2, 0.32, 0.04], [-2.1, 0.26, 0.05], [-1.9, 0.205, 0.1], [1.85, 0.205, 0.1], [2.24, 0.29, 0.05], [ZR - 0.012, 0.33, 0.03], [ZR, 0.52]],
     w: [[ZF, 0.8], [-2.12, 0.875], [-1.9, 0.912], [-1.38, 0.925], [-0.6, 0.92], [0.4, 0.92], [1.38, 0.926], [1.95, 0.92], [2.25, 0.905], [ZR, 0.87]],
     yWaist: [[ZF, 0.7], [-1.4, 0.74], [1.4, 0.76], [ZR, 0.78]], tuck: 0.08, ySill: 0.22,
@@ -285,13 +292,22 @@ export function buildEnyaq() {
   const dcW = decals(subSoup(shell, (x, y, z) => y > 1.0 && z < 0.2));
   pal.add(dcW.front(grow(ws, 0.016), { offset: 0.003 }).pal('gloss'));
   glass.add(dcW.front(ws, { offset: 0.005 }));
-  const rw = rpoly([[-0.6, 1.15], [0.6, 1.15], [0.47, 1.462], [-0.47, 1.462]], 0.06);
+  const rw = rpoly([[-0.6, 1.118], [0.6, 1.118], [0.47, 1.462], [-0.47, 1.462]], 0.06);
   pal.add(dcR.rear(grow(rw, 0.016), { offset: 0.003, ...fr }).pal('gloss'));
   glass.add(dcR.rear(rw, { offset: 0.007, ...fr }));
   // matt black roof spoiler over the rear glass, third brake light under its lip
   pal.add(dcT.top(rpoly([[-0.62, 1.9], [0.62, 1.9], [0.62, 2.2], [-0.62, 2.2]], 0.04), { offset: 0.0035, minFacing: 0.3, filter: (v) => v[1] > 1.475 }).pal('plastic'));
   pal.add(dcR.rear(rect(-0.62, 1.468, 0.62, 1.53), { offset: 0.0035, minFacing: 0.05, filter: (v) => v[2] > 1.95 && v[1] > 1.468 }).pal('plastic'));
-  chmsl.add(dcR.rear(rect(-0.3, 1.49, 0.3, 1.502, 0.004), { offset: 0.006, minFacing: 0.05, filter: (v) => v[2] > 2.0 && v[1] > 1.475 }));
+  // the spoiler itself: a gloss black blade overhanging the glass, third brake light in its trailing edge,
+  // and the black air guides down both sides of the rear window
+  {
+    const m = new THREE.Matrix4().makeTranslation(0, 1.5, 2.085).multiply(new THREE.Matrix4().makeRotationX(0.13));
+    pal.add(blob(1.07, 0.026, 0.18, m, 'gloss', 6, 10));
+    chmsl.add(box(0.46, 0.007, 0.006, { p: [0, 1.487, 2.179], r: [0.13, 0, 0] }));
+    const fin = [];
+    for (let i = 0; i <= 6; i++) { const t = i / 6, x = 0.5 + 0.125 * t, y = 1.47 - 0.3 * t; fin.push([x, y, prRear.rearZ(x - 0.03, y) + 0.004]); }
+    pal.add(sweep(fin, rrect(0.016, 0.055, 0.004, 1), { up: [0, 0, 1], scale: (i, n) => (i === n - 1 ? 0.35 : 1) }).pal('gloss').sym());
+  }
   // black panoramic roof
   pal.add(dcT.top(rpoly([[-0.5, -0.05], [0.5, -0.05], [0.5, 1.55], [-0.5, 1.55]], 0.06), { offset: 0.004, minFacing: 0.6 }).pal('darkglass'));
 
@@ -303,9 +319,11 @@ export function buildEnyaq() {
   clad.add(raise(dcS.side(rpoly([[HZ + 0.42, 0.25], [2.6, 0.25], [2.6, 0.5], [HZ + 0.45, 0.5]], 0.02), { offset: 0.01, minFacing: 0.15 }), 0.01));
   clad.add(raise(dcS.side(rpoly([[-2.6, 0.24], [-HZ - 0.42, 0.24], [-HZ - 0.45, 0.33], [-2.6, 0.33]], 0.02), { offset: 0.01, minFacing: 0.15 }), 0.01));
   pal.add(clad.pal('plastic').sym());
-  pal.add(raise(dcR.rear(rect(-1, 0.26, 1, 0.5), { offset: 0.01, minFacing: 0.1, filter: (v) => v[2] > 2.15 && v[1] < 0.52 }), 0.01).pal('plastic'));
-  pal.add(raise(dcR.rear(rpoly([[-0.56, 0.335], [0.56, 0.335], [0.5, 0.425], [-0.5, 0.425]], 0.02), { offset: 0.016, minFacing: 0.1, filter: (v) => v[2] > 2.15 }), 0.006).pal('disc'));
-  pal.add(dcR.rear([rect(0.7, 0.445, 0.84, 0.46, 0.005)], { offset: 0.013, minFacing: 0.05, filter: (v) => v[2] > 2.0 }).pal('reflector').sym());
+  const rb = { minFacing: 0.1, filter: (v) => v[2] > 2.15 && v[1] < 0.56 };
+  pal.add(raise(dcR.rear(rect(-1, 0.26, 1, 0.52), { offset: 0.01, ...rb }), 0.01).pal('clad'));
+  pal.add(raise(dcR.rear(rpoly([[-0.6, 0.3], [0.6, 0.3], [0.54, 0.41], [-0.54, 0.41]], 0.02), { offset: 0.016, ...rb }), 0.006).pal('plastic'));
+  pal.add(raise(dcR.rear([rect(-0.66, 0.418, 0.66, 0.436, 0.006), rpoly([[0.6, 0.3], [0.63, 0.3], [0.69, 0.43], [0.66, 0.43]], 0.004), rpoly([[-0.63, 0.3], [-0.6, 0.3], [-0.66, 0.43], [-0.69, 0.43]], 0.004)], { offset: 0.02, ...rb }), 0.004).pal('silver'));
+  pal.add(dcR.rear([rect(0.72, 0.39, 0.9, 0.412, 0.006)], { offset: 0.013, minFacing: 0.05, filter: (v) => v[2] > 2.0 }).pal('reflector').sym());
   pal.add(raise(dcF.front(rect(-1, 0.24, 1, 0.33), { offset: 0.01, minFacing: 0.05, filter: (v) => v[2] < -1.95 && v[1] < 0.35 }), 0.01).pal('plastic'));
 
   // --- shut lines
@@ -317,21 +335,26 @@ export function buildEnyaq() {
   ], { offset: 0.0055 }).pal('line').sym());
   pal.add(dcS.side(stroke(rpoly([[1.7, 0.86], [1.9, 0.86], [1.9, 0.98], [1.7, 0.98]], 0.02, 3).concat([[1.7, 0.9]]), 0.005), { offset: 0.0055 }).pal('line'));
   pal.add(dcT.top(stroke([[0.74, -2.08], [0.8, -1.0]], lw), { offset: 0.0055, minFacing: 0.4 }).pal('line').sym());
-  pal.add(dcR.rear([...stroke([[0.53, 1.47], [0.67, 1.13], [0.645, 1.0], [0.625, 0.69]], 0.0045), ...stroke([[-0.625, 0.69], [0.625, 0.69]], 0.0045)], { offset: 0.0055, ...fr }).pal('line').sym());
+  pal.add(dcR.rear([...stroke([[0.53, 1.47], [0.67, 1.13], [0.645, 1.0], [0.625, 0.64]], 0.0045), ...stroke([[-0.625, 0.64], [0.625, 0.64]], 0.0045)], { offset: 0.0055, ...fr }).pal('line').sym());
 
   // --- tail lamps (wrapping round the corners), lettering, badges, plate
   // yaw frame with a ~ 0.85 x on the tailgate, growing on round the corner onto the flank
   const ty = dcR.yaw(32), to = { minFacing: 0.02, origin: [0, 0, 2.37], ...fr };
-  const lampPoly = rpoly([[0.28, 1.074], [0.45, 1.054], [0.6, 1.026], [0.72, 0.972], [0.812, 0.958], [0.866, 1.03], [0.858, 1.102], [0.6, 1.108], [0.28, 1.098]], 0.008, 3);
+  // slim lamp: about 0.1 m tall across the tailgate with a slanted inner end, tapering to a point on the flank
+  const lampPoly = rpoly([[0.335, 0.959], [0.6, 0.955], [0.7, 0.977], [0.872, 1.043], [0.876, 1.063], [0.3, 1.063]], 0.006, 3);
   tail.add(ty(lampPoly, { offset: 0.006, ...to }));
   tail.add(tail.mirrored());
-  reverse.add(ty(rpoly([[0.31, 1.073], [0.46, 1.055], [0.46, 1.068], [0.31, 1.085]], 0.004), { offset: 0.0075, ...to }).sym());
-  atlas.add(dcR.rear(rect(-0.29, 1.03, 0.29, 1.093), { offset: 0.008, ...fr }).uvRect(A_SKODA));
-  atlas.add(dcR.rear(rect(0.47, 0.925, 0.575, 0.97), { offset: 0.008, ...fr }).uvRect(A_80X));
-  const pz = prRear.rearZ(0, 0.84);
-  const pl = plate([0, 0.84, pz + 0.006], A_PLATE, { tilt: 0.12 });
+  // clear strip (indicator / reverse) under the light bar on the tailgate part
+  reverse.add(ty(rpoly([[0.348, 0.968], [0.585, 0.964], [0.6, 1.005], [0.333, 1.007]], 0.004), { offset: 0.0075, ...to }).sym());
+  atlas.add(dcR.rear(rect(-0.25, 0.981, 0.25, 1.043), { offset: 0.008, ...fr }).uvRect(A_SKODA));
+  atlas.add(dcR.rear(rect(-0.66, 0.885, -0.46, 0.925), { offset: 0.008, ...fr }).uvRect(A_ENYAQ));
+  atlas.add(dcR.rear(rect(0.57, 0.885, 0.635, 0.935), { offset: 0.008, ...fr }).uvRect(A_IV));
+  atlas.add(dcR.rear(rect(0.555, 0.83, 0.65, 0.871), { offset: 0.008, ...fr }).uvRect(A_80X));
+  // plate low on the tailgate in its dark recess, just above the bumper
+  const PY = 0.74, pz = prRear.rearZ(0, PY);
+  const pl = plate([0, PY, pz + 0.006], A_PLATE, { tilt: 0.1 });
   atlas.add(pl.face); pal.add(pl.back);
-  pal.add(dcR.rear(rect(-0.3, 0.775, 0.3, 0.905, 0.015), { offset: 0.004, ...fr }).pal('gloss'));
+  pal.add(dcR.rear(rpoly([[-0.31, PY - 0.075], [0.31, PY - 0.075], [0.34, PY + 0.08], [-0.34, PY + 0.08]], 0.02), { offset: 0.004, ...fr }).pal('gloss'));
   // rear wiper parked along the top of the glass under the spoiler
   pal.add(rearWiper(prRear, 0.0, 1.448, -0.44, 1.432));
 

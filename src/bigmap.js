@@ -189,13 +189,21 @@ export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
     nearestRoad,
     get isOpen() { return open; },
     redraw() { if (open) redraw(); },
-    show(c) {
+    // others: points that should be in view too (other players), the view widens to fit them
+    show(c, others = []) {
       car = c; open = true;
       root.classList.remove('hidden');
       resize();
       cx = c.x; cz = c.z; k = Math.max(kMin, Math.min(W, H) / 2400);   // about 2.4 km across the short side
+      if (others.length) {
+        let x0 = c.x, x1 = c.x, z0 = c.z, z1 = c.z;
+        for (const p of others) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+        cx = (x0 + x1) / 2; cz = (z0 + z1) / 2;
+        k = Math.min(k, (W - 120) / Math.max(1, x1 - x0), (H - 160) / Math.max(1, z1 - z0));
+      }
       clamp(); pts.clear(); redraw();
     },
+    focus(x, z) { cx = x; cz = z; k = Math.max(k, 0.6); clamp(); redraw(); },
     hide() { open = false; pts.clear(); root.classList.add('hidden'); },
   };
 }

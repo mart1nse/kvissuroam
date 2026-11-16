@@ -14,6 +14,7 @@ import { createRoadMarkings } from './world/roads.js';
 import { buildDeckBodies } from './world/decks.js';
 import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
+import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
@@ -78,7 +79,7 @@ let launch = null;               // 0-100 km/h stopwatch
 async function boot() {
   const bar = $('#loadbar');
   world = await loadWorldData((p) => { bar.style.width = `${Math.round(p * 80)}%`; });
-  $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA`;
+  $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA. Shops: © OpenStreetMap contributors, ODbL`;
   try {
     ({ buildCarModel } = await import('./cars/models/index.js'));
   } catch (err) {
@@ -94,6 +95,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   const attachProps = createProps(world, { shadows: !isTouch });
+  const attachSigns = createSigns(world);
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
@@ -109,6 +111,7 @@ async function boot() {
     s.decks = buildDeckBodies(world, s);
     if (s.decks) scene.add(s.decks);
     attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
+    attachSigns(s, (g) => { if (s.signs) return; s.signs = g; scene.add(g); });
   });
   world.onSectorUnload((s) => {
     terrain.removeSector(s);
@@ -119,6 +122,7 @@ async function boot() {
     if (s.walls) { scene.remove(s.walls); s.walls.geometry.dispose(); s.walls = null; }
     if (s.decks) { scene.remove(s.decks); s.decks.userData.dispose(); s.decks = null; }
     if (s.props) { scene.remove(s.props); s.props.userData.dispose(); s.props = null; }
+    if (s.signs) { scene.remove(s.signs); s.signs.userData.dispose(); s.signs = null; }
   });
   // the game starts on the race track, just before its last corner (Uueturu at the Ülikooli crossing)
   const sp = createTrack().spawn;

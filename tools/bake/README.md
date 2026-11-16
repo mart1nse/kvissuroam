@@ -69,3 +69,10 @@ which the game uses for the shade of the tarmac. Car parks and squares are in `a
 (`Piirdeaed`) are not obstacles, because the game does not show them; walls are, and are drawn
 from `walls`. `python3 tools/bake/resurface.py SRC public/data` rebuilds the obstacle field and
 these lists in existing sector files; run it after `reheight.py`. It needs ETAK *Buildings* too.
+
+Shop signs (`tools/realism/`): `osm_pois.py estonia-latest.osm.pbf POIS.json` keeps the named shops, cafes,
+fuel stations and so on inside the boundary (OpenStreetMap extract from download.geofabrik.de, about 2 min).
+`signs.py POIS.json SRC/etak_e/E_401_hoone_ka` puts each on its building (by the Land Board address when
+that building is near, otherwise the building the map point is in), on the wall nearest the shop that faces
+a street, and writes `public/data/signs.json`. Fuel stations, and big stores with no building in the map
+data, get a pylon by the road. Like `walls.json`, re-run it after the sectors are re-baked.

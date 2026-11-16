@@ -49,6 +49,8 @@ export const CARS = {
     wheelRadius: 0.362,
     cdA: 0.36 * 2.58,
     drive: 'awd',
+    // Real Time 4WD: front drive, the rear clutch pack only bites once the fronts slip
+    rearShare: 0, rearShareMax: 0.4,
     engine: {
       type: 'ice',
       idle: 750,
@@ -81,6 +83,8 @@ export const CARS = {
     wheelRadius: 0.37,
     cdA: 0.257 * 2.63,
     drive: 'awd',
+    // separate motors: rear PSM 150 kW / 310 Nm, front induction 80 kW / 162 Nm
+    rearShare: 0.65,
     engine: {
       type: 'ev',
       maxPowerKw: 195,
@@ -109,6 +113,8 @@ export const CARS = {
     wheelRadius: 0.364,
     cdA: 0.33 * 2.62,
     drive: 'awd',
+    // Dynamic Torque Control: front-biased, couples up to half to the rear
+    rearShare: 0.25, rearShareMax: 0.5,
     engine: {
       type: 'ice',
       idle: 750,
@@ -170,10 +176,12 @@ export const CARS = {
     wheelbase: 2.85,
     track: 1.605,
     cgFront: 0.50,
-    cgHeight: 0.58,
+    cgHeight: 0.52,              // battery pack in the floor
     wheelRadius: 0.37,
     cdA: 0.30 * 2.70,
     drive: 'awd',
+    // two equal 268.6 Nm motors (Toyota UK tech specs, 2026)
+    rearShare: 0.5,
     engine: {
       type: 'ev',
       maxPowerKw: 280,
@@ -183,7 +191,7 @@ export const CARS = {
     gears: [12.0],
     reverse: 12.0,
     finalDrive: 1.0,
-    efficiency: 0.9,
+    efficiency: 0.93,
     shiftTime: 0,
     limiter: 180,
     ref: { zeroTo100: 4.5, top: 180, powerKw: 280 },

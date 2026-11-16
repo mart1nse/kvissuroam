@@ -2,8 +2,8 @@
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, whine, whineGain, skidGain, skidFilt;
-  let skid = 0, lastLanded = 0;
-  let muted = false, ev = false;
+  let skid = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
+  let muted = false, ev = false, turbo = false;
 
   function start() {
     if (ctx) { ctx.resume?.(); return; }
@@ -27,7 +27,7 @@ export function createAudio() {
     whine.connect(whineGain).connect(master); whine.start();
 
     const len = ctx.sampleRate * 2;
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const buf = noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
@@ -53,6 +53,19 @@ export function createAudio() {
     o.start(t); o.stop(t + 0.25);
   }
 
+  // turbo blow-off valve venting when the throttle snaps shut on boost
+  function psh(strength) {
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.setValueAtTime(3200, t);
+    f.frequency.exponentialRampToValueAtTime(1100, t + 0.35);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.min(0.12, 0.13 * strength), t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(f).connect(g).connect(master);
+    src.start(t, Math.random()); src.stop(t + 0.45);
+  }
+
   function update(car, active) {
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -69,8 +82,20 @@ export function createAudio() {
       whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
       whineGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
     } else {
-      whineGain.gain.setTargetAtTime(0, t, 0.05);
-      const cyl = car.spec.engine.torque && car.spec.id === 'w201' ? 3 : 2;   // firing order pulses per rev
+      // turbos whistle as they spool, rising in pitch with boost and revs
+      const b = car.boost || 0;
+      if (turbo) {
+        whine.frequency.setTargetAtTime(1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
+        whineGain.gain.setTargetAtTime(dead ? 0 : 0.016 * b * b, t, 0.08);
+        // (lastBoost: the boost built while the throttle was open, vented once it closes)
+        if (car.throttle > 0) lastBoost = Math.max(lastBoost * 0.99, b);
+        else {
+          if (!dead && lastBoost > 0.5 && t - lastPsh > 0.6) { psh(lastBoost); lastPsh = t; }
+          lastBoost = 0;
+        }
+      } else whineGain.gain.setTargetAtTime(0, t, 0.05);
+      const e = car.spec.engine;
+      const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev
       const f = (car.rpm / 60) * cyl;
       osc1.frequency.setTargetAtTime(f, t, 0.03);
       osc2.frequency.setTargetAtTime(f / 2, t, 0.03);
@@ -92,7 +117,7 @@ export function createAudio() {
 
   return {
     start, update,
-    setCar(spec) { ev = spec.engine.type === 'ev'; },
+    setCar(spec) { ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0; },
     setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.5, ctx.currentTime, 0.05); },
     get muted() { return muted; },
   };

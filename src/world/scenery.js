@@ -7,6 +7,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 //   0 detached house (boards or plaster)   1 apartment block (panels or brick)   2 shop, hall or shed (cladding)
 // Real wall colours come from public/data/walls.json (tools/realism/colours.py): per sector a list of
 // base, x, z, colour for each building. Two buildings that share a base height by chance are told apart by it.
+// buildings Martin pointed out as red brick (a point inside each, game x, z)
+const BRICK = [
+  [1314, 2187],        // Kroonuaia / Emajõe corner
+];
+
 function buildingGeometry(sector, walls) {
   const { nv, buf, offset } = sector.buildings;
   let o = offset;
@@ -59,13 +64,17 @@ function buildingGeometry(sector, walls) {
   }
   for (const g of groups.values()) {
     const b = g.b;
+    g.brick = BRICK.some(([x, z]) => x - sector.x0 > g.x0 && x - sector.x0 < g.x1 && z - sector.z0 > g.z0 && z - sector.z0 < g.z1);     // vertices are sector-relative
     const h = g.top - b * 0.01, area = (g.x1 - g.x0) * (g.z1 - g.z0);
     g.eavesH = Math.min(h, g.eaves > 1e8 ? h : g.eaves - b * 0.01);
     g.style = (h >= 10.5 ? 1 : area > 420 ? 2 : 0) + g.real * 4;      // +4: the wall colour is the real one
+    if (g.brick) g.style = 5;                                           // red brick with a real colour
     g.seed = Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
+  const brick = new THREE.Color().setRGB(0.55, 0.25, 0.18, THREE.SRGBColorSpace);
   for (let i = 0; i < nv; i++) {
     const g = groups.get(gkey[i]);
+    if (g.brick && kind[i] !== 1) { col[i * 3] = brick.r; col[i * 3 + 1] = brick.g; col[i * 3 + 2] = brick.b; }
     aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
   }
   const geo = new THREE.BufferGeometry();

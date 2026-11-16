@@ -70,6 +70,9 @@ export function createTrack() {
   };
 }
 
+// inside kerbs drawn as a curve: [apex index, points either side, side of the turn (1 right, -1 left)]
+export const ROUND = [[628, 9, 1], [1035, 8, -1]];
+
 // translucent glowing bands along both kerbs, built piece by piece as the ground under them loads
 function createEdges(track, world) {
   const group = new THREE.Group();
@@ -89,6 +92,36 @@ function createEdges(track, world) {
     return out;
   };
   const kerbs = [side(-1), side(1)];
+  // round the inside kerb of these corners (apex index: points either side) like the real kerb stones
+  for (const [apex, W, sgn] of ROUND) {
+    const k = sgn > 0 ? 1 : 0, L = kerbs[k];
+    const a = L[(apex - W + N) % N], c = L[apex], b = L[(apex + W) % N];
+    for (let j = -W + 1; j < W; j++) {
+      const t = (j + W) / (2 * W), u = 1 - t;
+      L[(apex + j + N) % N] = [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]];
+    }
+  }
+  // where the lap passes the same junction twice, a kerb band of one pass would run across the road of
+  // the other: fade it out there, so the two passes share one outline
+  const grid = new Map(), GC = 20;
+  for (let i = 0; i < N; i++) {
+    const key = `${Math.floor(P[i][0] / GC)},${Math.floor(P[i][1] / GC)}`;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(i);
+  }
+  const otherRoad = (x, z, own) => {
+    let v = 1;
+    const cx = Math.floor(x / GC), cz = Math.floor(z / GC);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      for (const j of grid.get(`${cx + dx},${cz + dz}`) || []) {
+        const gap = Math.abs(j - own);
+        if (Math.min(gap, N - gap) < 60) continue;
+        const d = Math.hypot(P[j][0] - x, P[j][1] - z) - (HW[j] - 0.6);
+        if (d < 1.5) v = Math.min(v, Math.max(0, d / 1.5));
+      }
+    }
+    return v;
+  };
   const colours = [new THREE.Color(0xff2bd6), new THREE.Color(0x2ff3ff)];
   const CH = 40, H = 0.6;
   const chunks = [];
@@ -99,8 +132,10 @@ function createEdges(track, world) {
   // onto the open paving on the other side (and narrow it if there is none), smoothed along the lap.
   const PAVED = 1;
   function fit(i0, i1) {
-    const M = 12, raw = new Map(), out = new Map();
-    for (let i = i0 - M; i <= i1 + M; i++) {
+    // the shift each point needs, then a smooth envelope over it: never less than needed, with long
+    // eased ramps (R points either side) so the glow bends gently round a building instead of zigzagging
+    const R = 22, raw = new Map(), out = new Map();
+    for (let i = i0 - R; i <= i1 + R; i++) {
       const k = (i + N) % N, [px, pz] = P[k], nx = -tan[k][1], nz = tan[k][0], hw = HW[k];
       const free = (sg) => { let d = 0; while (d < hw + 1 && world.sdfAt(px + nx * sg * d, pz + nz * sg * d) > 0.6) d += 0.25; return d; };
       const paved = (sg) => { let d = 0; while (d < hw + 8 && world.surfaceAt(px + nx * sg * d, pz + nz * sg * d) === PAVED) d += 0.5; return d; };
@@ -108,12 +143,13 @@ function createEdges(track, world) {
       let off = 0;
       if (fr < hw) off = -Math.min(hw - fr, Math.max(0, Math.min(paved(-1), fl) - hw));       // room on the left
       else if (fl < hw) off = Math.min(hw - fl, Math.max(0, Math.min(paved(1), fr) - hw));
-      raw.set(i, [off, Math.min(0, fr - (hw + off)), Math.min(0, fl - (hw - off))]);
+      raw.set(i, [Math.max(0, off), Math.max(0, -off), Math.max(0, -Math.min(0, fr - (hw + off))), Math.max(0, -Math.min(0, fl - (hw - off)))]);
     }
+    const ease = (k) => { const t = 1 - Math.abs(k) / R; return t * t * (3 - 2 * t); };
     for (let i = i0; i <= i1; i++) {
-      let s = [0, 0, 0], w = 0;
-      for (let k = -M; k <= M; k++) { const g = Math.exp(-0.5 * (k / 5) ** 2), r = raw.get(i + k); s = s.map((v, j) => v + r[j] * g); w += g; }
-      const [off, cutR, cutL] = s.map((v) => v / w);
+      const e = [0, 0, 0, 0];
+      for (let k = -R; k <= R; k++) { const r = raw.get(i + k), g = ease(k); for (let j = 0; j < 4; j++) e[j] = Math.max(e[j], r[j] * g); }
+      const off = e[0] - e[1], cutR = -e[2], cutL = -e[3];
       out.set((i + N) % N, [off - cutL, off + cutR]);          // shift of the left and right kerbs along the right-hand normal
     }
     return out;
@@ -124,19 +160,40 @@ function createEdges(track, world) {
     const n = ch.i1 - ch.i0 + 1;                 // one past, to close the gap to the next piece
     const pos = [], col = [], idx = [];
     const shift = fit(ch.i0, ch.i0 + n - 1);
+    // the ground is a 1 m grid with kerb steps: float the band just over the highest ground about it,
+    // so that the ground does not poke through it in a zigzag
+    const topNear = (x, z, i) => {
+      const [tx, tz] = tan[i];
+      let y = -1e9;
+      for (const [a, b] of [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.45], [0, -0.45]]) y = Math.max(y, world.topAt(x + tx * a - tz * b, z + tz * a + tx * b, 0));
+      return y + 0.09;
+    };
+    // heights along a line of points, then smoothed (a max over neighbours, then a mean) so the band
+    // runs level instead of following every step of the ground
+    const level = (pts) => {
+      const raw = pts.map(([x, z, i]) => topNear(x, z, i)), n = raw.length;
+      const mx = raw.map((_, j) => { let m = -1e9; for (let q = Math.max(0, j - 2); q <= Math.min(n - 1, j + 2); q++) m = Math.max(m, raw[q]); return m; });
+      return mx.map((_, j) => { let a = 0, w = 0; for (let q = Math.max(0, j - 2); q <= Math.min(n - 1, j + 2); q++) { a += mx[q]; w++; } return Math.max(raw[j], a / w); });
+    };
     const strip = (k, inner, h, a0, a1) => {
       const base = pos.length / 3, c = colours[k];
+      const outer = [], inn = [];
       for (let j = 0; j < n; j++) {
         const i = (ch.i0 + j) % N;
         const sh = shift.get(i)[k];
         const x = kerbs[k][i][0] - tan[i][1] * sh, z = kerbs[k][i][1] + tan[i][0] * sh;
-        const y = world.topAt(x, z, 0) + 0.07;
         // inner edge: towards the centre line by `inner` metres
         const dx = P[i][0] - kerbs[k][i][0], dz = P[i][1] - kerbs[k][i][1], l = Math.hypot(dx, dz) || 1;
-        const ix = x + (dx / l) * inner, iz = z + (dz / l) * inner;
-        const iy = inner ? world.topAt(ix, iz, 0) + 0.07 : y + h;
+        outer.push([x, z, i]);
+        inn.push([x + (dx / l) * inner, z + (dz / l) * inner, i]);
+      }
+      const yo = level(outer), yi = inner ? level(inn) : null;
+      for (let j = 0; j < n; j++) {
+        const [x, z, i] = outer[j], [ix, iz] = inn[j];
+        const y = yo[j], iy = inner ? yi[j] : y + h;
         pos.push(x, y, z, ix, iy, iz);
-        col.push(c.r, c.g, c.b, a0, c.r, c.g, c.b, a1);
+        const vis = otherRoad(x, z, i);
+        col.push(c.r, c.g, c.b, a0 * vis, c.r, c.g, c.b, a1 * vis);
         if (j) { const a = base + (j - 1) * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
       }
     };

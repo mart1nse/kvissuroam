@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { findCorners } from './decor.js';
+import { createCorners, cornerClear, cornerProps } from './corners.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -108,6 +109,7 @@ export function clearProps(data) {
       if (n.i >= 0 && n.d < track.HW[n.i] - 0.4) out.add(`${key}:${k / data.stride}`);
     }
   }
+  cornerClear(data, out);
   for (const zn of zones(track)) {
     if (zn.i0 < 0 || zn.i1 >= track.N) continue;
     const hits = [];
@@ -233,6 +235,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
+  out.push(...cornerProps());
   return out;
 }
 
@@ -342,6 +345,21 @@ export function createTrackside(world, scene) {
   const bushAt = edgePoint(track, JAKOBI_APEX, -1, BUSH_OFF);
   let bush = null;
   function buildBush() {
+    // Martin: right against the house corner at the apex. The corner is the building point nearest the
+    // inside kerb at the apex; stand the bush just off its wall, between the house and the road.
+    const edge = edgePoint(track, JAKOBI_APEX, -1, 0);
+    let best = null, bd = Infinity;
+    for (let dx = -12; dx <= 12; dx += 0.5) {
+      for (let dz = -12; dz <= 12; dz += 0.5) {
+        const px = edge[0] + dx, pz = edge[1] + dz, sd = world.sdfAt(px, pz);
+        if (sd < 1.0 || sd > 1.5) continue;
+        const n = track.nearest(px, pz);
+        if (n.i >= 0 && n.d < track.HW[n.i] + 1.2) continue;           // not on the road or its kerb
+        const d = Math.hypot(dx, dz);
+        if (d < bd) { bd = d; best = [px, pz]; }
+      }
+    }
+    if (best) { bushAt[0] = best[0]; bushAt[1] = best[1]; }
     const [bx, bz] = bushAt, y = world.heightAt(bx, bz);
     const greens = [0x3f7a2e, 0x4f8f35, 0x37692a, 0x5c9a3c, 0x456f2c];
     const parts = [];
@@ -434,6 +452,7 @@ export function createTrackside(world, scene) {
     if (treeMesh) { treeMesh.castShadow = true; group.add(treeMesh); }
   }
 
+  const corners = createCorners(world, group, merged);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -469,6 +488,7 @@ export function createTrackside(world, scene) {
 
   return {
     update(x, z) {
+      corners.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();

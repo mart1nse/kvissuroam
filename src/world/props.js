@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, SIGN0 = 10;
-const FACES = 13;
+const FACES = 14;
 
 function part(geo, hex) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -36,7 +36,7 @@ const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translat
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
 
 // sign faces in one strip: speed, prohibit, no entry, mandatory, warning, yield, priority, crossing, info, stop,
-// speed 40, parking, speed 30
+// speed 40, parking, speed 30, keep right
 function signAtlas() {
   const S = 96, cv = document.createElement('canvas');
   cv.width = S * FACES; cv.height = S;
@@ -57,6 +57,7 @@ function signAtlas() {
   at(9); poly([[-19, -46], [19, -46], [46, -19], [46, 19], [19, 46], [-19, 46], [-46, 19], [-46, -19]], red); c.fillStyle = white; c.font = 'bold 26px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STOP', 0, 2);
   at(10); disc(44, red); disc(33, white); c.fillStyle = '#18161c'; c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('40', 0, 2);
   at(11); c.fillStyle = blue; c.fillRect(-40, -44, 80, 88); c.fillStyle = white; c.font = 'bold 62px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('P', 0, 4);
+  at(13); disc(44, blue); c.rotate(Math.PI * 0.75); poly([[0, -30], [20, -4], [8, -4], [8, 28], [-8, 28], [-8, -4], [-20, -4]], white); c.setTransform(1, 0, 0, 1, 0, 0);
   at(12); disc(44, red); disc(33, white); c.fillStyle = '#18161c'; c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('30', 0, 2);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;

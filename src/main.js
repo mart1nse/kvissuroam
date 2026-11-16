@@ -23,6 +23,7 @@ import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
+import { pavedPatches } from './race/corners.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -91,6 +92,7 @@ async function boot() {
   } catch (err) {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
+  world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';

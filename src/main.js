@@ -20,6 +20,7 @@ import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createRace, createTrack } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
+import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
 import { createTrackside, clearProps } from './race/trackside.js';
 
@@ -61,7 +62,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, bigmap, race, mp, board, props, trackside;
+let world, terrain, water, edge, hud, skids, bigmap, race, mp, board, props, trackside, people;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -152,7 +153,9 @@ async function boot() {
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
     buildModel: (id) => { try { return buildCarModel ? buildCarModel(id) : buildPlaceholder(CARS[id]); } catch { return buildPlaceholder(CARS[id]); } },
     onBoard: () => { race?.refreshBest(); board?.render(); },
+    onPeople: (kind, name, old) => people?.event(kind, name, old),
   });
+  people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     onLap: (lap) => mp.submitLap(lap),
@@ -320,11 +323,13 @@ function goLastSpot() {
 // ---------------------------------------------------------------- city map
 function openMap() {
   if (mode !== 'drive' || car.inWater) return;
-  bigmap.show(car);
+  bigmap.show(car, mp.players());
+  people.showRoster(car);
 }
 
 function closeMap() {
   bigmap?.hide();
+  people?.hideRoster();
 }
 
 function insideBoundary(x, z) {
@@ -442,6 +447,7 @@ function frame() {
     skids.update(car);
   }
   mp.update(car, dt, mode === 'drive');
+  people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
 
   if (mode === 'drive') {

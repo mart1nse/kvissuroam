@@ -94,18 +94,45 @@ function createEdges(track, world) {
   const chunks = [];
   for (let i0 = 0; i0 < N; i0 += CH) chunks.push({ i0, i1: Math.min(N, i0 + CH), mesh: null, cx: P[i0][0], cz: P[i0][1] });
 
+  // The street centre lines are not always where the street is drawn: on Vallikraavi the line runs
+  // close to the houses. Where a kerb would stand in a building or wall, slide the band sideways
+  // onto the open paving on the other side (and narrow it if there is none), smoothed along the lap.
+  const PAVED = 1;
+  function fit(i0, i1) {
+    const M = 12, raw = new Map(), out = new Map();
+    for (let i = i0 - M; i <= i1 + M; i++) {
+      const k = (i + N) % N, [px, pz] = P[k], nx = -tan[k][1], nz = tan[k][0], hw = HW[k];
+      const free = (sg) => { let d = 0; while (d < hw + 1 && world.sdfAt(px + nx * sg * d, pz + nz * sg * d) > 0.6) d += 0.25; return d; };
+      const paved = (sg) => { let d = 0; while (d < hw + 8 && world.surfaceAt(px + nx * sg * d, pz + nz * sg * d) === PAVED) d += 0.5; return d; };
+      const fr = free(1), fl = free(-1);
+      let off = 0;
+      if (fr < hw) off = -Math.min(hw - fr, Math.max(0, Math.min(paved(-1), fl) - hw));       // room on the left
+      else if (fl < hw) off = Math.min(hw - fl, Math.max(0, Math.min(paved(1), fr) - hw));
+      raw.set(i, [off, Math.min(0, fr - (hw + off)), Math.min(0, fl - (hw - off))]);
+    }
+    for (let i = i0; i <= i1; i++) {
+      let s = [0, 0, 0], w = 0;
+      for (let k = -M; k <= M; k++) { const g = Math.exp(-0.5 * (k / 5) ** 2), r = raw.get(i + k); s = s.map((v, j) => v + r[j] * g); w += g; }
+      const [off, cutR, cutL] = s.map((v) => v / w);
+      out.set((i + N) % N, [off - cutL, off + cutR]);          // shift of the left and right kerbs along the right-hand normal
+    }
+    return out;
+  }
+
   // per kerb: a flat band on the road just inside the kerb and a low see-through fence on it
   function build(ch) {
     const n = ch.i1 - ch.i0 + 1;                 // one past, to close the gap to the next piece
     const pos = [], col = [], idx = [];
+    const shift = fit(ch.i0, ch.i0 + n - 1);
     const strip = (k, inner, h, a0, a1) => {
       const base = pos.length / 3, c = colours[k];
       for (let j = 0; j < n; j++) {
         const i = (ch.i0 + j) % N;
-        const [x, z] = kerbs[k][i];
+        const sh = shift.get(i)[k];
+        const x = kerbs[k][i][0] - tan[i][1] * sh, z = kerbs[k][i][1] + tan[i][0] * sh;
         const y = world.topAt(x, z, 0) + 0.07;
         // inner edge: towards the centre line by `inner` metres
-        const dx = P[i][0] - x, dz = P[i][1] - z, l = Math.hypot(dx, dz) || 1;
+        const dx = P[i][0] - kerbs[k][i][0], dz = P[i][1] - kerbs[k][i][1], l = Math.hypot(dx, dz) || 1;
         const ix = x + (dx / l) * inner, iz = z + (dz / l) * inner;
         const iy = inner ? world.topAt(ix, iz, 0) + 0.07 : y + h;
         pos.push(x, y, z, ix, iy, iz);
@@ -157,13 +184,32 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
   panel.innerHTML = `<div class="lt"><span class="lbl">LAP</span><b id="laptime">0:00.00</b></div>
     <div class="lb"><span class="lbl">BEST <span id="lapcar"></span></span><b id="lapbest"></b></div>
     <ol id="laplast"></ol><div id="lapmsg"></div>`;
+  // checkpoint split: time at the checkpoint and +/- against this browser's best lap in this car
+  const split = document.createElement('div');
+  split.id = 'lapsplit';
+  split.className = 'hidden';
+  document.querySelector('#hud').appendChild(split);
+  let splitTimer = 0;
+  function showSplit(label, t, ref) {
+    const d = ref == null ? null : t - ref;
+    split.className = d == null ? '' : d <= 0 ? 'ahead' : 'behind';
+    split.innerHTML = `<span>${label}</span><b>${fmtTime(t)}</b>${d == null ? '' : `<i>${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</i>`}`;
+    clearTimeout(splitTimer);
+    splitTimer = setTimeout(() => split.classList.add('hidden'), 3200);
+  }
+  // this browser's best lap in a car that has checkpoint times
+  const bestSplits = (carId) => {
+    let b = null;
+    for (const l of laps) if (l.car === carId && l.splits && (!b || l.ms < b.ms)) b = l;
+    return b;
+  };
   document.querySelector('#hud').appendChild(panel);
   const elTime = panel.querySelector('#laptime'), elBest = panel.querySelector('#lapbest'), elCar = panel.querySelector('#lapcar');
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
 
   const st = {
     running: false, t0: 0, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
-    prev: null, prevTime: 0,
+    prev: null, prevTime: 0, splits: [],
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -263,7 +309,9 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                 const lapT = tc - st.t0;
                 const missed = track.checkpoints.length - st.cps.size;
                 if (missed === 0 && lapT > MIN_LAP) {
-                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString() };
+                  const ref = bestSplits(carId);
+                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice() };
+                  showSplit('FINISH', lapT, ref ? ref.ms / 1000 : null);
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);
                   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(laps)); } catch { /* private mode */ }
@@ -274,11 +322,18 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                   onLap?.(lap);
                 } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
               } else toast('GO!', 1200);
-              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.splits = []; st.off = 0; elMsg.textContent = '';
             }
           }
           if (st.running) {
-            for (const cp of track.checkpoints) if (!st.cps.has(cp.i) && Math.hypot(x - cp.x, z - cp.z) < track.HW[cp.i] + CP_RADIUS) st.cps.add(cp.i);
+            track.checkpoints.forEach((cp, k) => {
+              if (st.cps.has(cp.i) || Math.hypot(x - cp.x, z - cp.z) >= track.HW[cp.i] + CP_RADIUS) return;
+              st.cps.add(cp.i);
+              const t = time - st.t0;
+              st.splits[k] = Math.round(t * 1000);
+              const ref = bestSplits(carId)?.splits?.[k];
+              showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, ref == null ? null : ref / 1000);
+            });
             if (!onTrack) {
               st.off += moved;
               if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED', true);

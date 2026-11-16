@@ -102,6 +102,28 @@ def at(dist):
     return i
 i0 = at(92)
 c = c[i0:] + c[:i0]; hw = hw[i0:] + hw[:i0]
+
+# straighten knots: where the street network makes the route run round a tiny loop at a junction
+# (Vanemuise at Vallikraavi), the path is far longer than the gap it covers. Replace those points
+# with a straight line, keeping the point count so indices elsewhere stay put.
+def straighten():
+    head = lambda k: math.atan2(c[(k + 1) % N][1] - c[k % N][1], c[(k + 1) % N][0] - c[k % N][0])
+    wrap = lambda a: math.atan2(math.sin(a), math.cos(a))
+    i = 0
+    while i < N:
+        for j in range(i + 24, i + 5, -1):
+            net = abs(wrap(head(j) - head(i)))
+            turn = sum(abs(wrap(head(k + 1) - head(k))) for k in range(i, j))
+            if net < 0.35 and turn > 2.0:      # turns a lot but ends up going the same way: a knot
+                a, b = c[i % N], c[j % N]
+                for k in range(i + 1, j):
+                    t = (k - i) / (j - i)
+                    c[k % N] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+                print('straightened', i, j)
+                i = j
+                break
+        i += 1
+straighten()
 s = [0.0]
 for i in range(1, N): s.append(s[-1] + math.dist(c[i - 1], c[i]))
 

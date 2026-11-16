@@ -22,7 +22,7 @@ const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo',
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
 
-export function createMultiplayer({ scene, camera, buildModel, toast, onBoard }) {
+export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, onPeople }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, retry = 1, sendTimer = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -66,6 +66,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard })
       online = false;
       if (ws === sock) ws = null;
       for (const id of [...others.keys()]) drop(id);
+      onPeople?.('count');
       schedule();
     };
     sock.onerror = () => {};
@@ -122,21 +123,22 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard })
       case 'welcome':
         myId = m.id;
         for (const p of m.players) add(p);
+        onPeople?.('count');
         if (m.board) setBoard(m.board);
         break;
       case 'join':
         add(m);
-        toast(`${m.name.toUpperCase()} JOINED`, 2600);
+        if (onPeople) onPeople('join', m.name); else toast(`${m.name.toUpperCase()} JOINED`, 2600);
         break;
       case 'leave': {
         const o = others.get(m.id);
-        if (o) toast(`${o.name.toUpperCase()} LEFT`, 1800);
+        if (o) { if (onPeople) onPeople('leave', o.name); else toast(`${o.name.toUpperCase()} LEFT`, 1800); }
         drop(m.id);
         break;
       }
       case 'name': {
         const o = others.get(m.id);
-        if (o) { o.name = m.name; o.el.textContent = m.name; }
+        if (o) { onPeople?.('rename', m.name, o.name); o.name = m.name; o.el.textContent = m.name; }
         break;
       }
       case 'car': {
@@ -294,6 +296,8 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard })
     get online() { return online; },
     get count() { return others.size; },
     nameReady,
+    // everyone else online, including those who have not sent a position yet
+    roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
       n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);

@@ -241,6 +241,123 @@ export const CARS = {
     limiter: null,
     ref: { zeroTo100: 4.1, top: 324, powerKw: 352 },
   },
+  cgt: {
+    id: 'cgt',
+    name: 'Porsche Carrera GT',
+    short: 'Carrera GT',
+    year: 2004,
+    blurb: 'Typ 980 · 5.7 V10 · 450 kW (612 PS) · 6 speeds, driven as an automatic · rear-wheel drive',
+    mass: 1455,                 // kerb 1380 kg + driver
+    wheelbase: 2.73,
+    track: 1.587,               // 1612 front / 1587 rear
+    cgFront: 0.58,              // mid-engined: about 42 % front, 58 % rear
+    cgHeight: 0.43,
+    wheelRadius: 0.354,         // 335/30 ZR20 rear (265/35 ZR19 front)
+    cdA: 0.396 * 1.95,
+    drive: 'rwd',
+    grip: 1.14,                 // Michelin Pilot Sport, 265 front / 335 rear
+    tc: 1,                      // traction control: holds the tyres at their grip limit while the wheel is straight
+    engine: {
+      type: 'ice',
+      idle: 900,
+      redline: 8400,
+      shiftRpm: 8150,
+      pulses: 5,                // V10: five firing pulses per revolution
+      revDrop: 7500,            // tiny ceramic clutch and flywheel: the revs fall like a racing engine's
+      revCut: 0.045, revCutDrop: 450,
+      // 5.7 litre 68 degree V10: 590 Nm @ 5750, 450 kW @ 8000
+      torque: [[900, 380], [2000, 465], [3000, 512], [4000, 550], [5000, 578], [5750, 590], [6500, 583], [7500, 557], [8000, 537], [8400, 505], [8800, 380]],
+      stallRpm: 3600,
+      converterGain: 1.6,
+    },
+    gears: [3.2, 1.87, 1.36, 1.07, 0.9, 0.75],
+    reverse: 2.9,
+    finalDrive: 4.44,
+    efficiency: 0.88,
+    shiftTime: 0.28,
+    limiter: null,
+    ref: { zeroTo100: 3.9, top: 330, powerKw: 450 },
+  },
+  audi200: {
+    id: 'audi200',
+    name: 'Audi 200 Avant quattro 20V',
+    short: '200 Avant',
+    year: 1990,
+    blurb: 'Typ 44 · 2.2 R5 20V turbo · 162 kW (220 PS) · 5 speeds, driven as an automatic · quattro',
+    mass: 1635,                 // kerb 1560 kg + driver
+    wheelbase: 2.687,
+    track: 1.511,               // 1514 front / 1511 rear
+    cgFront: 0.41,              // the five-cylinder hangs ahead of the front axle: about 59 % front
+    cgHeight: 0.55,
+    wheelRadius: 0.319,         // 215/60 ZR15
+    cdA: 0.34 * 2.06,
+    drive: 'awd',
+    rearShare: 0.5,             // Torsen centre differential, 50/50
+    engine: {
+      type: 'ice',
+      idle: 800,
+      redline: 6900,
+      shiftRpm: 6550,
+      pulses: 2.5,              // five cylinders: two and a half firing pulses per revolution
+      // 3B: 309 Nm from 1950 rpm, 162 kW @ 5700
+      torque: [[800, 160], [1500, 255], [1950, 309], [3000, 309], [4500, 305], [5200, 291], [5700, 271], [6300, 238], [6900, 200], [7300, 140]],
+      // ...and before the KKK K24 turbo is blowing
+      turbo: {
+        torqueOff: [[800, 130], [2000, 165], [4000, 180], [5500, 168], [6900, 140]],
+        onRpm: 1400,
+        fullRpm: 2300,
+        spool: 3.2,
+        dump: 9,
+        whistle: 0.5,           // a small, well-silenced turbo
+      },
+      stallRpm: 2900,
+      converterGain: 1.8,
+    },
+    gears: [3.5, 1.889, 1.32, 0.967, 0.73],
+    reverse: 3.455,
+    finalDrive: 4.111,
+    efficiency: 0.83,
+    shiftTime: 0.4,
+    limiter: null,
+    ref: { zeroTo100: 6.7, top: 238, powerKw: 162 },
+  },
+  m3: {
+    id: 'm3',
+    name: 'BMW M3 Coupé',
+    short: 'M3 E92',
+    year: 2008,
+    blurb: 'E92 · 4.0 V8 · 309 kW (420 PS) · 7-speed M DCT · rear-wheel drive',
+    mass: 1675,                 // 1580 kg DIN + M DCT + driver
+    wheelbase: 2.761,
+    track: 1.539,               // 1540 front / 1539 rear
+    cgFront: 0.5,               // close to 50 : 50 with the driver aboard
+    cgHeight: 0.52,
+    wheelRadius: 0.335,         // 265/40 ZR18 rear (245/40 ZR18 front)
+    cdA: 0.31 * 2.17,
+    drive: 'rwd',
+    grip: 1.1,
+    tc: 1,                      // DSC and launch control
+    engine: {
+      type: 'ice',
+      idle: 800,
+      redline: 8400,
+      shiftRpm: 8250,
+      pulses: 4,
+      revDrop: 6000,
+      revCut: 0.04, revCutDrop: 350,
+      // S65B40: 400 Nm @ 3900, 309 kW @ 8300
+      torque: [[800, 270], [2000, 342], [3000, 382], [3900, 400], [5000, 398], [6500, 392], [7500, 378], [8300, 355.5], [8400, 350], [8800, 250]],
+      stallRpm: 3600,           // launch control
+      converterGain: 1.5,
+    },
+    gears: [4.78, 2.933, 2.153, 1.678, 1.39, 1.203, 1.0],
+    reverse: 4.34,
+    finalDrive: 3.154,
+    efficiency: 0.89,
+    shiftTime: 0.12,
+    limiter: 250,               // electronically limited
+    ref: { zeroTo100: 4.6, top: 250, powerKw: 309 },
+  },
 };
 
-export const CAR_ORDER = ['w201', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'f40'];
+export const CAR_ORDER = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'f40'];

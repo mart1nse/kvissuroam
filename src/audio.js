@@ -110,11 +110,11 @@ export function createAudio() {
       const b = car.boost || 0;
       if (turbo) {
         whine.frequency.setTargetAtTime(1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
-        whineGain.gain.setTargetAtTime(dead ? 0 : 0.016 * b * b, t, 0.08);
+        whineGain.gain.setTargetAtTime(dead ? 0 : 0.016 * b * b * (car.spec.engine.turbo.whistle ?? 1), t, 0.08);
         // (lastBoost: the boost built while the throttle was open, vented once it closes)
         if (car.throttle > 0) lastBoost = Math.max(lastBoost * 0.99, b);
         else {
-          if (!dead && lastBoost > 0.5 && t - lastPsh > 0.6) { psh(lastBoost); lastPsh = t; }
+          if (!dead && lastBoost > 0.5 && t - lastPsh > 0.6) { psh(lastBoost * (car.spec.engine.turbo.whistle ?? 1)); lastPsh = t; }
           lastBoost = 0;
         }
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);

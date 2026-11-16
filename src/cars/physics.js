@@ -175,7 +175,9 @@ function engineForce(car, throttle, dt) {
   const full = lerpTable(e.torque, rq);
   const base = tb ? lerpTable(tb.torqueOff, rq) : full;
   const kick = 1 + 0.5 * Math.min(1, Math.max(0, (car.carry - rpm) / rpm));
-  const tq = (base + (full - base) * (tb ? car.boost : 1)) * gain * throttle * cut * kick;
+  let tq = (base + (full - base) * (tb ? car.boost : 1)) * gain * throttle * cut * kick;
+  // electronic speed limiter
+  if (s.limiter && !car.reversing && vAbs * 3.6 > s.limiter - 2) tq *= Math.max(0, (s.limiter - vAbs * 3.6) / 2);
   return (dir * tq * ratioOf(car.gear) * s.efficiency) / s.wheelRadius;
 }
 
@@ -398,6 +400,9 @@ function substep(car, input, world, dt) {
   // and lifting end it.
   const ts = drivenR ? (drivenF ? (sf.tail < sr.tail ? sf : sr) : sr) : sf;
   let spinMax = 0, drive_cut = false;
+  const tcWant = s.tc && steerIn === 0 && !hb ? s.tc : 0;
+  const tcNow = car.tcK ?? tcWant;
+  car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';
   const axle = (front, share, surf, cap, lon, alpha, brakeK) => {
     let slipV = front ? car.slipVF : car.slipVR;
@@ -407,6 +412,14 @@ function substep(car, input, world, dt) {
     // as on the real cars (otherwise no AWD EV reaches its factory 0-100).
     // The rear motor gets no such help, so power oversteer stays possible.
     if (front && evFront && demand > lon) { demand = lon; if (share > 0) drive_cut = true; }
+    // Traction control (spec.tc): with the wheel held straight the electronics trim the drive to what the
+    // tyres can pass on. It lets go as soon as the driver steers or pulls the handbrake.
+    let trimmed = false;
+    if (car.tcK > 0 && share > 0 && throttle > 0) {
+      // (once the tyres are past their peak it backs off further, to pull them down again)
+      const allow = lon * Math.max(0, 1 - 2 * Math.max(0, kappa / surf.kp - 1));
+      if (demand > allow) { demand = allow + (demand - allow) * (1 - car.tcK); trimmed = true; }
+    }
     const spinning = share > 0 && throttle > 0 && !(hb && !front) && (demand > lon || kappa > surf.kp);
     let fx, fy = null, ask;
     if (spinning) {
@@ -428,7 +441,7 @@ function substep(car, input, world, dt) {
       const d = throttle > 0 && share > 0 && lon > 0 ? Math.max(0, Math.min(1, demand / lon)) : 0;
       const slipEq = (1 - Math.sqrt(1 - d)) * surf.kp * Math.max(Math.abs(car.vx), 3);
       slipV += (slipEq - slipV) * Math.min(1, dt * 25);
-      fx = (drive_cut && front ? demand * dir : drive * share - vSign * brakeK);
+      fx = ((drive_cut && front) || trimmed ? demand * dir : drive * share - vSign * brakeK);
       if (hb && !front) fx = -vSign * surf.mu * fzR * 0.95;
       ask = hb && !front ? 2 : Math.abs(fx) / cap;
       fx = Math.max(-cap, Math.min(cap, fx));
@@ -584,7 +597,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.tcK = undefined;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

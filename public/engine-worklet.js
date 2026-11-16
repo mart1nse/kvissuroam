@@ -65,9 +65,14 @@ export class EngineCore {
     const sr = this.sr, r = rng(c.seed || 7);
     this.cfg = c;
     // firing events: [crank angle, cylinder index, bank]
+    // (fireAt gives uneven firing intervals; stagger shifts each cylinder's pulse by up to that many
+    // degrees, as unequal manifold runners do)
     const step = 720 / c.order.length;
-    this.events = c.order.map((cyl, k) => ({ a: k * step, cyl, bank: c.bankOf(cyl) }));
     this.bias = c.order.map(() => 1 + (r() * 2 - 1) * c.bias);
+    this.events = c.order.map((cyl, k) => {
+      const a = (c.fireAt ? c.fireAt[k] : k * step) + (c.stagger ? (r() * 2 - 1) * c.stagger : 0);
+      return { a: ((a % 720) + 720) % 720, cyl, bank: c.bankOf(cyl) };
+    });
     this.banks = c.pipes.map((p) => new Pipe(sr, p.len, p.fb, p.damp ?? 0.5));
     this.res = c.res.map(([f, q, g]) => ({ f: new Biquad().set('bp', f, q, sr), g }));
     this.lp1 = new Biquad(); this.lp2 = new Biquad();
@@ -153,7 +158,7 @@ export class EngineCore {
         env += e * P.amp;
         if (++P.t > P.tau * 9) pulses.splice(p, 1);
       }
-      let y = banks[0].run(b0) + (banks.length > 1 ? banks[1].run(b1) : banks[0].run(b1));
+      let y = banks.length > 1 ? banks[0].run(b0) + banks[1].run(b1) : banks[0].run(b0 + b1);
       // silencers / body resonances
       let r = y * c.dry;
       for (let k = 0; k < res.length; k++) r += res[k].f.run(y) * res[k].g;

@@ -10,6 +10,8 @@
 // noise:   turbulent share of each pulse; rough / bias: cycle-to-cycle and cylinder-to-cylinder variation.
 // intake:  induction roar level at intakeF Hz; tick: valvetrain / injector tick level at tickF Hz.
 // drive:   saturation; gain: overall level; idleVol: share of the level left at idle.
+// fireAt:  crank angle of each firing in `order`, for engines with uneven firing intervals.
+// stagger: up to this many degrees of fixed offset per cylinder (unequal manifold runners).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -69,5 +71,46 @@ export const ENGINE_SOUNDS = {
     intake: 0.55, intakeF: 950, intakeQ: 1.1, tick: 0.06, tickF: 3000,
     jitter: 2.0, lope: 14, drive: 2.4, gain: 0.85, idleVol: 0.32,
     turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05,
+  },
+  // Porsche Carrera GT: 5.7 litre 68 degree V10 born as a Le Mans racing engine, firing order
+  // 1-6-5-10-2-7-3-8-4-9. Each crankpin carries one cylinder of each bank, so the firing intervals alternate
+  // 68 and 76 degrees; each bank is an even-firing five with its own exhaust. Dry sump, tiny flywheel and
+  // almost no silencing: a clean, hard, very high wail with a loud induction howl right behind the seats.
+  cgt: {
+    seed: 980, order: [1, 6, 5, 10, 2, 7, 3, 8, 4, 9], banks: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+    fireAt: [0, 68, 144, 212, 288, 356, 432, 500, 576, 644],
+    pipes: [{ len: 0.74, fb: -0.52, damp: 0.66 }, { len: 0.78, fb: -0.52, damp: 0.66 }],
+    res: [[210, 1.2, 0.38], [520, 1.6, 0.46], [1150, 2, 0.4], [2300, 2.4, 0.22]], dry: 0.6,
+    lp0: 900, lpRpm: 360, lpLoad: 2500, hp: 38,
+    base: 0.4, overrun: 0.75, pulseDeg: 22, noise: 0.11, rough: 0.05, bias: 0.04,
+    intake: 0.6, intakeF: 1150, intakeQ: 1.2, tick: 0.05, tickF: 3400,
+    jitter: 1.0, lope: 12, drive: 2.0, gain: 0.85, idleVol: 0.3,
+    pops: 0.02,
+  },
+  // Audi 3B: 2.2 litre DOHC 20-valve inline five with a KKK K24 turbo, firing order 1-2-4-5-3. Five pulses
+  // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
+  // quattro rally cars, rounded off by the turbo.
+  audi200: {
+    seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 7,
+    pipes: [{ len: 1.5, fb: -0.44, damp: 0.46 }],
+    res: [[105, 1.4, 0.62], [235, 2.2, 0.5], [560, 2.6, 0.32], [1250, 3, 0.1]], dry: 0.4,
+    lp0: 300, lpRpm: 150, lpLoad: 820, hp: 30,
+    base: 0.4, overrun: 0.8, pulseDeg: 34, noise: 0.1, rough: 0.05, bias: 0.16,
+    intake: 0.3, intakeF: 600, intakeQ: 1.3, tick: 0.02, tickF: 4200,
+    jitter: 1.2, lope: 9, drive: 1.7, gain: 0.8, idleVol: 0.3,
+    turbo: true, turboMuffle: 220, hiss: 0.02,
+  },
+  // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
+  // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy
+  // howl, with a sharp induction bark from the airbox.
+  m3: {
+    seed: 92, order: [1, 5, 4, 8, 7, 2, 6, 3], banks: [0, 0, 0, 0, 1, 1, 1, 1],
+    pipes: [{ len: 0.86, fb: -0.5, damp: 0.56 }, { len: 0.91, fb: -0.5, damp: 0.56 }],
+    res: [[125, 1.3, 0.56], [300, 1.8, 0.46], [700, 2.2, 0.32], [1500, 2.5, 0.15]], dry: 0.5,
+    lp0: 520, lpRpm: 260, lpLoad: 1700, hp: 32,
+    base: 0.4, overrun: 0.8, pulseDeg: 28, noise: 0.14, rough: 0.06, bias: 0.05,
+    intake: 0.6, intakeF: 820, intakeQ: 1.2, tick: 0.03, tickF: 3600,
+    jitter: 1.4, lope: 9, drive: 2.0, gain: 0.85, idleVol: 0.3,
+    pops: 0.015,
   },
 };

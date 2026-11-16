@@ -77,7 +77,7 @@ export const CARS = {
     blurb: 'MEB · two electric motors · 195 kW · single speed · all-wheel drive',
     mass: 2310,                 // kerb 2235 kg + driver
     wheelbase: 2.765,
-    track: 1.59,
+    track: 1.577,               // 1587 front / 1567 rear
     cgFront: 0.51,
     cgHeight: 0.56,
     wheelRadius: 0.37,

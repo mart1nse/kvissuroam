@@ -21,6 +21,7 @@ import { createIntro } from './intro.js';
 import { createRace, createTrack } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createBoard } from './race/board.js';
+import { createTrackside, clearProps } from './race/trackside.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -60,7 +61,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, bigmap, race, mp, board;
+let world, terrain, water, edge, hud, skids, bigmap, race, mp, board, props, trackside;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -94,7 +95,8 @@ async function boot() {
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
-  const attachProps = createProps(world, { shadows: !isTouch });
+  trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps });
   const attachSigns = createSigns(world);
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -435,6 +437,8 @@ function frame() {
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     stepCar(car, mode === 'drive' ? input.state : idle, world, dt);
     mp.collide(car);
+    trackside.collide(car);
+    props.update(car, dt);
     skids.update(car);
   }
   mp.update(car, dt, mode === 'drive');
@@ -554,6 +558,7 @@ function frame() {
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;
+    trackside.update(car.x, car.z);
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
     terrain.update(camera.position);
@@ -587,7 +592,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp };
+  race: () => race, mp: () => mp, props: () => props };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

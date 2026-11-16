@@ -1,6 +1,8 @@
 // Street furniture at the places where Mapillary detected it in street photos (CC BY-SA):
 // street lights, poles, traffic lights and signs, benches, bins, bike racks, cabinets and zebra crossings.
-// Everything in a sector is merged into a handful of meshes. Props are scenery only: the car drives through them.
+// Everything in a sector is merged into a handful of meshes. Driving into a prop knocks it loose: it is
+// cut out of the merged mesh and flies off as its own rigid body (see knock() below). Knocked props stay
+// where they came to rest for the rest of the browser session (sessionStorage) and are back next time.
 import * as THREE from 'three';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, SIGN0 = 10;
@@ -91,8 +93,22 @@ class Batch {
   }
 }
 
+// physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
+const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, sign: 10 };
+const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, sign: 0.08 };
+const KNOCK_KEY = 'streetlap.knocked';
+const G = 9.81;
+
+function loadKnocked() {
+  try { return JSON.parse(sessionStorage.getItem(KNOCK_KEY)) || {}; } catch { return {}; }
+}
+
 export function createProps(world, opts = {}) {
-  let data = null;
+  let data = null, cleared = new Set();
+  const knocked = loadKnocked();              // id -> rest pose [x, y, z, qx, qy, qz, qw] (or 1 while flying)
+  const live = new Map();                     // sector key -> { entries, meshes, group }
+  const moving = new Set();                   // loose bodies still in motion
+  let saveTimer = 0;
   const waiting = [];
   const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
@@ -106,6 +122,8 @@ export function createProps(world, opts = {}) {
     const a = data.sectors[`${sector.sx}_${sector.sz}`];
     if (!a) return null;
     const solid = new Batch(), glow = new Batch(), pool = new Batch(), sign = new Batch(), paint = new Batch();
+    const entries = [], rest = [];
+    const mark = () => [solid.pos.length / 3, glow.pos.length / 3, pool.pos.length / 3, sign.pos.length / 3];
     const S = world.meta.sector.size;
     const hAt = (x, z) => world.topAt(Math.min(Math.max(x, sector.x0 + 0.01), sector.x0 + S - 0.01), Math.min(Math.max(z, sector.z0 + 0.01), sector.z0 + S - 0.01));
     for (let i = 0; i < a.length; i += data.stride) {
@@ -113,6 +131,12 @@ export function createProps(world, opts = {}) {
       // local +z points along the compass bearing "yaw" (0 = north = -z in the world)
       const cs = -Math.cos(yaw), sn = Math.sin(yaw);
       const y = hAt(x, z);
+      const id = `${sector.sx}_${sector.sz}:${i / data.stride}`;
+      if (kind !== ZEBRA) {
+        if (cleared.has(id)) continue;
+        if (knocked[id]) { rest.push({ id, kind, x, y, z, cs, sn }); continue; }
+      }
+      const m0 = kind === ZEBRA ? null : mark();
       if (kind === ZEBRA) {
         const w = extra || 7, fx = Math.sin(yaw), fz = -Math.cos(yaw);       // along the road
         for (let s = -w / 2 + 0.5; s <= w / 2 - 0.5; s += 1.0) {
@@ -128,6 +152,7 @@ export function createProps(world, opts = {}) {
       if (kind >= SIGN0) {
         for (const p of SOLID.sign) solid.add(p, x, y, z, cs, sn);
         sign.add(PLATE, x, y, z, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
+        entries.push({ id, kind, x, y, z, cs, sn, r0: m0, r1: mark(), gone: false });
         continue;
       }
       for (const p of SOLID[kind] || []) solid.add(p, x, y, z, cs, sn);
@@ -143,6 +168,7 @@ export function createProps(world, opts = {}) {
           glow.add(lamp, x + lx * cs + lz * sn, y + ly, z - lx * sn + lz * cs, cs, sn, 0, 1, [c[0] * dim, c[1] * dim, c[2] * dim]);
         });
       }
+      entries.push({ id, kind, x, y, z, cs, sn, r0: m0, r1: mark(), gone: false });
     }
     const group = new THREE.Group();
     const meshes = [solid.mesh(solidMat), glow.mesh(glowMat), pool.mesh(poolMat, true), sign.mesh(signMat, true), paint.mesh(paintMat)];
@@ -153,18 +179,232 @@ export function createProps(world, opts = {}) {
       if (k === 2) m.renderOrder = 2;
       group.add(m);
     });
-    group.userData.dispose = () => { for (const m of meshes) m?.geometry.dispose(); };
-    return group.children.length ? group : null;
+    const key = `${sector.sx}_${sector.sz}`;
+    const rec = { entries, meshes, group, loose: [] };
+    live.set(key, rec);
+    // props knocked earlier this session lie where they came to rest
+    for (const e of rest) {
+      const pose = knocked[e.id];
+      const b = makeBody(e, rec);
+      if (Array.isArray(pose)) { b.obj.position.fromArray(pose, 0); b.obj.quaternion.fromArray(pose, 3); b.asleep = true; }
+      else { b.obj.visible = false; b.asleep = true; }
+    }
+    group.userData.dispose = () => {
+      for (const m of meshes) m?.geometry.dispose();
+      for (const b of rec.loose) { b.geos.forEach((g) => g.dispose()); moving.delete(b); }
+      if (live.get(key) === rec) live.delete(key);
+    };
+    return group;
+  }
+
+  // ---- knocked props
+  // a loose copy of one prop, centred on its centre of mass, in its own group inside the sector's group
+  function makeBody(e, rec) {
+    const solid = new Batch(), glow = new Batch(), sign = new Batch();
+    const { kind, cs, sn } = e;
+    if (kind >= SIGN0) {
+      for (const p of SOLID.sign) solid.add(p, 0, 0, 0, cs, sn);
+      sign.add(PLATE, 0, 0, 0, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
+    } else {
+      for (const p of SOLID[kind] || []) solid.add(p, 0, 0, 0, cs, sn);
+      if (kind === LIGHT) glow.add(GLOW[LIGHT], 0, 0, 0, cs, sn);
+    }
+    const obj = new THREE.Group();
+    const geos = [];
+    const box = new THREE.Box3();
+    for (const [b, mat, uv] of [[solid, solidMat, false], [glow, glowMat, false], [sign, signMat, true]]) {
+      const m = b.mesh(mat, uv);
+      if (!m) continue;
+      m.geometry.computeBoundingBox();
+      box.union(m.geometry.boundingBox);
+      geos.push(m.geometry);
+      m.matrixAutoUpdate = true;
+      m.castShadow = k0(mat);
+      obj.add(m);
+    }
+    const c = box.getCenter(new THREE.Vector3());
+    for (const m of obj.children) m.position.sub(c);
+    const corners = [];
+    for (const X of [box.min.x, box.max.x]) for (const Y of [box.min.y, box.max.y]) for (const Z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(X - c.x, Y - c.y, Z - c.z));
+    obj.position.set(e.x + c.x, e.y + c.y, e.z + c.z);
+    rec.group.add(obj);
+    const size = box.getSize(new THREE.Vector3());
+    const mass = kind >= SIGN0 ? MASS.sign : MASS[kind] || 30;
+    const L = Math.max(size.x, size.y, size.z);
+    const body = {
+      id: e.id, kind, obj, geos, corners, mass, inertia: mass * (L * L) / 10 + 0.5,
+      v: new THREE.Vector3(), w: new THREE.Vector3(), asleep: false, still: 0, reach: (kind >= SIGN0 ? REACH.sign : REACH[kind] || 0.3) + Math.min(size.x, size.z) * 0.5,
+    };
+    rec.loose.push(body);
+    return body;
+  }
+  const k0 = (mat) => mat === solidMat && !!opts.shadows;
+
+  // cut a prop out of its sector's merged meshes
+  function hide(rec, e) {
+    e.gone = true;
+    for (let k = 0; k < 4; k++) {
+      const m = rec.meshes[k];
+      const a = e.r0[k], b = e.r1[k];
+      if (!m || b <= a) continue;
+      const pos = m.geometry.attributes.position;
+      for (let v = a; v < b; v++) pos.setXYZ(v, e.x, e.y - 50, e.z);
+      pos.needsUpdate = true;
+    }
+  }
+
+  const tmpV = new THREE.Vector3(), tmpR = new THREE.Vector3(), tmpN = new THREE.Vector3(), tmpC = new THREE.Vector3(), tmpT = new THREE.Vector3();
+  const tmpQ = new THREE.Quaternion();
+  // an impulse of size j along unit direction d at offset r from the body's centre
+  function impulse(b, d, j, r) {
+    b.v.addScaledVector(d, j / b.mass);
+    tmpT.crossVectors(r, d);
+    b.w.addScaledVector(tmpT, j / b.inertia);
+  }
+  // the car (world velocity cvx, cvz, mass M) hits body b; returns the impulse taken from the car
+  function hit(b, cvx, cvz, M) {
+    const sp = Math.hypot(cvx - b.v.x, cvz - b.v.z);
+    if (sp < 0.3) return 0;
+    tmpN.set((cvx - b.v.x) / sp, 0, (cvz - b.v.z) / sp);
+    // the bumper meets it about half a metre above the ground
+    const p = b.obj.position;
+    const gy = world.heightAt(p.x, p.z);
+    tmpR.set(0, Math.min(0.55 + gy - p.y, 0), 0);
+    tmpT.crossVectors(tmpR, tmpN);
+    const k = 1 / b.mass + tmpT.lengthSq() / b.inertia + 1 / M;
+    const j = (1.25 * sp) / k;
+    impulse(b, tmpN, j, tmpR);
+    b.v.y += 0.12 * sp + 0.3;
+    b.w.x += (Math.random() - 0.5) * 0.6; b.w.z += (Math.random() - 0.5) * 0.6;
+    b.asleep = false; b.still = 0; b.age = 0;
+    moving.add(b);
+    return j;
+  }
+
+  function step(b, dt) {
+    const o = b.obj;
+    b.v.y -= G * dt;
+    o.position.addScaledVector(b.v, dt);
+    const wl = b.w.length();
+    if (wl > 1e-6) { tmpQ.setFromAxisAngle(tmpV.copy(b.w).divideScalar(wl), wl * dt); o.quaternion.premultiply(tmpQ); }
+    // ground contact at the deepest corner
+    let deepest = 0, ci = -1;
+    for (let i = 0; i < b.corners.length; i++) {
+      tmpC.copy(b.corners[i]).applyQuaternion(o.quaternion).add(o.position);
+      const pen = world.heightAt(tmpC.x, tmpC.z) - tmpC.y;
+      if (pen > deepest) { deepest = pen; ci = i; }
+    }
+    let touching = false;
+    if (ci >= 0) {
+      touching = true;
+      o.position.y += deepest;
+      tmpR.copy(b.corners[ci]).applyQuaternion(o.quaternion);
+      tmpN.set(0, 1, 0);
+      tmpV.crossVectors(b.w, tmpR).add(b.v);                       // velocity of the contact point
+      const vn = tmpV.y;
+      if (vn < 0) {
+        tmpT.crossVectors(tmpR, tmpN);
+        const k = 1 / b.mass + tmpT.lengthSq() / b.inertia;
+        const j = (-(1 + 0.25) * vn) / k;
+        impulse(b, tmpN, j, tmpR);
+        // friction against the slide
+        tmpV.crossVectors(b.w, tmpR).add(b.v);
+        const vt = Math.hypot(tmpV.x, tmpV.z);
+        if (vt > 1e-4) {
+          const t = tmpN.set(-tmpV.x / vt, 0, -tmpV.z / vt);
+          tmpT.crossVectors(tmpR, t);
+          const kt = 1 / b.mass + tmpT.lengthSq() / b.inertia;
+          impulse(b, t, Math.min(vt / kt, 0.6 * j), tmpR);
+        }
+      }
+      b.w.multiplyScalar(Math.exp(-dt * 1.5));
+      b.v.x *= Math.exp(-dt * 0.8); b.v.z *= Math.exp(-dt * 0.8);
+    }
+    b.age += dt;
+    if (touching && b.v.lengthSq() < 0.09 && b.w.lengthSq() < 0.16) b.still += dt; else b.still = 0;
+    if (b.still > 0.5 || (touching && b.age > 8) || b.age > 30) {
+      b.asleep = true; b.v.set(0, 0, 0); b.w.set(0, 0, 0);
+      moving.delete(b);
+      knocked[b.id] = [...o.position.toArray().map((v) => Math.round(v * 100) / 100), ...o.quaternion.toArray().map((v) => Math.round(v * 1e4) / 1e4)];
+      saveTimer = 0.5;
+    }
+  }
+
+  // check the car against the props around it, knock what it touches, move what is flying
+  function update(car, dt) {
+    if (!data) return;
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    const speed = Math.hypot(car.vx, car.vy);
+    const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
+    if (speed > 0.3) {
+      const M = car.spec.mass;
+      let cvx = car.vx * fx + car.vy * rx, cvz = car.vx * fz + car.vy * rz, took = 0;
+      const sx = Math.floor((car.x - G0) / S), sz = Math.floor((car.z - G0) / S);
+      const touches = (px, pz, reach) => {
+        const dx = px - car.x, dz = pz - car.z;
+        if (dx * dx + dz * dz > 49) return false;
+        return Math.abs(dx * fx + dz * fz) < car.halfLen + reach && Math.abs(dx * rx + dz * rz) < car.halfWid + reach;
+      };
+      for (let ax = sx - 1; ax <= sx + 1; ax++) for (let az = sz - 1; az <= sz + 1; az++) {
+        const rec = live.get(`${ax}_${az}`);
+        if (!rec) continue;
+        const x0 = G0 + ax * S, z0 = G0 + az * S;
+        if (car.x < x0 - 8 || car.x > x0 + S + 8 || car.z < z0 - 8 || car.z > z0 + S + 8) continue;
+        for (const e of rec.entries) {
+          if (e.gone) continue;
+          const reach = e.kind >= SIGN0 ? REACH.sign : REACH[e.kind] || 0.3;
+          if (Math.abs(e.y - car.y) > 3 || !touches(e.x, e.z, reach)) continue;
+          hide(rec, e);
+          const b = makeBody(e, rec);
+          knocked[e.id] = 1;
+          const j = hit(b, cvx, cvz, M);
+          took += j;
+          cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M;
+          saveTimer = 0.5;
+        }
+        for (const b of rec.loose) {
+          const p = b.obj.position;
+          if (!b.obj.visible || Math.abs(p.y - car.y) > 2.5 || !touches(p.x, p.z, b.reach)) continue;
+          const j = hit(b, cvx, cvz, M);
+          if (j) { took += j; cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M; }
+        }
+      }
+      if (took > 0) {
+        car.vx = cvx * fx + cvz * fz; car.vy = cvx * rx + cvz * rz;
+        car.hit = Math.max(car.hit, Math.min(3, took / M * 6));
+      }
+    }
+    const sub = dt > 1 / 60 ? 2 : 1;
+    for (const b of [...moving]) for (let k = 0; k < sub; k++) if (!b.asleep) step(b, dt / sub);
+    if (saveTimer > 0 && (saveTimer -= dt) <= 0) {
+      try { sessionStorage.setItem(KNOCK_KEY, JSON.stringify(knocked)); } catch { /* private mode */ }
+    }
   }
 
   fetch(`${import.meta.env.BASE_URL}data/props.json`).then((r) => r.json()).then((d) => {
     data = d;
+    if (opts.clear) cleared = opts.clear(d);
     for (const f of waiting.splice(0)) f();
   }).catch(() => { /* no props baked: play without them */ });
 
   // attach(sector, add) calls add(group) once the sector's props exist (now, or when the data arrives)
-  return (sector, add) => {
+  const attach = (sector, add) => {
     const run = () => { if (sector.state === 'ready') { const g = build(sector); if (g) add(g); } };
     if (data) run(); else waiting.push(run);
   };
+  attach.update = update;
+  attach.knockedCount = () => Object.keys(knocked).length;
+  attach.moving = () => moving.size;
+  // nearest standing prop (for tests)
+  attach.nearest = (x, z, kindTest = () => true) => {
+    let best = null, bd = Infinity;
+    for (const rec of live.values()) for (const e of rec.entries) {
+      if (e.gone || !kindTest(e.kind)) continue;
+      const d = Math.hypot(e.x - x, e.z - z);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best && { id: best.id, kind: best.kind, x: best.x, y: best.y, z: best.z };
+  };
+  attach.loose = (id) => { for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) return { p: b.obj.position.toArray(), q: b.obj.quaternion.toArray(), asleep: b.asleep, v: b.v.toArray(), w: b.w.toArray(), still: b.still }; return null; };
+  return attach;
 }

@@ -70,11 +70,34 @@ export async function loadWorldData(onProgress = () => {}) {
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
+      for (const b of solids) stamp(s, b);
       s.state = 'ready';
       loading--;
       for (const f of onLoad) f(s);
     }, (err) => { loading--; s.state = 'failed'; console.warn(err); });
     return s.promise;
+  }
+
+  // Extra solid boxes added at run time (parked cars, kiosks): written into the obstacle distance field
+  // of every sector they touch, now and whenever that sector loads again. b: { x, z, yaw, hx, hz }
+  const solids = [];
+  function stamp(s, b) {
+    const reach = Math.hypot(b.hx, b.hz) + dspan + dmin;
+    if (b.x + reach < s.x0 || b.x - reach > s.x1 || b.z + reach < s.z0 || b.z - reach > s.z1) return;
+    const c = Math.cos(b.yaw), sn = Math.sin(b.yaw);
+    const c0 = Math.max(0, Math.floor((b.x - reach - s.x0) / dres)), c1 = Math.min(dn - 1, Math.ceil((b.x + reach - s.x0) / dres));
+    const r0 = Math.max(0, Math.floor((b.z - reach - s.z0) / dres)), r1 = Math.min(dn - 1, Math.ceil((b.z + reach - s.z0) / dres));
+    const D = s.D;
+    for (let r = r0; r <= r1; r++) {
+      for (let col = c0; col <= c1; col++) {
+        const px = s.x0 + col * dres - b.x, pz = s.z0 + r * dres - b.z;
+        const qx = Math.abs(px * c - pz * sn) - b.hx, qz = Math.abs(px * sn + pz * c) - b.hz;
+        const d = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
+        const v = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
+        const i = r * dn + col;
+        if (v < D[i]) D[i] = v;
+      }
+    }
   }
 
   function unload(s) {
@@ -120,6 +143,16 @@ export async function loadWorldData(onProgress = () => {}) {
   }
   const UNDER = 1.6;        // a car lower than this below a deck is on the ground under it
 
+  const bumps = [];
+  function bumpAt(x, z) {
+    let h = 0;
+    for (let k = 0; k < bumps.length; k++) {
+      const b = bumps[k];
+      if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) h += b.at(x, z);
+    }
+    return h;
+  }
+
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 
   const world = {
@@ -127,6 +160,12 @@ export async function loadWorldData(onProgress = () => {}) {
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
+
+    // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
+    addSolids(list) {
+      solids.push(...list);
+      for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
+    },
 
     // Start loading sectors within rLoad of the point, drop those beyond rKeep
     // (but never those within hold.r of hold, e.g. the parked car while the intro drone flies elsewhere).
@@ -182,8 +221,13 @@ export async function loadWorldData(onProgress = () => {}) {
       fx -= c; fz -= r;
       const H = s.H, i = r * hn + c;
       const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
-      return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      const h = ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      return bumps.length === 0 ? h : h + bumpAt(x, z);
     },
+
+    // Small raised shapes on top of the height field (kerbs finer than its 2 m grid): each is
+    // { x0, z0, x1, z1, at(x, z) -> metres }.
+    addBump(b) { bumps.push(b); },
 
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {

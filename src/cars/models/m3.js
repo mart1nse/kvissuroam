@@ -3,6 +3,7 @@
 // four tailpipes in a black diffuser and 19-inch twin-spoke M wheels.
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, arcPts, tintPaint } from './kit.js';
+import { useGlbBody } from './glbbody.js';
 import { part, planLine, sideLine, sweep, clip2, foldFlanks, lathe, skinPatch, bulge, spokeFace, tyreAndRim } from './parts.js';
 
 // real car: 4615 x 1804 x 1418 mm, wheelbase 2761, track 1540 front / 1539 rear,
@@ -300,5 +301,6 @@ export function buildM3() {
   const wheel = { soup: mWheel(0.335, 0.265, 0.2413 + 0.012, 0.03) };
   const wheelFront = { soup: mWheel(0.327, 0.245, 0.2413 + 0.012, 0.014) };
   const car = assembleCar({ id: 'm3', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
-  return tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
+  // the procedural body shows until the scanned body (public/models/m3.glb) has loaded
+  return useGlbBody(tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'm3.glb');
 }

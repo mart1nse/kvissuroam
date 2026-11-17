@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
   for (const c of cars.split(',')) for (const v of views.split(',')) {
     await p.goto(`http://localhost:${process.env.PORT || 5173}/tools/car-viewer/index.html?car=${c}&view=${v}&hud=0${extra}`);
     await p.waitForFunction(() => window.__ready, null, { timeout: 60000 });
-    await p.waitForTimeout(300);
+    await p.waitForTimeout(+process.env.WAIT || 300);
     await p.screenshot({ path: `${out}/${c}-${v}.png`, timeout: 60000 });
     if (v === views.split(',')[0]) console.log(c, JSON.stringify(await p.evaluate(() => window.__stats)));
   }

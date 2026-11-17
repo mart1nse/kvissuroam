@@ -94,7 +94,7 @@ const A_PLATE = uvr(0, 0, 832, 181), A_NAME = uvr(0, 200, 520, 70), A_CREST = uv
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '612 CGT');
+    drawPlate(g, 0, 0, 832, 181, '001 POR');
     // PORSCHE in wide spaced capitals
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = 'bold 58px "Helvetica Neue", Helvetica, Arial, sans-serif';

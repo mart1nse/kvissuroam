@@ -93,7 +93,7 @@ const flipU = (r) => [r[2], r[1], r[0], r[3]];
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '420 BMW');
+    drawPlate(g, 0, 0, 832, 181, '333 BMW');
     const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
     const chromeGrad = (y0, y1) => { const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.45, '#cfd2d6'); gr.addColorStop(0.55, '#868b91'); gr.addColorStop(1, '#eceef0'); return gr; };
     // kidney: chrome surround, black vertical slats (u 0 = centre of the car)

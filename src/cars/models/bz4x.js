@@ -31,7 +31,7 @@ const A_PLATE = uvr(0, 0, 832, 181), A_LOGO = uvr(0, 200, 200, 140), A_BZ = uvr(
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '426 BZX');
+    drawPlate(g, 0, 0, 832, 181, '444 BZX');
     toyotaLogo(g, 100, 270, 98, '#c9ccd0');
     g.fillStyle = '#15171a'; g.textBaseline = 'middle'; g.textAlign = 'center';
     g.font = 'bold 92px Arial, Helvetica, sans-serif'; g.fillText('bZ4X', 385, 254);

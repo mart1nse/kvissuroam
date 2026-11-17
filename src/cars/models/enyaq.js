@@ -211,7 +211,7 @@ function skodaLogo(g, cx, cy, r, col) {
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '023 ENQ');
+    drawPlate(g, 0, 0, 832, 181, '823 ENQ');
     // chrome lettering with a thin dark edge, so it reads against both the black paint and bright reflections
     const chrome = (txt, x, y, font, sx, edge) => {
       g.save(); g.translate(x, y); g.scale(sx, 1); g.font = font; g.lineJoin = 'round';

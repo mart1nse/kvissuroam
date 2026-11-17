@@ -291,6 +291,9 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #board .mine span { font-size: 9px; letter-spacing: .22em; color: var(--pink); }
 #board .mine ol { margin: 4px 0 0; padding-left: 1.4em; text-align: left; }
 #board .mine small { opacity: .6; margin-left: 6px; }
+#board .lastlaps { display: flex; gap: 48px; align-items: flex-start; justify-content: center; }
+#board .recent i { font-style: normal; color: var(--cyan); margin: 0 4px; }
+@media (max-width: 760px), (max-height: 430px) { #board .recent { display: none; } }
 #board .row { align-items: center; }
 #board .dl { color: var(--cyan); }
 /* (every element has touch-action: none, which stopped a finger from scrolling the board on phones) */

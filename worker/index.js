@@ -93,7 +93,9 @@ export class Lobby extends DurableObject {
     const best = (where, ...args) => this.sql.exec(
       `SELECT car, name, MIN(ms) AS ms, at FROM laps WHERE track = ? ${where} GROUP BY car`, TRACK, ...args).toArray();
     const count = this.sql.exec('SELECT COUNT(*) AS n FROM laps WHERE track = ?', TRACK).one().n;
-    return { track: TRACK, day, allTime: best(''), today: best('AND day = ?', day), laps: count };
+    // the latest laps by anyone, newest first (the desktop board lists them)
+    const recent = this.sql.exec('SELECT name, car, ms, at FROM laps WHERE track = ? ORDER BY at DESC, id DESC LIMIT 20', TRACK).toArray();
+    return { track: TRACK, day, allTime: best(''), today: best('AND day = ?', day), laps: count, recent };
   }
 
   async fetch(req) {

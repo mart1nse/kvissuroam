@@ -258,10 +258,11 @@ let groups = [];                 // [{ ids, front, el, cards }]
 // Cards behind the front one: their size, and how much of each shows below the one in front of it
 // (the next car shows about three quarters of itself, then less each step back). Short screens show less.
 const STACK = { scale: [1, 0.92, 0.84, 0.76], show: [1, 0.75, 0.55, 0.38] };
+const STACK_MID = { scale: [1, 0.92, 0.84], show: [1, 0.72, 0.42] };
 const STACK_LOW = { scale: [1, 0.9, 0.8], show: [1, 0.45, 0.32] };
 
 function layoutMenu() {
-  const st = innerHeight < 560 ? STACK_LOW : STACK, last = st.scale.length - 1;
+  const st = innerHeight < 560 ? STACK_LOW : innerHeight < 760 ? STACK_MID : STACK, last = st.scale.length - 1;
   // where each card's top sits, in front-card heights (they shrink towards their top edge)
   const top = [0], bottom = [1];
   for (let k = 1; k <= last; k++) { bottom[k] = bottom[k - 1] + st.show[k] * st.scale[k]; top[k] = bottom[k] - st.scale[k]; }
@@ -283,10 +284,20 @@ function layoutMenu() {
     });
     tallest = Math.max(tallest, bottom[Math.min(n - 1, last)]);
   }
-  // (the cards overlap in one grid cell, so the stacks are given room below for the ones behind)
-  const h = Math.max(...groups.map((g) => g.cards[g.front].offsetHeight));
-  for (const g of groups) g.el.querySelector('.stack').style.paddingBottom = `${Math.round((tallest - 1) * h)}px`;
+  stackRoom = tallest - 1;
+  padStacks();
 }
+
+// The cards overlap in one grid cell, so each stack is given room below for the ones behind, in front-card
+// heights. That needs the cards' real height, which is 0 while the menu is still hidden behind the loading
+// screen, so it is measured again whenever a card changes size (shown, resized, rotated, fonts loaded).
+let stackRoom = 0;
+function padStacks() {
+  const h = Math.max(0, ...groups.map((g) => g.cards[g.front].offsetHeight));
+  if (!h) return;
+  for (const g of groups) g.el.querySelector('.stack').style.paddingBottom = `${Math.round(stackRoom * h)}px`;
+}
+const cardSizes = typeof ResizeObserver === 'function' ? new ResizeObserver(() => padStacks()) : null;
 
 function slideGroup(g, d) {
   const n = g.ids.length;
@@ -318,6 +329,17 @@ function buildMenu() {
       stack.appendChild(c);
       g.cards.push(c);
     }
+    // up and down arrows on the right edge of the front card, so it is plain the stack can be slid
+    if (def.ids.length > 1) {
+      const nav = document.createElement('div');
+      nav.className = 'nav';
+      stack.classList.add('has-nav');
+      nav.innerHTML = '<button class="up" aria-label="Previous car">&#9650;</button><button class="dn" aria-label="Next car">&#9660;</button>';
+      nav.querySelector('.up').addEventListener('click', () => slideGroup(g, -1));
+      nav.querySelector('.dn').addEventListener('click', () => slideGroup(g, 1));
+      nav.addEventListener('pointerdown', (e) => e.stopPropagation());
+      stack.appendChild(nav);
+    }
     stack.addEventListener('wheel', (e) => {
       e.preventDefault();
       const now = performance.now();
@@ -341,6 +363,7 @@ function buildMenu() {
   });
   addEventListener('pointercancel', () => { drag = null; });
   layoutMenu();
+  for (const g of groups) for (const c of g.cards) cardSizes?.observe(c);
   addEventListener('resize', layoutMenu);
   $('#drive').addEventListener('click', startDriving);
   addEventListener('keydown', (e) => {

@@ -59,13 +59,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 /* (the groups side by side; the row can still scroll sideways if a very narrow screen can't fit them) */
 #cards {
-  display: flex; gap: clamp(10px, 2.4vw, 34px); align-items: flex-start; justify-content: safe center; width: 100%; margin-top: auto;
-  overflow-x: auto; padding: 8px 10px 4px; box-sizing: border-box; scrollbar-width: none; overscroll-behavior-x: contain;
+  display: flex; gap: clamp(18px, 2.8vw, 40px); align-items: flex-start; justify-content: safe center; width: 100%; margin-top: auto;
+  overflow-x: auto; padding: 8px 22px 4px; box-sizing: border-box; scrollbar-width: none; overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
 /* (touch is switched off everywhere else on the page; the row may still be dragged sideways) */
 #cards, #cards * { touch-action: pan-x; }
-.group { flex: 1 1 0; min-width: clamp(140px, 21vw, 190px); max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
+.group { flex: 1 1 0; min-width: clamp(130px, 20vw, 190px); max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
 .group h4 {
   display: flex; justify-content: space-between; align-items: baseline; margin: 0; padding: 0 2px;
   font-size: clamp(9px, 1.1vw, 12px); letter-spacing: .26em; font-weight: 800; color: var(--pink); opacity: .75;
@@ -92,6 +92,21 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .card:not(.front) dl { order: 2; margin-top: 4px; }
 .card:not(.front) h3 { order: 3; margin: 4px 0 0; }
 .card.gone { opacity: 0; pointer-events: none; }
+/* the up / down arrows, half over the front card's right edge */
+.stack.has-nav .card { padding-right: calc(clamp(8px, 1vw, 16px) + clamp(8px, 1vw, 12px)); }
+.stack .nav {
+  grid-area: 1 / 1; align-self: center; justify-self: end; z-index: 20; transform: translateX(50%);
+  display: flex; flex-direction: column; gap: clamp(6px, 2vh, 14px);
+}
+.stack .nav button {
+  width: clamp(22px, 2.6vw, 32px); height: clamp(22px, 2.6vw, 32px); padding: 0; border-radius: 50%;
+  font-size: clamp(9px, 1.1vw, 13px); line-height: 1; color: var(--cyan); text-shadow: 0 0 8px var(--cyan);
+  background: rgba(18, 6, 43, .92); border: 2px solid rgba(47, 243, 255, .8); box-shadow: 0 0 12px rgba(47, 243, 255, .45);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.stack .nav button:active { transform: scale(.9); }
+.group:not(.sel) .nav button { border-color: rgba(255, 95, 162, .7); color: var(--pink); text-shadow: 0 0 8px var(--pink); box-shadow: 0 0 10px rgba(255, 95, 162, .35); }
+@media (hover: hover) and (pointer: fine) { .stack .nav button:hover { background: rgba(47, 243, 255, .25); } }
 .card.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 26px rgba(47, 243, 255, .55), inset 0 0 22px rgba(47, 243, 255, .12); transform: translateY(-6px); }
 .card .yr { font-size: clamp(9px, 1.2vw, 12px); letter-spacing: .25em; color: var(--sun); }
 .card h3 { margin: 2px 0 4px; font-size: clamp(11px, 1.45vw, 19px); font-style: italic; font-weight: 800; }

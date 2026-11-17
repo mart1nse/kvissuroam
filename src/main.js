@@ -259,7 +259,7 @@ function buildMenu() {
     el.className = `card${id === carId ? ' sel' : ''}`;
     el.dataset.id = id;
     el.innerHTML = `<div class="yr">${s.year}</div><h3>${s.name}</h3><p>${s.blurb}</p>
-      <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>0–100</dt><dd>${s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl>`;
+      <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl>`;
     el.addEventListener('click', () => setCar(id));
     cards.appendChild(el);
   }
@@ -550,7 +550,9 @@ function frame(ts) {
     const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
     // a street photo is narrower than the game's view, so over photos the camera backs off and zooms in
     const pm = photos?.mix ?? 0;
-    const wantDist = (6.4 + Math.min(speed, 55) * 0.035 + Math.min(speed, 70) * 0.075) * (1 + 0.45 * pm);
+    // (a bus sets its own rig: further back and higher, so its 12 metres fit the view)
+    const cs = s.cam || {};
+    const wantDist = (6.4 + (cs.dist ?? 0) + Math.min(speed, 55) * 0.035 + Math.min(speed, 70) * 0.075) * (1 + 0.45 * pm);
     const top = car.y + (car.inWater ? Math.min(3, car.waterTime) : 0);
     // how steeply the ground falls away ahead (positive downhill), read off the ground itself
     if (!car.airborne && !car.inWater) {
@@ -566,10 +568,10 @@ function frame(ts) {
     }
     // downhill the rig tips forward with the slope and a little past it, so the car does not hide the road
     const down = Math.max(0, camSlope);
-    camPos.set(car.x - cx * camDist, camY + 2.35 + camDist * down * 1.35, car.z - cz * camDist);
+    camPos.set(car.x - cx * camDist, camY + 2.35 + (cs.up ?? 0) + camDist * down * 1.35, car.z - cz * camDist);
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
     if (camPos.y < floor) camPos.y = floor;
-    camLook.set(car.x + cx * 2, camY + 1.15 - down * 3, car.z + cz * 2);
+    camLook.set(car.x + cx * 2, camY + 1.15 + (cs.look ?? 0) - down * 3, car.z + cz * 2);
     // above 150 km/h the view stretches a touch more and the edges close in a little
     const fast = Math.min(1, Math.max(0, (speed - 41.7) / 33));
     const warp = fast * fast * (3 - 2 * fast);
@@ -593,8 +595,9 @@ function frame(ts) {
   } else {
     menuAngle += dt * 0.16;
     const a = car.yaw + Math.PI + Math.sin(menuAngle) * 0.85;   // sweep around the rear three-quarters
-    camPos.set(car.x + Math.sin(a) * 7.4, car.y + 1.9, car.z - Math.cos(a) * 7.4);
-    camLook.set(car.x, car.y + 0.75, car.z);
+    const cs = s.cam || {}, r = 7.4 + (cs.menu ?? 0);
+    camPos.set(car.x + Math.sin(a) * r, car.y + 1.9 + (cs.menuUp ?? 0), car.z - Math.cos(a) * r);
+    camLook.set(car.x, car.y + 0.75 + (cs.menuLook ?? 0), car.z);
     camera.position.copy(camPos);
     camera.fov = isTouch ? 40 : 46;
   }

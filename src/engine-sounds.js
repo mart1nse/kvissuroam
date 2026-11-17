@@ -115,4 +115,17 @@ export const ENGINE_SOUNDS = {
     jitter: 1.4, lope: 9, drive: 2.0, gain: 0.85, idleVol: 0.3,
     pops: 0.015, smoothTop: true,
   },
+  // Scania OC09 101: 9.3 litre straight five running on compressed natural gas, spark ignition and a
+  // three-way catalyst, so none of the diesel's clatter: a deep, soft, even thrum at 600-2200 rpm through a
+  // long pipe and a big silencer in the rear engine bay, the turbo whistling over it as it pulls away.
+  bus: {
+    seed: 408, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 4,
+    pipes: [{ len: 3.2, fb: -0.4, damp: 0.5 }],
+    res: [[62, 1.2, 0.8], [140, 1.8, 0.55], [330, 2.4, 0.3], [780, 3, 0.08]], dry: 0.3,
+    lp0: 190, lpRpm: 160, lpLoad: 420, hp: 20,
+    base: 0.45, overrun: 0.7, pulseDeg: 46, noise: 0.08, rough: 0.04, bias: 0.06,
+    intake: 0.25, intakeF: 380, intakeQ: 1.2, tick: 0.008, tickF: 3000,
+    jitter: 0.8, lope: 5, drive: 1.4, gain: 0.95, idleVol: 0.38,
+    turbo: true, turboMuffle: 180, hiss: 0.015,
+  },
 };

@@ -100,7 +100,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     const s = CARS[id];
     o.spec = s;
     o.off = s.wheelbase * s.cgFront - s.wheelbase / 2;
-    o.halfLen = s.wheelbase / 2 + 0.85; o.halfWid = s.track / 2 + 0.13;
+    o.halfLen = s.halfLen ?? s.wheelbase / 2 + 0.85; o.halfWid = s.halfWid ?? s.track / 2 + 0.13;
   }
   function drop(id) {
     const o = others.get(id);

@@ -80,7 +80,7 @@ export function createCar(spec, pose) {
     hit: 0,                      // strength of the last impact (m/s), decays
     a: L * spec.cgFront, b: L * (1 - spec.cgFront),
     iz: spec.mass * (0.5 * L) ** 2 * 1.15,
-    halfLen: L / 2 + 0.85, halfWid: spec.track / 2 + 0.13,
+    halfLen: spec.halfLen ?? L / 2 + 0.85, halfWid: spec.halfWid ?? spec.track / 2 + 0.13,
     time: 0,
   };
 }
@@ -410,7 +410,7 @@ function substep(car, input, world, dt) {
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
   const drive = engineForce(car, throttle, dt);
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
-  const brakeTotal = brake * 1.05 * m * G * Math.min(1, load * 4);
+  const brakeTotal = brake * (s.brakeG ?? 1.05) * m * G * Math.min(1, load * 4);
   const brakeF = brakeTotal * 0.66, brakeR = brakeTotal * 0.34;
   // Share of the drive sent to the rear axle. Two-motor EVs have a fixed
   // split set by their motors; an on-demand coupling sends more to the rear

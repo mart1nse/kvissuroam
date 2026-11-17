@@ -32,8 +32,11 @@ for (const [surf, name] of [[0, 'grass'], [2, 'gravel'], [1, 'tarmac']]) {
         console.log(`  t ${t.toFixed(1)} yaw ${deg(car.yawRate).toFixed(0).padStart(4)} deg/s v ${speedKmh(car).toFixed(0).padStart(3)} vx ${(car.vx*3.6).toFixed(0).padStart(3)} beta ${deg(Math.atan2(car.vy, Math.max(Math.abs(car.vx), 0.5))).toFixed(0).padStart(4)} slipF ${(car.slipVF*3.6).toFixed(0).padStart(3)} slipR ${(car.slipVR*3.6).toFixed(0).padStart(3)} rpm ${car.rpm.toFixed(0).padStart(5)} g ${car.gear} steer ${car.steer.toFixed(2)} cut ${car.revCut>0?1:0}`);
     }
     // rear-driven cars and the twin-motor EVs must hold the donut; the
-    // front-biased cars may wash wide and the weak AWD SUVs just circle
-    const must = spec.drive === 'rwd' || (spec.drive === 'awd' && spec.engine.type === 'ev');
+    // front-biased cars may wash wide and the weak AWD SUVs just circle.
+    // (a 13 tonne bus has a sixth of a car's power per tonne: it can swing its tail on grass and
+    // gravel but cannot spin its tyres on dry tarmac, so there it only has to circle)
+    const weak = spec.ref.powerKw / spec.mass < 0.03 && surf === 1;
+    const must = !weak && (spec.drive === 'rwd' || (spec.drive === 'awd' && spec.engine.type === 'ev'));
     if (must && (straightT > 1 || !Number.isFinite(car.vx))) ok = false;
     console.log(`  ${spec.short.padEnd(13)}${spec.drive} | yaw rate ${minYaw.toFixed(0)}..${maxYaw.toFixed(0)} avg ${(sumYaw / n).toFixed(0)} deg/s | slide ${minB.toFixed(0)}..${maxB.toFixed(0)} deg, straight for ${straightT.toFixed(1)} s of 16 | ${minV.toFixed(0)}..${maxV.toFixed(0)} km/h | rpm min ${minRpm.toFixed(0)}`);
   }

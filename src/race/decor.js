@@ -31,25 +31,39 @@ function chevronTex() {
   });
 }
 
-// the first board the player sees from the spawn: left chevrons with START · FINISH under them
-function startChevronTex() {
-  return canvasTex(512, 288, (g, w, h) => {
-    g.fillStyle = 'rgba(18,6,43,0.45)';
+// the first board the player sees from the spawn: a big START LINE billboard on two posts at the
+// first left turn, with left chevrons and the distance to the line
+function startBoardTex(dist) {
+  return canvasTex(1024, 432, (g, w, h) => {
+    g.fillStyle = 'rgba(18,6,43,0.82)';
     g.fillRect(0, 0, w, h);
+    // chequered strips top and bottom
+    for (let i = 0; i < 32; i++) for (let j = 0; j < 2; j++) {
+      g.fillStyle = (i + j) % 2 ? 'rgba(20,9,46,0.95)' : 'rgba(244,240,255,0.9)';
+      g.fillRect(i * 32, j * 16, 32, 16);
+      g.fillRect(i * 32, h - 32 + j * 16, 32, 16);
+    }
     g.lineJoin = 'round'; g.lineCap = 'round';
-    for (const [blur, col, lw] of [[28, 'rgba(255,43,214,0.9)', 30], [0, '#ffd6f4', 14]]) {
-      g.shadowColor = '#ff2bd6'; g.shadowBlur = blur;
-      g.strokeStyle = col; g.lineWidth = lw;
+    g.strokeStyle = '#ff2bd6'; g.shadowColor = '#ff2bd6'; g.shadowBlur = 22; g.lineWidth = 8;
+    g.strokeRect(10, 42, w - 20, h - 84);
+    // three chevrons pointing left
+    for (const [blur, col, lw] of [[26, 'rgba(255,43,214,0.95)', 26], [0, '#ffd6f4', 12]]) {
+      g.shadowBlur = blur; g.strokeStyle = col; g.lineWidth = lw;
       for (let k = 0; k < 3; k++) {
-        const x = w - 110 - k * 130;          // pointing left
-        g.beginPath(); g.moveTo(x, 36); g.lineTo(x - 70, 132); g.lineTo(x, 228 - 36); g.stroke();
+        const x = 120 + k * 62;
+        g.beginPath(); g.moveTo(x, 120); g.lineTo(x - 52, 196); g.lineTo(x, 272); g.stroke();
       }
     }
-    g.font = 'italic 900 50px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = '#ff2bd6'; g.shadowBlur = 18;
-    g.fillStyle = '#2ff3ff';
-    g.fillText('START · FINISH', w / 2, 252);
+    g.font = 'italic 900 128px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
+    g.shadowColor = '#ff2bd6'; g.shadowBlur = 0;
+    g.fillStyle = '#ff2bd6'; g.fillText('START LINE', 626, 186);      // hot offset shadow
+    g.shadowColor = '#2ff3ff'; g.shadowBlur = 20;
+    g.fillStyle = '#2ff3ff'; g.fillText('START LINE', 620, 180);
+    g.font = 'italic 800 46px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
+    g.shadowColor = '#ff2bd6'; g.shadowBlur = 14;
+    g.fillStyle = '#ffd45e';
+    g.fillText(`TURN LEFT · LAP STARTS IN ${dist} M`, w / 2, 318);
   });
 }
 
@@ -115,8 +129,10 @@ export function createDecor(track, world) {
   const corners = findCorners(track);
   const sp = track.spawnI ?? 0;
   const first = corners.reduce((b, c) => (((c.i - sp + N) % N) < ((b.i - sp + N) % N) ? c : b), corners[0]);
-  const matStart = glow(startChevronTex());
-  const startGeo = new THREE.PlaneGeometry(4.2, 2.36);
+  const toLine = Math.round((track.length - track.s[first.i]) / 10) * 10;
+  const startTex = startBoardTex(toLine);
+  // the billboard is not additive: it has to read as a solid sign in daylight
+  const matStart = new THREE.MeshBasicMaterial({ map: startTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
   for (const c of corners) {
     // the board stands at the corner, over the outside kerb, facing the cars coming in
     const iin = (c.i - 14 + N) % N;
@@ -124,14 +140,52 @@ export function createDecor(track, world) {
     const [px, pz] = P[c.i];
     const ox = tin[1] * c.dir, oz = -tin[0] * c.dir;        // outward side of the turn (left of travel for a right turn)
     const off = HW[c.i] * 0.55;
+    if (c === first && c.dir < 0) {
+      // the big START LINE billboard stands beyond the outside kerb, on two posts
+      const o2 = HW[c.i] + 3.2;
+      items.push({
+        x: px + tin[0] * HW[c.i] * 0.4 + ox * o2, z: pz + tin[1] * HW[c.i] * 0.4 + oz * o2,
+        yaw: Math.atan2(-tin[0], -tin[1]), big: true, mesh: null, phase: 0,
+      });
+      continue;
+    }
     items.push({
       x: px + tin[0] * HW[c.i] * 0.6 + ox * off, z: pz + tin[1] * HW[c.i] * 0.6 + oz * off,
       yaw: Math.atan2(-tin[0], -tin[1]),     // plane normal (+z local) points back along the approach
-      mat: c === first && c.dir < 0 ? matStart : c.dir > 0 ? matR : matL, geo: c === first && c.dir < 0 ? startGeo : boardGeo, mesh: null, phase: c.i * 0.37,
+      mat: c.dir > 0 ? matR : matL, geo: boardGeo, mesh: null, phase: c.i * 0.37,
     });
   }
 
+  const BW = 12, BH = BW * 432 / 1024, LIFT = 4.6;      // billboard size and clearance (m)
+  const postMat = new THREE.MeshBasicMaterial({ color: 0x2a1450, fog: true });
+  const postGlow = new THREE.MeshBasicMaterial({ color: 0xff2bd6, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending, fog: true });
+  function buildBig(it) {
+    const g = new THREE.Group();
+    const y0 = world.topAt(it.x, it.z, 0);
+    g.position.set(it.x, y0, it.z);
+    g.rotation.y = it.yaw;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), matStart);
+    sign.position.y = LIFT + BH / 2;
+    sign.renderOrder = 3;
+    g.add(sign);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(BW + 0.3, BH + 0.3, 0.12), postMat);
+    back.position.set(0, LIFT + BH / 2, -0.1);
+    g.add(back);
+    for (const sx of [-1, 1]) {
+      const H = LIFT + BH;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.32, H, 0.32), postMat);
+      post.position.set(sx * BW * 0.36, H / 2 - 0.4, -0.2);
+      g.add(post);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.08, LIFT, 0.34), postGlow);
+      strip.position.set(sx * BW * 0.36, LIFT / 2 - 0.2, -0.2);
+      g.add(strip);
+    }
+    it.mesh = g;
+    fixed.add(g);                // always shown, like the start gantry
+  }
+
   function buildBoard(it) {
+    if (it.big) return buildBig(it);
     const m = new THREE.Mesh(it.geo, it.mat);
     it.y = world.topAt(it.x, it.z, 0) + 3.4;
     m.position.set(it.x, it.y, it.z);
@@ -186,10 +240,10 @@ export function createDecor(track, world) {
           if (Math.hypot(it.x - x, it.z - z) < 700 && world.ready(it.x, it.z)) buildBoard(it);
           continue;
         }
-        it.mesh.position.y = it.y + Math.sin(time * 1.6 + it.phase) * 0.18;
+        if (!it.big) it.mesh.position.y = it.y + Math.sin(time * 1.6 + it.phase) * 0.18;
       }
       const pulse = 0.75 + 0.25 * Math.sin(time * 3);
-      matR.opacity = matL.opacity = matStart.opacity = pulse;
+      matR.opacity = matL.opacity = pulse;
     },
   };
 }

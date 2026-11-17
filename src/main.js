@@ -4,7 +4,7 @@ import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/s
 import { createTerrain } from './world/terrain.js';
 import { createBuildings, createTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
-import { createCar, stepCar, resetCar, speedKmh } from './cars/physics.js';
+import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
@@ -554,6 +554,19 @@ input.on('KeyM', toggleMap);
 input.on('KeyT', toggleMap);
 input.on('Escape', () => (bigmap.isOpen ? closeMap() : openGarage()));
 input.on('KeyN', toggleSound);
+// L: the lap times board over the drive (Esc or L again closes it)
+input.on('KeyL', unlessMap(() => (board.open ? board.hide() : board.show())));
+// A / Z: one gear up / down by hand; the automatic takes over again at the shift point
+const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open) shiftGear(car, dir); });
+input.on('KeyA', shiftBy(1));
+input.on('KeyZ', shiftBy(-1));
+// C: the chase camera or a drone following the car from above
+let camView = localStorage.getItem('kvissuroam.view') === 'drone' ? 'drone' : 'chase';
+input.on('KeyC', unlessMap(() => {
+  camView = camView === 'chase' ? 'drone' : 'chase';
+  try { localStorage.setItem('kvissuroam.view', camView); } catch {}
+  camSwoop = 0.7;
+}));
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;
@@ -642,7 +655,7 @@ function frame(ts) {
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
-    if (mode === 'drive') stepCar(car, input.state, world, dt);
+    if (mode === 'drive') stepCar(car, board?.open ? idle : input.state, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
       const x = car.x, z = car.z, yaw = car.yaw;
@@ -738,8 +751,23 @@ function frame(ts) {
     camLook.set(car.x + cx * 2, camY + 1.15 + (cs.look ?? 0) - down * 3, car.z + cz * 2);
     // above 150 km/h the view stretches a touch more and the edges close in a little
     const fast = Math.min(1, Math.max(0, (speed - 41.7) / 33));
-    const warp = fast * fast * (3 - 2 * fast);
-    const wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
+    let warp = fast * fast * (3 - 2 * fast);
+    let wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw);
+    if (input.state.look && !board?.open) {
+      // B held: look back from just in front of the car's nose, over the roof down the road behind
+      const half = car.halfLen;
+      camPos.set(car.x + fx * (half + 3.2), car.y + 2.1 + (cs.up ?? 0) * 0.5, car.z + fz * (half + 3.2));
+      camPos.y = Math.max(camPos.y, world.heightAt(camPos.x, camPos.z) + 0.9);
+      camLook.set(car.x - fx * 14, car.y + 0.9, car.z - fz * 14);
+      wantFov = 62; warp = 0; camSwoop = 0;
+    } else if (camView === 'drone') {
+      // a drone following the car from above, heading up, a little behind so the road ahead shows
+      const h = 30 + Math.min(speed, 60) * 0.3;
+      camPos.set(car.x - cx * h * 0.32, camY + h, car.z - cz * h * 0.32);
+      camLook.set(car.x + cx * (4 + speed * 0.15), camY, car.z + cz * (4 + speed * 0.15));
+      wantFov = 55; warp = 0;
+    }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
     if (flyIn) {
       flyIn.t = Math.min(1, flyIn.t + dt / FLY_IN);

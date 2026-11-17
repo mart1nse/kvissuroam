@@ -801,6 +801,16 @@ export function tintPaint(car, id, color, props = {}) {
   mesh.material = m;
   return car;
 }
+// Per-car glazing, e.g. a lighter tint than the shared near-black glass.
+const _glass = new Map();
+export function tintGlass(car, id, props) {
+  const mesh = car.group.getObjectByName(`${id}_glass`);
+  if (!mesh) return car;
+  let m = _glass.get(id);
+  if (!m) { m = mesh.material.clone(); Object.assign(m, props); if (props.color !== undefined) m.color = new THREE.Color(props.color); _glass.set(id, m); }
+  mesh.material = m;
+  return car;
+}
 // Roof rail on the right side (sym() it): a tube following the roof at lateral position x from z0 to z1,
 // standing h above the surface and dipping into the roof at both ends.
 export function roofRail(pr, x, z0, z1, h = 0.04, pal = 'plastic', r = 0.013) {

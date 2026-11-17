@@ -255,9 +255,17 @@ function setCar(id) {
 // front and the next few peek out below it, each further back and smaller. Sliding a stack (drag
 // up or down, the mouse wheel, or the up and down keys) brings the next car forward.
 let groups = [];                 // [{ ids, front, el, cards }]
-const PEEK = 3;                  // cards visible behind the front one
+// Cards behind the front one: their size, and how much of each shows below the one in front of it
+// (the next car shows about three quarters of itself, then less each step back). Short screens show less.
+const STACK = { scale: [1, 0.92, 0.84, 0.76], show: [1, 0.75, 0.55, 0.38] };
+const STACK_LOW = { scale: [1, 0.9, 0.8], show: [1, 0.45, 0.32] };
 
 function layoutMenu() {
+  const st = innerHeight < 560 ? STACK_LOW : STACK, last = st.scale.length - 1;
+  // where each card's top sits, in front-card heights (they shrink towards their top edge)
+  const top = [0], bottom = [1];
+  for (let k = 1; k <= last; k++) { bottom[k] = bottom[k - 1] + st.show[k] * st.scale[k]; top[k] = bottom[k] - st.scale[k]; }
+  let tallest = 0;
   for (const g of groups) {
     const n = g.ids.length;
     const i = g.ids.indexOf(carId);
@@ -265,14 +273,19 @@ function layoutMenu() {
     g.el.classList.toggle('sel', i >= 0);
     g.el.querySelector('.gn').textContent = `${g.front + 1}/${n}`;
     g.cards.forEach((c, j) => {
-      const k = (j - g.front + n) % n;
+      const k = (j - g.front + n) % n, kk = Math.min(k, last);
       c.style.setProperty('--k', k);
+      c.style.transform = k === 0 ? '' : `translateY(${(top[kk] * 100).toFixed(1)}%) scale(${st.scale[kk]})`;
       c.classList.toggle('front', k === 0);
-      c.classList.toggle('gone', k > PEEK);
+      c.classList.toggle('gone', k > last);
       c.classList.toggle('sel', c.dataset.id === carId);
       c.tabIndex = k === 0 ? 0 : -1;
     });
+    tallest = Math.max(tallest, bottom[Math.min(n - 1, last)]);
   }
+  // (the cards overlap in one grid cell, so the stacks are given room below for the ones behind)
+  const h = Math.max(...groups.map((g) => g.cards[g.front].offsetHeight));
+  for (const g of groups) g.el.querySelector('.stack').style.paddingBottom = `${Math.round((tallest - 1) * h)}px`;
 }
 
 function slideGroup(g, d) {
@@ -299,7 +312,7 @@ function buildMenu() {
       c.className = 'card';
       c.dataset.id = id;
       c.innerHTML = `<div class="yr">${s.year}</div><h3>${s.name}</h3><p>${s.blurb}</p>
-        <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl><i class="pk">${s.short.toUpperCase()}</i>`;
+        <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl>`;
       // (a tap on the front card picks it, a tap on one peeking out behind brings it forward)
       c.addEventListener('click', () => { if (!swiped) setCar(id); });
       stack.appendChild(c);
@@ -328,6 +341,7 @@ function buildMenu() {
   });
   addEventListener('pointercancel', () => { drag = null; });
   layoutMenu();
+  addEventListener('resize', layoutMenu);
   $('#drive').addEventListener('click', startDriving);
   addEventListener('keydown', (e) => {
     if (mode !== 'menu' || board?.open) return;

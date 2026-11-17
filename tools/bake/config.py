@@ -19,9 +19,9 @@ TILE_PX = 1024         # orthophoto tile size in pixels
 XTILE_PX = 1536        # extra-sharp tiles (0.10 m/px) inside detail_area.json, shown close to the car
 BUSH_RES = 0.5         # lidar bush/hedge grid (m)
 # coarse far-scenery grid (world x/z, metres)
-CX0, CX1, CZ0, CZ1 = -9760.0, 10080.0, -12960.0, 13920.0
+CX0, CX1, CZ0, CZ1 = -9760.0, 10080.0, -14240.0, 13920.0     # (CZ0 was -12960 before the 2026-11-17 northern extension)
 COARSE_RES = 32.0
-OVERVIEW_PX = (3024, 4096)
+OVERVIEW_PX = (3024, 4292)
 MOSAIC_RES = 1.25      # working orthophoto mosaic for roof colours / driveway detection
 # start: driveway of Kvissentali tee 8, facing the street (north)
 START_E, START_N = 657870.0, 6477151.0
@@ -64,8 +64,13 @@ def tile_div(sx, sz):
 
 
 def sectors():
-    """Sector indices (sx, sz) that touch the drivable polygon."""
+    """Sector indices (sx, sz) that touch the drivable polygon.
+
+    BAKE_ONLY=<json file with a list of [sx, sz]> limits the bake to those sectors (used to add an
+    extension to the map without re-baking the rest; see merge_extension.py)."""
     from shapely.geometry import Polygon, box
+    if os.environ.get('BAKE_ONLY'):
+        return [tuple(s) for s in json.load(open(os.environ['BAKE_ONLY']))]
     poly = Polygon(BOUNDARY)
     minx, miny, maxx, maxy = poly.bounds
     out = []

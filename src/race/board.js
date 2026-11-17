@@ -8,7 +8,7 @@ export function createBoard({ mp, race, cars, order }) {
 
   const row = document.createElement('div');
   row.id = 'menurow';
-  row.innerHTML = `<label id="driver"><span>DRIVER</span><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" /></label>`;
+  row.innerHTML = `<label id="driver"><span>DRIVER</span><span class="field"><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" /><i class="caret"></i></span></label>`;
   drive.replaceWith(row);
   row.appendChild(drive);
   const btn = document.createElement('button');
@@ -16,15 +16,49 @@ export function createBoard({ mp, race, cars, order }) {
   row.appendChild(btn);
 
   const input = row.querySelector('#drivername');
-  mp.nameReady.then((n) => { if (document.activeElement !== input) input.value = n; });
+  const caret = row.querySelector('.caret');
+  const field = row.querySelector('.field');
+  // On desktop the name starts selected with a blinking caret after it, so it is plain that it can
+  // be typed over. Until the player types, the menu keys (arrows, Enter, Space) still work.
+  const desktop = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  let fresh = false;
+  const measure = document.createElement('canvas').getContext('2d');
+  function placeCaret() {
+    const cs = getComputedStyle(input);
+    measure.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const w = measure.measureText(input.value).width + input.value.length * (parseFloat(cs.letterSpacing) || 0);
+    caret.style.left = `${Math.min(input.clientWidth - 6, parseFloat(cs.paddingLeft) + w + 3)}px`;
+  }
+  function preselect() {
+    if (!desktop || document.querySelector('#menu').classList.contains('hidden')) return;
+    input.focus({ preventScroll: true });
+    input.select();
+    fresh = true;
+    placeCaret();
+    field.classList.add('fresh');
+  }
+  const unfresh = () => { fresh = false; field.classList.remove('fresh'); };
+  mp.nameReady.then((n) => {
+    if (document.activeElement !== input || fresh) { input.value = n; if (fresh) preselect(); }
+  });
   const commit = () => { input.value = mp.setName(input.value) || mp.name; };
   input.addEventListener('change', commit);
-  input.addEventListener('blur', commit);
+  input.addEventListener('blur', () => { unfresh(); commit(); });
+  input.addEventListener('pointerdown', unfresh);
+  input.addEventListener('input', unfresh);
   // typing a name must not drive the menu (arrows switch cars, Enter / Space start)
   input.addEventListener('keydown', (e) => {
+    if (fresh && ['ArrowLeft', 'ArrowRight', 'Enter', 'Space'].includes(e.code)) {
+      e.preventDefault();          // let the menu have it, the name stays picked while cars switch
+      if (e.code === 'Enter' || e.code === 'Space') input.blur();
+      return;
+    }
     e.stopPropagation();
     if (e.key === 'Enter') input.blur();
   });
+  // pick the name every time the menu opens (start and back to the garage)
+  new MutationObserver(() => requestAnimationFrame(preselect)).observe(menu, { attributes: true, attributeFilter: ['class'] });
+  requestAnimationFrame(preselect);
   input.addEventListener('keyup', (e) => e.stopPropagation());
 
   const panel = document.createElement('div');

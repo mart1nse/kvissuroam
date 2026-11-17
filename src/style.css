@@ -210,6 +210,15 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
   user-select: text; -webkit-user-select: text; touch-action: manipulation;
 }
 #drivername:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 12px rgba(255, 212, 94, .5); }
+#drivername::selection { background: rgba(255, 43, 214, .75); color: #fff; }
+#driver .field { position: relative; display: block; }
+#driver .caret { display: none; position: absolute; top: 22%; bottom: 22%; width: 2px; background: var(--sun); box-shadow: 0 0 6px var(--sun); pointer-events: none; animation: caretblink 1.06s steps(1) infinite; }
+#driver .field.fresh .caret { display: block; }
+@keyframes caretblink { 50% { opacity: 0; } }
+@media (hover: hover) and (pointer: fine) {
+  #driver { font-size: 11px; gap: 4px; }
+  #drivername { width: 15em; font-size: clamp(18px, 2vw, 26px); padding: .45em .7em; border-width: 2px; }
+}
 #boardbtn { font-size: clamp(11px, 1.6vw, 16px); letter-spacing: .2em; }
 
 #board { background: radial-gradient(circle at 50% 30%, rgba(58, 20, 112, .92), rgba(12, 4, 30, .97)); z-index: 12; justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }

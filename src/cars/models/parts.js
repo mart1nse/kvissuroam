@@ -65,7 +65,7 @@ export function pushTri(s, a, b, c) {
 // the right-hand side, e.g. bottom-inner -> out -> up -> top-inner) along a plan line between arc lengths s0..s1.
 // taper(t) scales d along the run. hard: flat normals per profile segment. uv: u = position along uS, v along vH.
 export function sweep(line, y0, prof, o = {}) {
-  const { s0 = 0, s1 = line.L, n = 24, taper = null, hard = false } = o;
+  const { s0 = 0, s1 = line.L, n = 24, taper = null, hard = false, add = 0 } = o;   // add: stand-off that the taper does not scale
   const uS = o.uS || [s0, s1], hs = prof.map((p) => p[1]), vH = o.vH || [Math.min(...hs), Math.max(...hs)];
   const steps = o.steps || Array.from({ length: n + 1 }, (_, i) => s0 + (s1 - s0) * i / n);
   const segN = [];
@@ -79,7 +79,7 @@ export function sweep(line, y0, prof, o = {}) {
   });
   const s = new Soup();
   const V = (st, k, nn) => {
-    const p = line.at(st), t = (st - s0) / ((s1 - s0) || 1), m = taper ? taper(t) : 1, d = prof[k][0] * m;
+    const p = line.at(st), t = (st - s0) / ((s1 - s0) || 1), m = taper ? taper(t) : 1, d = prof[k][0] * m + add * Math.min(1, m * 8);
     return { p: [p.x + p.nx * d, y0 + prof[k][1], p.z + p.nz * d], n: [p.nx * nn[0], nn[1], p.nz * nn[0]], uv: [(st - uS[0]) / ((uS[1] - uS[0]) || 1), (prof[k][1] - vH[0]) / ((vH[1] - vH[0]) || 1)] };
   };
   for (let i = 0; i < steps.length - 1; i++) {

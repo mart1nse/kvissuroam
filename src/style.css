@@ -57,19 +57,44 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .bar { width: min(360px, 60vw); height: 10px; border: 2px solid var(--cyan); box-shadow: 0 0 14px rgba(47, 243, 255, .6); z-index: 1; }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--hot), var(--sun)); transition: width .2s; }
 
-/* (a row that scrolls sideways once the cars no longer fit; the padding leaves room for the selected card's lift and glow) */
+/* (the groups side by side; the row can still scroll sideways if a very narrow screen can't fit them) */
 #cards {
-  display: flex; gap: clamp(6px, 1.2vw, 18px); align-items: stretch; justify-content: safe center; width: 100%; margin-top: auto;
-  overflow-x: auto; padding: 14px 10px 12px; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .5) transparent; overscroll-behavior-x: contain;
+  display: flex; gap: clamp(10px, 2.4vw, 34px); align-items: flex-start; justify-content: safe center; width: 100%; margin-top: auto;
+  overflow-x: auto; padding: 8px 10px 4px; box-sizing: border-box; scrollbar-width: none; overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
-/* (touch is switched off everywhere else on the page; the row and everything in it must allow a sideways drag) */
+/* (touch is switched off everywhere else on the page; the row may still be dragged sideways) */
 #cards, #cards * { touch-action: pan-x; }
-.card {
-  flex: 1 0 clamp(112px, 10vw, 150px); min-width: 0; max-width: 300px; padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1vw, 16px); text-align: left;
-  background: rgba(18, 6, 43, .62); border: 2px solid rgba(255, 95, 162, .55); border-radius: 4px;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: transform .15s, border-color .15s, box-shadow .15s;
+.group { flex: 1 1 0; min-width: clamp(140px, 21vw, 190px); max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
+.group h4 {
+  display: flex; justify-content: space-between; align-items: baseline; margin: 0; padding: 0 2px;
+  font-size: clamp(9px, 1.1vw, 12px); letter-spacing: .26em; font-weight: 800; color: var(--pink); opacity: .75;
 }
+.group h4 b { font-size: .9em; letter-spacing: .1em; color: #fff; opacity: .7; }
+.group.sel h4 { color: var(--cyan); opacity: 1; text-shadow: 0 0 10px rgba(47, 243, 255, .6); }
+/* A stack: every card shares one grid cell. The k-th card behind the front one drops k peeks lower and
+   shrinks from its bottom edge, so only a strip of it shows under the one in front. Sliding is ours to
+   handle, so the stack takes touches itself. */
+.stack { --peek: clamp(9px, 2.4vh, 18px); display: grid; padding-bottom: calc(3 * var(--peek)); touch-action: none; }
+.stack, .stack * { touch-action: none; }
+.card {
+  grid-area: 1 / 1; min-width: 0; padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1vw, 16px); text-align: left;
+  background: rgba(18, 6, 43, .78); border: 2px solid rgba(255, 95, 162, .55); border-radius: 4px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  --k: 0; transform-origin: 50% 100%;
+  transform: translateY(calc(var(--k) * var(--peek))) scale(calc(1 - var(--k) * .065));
+  z-index: calc(10 - var(--k)); filter: brightness(calc(1 - var(--k) * .2));
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), filter .28s, opacity .28s, border-color .15s, box-shadow .15s;
+}
+/* behind the front card only the name shows, on the strip that peeks out below it */
+.card { position: relative; }
+.card:not(.front) > :not(.pk) { visibility: hidden; }
+.card .pk {
+  position: absolute; left: 0; right: 0; bottom: 0; height: var(--peek); display: none; align-items: center; justify-content: center;
+  font-size: clamp(8px, 1.6vh, 11px); font-style: italic; font-weight: 800; letter-spacing: .12em; white-space: nowrap; overflow: hidden; color: #fff; opacity: .85;
+}
+.card:not(.front) .pk { display: flex; }
+.card.gone { opacity: 0; pointer-events: none; }
 .card.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 26px rgba(47, 243, 255, .55), inset 0 0 22px rgba(47, 243, 255, .12); transform: translateY(-6px); }
 .card .yr { font-size: clamp(9px, 1.2vw, 12px); letter-spacing: .25em; color: var(--sun); }
 .card h3 { margin: 2px 0 4px; font-size: clamp(11px, 1.45vw, 19px); font-style: italic; font-weight: 800; }

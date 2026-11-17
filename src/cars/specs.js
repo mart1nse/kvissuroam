@@ -415,3 +415,11 @@ export const CARS = {
 };
 
 export const CAR_ORDER = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
+
+// The garage menu shows these side by side, each as a stack the player slides through.
+export const CAR_GROUPS = [
+  { name: 'EVERYDAY', ids: ['crv', 'mazda6', 'rav4'] },
+  { name: 'ELECTRIC', ids: ['enyaq', 'bz4x'] },
+  { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt'] },
+  { name: 'LOCAL HEROES', ids: ['w201', 'audi200', 'bus'] },   // the old Merc, the Audi wagon and the line 8 bus
+];

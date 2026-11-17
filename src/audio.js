@@ -171,8 +171,28 @@ export function createAudio() {
     spinGain.gain.setTargetAtTime(spinS * 0.05, t, 0.08);
   }
 
+  // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
+  function chime(kind) {
+    if (!ctx || ctx.state !== 'running') return;
+    const join = kind === 'join';
+    const notes = join ? [659.25, 987.77] : [783.99, 523.25];     // E5 -> B5, G5 -> C5
+    const t0 = ctx.currentTime + 0.01, level = join ? 0.16 : 0.12;
+    notes.forEach((f, i) => {
+      const t = t0 + i * 0.11;
+      const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
+      o.type = join ? 'sine' : 'triangle'; o.frequency.value = f;
+      o2.type = 'sine'; o2.frequency.value = f * 2.005;           // a little shimmer an octave up
+      g2.gain.value = join ? 0.25 : 0.12;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(level, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + (i ? 0.42 : 0.2));
+      o.connect(g); o2.connect(g2); g2.connect(g); g.connect(master);
+      o.start(t); o2.start(t); o.stop(t + 0.45); o2.stop(t + 0.45);
+    });
+  }
+
   return {
-    start, update,
+    start, update, chime,
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
       carId = ev ? null : spec.id;

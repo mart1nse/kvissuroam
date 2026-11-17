@@ -53,7 +53,7 @@ function coverWheel(R, width, rimR) {
 // ---------------------------------------------------------------- textures
 // Tail lamp, u 0 = inboard edge .. 1 = round the body corner, v 0 = bottom: red with fine fluting, the
 // clear reverse lamp in the bottom inboard corner.
-const REV_U = 0.3, REV_V = 0.22;
+const REV_U = 0.2, REV_V = 0.25;
 function lampTextures() {
   const tail = (glow) => (g, w, h) => {
     g.fillStyle = glow ? '#000' : '#0d0202'; g.fillRect(0, 0, w, h);
@@ -158,20 +158,20 @@ function sootTex() {
 // ---------------------------------------------------------------- the car
 export function buildPassat() {
   const ZG0 = 2.02, ZG1 = ZRB - 0.1;          // tailgate glass: top and bottom edges (z)
-  const YG0 = 1.36, YG1 = 0.99;               // ... and their heights
+  const YG0 = 1.36, YG1 = 0.95;               // ... and their heights
   const body = buildBody({
     top: [[ZFB, 0.48], [ZFB + 0.002, 0.58, 0.01], [ZFB + 0.025, 0.69, 0.03], [ZFB + 0.13, 0.745, 0.08], [-1.5, 0.82, 0.45],
-      [-0.98, 0.875, 0.25], [-0.84, 0.9, 0.05], [-0.06, 1.42, 0.25], [0.5, 1.455, 0.8], [1.5, 1.44, 0.6], [1.92, 1.41, 0.12],
-      [ZG0, YG0, 0.04], [ZG1, YG1, 0.04], [ZRB - 0.03, 0.95, 0.05], [ZRB - 0.004, 0.75, 0.06], [ZRB, 0.48]],
+      [-1.06, 0.868, 0.25], [-0.92, 0.895, 0.05], [-0.1, 1.42, 0.25], [0.5, 1.455, 0.8], [1.5, 1.44, 0.6], [1.92, 1.41, 0.12],
+      [ZG0, YG0, 0.04], [ZG1, YG1, 0.04], [ZRB - 0.03, 0.915, 0.05], [ZRB - 0.004, 0.72, 0.06], [ZRB, 0.48]],
     bottom: [[ZFB, 0.48], [ZFB + 0.002, 0.33, 0.03], [ZFB + 0.14, 0.22, 0.06], [-1.8, 0.19, 0.1], [1.8, 0.19, 0.1], [ZRB - 0.2, 0.26, 0.06], [ZRB - 0.002, 0.4, 0.03], [ZRB, 0.48]],
     w: [[ZFB, 0.72], [-2.05, 0.8], [-1.75, 0.848], [-1.2, 0.862], [-0.4, HW - FOLD], [1.1, HW - FOLD], [1.8, 0.858], [2.15, 0.838], [ZRB, 0.8]],
     yWaist: WAIST, tuck: 0.06, ySill: 0.2,
-    yBelt: [[ZFB, 0.76], [-0.84, 0.905], [1.0, 0.94], [ZRB, 0.96]],
-    sh: 0.02, ledge: 0.004, ledgeH: 0.02, th: [[ZFB, 0.3], [-0.8, 0.4], [1.4, 0.4], [ZRB, 0.34]], thc: 0.17,
+    yBelt: [[ZFB, 0.76], [-0.92, 0.9], [1.0, 0.935], [ZRB, 0.945]],
+    sh: 0.02, ledge: 0.004, ledgeH: 0.02, th: [[ZFB, 0.28], [-0.9, 0.32], [1.4, 0.32], [ZRB, 0.3]], thc: 0.12,
     rr: [[ZFB, 0.05], [-1.5, 0.08], [-0.95, 0.08], [-0.4, 0.11], [1.6, 0.11], [ZG0, 0.1], [ZRB, 0.06]],
     rs: 0.07,
-    crown: [[ZFB, 0.02], [-1.5, 0.04], [-0.84, 0.04], [-0.1, 0.06], [1.6, 0.06], [ZG1, 0.045], [ZRB, 0.02]],
-    bow: [[ZFB, 0.2], [-2.0, 0.1], [-1.75, 0], [-1.1, 0], [-0.84, 0.07], [-0.1, 0.04], [0.1, 0], [1.7, 0], [ZG0, 0.05], [ZG1, 0.1], [ZRB, 0.14]],
+    crown: [[ZFB, 0.02], [-1.5, 0.04], [-0.92, 0.04], [-0.1, 0.06], [1.6, 0.06], [ZG1, 0.045], [ZRB, 0.02]],
+    bow: [[ZFB, 0.2], [-2.0, 0.1], [-1.75, 0], [-1.15, 0], [-0.92, 0.07], [-0.15, 0.04], [0.1, 0], [1.7, 0], [ZG0, 0.05], [ZG1, 0.1], [ZRB, 0.14]],
     bowN: [[ZFB, 2.6], [-1.8, 3], [-1.1, 2.6], [-0.1, 2.6], [ZG0, 2.6], [ZRB, 3.2]],
   });
   const raw = body.soup;
@@ -180,7 +180,7 @@ export function buildPassat() {
   const rearP = part(raw, (x, y, z) => z > 1.3 && y > 0.18 && y < 1.2);
   const frontP = part(raw, (x, y, z) => z < -1.3 && y > 0.18 && y < 1.0);
   const sideP = part(raw, (x, y, z) => x > 0.45 && y > 0.25 && y < 1.0);
-  const cabP = part(raw, (x, y, z) => y > 0.85 && z > -1.1 && z < ZRB);
+  const cabP = part(raw, (x, y, z) => y > 0.85 && z > -1.2 && z < ZRB);
   const prR = probe(rearP), prC = probe(cabP), prS = probe(sideP);
 
   const arches = cutArches(raw, [{ z: -HZ, y: AY, r: AR }, { z: HZ, y: AY, r: AR }], { halfWidth: HW });
@@ -194,7 +194,7 @@ export function buildPassat() {
   const lw = 0.0065, lo = { offset: 0.0045 };
 
   // --- glazing: side glass in black frames with a long quarter window, raked screen, upright tailgate glass
-  const dloPts = [[-0.81, 0.915], [2.07, 0.968], [1.86, 1.345], [-0.06, 1.37]];
+  const dloPts = [[-0.89, 0.91], [2.07, 0.955], [1.86, 1.345], [-0.1, 1.37]];
   pal.add(dcS.side(grow(rpoly(dloPts, 0.06, 5), 0.012), { offset: 0.003 }).pal('plastic').sym());
   {
     const inner = grow(dloPts, -0.006);
@@ -202,62 +202,67 @@ export function buildPassat() {
     glass.add(dcS.side([rpoly(gF, 0.03, 4), rpoly(gR, 0.02, 4), rpoly(gQ, 0.05, 5)], { offset: 0.0052 }).sym());
   }
   const topO = (z0, z1) => ({ minFacing: 0.3, filter: (v) => v[2] > z0 && v[2] < z1 && v[1] > 0.9 });
-  const ws = rpoly([[-0.69, -0.82], [0.69, -0.82], [0.58, -0.1], [-0.58, -0.1]], 0.06, 5);
-  pal.add(dcT.top(grow(ws, 0.016), { offset: 0.003, ...topO(-0.9, -0.02) }).pal('rubber'));
-  glass.add(dcT.top(ws, { offset: 0.0052, ...topO(-0.9, -0.02) }));
-  // tailgate glass in a wide black surround (seen from behind)
-  const rgo = { minFacing: 0.15, filter: (v) => v[2] > 1.9 && v[1] > YG1 - 0.06 };
-  const rw = rpoly([[-0.62, YG1 + 0.03], [0.62, YG1 + 0.03], [0.55, YG0 - 0.03], [-0.55, YG0 - 0.03]], 0.06, 5);
-  pal.add(dcR.rear(grow(rw, 0.045), { offset: 0.003, ...rgo }).pal('gloss'));
+  const ws = rpoly([[-0.7, -0.9], [0.7, -0.9], [0.58, -0.14], [-0.58, -0.14]], 0.06, 5);
+  pal.add(dcT.top(grow(ws, 0.016), { offset: 0.003, ...topO(-0.98, -0.05) }).pal('rubber'));
+  glass.add(dcT.top(ws, { offset: 0.0052, ...topO(-0.98, -0.05) }));
+  // big tailgate glass with well-rounded top corners in a slim black frame (seen from behind)
+  const rgo = { minFacing: 0.3, filter: (v) => v[2] > 1.9 && v[1] > YG1 - 0.04 };
+  const rw = rpoly([[-0.645, YG1 + 0.02], [0.645, YG1 + 0.02], [0.545, YG0 - 0.035], [-0.545, YG0 - 0.035]], 0.09, 6);
+  pal.add(dcR.rear(grow(rw, 0.022), { offset: 0.003, ...rgo }).pal('gloss'));
   glass.add(dcR.rear(rw, { offset: 0.0052, ...rgo }));
 
   // --- shut lines: doors, bonnet, tailgate, filler flap
   const archR = AR + 0.03;
   const doorRear = [[1.06, 0.95], [1.06, 0.66], ...arcPts(HZ, AY, archR, 125, 180, 8).filter((p) => p[1] < 0.66), [HZ - archR, 0.245]];
   pal.add(dcS.side([
-    ...stroke([[-0.86, 0.245], [-0.86, 0.905]], lw), ...stroke([[0.12, 0.245], [0.12, 0.93]], lw),
-    ...stroke(doorRear, lw), ...stroke([[-0.86, 0.245], [HZ - archR, 0.245]], lw),
+    ...stroke([[-0.93, 0.245], [-0.93, 0.9]], lw), ...stroke([[0.12, 0.245], [0.12, 0.925]], lw),
+    ...stroke(doorRear, lw), ...stroke([[-0.93, 0.245], [HZ - archR, 0.245]], lw),
   ], { ...lo, minFacing: 0.3 }).pal('line').sym());
-  const hood = [[0.74, -2.15], [0.77, -0.95]];
-  pal.add(dcT.top([...stroke(hood, lw), ...stroke([[-0.77, -0.95], [0.77, -0.95]], lw)], { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.85 }).pal('line'));
-  pal.add(dcT.top(stroke(hood, lw), { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.85 }).pal('line').mirrored());
+  const hood = [[0.74, -2.15], [0.77, -1.03]];
+  pal.add(dcT.top([...stroke(hood, lw), ...stroke([[-0.77, -1.03], [0.77, -1.03]], lw)], { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.93 }).pal('line'));
+  pal.add(dcT.top(stroke(hood, lw), { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.93 }).pal('line').mirrored());
   // tailgate: across the roof behind the rails, then down each side along the inner edge of the lamps
-  const LX = 0.57;                             // tailgate edge / inner edge of the lamps
+  const LX = 0.545;                            // tailgate edge / inner edge of the lamps
+  const YT = 0.56;                             // top of the rear bumper (the load lip)
   pal.add(dcT.top(stroke([[-0.66, 1.93], [0.66, 1.93]], lw), { ...lo, minFacing: 0.3, filter: (v) => v[2] > 1.8 }).pal('line'));
-  pal.add(dcR.rear(stroke([[0.66, 1.4], [0.69, YG1], [LX - 0.01, 0.98], [LX - 0.01, 0.56]], lw), { ...lo, minFacing: 0.1, ...fr }).pal('line').sym());
+  pal.add(dcR.rear(stroke([[0.64, 1.4], [0.69, YG1 + 0.01], [LX - 0.008, YG1 - 0.035], [LX - 0.008, YT + 0.004]], lw), { ...lo, minFacing: 0.3, ...fr }).pal('line').sym());
   const flap = rpoly([[1.78, 0.78], [1.93, 0.78], [1.93, 0.9], [1.78, 0.9]], 0.03, 3);
   pal.add(dcS.side(stroke([...flap, flap[0]], 0.005), { ...lo, minFacing: 0.3 }).pal('line'));
 
-  // --- tail lamps: tall units in the rear wings, wrapping round the corner
-  const LY0 = 0.665, LH = 0.31;
-  const ln = planLine(rearP, LY0 + LH / 2, 1.5, 1, 0, 85);
-  const sIn = ln.where((p) => p.x - LX), sOut = ln.where((p) => p.nx - 0.97);
+  // --- tail lamps: tall units in the rear wings, flush with the body and wrapping round the corner. Laid on
+  // the shell as a decal, so they follow its curves exactly.
+  const LY0 = YT + 0.014, LH = 0.33;
+  const rearO = { minFacing: 0.5, filter: (v) => v[2] > 1.9 };
   {
-    const lens = [[0.003, 0.003], [0.009, 0.008], [0.011, LH / 2], [0.009, LH - 0.008], [0.003, LH - 0.003]];
-    const sAt = (u) => sIn + (sOut - sIn) * u;
-    const us = []; for (let i = 0; i <= 20; i++) us.push(i / 20);
-    us.push(REV_U); us.sort((a, b) => a - b);
-    const taper = (t) => Math.min(1, t / 0.03, (1 - t) / 0.03);
-    tail.add(sweep(ln, LY0, lens, { s0: sIn, s1: sOut, steps: us.map(sAt), uS: [sIn, sOut], vH: [0, LH], taper }));
-    reverse.add(sweep(ln, LY0, [[0.0115, 0.012], [0.0125, 0.02], [0.0125, LH * REV_V - 0.01], [0.0115, LH * REV_V - 0.004]], { s0: sAt(0.03), s1: sAt(REV_U - 0.02), n: 6, taper }));
-    tail.add(tail.mirrored()); reverse.add(reverse.mirrored());
-    // black gasket round each lamp
-    const xo = ln.at(sOut).x + 0.01;
-    pal.add(dcR.rear(rect(LX - 0.012, LY0 - 0.012, xo, LY0 + LH + 0.012), { offset: 0.002, minFacing: 0.04, filter: (v) => v[2] > ln.at(sOut).z - 0.02 }).pal('gloss').sym());
+    // projected from behind and 35 degrees to the side, so one decal covers the tail and the wrap round
+    const A = 35 * Math.PI / 180, c = Math.cos(A), sn = Math.sin(A);
+    const dcY = decals(part(shell, (x, y, z) => z > 1.9 && x > 0.3)).yaw(35);
+    const uAt = (x, z) => x * c - z * sn;
+    const ym = LY0 + LH / 2, zTip = ZRB - 0.12;
+    const uIn = uAt(LX, rz(LX, ym)), uTip = uAt(prS.sideX(zTip, ym) || 0.86, zTip);
+    const lamp = rpoly([[uIn, LY0], [uTip - 0.012, LY0 + 0.03], [uTip, LY0 + 0.07], [uTip, LY0 + LH - 0.05], [uTip - 0.01, LY0 + LH - 0.02], [uIn, LY0 + LH - 0.004]], 0.01, 3);
+    const yo = { minFacing: 0.3, filter: (v) => v[2] > 1.9 && v[0] > 0.3 };
+    pal.add(dcY(grow(lamp, 0.006), { offset: 0.003, ...yo }).pal('gloss').sym());
+    tail.add(dcY(lamp, { offset: 0.0048, box: [uIn, LY0, uTip, LY0 + LH], ...yo }).sym());
   }
-  // number plate recess, the chrome grab bar over it, badges and the roundel
-  const PY = 0.6;
-  pal.add(dcR.rear(rect(-0.3, PY - 0.075, 0.3, PY + 0.075, 0.012), { offset: 0.002, minFacing: 0.1, ...fr }).pal('plastic'));
+  {
+    const XO = LX + 0.42;
+    // the clear reverse lamp in the bottom inboard corner
+    const rw0 = LX + 0.014, rw1 = LX + REV_U * (XO - LX) - 0.01;
+    reverse.add(dcR.rear(rpoly([[rw0, LY0 + 0.014], [rw1, LY0 + 0.014], [rw1, LY0 + LH * REV_V - 0.01], [rw0, LY0 + LH * REV_V - 0.01]], 0.006, 2), { offset: 0.0062, ...rearO }).sym());
+  }
+  // number plate on the tailgate under the chrome grab bar, the roundel above it, PASSAT and TDI badges
+  const PY = YT + 0.135;
   const pl = plate([0, PY, rz(0, PY) + 0.004], A_PLATE, {});
   atlas.add(pl.face); pal.add(pl.back);
   {
-    const hy = PY + 0.105, pts = [];
-    for (let i = 0; i <= 10; i++) { const x = -0.3 + 0.6 * i / 10; pts.push([x, hy + 0.012 * (1 - (x / 0.3) ** 2), rz(x, hy) + 0.012]); }
-    pal.add(tube(pts, 0.016, null, 'chrome', 8));
+    const hy = PY + 0.088, pts = [];
+    for (let i = 0; i <= 12; i++) { const x = -0.33 + 0.66 * i / 12; pts.push([x, hy + 0.008 * (1 - (x / 0.33) ** 2), rz(x, hy) + 0.01]); }
+    pal.add(tube(pts, 0.019, null, 'chrome', 8));
   }
-  atlas.add(dcR.rear(rect(-0.5, 0.79, -0.27, 0.835), { offset: 0.0045, ...fr }).uvRect(A_NAME));
-  atlas.add(dcR.rear(rect(0.3, 0.765, 0.43, 0.81), { offset: 0.0045, ...fr }).uvRect(A_TDI));
-  atlas.add(dcR.rear(rect(-0.055, 0.8, 0.055, 0.91), { offset: 0.0045, ...fr }).uvRect(A_VW));
+  atlas.add(dcR.rear(rect(-0.47, PY + 0.1, -0.25, PY + 0.14), { offset: 0.0045, ...fr }).uvRect(A_NAME));
+  atlas.add(dcR.rear(rect(0.3, PY + 0.03, 0.42, PY + 0.07), { offset: 0.0045, ...fr }).uvRect(A_TDI));
+  atlas.add(dcR.rear(rect(-0.052, PY + 0.115, 0.052, PY + 0.219), { offset: 0.0045, ...fr }).uvRect(A_VW));
   // rear wiper parked across the bottom of the glass, pivot at the middle
   {
     const pts = [];
@@ -267,24 +272,29 @@ export function buildPassat() {
     pal.add(cyl(0.02, 0.024, 0.03, 12, { p: [-0.02, YG1 + 0.06, rz(-0.02, YG1 + 0.06) + 0.012], r: [Math.PI / 2, 0, 0] }, 'plastic'));
   }
 
-  // --- bumpers: body-coloured, wrapping round to the arches, black strips on the corners and a black valance
-  const YT = 0.53;
-  const bumper = (lnB, yB, sEnd, skin) => {
+  // --- bumpers: body-coloured, wrapping round to the arches, black strips on the corners; the rear one has a
+  // black textured apron along its bottom (yBlack: below this it is black)
+  const bumper = (lnB, yB, sEnd, skin, yBlack) => {
     const sC = lnB.where((p) => p.nx - 0.72), out = Math.max(...skin.map((p) => p[0]));
     const m = (t) => { const s = t * sEnd, k = Math.max(0, Math.min(1, (s - (sC - 0.16)) / 0.36)); return (1 - 0.8 * k * k * (3 - 2 * k)) * Math.max(0, Math.min(1, (1 - t) / 0.04)) ** 0.5; };
-    paint.add(sweep(lnB, yB, skin, { s1: sEnd, n: 56, taper: m }).sym());
+    if (yBlack === undefined) paint.add(sweep(lnB, yB, skin, { s1: sEnd, n: 56, taper: m }).sym());
+    else {
+      const b = yBlack - yB, i = skin.findIndex((p) => p[1] >= b), q = skin[i - 1], r = skin[i];
+      const cut = [q[0] + (r[0] - q[0]) * (b - q[1]) / (r[1] - q[1]), b];
+      pal.add(sweep(lnB, yB, [...skin.slice(0, i), cut], { s1: sEnd, n: 56, taper: m }).pal('bumper').sym());
+      paint.add(sweep(lnB, yB, [cut, ...skin.slice(i)], { s1: sEnd, n: 56, taper: m }).sym());
+    }
     return { m, out, sC };
   };
   {
     const yB = 0.42, lnB = planLine(rearP, yB, 1.5, 1, 0, 80, 160);
     const sEnd = lnB.where((p) => (HZ + archR + 0.012) - p.z);
-    const b = bumper(lnB, yB, sEnd, [[-0.03, -0.17], [0.0, -0.168], [0.03, -0.15], [0.05, -0.11], [0.06, -0.05], [0.064, 0.03], [0.064, YT - yB - 0.03],
-      [0.058, YT - yB - 0.01], [0.04, YT - yB], [-0.03, YT - yB]]);
-    // black strips round the corners only
-    const s0 = b.sC - 0.3;
-    pal.add(sweep(lnB, yB, [[0.062, 0.0], [0.072, 0.004], [0.075, 0.025], [0.072, 0.046], [0.062, 0.05]], { s0, s1: sEnd - 0.03, n: 20, taper: (t) => Math.min(1, t / 0.08, (1 - t) / 0.08) * 0.6 + 0.4 * b.m(t) }).pal('bumper').sym());
-    const lnV = planLine(rearP, 0.26, 1.5, 1, 0, 80, 160);
-    pal.add(sweep(lnV, 0.21, [[-0.03, 0], [0.05, 0.0], [0.07, 0.03], [0.074, 0.08], [-0.03, 0.09]], { s1: lnV.where((p) => (HZ + archR) - p.z), n: 40 }).pal('bumper').sym());
+    const b = bumper(lnB, yB, sEnd, [[-0.03, -0.205], [0.0, -0.203], [0.028, -0.19], [0.046, -0.15], [0.058, -0.09], [0.064, -0.02], [0.065, 0.06], [0.064, YT - yB - 0.03],
+      [0.058, YT - yB - 0.01], [0.04, YT - yB], [-0.03, YT - yB]], 0.335);
+    // black strips round the corners, lying on the bumper face, from under the lamps round to the arches
+    const s0 = lnB.where((p) => p.x - 0.5), s1 = sEnd - 0.02;
+    const sm = (t) => b.m((s0 + (s1 - s0) * t) / sEnd);
+    pal.add(sweep(lnB, yB, [[0.064, -0.005], [0.065, 0.0], [0.065, 0.05], [0.064, 0.055]], { s0, s1, n: 24, add: 0.009, taper: (t) => sm(t) * Math.min(1, t / 0.02 + 0.6, (1 - t) / 0.02 + 0.6) }).pal('bumper').sym());
   }
   {
     const yB = 0.42, lnB = planLine(frontP, yB, -1.5, -1, 0, 80, 160);
@@ -304,7 +314,7 @@ export function buildPassat() {
   {
     const yS = 0.47;
     const blk = [[-0.004, -0.018], [0.004, -0.017], [0.008, -0.012], [0.009, 0], [0.008, 0.012], [0.004, 0.017], [-0.004, 0.018]];
-    for (const [z0, z1] of [[-0.85, 0.11], [0.13, HZ - archR - 0.05]]) {
+    for (const [z0, z1] of [[-0.92, 0.11], [0.13, HZ - archR - 0.05]]) {
       const l = sideLine(sideP, yS, z0, z1, 16), k = 30 * (z1 - z0), tp = (t) => Math.min(1, 0.25 + k * t, 0.25 + k * (1 - t));
       pal.add(sweep(l, yS, blk, { n: 16, taper: tp }).pal('bumper').sym());
     }
@@ -331,12 +341,12 @@ export function buildPassat() {
   // --- wipers, mirrors, pull handles, roof rails, aerial
   for (const [x0, x1] of [[0.06, 0.6], [-0.5, 0.02]]) {
     const pts = [];
-    for (let i = 0; i <= 6; i++) { const x = x0 + (x1 - x0) * i / 6, z = -0.84 + 0.035 * i / 6; pts.push([x, prC.topY(x, z) + 0.016, z]); }
+    for (let i = 0; i <= 6; i++) { const x = x0 + (x1 - x0) * i / 6, z = -0.92 + 0.035 * i / 6; pts.push([x, prC.topY(x, z) + 0.016, z]); }
     pal.add(tube(pts, 0.006, null, 'plastic', 5));
     pal.add(tube(pts.slice(1), 0.0085, null, 'rubber', 5));
   }
   {
-    const mz = -0.72, my = 0.99, mx = prC.sideX(mz + 0.05, 0.96);
+    const mz = -0.8, my = 0.985, mx = prC.sideX(mz + 0.05, 0.96);
     paint.add(blob(0.2, 0.13, 0.095, { p: [mx + 0.12, my, mz], r: [0, -0.12, 0] }, null, 3.2).sym());
     pal.add(box(0.07, 0.04, 0.1, { p: [mx + 0.02, my - 0.03, mz + 0.01], r: [0, -0.15, 0] }, 'plastic').sym());
     for (const z of [-0.07, 0.95]) {

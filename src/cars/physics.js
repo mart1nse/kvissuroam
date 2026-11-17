@@ -14,6 +14,10 @@ const CASTER = 0.45;             // how far a released wheel follows the slide
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
+const DONUT = 0.4;              // how firmly a held donut is kept going (share of m*g*L as yaw moment)
+const DONUT_LO = 0.6, DONUT_HI = 1.1;    // ...the slide angle band it keeps the car in (rad)
+const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
+const EV_SLIDE_REAR = 0.7;      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
 
 // Body heave on the suspension, per kg of car: a 1.5 Hz spring with half-critical
@@ -382,7 +386,17 @@ function substep(car, input, world, dt) {
   // the axle with grip to spare, so a rear-biased car that floors it on a
   // loaded rear axle can break the tail loose while the front still grips.
   const base = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
-  const shareR = s.rearShareMax ? base + (s.rearShareMax - base) * Math.min(1, car.slipVF / 2) : base;
+  let shareR = s.rearShareMax ? base + (s.rearShareMax - base) * Math.min(1, car.slipVF / 2) : base;
+  // A two-motor EV sets its split in software. Floored in a slide at modest
+  // speed it lets the rear motor do more of the work, so the front wheels stop
+  // dragging the car straight and the slide can be held on the throttle
+  // (as the drift modes of powerful twin-motor cars do).
+  const bodySlip = Math.abs(Math.atan2(car.vy, Math.max(car.vx, 1)));
+  if (s.drive === 'awd' && s.engine.type === 'ev' && throttle > 0.5 && !car.reversing) {
+    const kSlide = Math.min(1, Math.max(0, (bodySlip - 0.08) / 0.15)) * Math.min(1, Math.max(0, (110 - speed * 3.6) / 30));
+    car.evSlide = (car.evSlide || 0) + (kSlide * throttle - (car.evSlide || 0)) * Math.min(1, dt * 4);
+  } else car.evSlide = (car.evSlide || 0) * Math.exp(-dt * 4);
+  if (car.evSlide > 0) shareR += (Math.max(shareR, EV_SLIDE_REAR) - shareR) * car.evSlide;
   const shareF = 1 - shareR;
   // inertia of motor/engine, driveline and wheels as felt at each axle's tread
   const e = s.engine;
@@ -420,7 +434,11 @@ function substep(car, input, world, dt) {
       const allow = lon * Math.max(0, 1 - 2 * Math.max(0, kappa / surf.kp - 1));
       if (demand > allow) { demand = allow + (demand - allow) * (1 - car.tcK); trimmed = true; }
     }
-    const spinning = share > 0 && throttle > 0 && !(hb && !front) && (demand > lon || kappa > surf.kp);
+    // A tyre already sliding sideways has no grip to spare for drive, so any
+    // drive torque spins it up (and the revs with it) rather than the wheel
+    // rolling with the road while the car slides.
+    const sideSlide = Math.abs(Math.tan(alpha)) * surf.b / 2.3 > 1;
+    const spinning = share > 0 && throttle > 0 && !(hb && !front) && (demand > lon || kappa > surf.kp || (sideSlide && demand > 0));
     let fx, fy = null, ask;
     if (spinning) {
       const sx = kappa / surf.kp, sy = Math.abs(Math.tan(alpha)) * surf.b / 2.3;
@@ -495,6 +513,33 @@ function substep(car, input, world, dt) {
   if (car.spin > 0) {
     const wob = Math.sin(car.time * 1.7 + 1.3) + 0.5 * Math.sin(car.time * 4.3 + car.x * 0.3);
     MZ += hw * (fxF + fxR) * SPIN_YAW * car.spin * wob * (1 + ts.bump);
+  }
+  // Donuts. Held at full lock and full throttle on spinning wheels, the model
+  // car would rotate past 90 degrees, scrub off its speed, then snap straight
+  // as the wheels found grip and drive it forward, a few seconds per cycle.
+  // A driver feathers the throttle and wheel to stop that; here a gentle yaw
+  // moment does it, keeping the slide angle inside DONUT_LO..DONUT_HI while
+  // the wheel is held into the rotation, the pedal down and the wheels spin.
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) car.donutAng = undefined;
+  else {
+    const turn = Math.sign(steerIn);
+    const ang = -turn * Math.atan2(car.vy, car.vx);          // slide angle, tail out positive
+    // (looking a moment ahead, so a fast swing is met before it overshoots)
+    const dAng = car.donutAng === undefined ? 0 : Math.max(-6, Math.min(6, (ang - car.donutAng) / dt));
+    car.donutAng = ang;
+    const angP = ang + DONUT_LEAD * dAng;
+    const spinW = Math.min(1, car.slipVR / 4);      // (the rear wheels: a front driver washes wide)
+    const slow = Math.min(1, Math.max(0, (70 - speed * 3.6) / 30));
+    const w = throttle * Math.min(1, (Math.abs(steerIn) - 0.5) / 0.4) * spinW * slow;
+    if (w > 0) {
+      let err = 0;
+      // (only a true donut, near full lock at low speed, is pushed round; a
+      // floored corner is just kept from over-rotating)
+      if (angP < DONUT_LO && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) err = Math.min(1, (DONUT_LO - angP) / 0.5);
+      else if (angP > DONUT_HI) err = -Math.min(1, (angP - DONUT_HI) / 0.35);
+      // (rotating against the wheel already: leave the driver to sort it out)
+      if (car.yawRate * turn > -0.2) MZ += turn * err * w * DONUT * m * G * L * load;
+    }
   }
   const uF = Math.min(1, Math.abs(fyF) / capF), uR = Math.min(1, Math.abs(fyR) / capR);
   car.useF += (uF - car.useF) * Math.min(1, dt * 15);
@@ -597,7 +642,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.tcK = undefined;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

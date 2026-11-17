@@ -89,6 +89,23 @@ export function speedKmh(car) {
   return Math.hypot(car.vx, car.vy) * 3.6;
 }
 
+// A gear picked by hand (keys A and Z): +1 up, -1 down. The gearbox then holds that gear until its revs
+// reach the shift point, and the automatic takes over again. Returns false when the shift cannot be made
+// (an EV, reversing, top or first gear, or a downshift that would over-rev the engine).
+export function shiftGear(car, dir) {
+  const s = car.spec, e = s.engine;
+  if (e.type === 'ev' || car.reversing) return false;
+  const g = car.gear + dir;
+  if (g < 1 || g > s.gears.length) return false;
+  const rpmIn = (Math.abs(car.vx) / s.wheelRadius) * s.gears[g - 1] * s.finalDrive * (60 / (2 * Math.PI));
+  if (dir < 0 && rpmIn > e.redline * 0.97) return false;
+  car.shiftUp = dir > 0;
+  car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
+  // (a downshift that already lands above the shift point holds on up to just short of the limiter)
+  car.manual = dir > 0 ? e.shiftRpm : Math.max(e.shiftRpm, Math.min(rpmIn + 400, e.redline - 150));
+  return true;
+}
+
 // rev limiter: the shortest ignition cut (s) and how far the revs must fall before it returns (rpm);
 // an engine can set its own with revCut and revCutDrop
 const SHIFT_TIME = 0.25;         // a quick manual change: clutch, lever, clutch (s)
@@ -121,8 +138,11 @@ function engineForce(car, throttle, dt) {
   }
   const ratioOf = (g) => (car.reversing ? s.reverse : s.gears[g - 1]) * s.finalDrive;
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
+  // a gear picked by hand is held until it reaches the shift point (or the car stops)
+  // (or the road speed sags below idle in that gear, when the automatic picks a lower gear again)
+  if (car.manual && (car.reversing || vAbs < 1.5 || rpmAt(car.gear) >= car.manual || rpmAt(car.gear) < (e.idle ?? 750) * 0.9)) car.manual = 0;
   if (car.reversing) car.gear = 1;
-  else if (car.shiftTimer <= 0) {
+  else if (car.shiftTimer <= 0 && !car.manual) {
     // kick-down automatic: lowest gear that stays below the shift point
     let g = car.gear;
     // (it also shifts a little early rather than run into the rev limiter when the tyres are only just slipping)
@@ -791,7 +811,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

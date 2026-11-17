@@ -3,12 +3,42 @@ import { speedKmh } from './cars/physics.js';
 const $ = (s) => document.querySelector(s);
 
 export function createHud(world) {
-  const elSpeed = $('#speed'), elGear = $('#gear'), elRpm = $('#rpm i'), elStreet = $('#street');
+  const elSpeed = $('#speed'), elGear = $('#gear'), elStreet = $('#street');
   const elName = $('#carname'), elToast = $('#toast');
   const map = $('#minimap');
   const ctx = map.getContext('2d');
   let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
-  let overlay = null;            // extra drawing in world coordinates (race track, other players)
+  let overlay = null;
+  const face = $('#dial .face'), needle = $('#dial .needle');
+  let dialMax = 8000, dialRed = 7000, needleShown = -1, needleHot = false;
+
+  // The round rev counter: 270 degrees from bottom left round to bottom right, numbers in thousands,
+  // red from the rev limiter on (an EV: the motor's top speed).
+  const SWEEP = 270, A0 = -135;
+  const ang = (rpm) => A0 + SWEEP * Math.min(1, Math.max(0, rpm / dialMax));
+  function buildDial(e) {
+    const red = e.type === 'ev' ? e.maxRpm || 16000 : e.redline;
+    const step = red > 10000 ? 2000 : 1000;
+    dialRed = red;
+    dialMax = Math.ceil((red + 1) / step) * step;
+    if (dialMax - red < step * 0.6) dialMax += step;     // always a clear stretch of red past the limiter
+    const pt = (a, r) => { const t = (a * Math.PI) / 180; return [(Math.sin(t) * r).toFixed(2), (-Math.cos(t) * r).toFixed(2)]; };
+    const arc = (a0, a1, r) => { const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r); return `M${x0} ${y0}A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+    let svg = `<path class="ring" d="${arc(A0, A0 + SWEEP, 92)}"/><path class="red" d="${arc(ang(red), A0 + SWEEP, 87.5)}"/>`;
+    const minor = step / 4;
+    for (let v = 0; v <= dialMax + 1; v += minor) {
+      const major = v % step === 0, mid = !major && v % (step / 2) === 0;
+      const [x0, y0] = pt(ang(v), 92), [x1, y1] = pt(ang(v), major ? 78 : mid ? 84 : 87);
+      svg += `<line class="tick" x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke-width="${major ? 3.2 : mid ? 2 : 1.3}"/>`;
+      if (major) {
+        const [tx, ty] = pt(ang(v), 66);
+        svg += `<text x="${tx}" y="${ty}"${v >= red ? ' class="hot"' : ''}>${v / 1000}</text>`;
+      }
+    }
+    svg += `<text class="x1000" x="0" y="45">×1000 RPM</text>`;
+    face.innerHTML = svg;
+    needleShown = -1;
+  }            // extra drawing in world coordinates (race track, other players)
 
   // spatial hash of named road segments for the street label
   const cell = 60;
@@ -108,7 +138,7 @@ export function createHud(world) {
 
   return {
     setOverlay(fn) { overlay = fn; },
-    setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); },
+    setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); buildDial(s.engine); },
     toast(text, ms = 3200) {
       elToast.textContent = text;
       elToast.classList.add('show');
@@ -118,11 +148,15 @@ export function createHud(world) {
     update(car) {
       elSpeed.textContent = Math.round(speedKmh(car));
       const ev = spec.engine.type === 'ev';
-      elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `D${car.gear}`;
-      const frac = ev
-        ? Math.min(1, (Math.abs(car.vx) + (car.slipV || 0)) / (spec.limiter / 3.6)) * (car.throttle ? 1 : 0.4)
-        : car.rpm / spec.engine.redline;
-      elRpm.style.width = `${Math.round(Math.min(1, frac) * 100)}%`;
+      // (M: a gear picked by hand with A / Z, held until the shift point)
+      elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `${car.manual ? 'M' : 'D'}${car.gear}`;
+      const a = ang(car.rpm || 0);
+      if (Math.abs(a - needleShown) > 0.2) {
+        needleShown = a;
+        needle.setAttribute('transform', `rotate(${a.toFixed(1)})`);
+        const hot = (car.rpm || 0) >= dialRed - 50;
+        if (hot !== needleHot) { needleHot = hot; needle.classList.toggle('hot', hot); }
+      }
       if (--streetTimer <= 0) {
         streetTimer = 5;
         const name = streetAt(car.x, car.z);

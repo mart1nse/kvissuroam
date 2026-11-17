@@ -88,13 +88,14 @@ export function createBoard({ mp, race, cars, order }) {
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
 
-  btn.addEventListener('click', () => {
+  function show() {
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
-  });
+  }
+  btn.addEventListener('click', show);
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 
-  return { render, get open() { return !panel.classList.contains('hidden'); } };
+  return { render, show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
 }

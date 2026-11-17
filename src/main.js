@@ -240,6 +240,7 @@ function setCar(id) {
   mp?.setCar(id);
   race?.cancel('LAP CANCELLED');
   document.querySelectorAll('.card').forEach((c) => c.classList.toggle('sel', c.dataset.id === id));
+  document.querySelector('.card.sel')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
 }
 
 function buildMenu() {

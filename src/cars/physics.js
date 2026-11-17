@@ -139,7 +139,11 @@ function engineForce(car, throttle, dt) {
   if (car.shiftTimer > 0) car.shiftTimer -= dt;
   const wheelRpm = (wAbs / s.wheelRadius) * ratioOf(car.gear) * (60 / (2 * Math.PI));
   // torque converter: engine speed never drops below stall while the throttle is open
-  const stall = e.idle + (e.stallRpm - e.idle) * throttle;
+  // (rollStallRpm: once rolling, a flat-out stab lets the engine flare higher before the converter takes
+  // hold, like dropping the clutch in a manual; a standing start keeps the gentler stallRpm)
+  if (throttle < 0.5) car.stabV = vAbs;     // (the road speed when the pedal went down)
+  const stallMax = e.rollStallRpm ? e.stallRpm + (e.rollStallRpm - e.stallRpm) * Math.min(1, (car.stabV ?? 0) / 3) ** 2 : e.stallRpm;
+  const stall = e.idle + (stallMax - e.idle) * throttle;
   const rpm = Math.max(wheelRpm, stall);
   const sr = Math.min(1, wheelRpm / rpm);
   // Turbocharged engines: boost only builds once the exhaust flows enough to
@@ -478,7 +482,10 @@ function substep(car, input, world, dt) {
     let trimmed = false;
     if (car.tcK > 0 && share > 0 && throttle > 0) {
       // (once the tyres are past their peak it backs off further, to pull them down again)
-      const allow = lon * Math.max(0, 1 - 2 * Math.max(0, kappa / surf.kp - 1));
+      // (tcSlip > 1: when the pedal is stabbed on the move, a sport setting lets the tyres spin up past
+      // their peak a little before it steps in; a standing start stays clean)
+      const k = (car.stabV ?? 0) > 2 ? s.tcSlip ?? 1 : 1;
+      const allow = lon * k * Math.max(0, 1 - 2 * Math.max(0, kappa / (surf.kp * k) - 1));
       if (demand > allow) { demand = allow + (demand - allow) * (1 - car.tcK); trimmed = true; }
     }
     // A tyre already sliding sideways has no grip to spare for drive, so any
@@ -784,7 +791,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

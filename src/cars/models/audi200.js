@@ -1,4 +1,4 @@
-// 1990 Audi 200 Avant quattro 20V (Typ 44) in champagne metallic: the long, smooth, flush-glazed C3 body
+// 1990 Audi 200 Avant quattro 20V (Typ 44) in dark lilac metallic: the long, smooth, flush-glazed C3 body
 // with a long nose, a fast sloping tailgate, a full-width band of tail lamps (amber over red) round the
 // number plate, body-coloured wrap-round bumpers with a black rubbing strip, bright roof rails and the
 // flat-faced 15-inch "Aero" alloys.
@@ -16,7 +16,7 @@ const HW = DIMS.width / 2;
 const AY = 0.325, AR = 0.365;                // wheel arches
 // soft shoulder line through the door handles
 const WAIST = [[ZFB, 0.69], [-1.0, 0.735], [1.0, 0.765], [ZRB, 0.78]], FOLD = 0.006;
-const PAINT = 0xbfad89;                      // champagne metallic
+const PAINT = 0x50294e;                      // dark lilac metallic with a hint of deep cherry red
 
 // ---------------------------------------------------------------- wheel
 // 15-inch "Aero" alloy: a smooth, slightly dished silver disc with five small round holes round the hub and

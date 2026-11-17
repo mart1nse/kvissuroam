@@ -3,7 +3,7 @@
 // over the mesh engine cover, big side intakes, a full-width mesh tail with two large tailpipes, the
 // extending rear wing and five-spoke centre-lock wheels (19-inch front, 20-inch rear) over yellow calipers.
 import * as THREE from 'three';
-import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, tintPaint } from './kit.js';
+import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, tintPaint } from './kit.js';
 import { part, planLine, pushTri, foldFlanks, lathe, skinPatch, spokeFace, tyreAndRim } from './parts.js';
 
 // real car: 4613 x 1921 x 1166 mm, wheelbase 2730, track 1612 front / 1587 rear,
@@ -44,17 +44,31 @@ function gridSoup(rows) {
 
 // ---------------------------------------------------------------- textures
 function lampTextures() {
-  // Tail lamp, u 0 = inboard .. 1 = round the corner: red lens over a row of round LED units
+  // Tail lamp, u 0 = inboard .. 1 = round the corner, v 0 = bottom .. 1 = top (canvas y runs down): a dark red
+  // lens over a honeycomb of small round LED cells, each in its own reflector cup
   const tail = (glow) => (g, w, h) => {
-    g.fillStyle = glow ? '#000' : '#6d0407'; g.fillRect(0, 0, w, h);
-    if (!glow) { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,90,80,0.3)'); gr.addColorStop(1, 'rgba(20,0,0,0.5)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
-    for (const [cx, r, amber] of [[0.14, 0.3, false], [0.36, 0.33, false], [0.58, 0.3, true], [0.77, 0.24, false]]) {
-      const x = cx * w, y = h * 0.5, R = r * h;
-      const rg = g.createRadialGradient(x, y, 1, x, y, R);
-      if (glow) { rg.addColorStop(0, amber ? '#444' : '#fff'); rg.addColorStop(0.7, amber ? '#222' : '#bbb'); rg.addColorStop(1, '#000'); }
-      else { rg.addColorStop(0, amber ? '#ffd9a0' : '#ff6a5c'); rg.addColorStop(0.6, amber ? '#f08a10' : '#d5141a'); rg.addColorStop(1, amber ? '#8a4a05' : '#5a0306'); }
-      g.fillStyle = rg; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
-      if (!glow) { g.strokeStyle = 'rgba(20,0,0,0.6)'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, R, 0, 7); g.stroke(); }
+    g.fillStyle = glow ? '#000' : '#3a0204'; g.fillRect(0, 0, w, h);
+    if (!glow) { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,70,60,0.28)'); gr.addColorStop(0.35, 'rgba(160,10,14,0.15)'); gr.addColorStop(1, 'rgba(10,0,0,0.45)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
+    const cols = 22, rows = 7, dx = w / cols, dy = h / rows, R = Math.min(dx, dy) * 0.4;
+    for (let r = 0; r < rows; r++) for (let c = -1; c <= cols; c++) {
+      const x = (c + 0.5 + (r % 2) * 0.5) * dx, y = (r + 0.5) * dy;
+      if (glow) {
+        const rg = g.createRadialGradient(x, y, 0, x, y, R * 1.1);
+        rg.addColorStop(0, '#fff'); rg.addColorStop(0.5, '#d8d8d8'); rg.addColorStop(1, '#000');
+        g.fillStyle = rg; g.beginPath(); g.arc(x, y, R * 1.1, 0, 7); g.fill();
+      } else {
+        // cup: dark rim, red bowl lit from the top left, a pin-point LED in the middle
+        g.fillStyle = '#1a0103'; g.beginPath(); g.arc(x, y, R * 1.12, 0, 7); g.fill();
+        const rg = g.createRadialGradient(x - R * 0.35, y - R * 0.35, 0.5, x, y, R);
+        rg.addColorStop(0, '#ff8a80'); rg.addColorStop(0.35, '#d0141c'); rg.addColorStop(1, '#4c0307');
+        g.fillStyle = rg; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
+        g.fillStyle = '#2a0204'; g.beginPath(); g.arc(x, y, R * 0.28, 0, 7); g.fill();
+      }
+    }
+    if (!glow) {
+      // clear outer lens: a soft highlight along the top and a dark edge all round
+      g.fillStyle = 'rgba(255,255,255,0.1)'; g.fillRect(0, 0, w, h * 0.12);
+      g.strokeStyle = '#120001'; g.lineWidth = 6; g.strokeRect(0, 0, w, h);
     }
   };
   // Headlamp seen from above, u across the car, v 0 = front tip .. 1 = rear: clear lens, two projectors
@@ -71,7 +85,7 @@ function lampTextures() {
     }
     if (!glow) { g.fillStyle = '#f0a020'; g.fillRect(w * 0.3, h * 0.03, w * 0.4, h * 0.07); }
   };
-  return { tailMap: canvasTex(256, 96, tail(false)), tailGlow: canvasTex(256, 96, tail(true)), headMap: canvasTex(96, 256, head(false)), headGlow: canvasTex(96, 256, head(true)) };
+  return { tailMap: canvasTex(768, 256, tail(false)), tailGlow: canvasTex(768, 256, tail(true)), headMap: canvasTex(96, 256, head(false)), headGlow: canvasTex(96, 256, head(true)) };
 }
 
 const AW = 1024, AH = 512;
@@ -202,33 +216,52 @@ export function buildCGT() {
   // --- air outlet behind each front wheel, ahead of the door
   pal.add(dcS.side(rpoly([[-HZ + 0.43, 0.27], [-0.775, 0.25], [-0.775, 0.6], [-HZ + 0.47, 0.64]], 0.03, 3), { offset: 0.004, minFacing: 0.05 }).pal('well').sym());
 
-  // --- tail: mesh panel across the car, lamps at the corners, two big tailpipes, wing
+  // --- tail: honeycomb LED lamps tucked under the deck lip and wrapping round the corners, a chrome-edged
+  // outlet grille between them, the script below, and a black recess low down with the plate, two round
+  // tailpipes and a round fog / reversing lamp at each end
   {
     const yL = 0.8, ln = planLine(rearP, yL, 1.3, 1, 0, 86, 150);
-    const sIn = ln.where((p) => p.x - 0.53), sOut = ln.where((p) => p.nx - 0.9);
-    const lo0 = (m) => (u) => 0.735 + 0.035 * smooth((u - 0.55) / 0.45) + 0.02 * (1 - u) * (1 - u) - m, hi0 = (m) => (u) => 0.875 - 0.04 * smooth((u - 0.5) / 0.5) - 0.012 * (1 - u) * (1 - u) + m;
-    tail.add(skinPatch(rearP, ln, { s0: sIn, s1: sOut, nu: 28, nv: 5, offset: 0.006, vH: [0.73, 0.88], y0: lo0(0), y1: hi0(0) }));
+    const sIn = ln.where((p) => p.x - 0.47), sOut = ln.where((p) => p.nx - 0.93);
+    // straight top under the lip; the bottom edge sweeps up toward the corner so the lamp runs out to a point,
+    // and the inboard end is rounded
+    const TOP = 0.888, BOT = 0.665;
+    const round = (u, ya, yb, m) => { const k = Math.min(1, u / 0.07, (1 - u) / 0.16), q = Math.sqrt(1 - (1 - k) * (1 - k)), mid = (ya + yb) / 2; return [mid + (ya - mid) * (0.45 + 0.55 * q), mid + (yb - mid) * (0.45 + 0.55 * q)]; };
+    const lo = (m) => (u) => round(u, BOT + 0.075 * Math.pow(smooth((u - 0.35) / 0.65), 1.4), TOP - 0.014 * smooth((u - 0.55) / 0.45), m)[0] - m;
+    const hi = (m) => (u) => round(u, BOT + 0.075 * Math.pow(smooth((u - 0.35) / 0.65), 1.4), TOP - 0.014 * smooth((u - 0.55) / 0.45), m)[1] + m;
+    tail.add(skinPatch(rearP, ln, { s0: sIn, s1: sOut, nu: 36, nv: 8, offset: 0.007, vH: [BOT, TOP], y0: lo(0), y1: hi(0) }));
     tail.add(tail.mirrored());
-    pal.add(skinPatch(rearP, ln, { s0: sIn - 0.008, s1: sOut + 0.008, nu: 28, nv: 5, offset: 0.003, y0: lo0(0.008), y1: hi0(0.008) }).pal('gloss').sym());
-    reverse.add(dcR.rear(rect(0.3, 0.335, 0.42, 0.36, 0.006), { offset: 0.0045, minFacing: 0.05, ...fr }));
-    reverse.add(reverse.mirrored());
-    atlas.add(dcR.rear(rpoly([[-0.5, 0.5], [0.5, 0.5], [0.5, 0.75], [0.44, 0.8], [-0.44, 0.8], [-0.5, 0.75]], 0.03, 3), { offset: 0.004, minFacing: 0.05, box: [-0.75, 0.4, 0.75, 0.95], ...fr }).uvRect(A_MESH));
-    atlas.add(dcR.rear(rect(-0.3, 0.826, 0.3, 0.874), { offset: 0.005, minFacing: 0.03, ...fr }).uvRect(A_NAME));
-    atlas.add(dcR.rear(rect(0.5, 0.66, 0.84, 0.72), { offset: 0.005, minFacing: 0.05, ...fr }).uvRect(A_SCRIPT));
-    // lower bumper: black diffuser, plate between the pipes
-    pal.add(dcR.rear(rpoly([[-0.72, 0.13], [0.72, 0.13], [0.66, 0.31], [-0.66, 0.31]], 0.03, 4), { offset: 0.004, minFacing: 0.02, filter: (v) => v[2] > 1.85 }).pal('plastic'));
-    const pl = plate([0, 0.41, rz(0, 0.41) + 0.008], A_PLATE, {});
+    // body-colour bezel standing just proud round each lens, dark cup behind it
+    pal.add(skinPatch(rearP, ln, { s0: sIn - 0.012, s1: sOut + 0.01, nu: 36, nv: 8, offset: 0.0035, y0: lo(0.012), y1: hi(0.012) }).pal('gloss').sym());
+    // outlet grille under the wing: a chrome-edged slot with mesh behind
+    const slot = rpoly([[-0.38, 0.73], [0.38, 0.73], [0.38, 0.79], [-0.38, 0.79]], 0.03, 4);
+    pal.add(dcR.rear(grow(slot, 0.012), { offset: 0.0035, minFacing: 0.05, ...fr }).pal('chrome'));
+    atlas.add(dcR.rear(slot, { offset: 0.0048, minFacing: 0.05, box: [-0.4, 0.69, 0.4, 0.83], ...fr }).uvRect(A_MESH));
+    atlas.add(dcR.rear(rect(-0.17, 0.6, 0.17, 0.65), { offset: 0.005, minFacing: 0.03, ...fr }).uvRect(A_SCRIPT));
+    // low recess, carbon lip under it
+    pal.add(dcR.rear(rpoly([[-0.69, 0.285], [0.69, 0.285], [0.66, 0.475], [-0.66, 0.475]], 0.06, 5), { offset: 0.003, minFacing: 0.02, filter: (v) => v[2] > 1.9 }).pal('gloss'));
+    pal.add(dcR.rear(rpoly([[-0.74, 0.13], [0.74, 0.13], [0.7, 0.27], [-0.7, 0.27]], 0.03, 4), { offset: 0.004, minFacing: 0.02, filter: (v) => v[2] > 1.85 }).pal('plastic'));
+    const pl = plate([0, 0.38, (rz(0, 0.38) || ZR) + 0.008], A_PLATE, {});
     atlas.add(pl.face); pal.add(pl.back);
-    for (const x of [0.36, -0.36]) {
-      const m = new THREE.Matrix4().makeTranslation(x, 0.585, ZR - 0.072).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-      pal.add(cyl(0.058, 0.058, 0.14, 24, m, 'steel', true));
-      pal.add(cyl(0.05, 0.05, 0.13, 16, m, 'well'));
+    for (const sx of [1, -1]) {
+      const zp = (rz(sx * 0.39, 0.38) || ZR - 0.01);
+      const m = new THREE.Matrix4().makeTranslation(sx * 0.39, 0.38, zp - 0.05).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+      pal.add(cyl(0.055, 0.055, 0.12, 24, m, 'chrome', true));
+      pal.add(cyl(0.044, 0.044, 0.11, 18, m, 'well'));
+      pal.add(fromGeo(new THREE.RingGeometry(0.043, 0.062, 32), { p: [sx * 0.39, 0.38, zp + 0.012] }, 'chrome'));
+      pal.add(fromGeo(new THREE.RingGeometry(0.036, 0.043, 32), { p: [sx * 0.39, 0.38, zp + 0.004] }, 'steel'));
+      // round fog / reversing lamp: red ring round a clear centre
+      const zl = (rz(sx * 0.6, 0.38) || ZR - 0.03);
+      const ml = new THREE.Matrix4().makeTranslation(sx * 0.6, 0.38, zl - 0.004).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+      pal.add(cyl(0.046, 0.046, 0.016, 24, ml, 'reflector'));
+      reverse.add(cyl(0.03, 0.03, 0.02, 20, ml));
     }
-    for (const x of [-0.24, 0.24]) pal.add(box(0.014, 0.1, 0.05, { p: [x, 0.2, (rz(x, 0.22) || ZR - 0.05) - 0.012] }, 'plastic'));
+    for (const x of [-0.24, 0.24]) pal.add(box(0.014, 0.1, 0.05, { p: [x, 0.19, (rz(x, 0.2) || ZR - 0.05) - 0.012] }, 'plastic'));
     // rear wing, raised on its two struts
     const wy = 1.0, wz = ZR - 0.17;
     paint.add(blob(1.42, 0.026, 0.26, { p: [0, wy, wz], r: [-0.07, 0, 0] }, null, 3.5, 14));
     for (const x of [0.5, -0.5]) pal.add(box(0.03, 0.09, 0.12, { p: [x, wy - 0.05, wz + 0.01] }, 'plastic'));
+    // third brake light: a row of LEDs along the trailing edge of the wing
+    chmsl.add(box(0.46, 0.012, 0.012, { p: [0, wy - 0.004, wz + 0.128], r: [-0.07, 0, 0] }));
   }
 
   // --- front: headlamps laid back along the wings, three intakes, crest

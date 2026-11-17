@@ -265,11 +265,11 @@ export const CARS = {
       redline: 8400,
       shiftRpm: 8150,
       pulses: 5,                // V10: five firing pulses per revolution
-      revDrop: 7500,            // tiny ceramic clutch and flywheel: the revs fall like a racing engine's
+      revDrop: 5500,            // tiny ceramic clutch and flywheel: the revs fall fast, though not so fast it bogs mid-donut
       revCut: 0.045, revCutDrop: 450,
       // 5.7 litre 68 degree V10: 590 Nm @ 5750, 450 kW @ 8000
       torque: [[900, 380], [2000, 465], [3000, 512], [4000, 550], [5000, 578], [5750, 590], [6500, 583], [7500, 557], [8000, 537], [8400, 505], [8800, 380]],
-      stallRpm: 3600,
+      stallRpm: 4200,           // (a launch slips the clutch high, so it pulls clear of the bog)
       converterGain: 1.6,
     },
     gears: [3.2, 1.87, 1.36, 1.07, 0.9, 0.75],

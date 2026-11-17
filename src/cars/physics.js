@@ -525,7 +525,9 @@ function substep(car, input, world, dt) {
   // A driver feathers the throttle and wheel to stop that; here a gentle yaw
   // moment does it, keeping the slide angle inside DONUT_LO..DONUT_HI while
   // the wheel is held into the rotation, the pedal down and the wheels spin.
-  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = 0; }
+  // (a quick lift and re-press mid-donut picks up where it left off; only a
+  // longer break makes the next one wait for the revs again)
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 0.8, car.donutT || 0) - dt * 1.5); }
   else {
     car.donutT = (car.donutT || 0) + dt;
     const turn = Math.sign(steerIn);
@@ -537,17 +539,30 @@ function substep(car, input, world, dt) {
     const spinW = Math.min(1, car.slipVR / 4);      // (the rear wheels: a front driver washes wide)
     const slow = Math.min(1, Math.max(0, (70 - speed * 3.6) / 30));
     const w = throttle * Math.min(1, (Math.abs(steerIn) - 0.5) / 0.4) * spinW * slow;
+    // No two laps of a real donut are alike. On the very powerful cars the
+    // hold drifts now and then (more so on a tilted patch of road), so the
+    // car swings round too far, bogs down for a moment and then gets going again.
+    const kw = (s.engine.maxPowerKw ?? s.ref?.powerKw ?? 0) / m;      // kW per kg
+    const pw = Math.min(1, Math.max(0, (kw - 0.12) / 0.15));
+    let lo = DONUT_LO, hi = DONUT_HI;
+    if (pw > 0) {
+      const tm = car.time;
+      const n = 0.6 * Math.sin(tm * 0.83 + 1.7) + 0.4 * Math.sin(tm * 0.31 + car.x * 0.05);
+      const tilt = Math.min(0.15, Math.hypot(car.groundPitch, car.groundRoll));
+      const slack = Math.min(1, pw * (Math.max(0, n - 0.45) * 3 + tilt * 6));
+      lo += 0.9 * slack; hi += 0.7 * slack;
+    }
     if (w > 0) {
       let err = 0;
       // (only a true donut, near full lock at low speed, is pushed round; a
       // floored corner is just kept from over-rotating)
       // From a standstill the push waits for the revs and the wheelspin to
       // build first, so the tail comes round with the engine, not ahead of it.
-      if (angP < DONUT_LO && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) {
+      if (angP < lo && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) {
         const build = Math.min(1, Math.max(0, (car.donutT - DONUT_WAIT) / 0.8));
-        err = Math.min(1, (DONUT_LO - angP) / 0.5) * build;
+        err = Math.min(1, (lo - angP) / 0.5) * build;
       }
-      else if (angP > DONUT_HI) err = -Math.min(1, (angP - DONUT_HI) / 0.35);
+      else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
       // (rotating against the wheel already: leave the driver to sort it out)
       if (car.yawRate * turn > -0.2) MZ += turn * err * w * DONUT * m * G * L * load;
     }

@@ -49,13 +49,18 @@ function lampTextures() {
     // the light rods (v runs bottom to top in the model, top to bottom here)
     const rod = (x0, x1, y, t) => {
       g.fillStyle = glow ? '#fff' : '#ff3a32'; g.fillRect(x0 * w, y * h - t * h / 2, (x1 - x0) * w, t * h);
-      if (!glow) { g.fillStyle = 'rgba(255,200,190,0.55)'; g.fillRect(x0 * w, y * h - t * h / 6, (x1 - x0) * w, t * h / 3); }
+      if (!glow) { g.fillStyle = 'rgba(255,120,105,0.6)'; g.fillRect(x0 * w, y * h - t * h / 6, (x1 - x0) * w, t * h / 3); }
     };
-    rod(0.03, U_LID - 0.02, 0.52, 0.07); rod(0.03, U_LID - 0.02, 0.78, 0.07);
-    rod(U_LID + 0.02, 0.9, 0.3, 0.075); rod(U_LID + 0.02, 0.84, 0.62, 0.075);
+    // two light rods running the width of both units, each turning down into an L at the outer end
+    rod(0.12, 0.93, 0.34, 0.07); rod(0.06, 0.86, 0.66, 0.07);
+    const leg = (x, y0, y1, t) => { g.fillStyle = glow ? '#fff' : '#ff3a32'; g.fillRect(x * w - t * w / 2, y0 * h, t * w, (y1 - y0) * h); };
+    leg(0.93, 0.3, 0.8, 0.018); leg(0.86, 0.62, 0.9, 0.018);
     if (!glow) {
-      // clear indicator strip along the top of the outer unit
-      g.fillStyle = 'rgba(255,225,215,0.5)'; g.fillRect((U_LID + 0.03) * w, h * 0.06, 0.4 * w, h * 0.11);
+      // smoked inner lens, darker towards the plate
+      const sm = g.createLinearGradient(0, 0, w, 0); sm.addColorStop(0, 'rgba(20,0,0,0.45)'); sm.addColorStop(0.35, 'rgba(20,0,0,0.1)'); sm.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = sm; g.fillRect(0, 0, w, h);
+      // the lid / wing split
+      g.fillStyle = '#2a0204'; g.fillRect(U_LID * w - 3, 0, 6, h);
       g.strokeStyle = '#1c0203'; g.lineWidth = 5; g.strokeRect(0, 0, w, h);
     }
   };
@@ -127,17 +132,19 @@ function atlasTex() {
 
 // ---------------------------------------------------------------- the car
 export function buildM3() {
-  const ZC = -0.72, ZH = 0.0;                 // cowl and windscreen header
-  const ZG0 = 1.1, ZG1 = 1.8;                 // rear glass: roof edge and bottom edge (the boot lid is 0.6 m long)
+  const ZC = -0.76, ZH = 0.0;                 // cowl and windscreen header
+  // rear glass: roof edge and bottom edge. Measured off a true side view: the roof crowns about 0.45 m behind
+  // the B-pillar and runs in one long, nearly straight fall to a short boot deck just over a metre up
+  const ZG0 = 0.95, ZG1 = 1.84;
   const body = buildBody({
     top: [[ZF, 0.42], [ZF + 0.004, 0.56, 0.03], [ZF + 0.03, 0.665, 0.03], [ZF + 0.1, 0.73, 0.05], [-1.5, 0.87, 0.5],
-      [ZC - 0.1, 0.955, 0.2], [ZC, 0.965, 0.05], [ZH, 1.375, 0.25], [0.42, 1.418, 0.9], [ZG0, 1.362, 0.4],
-      [ZG1, 1.04, 0.08], [ZR - 0.12, 1.046, 0.03], [ZR - 0.066, 1.06, 0.008], [ZR - 0.05, 1.034, 0.008], [ZR - 0.034, 0.8, 0.06], [ZR - 0.004, 0.6, 0.04], [ZR, 0.45]],
+      [ZC - 0.1, 0.955, 0.2], [ZC, 0.965, 0.05], [ZH, 1.37, 0.25], [0.45, 1.412, 0.9], [ZG0, 1.374, 0.45],
+      [ZG1, 1.072, 0.1], [ZR - 0.14, 1.062, 0.04], [ZR - 0.07, 1.078, 0.01], [ZR - 0.05, 1.05, 0.008], [ZR - 0.034, 0.8, 0.06], [ZR - 0.004, 0.6, 0.04], [ZR, 0.45]],
     bottom: [[ZF, 0.42], [ZF + 0.004, 0.3, 0.03], [ZF + 0.09, 0.2, 0.04], [-1.8, 0.17, 0.1], [1.85, 0.18, 0.1], [ZR - 0.22, 0.235, 0.05], [ZR - 0.004, 0.285, 0.03], [ZR, 0.45]],
     w: [[ZF, 0.8], [-1.95, 0.872], [-1.6, 0.893], [-HZ, HW - FOLD], [-0.7, 0.884], [0.5, 0.884], [1.0, 0.89], [HZ, HW - FOLD], [1.95, 0.885], [ZR, 0.835]],
     yWaist: WAIST, tuck: 0.06, ySill: 0.19,
-    yBelt: [[ZF, 0.73], [ZC, 0.93], [1.0, 0.975], [ZG1, 1.0], [ZR, 1.0]],
-    sh: 0.026, ledge: 0.005, ledgeH: 0.02, th: [[ZF, 0.3], [ZC, 0.44], [1.3, 0.5], [ZR, 0.32]], thc: 0.32,
+    yBelt: [[ZF, 0.73], [ZC, 0.93], [1.0, 0.975], [ZG1, 1.02], [ZR, 1.02]],
+    sh: 0.026, ledge: 0.005, ledgeH: 0.02, th: [[ZF, 0.3], [ZC, 0.44], [0.6, 0.46], [1.4, 0.4], [ZR, 0.32]], thc: 0.24,
     rr: [[ZF, 0.04], [-1.5, 0.07], [ZC, 0.07], [-0.1, 0.09], [ZG0, 0.09], [ZG1, 0.075], [ZR, 0.045]],
     rs: 0.05,
     crown: [[ZF, 0.012], [-1.5, 0.035], [ZC, 0.035], [ZH, 0.045], [ZG0, 0.045], [ZG1, 0.03], [ZR, 0.014]],
@@ -177,61 +184,66 @@ export function buildM3() {
   const ws = rpoly([[-0.7, ZC + 0.115], [-0.35, ZC + 0.05], [0, ZC + 0.035], [0.35, ZC + 0.05], [0.7, ZC + 0.115], [0.56, ZH - 0.035], [-0.56, ZH - 0.035]], 0.04, 4);
   pal.add(dcT.top(grow(ws, 0.014), { offset: 0.003, ...topO(ZC - 0.02, ZH + 0.02) }).pal('rubber'));
   glass.add(dcT.top(ws, { offset: 0.0052, ...topO(ZC - 0.02, ZH + 0.02) }));
-  const rw = rpoly([[-0.5, ZG0 + 0.07], [0.5, ZG0 + 0.07], [0.6, ZG1 - 0.1], [0.3, ZG1 - 0.055], [-0.3, ZG1 - 0.055], [-0.6, ZG1 - 0.1]], 0.04, 4);
+  const rw = rpoly([[-0.53, ZG0 + 0.06], [0.53, ZG0 + 0.06], [0.67, ZG1 - 0.09], [0.35, ZG1 - 0.04], [-0.35, ZG1 - 0.04], [-0.67, ZG1 - 0.09]], 0.05, 4);
   pal.add(dcT.top(grow(rw, 0.016), { offset: 0.003, ...topO(ZG0 - 0.02, ZG1 + 0.02, 1.0) }).pal('rubber'));
   glass.add(dcT.top(rw, { offset: 0.0052, ...topO(ZG0, ZG1, 1.0) }));
   chmsl.add(dcT.top(rect(-0.17, ZG0 + 0.085, 0.17, ZG0 + 0.103, 0.004), { offset: 0.0068, ...topO(ZG0, ZG1, 1.0) }));
   // bare carbon roof panel between the screens, shark-fin aerial at the back
   pal.add(dcT.top(rpoly([[-0.535, ZH + 0.005], [0.535, ZH + 0.005], [0.5, ZG0 + 0.03], [-0.5, ZG0 + 0.03]], 0.03, 4), { offset: 0.0032, minFacing: 0.5, filter: (v) => v[1] > 1.2 }).pal('gloss'));
-  paint.add(blob(0.05, 0.055, 0.16, { p: [0, prC.topY(0, ZG0 - 0.1) + 0.02, ZG0 - 0.1], r: [-0.2, 0, 0] }, null, 2.6, 8));
+  pal.add(blob(0.05, 0.055, 0.16, { p: [0, prC.topY(0, ZG0 - 0.12) + 0.02, ZG0 - 0.12], r: [-0.2, 0, 0] }, 'gloss', 2.6, 8));
 
   // --- shut lines: door, bonnet, boot lid, bumpers, filler flap
   const archR = AR + 0.03;
   pal.add(dcS.side([
     ...stroke([[-0.86, 0.25], [-0.86, 0.9], [-0.7, 0.945]], lw), ...stroke([[0.435, 0.25], [0.435, 0.975]], lw), ...stroke([[-0.86, 0.25], [0.435, 0.25]], lw),
     // bumper joints running to the arches
-    ...stroke([[HZ + archR - 0.02, 0.69], [ZR, 0.772]], lw), ...stroke([[-HZ - archR + 0.02, 0.6], [ZF, 0.655]], lw),
+    ...stroke([[HZ + archR - 0.02, 0.68], [ZR, 0.742]], lw), ...stroke([[-HZ - archR + 0.02, 0.6], [ZF, 0.655]], lw),
   ], { ...lo, minFacing: 0.25 }).pal('line').sym());
   const hood = [[0.6, ZF + 0.2], [0.73, -1.9], [0.775, -1.2], [0.75, ZC + 0.03]];
   for (const m of [false, true]) { const s = dcT.top(stroke(hood, lw), { ...lo, minFacing: 0.35, filter: (v) => v[2] < ZC + 0.2 }).pal('line'); pal.add(m ? s.mirrored() : s); }
-  const lid = [[0.5, ZG1 - 0.04], [0.66, ZG1 + 0.02], [0.67, ZR - 0.06]];
+  const lid = [[0.55, ZG1 - 0.03], [0.645, ZG1 + 0.03], [0.652, ZR - 0.06]];
   for (const m of [false, true]) { const s = dcT.top(stroke(lid, lw), { ...lo, minFacing: 0.3, filter: (v) => v[2] > ZG1 - 0.1 }).pal('line'); pal.add(m ? s.mirrored() : s); }
-  pal.add(dcR.rear([...stroke([[-0.86, 0.775], [0.86, 0.775]], lw), ...stroke([[0.672, 1.03], [0.66, 0.775]], lw), ...stroke([[-0.672, 1.03], [-0.66, 0.775]], lw)], { ...lo, minFacing: 0.2, ...fr }).pal('line'));
+  pal.add(dcR.rear([...stroke([[-0.86, 0.745], [0.86, 0.745]], lw), ...stroke([[0.652, 1.05], [0.645, 0.745]], lw), ...stroke([[-0.652, 1.05], [-0.645, 0.745]], lw)], { ...lo, minFacing: 0.2, ...fr }).pal('line'));
   const flap = rpoly([[1.72, 0.84], [1.88, 0.845], [1.88, 0.96], [1.72, 0.955]], 0.025, 3);
   pal.add(dcS.side(stroke([...flap, flap[0]], 0.005), { ...lo, minFacing: 0.3 }).pal('line'));
 
   // --- tail: L-shaped lamps (slim on the lid, taller on the wing, pointed round the corner)
   {
     const yL = 0.9, ln = planLine(rearP, yL, 1.5, 1, 0, 84, 150);
-    const sIn = ln.where((p) => p.x - 0.3), sLid = ln.where((p) => p.x - 0.66), sOut = ln.where((p) => p.nx - 0.93);
-    const VH = [0.81, 0.98], remap = (s, a, b) => { for (let i = 0; i < s.uv.length; i += 2) s.uv[i] = a + (b - a) * s.uv[i]; return s; };
+    const sIn = ln.where((p) => p.x - 0.36), sLid = ln.where((p) => p.x - 0.645), sOut = ln.where((p) => p.nx - 0.93);
+    const VH = [0.818, 0.994], remap = (s, a, b) => { for (let i = 0; i < s.uv.length; i += 2) s.uv[i] = a + (b - a) * s.uv[i]; return s; };
     // lower and upper edges of the two units (u along each unit), m = margin for the dark surround
-    const in0 = (m) => (u) => 0.85 + 0.012 * (1 - u) * (1 - u) - m, in1 = (m) => (u) => 0.95 - 0.02 * (1 - u) * (1 - u) + m;
-    const out0 = (m) => (u) => 0.818 + 0.066 * smooth((u - 0.45) / 0.55) - m, out1 = (m) => (u) => 0.972 - 0.054 * smooth((u - 0.4) / 0.6) + m;
+    // (as in the photos: the lid unit narrows to a slanted point towards the plate, the wing unit stays
+    // tall right round the corner, where both edges round off)
+    const in0 = (m) => (u) => 0.83 + 0.016 * (1 - u) * (1 - u) - m, in1 = (m) => (u) => 0.988 - 0.036 * (1 - u) * (1 - u) + m;
+    const out0 = (m) => (u) => 0.818 + 0.035 * smooth((u - 0.8) / 0.2) - m, out1 = (m) => (u) => 0.994 - 0.045 * smooth((u - 0.72) / 0.28) + m;
     const inner = skinPatch(rearP, ln, { s0: sIn, s1: sLid - 0.006, nu: 14, nv: 4, offset: 0.006, vH: VH, y0: in0(0), y1: in1(0) });
     const outer = skinPatch(rearP, ln, { s0: sLid + 0.006, s1: sOut, nu: 26, nv: 6, offset: 0.006, vH: VH, y0: out0(0), y1: out1(0) });
     tail.add(remap(inner, 0, U_LID)).add(remap(outer, U_LID, 1));
-    reverse.add(skinPatch(rearP, ln, { s0: sIn + 0.08, s1: sLid - 0.05, nu: 8, nv: 2, offset: 0.0075, y0: () => 0.858, y1: () => 0.88 }));
+    // (the reversing lamp is a small clear segment low in the lid unit)
+    reverse.add(skinPatch(rearP, ln, { s0: sLid - 0.07, s1: sLid - 0.02, nu: 3, nv: 2, offset: 0.0075, y0: () => 0.842, y1: () => 0.856 }));
     tail.add(tail.mirrored()); reverse.add(reverse.mirrored());
     // dark surround behind the lenses
     pal.add(skinPatch(rearP, ln, { s0: sIn - 0.007, s1: sLid, nu: 14, nv: 4, offset: 0.003, y0: in0(0.007), y1: in1(0.007) }).pal('gloss').sym());
     pal.add(skinPatch(rearP, ln, { s0: sLid, s1: sOut + 0.008, nu: 26, nv: 6, offset: 0.003, y0: out0(0.007), y1: out1(0.007) }).pal('gloss').sym());
     // number plate on the lid, roundel above it, M3 badge on the right
-    const pl = plate([0, 0.845, rz(0, 0.845) + 0.008], A_PLATE, { tilt: -0.06 });
+    const pl = plate([0, 0.82, rz(0, 0.82) + 0.008], A_PLATE, { tilt: -0.06 });
     atlas.add(pl.face); pal.add(pl.back);
-    for (const x of [-0.12, 0.12]) pal.add(box(0.05, 0.008, 0.014, { p: [x, 0.915, rz(x, 0.915) + 0.006] }, 'lens'));
+    for (const x of [-0.12, 0.12]) pal.add(box(0.05, 0.008, 0.014, { p: [x, 0.89, rz(x, 0.89) + 0.006] }, 'lens'));
     atlas.add(dcR.rear(rect(-0.037, 0.94, 0.037, 1.014), { offset: 0.005, minFacing: 0.1, ...fr }).uvRect(A_ROUNDEL));
     atlas.add(dcR.rear(rect(0.41, 0.957, 0.55, 1.016), { offset: 0.005, minFacing: 0.1, ...fr }).uvRect(A_M3));
     // slim reflectors in the bumper
-    pal.add(dcR.rear(rect(0.5, 0.5, 0.76, 0.527, 0.008), { offset: 0.0045, minFacing: 0.1, ...fr }).pal('reflector').sym());
-    // diffuser with four tailpipes
-    pal.add(dcR.rear(rpoly([[-0.62, 0.19], [0.62, 0.19], [0.55, 0.4], [-0.55, 0.4]], 0.03, 4), { offset: 0.004, minFacing: 0.02, filter: (v) => v[2] > 1.9 }).pal('plastic'));
-    for (const x of [0.255, 0.36]) {
-      const m = new THREE.Matrix4().makeTranslation(x, 0.3, ZR - 0.062).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.03));
+    pal.add(dcR.rear(rect(0.7, 0.45, 0.8, 0.465, 0.006), { offset: 0.0045, minFacing: 0.1, ...fr }).pal('reflector').sym());
+    // honeycomb slot across the middle of the bumper
+    atlas.add(dcR.rear(rpoly([[-0.34, 0.345], [0.34, 0.345], [0.32, 0.405], [-0.32, 0.405]], 0.02, 3), { offset: 0.0045, minFacing: 0.05, box: [-0.34, 0.345, 0.34, 0.405], ...fr }).uvRect(A_MESH));
+    // slim black diffuser along the bottom, four tailpipes in two pairs well outboard
+    pal.add(dcR.rear(rpoly([[-0.72, 0.19], [0.72, 0.19], [0.68, 0.3], [-0.68, 0.3]], 0.02, 3), { offset: 0.004, minFacing: 0.02, filter: (v) => v[2] > 1.9 }).pal('plastic'));
+    for (const x of [0.39, 0.5]) {
+      const m = new THREE.Matrix4().makeTranslation(x, 0.255, ZR - 0.062).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.03));
       pal.add(cyl(0.043, 0.043, 0.13, 20, m, 'chrome', true).sym());
       pal.add(cyl(0.035, 0.035, 0.12, 14, m, 'well').sym());
     }
-    for (const x of [-0.17, 0, 0.17]) pal.add(box(0.012, 0.09, 0.05, { p: [x, 0.305, (rz(x, 0.32) || ZR - 0.05) - 0.012] }, 'plastic'));
+    for (const x of [-0.2, 0, 0.2]) pal.add(box(0.012, 0.07, 0.05, { p: [x, 0.24, (rz(x, 0.25) || ZR - 0.05) - 0.012] }, 'plastic'));
   }
 
   // --- front: kidneys, swept headlamps, three big intakes, number plate

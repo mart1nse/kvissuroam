@@ -6,8 +6,8 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 const ENGINE_LEVEL = 0.4;
 
 export function createAudio() {
-  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt;
-  let skid = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
+  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
+  let skid = 0, spinS = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
   let muted = false, ev = false, turbo = false, background = false;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
 
@@ -47,6 +47,10 @@ export function createAudio() {
     skidFilt = ctx.createBiquadFilter(); skidFilt.type = 'bandpass'; skidFilt.frequency.value = 1300; skidFilt.Q.value = 5;
     skidGain = ctx.createGain(); skidGain.gain.value = 0;
     noise.connect(skidFilt).connect(skidGain).connect(master);
+    // wheelspin: the thin howl of a tyre spinning on paving, kept well under the engine
+    spinFilt = ctx.createBiquadFilter(); spinFilt.type = 'bandpass'; spinFilt.frequency.value = 800; spinFilt.Q.value = 6;
+    spinGain = ctx.createGain(); spinGain.gain.value = 0;
+    noise.connect(spinFilt).connect(spinGain).connect(master);
     noise.start();
   }
 
@@ -142,6 +146,11 @@ export function createAudio() {
     skid += (k - skid) * 0.2;
     skidFilt.frequency.setTargetAtTime(1050 + Math.min(v, 35) * 16, t, 0.08);
     skidGain.gain.setTargetAtTime(Math.max(0, skid - 0.15) * 0.07, t, 0.07);
+    // (only the spin beyond the creep of a gripping tyre counts, and only on paving)
+    const over = dead || flying || car.surface !== 1 ? 0 : (car.slipV || 0) - 0.2 * Math.max(Math.abs(car.vx), 3) - 1.5;
+    spinS += (Math.max(0, Math.min(1, over / 9)) - spinS) * 0.15;
+    spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
+    spinGain.gain.setTargetAtTime(spinS * 0.05, t, 0.08);
   }
 
   return {

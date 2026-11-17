@@ -201,7 +201,7 @@ export function stepCar(car, input, world, dtFrame) {
 }
 
 function substep(car, input, world, dt) {
-  car.skidF = car.skidR = 0;
+  car.skidF = car.skidR = car.rubF = car.rubR = 0;
   const s = car.spec;
   const m = s.mass, L = s.wheelbase;
   const up = +input.up || 0, down = +input.down || 0;
@@ -495,7 +495,11 @@ function substep(car, input, world, dt) {
     const lon = (x) => Math.max(0, Math.min(1, (x - 1.3) / 0.4));
     car.skidF = Math.max(lon(askF), Math.min(1, Math.max(0, (Math.abs(slipF) - 0.12) / 0.1)));
     car.skidR = Math.max(lon(askR), Math.min(1, Math.max(0, (Math.abs(slipR) - 0.12) / 0.1)));
-  } else car.skidF = car.skidR = 0;
+    // Speed of the tread sliding over the road at each axle (m/s), for the tyre smoke and the marks:
+    // wheelspin beyond the creep of a gripping tyre, sideways sliding, or the whole road speed when locked.
+    const rub = (skid, slipV, vLat, locked) => skid * Math.hypot(locked ? car.vx : Math.max(0, slipV - 0.2 * Math.max(Math.abs(car.vx), 3)), vLat);
+    car.rubF = rub(car.skidF, car.slipVF, vLatF, false); car.rubR = rub(car.skidR, car.slipVR, vLatR, hb);
+  } else car.skidF = car.skidR = car.rubF = car.rubR = 0;
   const fyF = fySpinF !== null ? fySpinF : -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
   const fyR = fySpinR !== null ? fySpinR : -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
 

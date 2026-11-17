@@ -160,8 +160,17 @@ export function skinPatch(soup, line, { s0 = 0, s1 = line.L, y0, y1, nu = 24, nv
 }
 // Raises a smooth bulge on upward-facing skin: dy = h(x, z) for vertices above yMin (power domes, humps).
 export function bulge(soup, yMin, h) {
-  const P = soup.p;
-  for (let i = 0; i < P.length; i += 3) if (P[i + 1] > yMin && soup.n[i + 1] > 0.3) P[i + 1] += h(P[i], P[i + 2]);
+  const P = soup.p, N = soup.n, e = 0.004;
+  for (let i = 0; i < P.length; i += 3) {
+    if (P[i + 1] <= yMin || N[i + 1] <= 0.3) continue;
+    const x = P[i], z = P[i + 2], d = h(x, z);
+    if (d === 0) continue;
+    // lean the normal with the slope of the bulge
+    const nx = N[i] - (h(x + e, z) - h(x - e, z)) / (2 * e) * N[i + 1], nz = N[i + 2] - (h(x, z + e) - h(x, z - e)) / (2 * e) * N[i + 1];
+    const l = Math.hypot(nx, N[i + 1], nz) || 1;
+    N[i] = nx / l; N[i + 1] /= l; N[i + 2] = nz / l;
+    P[i + 1] += d;
+  }
 }
 // Wheel face with n pairs of twin spokes (or n single spokes when slit = 0), as an extruded, dished disc.
 // rf: face radius; r1 / r2: inner and outer radius of the windows; big / slit: half-angles (rad) of the windows

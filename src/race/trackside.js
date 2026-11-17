@@ -18,6 +18,7 @@ import { createTrack } from './race.js';
 import { findCorners } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
+import { createVeski } from './veski.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -40,6 +41,7 @@ function zones(track) {
 const KERBS = [
   { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.12, edge: 0.07, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
   { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.14, edge: 0.05, back: 0.35, colour: 0x8f8a99 },   // Pepleri corner
+  { i0: 1656, i1: 1808, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x5f8f3e },    // Veski grass strip
   { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.13, edge: 0.04, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
@@ -455,6 +457,7 @@ export function createTrackside(world, scene) {
 
   const corners = createCorners(world, group, merged);
   const valli = createValli(world, group, merged);
+  const veski = createVeski(world, group, merged);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -492,6 +495,7 @@ export function createTrackside(world, scene) {
     update(x, z) {
       corners.update(x, z);
       valli.update(x, z);
+      veski.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();
@@ -502,6 +506,7 @@ export function createTrackside(world, scene) {
     collide(car) {
       if (treeMesh) pushOutOfCircles(car, trees, 0.32);
       valli.collide(car, pushOutOfCircles);
+      veski.collide(car);
       if (!wallSegs || !wallSegs.length) return;
       const w0 = wallLine[0];
       if (Math.abs(car.x - w0[0]) > 160 || Math.abs(car.z - w0[1]) > 160) return;

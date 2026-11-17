@@ -24,6 +24,8 @@ import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
+import { veskiRoads } from './race/veski.js';
+import { valliWalls } from './race/valli.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -93,6 +95,8 @@ async function boot() {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
   world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
+  veskiRoads(world.vectors);
+  valliWalls(world.vectors);
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';

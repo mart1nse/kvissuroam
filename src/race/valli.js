@@ -9,7 +9,7 @@ import { createTrack } from './race.js';
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
 const ENTRY_SIGN = 90;                       // lap index of the signs, right side against the wall (Martin's pink box)
 const STATUE = { at: [1467, 3050], minSdf: 1.6 };      // Martin's spot: the open paving left of Vallikraavi, before the pink house
-const STEPS = { i0: 94, i1: 118, side: 1, off: 0.25, depth: 1.7, flight: [95, 104], rise: 0.17, top: 1.25 };
+const STEPS = { i0: 94, i1: 118, side: 1, off: 0.25, depth: 2.6, flight: [95, 104], rise: 0.17, top: 1.25 };
 const STONE = 0x8a7764, GRANITE = 0x9b8f8c, BRONZE = 0x4a3a2c, RAIL = 0x9aa0a8;
 
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -25,6 +25,25 @@ export function valliProps() {
   const back = bearing(-track.tan[ENTRY_SIGN][0], -track.tan[ENTRY_SIGN][1]);
   const a = edgePoint(track, ENTRY_SIGN, 1, 0.35), b = edgePoint(track, ENTRY_SIGN + 1, 1, 0.35);
   return [[NO_ENTRY, a[0], a[1], back], [PROHIBIT, b[0], b[1], back]];
+}
+
+// the mapped stone wall along the steps is drawn by the steps themselves now (Martin: the steps reach
+// back to the house), so leave its segments out of the map walls
+export function valliWalls(vectors) {
+  const track = createTrack();
+  const zone = [];
+  for (let i = STEPS.i0 - 2; i <= STEPS.flight[1] + 3; i++) zone.push(edgePoint(track, i, STEPS.side, 1.2));
+  const inZone = (x, z) => zone.some(([px, pz]) => Math.hypot(px - x, pz - z) < 2.2);
+  const out = [];
+  for (const w of vectors.walls || []) {
+    let run = [w[0]];
+    for (let i = 0; i < w.length - 1; i++) {
+      const a = w[i], b = w[i + 1];
+      if (inZone((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) { if (run.length > 1) out.push(run); run = [b]; } else run.push(b);
+    }
+    if (run.length > 1) out.push(run);
+  }
+  vectors.walls = out;
 }
 
 export function createValli(world, group, merged) {
@@ -50,9 +69,10 @@ export function createValli(world, group, merged) {
     if (!best) { statue = new THREE.Group(); return; }
     const [x, z] = best;
     
-    // face the road
-    const nr = track.nearest(x, z), rp = track.P[Math.max(0, nr.i)];
-    const yaw = Math.atan2(rp[0] - x, rp[1] - z);
+    // side-on to the street (Martin): the two men sit along the road, so a driver coming up sees
+    // them in profile across the bench; the steps face the oncoming cars
+    const nr = track.nearest(x, z), tn = track.tan[Math.max(0, nr.i)];
+    const yaw = Math.atan2(-tn[0], -tn[1]);
     const y = world.heightAt(x, z);
     const parts = [];
     const put = (g, lx, ly, lz, c) => {          // local: x across, z forward (away from the house)
@@ -108,7 +128,11 @@ export function createValli(world, group, merged) {
       const a = front[k], b = front[k + 1];
       // how far back the wall reaches: to the house, at most `depth`
       let depth = STEPS.depth;
-      for (let d = 0.3; d < STEPS.depth; d += 0.1) if (world.sdfAt(a.x + a.nx * d, a.z + a.nz * d) < 0.05) { depth = d + 0.15; break; }
+      for (let d = 0.3; d < STEPS.depth; d += 0.1) {
+        let run = 0;
+        while (run < 1.5 && world.sdfAt(a.x + a.nx * (d + run), a.z + a.nz * (d + run)) < 0.05) run += 0.25;
+        if (run >= 1.5) { depth = d + 0.15; break; }
+      }
       const t = (a.i - f0) / (f1 - f0);
       const h = a.i < f0 ? 0.18 : a.i > f1 ? STEPS.top : Math.max(0.18, Math.ceil(t * (STEPS.top / STEPS.rise)) * STEPS.rise);
       const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz);

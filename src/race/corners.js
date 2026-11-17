@@ -15,7 +15,7 @@ const ISLANDS = [
 const ISLAND = { height: 0.13, edge: 0.06, top: 0x9a4a3c, kerb: 0xb8b2bd };
 // street furniture to take away: [kind, x, z]
 const REMOVE = [[BENCH, 1338.3, 2185.9]];          // the bench on the right before Kroonuaia
-const BARRIER = { off: 0.5, height: 0.17, width: 0.8, rail: 0.48 };
+const BARRIER = { off: 0.5, height: 0.24, width: 1.3, ramp: 0.35, rail: 0.48 };      // wide enough that one side of the car rides up on it
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -171,7 +171,7 @@ export function createCorners(world, group, merged) {
         }
         const w = BARRIER.width / 2;
         if (best >= w) return 0;
-        return BARRIER.height * smooth((w - best) / 0.15) * smooth(s / 0.8) * smooth((bTotal - s) / 0.8);
+        return BARRIER.height * smooth((w - best) / BARRIER.ramp) * smooth(s / 0.8) * smooth((bTotal - s) / 0.8);
       },
     });
   }

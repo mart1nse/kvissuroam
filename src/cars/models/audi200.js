@@ -3,7 +3,7 @@
 // number plate, body-coloured wrap-round bumpers with a black rubbing strip, bright roof rails and the
 // flat-faced 15-inch "Aero" alloys.
 import * as THREE from 'three';
-import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint } from './kit.js';
+import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint, tintGlass } from './kit.js';
 import { part, planLine, sideLine, sweep, plateShape, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car: 4807 x 1814 x 1422 mm, wheelbase 2687, track 1514 front / 1511 rear, 215/60 ZR15 on 7.5J x 15.
@@ -11,7 +11,7 @@ import { part, planLine, sideLine, sweep, plateShape, clip2, foldFlanks, lathe }
 const DIMS = { length: 4.807, width: 1.814, height: 1.422, wheelbase: 2.687, track: 1.511, trackFront: 1.514, wheelRadius: 0.319 };
 const HZ = DIMS.wheelbase / 2;
 const ZF = -HZ - 1.03, ZR = HZ + 1.09;        // bumper faces
-const ZFB = ZF + 0.058, ZRB = ZR - 0.05;       // body shell ends behind the bumpers
+const ZFB = ZF + 0.058, ZRB = ZR - 0.1;        // body shell ends behind the bumpers (the rear one stands well proud)
 const HW = DIMS.width / 2;
 const AY = 0.325, AR = 0.365;                // wheel arches
 // soft shoulder line through the door handles
@@ -208,7 +208,7 @@ export function buildAudi200() {
   pal.add(dcS.side(stroke([...flap, flap[0]], 0.005), { ...lo, minFacing: 0.3 }).pal('line'));
 
   // --- tail: full-width lamp band round the number plate, badge panel above it
-  const LY0 = 0.652, LH = 0.158, LIN = 0.285;
+  const LY0 = 0.68, LH = 0.195, LIN = 0.29;
   const ln = planLine(rearP, LY0 + LH / 2, 1.5, 1, 0, 80);
   const sIn = ln.where((p) => p.x - LIN), sOut = ln.where((p) => p.nx - 0.93);
   {
@@ -232,10 +232,26 @@ export function buildAudi200() {
     // plate lamps under the badge panel
     for (const x of [-0.13, 0.13]) pal.add(box(0.05, 0.008, 0.014, { p: [x, LY0 + LH + 0.004, rz(x, LY0 + LH) + 0.008] }, 'lens'));
   }
-  const by = LY0 + LH + 0.052;
+  const by = LY0 + LH + 0.04;
   atlas.add(dcR.rear(rect(-0.66, by - 0.022, -0.44, by + 0.022), { offset: 0.0045, ...fr }).uvRect(A_AUDI));
   atlas.add(dcR.rear(rect(0.38, by - 0.022, 0.66, by + 0.022), { offset: 0.0045, ...fr }).uvRect(A_QUATTRO));
   atlas.add(dcR.rear(rect(-0.1, by - 0.03, 0.1, by + 0.03), { offset: 0.0045, ...fr }).uvRect(A_RINGS));
+  // tailgate lock and the black grab handle in the panel under the lamps
+  pal.add(cyl(0.014, 0.014, 0.012, 14, { p: [0, LY0 - 0.042, rz(0, LY0 - 0.042) + 0.004], r: [Math.PI / 2, 0, 0] }, 'chrome'));
+  pal.add(box(0.17, 0.016, 0.012, { p: [0, LY0 - 0.088, rz(0, LY0 - 0.088) + 0.003] }, 'plastic'));
+  // black spoiler standing off the tailgate glass, about a fifth of the way up from its bottom edge
+  {
+    const z0 = ZG1 - 0.1, gy = (z) => prC.topY(0, z);
+    const sh = new THREE.Shape();
+    sh.moveTo(-(z0 - 0.07), gy(z0 - 0.07) + 0.006);
+    sh.bezierCurveTo(-(z0 - 0.02), gy(z0 - 0.07) + 0.03, -(z0 + 0.04), gy(z0) + 0.034, -(z0 + 0.075), gy(z0) + 0.04);
+    sh.lineTo(-(z0 + 0.078), gy(z0) + 0.006);
+    sh.bezierCurveTo(-(z0 + 0.03), gy(z0) + 0.0, -(z0 - 0.02), gy(z0 - 0.04) + 0.0, -(z0 - 0.06), gy(z0 - 0.06) + 0.002);
+    sh.closePath();
+    const wd = 1.3, g = new THREE.ExtrudeGeometry(sh, { depth: wd, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.004, bevelSegments: 2, curveSegments: 8 });
+    g.rotateY(Math.PI / 2); g.translate(-wd / 2, 0, 0);
+    pal.add(fromGeo(g, null, 'plastic'));
+  }
   // rear wiper parked across the bottom of the glass
   {
     const pts = [];
@@ -247,28 +263,32 @@ export function buildAudi200() {
 
   // --- bumpers (European): slim body-coloured mouldings that stand proud across the nose and tail, come in
   // flush with the wings round the corners, and carry a bright bead along the top edge to the wheel arches
-  const YT = 0.555;                            // top edge of both bumpers and of the door strips
-  const bumper = (lnB, yB, sEnd, skin) => {
+  // Black rubbing band along the top of each bumper (and along the doors), body colour below it.
+  const YT = 0.555;                            // top edge of the front bumper and of the door strips
+  const bumper = (lnB, yB, sEnd, skin, yBand) => {
     const sC = lnB.where((p) => p.nx - 0.72), top = Math.max(...skin.map((p) => p[1])), out = Math.max(...skin.map((p) => p[0]));
     // full depth across the car, 18 % of it along the flanks, nothing where it meets the arch
     const m = (t) => { const s = t * sEnd, k = Math.max(0, Math.min(1, (s - (sC - 0.16)) / 0.36)); return (1 - 0.82 * k * k * (3 - 2 * k)) * Math.max(0, Math.min(1, (1 - t) / 0.04)) ** 0.5; };
-    paint.add(sweep(lnB, yB, skin, { s1: sEnd, n: 56, taper: m }).sym());
+    const b = yBand - yB, i = skin.findIndex((p) => p[1] >= b), q = skin[i - 1], r = skin[i];
+    const cut = [q[0] + (r[0] - q[0]) * (b - q[1]) / (r[1] - q[1]), b];
+    paint.add(sweep(lnB, yB, [...skin.slice(0, i), cut], { s1: sEnd, n: 56, taper: m }).sym());
+    pal.add(sweep(lnB, yB, [cut, ...skin.slice(i)], { s1: sEnd, n: 56, taper: m }).pal('bumper').sym());
     pal.add(sweep(lnB, yB, [[out - 0.004, top - 0.022], [out, top - 0.019], [out, top - 0.006], [out - 0.004, top - 0.003]], { s1: sEnd, n: 56, taper: m, add: 0.004 }).pal('chrome').sym());
     return (x) => out * m(lnB.where((p) => p.x - Math.abs(x)) / sEnd);     // how far the face stands off the shell at x
   };
   {
-    const yB = 0.45, lnB = planLine(rearP, yB, 1.5, 1, 0, 80, 160);
+    const yB = 0.45, YR = 0.585, lnB = planLine(rearP, yB, 1.5, 1, 0, 80, 160);
     const sEnd = lnB.where((p) => (HZ + archR + 0.012) - p.z);
-    bumper(lnB, yB, sEnd, [[-0.03, -0.165], [0.0, -0.163], [0.02, -0.152], [0.035, -0.125], [0.045, -0.08], [0.051, -0.02], [0.054, 0.04], [0.054, YT - yB - 0.022],
-      [0.051, YT - yB - 0.007], [0.043, YT - yB], [-0.03, YT - yB]]);
-    // black valance under it, with the cut-out for the tailpipes
-    pal.add(box(1.16, 0.05, 0.03, { p: [0, 0.285, ZRB - 0.07] }, 'plastic'));
+    bumper(lnB, yB, sEnd, [[-0.03, -0.165], [0.0, -0.163], [0.05, -0.15], [0.08, -0.12], [0.097, -0.08], [0.105, -0.03], [0.108, 0.04], [0.11, YR - yB - 0.022],
+      [0.107, YR - yB - 0.007], [0.098, YR - yB], [-0.03, YR - yB]], 0.45);
+    // dark lip under the body-coloured valance
+    pal.add(box(1.16, 0.03, 0.03, { p: [0, 0.29, ZRB - 0.07] }, 'plastic'));
   }
   {
     const yB = 0.44, lnB = planLine(frontP, yB, -1.5, -1, 0, 80, 160);
     const sEnd = lnB.where((p) => p.z - (-HZ - archR - 0.012));
     const off = bumper(lnB, yB, sEnd, [[-0.03, -0.205], [0.0, -0.203], [0.02, -0.19], [0.03, -0.165], [0.034, -0.13], [0.04, -0.1], [0.046, -0.05], [0.05, 0.0], [0.052, 0.05], [0.052, YT - yB - 0.022],
-      [0.049, YT - yB - 0.007], [0.041, YT - yB], [-0.03, YT - yB]]);
+      [0.049, YT - yB - 0.007], [0.041, YT - yB], [-0.03, YT - yB]], 0.46);
     const zb = (x) => lnB.at(lnB.where((p) => p.x - Math.abs(x))).z - off(x);
     // centre intake under the number plate, and a slim slot each side of it
     pal.add(box(0.5, 0.062, 0.012, { p: [0, 0.335, zb(0.15) + 0.004] }, 'well'));
@@ -286,9 +306,9 @@ export function buildAudi200() {
   }
   // --- side rubbing strips carrying the bumper line along the doors
   {
-    const yS = YT - 0.033;
-    const blk = [[-0.004, -0.024], [0.005, -0.023], [0.009, -0.018], [0.01, 0], [0.009, 0.018], [0.005, 0.023], [-0.004, 0.024]];
-    const chr = [[0.0085, 0.016], [0.0115, 0.019], [0.0115, 0.028], [0.0085, 0.031]];
+    const yS = YT - 0.047;
+    const blk = [[-0.004, -0.044], [0.006, -0.043], [0.011, -0.036], [0.013, 0], [0.012, 0.03], [0.008, 0.038], [-0.004, 0.039]];
+    const chr = [[0.0075, 0.036], [0.0105, 0.038], [0.0105, 0.046], [0.0075, 0.048]];
     for (const [z0, z1] of [[-HZ + archR + 0.02, -0.865], [-0.845, 0.127], [0.143, HZ - archR - 0.06]]) {
       const l = sideLine(sideP, yS, z0, z1, 16), k = 30 * (z1 - z0), tp = (t) => Math.min(1, 0.25 + k * t, 0.25 + k * (1 - t));
       pal.add(sweep(l, yS, blk, { n: 16, taper: tp }).pal('bumper').sym());
@@ -327,7 +347,7 @@ export function buildAudi200() {
     paint.add(blob(0.2, 0.125, 0.09, { p: [mx + 0.12, my, mz], r: [0, -0.12, 0] }, null, 3.4).sym());
     pal.add(box(0.07, 0.04, 0.1, { p: [mx + 0.02, my - 0.03, mz + 0.01], r: [0, -0.15, 0] }, 'plastic').sym());
     for (const z of [-0.06, 0.84]) {
-      const hy = yFold(z) + 0.02, hx = prS.sideX(z, hy) || 0.9;
+      const hy = yFold(z) + 0.06, hx = prS.sideX(z, hy) || 0.9;
       pal.add(box(0.008, 0.05, 0.19, { p: [hx - 0.001, hy, z] }, 'plastic').sym());
       paint.add(blob(0.016, 0.03, 0.15, { p: [hx + 0.003, hy + 0.004, z] }, null, 5, 8).sym());
     }
@@ -341,5 +361,6 @@ export function buildAudi200() {
 
   const wheel = { soup: aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
   const car = assembleCar({ id: 'audi200', dims: DIMS, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
+  tintGlass(car, 'audi200', { color: 0x34404a, metalness: 0.7, roughness: 0.05 });   // light factory tint
   return tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 });
 }

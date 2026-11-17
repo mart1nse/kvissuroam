@@ -47,7 +47,7 @@ export function createRoadMarkings(world) {
       strokes(r.pts, r.w / 4, DASH, GAP, 12);
       strokes(r.pts, -r.w / 4, DASH, GAP, 12);
     } else {
-      strokes(r.pts, 0, DASH, GAP, 9);
+      strokes(r.pts, r.mark || 0, DASH, GAP, 9);          // mark: a lane line moved off the centre
     }
   }
 

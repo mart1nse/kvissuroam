@@ -651,8 +651,8 @@ function frame(ts) {
     trackside.collide(car);
     props.update(car, dt);
     skids.update(car);
-    smoke.update(car, dt, mode === 'drive');
-  } else smoke.update(null, dt, false);
+    smoke.update(car, dt, mode === 'drive', mp.smokers());
+  } else smoke.update(null, dt, false, mp.smokers());
   mp.update(car, dt, mode === 'drive');
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }

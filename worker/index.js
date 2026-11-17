@@ -116,15 +116,30 @@ export class Lobby extends DurableObject {
     if (path === '/api/board') return json(this.board());
 
     if (path === '/api/lap' && req.method === 'POST') {
+      // one lap {name, car, ms, at}, or a batch {laps: [...]} of laps a browser kept and resends.
+      // A lap already stored (same car and same time to the millisecond) is not stored twice, so a
+      // browser can safely send again everything it has no confirmation for.
       let body;
       try { body = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
-      const name = cleanName(body.name), car = cleanCar(body.car), ms = Math.round(Number(body.ms));
-      if (!name || !car || !(ms >= 60000 && ms <= 3600000)) return json({ error: 'invalid lap' }, 400);
+      const list = Array.isArray(body?.laps) ? body.laps.slice(0, 50) : [body];
       const now = new Date();
-      this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day) VALUES (?, ?, ?, ?, ?, ?)', TRACK, name, car, ms, now.toISOString(), tartuDay(now));
+      const added = [], ok = [];
+      for (const l of list) {
+        const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms));
+        if (!name || !car || !(ms >= 60000 && ms <= 3600000)) continue;
+        ok.push(ms);
+        if (this.sql.exec('SELECT 1 FROM laps WHERE track = ? AND car = ? AND ms = ? LIMIT 1', TRACK, car, ms).toArray().length) continue;
+        // the time the lap was driven, when the browser says so and it is plausible (it may have
+        // been offline for a while), else now
+        const t = new Date(l?.at);
+        const at = t <= now && now - t < 60 * 86400000 ? t : now;
+        this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day) VALUES (?, ?, ?, ?, ?, ?)', TRACK, name, car, ms, at.toISOString(), tartuDay(at));
+        added.push({ name, car, ms });
+      }
+      if (!ok.length) return json({ error: 'invalid lap' }, 400);
       const board = this.board();
-      this.broadcast({ t: 'board', board, lap: { name, car, ms } });
-      return json({ ok: true, board });
+      if (added.length) this.broadcast({ t: 'board', board, lap: added[added.length - 1] });
+      return json({ ok: true, saved: ok, board });
     }
 
     if (path === '/api/laps.csv' || path === '/api/laps.json') {

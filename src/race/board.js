@@ -87,6 +87,7 @@ export function createBoard({ mp, race, cars, order }) {
   btn.addEventListener('click', () => {
     panel.classList.remove('hidden');
     render();
+    mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
   });
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);

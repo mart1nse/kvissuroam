@@ -2,7 +2,8 @@
 // locked rear wheels). The tyres have to warm up first, so a short chirp makes none and a held burnout
 // builds a drifting cloud. Kept thin on purpose: every puff is nearly transparent and they only add up.
 // A diesel with a failing particulate filter (spec.dpfSmoke) also blows black soot out of its tailpipe
-// whenever the throttle goes down: a thick burst as the pedal is stabbed, then a trail while it is held.
+// whenever the throttle goes down: only a wisp at first, then, as the turbo spools up and the pump feeds
+// in more fuel, a thick cloud that keeps rolling out while the pedal is held.
 import * as THREE from 'three';
 
 const MAX = 420;           // puffs alive at once
@@ -75,22 +76,26 @@ export function createSmoke(world) {
   }
   // black smoke from a tired diesel's tailpipe; st keeps one car's puffing state (the player's own, or
   // another player's car rebuilt from what it sends)
-  const mine = { thrPrev: 0, sootOwed: 0, burst: 0, shiftWas: false };
+  const fresh0 = () => ({ thrPrev: 0, sootOwed: 0, burst: 0, shiftWas: false, boostPrev: 0 });
+  const mine = fresh0();
   const theirs = new Map();
   function exhaust(car, dt, st = mine) {
-    let { thrPrev, sootOwed, burst, shiftWas } = st;
+    let { thrPrev, sootOwed, burst, shiftWas, boostPrev } = st;
     exhaustStep();
-    Object.assign(st, { thrPrev, sootOwed, burst, shiftWas });
+    Object.assign(st, { thrPrev, sootOwed, burst, shiftWas, boostPrev });
     function exhaustStep() {
     const s = car.spec, ex = s.exhaust, thr = car.throttle || 0;
-    // a stab of the pedal (or a gear change under power) dumps a thick cloud; then it settles to a trail
-    // that is heaviest at low revs before the turbo is up to pressure
-    if ((thr > thrPrev + 1e-3 && thr > 0.25) || (car.shiftCut && !shiftWas)) burst = Math.max(burst, thr);
+    // (a gear change under power still coughs out a puff as the boost comes back)
+    if (car.shiftCut && !shiftWas) burst = Math.max(burst, thr * 0.5);
     shiftWas = !!car.shiftCut;
     thrPrev = thr;
-    burst = Math.max(0, burst - dt * 1.3);
-    const lag = s.engine.turbo ? 1 - (car.boost || 0) : 0.3;
-    const strength = Math.min(1, thr * (0.35 + 0.4 * lag) + burst * thr * 0.9);
+    burst = Math.max(0, burst - dt * 1.5);
+    // the smoke follows the boost: a wisp while the turbo is still spooling, then it pours out, thickest
+    // while the boost is still climbing (the pump is already giving full fuel)
+    const boost = s.engine.turbo ? car.boost || 0 : 1;
+    const climb = Math.max(0, boost - boostPrev) / Math.max(dt, 1e-3);
+    boostPrev = boost;
+    const strength = Math.min(1, thr * (0.08 + 0.8 * boost * boost + Math.min(0.3, climb * boost * boost * 0.6)) + burst * 0.6);
     if (strength < 0.04 || car.reversing) { sootOwed = 0; return; }
     sootOwed += (16 + 44 * strength) * dt;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
@@ -113,7 +118,7 @@ export function createSmoke(world) {
   function update(car, dt, active, others = []) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
     for (const o of others) {
-      if (!theirs.has(o.id)) theirs.set(o.id, { thrPrev: 0, sootOwed: 0, burst: 0, shiftWas: false });
+      if (!theirs.has(o.id)) theirs.set(o.id, fresh0());
       exhaust(o.car, dt, theirs.get(o.id));
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);

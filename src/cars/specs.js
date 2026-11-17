@@ -164,7 +164,7 @@ export const CARS = {
         torqueOff: [[850, 95], [1500, 112], [2500, 122], [3500, 115], [4500, 95], [5100, 40]],
         onRpm: 1250,            // the VNT turbo starts building boost early...
         fullRpm: 1900,          // ...and is on full boost from here
-        spool: 3.2,
+        spool: 1.5,             // an old VNT turbo: a short wait before it comes in when you floor it
         dump: 6,
       },
       stallRpm: 2000,

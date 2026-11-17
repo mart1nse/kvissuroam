@@ -77,7 +77,16 @@ export const ROUND = [[628, 9, 1], [1035, 8, -1]];
 function createEdges(track, world) {
   const group = new THREE.Group();
   group.visible = false;
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+  // The bands are straight, but the ground under them is a grid of triangles that steps up at the
+  // kerb, and wherever a triangle pokes through a band it bites a notch out of it: seen along the
+  // street the glow zigzags. Pull the bands' depth (not their place on screen) half a metre towards
+  // the camera, so the ground never covers them while cars, walls and houses still do.
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      mvPosition.xyz *= max(0.05, 1.0 - 0.5 / max(length(mvPosition.xyz), 0.6));
+      gl_Position = projectionMatrix * mvPosition;`);
+  };
   const { P, HW, N, tan } = track;
   // offset each kerb, holding the inner side of a tight corner instead of letting it fold back
   const side = (sgn) => {
@@ -431,4 +440,93 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// The street centre lines of the map are hand-digitised and wander by a few tens of centimetres, and
+// the ground paints each road (and its kerb line) along them, so the kerbs of the lap zigzagged next
+// to the straight glow. Along the lap, pull those centre lines onto the track's smooth centre line
+// (resampled every 2 m), easing back to the mapped line where a street leaves the track.
+export function snapRoadsToTrack(vectors) {
+  const track = createTrack();
+  const { P, tan, N } = track;
+  const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  for (const r of vectors.roads) {
+    if (!r.pts || r.pts.length < 2) continue;
+    // quick reject: no vertex anywhere near the track
+    let near = false;
+    for (let k = 0; k < r.pts.length - 1 && !near; k++) {
+      const a = r.pts[k], b = r.pts[k + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (let t = 0; t <= l && !near; t += 8) {
+        const n = track.nearest(a[0] + (b[0] - a[0]) * (t / (l || 1)), a[1] + (b[1] - a[1]) * (t / (l || 1)));
+        near = n.i >= 0 && n.d < 4;
+      }
+    }
+    if (!near) continue;
+    const out = [];
+    let hint = -1, moved = false;
+    for (let k = 0; k < r.pts.length - 1; k++) {
+      const a = r.pts[k], b = r.pts[k + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+      const steps = Math.max(1, Math.ceil(l / 2));
+      for (let s = 0; s < steps; s++) {
+        const x = a[0] + (dx * s) / steps, z = a[1] + (dz * s) / steps;
+        const n = track.nearest(x, z, hint);
+        let w = 0, q = null;
+        if (n.i >= 0) {
+          hint = n.i;
+          const i = n.i, j = (i + 1) % N;
+          q = [P[i][0] + (P[j][0] - P[i][0]) * n.t, P[i][1] + (P[j][1] - P[i][1]) * n.t];
+          const along = Math.abs((dx * tan[i][0] + dz * tan[i][1]) / (l || 1));
+          w = smooth((3 - n.d) / 1.5) * smooth((along - 0.85) / 0.1);
+        }
+        if (w > 0) moved = true;
+        out.push(w > 0 ? [x + (q[0] - x) * w, z + (q[1] - z) * w] : [x, z]);
+      }
+    }
+    out.push(r.pts[r.pts.length - 1]);
+    if (moved) r.pts = out;
+  }
+}
+
+// The ground is a 2 m height grid. Where a levelled street meets a rising bank, the crease between
+// them runs in steps across the grid, and the kerb line and glow painted on it rise and fall with
+// each step: seen along the street they zigzag. Along the lap, level a strip of about a metre beyond
+// each kerb to the height of the street, so the crease sits back on the verge and the kerb lies flat.
+// Done to the height data as each piece of the map loads, so the cars and the ground agree.
+export function levelTrackShoulders(world) {
+  const track = createTrack();
+  const { P, HW, N } = track;
+  const hm = world.meta.height, hn = hm.n, res = hm.res;
+  const FULL = 1.2, FADE = 2.4;
+  const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  world.onSectorLoad((s) => {
+    const H = s.H;
+    if (!H) return;
+    const span = (hn - 1) * res;
+    // any of the lap in or near this piece of the map?
+    let any = false;
+    for (let i = 0; i < N && !any; i += 4) any = P[i][0] > s.x0 - 12 && P[i][0] < s.x0 + span + 12 && P[i][1] > s.z0 - 12 && P[i][1] < s.z0 + span + 12;
+    if (!any) return;
+    const at = (x, z) => {             // this piece's own ground, clamped to it
+      let fx = Math.max(0, Math.min(hn - 1.001, (x - s.x0) / res)), fz = Math.max(0, Math.min(hn - 1.001, (z - s.z0) / res));
+      const c = Math.floor(fx), r = Math.floor(fz);
+      fx -= c; fz -= r;
+      const i = r * hn + c;
+      return ((H[i] * (1 - fx) + H[i + 1] * fx) * (1 - fz) + (H[i + hn] * (1 - fx) + H[i + hn + 1] * fx) * fz);
+    };
+    const edits = [];
+    for (let r = 0; r < hn; r++) {
+      for (let c = 0; c < hn; c++) {
+        const x = s.x0 + c * res, z = s.z0 + r * res;
+        const n = track.nearest(x, z);
+        if (n.i < 0) continue;
+        const hw = HW[n.i], d = n.d - hw;
+        if (d < -0.6 || d > FADE) continue;
+        const j = (n.i + 1) % N;
+        const cx = P[n.i][0] + (P[j][0] - P[n.i][0]) * n.t, cz = P[n.i][1] + (P[j][1] - P[n.i][1]) * n.t;
+        const w = d <= FULL ? 1 : 1 - smooth((d - FULL) / (FADE - FULL));
+        edits.push([r * hn + c, at(cx, cz), w]);
+      }
+    }
+    for (const [k, road, w] of edits) H[k] = Math.round(H[k] + (road - H[k]) * w);
+  });
 }

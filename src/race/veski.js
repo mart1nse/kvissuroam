@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 
 export const VESKI = { i0: 1655, i1: 1810, red: [0.15, 1.9], dash: -1.9 };     // red: from the left road edge inwards
-const FENCE = { i0: 1806, i1: 1842, off: 1.6, height: 0.85, colour: 0xc0622e, post: 0x8a4422 };
+const FENCE = { i0: 1806, i1: 1842, off: 1.6, height: 0.85, colour: 0xb39d8c, post: 0x988376 };
 // the Veski centre lines of this stretch in vectors.json (start points)
 const VESKI_ROADS = [[694.0, 2974.3], [760.8, 3107.9], [789.3, 3164.6]];
 
@@ -49,7 +49,7 @@ export function createVeski(world, group, merged) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
-    lane = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x7a5052, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+    lane = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x957d82, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     lane.receiveShadow = true;
     group.add(lane);
   }

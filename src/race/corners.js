@@ -12,10 +12,10 @@ const ISLANDS = [
   { i0: 675, i1: 681, hw: 0.75, off: 0 },        // Jakobi, before the Lai junction
   { i0: 693, i1: 698, hw: 0.7, off: 0 },         // the mouth of Lai
 ];
-const ISLAND = { height: 0.13, edge: 0.06, top: 0x9a4a3c, kerb: 0xb8b2bd };
+const ISLAND = { height: 0.13, edge: 0.06, top: 0xaea7b2, kerb: 0xd0ccd6 };
 // street furniture to take away: [kind, x, z]
 const REMOVE = [[BENCH, 1338.3, 2185.9]];          // the bench on the right before Kroonuaia
-const BARRIER = { off: 0.5, height: 0.24, width: 1.3, ramp: 0.35, rail: 0.48 };      // wide enough that one side of the car rides up on it
+const BARRIER = { off: 0.5, height: 0.38, width: 1.4, ramp: 0.35, rail: 0.6 };       // wide enough that one side of the car rides up on it (Martin, 17 Nov: more tilt)
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -125,7 +125,7 @@ export function createCorners(world, group, merged) {
       const a = (i - 1) * 4, b = i * 4;
       for (let q = 0; q < 3; q++) idx.push(a + q, b + q, a + q + 1, a + q + 1, b + q, b + q + 1);
     }
-    // the top in cobble red, the kerbs grey: split by colouring vertices per face
+    // the top in grey setts, the kerbs in lighter granite: split by colouring vertices per face
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
@@ -188,7 +188,7 @@ export function createCorners(world, group, merged) {
       if (i % 2 === 0) {
         const post = new THREE.BoxGeometry(0.1, BARRIER.rail + 0.15, 0.1);
         post.translate(a[0], y + (BARRIER.rail + 0.15) / 2, a[1]);
-        parts.push([post, 0x6f7380]);
+        parts.push([post, 0x9a9eaa]);
       }
     }
     const last = bline[bline.length - 1], prev = bline[bline.length - 2];
@@ -196,7 +196,7 @@ export function createCorners(world, group, merged) {
     const y = bare(last[0], last[1], -ez / el, ex / el, 1.0);
     const post = new THREE.BoxGeometry(0.1, BARRIER.rail + 0.15, 0.1);
     post.translate(last[0], y + (BARRIER.rail + 0.15) / 2, last[1]);
-    parts.push([post, 0x6f7380]);
+    parts.push([post, 0x9a9eaa]);
     barrier = merged(parts);
     if (barrier) { barrier.castShadow = barrier.receiveShadow = true; group.add(barrier); }
   }

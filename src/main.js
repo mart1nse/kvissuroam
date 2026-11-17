@@ -295,9 +295,10 @@ let groups = [];                 // [{ ids, front, el, cards }]
 const STACK = { scale: [1, 0.92, 0.84, 0.76], show: [1, 0.75, 0.55, 0.38] };
 const STACK_MID = { scale: [1, 0.92, 0.84], show: [1, 0.72, 0.42] };
 const STACK_LOW = { scale: [1, 0.9, 0.8], show: [1, 0.45, 0.32] };
+const STACK_PHONE = { scale: [1, 0.92], show: [1, 0.36] };      // a phone on its side: one car peeks out, name only
 
 function layoutMenu() {
-  const st = innerHeight < 560 ? STACK_LOW : innerHeight < 760 ? STACK_MID : STACK, last = st.scale.length - 1;
+  const st = innerHeight <= 430 ? STACK_PHONE : innerHeight < 560 ? STACK_LOW : innerHeight < 760 ? STACK_MID : STACK, last = st.scale.length - 1;
   // where each card's top sits, in front-card heights (they shrink towards their top edge)
   const top = [0], bottom = [1];
   for (let k = 1; k <= last; k++) { bottom[k] = bottom[k - 1] + st.show[k] * st.scale[k]; top[k] = bottom[k] - st.scale[k]; }

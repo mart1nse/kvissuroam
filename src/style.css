@@ -207,6 +207,19 @@ body.touch .desktop-only { display: none; }
   #menu { gap: 4px; }
   .card p { display: none; }
   .keys { display: none; }
+  /* phones on their side (Martin, 2026-11-17): the stacks used to run under the DRIVE row with the
+     cars behind showing cut-off figures. Smaller logo, no year, one car peeking out below the front
+     one with only its name, and bigger arrows that keep clear of the figures. */
+  #menu .logo { font-size: min(9vw, 13vh); }
+  #menu .tag { display: none; }
+  #menu .attribution { font-size: 8px; }
+  .card .yr { display: none; }
+  .card { padding-top: 7px; padding-bottom: 7px; }
+  .card:not(.front) dl { display: none; }
+  .card:not(.front) h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stack.has-nav .card { padding-right: 24px; }
+  .stack .nav { gap: 8px; }
+  .stack .nav button { width: 32px; height: 32px; font-size: 12px; }
 }
 
 /* ---- race: lap panel, names over other cars, driver name, lap times board */

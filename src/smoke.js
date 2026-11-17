@@ -74,12 +74,17 @@ export function createSmoke(world) {
       life[i] = 2.2 + Math.random() * 1.8;
     }
   }
-  let thrPrev = 0, sootOwed = 0, burst = 0, shiftWas = false, boostPrev = 0;
-  // black smoke from a tired diesel's tailpipe
-  function exhaust(car, dt) {
+  // black smoke from a tired diesel's tailpipe; st keeps one car's puffing state (the player's own, or
+  // another player's car rebuilt from what it sends)
+  const fresh0 = () => ({ thrPrev: 0, sootOwed: 0, burst: 0, shiftWas: false, boostPrev: 0 });
+  const mine = fresh0();
+  const theirs = new Map();
+  function exhaust(car, dt, st = mine) {
+    let { thrPrev, sootOwed, burst, shiftWas, boostPrev } = st;
+    exhaustStep();
+    Object.assign(st, { thrPrev, sootOwed, burst, shiftWas, boostPrev });
+    function exhaustStep() {
     const s = car.spec, ex = s.exhaust, thr = car.throttle || 0;
-    // a stab of the pedal (or a gear change under power) dumps a thick cloud; then it settles to a trail
-    // that is heaviest at low revs before the turbo is up to pressure
     // (a gear change under power still coughs out a puff as the boost comes back)
     if (car.shiftCut && !shiftWas) burst = Math.max(burst, thr * 0.5);
     shiftWas = !!car.shiftCut;
@@ -105,11 +110,18 @@ export function createSmoke(world) {
       puff(x + r() * 0.08, y, z + r() * 0.08, wvx * 0.55 - fx * k + r() * 0.6, 0.05 + Math.random() * 0.3, wvz * 0.55 - fz * k + r() * 0.6, strength, 1);
       gy[(next + MAX - 1) % MAX] = gyy;
     }
+    }
   }
 
   // car: the player's car after its physics step; active: false while the game is not being driven
-  function update(car, dt, active) {
+  // others: other players' smoking cars, [{ id, car }] (multiplayer.js smokers())
+  function update(car, dt, active, others = []) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
+    for (const o of others) {
+      if (!theirs.has(o.id)) theirs.set(o.id, fresh0());
+      exhaust(o.car, dt, theirs.get(o.id));
+    }
+    if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
     if (active && car && !car.inWater) {
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
       const ht = car.spec.track / 2;

@@ -75,7 +75,8 @@ export function createBoard({ mp, race, cars, order }) {
     const todayBest = (b?.today || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const mine = race.laps.slice(-5).reverse()
       .map((l) => `<li><b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${new Date(l.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></li>`).join('');
-    panel.innerHTML = `<h2>TOOMEMÄGI · LAP TIMES</h2>
+    // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
+    panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
       ${todayBest ? `<p class="today">FASTEST TODAY <b>${fmtTime(todayBest.ms / 1000)}</b> ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
       <table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>

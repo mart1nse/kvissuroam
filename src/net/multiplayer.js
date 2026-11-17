@@ -255,7 +255,9 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
       const r2 = (v) => Math.round(v * 100) / 100;
       const r3 = (v) => Math.round(v * 1000) / 1000;
       send({ t: 's', p: [r2(car.x), r2(car.z), r2(car.y), r3(car.yaw), r3(car.pitch), r3(car.roll),
-        r2(car.vx * fx + car.vy * rx), r2(car.vx * fz + car.vy * rz), r3(car.steer), car.brake > 0 ? 1 : 0, car.reversing ? 1 : 0] });
+        r2(car.vx * fx + car.vy * rx), r2(car.vx * fz + car.vy * rz), r3(car.steer), car.brake > 0 ? 1 : 0, car.reversing ? 1 : 0,
+        // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke)
+        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(car.throttle || 0), r2(car.boost || 0)] });
     }
     const W = innerWidth, H = innerHeight;
     for (const o of others.values()) {
@@ -276,6 +278,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
         w.fl.spin.rotation.x = w.fr.spin.rotation.x = w.rl.spin.rotation.x = w.rr.spin.rotation.x = -o.wheel;
       }
       o.model.setLights?.({ brake: !!p[9], reverse: !!p[10], headlights: true });
+      if (o.model.setSoot && p[11] !== undefined) o.model.setSoot(p[11]);
       // floating name
       v3.set(p[0], p[2] + 2.2, p[1]);
       const dist = v3.distanceTo(camera.position);
@@ -298,6 +301,18 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     nameReady,
     // everyone else online, including those who have not sent a position yet
     roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    // other players' cars that puff smoke (a diesel with a failing DPF), as the smoke module wants them
+    smokers() {
+      const out = [];
+      for (const o of others.values()) {
+        const p = o.pose;
+        if (!p || !o.spec?.dpfSmoke || p[12] === undefined) continue;
+        const fx = Math.sin(p[3]), fz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
+        out.push({ id: o.id, car: { spec: o.spec, x: p[0], z: p[1], y: p[2], yaw: p[3], b: o.spec.wheelbase * (1 - o.spec.cgFront),
+          vx: p[6] * fx + p[7] * fz, vy: p[6] * sx + p[7] * sz, throttle: p[12], boost: p[13] || 0, reversing: !!p[10] } });
+      }
+      return out;
+    },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
       n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);

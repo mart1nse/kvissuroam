@@ -194,7 +194,7 @@ async function boot() {
     ctx.strokeStyle = 'rgba(255,43,214,.5)'; ctx.lineWidth = 16;
     trackPath(ctx); ctx.stroke();
     // other players: arrows pointing the way they drive; anyone outside the minimap
-    // gets a small pointer on its rim showing which way they are from us
+    // gets a pointer on its rim showing which way they are from us
     const players = mp.players();
     if (!players.length) return;
     const m = ctx.getTransform(), R = ctx.canvas.width / 2;
@@ -206,16 +206,17 @@ async function boot() {
       const ex = q.x - R, ey = q.y - R;
       if (ex * ex + ey * ey < (R - 7) * (R - 7)) {
         ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(p.yaw - car.yaw);
-        playerArrow(ctx, 0.75); ctx.restore();
+        playerArrow(ctx, 1); ctx.restore();
         continue;
       }
       // where the line from our car towards them crosses a circle just inside the rim
       const dx = q.x - me.x, dy = q.y - me.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-      const ox = me.x - R, oy = me.y - R, rr = R - 9;
+      const ox = me.x - R, oy = me.y - R, rr = R - 26;      // (pointers made bigger, Martin 2026-11-17)
       const b = ox * ux + oy * uy, t = -b + Math.sqrt(Math.max(0, b * b - (ox * ox + oy * oy - rr * rr)));
       ctx.save(); ctx.translate(me.x + ux * t, me.y + uy * t); ctx.rotate(Math.atan2(ux, -uy));
-      ctx.fillStyle = 'rgba(47,243,255,.9)'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 3); ctx.lineTo(-5, 3); ctx.closePath();
+      ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
+      ctx.shadowColor = 'rgba(47,243,255,.8)'; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(17, 11); ctx.lineTo(-17, 11); ctx.closePath();
       ctx.stroke(); ctx.fill(); ctx.restore();
     }
     ctx.restore();
@@ -650,8 +651,8 @@ function frame(ts) {
     trackside.collide(car);
     props.update(car, dt);
     skids.update(car);
-    smoke.update(car, dt, mode === 'drive');
-  } else smoke.update(null, dt, false);
+    smoke.update(car, dt, mode === 'drive', mp.smokers());
+  } else smoke.update(null, dt, false, mp.smokers());
   mp.update(car, dt, mode === 'drive');
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }

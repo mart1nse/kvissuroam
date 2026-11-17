@@ -293,6 +293,13 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #board .mine small { opacity: .6; margin-left: 6px; }
 #board .row { align-items: center; }
 #board .dl { color: var(--cyan); }
+/* (every element has touch-action: none, which stopped a finger from scrolling the board on phones) */
+#board, #board * { touch-action: pan-y; }
+#board > * { flex-shrink: 0; }
+#board .bclose { position: fixed; z-index: 13; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+  width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-style: normal; letter-spacing: 0;
+  color: var(--cyan); background: rgba(18, 6, 43, .9); border: 2px solid var(--cyan); border-radius: 4px; box-shadow: 0 0 12px rgba(47, 243, 255, .45); }
+body.touch #board { padding-top: max(16px, env(safe-area-inset-top)); }
 
 /* desktop: a bigger map in the bottom left corner, the street name above it, a bigger lap panel */
 body:not(.touch) #minimap { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: clamp(170px, 24vw, 280px); height: clamp(170px, 24vw, 280px); }

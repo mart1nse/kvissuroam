@@ -173,7 +173,7 @@ export function buildAudi200() {
   const lw = 0.0065, lo = { offset: 0.0045 };
 
   // --- glazing: flush side glass in slim black frames, big raked screen, long sloping tailgate glass
-  const dloPts = [[-0.79, 0.912], [2.0, 0.955], [1.62, 1.33], [-0.1, 1.342]];
+  const dloPts = [[-0.79, 0.912], [2.11, 0.957], [1.63, 1.33], [-0.1, 1.342]];      // slim D-pillar, parallel to the tailgate
   pal.add(dcS.side(grow(rpoly(dloPts, 0.035, 4), 0.012), { offset: 0.003 }).pal('plastic').sym());
   {
     const inner = grow(dloPts, -0.006);
@@ -184,8 +184,8 @@ export function buildAudi200() {
   const ws = rpoly([[-0.715, -0.775], [0.715, -0.775], [0.6, -0.1], [-0.6, -0.1]], 0.05, 5);
   pal.add(dcT.top(grow(ws, 0.014), { offset: 0.003, ...topO(-0.86, -0.02) }).pal('rubber'));
   glass.add(dcT.top(ws, { offset: 0.0052, ...topO(-0.86, -0.02) }));
-  const rw = rpoly([[-0.6, ZG0 + 0.09], [0.6, ZG0 + 0.09], [0.68, ZG1 - 0.03], [-0.68, ZG1 - 0.03]], 0.05, 5);
-  pal.add(dcT.top(grow(rw, 0.04), { offset: 0.003, ...topO(ZG0 - 0.02, ZG1 + 0.03) }).pal('gloss'));
+  const rw = rpoly([[-0.63, ZG0 + 0.08], [0.63, ZG0 + 0.08], [0.72, ZG1 - 0.03], [-0.72, ZG1 - 0.03]], 0.05, 5);
+  pal.add(dcT.top(grow(rw, 0.028), { offset: 0.003, ...topO(ZG0 - 0.02, ZG1 + 0.03) }).pal('gloss'));
   glass.add(dcT.top(rw, { offset: 0.0052, ...topO(ZG0, ZG1) }));
   // black lip under the glass, across the tail
   pal.add(dcT.top(rect(-0.74, ZG1 - 0.005, 0.74, ZRB - 0.015, 0.01), { offset: 0.0035, minFacing: 0.25, filter: (v) => v[2] > ZG1 - 0.02 && v[1] > 0.93 }).pal('plastic'));
@@ -215,6 +215,9 @@ export function buildAudi200() {
     const xo = ln.at(sOut).x + 0.012, zo = ln.at(sOut).z - 0.01;
     // black backing for the whole band, and the plate panel between the lamps
     pal.add(dcR.rear(rpoly([[-xo, LY0 - 0.01], [xo, LY0 - 0.01], [xo, LY0 + LH + 0.01], [-xo, LY0 + LH + 0.01]], 0.01), { offset: 0.002, minFacing: 0.04, filter: (v) => v[2] > zo }).pal('gloss'));
+    // the band carries on behind the plate: amber over red, as on the lamps
+    const mid = (y0, y1, c) => pal.add(dcR.rear(rect(-LIN + 0.004, y0, LIN - 0.004, y1), { offset: 0.0035, minFacing: 0.04, filter: (v) => v[2] > zo }).pal(c));
+    mid(LY0 + LH / 2 + 0.002, LY0 + LH - 0.004, 'amber'); mid(LY0 + 0.004, LY0 + LH / 2 - 0.002, 'reflector');
     const lens = [[0.003, 0.003], [0.009, 0.007], [0.0105, LH / 2], [0.009, LH - 0.007], [0.003, LH - 0.003]];
     const sAt = (u) => sIn + (sOut - sIn) * u;
     const us = new Set(); for (let i = 0; i <= 24; i++) us.add(i / 24);
@@ -242,44 +245,50 @@ export function buildAudi200() {
     pal.add(cyl(0.02, 0.024, 0.03, 12, { p: [0.02, prC.topY(0.02, ZG1 - 0.07) + 0.01, ZG1 - 0.07] }, 'plastic'));
   }
 
-  // --- bumpers: body-coloured wrap-round mouldings with a black rubbing strip and a bright bead on top
-  const bumper = (lnB, yB, sEnd, skin, strip, bead) => {
-    const tp = (t) => Math.min(1, (1 - t) / 0.05) ** 0.5;
-    paint.add(sweep(lnB, yB, skin, { s1: sEnd, n: 44, taper: tp }).sym());
-    pal.add(sweep(lnB, yB, strip, { s1: sEnd, n: 44, taper: tp }).pal('bumper').sym());
-    pal.add(sweep(lnB, yB, bead, { s1: sEnd, n: 44, taper: tp }).pal('chrome').sym());
+  // --- bumpers (European): slim body-coloured mouldings that stand proud across the nose and tail, come in
+  // flush with the wings round the corners, and carry a bright bead along the top edge to the wheel arches
+  const YT = 0.555;                            // top edge of both bumpers and of the door strips
+  const bumper = (lnB, yB, sEnd, skin) => {
+    const sC = lnB.where((p) => p.nx - 0.72), top = Math.max(...skin.map((p) => p[1])), out = Math.max(...skin.map((p) => p[0]));
+    // full depth across the car, 18 % of it along the flanks, nothing where it meets the arch
+    const m = (t) => { const s = t * sEnd, k = Math.max(0, Math.min(1, (s - (sC - 0.16)) / 0.36)); return (1 - 0.82 * k * k * (3 - 2 * k)) * Math.max(0, Math.min(1, (1 - t) / 0.04)) ** 0.5; };
+    paint.add(sweep(lnB, yB, skin, { s1: sEnd, n: 56, taper: m }).sym());
+    pal.add(sweep(lnB, yB, [[out - 0.004, top - 0.022], [out, top - 0.019], [out, top - 0.006], [out - 0.004, top - 0.003]], { s1: sEnd, n: 56, taper: m, add: 0.004 }).pal('chrome').sym());
+    return (x) => out * m(lnB.where((p) => p.x - Math.abs(x)) / sEnd);     // how far the face stands off the shell at x
   };
   {
     const yB = 0.45, lnB = planLine(rearP, yB, 1.5, 1, 0, 80, 160);
     const sEnd = lnB.where((p) => (HZ + archR + 0.012) - p.z);
-    bumper(lnB, yB, sEnd,
-      [[-0.03, -0.17], [0.02, -0.172], [0.04, -0.16], [0.052, -0.13], [0.058, -0.07], [0.06, 0.0], [0.06, 0.1], [0.057, 0.145], [0.045, 0.172], [0.02, 0.18], [-0.03, 0.18]],
-      [[0.06, 0.03], [0.066, 0.036], [0.066, 0.084], [0.06, 0.09]],
-      [[0.059, 0.094], [0.0635, 0.097], [0.0635, 0.107], [0.059, 0.11]]);
+    bumper(lnB, yB, sEnd, [[-0.03, -0.165], [0.0, -0.163], [0.02, -0.152], [0.035, -0.125], [0.045, -0.08], [0.051, -0.02], [0.054, 0.04], [0.054, YT - yB - 0.022],
+      [0.051, YT - yB - 0.007], [0.043, YT - yB], [-0.03, YT - yB]]);
+    // black valance under it, with the cut-out for the tailpipes
+    pal.add(box(1.16, 0.05, 0.03, { p: [0, 0.285, ZRB - 0.07] }, 'plastic'));
   }
   {
     const yB = 0.44, lnB = planLine(frontP, yB, -1.5, -1, 0, 80, 160);
     const sEnd = lnB.where((p) => p.z - (-HZ - archR - 0.012));
-    bumper(lnB, yB, sEnd,
-      [[-0.03, -0.2], [0.02, -0.205], [0.045, -0.19], [0.056, -0.15], [0.062, -0.08], [0.064, 0.0], [0.064, 0.09], [0.06, 0.135], [0.046, 0.16], [0.02, 0.168], [-0.03, 0.168]],
-      [[0.064, 0.025], [0.07, 0.031], [0.07, 0.079], [0.064, 0.085]],
-      [[0.063, 0.089], [0.0675, 0.092], [0.0675, 0.102], [0.063, 0.105]]);
-    // lower intake, indicator / fog lamps and the number plate on the moulding
-    const zb = (x, y) => lnB.at(lnB.where((p) => p.x - Math.abs(x))).z - 0.066;
-    pal.add(box(0.62, 0.075, 0.012, { p: [0, 0.32, zb(0.2, 0.32) + 0.003] }, 'well'));
-    for (let i = 0; i < 3; i++) pal.add(box(0.62, 0.006, 0.016, { p: [0, 0.298 + i * 0.022, zb(0.2, 0.32)] }, 'plastic'));
+    const off = bumper(lnB, yB, sEnd, [[-0.03, -0.205], [0.0, -0.203], [0.02, -0.19], [0.03, -0.165], [0.034, -0.13], [0.04, -0.1], [0.046, -0.05], [0.05, 0.0], [0.052, 0.05], [0.052, YT - yB - 0.022],
+      [0.049, YT - yB - 0.007], [0.041, YT - yB], [-0.03, YT - yB]]);
+    const zb = (x) => lnB.at(lnB.where((p) => p.x - Math.abs(x))).z - off(x);
+    // centre intake under the number plate, and a slim slot each side of it
+    pal.add(box(0.5, 0.062, 0.012, { p: [0, 0.335, zb(0.15) + 0.004] }, 'well'));
+    for (let i = 0; i < 3; i++) pal.add(box(0.5, 0.005, 0.016, { p: [0, 0.317 + i * 0.018, zb(0.15) + 0.001] }, 'plastic'));
+    // fog lamp and indicator in one long unit each side, set into the face
     for (const sx of [1, -1]) {
-      const x = sx * 0.56, yaw = sx * -0.16;
-      atlas.add(fromGeo(new THREE.PlaneGeometry(0.2, 0.06), { p: [x, 0.325, zb(0.56, 0.32) - 0.001], r: [0, Math.PI + yaw, 0] }).uvRect(sx > 0 ? A_IND : [A_IND[2], A_IND[1], A_IND[0], A_IND[3]]));
+      const x = sx * 0.57, yaw = sx * -0.2;
+      pal.add(box(0.25, 0.076, 0.012, { p: [x, 0.41, zb(0.57) + 0.003], r: [0, yaw, 0] }, 'plastic'));
+      atlas.add(fromGeo(new THREE.PlaneGeometry(0.235, 0.064), { p: [x, 0.41, zb(0.57) - 0.0035], r: [0, Math.PI + yaw, 0] }).uvRect(sx > 0 ? A_IND : [A_IND[2], A_IND[1], A_IND[0], A_IND[3]]));
     }
-    const fp = plate([0, 0.5, zb(0.1, 0.5) - 0.007], A_PLATE, { front: true });
+    const fp = plate([0, 0.455, zb(0.1) - 0.006], A_PLATE, { front: true });
     atlas.add(fp.face); pal.add(fp.back);
+    // chin spoiler lip
+    pal.add(sweep(lnB, 0.235, [[-0.02, -0.03], [0.012, -0.03], [0.02, -0.018], [0.022, 0.006], [-0.02, 0.006]], { s1: lnB.where((p) => p.nx - 0.6), n: 30, taper: (t) => Math.min(1, (1 - t) / 0.12) }).pal('plastic').sym());
   }
   // --- side rubbing strips carrying the bumper line along the doors
   {
-    const yS = 0.505;
-    const blk = [[-0.004, -0.03], [0.006, -0.029], [0.011, -0.022], [0.012, 0], [0.011, 0.022], [0.006, 0.029], [-0.004, 0.03]];
-    const chr = [[0.0105, 0.021], [0.0135, 0.024], [0.0135, 0.031], [0.0105, 0.034]];
+    const yS = YT - 0.033;
+    const blk = [[-0.004, -0.024], [0.005, -0.023], [0.009, -0.018], [0.01, 0], [0.009, 0.018], [0.005, 0.023], [-0.004, 0.024]];
+    const chr = [[0.0085, 0.016], [0.0115, 0.019], [0.0115, 0.028], [0.0085, 0.031]];
     for (const [z0, z1] of [[-HZ + archR + 0.02, -0.865], [-0.845, 0.127], [0.143, HZ - archR - 0.06]]) {
       const l = sideLine(sideP, yS, z0, z1, 16), k = 30 * (z1 - z0), tp = (t) => Math.min(1, 0.25 + k * t, 0.25 + k * (1 - t));
       pal.add(sweep(l, yS, blk, { n: 16, taper: tp }).pal('bumper').sym());

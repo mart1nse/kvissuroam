@@ -197,6 +197,7 @@ export const CARS = {
     ref: { zeroTo100: 4.5, top: 180, powerKw: 280 },
   },
   f40: {
+    tyreWidth: [0.245, 0.335],   // m, front and rear (for the tyre marks)
     id: 'f40',
     name: 'Ferrari F40',
     short: 'F40',
@@ -242,6 +243,7 @@ export const CARS = {
     ref: { zeroTo100: 4.1, top: 324, powerKw: 352 },
   },
   cgt: {
+    tyreWidth: [0.265, 0.335],   // m, front and rear (for the tyre marks)
     id: 'cgt',
     name: 'Porsche Carrera GT',
     short: 'Carrera GT',
@@ -322,6 +324,7 @@ export const CARS = {
     ref: { zeroTo100: 6.7, top: 238, powerKw: 162 },
   },
   m3: {
+    tyreWidth: [0.245, 0.265],   // m, front and rear (for the tyre marks)
     id: 'm3',
     name: 'BMW M3 Coupé',
     short: 'M3 E92',

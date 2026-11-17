@@ -16,6 +16,7 @@ import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
+import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createRace, createTrack } from './race/race.js';
@@ -65,7 +66,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, bigmap, race, mp, board, props, trackside, people;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -159,6 +160,8 @@ async function boot() {
   hud = createHud(world);
   skids = createSkidMarks(world);
   scene.add(skids.mesh);
+  smoke = createSmoke(world);
+  scene.add(smoke.points);
   mp = createMultiplayer({
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
     buildModel: (id) => { try { return buildCarModel ? buildCarModel(id) : buildPlaceholder(CARS[id]); } catch { return buildPlaceholder(CARS[id]); } },
@@ -488,7 +491,8 @@ function frame(ts) {
     trackside.collide(car);
     props.update(car, dt);
     skids.update(car);
-  }
+    smoke.update(car, dt, mode === 'drive');
+  } else smoke.update(null, dt, false);
   mp.update(car, dt, mode === 'drive');
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
@@ -647,7 +651,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, props: () => props };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

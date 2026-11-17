@@ -3,7 +3,7 @@ import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
 import { createBuildings, createTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
-import { CARS, CAR_ORDER } from './cars/specs.js';
+import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createCar, stepCar, resetCar, speedKmh } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
@@ -246,29 +246,95 @@ function setCar(id) {
   hud.setCar(spec);
   mp?.setCar(id);
   race?.cancel('LAP CANCELLED');
-  document.querySelectorAll('.card').forEach((c) => c.classList.toggle('sel', c.dataset.id === id));
-  document.querySelector('.card.sel')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  layoutMenu();
+}
+
+// ---- garage menu: the groups side by side, each a stack of cards. The group's current car is in
+// front and the next few peek out below it, each further back and smaller. Sliding a stack (drag
+// up or down, the mouse wheel, or the up and down keys) brings the next car forward.
+let groups = [];                 // [{ ids, front, el, cards }]
+const PEEK = 3;                  // cards visible behind the front one
+
+function layoutMenu() {
+  for (const g of groups) {
+    const n = g.ids.length;
+    const i = g.ids.indexOf(carId);
+    if (i >= 0) g.front = i;
+    g.el.classList.toggle('sel', i >= 0);
+    g.el.querySelector('.gn').textContent = `${g.front + 1}/${n}`;
+    g.cards.forEach((c, j) => {
+      const k = (j - g.front + n) % n;
+      c.style.setProperty('--k', k);
+      c.classList.toggle('front', k === 0);
+      c.classList.toggle('gone', k > PEEK);
+      c.classList.toggle('sel', c.dataset.id === carId);
+      c.tabIndex = k === 0 ? 0 : -1;
+    });
+  }
+}
+
+function slideGroup(g, d) {
+  const n = g.ids.length;
+  setCar(g.ids[(g.front + d + n) % n]);
 }
 
 function buildMenu() {
   const cards = $('#cards');
   cards.innerHTML = '';
-  for (const id of CAR_ORDER) {
-    const s = CARS[id];
-    const el = document.createElement('button');
-    el.className = `card${id === carId ? ' sel' : ''}`;
-    el.dataset.id = id;
-    el.innerHTML = `<div class="yr">${s.year}</div><h3>${s.name}</h3><p>${s.blurb}</p>
-      <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl>`;
-    el.addEventListener('click', () => setCar(id));
+  // (a car left out of every group still gets a place, at the end of the last one)
+  const listed = new Set(CAR_GROUPS.flatMap((g) => g.ids));
+  const defs = CAR_GROUPS.map((g, i) => ({ name: g.name, ids: [...g.ids, ...(i === CAR_GROUPS.length - 1 ? CAR_ORDER.filter((id) => !listed.has(id)) : [])] }));
+  let swiped = false, drag = null, lastWheel = 0;
+  groups = defs.map((def) => {
+    const el = document.createElement('div');
+    el.className = 'group';
+    el.innerHTML = `<h4><span>${def.name}</span><b class="gn"></b></h4><div class="stack"></div>`;
+    const stack = el.querySelector('.stack');
+    const g = { ids: def.ids, front: 0, el, cards: [] };
+    for (const id of def.ids) {
+      const s = CARS[id];
+      const c = document.createElement('button');
+      c.className = 'card';
+      c.dataset.id = id;
+      c.innerHTML = `<div class="yr">${s.year}</div><h3>${s.name}</h3><p>${s.blurb}</p>
+        <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl><i class="pk">${s.short.toUpperCase()}</i>`;
+      // (a tap on the front card picks it, a tap on one peeking out behind brings it forward)
+      c.addEventListener('click', () => { if (!swiped) setCar(id); });
+      stack.appendChild(c);
+      g.cards.push(c);
+    }
+    stack.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const now = performance.now();
+      if (Math.abs(e.deltaY) < 4 || now - lastWheel < 260) return;
+      lastWheel = now;
+      slideGroup(g, Math.sign(e.deltaY));
+    }, { passive: false });
+    stack.addEventListener('pointerdown', (e) => { drag = { g, y: e.clientY }; });
     cards.appendChild(el);
-  }
+    return g;
+  });
+  // drag the front card up to bring the next car forward, down to go back
+  addEventListener('pointerup', (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y, g = drag.g;
+    drag = null;
+    if (Math.abs(dy) < 24) return;
+    swiped = true;
+    setTimeout(() => { swiped = false; }, 0);
+    slideGroup(g, dy < 0 ? 1 : -1);
+  });
+  addEventListener('pointercancel', () => { drag = null; });
+  layoutMenu();
   $('#drive').addEventListener('click', startDriving);
   addEventListener('keydown', (e) => {
     if (mode !== 'menu' || board?.open) return;
-    const i = CAR_ORDER.indexOf(carId);
-    if (e.code === 'ArrowRight') setCar(CAR_ORDER[(i + 1) % CAR_ORDER.length]);
-    else if (e.code === 'ArrowLeft') setCar(CAR_ORDER[(i + CAR_ORDER.length - 1) % CAR_ORDER.length]);
+    const gi = Math.max(0, groups.findIndex((g) => g.ids.includes(carId))), g = groups[gi];
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+      const h = groups[(gi + (e.code === 'ArrowRight' ? 1 : groups.length - 1)) % groups.length];
+      setCar(h.ids[h.front]);
+    } else if (e.code === 'ArrowDown') slideGroup(g, 1);
+    else if (e.code === 'ArrowUp') slideGroup(g, -1);
     else if (e.code === 'Enter' || e.code === 'Space') startDriving();
   });
 }

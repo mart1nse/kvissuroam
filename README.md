@@ -13,8 +13,10 @@ The in-game figures come from `node tools/perf-test.mjs`, which floors each car 
 
 ## Controls
 
-- **Desktop:** arrow keys (or WASD). Down brakes, then reverses. Space is the handbrake.
-  `R` puts the car back on the last intact spot, `H` back at the start, `G` opens the garage, `M` toggles sound.
+- **Desktop:** arrow keys (W and S also work as gas and brake). Down brakes, then reverses. Space is the handbrake.
+  `A` shifts up one gear and `Z` down one (the automatic takes over again at the shift point), `B` held looks back,
+  `C` switches between the chase camera and a drone above the car, `L` shows the lap times (Esc closes them).
+  `R` puts the car back on the last intact spot, `H` back at the start, `G` opens the garage, `M` the city map, `N` toggles sound.
 - **Phone / tablet:** open the same link, hold the device in landscape, and use the on-screen pedals.
 
 Driving into the Emajõgi (or a pond) sinks the car; use the reset buttons to carry on.

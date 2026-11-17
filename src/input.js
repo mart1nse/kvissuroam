@@ -1,10 +1,11 @@
 // Keyboard (arrow keys) and on-screen touch pedals. Both write into one state object.
 
 export function createInput(root) {
-  const state = { up: 0, down: 0, left: 0, right: 0, handbrake: 0 };
+  const state = { up: 0, down: 0, left: 0, right: 0, handbrake: 0, look: 0 };
+  // (A and Z shift gears, so A/D no longer steer; W and S still work as gas and brake. B is held to look back.)
   const keys = new Map([
     ['ArrowUp', 'up'], ['ArrowDown', 'down'], ['ArrowLeft', 'left'], ['ArrowRight', 'right'],
-    ['KeyW', 'up'], ['KeyS', 'down'], ['KeyA', 'left'], ['KeyD', 'right'], ['Space', 'handbrake'],
+    ['KeyW', 'up'], ['KeyS', 'down'], ['Space', 'handbrake'], ['KeyB', 'look'],
   ]);
   const actions = new Map();   // code -> callback
   let enabled = false;

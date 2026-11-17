@@ -10,6 +10,7 @@ const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (
 const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
+const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
@@ -17,6 +18,7 @@ const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheel
 const DONUT = 0.4;              // how firmly a held donut is kept going (share of m*g*L as yaw moment)
 const DONUT_LO = 0.6, DONUT_HI = 1.1;    // ...the slide angle band it keeps the car in (rad)
 const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this long after it is floored (s)
+const DONUT_SWAY = 0.5;          // ...how much the hold wanders in between
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
 const EV_SLIDE_REAR = 0.7;      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
@@ -88,7 +90,10 @@ export function speedKmh(car) {
 
 // rev limiter: the shortest ignition cut (s) and how far the revs must fall before it returns (rpm);
 // an engine can set its own with revCut and revCutDrop
+const SHIFT_TIME = 0.25;         // a quick manual change: clutch, lever, clutch (s)
 const REV_CUT_TIME = 0.03, REV_CUT_DROP = 120;
+// a repeatable 0..1 'random' number, so every car runs the same on every screen
+const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
 function engineForce(car, throttle, dt) {
   // Returns the drive force at the wheels (N, signed along vx) and updates rpm / gear.
@@ -123,7 +128,12 @@ function engineForce(car, throttle, dt) {
     const early = rpmAt(g) > e.shiftRpm * 0.88 && rpmAt(g) * wAbs >= e.redline * vAbs;
     if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
     else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * (throttle > 0.5 ? 0.9 : 0.55)) g--;
-    if (g !== car.gear) { car.gear = g; car.shiftTimer = s.shiftTime; }
+    if (g !== car.gear) {
+      // Shifted like a quick manual: an upshift under power cuts the ignition while the clutch is
+      // out (the revs drop to the next gear's), then it bites again; a downshift blips the throttle.
+      car.shiftUp = g > car.gear && throttle > 0.3;
+      car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
+    }
   }
   if (car.shiftTimer > 0) car.shiftTimer -= dt;
   const wheelRpm = (wAbs / s.wheelRadius) * ratioOf(car.gear) * (60 / (2 * Math.PI));
@@ -165,17 +175,26 @@ function engineForce(car, throttle, dt) {
   if (throttle <= 0) car.revCut = 0;
   else if (car.revCut > 0) {
     car.revCut -= dt;
-    if (car.revCut <= 0) car.revCut = wheelRpm > e.redline - (e.revCutDrop ?? REV_CUT_DROP) ? 1e-4 : 0;
-  } else if (wheelRpm >= e.redline) car.revCut = e.revCut ?? REV_CUT_TIME;
-  const rpmTo = Math.min(Math.max(rpm, car.carry), e.redline);
+    if (car.revCut <= 0) car.revCut = wheelRpm > e.redline - car.cutDrop ? 1e-4 : 0;
+  } else if (wheelRpm >= e.redline) {
+    // No two bounces are alike: each cut lasts a little longer or shorter and lets the revs fall a
+    // different way before the engine fires again, so the limiter stutters rather than buzzes.
+    const r1 = hash(car.time * 7.31 + car.x * 0.13), r2 = hash(car.time * 3.17 + car.z * 0.11 + 5.2);
+    car.revCut = (e.revCut ?? REV_CUT_TIME) * (0.7 + 0.9 * r1);
+    car.cutDrop = Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) * (0.5 + 2.2 * r2 * r2);
+  }
+  // (when the tyres let go the engine is suddenly unloaded and flares up ahead of the wheels a little)
+  const rpmTo = Math.min(Math.max(rpm, car.carry, throttle > 0.5 ? stall + 1600 * (car.spin || 0) * throttle : 0), e.redline);
   // (the needle and the engine note follow the bounce closely)
-  car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * (wheelRpm > e.redline - 600 ? 40 : 12));
+  car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * (wheelRpm > e.redline - 600 || car.shiftTimer > 0 ? 40 : 12));
+  car.shiftCut = car.shiftTimer > 0 && car.shiftUp && throttle > 0;
   if (throttle <= 0) {
     // engine braking through the converter
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
   }
   if (car.revCut > 0 || (car.reversing && vAbs > 11)) return 0;
-  const cut = car.shiftTimer > 0 ? 0.25 : 1;
+  // (no drive while the clutch is out, then it bites back in over the last part of the shift)
+  const cut = car.shiftTimer > 0 ? (car.shiftUp ? Math.max(0, 1 - car.shiftTimer / (0.45 * car.shiftLen)) * 0.6 : 0.4) : 1;
   const rq = Math.max(rpm, car.carry);
   const full = lerpTable(e.torque, rq);
   const base = tb ? lerpTable(tb.torqueOff, rq) : full;
@@ -344,7 +363,13 @@ function substep(car, input, world, dt) {
   if (steerIn === 0 || Math.sign(steerIn) !== car.csDir) car.csHold = 0;
   else car.csHold = Math.max(over, car.csHold - dt * 1.5);
   const ease = 1 - CATCH * car.csHold;
-  const target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow) * ease));
+  // As soon as the slide shows signs of coming back (the rear slip angle shrinking), the steering's
+  // own share of the opposite lock backs off, so a recovering car is not flung the other way: the
+  // driver catches the exit by winding the wheel back and adding throttle.
+  const back = sR * dsR < 0 && Math.abs(sR) > 0.04 ? Math.min(1, (-dsR * Math.sign(sR) - 0.1) / 0.5) : 0;
+  car.recov = back > (car.recov || 0) ? car.recov + (back - car.recov) * Math.min(1, dt * 25) : Math.max(0, (car.recov || 0) - dt * 2.5);
+  const auto = 1 - RECOVER * car.recov;
+  const target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow * auto) * ease));
   // (unwinding is quick: in a slide the wheel spins back through your hands)
   const rate = ((steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * car.csHold);
   const ds = target - car.steer;
@@ -373,7 +398,12 @@ function substep(car, input, world, dt) {
   const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
   // (wide performance tyres: spec.grip scales every surface)
   const tyre = s.grip ?? 1;
-  const capF = sf.mu * tyre * fzF, capR = sr.mu * tyre * fzR;
+  // No surface grips the same everywhere: dust, damp, ruts and worn patches a few metres across
+  // (more on loose ground than on paving), so a slide or a donut never repeats itself exactly.
+  const patch = (x, z, k) => 1 + k * (0.55 * Math.sin(x * 0.83 + Math.sin(z * 0.31) * 2.1) * Math.sin(z * 0.71 + 1.3) + 0.45 * Math.sin((x + z) * 0.37 + Math.sin(x * 0.19) * 1.7));
+  const pF = patch(car.x + fx * car.a, car.z + fz * car.a, surfF === 1 ? 0.05 : 0.13);
+  const pR = patch(car.x - fx * car.b, car.z - fz * car.b, surfR === 1 ? 0.05 : 0.13);
+  const capF = sf.mu * tyre * fzF * pF, capR = sr.mu * tyre * fzR * pR;
   // traction left on each driven axle once cornering has taken its share
   const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
@@ -527,7 +557,7 @@ function substep(car, input, world, dt) {
   // the wheel is held into the rotation, the pedal down and the wheels spin.
   // (a quick lift and re-press mid-donut picks up where it left off; only a
   // longer break makes the next one wait for the revs again)
-  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 0.8, car.donutT || 0) - dt * 1.5); }
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
   else {
     car.donutT = (car.donutT || 0) + dt;
     const turn = Math.sign(steerIn);
@@ -543,14 +573,20 @@ function substep(car, input, world, dt) {
     // hold drifts now and then (more so on a tilted patch of road), so the
     // car swings round too far, bogs down for a moment and then gets going again.
     const kw = (s.engine.maxPowerKw ?? s.ref?.powerKw ?? 0) / m;      // kW per kg
-    const pw = Math.min(1, Math.max(0, (kw - 0.12) / 0.15));
-    let lo = DONUT_LO, hi = DONUT_HI;
-    if (pw > 0) {
+    const pw = 0.6 + 0.4 * Math.min(1, Math.max(0, (kw - 0.08) / 0.17));
+    let lo = DONUT_LO, hi = DONUT_HI, tuck = 0, sway = 0;
+    {
+      // two slow, unrelated swells (and the lie of the ground) decide when the car swings too far
+      // round and bogs, and when the tail tucks in so it runs on a few metres before coming round again
       const tm = car.time;
       const n = 0.6 * Math.sin(tm * 0.83 + 1.7) + 0.4 * Math.sin(tm * 0.31 + car.x * 0.05);
+      const q = 0.55 * Math.sin(tm * 0.57 + 0.4 + car.z * 0.04) + 0.45 * Math.sin(tm * 0.23 + 2.9);
       const tilt = Math.min(0.15, Math.hypot(car.groundPitch, car.groundRoll));
-      const slack = Math.min(1, pw * (Math.max(0, n - 0.45) * 3 + tilt * 6));
-      lo += 0.9 * slack; hi += 0.7 * slack;
+      const slack = Math.min(1, pw * (Math.max(0, n - 0.4) * 3 + tilt * 6));
+      tuck = Math.min(1, pw * Math.max(0, q - 0.45) * 3.5);
+      lo += 0.75 * slack - 0.5 * tuck; hi += 0.55 * slack - 0.3 * tuck;
+      // ...and in between the hold itself breathes, as a driver's hands and feet never stay still
+      sway = Math.max(-1, Math.min(1, 0.6 * n * pw - 1.2 * tuck + 0.4 * slack));
     }
     if (w > 0) {
       let err = 0;
@@ -559,12 +595,14 @@ function substep(car, input, world, dt) {
       // From a standstill the push waits for the revs and the wheelspin to
       // build first, so the tail comes round with the engine, not ahead of it.
       if (angP < lo && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) {
-        const build = Math.min(1, Math.max(0, (car.donutT - DONUT_WAIT) / 0.8));
-        err = Math.min(1, (lo - angP) / 0.5) * build;
+        // (loose ground lets go more easily, so there it waits a touch longer)
+        const wait = DONUT_WAIT + (surfR === 1 ? 0 : 0.2);
+        const build = Math.min(1, Math.max(0, (car.donutT - wait) / 1.0));
+        err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck);
       }
       else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
       // (rotating against the wheel already: leave the driver to sort it out)
-      if (car.yawRate * turn > -0.2) MZ += turn * err * w * DONUT * m * G * L * load;
+      if (car.yawRate * turn > -0.2) MZ += turn * (err + DONUT_SWAY * sway * (angP > lo - 0.5 ? 1 : 0)) * w * DONUT * m * G * L * load;
     }
   }
   const uF = Math.min(1, Math.abs(fyF) / capF), uR = Math.min(1, Math.abs(fyR) / capR);

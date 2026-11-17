@@ -124,7 +124,7 @@ export function createAudio() {
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0 } });
+        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev

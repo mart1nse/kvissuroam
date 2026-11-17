@@ -265,7 +265,7 @@ export const CARS = {
       redline: 8400,
       shiftRpm: 8150,
       pulses: 5,                // V10: five firing pulses per revolution
-      revDrop: 5500,            // tiny ceramic clutch and flywheel: the revs fall fast, though not so fast it bogs mid-donut
+      revDrop: 4000,            // tiny ceramic clutch and flywheel, but kept spinning on a lift so it doesn't bog mid-donut
       revCut: 0.045, revCutDrop: 450,
       // 5.7 litre 68 degree V10: 590 Nm @ 5750, 450 kW @ 8000
       torque: [[900, 380], [2000, 465], [3000, 512], [4000, 550], [5000, 578], [5750, 590], [6500, 583], [7500, 557], [8000, 537], [8400, 505], [8800, 380]],
@@ -346,11 +346,11 @@ export const CARS = {
       redline: 8400,
       shiftRpm: 8250,
       pulses: 4,
-      revDrop: 6000,
+      revDrop: 4200,            // (falls off a lift slowly enough to pick straight back up)
       revCut: 0.04, revCutDrop: 350,
       // S65B40: 400 Nm @ 3900, 309 kW @ 8300
       torque: [[800, 270], [2000, 342], [3000, 382], [3900, 400], [5000, 398], [6500, 392], [7500, 378], [8300, 355.5], [8400, 350], [8800, 250]],
-      stallRpm: 3600,           // launch control
+      stallRpm: 4200,           // launch control
       converterGain: 1.5,
     },
     gears: [4.78, 2.933, 2.153, 1.678, 1.39, 1.203, 1.0],

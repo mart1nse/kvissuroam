@@ -55,7 +55,7 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, on: 0, redline: 6500, idle: 800, cut: 0 };
+    this.in = { rpm: 800, throttle: 0, boost: 0, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0 };
     this.rpm = 800; this.load = 0; this.boost = 0; this.on = 0; this.theta = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0;
@@ -95,12 +95,12 @@ export class EngineCore {
     const overrun = this.load < 0.05 && rpm > this.in.idle + 500;
     let amp = (c.base + (1 - c.base) * this.load) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough);
     let nz = c.noise * (0.6 + 0.8 * this.load), tauDeg = c.pulseDeg * (0.85 + 0.3 * this.load);
-    if (this.in.cut) {
-      // ignition cut on the rev limiter: the cylinder only pumps air, and on a hot, loud engine some of
-      // the unburnt charge goes off in the exhaust
+    if (this.in.cut || this.in.shift) {
+      // ignition cut on the rev limiter (or for an upshift): the cylinder only pumps air, and on a hot,
+      // loud engine some of the unburnt charge goes off in the exhaust (a shift crackles more)
       this.cutN++;
-      amp *= c.cutAmp ?? 0.08; nz *= 0.5;
-      if (c.pops && n() < c.pops * 0.8) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
+      amp *= c.cutAmp ?? 0.35; nz *= 0.7;
+      if (c.pops && n() < c.pops * (this.in.shift ? 3 : 0.8)) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
     } else if (this.cutN) {
       // the first firings after the cut light what collected meanwhile: the bark of an engine on its limiter
       amp *= 1 + (c.limBark ?? 0.5) * Math.min(1, this.cutN / 3); this.cutN = Math.max(0, this.cutN - 3);

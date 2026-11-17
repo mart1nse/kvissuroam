@@ -225,6 +225,12 @@ body.touch .desktop-only { display: none; }
 #lap ol li span { display: none; }
 #lap ol li:first-child b { color: var(--sun); }
 #lapmsg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; }
+/* desktop: checkpoint splits large enough to read at a glance (Martin, 2026-11-17) */
+body:not(.touch) #lapmsg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
+body:not(.touch) #lapsplit { top: calc(max(8px, env(safe-area-inset-top)) + 170px); padding: 8px 20px; gap: 14px; }
+body:not(.touch) #lapsplit span { font-size: clamp(13px, 1.4vw, 17px); font-weight: 800; }
+body:not(.touch) #lapsplit b { font-size: clamp(26px, 3.2vw, 40px); }
+body:not(.touch) #lapsplit i { font-size: clamp(24px, 3vw, 38px); }
 body.touch #lap { left: max(10px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + clamp(96px, 15vw, 170px) + 30px); transform: none; min-width: 0; padding: 4px 8px; }
 body.touch #lap ol { display: none; }
 body.touch #lap { background: none; border: none; box-shadow: none; padding: 0; text-align: left; }
@@ -333,4 +339,11 @@ body.touch #lapsplit { top: 22%; }
 #lapmsg i.ahead { color: #5dff9b; }
 #lapmsg i.behind { color: #ff5a6e; }
 #lap ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
+#people .who { display: none; }
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 5px; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
+#people .who li { color: #fff; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .08em; }
+#people .who li::before { content: '● '; color: var(--cyan); font-size: .8em; }
+#people .who li.more { opacity: .6; }
+#people .who li.more::before { content: ''; }
+#roster li small { font-size: 9px; letter-spacing: .15em; margin-left: 4px; }
 #people .me { margin-top: 2px; font-size: .9em; color: #fff; opacity: .75; letter-spacing: .12em; }

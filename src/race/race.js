@@ -16,6 +16,7 @@ const NEAR = 45;               // within this of the track the edges and the lap
 const CP_RADIUS = 28;          // how close a checkpoint has to be passed
 const MIN_LAP = 30;            // seconds; anything faster is a glitch (a reset onto the line)
 const LOCAL_KEY = 'kvissuroam.laps';
+const CP_KEY = TRACK.checkpoints.join(',');      // which checkpoints a lap's split times belong to
 
 export function fmtTime(sec) {
   if (sec == null || !isFinite(sec)) return '–:––.––';
@@ -267,7 +268,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
   // this browser's best lap in a car that has checkpoint times
   const bestSplits = (carId) => {
     let b = null;
-    for (const l of laps) if (l.car === carId && l.splits && (!b || l.ms < b.ms)) b = l;
+    for (const l of laps) if (l.car === carId && l.splits && l.cp === CP_KEY && (!b || l.ms < b.ms)) b = l;
     return b;
   };
   document.querySelector('#hud').appendChild(panel);
@@ -383,7 +384,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                 const missed = track.checkpoints.length - st.cps.size;
                 if (missed === 0 && lapT > MIN_LAP) {
                   const ref = bestSplits(carId);
-                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice() };
+                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY };
                   showSplit('FINISH', lapT, ref ? ref.ms / 1000 : null);
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);

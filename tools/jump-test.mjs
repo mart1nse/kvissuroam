@@ -25,13 +25,15 @@ const crest = (s) => {                                                // humpbac
   return d > 60 ? 0 : d > 6 ? (60 - d) * 0.08 : 4.56 - (d * d) / 150;
 };
 
-function run(spec, h, kmh, input = { up: 0.4 }, dist = 300) {
+// With no input given the car holds its entry speed (light throttle, eased off above it), so a powerful
+// car arrives at the obstacle at the stated speed instead of accelerating all the way there.
+function run(spec, h, kmh, input = null, dist = 300) {
   const w = world(h);
   const car = createCar(spec, { x: 0, z: 0, yaw: 0, y: h(0) });
   car.vx = kmh / 3.6;
   let air = 0, longest = 0, cur = 0, peak = 0, s0 = 0, len = 0, t = 0, v0 = null, flight = null;
   while (-car.z < dist && t < 60) {
-    stepCar(car, input, w, dt);
+    stepCar(car, input || { up: Math.max(0, Math.min(0.4, (kmh / 3.6 + 1 - car.vx) * 0.4)) }, w, dt);
     t += dt;
     if (car.airborne) {
       if (cur === 0) { s0 = -car.z; v0 = car.vyUp; }

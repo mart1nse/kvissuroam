@@ -2,7 +2,8 @@
 // short, upright glasshouse, thick C-pillars, a high wedge-shaped boot, a waist fold rising to the ribbed
 // tail lamps, anthracite bumpers, narrow black rubbing strips, chrome-framed grille and star.
 import * as THREE from 'three';
-import { Soup, buildBody, cutArches, decals, probe, raycast, clipSoup, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, arcPts } from './kit.js';
+import { Soup, buildBody, cutArches, decals, probe, clipSoup, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts } from './kit.js';
+import { part, planLine, sideLine, pushTri, sweep, plateShape, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car (factory data): 4428 x 1678 x 1390 mm, wheelbase 2665, track 1437 front / 1418 rear,
 // 185/65 R15 on 6J x 15. Overhangs about 785 front / 978 rear.
@@ -16,101 +17,6 @@ const AY = 0.31, AR = 0.355;                 // wheel arches
 const WAIST = [[ZFB, 0.762], [-1.0, 0.792], [1.0, 0.815], [ZRB, 0.83]], FOLD = 0.01;
 
 // ---------------------------------------------------------------- local geometry helpers
-// Triangles of a soup whose centroid passes pred(x, y, z): a small soup for fast raycasts.
-function part(soup, pred) {
-  const s = new Soup(), P = soup.p, N = soup.n;
-  for (let i = 0; i < P.length; i += 9) {
-    if (!pred((P[i] + P[i + 3] + P[i + 6]) / 3, (P[i + 1] + P[i + 4] + P[i + 7]) / 3, (P[i + 2] + P[i + 5] + P[i + 8]) / 3)) continue;
-    for (let k = 0; k < 9; k++) { s.p.push(P[i + k]); s.n.push(N[i + k]); }
-  }
-  return s;
-}
-// Polyline in plan view [{x, z, nx, nz}] with arc-length lookup.
-function polyline(pts) {
-  const S = [0];
-  for (let i = 1; i < pts.length; i++) S.push(S[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
-  const L = S[S.length - 1];
-  const at = (s) => {
-    s = Math.min(L, Math.max(0, s));
-    let lo = 0, hi = pts.length - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] <= s) lo = m; else hi = m; }
-    const t = (s - S[lo]) / ((S[hi] - S[lo]) || 1), A = pts[lo], B = pts[hi];
-    const nx = A.nx + (B.nx - A.nx) * t, nz = A.nz + (B.nz - A.nz) * t, l = Math.hypot(nx, nz) || 1;
-    return { x: A.x + (B.x - A.x) * t, z: A.z + (B.z - A.z) * t, nx: nx / l, nz: nz / l };
-  };
-  // arc length where fn(point) crosses zero (fn < 0 at the start, > 0 at the end)
-  const where = (fn) => { let lo = 0, hi = L; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (fn(at(m)) < 0) lo = m; else hi = m; } return (lo + hi) / 2; };
-  return { pts, L, at, where };
-}
-// Plan-view line on the surface at height y, from rays fanned out of (0, y, zc) over a0..a1 degrees
-// (0 = along dir * z, 90 = toward +x).
-function planLine(soup, y, zc, dir, a0, a1, n = 140) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180;
-    const h = raycast(soup, [0, y, zc], [Math.sin(a), 0, dir * Math.cos(a)]);
-    if (!h) continue;
-    const l = Math.hypot(h.n[0], h.n[2]) || 1;
-    pts.push({ x: h.p[0], z: h.p[2], nx: h.n[0] / l, nz: h.n[2] / l });
-  }
-  return polyline(pts);
-}
-// Side line on the right flank at height y between z0 and z1.
-function sideLine(soup, y, z0, z1, n = 40) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const z = z0 + (z1 - z0) * i / n, h = raycast(soup, [3, y, z], [-1, 0, 0]);
-    if (!h) continue;
-    const l = Math.hypot(h.n[0], h.n[2]) || 1;
-    pts.push({ x: h.p[0], z, nx: h.n[0] / l, nz: h.n[2] / l });
-  }
-  return polyline(pts);
-}
-function pushTri(s, a, b, c) {
-  const ux = b.p[0] - a.p[0], uy = b.p[1] - a.p[1], uz = b.p[2] - a.p[2], vx = c.p[0] - a.p[0], vy = c.p[1] - a.p[1], vz = c.p[2] - a.p[2];
-  const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
-  if (fx * fx + fy * fy + fz * fz < 1e-18) return;
-  const nx = a.n[0] + b.n[0] + c.n[0], ny = a.n[1] + b.n[1] + c.n[1], nz = a.n[2] + b.n[2] + c.n[2];
-  const list = fx * nx + fy * ny + fz * nz >= 0 ? [a, b, c] : [a, c, b];
-  for (const v of list) { s.p.push(...v.p); s.n.push(...v.n); s.uv.push(...v.uv); }
-}
-// Sweeps a profile [[d, h], ...] (d out from the surface line, h up from y0; listed so that the outside is on
-// the right-hand side, e.g. bottom-inner -> out -> up -> top-inner) along a plan line between arc lengths s0..s1.
-// taper(t) scales d along the run. hard: flat normals per profile segment. uv: u = position along uS, v along vH.
-function sweep(line, y0, prof, o = {}) {
-  const { s0 = 0, s1 = line.L, n = 24, taper = null, hard = false } = o;
-  const uS = o.uS || [s0, s1], hs = prof.map((p) => p[1]), vH = o.vH || [Math.min(...hs), Math.max(...hs)];
-  const steps = o.steps || Array.from({ length: n + 1 }, (_, i) => s0 + (s1 - s0) * i / n);
-  const segN = [];
-  for (let k = 0; k < prof.length - 1; k++) {
-    const dd = prof[k + 1][0] - prof[k][0], dh = prof[k + 1][1] - prof[k][1], l = Math.hypot(dd, dh) || 1;
-    segN.push([dh / l, -dd / l]);
-  }
-  const ptN = prof.map((_, k) => {
-    const a = segN[Math.max(0, k - 1)], b = segN[Math.min(segN.length - 1, k)], x = a[0] + b[0], y = a[1] + b[1], l = Math.hypot(x, y) || 1;
-    return [x / l, y / l];
-  });
-  const s = new Soup();
-  const V = (st, k, nn) => {
-    const p = line.at(st), t = (st - s0) / ((s1 - s0) || 1), m = taper ? taper(t) : 1, d = prof[k][0] * m;
-    return { p: [p.x + p.nx * d, y0 + prof[k][1], p.z + p.nz * d], n: [p.nx * nn[0], nn[1], p.nz * nn[0]], uv: [(st - uS[0]) / ((uS[1] - uS[0]) || 1), (prof[k][1] - vH[0]) / ((vH[1] - vH[0]) || 1)] };
-  };
-  for (let i = 0; i < steps.length - 1; i++) {
-    for (let k = 0; k < prof.length - 1; k++) {
-      const na = hard ? segN[k] : ptN[k], nb = hard ? segN[k] : ptN[k + 1];
-      const a = V(steps[i], k, na), b = V(steps[i + 1], k, na), c = V(steps[i + 1], k + 1, nb), d = V(steps[i], k + 1, nb);
-      pushTri(s, a, b, c); pushTri(s, a, c, d);
-    }
-  }
-  return s;
-}
-// Extruded 2D shape in the x-y plane (front face at z = 0, extruding toward +z by depth).
-function plateShape(pts, holes, depth, bevel = 0.002, pal = null) {
-  const sh = new THREE.Shape(pts.map((p) => new THREE.Vector2(p[0], p[1])));
-  for (const h of holes || []) sh.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p[0], p[1]))));
-  const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 4 });
-  return fromGeo(g, null, pal);
-}
 // Three-pointed star in a ring, in the x-y plane (seen from the front and the back). R = ring radius.
 function star3d(R, pal, ring = true) {
   const s = new Soup();
@@ -123,47 +29,6 @@ function star3d(R, pal, ring = true) {
     s.add(arm);
   }
   return s;
-}
-// 2D polygon clipped to the half-plane a*x + b*y + c >= 0 (Sutherland-Hodgman).
-function clip2(poly, a, b, c) {
-  const out = [];
-  for (let i = 0; i < poly.length; i++) {
-    const P = poly[i], Q = poly[(i + 1) % poly.length], fp = a * P[0] + b * P[1] + c, fq = a * Q[0] + b * Q[1] + c;
-    if (fp >= 0) out.push(P);
-    if ((fp >= 0) !== (fq >= 0)) { const t = fp / (fp - fq); out.push([P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t]); }
-  }
-  return out;
-}
-
-// Folds the flanks along a raised character line at height yc(z): the sides are pushed out by A at the
-// fold and blend back over wa above / wb below; the normals take the slope of the fold so it reads crisply.
-function foldFlanks(soup, yc, A, wa, wb, zf, zr) {
-  const P = soup.p, N = soup.n;
-  const prof = (d) => {
-    if (d >= 0) { const s = Math.min(1, d / wa); return [A * (1 - s) * (1 - s), -2 * A * (1 - s) / wa]; }
-    const s = Math.min(1, -d / wb); return [A * (1 - s) * (1 - s), 2 * A * (1 - s) / wb];
-  };
-  for (let t = 0; t < P.length; t += 9) {
-    const cy = (P[t + 1] + P[t + 4] + P[t + 7]) / 3;
-    for (let k = 0; k < 3; k++) {
-      const i = t + k * 3, x = P[i], y = P[i + 1], z = P[i + 2];
-      const w = smooth((z - zf) / 0.22) * smooth((zr - z) / 0.22) * smooth((Math.abs(x) - 0.6) / 0.12);
-      if (w <= 0) continue;
-      const c = yc(z), onFold = Math.abs(y - c) < 0.003;
-      const [dx, slope] = prof(onFold ? (cy > c ? 1e-6 : -1e-6) : y - c);
-      if (dx <= 0 && !onFold) continue;
-      P[i] = x + Math.sign(x) * dx * w;
-      N[i + 1] -= slope * w * Math.abs(N[i]);
-      const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1;
-      N[i] /= l; N[i + 1] /= l; N[i + 2] /= l;
-    }
-  }
-}
-// Lathe about the X axis from [radius, x] pairs.
-function lathe(prof, pal, seg = 40) {
-  const g = new THREE.LatheGeometry(prof.map((p) => new THREE.Vector2(p[0], p[1])), seg);
-  g.rotateZ(-Math.PI / 2);
-  return fromGeo(g, null, pal);
 }
 // 15-hole "Gullideckel" light-alloy wheel with its tyre: flat silver face with a ring of 15 round holes,
 // five bolts round a domed centre cap. Axis on X, outer face toward +X.

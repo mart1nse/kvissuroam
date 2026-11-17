@@ -56,6 +56,20 @@ export async function loadWorldData(onProgress = () => {}) {
     return null;
   }
 
+  // a bucket grid over a sector's trees, built the first time a car comes near
+  const TC = 16;
+  function trunkGrid(s) {
+    if (s.tgrid) return s.tgrid;
+    const rec = s.trees, n = rec.length / 6, nc = Math.ceil(S / TC);
+    const heads = new Int32Array(nc * nc).fill(-1), next = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      const c = Math.min(nc - 1, Math.max(0, Math.floor((rec[i * 6] - s.x0) / TC)));
+      const r = Math.min(nc - 1, Math.max(0, Math.floor((rec[i * 6 + 2] - s.z0) / TC)));
+      next[i] = heads[r * nc + c]; heads[r * nc + c] = i;
+    }
+    return (s.tgrid = { nc, heads, next });
+  }
+
   function load(s) {
     s.state = 'loading';
     loading++;
@@ -103,7 +117,7 @@ export async function loadWorldData(onProgress = () => {}) {
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
-    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = null;
+    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = null;
     s.state = 'idle';
   }
 
@@ -267,6 +281,30 @@ export async function loadWorldData(onProgress = () => {}) {
       if (c >= sn) c = sn - 1;
       if (r >= sn) r = sn - 1;
       return s.S[r * sn + c];
+    },
+
+    // Tree trunks within reach of (x, z), written to out as flat [x, z, radius, ...]. The physics
+    // collides with them as exact circles: the 0.5 m distance field is too coarse for something
+    // as thin as a trunk, and a car that got half way past one could not get free again.
+    trunksNear(x, z, reach, out) {
+      out.length = 0;
+      const sx0 = Math.floor((x - reach - G0) / S), sx1 = Math.floor((x + reach - G0) / S);
+      const sz0 = Math.floor((z - reach - G0) / S), sz1 = Math.floor((z + reach - G0) / S);
+      for (let sx = sx0; sx <= sx1; sx++) for (let sz = sz0; sz <= sz1; sz++) {
+        const s = sectors.get(key(sx, sz));
+        if (s === undefined || s.state !== 'ready' || !s.trees) continue;
+        const g = trunkGrid(s), rec = s.trees;
+        const c0 = Math.max(0, Math.floor((x - reach - s.x0) / TC)), c1 = Math.min(g.nc - 1, Math.floor((x + reach - s.x0) / TC));
+        const r0 = Math.max(0, Math.floor((z - reach - s.z0) / TC)), r1 = Math.min(g.nc - 1, Math.floor((z + reach - s.z0) / TC));
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+          for (let i = g.heads[r * g.nc + c]; i >= 0; i = g.next[i]) {
+            const tx = rec[i * 6], tz = rec[i * 6 + 2];
+            if (Math.abs(tx - x) > reach || Math.abs(tz - z) > reach) continue;
+            out.push(tx, tz, Math.min(0.45, Math.max(0.14, 0.035 * rec[i * 6 + 3])));   // as baked (tools/bake/surface.py trunk)
+          }
+        }
+      }
+      return out;
     },
 
     // Signed distance (m) to the nearest solid obstacle, including the map edge.

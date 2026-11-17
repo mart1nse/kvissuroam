@@ -414,7 +414,6 @@ function goLastSpot() {
   history.pop();
   place(pick);
   race?.hopped(pick.x, pick.z);
-  hud.toast('BACK ON DRY LAND');
 }
 
 // ---------------------------------------------------------------- city map
@@ -591,7 +590,7 @@ function frame(ts) {
       history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time });
       if (history.length > 80) history.shift();
     }
-    if (car.sunk) $('#sunk').classList.remove('hidden');
+    $('#sunk').classList.toggle('hidden', !car.sunk);   // gone again if the car drifts out onto land
     // 0-100 stopwatch
     const kmh = speedKmh(car);
     if (kmh < 1 && !launch) launch = { t: null, done: false };

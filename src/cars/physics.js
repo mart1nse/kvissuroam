@@ -791,7 +791,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

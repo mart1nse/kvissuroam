@@ -10,9 +10,10 @@ import { buildAudi200 } from './audi200.js';
 import { buildM3 } from './m3.js';
 import { buildCGT } from './cgt.js';
 import { buildBus } from './bus.js';
+import { buildPassat } from './passat.js';
 
-export const CAR_IDS = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
-const BUILDERS = { w201: buildW201, crv: buildCRV, enyaq: buildEnyaq, rav4: buildRAV4, mazda6: buildMazda6, bz4x: buildBZ4X, f40: buildF40, audi200: buildAudi200, m3: buildM3, cgt: buildCGT, bus: buildBus };
+export const CAR_IDS = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
+const BUILDERS = { w201: buildW201, crv: buildCRV, enyaq: buildEnyaq, rav4: buildRAV4, mazda6: buildMazda6, bz4x: buildBZ4X, f40: buildF40, audi200: buildAudi200, m3: buildM3, cgt: buildCGT, bus: buildBus, passat: buildPassat };
 
 // Returns a fresh model each call:
 // { group, wheels: { fl, fr, rl, rr: { steer, spin } }, wheelRadius, wheelbase, track,

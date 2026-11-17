@@ -677,6 +677,11 @@ function frame(ts) {
   w.fl.spin.rotation.x = w.fr.spin.rotation.x = -car.wheelSpinF;
   w.rl.spin.rotation.x = w.rr.spin.rotation.x = -car.wheelSpinR;
   model.setLights({ brake: car.brake > 0, reverse: car.reversing, headlights: true });
+  // a diesel with a failing DPF sooting up its tail: clean at the start, bad by 5 km, clean again on a respawn
+  if (s.dpfSmoke && model.setSoot) {
+    if (mode === 'drive') car.sootKm = (car.sootKm || 0) + Math.abs(car.vx) * dt / 1000;
+    model.setSoot(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2)));
+  }
 
   // ---- camera
   const speed = Math.hypot(car.vx, car.vy);

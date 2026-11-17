@@ -7,7 +7,7 @@ const ENGINE_LEVEL = 0.4;
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
-  let skid = 0, spinS = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0;
+  let skid = 0, spinS = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
   let muted = false, ev = false, turbo = false, background = false;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
 
@@ -93,6 +93,19 @@ export function createAudio() {
     src.start(t, Math.random()); src.stop(t + 0.45);
   }
 
+  // air brakes: the long, low hiss of the valves venting once a bus has braked to a stop
+  function airPsh() {
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.7;
+    f.frequency.setValueAtTime(2600, t);
+    f.frequency.exponentialRampToValueAtTime(1500, t + 0.9);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.03);
+    g.gain.setTargetAtTime(0.0001, t + 0.25, 0.22);
+    src.connect(f).connect(g).connect(master);
+    src.start(t, Math.random()); src.stop(t + 1.3);
+  }
+
   function update(car, active) {
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -102,6 +115,11 @@ export function createAudio() {
     const v = Math.hypot(car.vx, car.vy);
     const dead = !active || car.inWater;
     const flying = car.airborne && car.airTime > 0.1;
+    if (car.spec.airBrakes) {
+      if (car.brake > 0 && v > 2) airArmed = true;
+      else if (airArmed && v < 0.3) { airArmed = false; if (!dead) airPsh(); }
+      else if (car.throttle > 0) airArmed = false;
+    }
     // the driven wheels (and the motor with them) can run ahead of the road
     const vw = v + (car.slipV || 0);
     if (ev) {

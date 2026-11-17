@@ -362,6 +362,56 @@ export const CARS = {
     limiter: 250,               // electronically limited
     ref: { zeroTo100: 4.6, top: 250, powerKw: 309 },
   },
+  bus: {
+    tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks
+    id: 'bus',
+    name: 'Scania Citywide LF CNG',
+    short: 'Citywide',
+    year: 2019,
+    blurb: 'GoBus line 8 · OC09 9.3 R5 CNG · 206 kW · 6-speed automatic · rear-wheel drive',
+    mass: 13200,                // about 11.6 t empty, plus driver, a full load of gas and some 20 passengers
+    wheelbase: 5.95,
+    track: 1.98,                // 2.1 m front, 1.86 m between the rear twin pairs
+    cgFront: 0.62,              // the engine and gas tanks sit at the back: about 38 % on the front axle
+    cgHeight: 1.15,             // gas cylinders on the roof
+    wheelRadius: 0.478,         // 275/70 R22.5
+    cdA: 0.65 * 7.6,
+    drive: 'rwd',
+    grip: 0.72,                 // hard, long-life bus tyres carrying 6 tonnes an axle
+    abs: 1,                     // EBS with ABS
+    brakeG: 0.72,               // a bus stops at about 0.7 g at best
+    airBrakes: true,            // (they hiss when it comes to a stop)
+    halfLen: 6.0, halfWid: 1.3, // (12 m by 2.55 m: far bigger than the wheelbase and track suggest)
+    cam: { dist: 8.5, up: 2.0, look: 1.5, menu: 9.5, menuUp: 1.4, menuLook: 1.2 },   // chase and menu camera, further out
+    engine: {
+      type: 'ice',
+      idle: 600,
+      redline: 2200,
+      shiftRpm: 1950,
+      pulses: 2.5,              // five cylinders
+      revDrop: 900,             // a heavy flywheel: the revs fall slowly
+      // OC09 101 (Euro 6, 280 hp CNG): 1350 Nm @ 1100-1400 rpm, 206 kW @ 1900
+      torque: [[600, 800], [1000, 1250], [1100, 1350], [1400, 1350], [1600, 1270], [1900, 1035], [2100, 930], [2300, 600]],
+      turbo: {
+        torqueOff: [[600, 650], [1000, 820], [1400, 880], [1900, 760], [2300, 500]],
+        onRpm: 750,
+        fullRpm: 1150,
+        spool: 2.4,
+        dump: 6,
+        whistle: 0.35,
+      },
+      stallRpm: 1300,           // torque converter
+      converterGain: 1.6,
+    },
+    // ZF EcoLife 6AP1200B
+    gears: [3.364, 1.909, 1.421, 1.0, 0.72, 0.615],
+    reverse: 4.4,
+    finalDrive: 5.74,
+    efficiency: 0.8,            // (the retarder and the gearbox's oil pumps take their share)
+    shiftTime: 0.45,
+    limiter: 80,                // city buses are limited
+    ref: { zeroTo50: 10.5, top: 80, powerKw: 206 },   // (no factory 0-50: a typical figure for a lightly loaded 12 m bus)
+  },
 };
 
-export const CAR_ORDER = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt'];
+export const CAR_ORDER = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];

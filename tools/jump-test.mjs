@@ -67,6 +67,8 @@ for (const spec of Object.values(CARS)) {
     check(r.air === 0, `${name} must not lift the car`);
   }
   for (const [name, h, kmh, want] of [['ramp', ramp, 90, true], ['humpback', crest, 30, false], ['humpback', crest, 110, true]]) {
+    // (the bus is limited to 80 km/h, so it never meets the 110 km/h humpback)
+    if (spec.limiter && kmh > spec.limiter + 15) { console.log(`  ${name} at ${kmh} km/h: beyond its ${spec.limiter} km/h limiter`); continue; }
     const r = run(spec, h, kmh);
     console.log(`  ${name} at ${kmh} km/h: ${r.longest.toFixed(2)} s flight, ${r.len.toFixed(1)} m long, ${r.peak.toFixed(2)} m above the ground`);
     check(r.longest > 0.25 === want, want ? 'should jump' : 'should stay down');

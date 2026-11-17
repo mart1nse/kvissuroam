@@ -26,10 +26,12 @@ for (const spec of Object.values(CARS)) {
     if (d400 === null && dist >= 402.3) d400 = t;
     top = Math.max(top, v);
   }
-  const e100 = Math.abs(t100 - spec.ref.zeroTo100) / spec.ref.zeroTo100;
+  // (a bus is limited to 80 km/h, so it is checked on 0-50 instead)
+  const r50 = spec.ref.zeroTo50;
+  const e100 = r50 ? Math.abs(t50 - r50) / r50 : Math.abs(t100 - spec.ref.zeroTo100) / spec.ref.zeroTo100;
   const eTop = Math.abs(top - spec.ref.top) / spec.ref.top;
   const pass = e100 < 0.05 && eTop < 0.04;
   ok &&= pass;
-  console.log(`${spec.short.padEnd(10)} 0-50 ${t50.toFixed(1)} s | 0-100 ${t100.toFixed(1)} s (factory ${spec.ref.zeroTo100}) | 400 m ${d400.toFixed(1)} s | top ${top.toFixed(0)} km/h (factory ${spec.ref.top}) ${pass ? 'OK' : 'OFF'}`);
+  console.log(`${spec.short.padEnd(10)} 0-50 ${t50.toFixed(1)} s | ${r50 ? `(factory ${r50}) | 0-100 -` : `0-100 ${t100.toFixed(1)} s (factory ${spec.ref.zeroTo100})`} | 400 m ${d400?.toFixed(1)} s | top ${top.toFixed(0)} km/h (factory ${spec.ref.top}) ${pass ? 'OK' : 'OFF'}`);
 }
 process.exit(ok ? 0 : 1);

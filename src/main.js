@@ -427,7 +427,11 @@ document.addEventListener('click', (e) => {
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
 }
-document.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+// (one finger dragging the row of cars or the lap times board is a scroll, and must be left alone)
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1 && e.target.closest?.('#cards, #board')) return;
+  if (e.cancelable) e.preventDefault();
+}, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
 if (window.visualViewport) {
   const vp = document.querySelector('meta[name="viewport"]');

@@ -16,6 +16,7 @@ const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = f
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
 const DONUT = 0.4;              // how firmly a held donut is kept going (share of m*g*L as yaw moment)
 const DONUT_LO = 0.6, DONUT_HI = 1.1;    // ...the slide angle band it keeps the car in (rad)
+const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this long after it is floored (s)
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
 const EV_SLIDE_REAR = 0.7;      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
@@ -520,8 +521,9 @@ function substep(car, input, world, dt) {
   // A driver feathers the throttle and wheel to stop that; here a gentle yaw
   // moment does it, keeping the slide angle inside DONUT_LO..DONUT_HI while
   // the wheel is held into the rotation, the pedal down and the wheels spin.
-  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) car.donutAng = undefined;
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = 0; }
   else {
+    car.donutT = (car.donutT || 0) + dt;
     const turn = Math.sign(steerIn);
     const ang = -turn * Math.atan2(car.vy, car.vx);          // slide angle, tail out positive
     // (looking a moment ahead, so a fast swing is met before it overshoots)
@@ -535,7 +537,12 @@ function substep(car, input, world, dt) {
       let err = 0;
       // (only a true donut, near full lock at low speed, is pushed round; a
       // floored corner is just kept from over-rotating)
-      if (angP < DONUT_LO && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) err = Math.min(1, (DONUT_LO - angP) / 0.5);
+      // From a standstill the push waits for the revs and the wheelspin to
+      // build first, so the tail comes round with the engine, not ahead of it.
+      if (angP < DONUT_LO && ang > -0.3 && Math.abs(steerIn) > 0.85 && speed < 10) {
+        const build = Math.min(1, Math.max(0, (car.donutT - DONUT_WAIT) / 0.8));
+        err = Math.min(1, (DONUT_LO - angP) / 0.5) * build;
+      }
       else if (angP > DONUT_HI) err = -Math.min(1, (angP - DONUT_HI) / 0.35);
       // (rotating against the wheel already: leave the driver to sort it out)
       if (car.yawRate * turn > -0.2) MZ += turn * err * w * DONUT * m * G * L * load;

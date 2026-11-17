@@ -152,12 +152,32 @@ def grade_roads(hN, roads, wm, decks=(), also=None):
                 also[r0 + rr, c0 + cc] += delta
 
 
-def mark_water_crossings(roads, river_u):
-    """ETAK has some bridges at ground level (Kaarsild): a road that runs over the river is a bridge."""
+def mark_water_crossings(roads, river_u, others=()):
+    """ETAK has some bridges at ground level (Kaarsild, and the road bridges over the Amme and the
+    other small rivers): a road that runs over water is a bridge. Otherwise the terrain model, which
+    has bridges removed, and the dug water bed leave a pit where the road crosses.
+
+    Over the Emajõgi the whole ETAK segment becomes the bridge. Over other water only the stretch over
+    the water and a few metres beyond is cut out of the road as a bridge (marked small), because a
+    segment there can run on for hundreds of metres. roads is changed in place."""
+    other_u = unary_union(list(others)) if len(others) else None
+    near = other_u.buffer(6.0) if other_u is not None else None
     k = 0
-    for p, g in roads:
-        if road_level(p) == 0 and g.intersects(river_u) and g.intersection(river_u).length > 30:
+    for i in range(len(roads)):
+        p, g = roads[i]
+        if road_level(p) != 0:
+            continue
+        if g.intersects(river_u) and g.intersection(river_u).length > 30:
             p['a_tasand'] = p['l_tasand'] = 1
+            k += 1
+        elif (other_u is not None and p.get('tyyp_t') != 'Rada' and g.intersects(other_u)
+              and g.intersection(other_u).length > 4):
+            g2 = LineString([c[:2] for c in g.coords]) if g.geom_type == 'LineString' else g
+            on, off = g2.intersection(near), g2.difference(near)
+            q = dict(p, a_tasand=1, l_tasand=1, small=1)
+            roads[i] = (q, on)
+            if not off.is_empty:
+                roads.append((p, off))
             k += 1
     return k
 
@@ -347,11 +367,11 @@ def crossings(hN, hG, wm, roads):
         return walk(c[0], c[1])[::-1], walk(c[-1], c[-2])
 
     def chains(level):
-        segs, widths, names = [], [], []
+        segs, widths, names, small = [], [], [], []
         for p, g in roads:
             if road_level(p) == level:
                 for part in flat(g):
-                    segs.append(part); widths.append(road_width(p)); names.append(p.get('nimetus') or '')
+                    segs.append(part); widths.append(road_width(p)); names.append(p.get('nimetus') or ''); small.append(bool(p.get('small')))
         if not segs:
             return
         tree = STRtree(segs)
@@ -362,6 +382,7 @@ def crossings(hN, hG, wm, roads):
             on = [i for i in tree.query(ch) if segs[i].distance(ch) < 0.01]
             w = max(widths[i] for i in on) + 1.0
             cur['name'] = max((names[i] for i in on), key=len)
+            cur['small'] = all(small[i] for i in on)
             n = int(ch.length) + 1
             pts = np.array([ch.interpolate(d).coords[0] for d in np.linspace(0, ch.length, n)])
             yield ch, w, n, pts[:, 0] - E0, N0 - pts[:, 1]
@@ -426,14 +447,15 @@ def crossings(hN, hG, wm, roads):
                 while b < nf - 1 and (cw[b + 1] > 0.15 or fw[b + 1]):
                     b += 1
                 a, b = max(a - 2, 0), min(b + 2, nf - 1)
-                for i in range(a, 6, -1):                # abutment face on the near side
+                reach = 20 if cur['small'] else nf               # a small river: the abutments are close by
+                for i in range(a, max(6, a - reach), -1):        # abutment face on the near side
                     if fq[i - 6] - fq[i] > 2.5 and fq[i - 6] > fq[a] + 3:
                         a = i - 6
                         k = 0
                         while a > 0 and fq[a - 1] > fq[a] + 0.1 and k < 15:
                             a -= 1; k += 1
                         break
-                for i in range(b, nf - 6):               # and on the far side
+                for i in range(b, min(nf - 6, b + reach)):       # and on the far side
                     if fq[i + 6] - fq[i] > 2.5 and fq[i + 6] > fq[b] + 3:
                         b = i + 6
                         k = 0
@@ -455,6 +477,11 @@ def crossings(hN, hG, wm, roads):
                 d['n'] = kb[2] if kb else cur['name']
                 d['b'] = kb[3] if kb else 'girder'
                 decks.append(d)
+        # a culvert under a road over a small river: no gap in the terrain model to span, so the road
+        # stays on its embankment instead of dipping into the dug water bed
+        if cur['small'] and not taken.any():
+            fill[:] = True
+            target = np.maximum(target, ndimage.grey_closing(q, size=ne, mode='nearest')[E:E + n])
         # dry land: a span is a dip shorter than a long bridge, between the two abutments.
         c2 = ndimage.grey_closing(q, size=min(ne, 121), mode='nearest')
         for m in _runs((c2 - q > 1.2) & ~taken):

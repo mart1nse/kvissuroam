@@ -52,6 +52,21 @@ export class Lobby extends DurableObject {
     return out;
   }
 
+  // Drop sockets that have gone silent: every browser pings each 25 s, so one that has neither
+  // pinged nor said hello for 80 s is a dead connection (a phone that went to sleep, a lost
+  // network) that would otherwise stay in everyone's player list.
+  prune(except) {
+    const now = Date.now();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      const a = ws.deserializeAttachment();
+      const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
+      if (Math.max(ping, a?.at || 0) > now - 80000) continue;
+      try { ws.close(1001, 'stale'); } catch { /* already closed */ }
+      if (a?.id) this.broadcast({ t: 'leave', id: a.id }, ws);
+    }
+  }
+
   broadcast(msg, except) {
     const s = typeof msg === 'string' ? msg : JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
@@ -89,6 +104,7 @@ export class Lobby extends DurableObject {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
+      pair[1].serializeAttachment({ at: Date.now() });
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -136,9 +152,10 @@ export class Lobby extends DurableObject {
       return;
     }
     if (m.t === 'hello') {
+      this.prune(ws);
       const id = me?.id || crypto.randomUUID().slice(0, 8);
       const name = cleanName(m.name) || this.freshName();
-      const a = { id, name, car: cleanCar(m.car) || 'w201' };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now() };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, players: this.players().filter((p) => p.id !== id), board: this.board() }));
       if (!me?.id) this.broadcast({ t: 'join', ...a }, ws);

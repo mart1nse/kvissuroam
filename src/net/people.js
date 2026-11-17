@@ -1,15 +1,20 @@
 // Who is online, next to the minimap: "3 ONLINE" plus small notes as people join and leave.
+// Only players whose car is on the map count (Martin, 2026-11-17: the count showed people who sat in
+// the menu or had the game in a background tab). On desktop every driver is listed above the count,
+// growing upwards, so a glance tells 2 from 20.
 // On the big map a list of everyone online; tapping a name centres the map on that car.
 import { escapeHtml } from '../race/race.js';
 
 const NOTE_MS = 6000;
+const LIST_MAX = 24;              // names listed on desktop before "+N MORE"
 
 export function createPeople({ mp, onFocus }) {
   const box = document.createElement('div');
   box.id = 'people';
-  box.innerHTML = '<div class="count hidden"><i></i><span></span></div><div class="me"></div><ul class="feed"></ul>';
+  box.innerHTML = '<ul class="who hidden"></ul><div class="count hidden"><i></i><span></span></div><div class="me"></div><ul class="feed"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
+  const elWho = box.querySelector('.who');
 
   const list = document.createElement('div');
   list.id = 'roster';
@@ -24,16 +29,26 @@ export function createPeople({ mp, onFocus }) {
   let shown = [], myCar = null;
 
   const elMe = box.querySelector('.me');
-  let last = -1;
+  let last = '';
   function refresh() {
     const nm = mp.name ? `YOU: ${mp.name}` : '';
     if (elMe.textContent !== nm) elMe.textContent = nm;
-    const n = mp.online ? mp.count + 1 : 0;
-    if (n === last) return;
-    last = n;
+    const drivers = mp.online ? mp.players() : [];
+    const n = mp.online ? drivers.length + 1 : 0;
+    const key = `${n}|${mp.name}|${drivers.map((p) => p.name).join('|')}`;
+    if (key === last) return;
+    last = key;
     elCount.classList.toggle('hidden', n === 0);
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
+    // the list of drivers (desktop only, see style.css), shown once somebody else is driving
+    if (n < 2) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
+    const names = drivers.map((p) => p.name).sort((a, b) => a.localeCompare(b));
+    const more = names.length > LIST_MAX ? names.length - LIST_MAX + 1 : 0;
+    const rows = names.slice(0, more ? LIST_MAX - 1 : LIST_MAX).map((s) => `<li>${escapeHtml(s)}</li>`);
+    if (more) rows.push(`<li class="more">+${more} MORE</li>`);
+    elWho.innerHTML = rows.join('');
+    elWho.classList.remove('hidden');
   }
 
   function note(text, kind) {
@@ -53,18 +68,21 @@ export function createPeople({ mp, onFocus }) {
       else if (kind === 'rename') note(`${old} is now ${name}`, 'rename');
       // the player list changes right after this event; look once it has
       queueMicrotask(() => {
-        last = -1; refresh();
+        last = ''; refresh();
         if (myCar && document.querySelector('#bigmap:not(.hidden)')) this.showRoster();
       });
     },
     update: refresh,
-    // big map opened: list everyone online (only when someone else is)
+    // big map opened: list everyone driving, then those connected but not on the map (menu,
+    // background tab), greyed out and not counted
     showRoster(car = myCar) {
       myCar = car;
       const others = mp.roster();
       if (!mp.online || !others.length) { list.classList.add('hidden'); return; }
-      shown = [{ name: `${mp.name} (you)`, me: true, x: car?.x, z: car?.z }, ...others];
-      list.innerHTML = `<h4>${shown.length} ONLINE</h4><ul>${shown.map((p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : '<b>●</b>'} ${escapeHtml(p.name)}</li>`).join('')}</ul>`;
+      const driving = others.filter((p) => p.x !== undefined), away = others.filter((p) => p.x === undefined);
+      shown = [{ name: `${mp.name} (you)`, me: true, x: car?.x, z: car?.z }, ...driving, ...away];
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : '<b>●</b>'} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}</li>`;
+      list.innerHTML = `<h4>${driving.length + 1} ONLINE</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
     },
     hideRoster() { list.classList.add('hidden'); },

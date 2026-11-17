@@ -111,6 +111,8 @@ export function findCorners(track) {
   return out;
 }
 
+const START_LEFT = 7;                  // metres the START LINE billboard sits left of its old spot
+
 export function createDecor(track, world) {
   const { P, HW, N, tan } = track;
   const group = new THREE.Group();          // corner boards: shown with the kerb glow
@@ -142,7 +144,8 @@ export function createDecor(track, world) {
     const off = HW[c.i] * 0.55;
     if (c === first && c.dir < 0) {
       // the big START LINE billboard stands beyond the outside kerb, on two posts
-      const o2 = HW[c.i] + 3.2;
+      // (Martin, 2026-11-17: moved left towards the road so the trees on the right no longer hide it)
+      const o2 = HW[c.i] + 3.2 - START_LEFT;
       items.push({
         x: px + tin[0] * HW[c.i] * 0.4 + ox * o2, z: pz + tin[1] * HW[c.i] * 0.4 + oz * o2,
         yaw: Math.atan2(-tin[0], -tin[1]), big: true, mesh: null, phase: 0,

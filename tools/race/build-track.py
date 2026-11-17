@@ -129,9 +129,9 @@ for i in range(1, N): s.append(s[-1] + math.dist(c[i - 1], c[i]))
 
 def near(p):
     return min(range(N), key=lambda i: math.dist(c[i], p))
-# checkpoints: the river corner at Kroonuaia (Martin's second red line) and three more
+# checkpoints: Martin's green line (2026-11-17, was the Kroonuaia river corner) and three more
 # around the lap, each must be passed before the finish counts
-cps = [near(p) for p in [(1430, 2375), (1330, 2185), (660, 2900), (1230, 3460)]]
+cps = [near(p) for p in [(1009, 3020), (1330, 2185), (660, 2900), (1230, 3460)]]
 # spawn: on Uueturu at the Ülikooli crossing (green line), facing along the track
 sp = near((1545, 3172))
 

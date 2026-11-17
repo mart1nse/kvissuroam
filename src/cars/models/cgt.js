@@ -3,6 +3,7 @@
 // over the mesh engine cover, big side intakes, a full-width mesh tail with two large tailpipes, the
 // extending rear wing and five-spoke centre-lock wheels (19-inch front, 20-inch rear) over yellow calipers.
 import * as THREE from 'three';
+import { useGlbBody } from './glbbody.js';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, tintPaint } from './kit.js';
 import { part, planLine, pushTri, foldFlanks, lathe, skinPatch, spokeFace, tyreAndRim } from './parts.js';
 
@@ -298,5 +299,6 @@ export function buildCGT() {
   const wheel = { soup: gtWheel(0.354, 0.335, 0.254 + 0.012, 0.045) };
   const wheelFront = { soup: gtWheel(0.334, 0.265, 0.2413 + 0.012, 0.02) };
   const car = assembleCar({ id: 'cgt', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
-  return tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
+  // the procedural body shows until the scanned body (public/models/cgt.glb) has loaded
+  return useGlbBody(tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }), 'cgt.glb', { liner: { r: 0.44, len: 0.28, inset: 0.12 } });
 }

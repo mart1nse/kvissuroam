@@ -18,7 +18,7 @@ function load(url) {
         m.material = new THREE.MeshPhysicalMaterial({
           map: s.map, metalnessMap: s.metalnessMap, roughnessMap: s.roughnessMap, normalMap: s.normalMap,
           emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0,
-          metalness: 1, roughness: 1, clearcoat: 0.5, clearcoatRoughness: 0.08,
+          metalness: s.metalness, roughness: s.roughness, clearcoat: 0.5, clearcoatRoughness: 0.08,
         });
         s.dispose();
       }
@@ -28,9 +28,42 @@ function load(url) {
   return cache.get(url);
 }
 
+const _ray = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
+function archLiner(meshes, p, { r, len, inset, steps = 28 }, rMin) {
+  const probe = meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })));
+  const sx = Math.sign(p.x), x0 = p.x - sx * inset, x1 = x0 - sx * len;
+  const a0 = -0.35, a1 = Math.PI + 0.35, rad = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = a0 + (a1 - a0) * i / steps;
+    _d.set(0, Math.sin(a), -Math.cos(a));
+    let best = r;
+    for (let k = 0; k <= 4; k++) { const x = x0 + (x1 - x0) * k / 4;
+      _ray.set(_o.set(x, p.y, p.z), _d); _ray.far = r + 0.02;
+      const hit = _ray.intersectObjects(probe, false)[0];
+      if (hit) best = Math.min(best, hit.distance - 0.012);
+    }
+    rad.push(Math.max(best, rMin));   // hits inside that are scan bits in the arch, not bodywork
+  }
+  for (const m of probe) m.material.dispose();
+  // a ray that slipped through a vent or gap in the scan must not push the liner out through the panel
+  const raw = rad.slice();
+  for (let i = 0; i <= steps; i++) rad[i] = Math.min(...raw.slice(Math.max(0, i - 2), i + 3));
+  // tube strip (x0..x1) plus an end wall at x1, both following rad[]
+  const pos = [], idx = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = a0 + (a1 - a0) * i / steps, y = Math.sin(a) * rad[i], z = -Math.cos(a) * rad[i];
+    pos.push(x0, p.y + y, p.z + z, x1, p.y + y, p.z + z);
+  }
+  for (let i = 0; i < steps; i++) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  const c = pos.length / 3; pos.push(x1, p.y, p.z);
+  for (let i = 0; i < steps; i++) idx.push(c, i * 2 + 1, i * 2 + 3);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, linerMat);
+}
 const linerMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 1, metalness: 0, side: THREE.DoubleSide });
 // tail: emissive intensity with { brake, tail (headlights on) }
-export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.43, len: 0.4, inset: 0.22 } } = {}) {
+export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12 } } = {}) {
   if (typeof window === 'undefined') return car;
   const state = { brake: false, headlights: false };
   let mat = null;
@@ -50,20 +83,9 @@ export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.43
       car.triangles = (car.triangles || 0) + src.geometry.index.count / 3;
     }
     glow();
-    // dark wheel wells: the scan has no arch liners, so without these you would see through the car
-    // only the arch above the axle (a bit past horizontal): a full tube would show below the sills
-    const lg = new THREE.CylinderGeometry(liner.r, liner.r, liner.len, 20, 1, true, -0.3, Math.PI + 0.6);
-    lg.rotateZ(Math.PI / 2);
-    const wg = new THREE.CircleGeometry(liner.r, 20, -0.3, Math.PI + 0.6); wg.rotateY(Math.PI / 2);
-    for (const w of Object.values(car.wheels)) {
-      const p = w.steer.position, m = new THREE.Mesh(lg, linerMat);
-      m.position.set(p.x - Math.sign(p.x) * liner.inset, p.y, p.z);
-      car.group.add(m);
-      // and a dark wall behind each wheel, so nothing shows through between tyre and bodywork
-      const wall = new THREE.Mesh(wg, linerMat);
-      wall.position.set(p.x - Math.sign(p.x) * (liner.inset + liner.len / 2), p.y, p.z);
-      car.group.add(wall);
-    }
+    // dark wheel wells: the scan has no arch liners, so without these you would see through the car.
+    // Each liner is shaped to the arch: rays from the hub find the bodywork, so it never pokes through.
+    if (liner) for (const w of Object.values(car.wheels)) car.group.add(archLiner(meshes, w.steer.position, liner, w.steer.position.y + 0.035));
   }).catch((e) => console.warn('glb body', file, e));
   return car;
 }

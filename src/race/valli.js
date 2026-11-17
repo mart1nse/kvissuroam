@@ -9,7 +9,9 @@ import { createTrack } from './race.js';
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
 const ENTRY_SIGN = 90;                       // lap index of the signs, right side against the wall (Martin's pink box)
 const STATUE = { at: [1467, 3050], minSdf: 1.6 };      // Martin's spot: the open paving left of Vallikraavi, before the pink house
-const STEPS = { i0: 94, i1: 118, side: 1, off: 0.25, depth: 2.6, flight: [95, 104], rise: 0.17, top: 1.25 };
+const STEPS = { i0: 94, side: 1, off: 0.25, depth: 2.6, flight: [95, 104], rise: 0.17, top: 1.25 };
+// the corner of the house the steps run up to (its wall meets the road here)
+const HOUSE = [1434.0, 3088.8];
 const STONE = 0x8a7764, GRANITE = 0x9b8f8c, BRONZE = 0x4a3a2c, RAIL = 0x9aa0a8;
 
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -109,16 +111,32 @@ export function createValli(world, group, merged) {
   }
 
   // ---- steps and stone wall on the right of the first right corner
+  // The front of the steps is one straight line (Martin's blue line, 17 Nov) from the start of the
+  // flight to the road corner of the house, so the stone reaches the house wall without a gap of road.
   const front = [];
-  for (let i = STEPS.i0; i <= STEPS.i1; i++) {
-    const p = edgePoint(track, i, STEPS.side, STEPS.off);
-    if (front.length) {
-      const q = front[front.length - 1];
-      const [tx, tz] = track.tan[i];
-      if ((p[0] - q.x) * tx + (p[1] - q.z) * tz < 0.3) continue;
+  {
+    const A = edgePoint(track, STEPS.i0, STEPS.side, STEPS.off), [hx, hz] = HOUSE;
+    const dx = hx - A[0], dz = hz - A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
+    // away from the road: the side of the line the track centre is not on
+    let nx = -uz, nz = ux;
+    const m = track.P[STEPS.i0 + 6];
+    if ((m[0] - A[0]) * nx + (m[1] - A[1]) * nz > 0) { nx = -nx; nz = -nz; }
+    const n = Math.max(2, Math.round(L / 0.55));
+    let hint = STEPS.i0;
+    for (let k = 0; k <= n; k++) {
+      const x = A[0] + ux * L * (k / n), z = A[1] + uz * L * (k / n);
+      const near = track.nearest(x, z, hint);
+      hint = near.i;
+      front.push({ x, z, i: near.i + near.t, nx, nz });
     }
-    const [tx, tz] = track.tan[i];
-    front.push({ x: p[0], z: p[1], i, nx: -tz * STEPS.side, nz: tx * STEPS.side });       // n: away from the road
+    // solid in the obstacle field too, so the car stops at the stone and the kerb glow keeps off it
+    const solid = [];
+    for (let k = 0; k < front.length - 1; k += 3) {
+      const a = front[k], b = front[Math.min(front.length - 1, k + 3)];
+      const l = Math.hypot(b.x - a.x, b.z - a.z), d = 1.2;
+      solid.push({ x: (a.x + b.x) / 2 + nx * d / 2, z: (a.z + b.z) / 2 + nz * d / 2, yaw: Math.atan2(-(b.z - a.z), b.x - a.x), hx: l / 2 + 0.05, hz: d / 2 });
+    }
+    world.addSolids?.(solid);
   }
   function buildSteps() {
     const parts = [];
@@ -128,7 +146,7 @@ export function createValli(world, group, merged) {
       const a = front[k], b = front[k + 1];
       // how far back the wall reaches: to the house, at most `depth`
       let depth = STEPS.depth;
-      for (let d = 0.3; d < STEPS.depth; d += 0.1) {
+      for (let d = 1.4; d < STEPS.depth; d += 0.1) {       // the first 1.2 m is our own solid in the field
         let run = 0;
         while (run < 1.5 && world.sdfAt(a.x + a.nx * (d + run), a.z + a.nz * (d + run)) < 0.05) run += 0.25;
         if (run >= 1.5) { depth = d + 0.15; break; }

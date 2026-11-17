@@ -19,7 +19,7 @@ import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
-import { createRace, createTrack } from './race/race.js';
+import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
@@ -97,6 +97,7 @@ async function boot() {
   }
   world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
   veskiRoads(world.vectors);
+  snapRoadsToTrack(world.vectors);              // after veskiRoads: it finds its roads by their first point
   valliWalls(world.vectors);
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -110,6 +111,7 @@ async function boot() {
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
   const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: extraProps });
   const attachSigns = createSigns(world);
+  levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);

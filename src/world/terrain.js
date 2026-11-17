@@ -53,13 +53,15 @@ function groundMaterial(map, detail, overview, mask) {
     if (mask) shader.defines = { ...(shader.defines || {}), USE_MASK: '' };
     shader.uniforms.uRect = { value: overview || new THREE.Vector4() };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vWxz;\nvarying float vWy;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWxz = position.xz;\nvWy = position.y;');
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSec;\nvarying vec2 vWxz;\nvarying vec2 vSuv;\nvarying float vWy;')
+      // the place in the sector's road textures, worked out per vertex, so that phones with lower
+      // precision in the fragment shader do not lose centimetres off a world position in thousands of metres
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWxz = position.xz;\nvSuv = (position.xz - uSec.xy) / max(uSec.z, 1.0);\nvWy = position.y;');
     const sample = overview
       ? `diffuseColor *= texture2D(map, vec2((vWxz.x - uRect.x) / uRect.z, 1.0 - (vWxz.y - uRect.y) / uRect.w));`
       : '#include <map_fragment>';
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform sampler2D uRoad;\nuniform sampler2D uTone;\nuniform float uKerb;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying float vWy;\nfloat gWet = 0.0;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform sampler2D uRoad;\nuniform sampler2D uTone;\nuniform float uKerb;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying vec2 vSuv;\nvarying float vWy;\nfloat gWet = 0.0;')
       .replace('#include <map_fragment>', `${sample}
         float dA = texture2D(uDetail, vWxz * 0.9).r;
         float dB = texture2D(uDetail, vWxz * 0.11).r;
@@ -67,11 +69,17 @@ function groundMaterial(map, detail, overview, mask) {
         float k = 1.0 - smoothstep(25.0, 90.0, dist);
         diffuseColor.rgb *= mix(1.0, (dA * 0.75 + dB * 0.55) * 1.02, k * 0.85);
         #ifdef USE_MASK
-          vec2 suv = (vWxz - uSec.xy) / uSec.z;
+          vec2 suv = vSuv;
           vec4 mk = texture2D(uMask, suv);
           vec4 rd = texture2D(uRoad, suv);
           vec4 tn = texture2D(uTone, suv);
-          float road = smoothstep(0.4, 0.6, rd.r);
+          // The road texture blurred by a texel: up close it is magnified, and an edge drawn along it,
+          // anti-aliased texel by texel, wavered from texel to texel. Four bilinear taps half a texel
+          // apart make a smooth 3x3 tent filter, so the road edge and kerb line run straight.
+          vec2 tx = 0.5 / vec2(textureSize(uRoad, 0));
+          vec4 rdS = 0.25 * (texture2D(uRoad, suv + vec2(tx.x, tx.y)) + texture2D(uRoad, suv + vec2(-tx.x, tx.y))
+            + texture2D(uRoad, suv + vec2(tx.x, -tx.y)) + texture2D(uRoad, suv - tx));
+          float road = smoothstep(0.4, 0.6, rdS.r);
           float paved = max(road, smoothstep(0.45, 0.65, mk.r));
           float loose = smoothstep(0.4, 0.6, rd.b) * (1.0 - road);
           float stone = smoothstep(0.4, 0.6, tn.b) * road;
@@ -95,7 +103,7 @@ function groundMaterial(map, detail, overview, mask) {
           setts = mix(vec3(0.31, 0.285, 0.275) * (0.85 + 0.3 * dB), setts, nearK) * tint * mix(1.0, shade, 0.6);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(asphalt, setts, stone), mix(0.82, 0.92, stone) * paved);
           // kerb stone along streets
-          float kerb = smoothstep(0.42 - uKerb, 0.42, rd.g) * (1.0 - smoothstep(0.42, 0.42 + uKerb, rd.g)) * (1.0 - smoothstep(60.0, 160.0, dist));
+          float kerb = smoothstep(0.42 - uKerb * 0.8, 0.42, rdS.g) * (1.0 - smoothstep(0.42, 0.42 + uKerb * 0.8, rdS.g)) * (1.0 - smoothstep(60.0, 160.0, dist));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.49) * (0.8 + 0.3 * grain), kerb * 0.85);
           // gravel and dirt roads: crushed stone, lighter where the wheels run dry
           float pebble = texture2D(uDetail, vWxz * 5.1 + 0.31).r;

@@ -15,6 +15,7 @@ import { buildDeckBodies } from './world/decks.js';
 import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createJanese } from './world/janese.js';
+import { createAksi, aksiProps } from './world/aksi.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
@@ -67,7 +68,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -110,9 +111,10 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: extraProps });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps()] });
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
+  aksi = createAksi(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -653,6 +655,7 @@ function frame(ts) {
     trackside.collide(car);
     props.update(car, dt);
     janese.update(car, dt);
+    aksi.update(car, dt);
     skids.update(car);
     smoke.update(car, dt, mode === 'drive', mp.smokers());
   } else smoke.update(null, dt, false, mp.smokers());
@@ -823,7 +826,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, props: () => props, janese: () => janese };
+  race: () => race, mp: () => mp, props: () => props, janese: () => janese, aksi: () => aksi };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

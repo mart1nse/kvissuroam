@@ -92,7 +92,7 @@ const SKIN = 0xe2b49a, HAIR = 0x1c130e, TOP = 0x1d1c24, PANTS = 0x24232b, SHOE =
 
 // an object whose local +y runs from point a to point b (unit length along y, scaled)
 const yUp = new THREE.Vector3(0, 1, 0), tv = new THREE.Vector3();
-function span(o, a, b) {
+export function span(o, a, b) {
   tv.subVectors(b, a);
   const L = tv.length();
   o.position.copy(a).addScaledVector(tv, 0.5);
@@ -100,7 +100,7 @@ function span(o, a, b) {
   o.scale.y = L;
 }
 // two-bone IK: elbow/knee position for root a, target c, lengths l1, l2, bending towards pole
-function bend(a, c, l1, l2, pole, out) {
+export function bend(a, c, l1, l2, pole, out) {
   const d = new THREE.Vector3().subVectors(c, a);
   let L = d.length();
   L = Math.min(L, l1 + l2 - 1e-4);

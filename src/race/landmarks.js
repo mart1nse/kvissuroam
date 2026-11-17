@@ -24,9 +24,9 @@ const PARKING = [
 const TERRACE = [1586, 3046];       // café terrace by the start line (moved to the kerb at run time)
 const PLAY = [[1602, 3019, 5.2], [1616, 3031, 4.2]];      // playground rubber discs: x, z, radius
 
-const CAR_COLOURS = [0xb9bcc2, 0x8d9197, 0x3b3e44, 0x18191c, 0xe9e9e6, 0x23344f, 0x7b1d22, 0x4d5a6b, 0xc8c3b6, 0x2c4a3a];
+export const CAR_COLOURS = [0xb9bcc2, 0x8d9197, 0x3b3e44, 0x18191c, 0xe9e9e6, 0x23344f, 0x7b1d22, 0x4d5a6b, 0xc8c3b6, 0x2c4a3a];
 
-function rnd(seed) {
+export function rnd(seed) {
   let s = seed * 9301 + 49297;
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 }
@@ -60,7 +60,7 @@ function signTex() {
 }
 
 // collects coloured parts and merges them into one mesh
-class Parts {
+export class Parts {
   constructor() { this.list = []; }
   add(geo, hex, x, y, z, yaw = 0) {
     const g = geo.index ? geo.toNonIndexed() : geo.clone();
@@ -80,10 +80,10 @@ class Parts {
   }
 }
 
-const BOX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+export const BOX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
 // a generic hatchback / saloon, local +x along the car
-function addCar(p, x, y, z, yaw, colour, r) {
+export function addCar(p, x, y, z, yaw, colour, r) {
   const L = 4.2 + r() * 0.6, W = 1.78, wagon = r() < 0.35;
   p.add(BOX(L, 0.62, W), colour, x, y + 0.58, z, yaw);                                   // body
   const cl = wagon ? L * 0.62 : L * 0.5, cx = wagon ? -L * 0.08 : -L * 0.04;

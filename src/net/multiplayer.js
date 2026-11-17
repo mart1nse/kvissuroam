@@ -12,6 +12,8 @@ import { escapeHtml } from '../race/race.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
+const SENT_KEY = 'kvissuroam.sentLaps';      // laps the server has confirmed, as car|ms
+const LOCAL_LAPS_KEY = 'kvissuroam.laps';    // every lap this browser has driven (race.js)
 const SEND_HZ = 10;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 const RESTITUTION = 0.35;
@@ -158,26 +160,50 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
   }
 
   // ---- lap times
-  function pending() { try { return JSON.parse(lsGet(PENDING_KEY)) || []; } catch { return []; } }
-  let flushing = false;
+  // Laps wait in a queue (kept in memory, and in localStorage when it works) until the server
+  // confirms them. On start every lap this browser drove that the server never confirmed is
+  // queued again: the server ignores ones it already has, so a lap lost to a dropped connection,
+  // a closed tab or a full storage still reaches the board the next time the game is opened.
+  const lapKey = (l) => `${l.car}|${l.ms}`;
+  function readJson(k) { try { const v = JSON.parse(lsGet(k)); return Array.isArray(v) ? v : []; } catch { return []; } }
+  const sent = new Set(readJson(SENT_KEY));
+  const queue = [];
+  function enqueue(l) {
+    if (!l?.car || !(l.ms > 0) || sent.has(lapKey(l)) || queue.some((q) => lapKey(q) === lapKey(l))) return;
+    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at });
+  }
+  function saveQueue() { lsSet(PENDING_KEY, JSON.stringify(queue.slice(-200))); }
+  function markSent(list) {
+    for (const l of list) sent.add(lapKey(l));
+    lsSet(SENT_KEY, JSON.stringify([...sent].slice(-400)));
+  }
+  readJson(PENDING_KEY).forEach(enqueue);
+  let flushing = false, retryTimer = 0;
   async function flushLaps() {
     if (flushing) return;
-    const list = pending();
-    if (!list.length) return;
+    await nameReady;
+    if (!queue.length) return;
     flushing = true;
-    lsSet(PENDING_KEY, '[]');
-    const keep = [];
-    for (const lap of list) {
+    let failed = false;
+    while (queue.length && !failed) {
+      const batch = queue.slice(0, 50).map((l) => ({ ...l, name: l.name || name }));
       try {
-        const r = await fetch('/api/lap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(lap) });
-        if (r.ok) { const j = await r.json(); if (j.board) setBoard(j.board); }
-        else if (r.status >= 500) keep.push(lap);
-      } catch { keep.push(lap); }
+        const r = await fetch('/api/lap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ laps: batch }) });
+        if (r.ok || (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429)) {
+          // stored, already there, or refused as invalid: either way not worth sending again
+          markSent(batch);
+          queue.splice(0, batch.length);
+          if (r.ok) { const j = await r.json().catch(() => null); if (j?.board) setBoard(j.board); }
+        } else failed = true;
+      } catch { failed = true; }
     }
-    lsSet(PENDING_KEY, JSON.stringify(keep.concat(pending())));
+    saveQueue();
     flushing = false;
-    if (keep.length) setTimeout(flushLaps, 30000);
+    if (queue.length) { clearTimeout(retryTimer); retryTimer = setTimeout(flushLaps, 30000); }
   }
+  // laps driven before this queue existed, or lost on the way (once the name is known)
+  nameReady.then(() => { readJson(LOCAL_LAPS_KEY).forEach(enqueue); saveQueue(); flushLaps(); });
+  addEventListener('online', () => flushLaps());
 
   // remote pose at render time, interpolated between the two updates around it
   function sample(o, now) {
@@ -323,10 +349,12 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     submitLap(lap) {
-      const list = pending();
-      list.push({ name, car: lap.car, ms: lap.ms, at: lap.at });
-      lsSet(PENDING_KEY, JSON.stringify(list.slice(-50)));
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at });
+      saveQueue();
       flushLaps();
+    },
+    refreshBoard() {
+      fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
     },
     get board() { return board; },
     bestFor(id) {

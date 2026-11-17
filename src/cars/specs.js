@@ -295,6 +295,7 @@ export const CARS = {
     cdA: 0.34 * 2.06,
     drive: 'awd',
     rearShare: 0.5,             // Torsen centre differential, 50/50
+    abs: 0.75,                  // Bosch ABS 2: keeps it steerable under a full stop, a little less sure than a modern system
     engine: {
       type: 'ice',
       idle: 800,

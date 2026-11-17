@@ -18,7 +18,8 @@ const DONUT = 0.4;              // how firmly a held donut is kept going (share 
 const DONUT_LO = 0.6, DONUT_HI = 1.1;    // ...the slide angle band it keeps the car in (rad)
 const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this long after it is floored (s)
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
-const EV_SLIDE_REAR = 0.7;      // rear share a two-motor EV moves to while powersliding under 100 km/h
+const EV_SLIDE_REAR = 0.7;
+const ABS_HZ = 8;                // anti-lock pressure cycling (spec.abs: 0..1, how much of the lock-up it prevents)      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
 
 // Body heave on the suspension, per kg of car: a 1.5 Hz spring with half-critical
@@ -415,6 +416,7 @@ function substep(car, input, world, dt) {
   // and lifting end it.
   const ts = drivenR ? (drivenF ? (sf.tail < sr.tail ? sf : sr) : sr) : sf;
   let spinMax = 0, drive_cut = false;
+  const absOn = [0, 0];
   const tcWant = s.tc && steerIn === 0 && !hb ? s.tc : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
@@ -463,6 +465,20 @@ function substep(car, input, world, dt) {
       fx = ((drive_cut && front) || trimmed ? demand * dir : drive * share - vSign * brakeK);
       if (hb && !front) fx = -vSign * surf.mu * fzR * 0.95;
       ask = hb && !front ? 2 : Math.abs(fx) / cap;
+      // Anti-lock brakes (spec.abs): instead of locking, each axle is held just short of its peak, and short
+      // of what the tyres need for cornering, so the car keeps steering under a full stop. The pressure
+      // cycles a few times a second, as an early three-channel system does.
+      if (s.abs && brakeK > 0 && vSign !== 0 && !(hb && !front) && Math.abs(car.vx) > 1.5) {
+        const use = front ? car.useF : car.useR;
+        const pulse = 0.5 + 0.5 * Math.sin(car.time * ABS_HZ * 2 * Math.PI + (front ? 0 : 1.7));
+        const room = cap * Math.max(0.3, Math.sqrt(Math.max(0, 1 - use * use))) * (0.97 - 0.05 * pulse);
+        if (Math.abs(fx) > room) {
+          const k = s.abs;
+          fx = Math.sign(fx) * (room * k + Math.min(Math.abs(fx), cap) * (1 - k));
+          ask = Math.min(ask, 1 + (ask - 1) * (1 - k));
+          absOn[front ? 0 : 1] = k;
+        }
+      }
       fx = Math.max(-cap, Math.min(cap, fx));
     }
 
@@ -476,13 +492,18 @@ function substep(car, input, world, dt) {
   car.slipV = shareF === 0 ? car.slipVR : shareR === 0 ? car.slipVF : Math.max(car.slipVF, car.slipVR);
   let latCapF = Math.sqrt(Math.max(capF * capF - fxF * fxF, (0.55 * capF) ** 2));
   let latCapR = Math.sqrt(Math.max(capR * capR - fxR * fxR, (0.55 * capR) ** 2));
+  // (a rolling tyre held off its lock keeps most of its sideways bite)
+  if (absOn[0]) latCapF = Math.max(latCapF, (0.55 + 0.3 * absOn[0]) * capF);
+  if (absOn[1]) latCapR = Math.max(latCapR, (0.55 + 0.3 * absOn[1]) * capR);
+  car.abs = Math.max(absOn[0], absOn[1]);
   // Hard braking unloads the rear axle, so the front tyres would out-grip the
   // rears and any small disturbance would swing the tail round. While the
   // wheel is held straight the front lateral grip is trimmed to what the rear
   // axle can balance; steering into a corner hands it back, so braking into a
   // turn still rotates the car as before.
   if (brake > 0 && !hb) {
-    const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock));
+    // (anti-lock brakes keep the rear tyres rolling, so the tail stays put even with the wheel turned)
+    const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock), 0.85 * car.abs);
     const balanced = (latCapR * car.b) / car.a;
     if (balanced < latCapF) latCapF += (balanced - latCapF) * straight * brake;
   }

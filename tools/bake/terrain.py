@@ -8,6 +8,7 @@ on the height field below it otherwise.
 """
 import glob
 import json
+import os
 
 import numpy as np
 import rasterio
@@ -16,7 +17,7 @@ import rasterio.windows
 from rasterio.transform import from_origin
 from scipy import ndimage
 from scipy.spatial import cKDTree
-from shapely.geometry import LineString, Point, box, mapping, shape
+from shapely.geometry import LineString, Point, Polygon, box, mapping, shape
 from shapely.ops import linemerge, unary_union
 from shapely.strtree import STRtree
 
@@ -275,16 +276,17 @@ def water(hN):
     streams = feats('E_203_vooluveekogu_a')
     ponds = feats('E_202_seisuveekogu_a', detail_box)
     main = [g for p, g in streams if 'Emaj' in (p.get('nimetus') or '')]
-    if not main:
+    if not main and not os.environ.get('BAKE_ONLY'):
         main = [max((g for p, g in streams), key=lambda g: g.area)]
-    river_u = unary_union(main)
+    # (a partial bake far from the Emajõgi has no river: RIVER_LEVEL gives its level for meta.json)
+    river_u = unary_union(main) if main else Polygon()
     others = [g for p, g in streams if g.intersects(detail_box) and not g.intersects(river_u.buffer(-1))] + [g for p, g in ponds]
     others = [g for g in others if g.area > 12]
     other_u = unary_union(others)
     rv = rast([river_u], X0 - 0.5, Z0 - 0.5, W1 + 1, H1 + 1, 1.0)
     ot = rast([other_u], X0 - 0.5, Z0 - 0.5, W1 + 1, H1 + 1, 1.0)
     ot[rv > 0] = 0
-    river_level = float(np.median(hN[rv > 0]))
+    river_level = float(np.median(hN[rv > 0])) if (rv > 0).any() else float(os.environ.get('RIVER_LEVEL', 'nan'))
     wm = (rv > 0) | (ot > 0)
     # depth below the surface grows with the distance from the bank, up to 4 m (river) or 1.2 m.
     # Done in blocks: only the first few metres from the bank matter.

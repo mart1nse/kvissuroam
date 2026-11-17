@@ -168,7 +168,10 @@ async function boot() {
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
     buildModel: (id) => { try { return buildCarModel ? buildCarModel(id) : buildPlaceholder(CARS[id]); } catch { return buildPlaceholder(CARS[id]); } },
     onBoard: () => { race?.refreshBest(); board?.render(); },
-    onPeople: (kind, name, old) => people?.event(kind, name, old),
+    onPeople: (kind, name, old) => {
+      if (kind === 'join' || kind === 'leave') audio.chime?.(kind);
+      people?.event(kind, name, old);
+    },
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
@@ -187,13 +190,35 @@ async function boot() {
     race.track.P.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
     ctx.closePath();
   };
-  hud.setOverlay((ctx, scale) => {
+  hud.setOverlay((ctx, scale, car) => {
     ctx.strokeStyle = 'rgba(255,43,214,.5)'; ctx.lineWidth = 16;
     trackPath(ctx); ctx.stroke();
-    for (const p of mp.players()) {
-      ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2 / scale;
-      ctx.beginPath(); ctx.arc(p.x, p.z, 6 / scale, 0, 7); ctx.fill(); ctx.stroke();
+    // other players: arrows pointing the way they drive; anyone outside the minimap
+    // gets a small pointer on its rim showing which way they are from us
+    const players = mp.players();
+    if (!players.length) return;
+    const m = ctx.getTransform(), R = ctx.canvas.width / 2;
+    const me = m.transformPoint(new DOMPoint(car.x, car.z));
+    ctx.save();
+    ctx.resetTransform();
+    for (const p of players) {
+      const q = m.transformPoint(new DOMPoint(p.x, p.z));
+      const ex = q.x - R, ey = q.y - R;
+      if (ex * ex + ey * ey < (R - 7) * (R - 7)) {
+        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(p.yaw - car.yaw);
+        playerArrow(ctx, 0.75); ctx.restore();
+        continue;
+      }
+      // where the line from our car towards them crosses a circle just inside the rim
+      const dx = q.x - me.x, dy = q.y - me.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+      const ox = me.x - R, oy = me.y - R, rr = R - 9;
+      const b = ox * ux + oy * uy, t = -b + Math.sqrt(Math.max(0, b * b - (ox * ox + oy * oy - rr * rr)));
+      ctx.save(); ctx.translate(me.x + ux * t, me.y + uy * t); ctx.rotate(Math.atan2(ux, -uy));
+      ctx.fillStyle = 'rgba(47,243,255,.9)'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 3); ctx.lineTo(-5, 3); ctx.closePath();
+      ctx.stroke(); ctx.fill(); ctx.restore();
     }
+    ctx.restore();
   });
   bigmap = createBigMap(world, {
     onPick: dropAt, onClose: closeMap,
@@ -206,9 +231,9 @@ async function boot() {
       });
       ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center';
       for (const p of mp.players()) mark(p.x, p.z, () => {
-        ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); ctx.fill(); ctx.stroke();
-        ctx.lineWidth = 3; ctx.strokeText(p.name, 0, -12); ctx.fillStyle = '#fff'; ctx.fillText(p.name, 0, -12);
+        ctx.lineWidth = 3; ctx.strokeStyle = '#160735'; ctx.strokeText(p.name, 0, -17); ctx.fillStyle = '#fff'; ctx.fillText(p.name, 0, -17);
+        ctx.rotate(p.yaw);
+        playerArrow(ctx, 1);
       });
     },
   });
@@ -226,6 +251,13 @@ async function boot() {
   $('#menu').classList.remove('hidden');
   mode = 'menu';
   if (params.has('drive')) startDriving();
+}
+
+// another player's car on a map: a cyan arrow pointing forward (up), drawn around the origin
+function playerArrow(ctx, k) {
+  ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, -12 * k); ctx.lineTo(8 * k, 9 * k); ctx.lineTo(0, 4.5 * k); ctx.lineTo(-8 * k, 9 * k); ctx.closePath();
+  ctx.stroke(); ctx.fill();
 }
 
 function setCar(id) {

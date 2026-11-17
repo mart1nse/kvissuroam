@@ -3,7 +3,7 @@
 // four tailpipes in a black diffuser and 19-inch twin-spoke M wheels.
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, smooth, canvasTex, drawPlate, plate, assembleCar, arcPts, tintPaint } from './kit.js';
-import { part, planLine, clip2, foldFlanks, lathe, skinPatch, bulge, spokeFace, tyreAndRim } from './parts.js';
+import { part, planLine, sideLine, sweep, clip2, foldFlanks, lathe, skinPatch, bulge, spokeFace, tyreAndRim } from './parts.js';
 
 // real car: 4615 x 1804 x 1418 mm, wheelbase 2761, track 1540 front / 1539 rear,
 // 245/35 ZR19 on 8.5J front, 265/35 ZR19 on 9.5J rear. Overhangs about 810 front / 1044 rear.
@@ -11,7 +11,7 @@ const DIMS = { length: 4.615, width: 1.804, height: 1.418, wheelbase: 2.761, tra
 const HZ = DIMS.wheelbase / 2;
 const ZF = -HZ - 0.81, ZR = HZ + 1.044;
 const HW = DIMS.width / 2;
-const AY = 0.34, AR = 0.378;                 // wheel arches
+const AY = 0.34, AR = 0.366;                 // wheel arches
 // the crease through the door handle, rising toward the tail
 const WAIST = [[ZF, 0.66], [-1.0, 0.755], [1.0, 0.825], [ZR, 0.86]], FOLD = 0.007;
 const PAINT = 0xf2f2ee;                      // Alpine white (solid)
@@ -64,7 +64,7 @@ function lampTextures() {
     g.fillStyle = glow ? '#000' : '#15181b'; g.fillRect(0, 0, w, h);
     if (!glow) {
       const gr = g.createLinearGradient(0, 0, 0, h);
-      gr.addColorStop(0, '#3b4147'); gr.addColorStop(0.5, '#1a1d21'); gr.addColorStop(1, '#40464c');
+      gr.addColorStop(0, '#1d2125'); gr.addColorStop(0.22, '#59616a'); gr.addColorStop(0.6, '#8f989f'); gr.addColorStop(1, '#5b636b');
       g.fillStyle = gr; g.fillRect(4, 4, w - 8, h - 8);
       g.fillStyle = '#c7ccd1'; g.fillRect(w * 0.8, h * 0.3, w * 0.17, h * 0.4);     // corner reflector
     }
@@ -128,11 +128,11 @@ function atlasTex() {
 // ---------------------------------------------------------------- the car
 export function buildM3() {
   const ZC = -0.72, ZH = 0.0;                 // cowl and windscreen header
-  const ZG0 = 1.22, ZG1 = 1.93;               // rear glass: roof edge and bottom edge
+  const ZG0 = 1.1, ZG1 = 1.8;                 // rear glass: roof edge and bottom edge (the boot lid is 0.6 m long)
   const body = buildBody({
     top: [[ZF, 0.42], [ZF + 0.004, 0.56, 0.03], [ZF + 0.03, 0.665, 0.03], [ZF + 0.1, 0.73, 0.05], [-1.5, 0.87, 0.5],
-      [ZC - 0.1, 0.955, 0.2], [ZC, 0.965, 0.05], [ZH, 1.375, 0.25], [0.55, 1.418, 0.9], [ZG0, 1.37, 0.4],
-      [ZG1, 1.052, 0.08], [ZR - 0.085, 1.048, 0.02], [ZR - 0.05, 1.03, 0.012], [ZR - 0.034, 0.8, 0.06], [ZR - 0.004, 0.6, 0.04], [ZR, 0.45]],
+      [ZC - 0.1, 0.955, 0.2], [ZC, 0.965, 0.05], [ZH, 1.375, 0.25], [0.42, 1.418, 0.9], [ZG0, 1.362, 0.4],
+      [ZG1, 1.04, 0.08], [ZR - 0.12, 1.046, 0.03], [ZR - 0.066, 1.06, 0.008], [ZR - 0.05, 1.034, 0.008], [ZR - 0.034, 0.8, 0.06], [ZR - 0.004, 0.6, 0.04], [ZR, 0.45]],
     bottom: [[ZF, 0.42], [ZF + 0.004, 0.3, 0.03], [ZF + 0.09, 0.2, 0.04], [-1.8, 0.17, 0.1], [1.85, 0.18, 0.1], [ZR - 0.22, 0.235, 0.05], [ZR - 0.004, 0.285, 0.03], [ZR, 0.45]],
     w: [[ZF, 0.8], [-1.95, 0.872], [-1.6, 0.893], [-HZ, HW - FOLD], [-0.7, 0.884], [0.5, 0.884], [1.0, 0.89], [HZ, HW - FOLD], [1.95, 0.885], [ZR, 0.835]],
     yWaist: WAIST, tuck: 0.06, ySill: 0.19,
@@ -166,7 +166,7 @@ export function buildM3() {
   const lw = 0.006, lo = { offset: 0.0045 };
 
   // --- glazing: frameless door glass and the quarter light with the Hofmeister kink
-  const dloPts = [[-0.66, 0.948], [1.44, 0.998], [1.39, 1.08], [1.0, 1.312], [-0.03, 1.34]];
+  const dloPts = [[-0.66, 0.948], [1.33, 0.996], [1.305, 1.075], [0.9, 1.31], [-0.03, 1.34]];
   pal.add(dcS.side(grow(rpoly(dloPts, 0.035, 4), 0.014), { offset: 0.003 }).pal('gloss').sym());
   {
     const inner = grow(dloPts, -0.004);
@@ -177,7 +177,7 @@ export function buildM3() {
   const ws = rpoly([[-0.7, ZC + 0.115], [-0.35, ZC + 0.05], [0, ZC + 0.035], [0.35, ZC + 0.05], [0.7, ZC + 0.115], [0.56, ZH - 0.035], [-0.56, ZH - 0.035]], 0.04, 4);
   pal.add(dcT.top(grow(ws, 0.014), { offset: 0.003, ...topO(ZC - 0.02, ZH + 0.02) }).pal('rubber'));
   glass.add(dcT.top(ws, { offset: 0.0052, ...topO(ZC - 0.02, ZH + 0.02) }));
-  const rw = rpoly([[-0.46, ZG0 + 0.07], [0.46, ZG0 + 0.07], [0.555, ZG1 - 0.1], [0.28, ZG1 - 0.055], [-0.28, ZG1 - 0.055], [-0.555, ZG1 - 0.1]], 0.04, 4);
+  const rw = rpoly([[-0.5, ZG0 + 0.07], [0.5, ZG0 + 0.07], [0.6, ZG1 - 0.1], [0.3, ZG1 - 0.055], [-0.3, ZG1 - 0.055], [-0.6, ZG1 - 0.1]], 0.04, 4);
   pal.add(dcT.top(grow(rw, 0.016), { offset: 0.003, ...topO(ZG0 - 0.02, ZG1 + 0.02, 1.0) }).pal('rubber'));
   glass.add(dcT.top(rw, { offset: 0.0052, ...topO(ZG0, ZG1, 1.0) }));
   chmsl.add(dcT.top(rect(-0.17, ZG0 + 0.085, 0.17, ZG0 + 0.103, 0.004), { offset: 0.0068, ...topO(ZG0, ZG1, 1.0) }));
@@ -227,7 +227,7 @@ export function buildM3() {
     // diffuser with four tailpipes
     pal.add(dcR.rear(rpoly([[-0.62, 0.19], [0.62, 0.19], [0.55, 0.4], [-0.55, 0.4]], 0.03, 4), { offset: 0.004, minFacing: 0.02, filter: (v) => v[2] > 1.9 }).pal('plastic'));
     for (const x of [0.255, 0.36]) {
-      const m = new THREE.Matrix4().makeTranslation(x, 0.3, ZR - 0.04).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.03));
+      const m = new THREE.Matrix4().makeTranslation(x, 0.3, ZR - 0.062).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2 + 0.03));
       pal.add(cyl(0.043, 0.043, 0.13, 20, m, 'chrome', true).sym());
       pal.add(cyl(0.035, 0.035, 0.12, 14, m, 'well').sym());
     }
@@ -255,6 +255,17 @@ export function buildM3() {
     const gz0 = -HZ + archR + 0.06;
     atlas.add(dcS.side(rect(gz0, 0.672, gz0 + 0.2, 0.728), { offset: 0.0045 }).uvRect(flipU(A_GILL)));
     atlas.add(dcS.side(rect(gz0, 0.672, gz0 + 0.2, 0.728), { offset: 0.0045 }).uvRect(flipU(A_GILL)).mirrored());
+  }
+
+  // --- M side sills: a blade under the doors that kicks out ahead of the rear arch
+  {
+    const l = sideLine(sideP, 0.3, -HZ + archR + 0.03, HZ - archR - 0.03, 24);
+    paint.add(sweep(l, 0.19, [[-0.02, -0.012], [0.02, -0.012], [0.03, 0.0], [0.03, 0.045], [0.02, 0.075], [0.0, 0.1], [-0.02, 0.105]], { n: 24, taper: (t) => Math.min(1, t / 0.06, (1 - t) / 0.04) * (0.75 + 0.25 * t) }).sym());
+  }
+  // --- bonnet: a slim vent each side of the power dome
+  for (const m of [false, true]) {
+    const v = dcT.top(rpoly([[0.4, -1.84], [0.45, -1.83], [0.485, -1.6], [0.435, -1.62]], 0.012, 3), { offset: 0.004, minFacing: 0.4, filter: (q) => q[2] < ZC }).pal('well');
+    pal.add(m ? v.mirrored() : v);
   }
 
   // --- wipers, mirrors, door handles

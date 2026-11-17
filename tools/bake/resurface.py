@@ -34,8 +34,8 @@ WATER, PAVED = 4, 1
 hN = T.load_dtm(SRC)[1]
 roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
-hN, wm, river_u, *_ = T.water(hN)
-T.mark_water_crossings(roads, river_u)
+hN, wm, river_u, others, _ = T.water(hN)
+T.mark_water_crossings(roads, river_u, others)
 _, bridge_cells = T.crossings(hN, hG, wm, roads)
 wet = wm[:-1, :-1] & wm[1:, 1:]
 bc = bridge_cells[:-1, :-1] | bridge_cells[1:, :-1] | bridge_cells[:-1, 1:] | bridge_cells[1:, 1:]

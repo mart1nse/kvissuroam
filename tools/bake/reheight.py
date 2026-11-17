@@ -29,9 +29,10 @@ S = int(SECTOR)
 hN = T.load_dtm(SRC)[1]
 roads = T.feats('E_501_tee_j', T.detail_box.buffer(100))
 hG = hN.copy()
-hN, wm, river_u, *_ = T.water(hN)
-T.mark_water_crossings(roads, river_u)
-decks, _ = T.crossings(hN, hG, wm, roads)
+hN, wm, river_u, others, _ = T.water(hN)
+T.mark_water_crossings(roads, river_u, others)
+decks, bridge_cells = T.crossings(hN, hG, wm, roads)
+from scipy import ndimage
 T.grade_roads(hN, roads, wm, decks, also=hG)            # roads level from edge to edge; trees beside them follow
 
 changed = 0
@@ -52,6 +53,17 @@ for sx, sz, _ in meta['sector']['list']:
     if hq != b[32:32 + len(hq)]:
         d = np.frombuffer(hq, '<u2').astype(int) - np.frombuffer(b, '<u2', HN * HN, 32)
         print(f'  {sx},{sz}: {int((d != 0).sum())} nodes, {d.min() * Q:+.1f} .. {d.max() * Q:+.1f} m')
+    # a road filled over a culvert is road again, not water (cells are between four nodes)
+    SN = meta['surface']['n']
+    bc = bridge_cells[r0:r0 + S + 1, c0:c0 + S + 1]
+    bc = bc[:-1, :-1] | bc[1:, :-1] | bc[:-1, 1:] | bc[1:, 1:]
+    sf = np.frombuffer(b, 'uint8', SN * SN, 32 + len(hq)).reshape(SN, SN)
+    wet = sf == 4
+    if (bc & wet).any():
+        _, (ir, ic) = ndimage.distance_transform_edt(wet, return_indices=True)
+        sf = np.where(bc & wet, sf[ir, ic], sf).astype('uint8')
+        b = b[:32 + len(hq)] + sf.tobytes() + b[32 + len(hq) + SN * SN:]
+        print(f'  {sx},{sz}: {int((bc & wet).sum())} culvert cells back to road')
     new = b[:32] + hq + b[32 + len(hq):]
     if new != orig:
         open(path, 'wb').write(gzip.compress(new, 6))
@@ -60,8 +72,8 @@ print('sectors changed', changed)
 
 vec = json.load(open(f'{OUT}/vectors.json'))
 vec['decks'] = decks
-lv = [(T.road_level(p), part) for p, g in roads if T.road_level(p) for part in T.flat(g)]
-tree = STRtree([g for _, g in lv])
+lv = [(T.road_level(p), part, p.get('small')) for p, g in roads if T.road_level(p) for part in T.flat(g)]
+tree = STRtree([g for _, g, _ in lv])
 n = 0
 for r in vec['roads']:
     r.pop('e', None)
@@ -69,7 +81,8 @@ for r in vec['roads']:
         continue
     line = LineString([(E0 + x, N0 - z) for x, z in r['pts']])
     for i in tree.query(line):
-        if line.hausdorff_distance(lv[i][1]) < 0.8:
+        # a bridge over a small river is a short piece cut out of a longer road line
+        if lv[i][2] and line.buffer(0.8).contains(lv[i][1]) or line.hausdorff_distance(lv[i][1]) < 0.8:
             r['e'] = lv[i][0]; n += 1
             break
 print('decks', len(decks), 'road lines on a bridge or in a tunnel', n)

@@ -12,6 +12,8 @@
 // drive:   saturation; gain: overall level; idleVol: share of the level left at idle.
 // fireAt:  crank angle of each firing in `order`, for engines with uneven firing intervals.
 // stagger: up to this many degrees of fixed offset per cylinder (unequal manifold runners).
+// smoothTop: for loud, open engines: induction roar cut off above its band, ticks fading with revs, lower
+//          turbo hiss. Without it their noise turns into a sharp hiss; quieter engines keep a brighter top.
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -70,7 +72,7 @@ export const ENGINE_SOUNDS = {
     base: 0.4, overrun: 0.8, pulseDeg: 26, noise: 0.2, rough: 0.09, bias: 0.07,
     intake: 0.55, intakeF: 950, intakeQ: 1.1, tick: 0.06, tickF: 3000,
     jitter: 2.0, lope: 14, drive: 2.4, gain: 0.85, idleVol: 0.32,
-    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05,
+    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05, smoothTop: true,
   },
   // Porsche Carrera GT: 5.7 litre 68 degree V10 born as a Le Mans racing engine, firing order
   // 1-6-5-10-2-7-3-8-4-9. Each crankpin carries one cylinder of each bank, so the firing intervals alternate
@@ -85,7 +87,7 @@ export const ENGINE_SOUNDS = {
     base: 0.4, overrun: 0.75, pulseDeg: 22, noise: 0.11, rough: 0.05, bias: 0.04,
     intake: 0.6, intakeF: 1150, intakeQ: 1.2, tick: 0.05, tickF: 3400,
     jitter: 1.0, lope: 12, drive: 2.0, gain: 0.85, idleVol: 0.3,
-    pops: 0.02,
+    pops: 0.02, smoothTop: true,
   },
   // Audi 3B: 2.2 litre DOHC 20-valve inline five with a KKK K24 turbo, firing order 1-2-4-5-3. Five pulses
   // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
@@ -111,6 +113,6 @@ export const ENGINE_SOUNDS = {
     base: 0.4, overrun: 0.8, pulseDeg: 28, noise: 0.14, rough: 0.06, bias: 0.05,
     intake: 0.6, intakeF: 820, intakeQ: 1.2, tick: 0.03, tickF: 3600,
     jitter: 1.4, lope: 9, drive: 2.0, gain: 0.85, idleVol: 0.3,
-    pops: 0.015,
+    pops: 0.015, smoothTop: true,
   },
 };

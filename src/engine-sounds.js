@@ -28,6 +28,19 @@ export const ENGINE_SOUNDS = {
     intake: 0.22, intakeF: 420, intakeQ: 1.4, tick: 0.012, tickF: 3800,
     jitter: 0.8, lope: 6, drive: 1.3, gain: 0.85, idleVol: 0.3,
   },
+  // VW AFN: 1.9 litre 8-valve TDI four, 1-3-4-2, direct injection with a variable-vane turbo. A hard,
+  // knocking diesel clatter at idle (the injectors and the combustion itself), a gruff low drone under load
+  // and almost nothing above 4000; the turbo whistles and the tired silencer lets plenty through.
+  passat: {
+    seed: 19, order: [1, 3, 4, 2], banks: [0, 0, 0, 0],
+    pipes: [{ len: 1.7, fb: -0.4, damp: 0.5 }],
+    res: [[85, 1.4, 0.65], [190, 2, 0.5], [420, 2.5, 0.22], [1300, 3, 0.1]], dry: 0.45,
+    lp0: 300, lpRpm: 110, lpLoad: 560, hp: 28,
+    base: 0.55, overrun: 0.6, pulseDeg: 22, noise: 0.16, rough: 0.09, bias: 0.06,
+    intake: 0.2, intakeF: 520, intakeQ: 1.3, tick: 0.09, tickF: 2600,
+    jitter: 1.4, lope: 5, drive: 1.9, gain: 0.8, idleVol: 0.42,
+    turbo: true, turboMuffle: 320, hiss: 0.035,
+  },
   // Honda R20A2: 2.0 SOHC 16-valve i-VTEC four, 1-3-4-2, 4-2-1 manifold (1+4, 2+3), quiet SUV silencing.
   crv: {
     seed: 7, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],

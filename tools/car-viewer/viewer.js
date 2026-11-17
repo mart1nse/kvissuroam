@@ -62,6 +62,7 @@ scene.add(car.group); window.__car = car;
 car.setLights({ brake: q.get('brake') === '1', reverse: q.get('reverse') === '1', headlights: q.get('head') === '1' });
 if (q.get('steer')) { car.wheels.fl.steer.rotation.y = +q.get('steer'); car.wheels.fr.steer.rotation.y = +q.get('steer'); }
 if (q.get('spin')) for (const k in car.wheels) car.wheels[k].spin.rotation.x = +q.get('spin');
+if (q.get('soot')) car.setSoot?.(+q.get('soot'));
 
 const camera = new THREE.PerspectiveCamera(V.fov, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(...V.cam);

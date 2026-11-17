@@ -134,6 +134,50 @@ export const CARS = {
     limiter: null,
     ref: { zeroTo100: 10.7, top: 190, powerKw: 129 },
   },
+  passat: {
+    id: 'passat',
+    name: 'Volkswagen Passat Variant 1.9 TDI',
+    short: 'Passat TDI',
+    year: 1998,
+    blurb: 'B5 · 1.9 R4 TDI · 81 kW · 5-speed · front-wheel drive · tired DPF, smokes on throttle',
+    mass: 1475,                 // kerb about 1395 kg + driver
+    wheelbase: 2.703,
+    track: 1.499,               // 1498 front / 1500 rear, 195/65 R15 on steel wheels with covers
+    cgFront: 0.38,              // a cast-iron diesel hung out over the front axle: 62 % front weight
+    cgHeight: 0.56,
+    wheelRadius: 0.317,
+    cdA: 0.285 * 2.12,
+    drive: 'fwd',
+    abs: 0.8,                   // Bosch ABS 5.3
+    dpfSmoke: true,             // black smoke on throttle, and soot building up on the tailgate (see smoke.js)
+    exhaust: { x: -0.42, y: 0.27, back: 0.99 },   // tailpipe: left, under the bumper, behind the rear axle
+    engine: {
+      type: 'ice',
+      idle: 850,
+      redline: 4800,
+      shiftRpm: 4350,
+      revDrop: 2400,            // heavy dual-mass flywheel: the revs sink slowly after a lift
+      // AFN: 235 Nm @ 1900, 81 kW @ 4150 with the variable-vane turbo up to pressure
+      torque: [[850, 105], [1300, 150], [1600, 200], [1900, 235], [2500, 232], [3000, 222], [3500, 206], [4150, 186.4], [4500, 160], [4800, 95], [5100, 40]],
+      // ...and with no boost, a 1.9 litre diesel on its own
+      turbo: {
+        torqueOff: [[850, 95], [1500, 112], [2500, 122], [3500, 115], [4500, 95], [5100, 40]],
+        onRpm: 1250,            // the VNT turbo starts building boost early...
+        fullRpm: 1900,          // ...and is on full boost from here
+        spool: 3.2,
+        dump: 6,
+      },
+      stallRpm: 2000,
+      converterGain: 1.9,
+    },
+    gears: [3.778, 2.118, 1.36, 0.971, 0.756],
+    reverse: 3.6,
+    finalDrive: 3.389,
+    efficiency: 0.86,
+    shiftTime: 0.4,
+    limiter: null,
+    ref: { zeroTo100: 11.5, top: 193, powerKw: 81 },
+  },
   mazda6: {
     id: 'mazda6',
     name: 'Mazda 6 Wagon 2.0',
@@ -419,11 +463,11 @@ export const CARS = {
   },
 };
 
-export const CAR_ORDER = ['w201', 'audi200', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
+export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
 
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [
-  { name: 'EVERYDAY', ids: ['crv', 'mazda6', 'rav4'] },
+  { name: 'EVERYDAY', ids: ['passat', 'crv', 'mazda6', 'rav4'] },
   { name: 'ELECTRIC', ids: ['enyaq', 'bz4x'] },
   { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt'] },
   { name: 'LOCAL HEROES', ids: ['w201', 'audi200', 'bus'] },   // the old Merc, the Audi wagon and the line 8 bus

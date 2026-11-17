@@ -97,7 +97,7 @@ const A_GRILLE = uvr(0, 300, 560, 110);
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '998 TDI');
+    drawPlate(g, 0, 0, 832, 181, '019 TDI');
     const chrome = () => {
       const gr = g.createLinearGradient(0, -30, 0, 30);
       gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.45, '#d4d7da'); gr.addColorStop(0.55, '#8a8f94'); gr.addColorStop(1, '#eef0f2');
@@ -221,17 +221,21 @@ export function buildPassat() {
   const hood = [[0.74, -2.15], [0.77, -1.03]];
   pal.add(dcT.top([...stroke(hood, lw), ...stroke([[-0.77, -1.03], [0.77, -1.03]], lw)], { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.93 }).pal('line'));
   pal.add(dcT.top(stroke(hood, lw), { ...lo, minFacing: 0.4, filter: (v) => v[2] < -0.93 }).pal('line').mirrored());
-  // tailgate: across the roof behind the rails, then down each side along the inner edge of the lamps
+  // tailgate: across the roof behind the rails, down each D-pillar close to the corner where the tail turns
+  // into the side, in along the top of the lamp and down its inner edge
   const LX = 0.545;                            // tailgate edge / inner edge of the lamps
   const YT = 0.56;                             // top of the rear bumper (the load lip)
+  const LY0 = YT + 0.014, LH = 0.33;           // tail lamps: bottom and height
+  const YS = LY0 + LH + 0.008;
   pal.add(dcT.top(stroke([[-0.66, 1.93], [0.66, 1.93]], lw), { ...lo, minFacing: 0.3, filter: (v) => v[2] > 1.8 }).pal('line'));
-  pal.add(dcR.rear(stroke([[0.64, 1.4], [0.69, YG1 + 0.01], [LX - 0.008, YG1 - 0.035], [LX - 0.008, YT + 0.004]], lw), { ...lo, minFacing: 0.3, ...fr }).pal('line').sym());
+  const gateSide = [[0.6, 1.4], [0.615, 1.3], [0.665, 1.2], [0.7, 1.1], [0.73, 1.0], [0.75, 0.95], [0.758, YS + 0.012], [0.748, YS],
+    [LX + 0.004, YS], [LX - 0.008, YS - 0.012], [LX - 0.008, YT + 0.004]];
+  pal.add(dcR.rear(stroke(gateSide, lw), { ...lo, minFacing: 0.3, ...fr }).pal('line').sym());
   const flap = rpoly([[1.78, 0.78], [1.93, 0.78], [1.93, 0.9], [1.78, 0.9]], 0.03, 3);
   pal.add(dcS.side(stroke([...flap, flap[0]], 0.005), { ...lo, minFacing: 0.3 }).pal('line'));
 
   // --- tail lamps: tall units in the rear wings, flush with the body and wrapping round the corner. Laid on
   // the shell as a decal, so they follow its curves exactly.
-  const LY0 = YT + 0.014, LH = 0.33;
   const rearO = { minFacing: 0.5, filter: (v) => v[2] > 1.9 };
   {
     // projected from behind and 35 degrees to the side, so one decal covers the tail and the wrap round

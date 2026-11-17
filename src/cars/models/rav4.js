@@ -44,7 +44,7 @@ export function toyotaLogo(g, cx, cy, r, col) {
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '520 RAV');
+    drawPlate(g, 0, 0, 832, 181, '369 RAV');
     toyotaLogo(g, 100, 270, 98, '#e4e6e8');
     g.fillStyle = '#dfe1e3'; g.textBaseline = 'middle'; g.textAlign = 'center';
     g.font = 'bold 92px Arial, Helvetica, sans-serif'; g.fillText('RAV4', 385, 254);

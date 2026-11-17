@@ -46,7 +46,7 @@ const A_PLATE = uvr(0, 0, 832, 181), A_LOGO = uvr(0, 200, 180, 150), A_M6 = uvr(
 function atlasTex() {
   return canvasTex(AW, AH, (g) => {
     g.clearRect(0, 0, AW, AH);
-    drawPlate(g, 0, 0, 832, 181, '619 MZD');
+    drawPlate(g, 0, 0, 832, 181, '006 MAZ');
     // Mazda winged "M" in an oval
     const cx = 90, cy = 275, r = 84, col = '#eef0f2';
     g.strokeStyle = col; g.lineWidth = 17; g.lineJoin = 'round';

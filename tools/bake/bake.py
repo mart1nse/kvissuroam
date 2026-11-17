@@ -134,6 +134,20 @@ for f in glob.glob(f'{SRC}/vegetatsioon-*.gpkg'):
             p = ft['properties']
             trees[int(p['puu_id'])] = (x - E0, N0 - y, float(p['korgus'] or 8), float(p['puukroon'] or 4),
                                        1.0 if p['puutyyp'] == 'Okaspuu' else 0.0)
+if os.environ.get('SYNTH_TREES'):
+    # holes in the single-tree data (Äksi, 2026-11-17): woodland, tree rows and garden trees made up
+    import synth_trees
+    blk = rast([g.buffer(1.5) for p, g in buildings_fp], X0, Z0, W1, H1, 1.0) > 0
+    blk |= (surf == PAVED) | (surf == WATER)
+
+    def blocked(xs, zs):
+        c, r = (xs - X0).astype(int), (zs - Z0).astype(int)
+        ok = (c >= 0) & (c < W1) & (r >= 0) & (r < H1)
+        return ~ok | blk[np.clip(r, 0, H1 - 1), np.clip(c, 0, W1 - 1)]
+    real = np.array([(t[0], t[1]) for t in trees.values()]).reshape(-1, 2)
+    for k, t in enumerate(synth_trees.synth(SRC, poly_en.intersection(detail_box), real, mos, X0, Z0, blocked)):
+        trees[-1 - k] = t
+    del blk
 T = np.array(list(trees.values()), 'float64')
 del trees
 T = T[(T[:, 0] > X0) & (T[:, 0] < X1 - 0.01) & (T[:, 1] > Z0) & (T[:, 1] < Z1 - 0.01)]

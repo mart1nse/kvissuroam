@@ -1,4 +1,4 @@
-# StreetLap
+# LINNARING
 
 A free-driving browser game set in Tartu, Estonia. You start by the Toomemägi race track in the city centre and can roam about 163 km² of Tartu and its surroundings, from Lähte in the north to Ülenurme and Külitse in the south: real streets, lawns and the bank of the
 Emajõgi in one of six cars.

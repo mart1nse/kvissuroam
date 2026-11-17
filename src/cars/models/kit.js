@@ -1,4 +1,4 @@
-// Shared procedural car-building toolkit for StreetLap.
+// Shared procedural car-building toolkit for LINNARING.
 // Everything is generated in code: lofted body shells, surface-conforming decals
 // (glass, lamps, trim, shut lines), wheels, canvas textures.
 //

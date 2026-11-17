@@ -215,7 +215,13 @@ export function tyreAndRim(R, width, rimR, { lip = 'alloy', disc = 0.74, caliper
   s.add(fromGeo(new THREE.CircleGeometry(rimR - 0.01, 32), { p: [-hw * 0.5, 0, 0], r: [0, Math.PI / 2, 0] }, 'well'));
   s.add(fromGeo(new THREE.CylinderGeometry(rimR * disc, rimR * disc, 0.028, 36), { p: [hw * 0.1, 0, 0], r: [0, 0, Math.PI / 2] }, 'disc'));
   s.add(fromGeo(new THREE.CylinderGeometry(rimR * 0.3, rimR * 0.34, hw * 0.8, 20), { p: [hw * 0.3, 0, 0], r: [0, 0, -Math.PI / 2] }, 'darkalloy'));
-  // brake caliper at the back of the wheel (palette name), clamped over the disc
-  if (caliper) s.add(fromGeo(new THREE.BoxGeometry(0.06, rimR * 0.34, rimR * 0.62), { p: [hw * 0.1 + 0.012, rimR * 0.02, rimR * 0.62] }, caliper));
+  // brake caliper (palette name) clamped over the disc
+  if (caliper) {
+    // (an arc of blocks round the back of the disc)
+    for (let k = -2; k <= 2; k++) {
+      const a = k * 0.2, r = rimR * 0.7;
+      s.add(fromGeo(new THREE.BoxGeometry(0.07, rimR * 0.3, rimR * 0.17), { p: [hw * 0.1 + 0.012, Math.sin(a) * r, Math.cos(a) * r], r: [-a, 0, 0] }, caliper));
+    }
+  }
   return s;
 }

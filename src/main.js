@@ -603,9 +603,23 @@ const idle = {};
 // letting the physics and camera jump between long and short steps.
 clock.connect?.(document);
 let settle = 0, dtSmooth = 1 / 60;
+// Keep the screen on while the game is open (phones otherwise dim and lock it after a minute or so
+// without a touch). The browser drops the lock whenever the page is hidden, so it is taken again on
+// return; Safari only grants it after a tap, so the first touch or key asks too.
+let wakeLock = null;
+async function keepAwake() {
+  if (wakeLock || document.hidden || !navigator.wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch { wakeLock = null; }
+}
+keepAwake();
+for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, keepAwake, { passive: true });
 document.addEventListener('visibilitychange', () => {
   audio.setBackground?.(document.hidden);           // no engine noise from a tab or app in the background
   if (document.hidden) return;
+  keepAwake();
   clock.reset?.();
   settle = 1.5; slowFrames = 0;
 });

@@ -260,9 +260,12 @@ function playerArrow(ctx, k) {
   ctx.stroke(); ctx.fill();
 }
 
-function setCar(id) {
+function setCar(id, now = false) {
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
+  // (behind the opening drone flight the car isn't on screen, so picking one only marks it: it is built
+  // when DRIVE is pressed, and choosing stays instant. In the garage later it is swapped at once, as you see it.)
+  if (intro && model && !now) { layoutMenu(); return; }
   const spec = CARS[id];
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
@@ -412,6 +415,7 @@ function buildMenu() {
 
 function startDriving() {
   if (mode === 'drive') return;
+  if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   if (intro) {
     // fly from wherever the drone is to the chase position behind the car

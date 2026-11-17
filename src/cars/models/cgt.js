@@ -13,7 +13,7 @@ const HZ = DIMS.wheelbase / 2;
 const ZF = -HZ - 1.02, ZR = HZ + 0.863;
 const HW = DIMS.width / 2;
 const WAIST = [[ZF, 0.42], [-1.0, 0.5], [0.6, 0.56], [ZR, 0.62]], FOLD = 0.006;
-const PAINT = 0xc3c7cb;                      // GT silver metallic
+const PAINT = 0xb7bcc1;                      // GT silver metallic
 
 // ---------------------------------------------------------------- wheel
 // Forged magnesium five-spoke with a centre-lock nut. Axis on X, outer face +X.
@@ -59,11 +59,12 @@ function lampTextures() {
   };
   // Headlamp seen from above, u across the car, v 0 = front tip .. 1 = rear: clear lens, two projectors
   const head = (glow) => (g, w, h) => {
-    g.fillStyle = glow ? '#000' : '#aeb5bb'; g.fillRect(0, 0, w, h);
-    if (!glow) { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#6d757c'); gr.addColorStop(0.5, '#cfd5da'); gr.addColorStop(1, '#8d959c'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
+    g.fillStyle = glow ? '#000' : '#3a4046'; g.fillRect(0, 0, w, h);
+    if (!glow) { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#23272b'); gr.addColorStop(0.5, '#565e66'); gr.addColorStop(1, '#2b3035'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
     for (const [cy, r] of [[0.36, 0.3], [0.68, 0.34]]) {
       const x = w * 0.5, y = (1 - cy) * h, R = r * w;
-      g.fillStyle = glow ? '#666' : '#22262a'; g.beginPath(); g.arc(x, y, R * 1.1, 0, 7); g.fill();
+      g.fillStyle = glow ? '#666' : '#c9d0d6'; g.beginPath(); g.arc(x, y, R * 1.12, 0, 7); g.fill();
+      g.fillStyle = glow ? '#666' : '#15181b'; g.beginPath(); g.arc(x, y, R * 0.98, 0, 7); g.fill();
       const rg = g.createRadialGradient(x - R * 0.2, y - R * 0.2, 1, x, y, R);
       rg.addColorStop(0, glow ? '#fff' : '#f4f8fa'); rg.addColorStop(0.55, glow ? '#eee' : '#8f9aa3'); rg.addColorStop(1, glow ? '#555' : '#2c3238');
       g.fillStyle = rg; g.beginPath(); g.arc(x, y, R * 0.9, 0, 7); g.fill();
@@ -114,8 +115,8 @@ export function buildCGT() {
     top: [[ZF, 0.34], [ZF + 0.004, 0.405, 0.03], [ZF + 0.1, 0.5, 0.08], [ZF + 0.4, 0.58, 0.3], [-1.5, 0.67, 0.6], [ZC - 0.15, 0.79, 0.2], [ZC, 0.815, 0.05],
       [ZH, 1.135, 0.18], [0.32, 1.166, 0.5], [ZB, 1.13, 0.12], [ZB + 0.15, 0.975, 0.06], [1.6, 0.95, 0.5],
       [ZR - 0.12, 0.925, 0.03], [ZR - 0.045, 0.9, 0.02], [ZR - 0.022, 0.6, 0.06], [ZR - 0.003, 0.45, 0.03], [ZR, 0.36]],
-    bottom: [[ZF, 0.34], [ZF + 0.005, 0.22, 0.03], [ZF + 0.1, 0.13, 0.04], [-1.8, 0.11, 0.1], [1.7, 0.115, 0.1], [ZR - 0.16, 0.2, 0.06], [ZR - 0.003, 0.27, 0.03], [ZR, 0.36]],
-    w: [[ZF, 0.76], [-2.05, 0.9], [-HZ, 0.948], [-0.75, 0.905], [0.2, 0.9], [0.9, 0.93], [HZ, HW - FOLD], [1.95, 0.94], [ZR, 0.87]],
+    bottom: [[ZF, 0.34], [ZF + 0.005, 0.22, 0.03], [ZF + 0.1, 0.13, 0.04], [-1.8, 0.095, 0.1], [1.7, 0.1, 0.1], [ZR - 0.16, 0.2, 0.06], [ZR - 0.003, 0.27, 0.03], [ZR, 0.36]],
+    w: [[ZF, 0.76], [-2.05, 0.9], [-HZ, 0.948], [-0.75, 0.905], [0.2, 0.9], [0.9, 0.93], [HZ, HW - FOLD], [1.8, 0.948], [2.05, 0.925], [ZR, 0.875]],
     yWaist: WAIST, tuck: 0.075, ySill: 0.14,
     yBelt: [[ZF, 0.76], [-HZ, 0.78], [ZC, 0.785], [0.3, 0.83], [ZB + 0.15, 0.86], [ZR, 0.84]],
     sh: 0.035, ledge: 0.006, ledgeH: 0.02, th: [[ZF, 0.3], [ZC, 0.75], [ZB, 0.8], [ZB + 0.2, 0.5], [ZR, 0.3]], thc: [[ZF, 0.2], [ZC, 0.7], [ZB, 0.7], [ZB + 0.2, 0.2], [ZR, 0.2]],
@@ -123,7 +124,7 @@ export function buildCGT() {
     rs: 0.045,
     // (negative crown: the wings stand above the bonnet and the engine cover)
     crown: [[ZF, 0.0], [-2.1, -0.04], [-HZ, -0.085], [ZC - 0.15, -0.06], [ZC + 0.05, 0.02], [ZH, 0.03], [ZB, 0.03], [ZB + 0.18, -0.01], [1.1, -0.035], [HZ, -0.05], [ZR - 0.1, -0.02], [ZR, 0.0]],
-    bow: [[ZF, 0.25], [-2.05, 0.14], [-1.7, 0.03], [-1.1, 0], [ZC, 0.14], [ZH - 0.05, 0.07], [ZH + 0.1, 0], [1.7, 0], [2.0, 0.05], [ZR, 0.2]],
+    bow: [[ZF, 0.25], [-2.05, 0.14], [-1.7, 0.03], [-1.1, 0], [ZC, 0.14], [ZH - 0.05, 0.07], [ZH + 0.1, 0], [1.6, 0], [1.9, 0.03], [2.08, 0.09], [ZR, 0.19]],
     bowN: [[ZF, 2.4], [-1.7, 2.6], [ZC, 2.3], [ZB, 2.6], [ZR, 3.0]],
   });
   const raw = body.soup;
@@ -135,7 +136,7 @@ export function buildCGT() {
   const cabP = part(raw, (x, y, z) => y > 0.6 && z > -1.2);
   const prR = probe(rearP), prF = probe(frontP), prC = probe(cabP), prS = probe(sideP);
 
-  const arches = cutArches(raw, [{ z: -HZ, y: 0.335, r: 0.376 }, { z: HZ, y: 0.355, r: 0.402 }], { halfWidth: HW });
+  const arches = cutArches(raw, [{ z: -HZ, y: 0.335, r: 0.363 }, { z: HZ, y: 0.355, r: 0.386 }], { halfWidth: HW });
   const shell = arches.soup;
   const dcS = decals(part(shell, (x) => x > 0.35)), dcR = decals(part(shell, (x, y, z) => z > 0.5));
   const dcF = decals(part(shell, (x, y, z) => z < -1.2)), dcT = decals(part(shell, (x, y) => y > 0.45));
@@ -168,8 +169,11 @@ export function buildCGT() {
   const ws = rpoly([[-0.73, ZC + 0.155], [-0.38, ZC + 0.07], [0, ZC + 0.045], [0.38, ZC + 0.07], [0.73, ZC + 0.155], [0.52, ZH - 0.03], [-0.52, ZH - 0.03]], 0.04, 4);
   pal.add(dcT.top(grow(ws, 0.014), { offset: 0.003, ...topO(ZC - 0.02, ZH + 0.02, 0.8) }).pal('rubber'));
   glass.add(dcT.top(ws, { offset: 0.0052, ...topO(ZC - 0.02, ZH + 0.02, 0.8) }));
-  pal.add(dcT.top(rpoly([[-0.5, ZH + 0.01], [0.5, ZH + 0.01], [0.47, ZB - 0.06], [-0.47, ZB - 0.06]], 0.03, 4), { offset: 0.0032, minFacing: 0.5, filter: (v) => v[1] > 1.0 }).pal('gloss'));
-  pal.add(dcT.top(stroke([[0, ZH + 0.01], [0, ZB - 0.06]], 0.007), { offset: 0.0045, minFacing: 0.5, filter: (v) => v[1] > 1.0 }).pal('line'));
+  // the two lift-out roof shells are painted like the body: only their joints show
+  {
+    const rp = [[-0.5, ZH + 0.012], [0.5, ZH + 0.012], [0.47, ZB - 0.06], [-0.47, ZB - 0.06]];
+    pal.add(dcT.top([...stroke([...rp, rp[0]], 0.006), ...stroke([[0, ZH + 0.012], [0, ZB - 0.06]], 0.006)], { offset: 0.0045, minFacing: 0.4, filter: (v) => v[1] > 1.0 }).pal('line'));
+  }
   glass.add(dcR.rear(rpoly([[-0.13, 0.985], [0.13, 0.985], [0.13, 1.09], [-0.13, 1.09]], 0.02, 3), { offset: 0.005, minFacing: 0.2, filter: (v) => v[2] > ZB - 0.05 && v[2] < ZB + 0.2 }));
   chmsl.add(dcR.rear(rect(-0.1, 1.098, 0.1, 1.11, 0.003), { offset: 0.006, minFacing: 0.1, filter: (v) => v[2] > ZB - 0.05 && v[2] < ZB + 0.2 }));
 
@@ -195,6 +199,9 @@ export function buildCGT() {
     atlas.add(m ? a.mirrored() : a).add(m ? b.mirrored() : b);
   }
 
+  // --- air outlet behind each front wheel, ahead of the door
+  pal.add(dcS.side(rpoly([[-HZ + 0.43, 0.27], [-0.775, 0.25], [-0.775, 0.6], [-HZ + 0.47, 0.64]], 0.03, 3), { offset: 0.004, minFacing: 0.05 }).pal('well').sym());
+
   // --- tail: mesh panel across the car, lamps at the corners, two big tailpipes, wing
   {
     const yL = 0.8, ln = planLine(rearP, yL, 1.3, 1, 0, 86, 150);
@@ -213,7 +220,7 @@ export function buildCGT() {
     const pl = plate([0, 0.41, rz(0, 0.41) + 0.008], A_PLATE, {});
     atlas.add(pl.face); pal.add(pl.back);
     for (const x of [0.36, -0.36]) {
-      const m = new THREE.Matrix4().makeTranslation(x, 0.585, ZR - 0.05).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+      const m = new THREE.Matrix4().makeTranslation(x, 0.585, ZR - 0.072).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
       pal.add(cyl(0.058, 0.058, 0.14, 24, m, 'steel', true));
       pal.add(cyl(0.05, 0.05, 0.13, 16, m, 'well'));
     }

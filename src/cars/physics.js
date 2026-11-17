@@ -209,6 +209,15 @@ function engineForce(car, throttle, dt) {
 const tmpG = [0, 0];
 const tmpA = [0, 0];
 const tmpR = [0, 0, 0];
+const tmpT = [];
+// is (x, z) close enough to a trunk that the distance field there is the trunk's?
+function nearTrunk(t, x, z) {
+  for (let i = 0; i < t.length; i += 3) {
+    const r = t[i + 2] + 0.75, dx = t[i] - x, dz = t[i + 1] - z;
+    if (dx * dx + dz * dz < r * r) return true;
+  }
+  return false;
+}
 
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1)
 export function stepCar(car, input, world, dtFrame) {
@@ -273,6 +282,11 @@ function substep(car, input, world, dt) {
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;
   const depth = car.surface === WATER ? wl - groundY : 0;
   if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
+  if (car.inWater && (car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35) {
+    // washed or jumped out onto land: drive on from here
+    car.inWater = false; car.sunk = false; car.waterTime = 0;
+    car.hy = car.y = Math.max(car.y, groundY); car.vyUp = 0; car.lastGround = null;
+  }
   if (car.inWater) {
     car.waterTime += dt;
     const k = Math.exp(-dt * 1.6);
@@ -649,42 +663,85 @@ function substep(car, input, world, dt) {
   car.x += wvx * dt; car.z += wvz * dt;
   car.yaw += car.yawRate * dt;
 
-  // ---- collisions against the obstacle distance field
+  // ---- collisions
   const hl = car.halfLen, hwid = car.halfWid;
+  // push the body out along n (world, pointing away from the obstacle) by pen and bounce the
+  // contact point at (ox, oz) from the car centre off it
+  const contact = (nx, nz, ox, oz, pen) => {
+    car.x += nx * pen; car.z += nz * pen;
+    // velocity of the contact point (yaw is clockwise: v + w x r in the x/z plane)
+    const pvx = wvx - car.yawRate * oz, pvz = wvz + car.yawRate * ox;
+    const vn = pvx * nx + pvz * nz;
+    if (vn >= 0) return;
+    const rn = ox * nz - oz * nx;
+    const j = (-(1 + 0.15) * vn) / (1 / m + (rn * rn) / car.iz);
+    // friction along the obstacle
+    const tx = -nz, tz = nx;
+    const vt = pvx * tx + pvz * tz;
+    const rt = ox * tz - oz * tx;
+    let jt = -vt / (1 / m + (rt * rt) / car.iz);
+    const jtMax = 0.35 * j;
+    jt = Math.max(-jtMax, Math.min(jtMax, jt));
+    wvx += (j * nx + jt * tx) / m; wvz += (j * nz + jt * tz) / m;
+    car.yawRate += (rn * j + rt * jt) / car.iz;
+    car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
+    car.hit = Math.max(car.hit, -vn);
+  };
+
+  // tree trunks: exact circles against the body rectangle
+  const trunks = world.trunksNear ? world.trunksNear(car.x, car.z, Math.hypot(hl, hwid) + 1.2, tmpT) : null;
+  if (trunks && trunks.length) {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let t = 0; t < trunks.length; t += 3) {
+        const dx = trunks[t] - car.x, dz = trunks[t + 1] - car.z, R = trunks[t + 2] + 0.06;
+        const lx = dx * fx + dz * fz, ly = dx * rx + dz * rz;      // trunk in car coordinates
+        if (Math.abs(lx) >= hl + R || Math.abs(ly) >= hwid + R) continue;
+        const cx = Math.max(-hl, Math.min(hl, lx)), cy = Math.max(-hwid, Math.min(hwid, ly));
+        let nlx, nly, pen, px = cx, py = cy;
+        if (cx !== lx || cy !== ly) {
+          // trunk outside the outline, touching it
+          const ex = cx - lx, ey = cy - ly, d = Math.hypot(ex, ey);
+          if (d >= R) continue;
+          nlx = ex / d; nly = ey / d; pen = R - d;
+        } else {
+          // trunk got inside the outline (a fast hit): send it back out through the side it came
+          // in by, found by tracing back along the car's motion, or the nearest side when slow
+          const vl = Math.hypot(car.vx, car.vy);
+          let face;
+          if (vl > 0.5) {
+            const tX = car.vx > 0 ? (hl - lx) / car.vx : car.vx < 0 ? (-hl - lx) / car.vx : Infinity;
+            const tY = car.vy > 0 ? (hwid - ly) / car.vy : car.vy < 0 ? (-hwid - ly) / car.vy : Infinity;
+            face = tX < tY ? (car.vx > 0 ? 0 : 1) : (car.vy > 0 ? 2 : 3);
+          } else {
+            const ds = [hl - lx, lx + hl, hwid - ly, ly + hwid];
+            face = ds.indexOf(Math.min(...ds));
+          }
+          if (face === 0) { nlx = -1; nly = 0; pen = hl - lx + R; px = hl; }
+          else if (face === 1) { nlx = 1; nly = 0; pen = lx + hl + R; px = -hl; }
+          else if (face === 2) { nlx = 0; nly = -1; pen = hwid - ly + R; py = hwid; }
+          else { nlx = 0; nly = 1; pen = ly + hwid + R; py = -hwid; }
+        }
+        contact(fx * nlx + rx * nly, fz * nlx + rz * nly, fx * px + rx * py, fz * px + rz * py, pen);
+      }
+    }
+  }
+
+  // everything else: the obstacle distance field (buildings, walls, the map edge). Samples next
+  // to a trunk are left out, the trunk was handled above.
   let worst = 0.12, wpx = 0, wpz = 0, found = false;
   for (let k = 0; k < 10; k++) {
     // corners, side midpoints, bumper centres, quarter points
     const lx = k < 4 ? (k < 2 ? hl : -hl) : k < 6 ? 0 : k < 8 ? (k === 6 ? hl : -hl) : (k === 8 ? hl * 0.5 : -hl * 0.5);
     const ly = k < 4 ? (k % 2 ? hwid : -hwid) : k < 6 ? (k === 4 ? hwid : -hwid) : k < 8 ? 0 : (k === 8 ? hwid : -hwid);
     const ox = fx * lx + rx * ly, oz = fz * lx + rz * ly;
+    if (trunks && nearTrunk(trunks, car.x + ox, car.z + oz)) continue;
     const d = world.sdfAt(car.x + ox, car.z + oz);
     if (d < worst) { worst = d; wpx = ox; wpz = oz; found = true; }
   }
   if (found) {
     world.sdfGrad(car.x + wpx, car.z + wpz, tmpG);
     const nx = tmpG[0], nz = tmpG[1];
-    if (nx !== 0 || nz !== 0) {
-      const pen = 0.12 - worst;
-      car.x += nx * pen; car.z += nz * pen;
-      // velocity of the contact point (yaw is clockwise: v + w x r in the x/z plane)
-      const pvx = wvx - car.yawRate * wpz, pvz = wvz + car.yawRate * wpx;
-      const vn = pvx * nx + pvz * nz;
-      if (vn < 0) {
-        const rn = wpx * nz - wpz * nx;
-        const j = (-(1 + 0.15) * vn) / (1 / m + (rn * rn) / car.iz);
-        // friction along the wall
-        const tx = -nz, tz = nx;
-        const vt = pvx * tx + pvz * tz;
-        const rt = wpx * tz - wpz * tx;
-        let jt = -vt / (1 / m + (rt * rt) / car.iz);
-        const jtMax = 0.35 * j;
-        jt = Math.max(-jtMax, Math.min(jtMax, jt));
-        wvx += (j * nx + jt * tx) / m; wvz += (j * nz + jt * tz) / m;
-        car.yawRate += (rn * j + rt * jt) / car.iz;
-        car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
-        car.hit = Math.max(car.hit, -vn);
-      }
-    }
+    if (nx !== 0 || nz !== 0) contact(nx, nz, wpx, wpz, 0.12 - worst);
   }
 
   // ---- bridge railings

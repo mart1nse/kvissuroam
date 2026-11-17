@@ -1,4 +1,4 @@
-"""Shared constants for the StreetLap map bake.
+"""Shared constants for the LINNARING map bake.
 
 World frame: x = east - E0, z = -(north - N0), y = height - H0 (metres).
 Projection: L-EST97 (EPSG:3301).

@@ -1,4 +1,4 @@
-// StreetLap server: the static game is served as assets; this Worker answers /api/*.
+// LINNARING server: the static game is served as assets; this Worker answers /api/*.
 //
 // One Durable Object ("lobby") holds everyone who has the game open. Each browser keeps a
 // WebSocket to it and sends its car's position about ten times a second while someone else is
@@ -151,7 +151,7 @@ export class Lobby extends DurableObject {
       const csv = ['track,driver,car,lap_ms,lap_time,date_utc']
         .concat(rows.map((r) => [r.track, q(r.name), r.car, r.ms, `${Math.floor(r.ms / 60000)}:${((r.ms % 60000) / 1000).toFixed(2).padStart(5, '0')}`, r.at].join(',')))
         .join('\n');
-      return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'inline; filename="streetlap-laps.csv"', 'cache-control': 'no-store' } });
+      return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'inline; filename="linnaring-laps.csv"', 'cache-control': 'no-store' } });
     }
 
     return json({ error: 'not found' }, 404);

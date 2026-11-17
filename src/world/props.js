@@ -3,6 +3,8 @@
 // Everything in a sector is merged into a handful of meshes. Driving into a prop knocks it loose: it is
 // cut out of the merged mesh and flies off as its own rigid body (see knock() below). Knocked props stay
 // where they came to rest for the rest of the browser session (sessionStorage) and are back next time.
+// Poles and signs lying on the road are driven over with a small thump rather than pushed along, and
+// sometimes snap into two or three pieces, on the first impact or when a wheel rolls over them later.
 import * as THREE from 'three';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, SIGN0 = 10;
@@ -34,6 +36,21 @@ const GLOW = {
 };
 const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.07, 1.75), 0xffffff);
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
+
+// Poles can snap. Each pole-like kind is its shaft (radius at the foot, height, colour, sides) plus the
+// parts that sit on top of it and go with the top piece when it breaks.
+const SHAFT = {
+  [LIGHT]: { r: 0.09, h: 8.2, hex: 0x55525e, sides: 6, top: SOLID[LIGHT].slice(1), glow: [GLOW[LIGHT]] },
+  [POLE]: { r: 0.12, h: 8.5, hex: 0x5a4636, sides: 6, top: [] },
+  [SIGNAL]: { r: 0.07, h: 3.4, hex: 0x4a4852, sides: 6, top: SOLID[SIGNAL].slice(1) },
+  sign: { r: 0.035, h: 2.9, hex: 0x8a8a94, sides: 5, top: [], plate: true },
+};
+const shaftOf = (kind) => (kind >= SIGN0 ? SHAFT.sign : SHAFT[kind]);
+// the stretch of a shaft between heights y0 and y1 (it tapers to 0.8 of its radius at the top)
+function shaftPiece(sh, y0, y1) {
+  const r = (y) => sh.r * (1 - 0.2 * y / sh.h);
+  return part(new THREE.CylinderGeometry(r(y1), r(y0), y1 - y0, sh.sides, 1, true).translate(0, (y0 + y1) / 2, 0), sh.hex);
+}
 
 // sign faces in one strip: speed, prohibit, no entry, mandatory, warning, yield, priority, crossing, info, stop,
 // speed 40, parking, speed 30, keep right
@@ -190,11 +207,17 @@ export function createProps(world, opts = {}) {
     const rec = { entries, meshes, group, loose: [] };
     live.set(key, rec);
     // props knocked earlier this session lie where they came to rest
+    const lay = (b, pose) => {
+      if (Array.isArray(pose)) { b.obj.position.fromArray(pose, 0); b.obj.quaternion.fromArray(pose, 3); }
+      else b.obj.visible = false;
+      b.asleep = true;
+    };
     for (const e of rest) {
-      const pose = knocked[e.id];
-      const b = makeBody(e, rec);
-      if (Array.isArray(pose)) { b.obj.position.fromArray(pose, 0); b.obj.quaternion.fromArray(pose, 3); b.asleep = true; }
-      else { b.obj.visible = false; b.asleep = true; }
+      const k = knocked[e.id];
+      if (k && k.cuts) {
+        const ys = [0, ...k.cuts, shaftOf(e.kind).h];
+        for (let i = 0; i + 1 < ys.length; i++) lay(makeBody(e, rec, { y0: ys[i], y1: ys[i + 1], idx: i }), k.p[i]);
+      } else lay(makeBody(e, rec), k);
     }
     group.userData.dispose = () => {
       for (const m of meshes) m?.geometry.dispose();
@@ -205,16 +228,22 @@ export function createProps(world, opts = {}) {
   }
 
   // ---- knocked props
-  // a loose copy of one prop, centred on its centre of mass, in its own group inside the sector's group
-  function makeBody(e, rec) {
+  // a loose copy of one prop (or, with piece = { y0, y1, idx }, of the stretch of a snapped pole between
+  // those heights), centred on its centre of mass, in its own group inside the sector's group
+  function makeBody(e, rec, piece) {
     const solid = new Batch(), glow = new Batch(), sign = new Batch();
     const { kind, cs, sn } = e;
-    if (kind >= SIGN0) {
-      for (const p of SOLID.sign) solid.add(p, 0, 0, 0, cs, sn);
-      sign.add(PLATE, 0, 0, 0, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
+    const sh = shaftOf(kind);
+    const y0 = piece ? piece.y0 : 0, y1 = piece ? piece.y1 : sh?.h;
+    if (sh) {
+      solid.add(shaftPiece(sh, y0, y1), 0, 0, 0, cs, sn);
+      if (y1 >= sh.h) {
+        for (const p of sh.top) solid.add(p, 0, 0, 0, cs, sn);
+        for (const p of sh.glow || []) glow.add(p, 0, 0, 0, cs, sn);
+        if (sh.plate) sign.add(PLATE, 0, 0, 0, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
+      }
     } else {
       for (const p of SOLID[kind] || []) solid.add(p, 0, 0, 0, cs, sn);
-      if (kind === LIGHT) glow.add(GLOW[LIGHT], 0, 0, 0, cs, sn);
     }
     const obj = new THREE.Group();
     const geos = [];
@@ -236,11 +265,15 @@ export function createProps(world, opts = {}) {
     obj.position.set(e.x + c.x, e.y + c.y, e.z + c.z);
     rec.group.add(obj);
     const size = box.getSize(new THREE.Vector3());
-    const mass = kind >= SIGN0 ? MASS.sign : MASS[kind] || 30;
+    const whole = kind >= SIGN0 ? MASS.sign : MASS[kind] || 30;
+    const mass = sh && piece ? Math.max(2, whole * ((y1 - y0) / sh.h + (y1 >= sh.h && kind === LIGHT ? 0.15 : 0))) : whole;
     const L = Math.max(size.x, size.y, size.z);
     const body = {
-      id: e.id, kind, obj, geos, corners, mass, inertia: mass * (L * L) / 10 + 0.5,
+      id: e.id, kind, e, rec, c, obj, geos, corners, mass, inertia: mass * (L * L) / 10 + 0.5,
       v: new THREE.Vector3(), w: new THREE.Vector3(), asleep: false, still: 0, reach: (kind >= SIGN0 ? REACH.sign : REACH[kind] || 0.3) + Math.min(size.x, size.z) * 0.5,
+      // the shaft's centre line, for driving over it when it lies on the ground
+      seg: sh ? [new THREE.Vector3(0, y0, 0).sub(c), new THREE.Vector3(0, y1, 0).sub(c)] : null, r: sh ? sh.r : 0,
+      idx: piece ? piece.idx : -1, under: 0, lastPass: -9,
     };
     rec.loose.push(body);
     return body;
@@ -332,9 +365,105 @@ export function createProps(world, opts = {}) {
     if (b.still > 0.5 || (touching && b.age > 8) || b.age > 30) {
       b.asleep = true; b.v.set(0, 0, 0); b.w.set(0, 0, 0);
       moving.delete(b);
-      knocked[b.id] = [...o.position.toArray().map((v) => Math.round(v * 100) / 100), ...o.quaternion.toArray().map((v) => Math.round(v * 1e4) / 1e4)];
+      const pose = [...o.position.toArray().map((v) => Math.round(v * 100) / 100), ...o.quaternion.toArray().map((v) => Math.round(v * 1e4) / 1e4)];
+      if (b.idx >= 0) { if (knocked[b.id]?.p) knocked[b.id].p[b.idx] = pose; } else knocked[b.id] = pose;
       saveTimer = 0.5;
     }
+  }
+
+  // ---- snapping poles
+  // break a whole pole body into pieces at the heights in cuts; the pieces carry on with its motion
+  function split(b, cuts) {
+    const { e, rec, obj } = b;
+    const sh = shaftOf(e.kind);
+    const ys = [0, ...cuts, sh.h];
+    rec.group.remove(obj);
+    b.geos.forEach((g) => g.dispose());
+    rec.loose.splice(rec.loose.indexOf(b), 1);
+    moving.delete(b);
+    knocked[e.id] = { cuts: cuts.map((y) => Math.round(y * 100) / 100), p: ys.slice(1).map(() => 1) };
+    const out = [];
+    for (let i = 0; i + 1 < ys.length; i++) {
+      const pc = makeBody(e, rec, { y0: ys[i], y1: ys[i + 1], idx: i });
+      const off = tmpC.copy(pc.c).sub(b.c).applyQuaternion(obj.quaternion);
+      pc.obj.quaternion.copy(obj.quaternion);
+      pc.obj.position.copy(obj.position).add(off);
+      pc.v.crossVectors(b.w, off).add(b.v);
+      pc.w.copy(b.w);
+      // a little kick apart at the break, and a tumble of its own
+      pc.v.addScaledVector(off.normalize(), 0.6 + Math.random() * 0.6);
+      pc.w.x += (Math.random() - 0.5) * 2; pc.w.z += (Math.random() - 0.5) * 2;
+      pc.age = 0; pc.still = 0; pc.lastPass = b.lastPass; pc.under = 0;
+      moving.add(pc);
+      out.push(pc);
+    }
+    return out;
+  }
+  const canBreak = (b) => b.seg && b.idx < 0;
+  // where a pole snaps on the first impact: low down near the bumper, sometimes again higher up
+  function impactCuts(kind) {
+    const h = shaftOf(kind).h;
+    const lo = Math.min(h * 0.4, 0.45 + Math.random() * 0.6);
+    return Math.random() < 0.35 ? [lo, lo + (h - lo) * (0.35 + Math.random() * 0.3)] : [lo];
+  }
+  // where a lying pole snaps under a wheel: at the wheel (t along the shaft), sometimes also elsewhere
+  function wheelCuts(kind, t) {
+    const h = shaftOf(kind).h;
+    const at = h * Math.min(0.85, Math.max(0.15, t));
+    if (Math.random() < 0.3) {
+      const other = h * (at > h / 2 ? 0.15 + Math.random() * 0.2 : 0.65 + Math.random() * 0.2);
+      if (Math.abs(other - at) > 0.6) return [Math.min(at, other), Math.max(at, other)];
+    }
+    return [at];
+  }
+
+  // A pole lying on the road is driven over, not pushed: each wheel that rolls onto it gives the car a
+  // small knock upwards and rolls the pole a little, and a pass over it may snap it.
+  const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+  function lying(b) {
+    return b.seg && Math.abs(tmpV.set(0, 1, 0).applyQuaternion(b.obj.quaternion).y) < 0.55;
+  }
+  function driveOver(b, car, wheels, fx, fz, speed) {
+    const o = b.obj;
+    tmpA.copy(b.seg[0]).applyQuaternion(o.quaternion).add(o.position);
+    tmpB.copy(b.seg[1]).applyQuaternion(o.quaternion).add(o.position);
+    const ux = tmpB.x - tmpA.x, uz = tmpB.z - tmpA.z, uu = ux * ux + uz * uz || 1;
+    let under = 0, fresh = 0, tHit = 0.5;
+    for (let i = 0; i < 4; i++) {
+      const [wx, wz] = wheels[i];
+      const t = Math.min(1, Math.max(0, ((wx - tmpA.x) * ux + (wz - tmpA.z) * uz) / uu));
+      const dx = wx - tmpA.x - ux * t, dz = wz - tmpA.z - uz * t;
+      if (dx * dx + dz * dz > (0.14 + b.r) ** 2) continue;
+      // the shaft must be down at road level there, not up on a kerb or wall
+      if (tmpA.y + (tmpB.y - tmpA.y) * t - world.heightAt(wx, wz) > 0.5) continue;
+      under |= 1 << i;
+      if (!(b.under & (1 << i))) { fresh++; tHit = t; }
+    }
+    b.under = under;
+    if (!fresh) return;
+    // the car: a thump through the springs and a whisker of speed
+    const k = Math.min(1, speed / 15);
+    car.vyUp = Math.max(car.vyUp, 0) + fresh * (0.12 + 0.22 * k) * Math.min(1, b.r / 0.09 + 0.3);
+    car.vx *= 1 - 0.004 * fresh;
+    car.hit = Math.max(car.hit, 0.15 + 0.25 * k);
+    // the pole: rolled a little the way the car goes, never carried along
+    const kick = Math.min(0.8, 0.1 + speed * 0.025);
+    b.v.x += fx * kick; b.v.z += fz * kick; b.v.y += 0.2 + 0.3 * k;
+    tmpT.set(ux, 0, uz).normalize();
+    // spin about its own axis, rolling it forwards
+    const roll = (fx * tmpT.z - fz * tmpT.x) * kick / Math.max(0.05, b.r) * 0.15;
+    b.w.addScaledVector(tmpT, roll);
+    b.w.y += (Math.random() - 0.5) * 0.3 * k;
+    b.asleep = false; b.still = 0; b.age = 0;
+    moving.add(b);
+    // a new pass over it (not the second wheel of the same one) may snap it
+    const now = car.time ?? performance.now() / 1000;
+    if (canBreak(b) && now - b.lastPass > 0.25 && Math.random() < 0.45 + 0.2 * k) {
+      // pieces start clear of the wheel so they are not driven over twice in one go
+      for (const pc of split(b, wheelCuts(b.kind, tHit))) pc.under = 15;
+    }
+    b.lastPass = now;
+    saveTimer = 0.5;
   }
 
   // check the car against the props around it, knock what it touches, move what is flying
@@ -347,6 +476,8 @@ export function createProps(world, opts = {}) {
       const M = car.spec.mass;
       let cvx = car.vx * fx + car.vy * rx, cvz = car.vx * fz + car.vy * rz, took = 0;
       const sx = Math.floor((car.x - G0) / S), sz = Math.floor((car.z - G0) / S);
+      const hw = car.halfWid - 0.25;
+      const wheels = [[car.a, -hw], [car.a, hw], [-car.b, -hw], [-car.b, hw]].map(([l, t]) => [car.x + fx * l + rx * t, car.z + fz * l + rz * t]);
       const touches = (px, pz, reach) => {
         const dx = px - car.x, dz = pz - car.z;
         if (dx * dx + dz * dz > 49) return false;
@@ -366,12 +497,20 @@ export function createProps(world, opts = {}) {
           knocked[e.id] = 1;
           const j = hit(b, cvx, cvz, M);
           took += j;
+          // sometimes it snaps straight away, more often the faster the car; else maybe later, under a wheel
+          if (canBreak(b) && Math.random() < Math.min(0.5, Math.max(0.08, (speed - 6) / 40))) split(b, impactCuts(b.kind));
           cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M;
           saveTimer = 0.5;
         }
-        for (const b of rec.loose) {
+        for (const b of [...rec.loose]) {
           const p = b.obj.position;
-          if (!b.obj.visible || Math.abs(p.y - car.y) > 2.5 || !touches(p.x, p.z, b.reach)) continue;
+          if (!b.obj.visible || Math.abs(p.y - car.y) > 2.5) continue;
+          if (lying(b)) {
+            const dx = p.x - car.x, dz = p.z - car.z;
+            if (dx * dx + dz * dz < 64 + 25) driveOver(b, car, wheels, fx, fz, speed);
+            continue;
+          }
+          if (!touches(p.x, p.z, b.reach)) continue;
           const j = hit(b, cvx, cvz, M);
           if (j) { took += j; cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M; }
         }
@@ -422,5 +561,7 @@ export function createProps(world, opts = {}) {
     return best && { id: best.id, kind: best.kind, x: best.x, y: best.y, z: best.z };
   };
   attach.loose = (id) => { for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) return { p: b.obj.position.toArray(), q: b.obj.quaternion.toArray(), asleep: b.asleep, v: b.v.toArray(), w: b.w.toArray(), still: b.still }; return null; };
+  attach._raw = (id) => { const r = []; for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) r.push(b); r.wake = (b) => { b.asleep = false; b.age = 0; b.still = 0; moving.add(b); }; return r; };
+  attach.bodies = (id) => { const r = []; for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) r.push({ idx: b.idx, p: b.obj.position.toArray(), lying: !!lying(b), asleep: b.asleep, ax: b.seg && new THREE.Vector3(0, 1, 0).applyQuaternion(b.obj.quaternion).toArray() }); return r; };
   return attach;
 }

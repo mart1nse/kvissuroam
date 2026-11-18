@@ -26,7 +26,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mo
 
 export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, onPeople }) {
   const others = new Map();      // id -> remote player
-  let ws = null, myId = null, retry = 1, sendTimer = 0, shiftHold = 0, board = null, online = false;
+  let ws = null, myId = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   let carId = 'w201';
   const labels = document.createElement('div');
@@ -221,6 +221,8 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
           let d = B.p[k] - v; d = Math.atan2(Math.sin(d), Math.cos(d));
           return v + d * f;
         }
+        if (B.p[k] === undefined) return v;                         // (a browser still on an older version)
+        if (k === 20) return B.p[k];                                // flags
         return v + (B.p[k] - v) * f;
       });
     } else {
@@ -230,6 +232,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
       p[0] += p[6] * ahead; p[1] += p[7] * ahead;
     }
     if (now - B.t > 5) return null;                              // gone quiet
+    o.live = now - B.t < 0.6;                                    // still sending: its sound and smoke are current
     return p;
   }
 
@@ -270,25 +273,54 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     }
   }
 
+  // Another player's car as the sound, smoke and tyre mark code wants it: the same fields as our own car
+  // after its physics step, rebuilt from what that browser sends.
+  const fxList = [];
+  function effects(o, p, fx, fz) {
+    const s = o.spec, r = o.fx || (o.fx = {});
+    const sx = -fz, sz = fx, flags = p[20] || 0, has = p[14] !== undefined;
+    r.id = o.id; r.spec = s;
+    r.x = p[0]; r.z = p[1]; r.y = p[2]; r.yaw = p[3]; r.steer = p[8];
+    r.a = s.wheelbase * s.cgFront; r.b = s.wheelbase * (1 - s.cgFront);
+    r.vx = p[6] * fx + p[7] * fz; r.vy = p[6] * sx + p[7] * sz;
+    r.reversing = !!p[10];
+    r.soot = !!s.dpfSmoke && p[12] !== undefined;
+    r.throttle = p[12] || 0; r.boost = p[13] || 0;
+    r.tyres = has;                                                // false for a browser still on an older version
+    r.rpm = has ? p[14] : 0;
+    r.slipV = r.slipVF = r.slipVR = has ? p[15] : 0;
+    r.skidF = has ? p[16] : 0; r.skidR = has ? p[17] : 0; r.rubF = has ? p[18] : 0; r.rubR = has ? p[19] : 0;
+    r.revCut = flags & 1; r.inWater = !!(flags & 2); r.paved = !!(flags & 4);
+    return r;
+  }
+
   const v3 = new THREE.Vector3();
   function update(car, dt, active) {
     const now = performance.now() / 1000;
     // send our position while anyone else is online
     sendTimer -= dt;
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
+    cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     if (active && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       sendTimer = 1 / SEND_HZ;
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
       const r2 = (v) => Math.round(v * 100) / 100;
       const r3 = (v) => Math.round(v * 1000) / 1000;
+      const r1 = (v) => Math.round((v || 0) * 10) / 10;
       send({ t: 's', p: [r2(car.x), r2(car.z), r2(car.y), r3(car.yaw), r3(car.pitch), r3(car.roll),
         r2(car.vx * fx + car.vy * rx), r2(car.vx * fz + car.vy * rz), r3(car.steer), car.brake > 0 ? 1 : 0, car.reversing ? 1 : 0,
         // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke; the pedal
         // is sent as lifted during a gear change and for long enough after it to be seen at this send rate,
         // which cuts the smoke on the other side too)
-        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0)] });
+        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0),
+        // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
+        // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
+        // 4 on paving)
+        Math.round(car.rpm || 0), r1(car.slipV), r1(car.skidF), r1(car.skidR), r1(car.rubF), r1(car.rubR),
+        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0)] });
     }
     const W = innerWidth, H = innerHeight;
+    fxList.length = 0;
     for (const o of others.values()) {
       o.pose = sample(o, now);
       const g = o.model?.group;
@@ -296,6 +328,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
       if (!o.pose) { g.visible = false; o.el.style.display = 'none'; continue; }
       const p = o.pose;
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
+      if (o.live) fxList.push(effects(o, p, fx, fz));
       g.visible = true;
       g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
       g.rotation.set(p[4], -p[3], -p[5]);
@@ -330,18 +363,8 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     nameReady,
     // everyone else online, including those who have not sent a position yet
     roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
-    // other players' cars that puff smoke (a diesel with a failing DPF), as the smoke module wants them
-    smokers() {
-      const out = [];
-      for (const o of others.values()) {
-        const p = o.pose;
-        if (!p || !o.spec?.dpfSmoke || p[12] === undefined) continue;
-        const fx = Math.sin(p[3]), fz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
-        out.push({ id: o.id, car: { spec: o.spec, x: p[0], z: p[1], y: p[2], yaw: p[3], b: o.spec.wheelbase * (1 - o.spec.cgFront),
-          vx: p[6] * fx + p[7] * fz, vy: p[6] * sx + p[7] * sz, throttle: p[12], boost: p[13] || 0, reversing: !!p[10] } });
-      }
-      return out;
-    },
+    // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
+    remotes() { return fxList; },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
       n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);

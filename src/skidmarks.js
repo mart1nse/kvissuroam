@@ -64,7 +64,8 @@ export function createSkidMarks(world) {
 
   let next = 0;
   // per wheel: the last ribbon point (centre, its two edges, strength, distance along the mark, heading)
-  const wheels = [0, 1, 2, 3].map(() => ({ on: false, x: 0, z: 0, lx: 0, ly: 0, lz: 0, rx: 0, ry: 0, rz: 0, a: 0, v: 0, tx: 0, tz: 0, hw: TYRE / 2, paved: true }));
+  const wheelSet = () => [0, 1, 2, 3].map(() => ({ on: false, x: 0, z: 0, lx: 0, ly: 0, lz: 0, rx: 0, ry: 0, rz: 0, a: 0, v: 0, tx: 0, tz: 0, hw: TYRE / 2, paved: true }));
+  const mine = wheelSet(), theirs = new Map();
 
   // one quad from the wheel's last point to a new one
   function quad(w, lx, ly, lz, rx, ry, rz, a, v, paved) {
@@ -94,7 +95,18 @@ export function createSkidMarks(world) {
     w.on = false;
   }
 
-  function update(car) {
+  // other players' cars (multiplayer.js remotes()) lay marks too, while they are near enough to be seen
+  function updateOthers(list, me) {
+    for (const o of list) {
+      if (!o.tyres || (me && (o.x - me.x) ** 2 + (o.z - me.z) ** 2 > 350 * 350)) continue;
+      let set = theirs.get(o.id);
+      if (!set) theirs.set(o.id, set = wheelSet());
+      update(o, set);
+    }
+    if (theirs.size > list.length) for (const [id, set] of [...theirs]) if (!list.some((o) => o.id === id)) { set.forEach(close); theirs.delete(id); }
+  }
+
+  function update(car, wheels = mine) {
     const live = !car.inWater;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw);
     const sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
@@ -144,5 +156,5 @@ export function createSkidMarks(world) {
     }
   }
 
-  return { mesh, update, get count() { return next; } };
+  return { mesh, update: (car) => update(car), updateOthers, get count() { return next; } };
 }

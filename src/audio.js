@@ -4,12 +4,20 @@
 import { ENGINE_SOUNDS } from './engine-sounds.js';
 
 const ENGINE_LEVEL = 0.4;
+// Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
+// distance and direction from the camera.
+const VOICES = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 2 : 3;
+const HEAR = 240;          // metres: further off than this a car is silent
+const REF = 7;             // metres: at this distance another car is as loud as our own
+const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, which is also what bends its pitch
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let skid = 0, spinS = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
   let muted = false, ev = false, turbo = false, background = false;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
+  let noiseSrc = null, workletReady = false;
+  const voices = [];
 
   function start() {
     if (ctx) { ctx.resume?.(); return; }
@@ -52,11 +60,13 @@ export function createAudio() {
     spinGain = ctx.createGain(); spinGain.gain.value = 0;
     noise.connect(spinFilt).connect(spinGain).connect(master);
     noise.start();
+    noiseSrc = noise;
   }
 
   function loadSynth() {
     if (!ctx.audioWorklet || typeof AudioWorkletNode !== 'function') return;
     ctx.audioWorklet.addModule(`${import.meta.env.BASE_URL}engine-worklet.js`).then(() => {
+      workletReady = true;
       synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
       synthGain = ctx.createGain(); synthGain.gain.value = ENGINE_LEVEL;
       synth.connect(synthGain).connect(master);
@@ -81,7 +91,7 @@ export function createAudio() {
   }
 
   // turbo blow-off valve venting when the throttle snaps shut on boost
-  function psh(strength) {
+  function psh(strength, dest = master) {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.8;
     f.frequency.setValueAtTime(3200, t);
@@ -89,7 +99,7 @@ export function createAudio() {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(Math.min(0.12, 0.13 * strength), t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(dest);
     src.start(t, Math.random()); src.stop(t + 0.45);
   }
 
@@ -171,6 +181,120 @@ export function createAudio() {
     spinGain.gain.setTargetAtTime(spinS * 0.05, t, 0.08);
   }
 
+  // ---- other players' cars
+  // Each voice is the same set of sources as our own car (engine synthesiser, whine, tyre noise) mixed
+  // into one chain: a low-pass that dulls it with distance, a delay of the time the sound takes to
+  // arrive, a gain that falls with distance and a pan towards where the car is. The delay changing as
+  // the car closes or pulls away is the Doppler shift: higher coming at you, dropping as it goes past.
+  function makeVoice() {
+    const v = { id: null, carId: null, synth: null, cfg: null, skid: 0, spin: 0, lastBoost: 0, lastPsh: 0, d: 0 };
+    v.mix = ctx.createGain();
+    v.lp = ctx.createBiquadFilter(); v.lp.type = 'lowpass'; v.lp.frequency.value = 8000; v.lp.Q.value = 0.5;
+    v.delay = ctx.createDelay(1);
+    v.out = ctx.createGain(); v.out.gain.value = 0;
+    v.mix.connect(v.lp).connect(v.delay).connect(v.out);
+    if (ctx.createStereoPanner) { v.pan = ctx.createStereoPanner(); v.out.connect(v.pan).connect(master); } else v.out.connect(master);
+    v.engGain = ctx.createGain(); v.engGain.gain.value = ENGINE_LEVEL; v.engGain.connect(v.mix);
+    v.whine = ctx.createOscillator(); v.whine.type = 'sine';
+    v.whineGain = ctx.createGain(); v.whineGain.gain.value = 0;
+    v.whine.connect(v.whineGain).connect(v.mix); v.whine.start();
+    v.tyreFilt = ctx.createBiquadFilter(); v.tyreFilt.type = 'bandpass'; v.tyreFilt.frequency.value = 1300; v.tyreFilt.Q.value = 5;
+    v.tyreGain = ctx.createGain(); v.tyreGain.gain.value = 0;
+    noiseSrc.connect(v.tyreFilt).connect(v.tyreGain).connect(v.mix);
+    v.spinFilt = ctx.createBiquadFilter(); v.spinFilt.type = 'bandpass'; v.spinFilt.frequency.value = 800; v.spinFilt.Q.value = 6;
+    v.spinGain = ctx.createGain(); v.spinGain.gain.value = 0;
+    noiseSrc.connect(v.spinFilt).connect(v.spinGain).connect(v.mix);
+    voices.push(v);
+    return v;
+  }
+  function release(v) {
+    const t = ctx.currentTime;
+    v.id = null;
+    v.out.gain.setTargetAtTime(0, t, 0.08);
+    if (v.synth) v.synth.port.postMessage({ state: { on: 0 } });
+  }
+  function bind(v, r, d) {
+    const t = ctx.currentTime;
+    v.id = r.id; v.carId = r.spec.id; v.skid = v.spin = v.lastBoost = 0;
+    v.ev = r.spec.engine.type === 'ev';
+    v.cfg = v.ev ? null : ENGINE_SOUNDS[r.spec.id] || null;
+    if (v.cfg && workletReady && !v.synth) {
+      try {
+        v.synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+        v.synth.connect(v.engGain);
+      } catch { v.synth = null; }
+    }
+    if (v.synth) v.synth.port.postMessage(v.cfg ? { config: v.cfg, state: { on: 0 } } : { state: { on: 0 } });
+    // start silent and already at the right delay, so a car coming into earshot does not sweep in
+    v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(0, t);
+    v.delay.delayTime.cancelScheduledValues(t); v.delay.delayTime.setValueAtTime(Math.min(0.95, d / SOUND), t);
+    v.d = d;
+  }
+  function drive(v, r, d, pan) {
+    const t = ctx.currentTime, s = r.spec, e = s.engine;
+    // a jump across the map is not a car passing by: no pitch sweep for it
+    if (Math.abs(d - v.d) > 25) { v.delay.delayTime.cancelScheduledValues(t); v.delay.delayTime.setValueAtTime(Math.min(0.95, d / SOUND), t); }
+    else v.delay.delayTime.setTargetAtTime(Math.min(0.95, d / SOUND), t, 0.07);
+    v.d = d;
+    const fade = Math.max(0, Math.min(1, (HEAR - d) / 70));
+    v.out.gain.setTargetAtTime(Math.pow(Math.min(1, REF / d), 0.8) * fade, t, 0.06);
+    v.lp.frequency.setTargetAtTime(700 + 11000 * Math.min(1, 14 / d), t, 0.1);
+    if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.06);
+    const speed = Math.hypot(r.vx, r.vy), vw = speed + r.slipV, b = r.boost;
+    if (v.ev) {
+      v.whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
+      v.whineGain.gain.setTargetAtTime(Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + r.throttle * 0.5), t, 0.08);
+    } else {
+      if (e.turbo) {
+        const wh = e.turbo.whistle ?? 1;
+        v.whine.frequency.setTargetAtTime(1400 + r.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
+        v.whineGain.gain.setTargetAtTime(0.016 * b * b * wh, t, 0.08);
+        if (r.throttle > 0.02) v.lastBoost = Math.max(v.lastBoost * 0.99, b);
+        else {
+          if (v.lastBoost > 0.5 && t - v.lastPsh > 0.6) { psh(v.lastBoost * wh, v.mix); v.lastPsh = t; }
+          v.lastBoost = 0;
+        }
+      } else v.whineGain.gain.setTargetAtTime(0, t, 0.05);
+      if (v.synth && v.cfg) v.synth.port.postMessage({ state: { rpm: Math.max(r.rpm, e.idle * 0.8), throttle: r.throttle, boost: b, on: 1, redline: e.redline, idle: e.idle, cut: r.revCut ? 1 : 0, shift: 0 } });
+    }
+    const k = r.paved ? Math.max(r.skidF, r.skidR) : 0;
+    v.skid += (k - v.skid) * 0.2;
+    v.tyreFilt.frequency.setTargetAtTime(1050 + Math.min(speed, 35) * 16, t, 0.08);
+    v.tyreGain.gain.setTargetAtTime(Math.max(0, v.skid - 0.15) * 0.07, t, 0.07);
+    const over = r.paved ? r.slipV - 0.2 * Math.max(Math.abs(r.vx), 3) - 1.5 : 0;
+    v.spin += (Math.max(0, Math.min(1, over / 9)) - v.spin) * 0.15;
+    v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
+    v.spinGain.gain.setTargetAtTime(v.spin * 0.05, t, 0.08);
+  }
+  // list: other players' cars (multiplayer.js remotes()); cam: the camera, which is where the ears are
+  const near = [];
+  function updateRemotes(list, cam, active) {
+    if (!ctx || !noiseSrc) return;
+    near.length = 0;
+    const c = cam.position;
+    if (active && ctx.state === 'running') for (const r of list) {
+      if (!r.tyres || r.inWater) continue;
+      const d = Math.hypot(r.x - c.x, r.y + 0.5 - c.y, r.z - c.z);
+      if (d < HEAR) near.push({ r, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    if (near.length > VOICES) near.length = VOICES;
+    for (const v of voices) if (v.id !== null && !near.some((n) => n.r.id === v.id)) release(v);
+    const m = cam.matrixWorld.elements;                            // (its first column is the camera's right)
+    for (const { r, d } of near) {
+      let v = voices.find((x) => x.id === r.id);
+      if (v && v.carId !== r.spec.id) { release(v); v = null; }
+      if (!v) {
+        v = voices.find((x) => x.id === null) || (voices.length < VOICES ? makeVoice() : null);
+        if (!v) continue;
+        bind(v, r, d);
+      }
+      const dd = Math.max(d, 0.5);
+      const side = ((r.x - c.x) * m[0] + (r.y + 0.5 - c.y) * m[1] + (r.z - c.z) * m[2]) / dd;
+      drive(v, r, dd, Math.max(-0.85, Math.min(0.85, side * 0.85 * Math.min(1, d / 4))));
+    }
+  }
+
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
     if (!ctx || ctx.state !== 'running') return;
@@ -192,7 +316,7 @@ export function createAudio() {
   }
 
   return {
-    start, update, chime,
+    start, update, updateRemotes, chime,
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
       carId = ev ? null : spec.id;
@@ -207,5 +331,7 @@ export function createAudio() {
       if (master) master.gain.setTargetAtTime(muted || b ? 0 : 0.5, ctx.currentTime, 0.05);
     },
     get muted() { return muted; },
+    // (for tests: which other cars have a voice, how far off they are and how loud)
+    get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, node: v.out })); },
   };
 }

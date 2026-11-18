@@ -1,9 +1,12 @@
 // The Vanemuise / Ülikooli / Uueturu junction and Uueturu up to the Küüni plaza (Martin, 18 Nov, street
-// view Aug 2024), in pastel colours: the zebra crossings round the junction, the street names painted on
-// the road, and the diamond paving of Uueturu (dark slate squares between pale bands), which runs across
-// the whole street from the building fronts to the green (extent checked on the 2024 kaldaerofoto).
+// view Aug 2024 and kaldaerofoto Apr 2024), in pastel colours: the zebra crossings round the junction, the
+// street names painted on the road, the diamond paving of Uueturu (dark slate squares between slightly
+// paler bands) from the building fronts to the green, and the left side of the street: the slate office
+// building with its window bands, pale plinth and white annex, the parking bays in front of it, the bush
+// island after the bays, lamp posts and bollards.
 import * as THREE from 'three';
 import { createTrack } from './race.js';
+import { Parts, BOX } from './landmarks.js';
 
 const ZEBRAS = [
   { i: 2303.5, w: 4.0 },                                    // across Vanemuise, before the junction
@@ -16,8 +19,66 @@ const SIDE_ZEBRAS = [
 ];
 const ULIKOOLI = [0.70, 0.71];                              // direction of Ülikooli (x, z), from the orthophoto
 const NAMES = [{ text: 'Ülikooli tn', i: 2305.5, lat: 2.2 }, { text: 'Uueturu tn', i: 2318, lat: 1.6 }];
-const DIAMOND = { i0: 2316, i1: 2346, left: -9.5, right: 7.5, period: 2.6, band: 0.3 };
-const COL = { white: 0xfaf8ff, slate: 0xb4afd4, band: 0xece7f5 };
+const DIAMOND = { i0: 2316, i1: 2346, left: -23, right: 7.5, period: 2.6, band: 0.3 };
+const COL = {
+  white: 0xfaf8ff, slate: 0x66657e, band: 0x807f9a, patch: 0xb9b5c9,
+  wall: 0x8885a4, glass: 0xa8cfd0, frame: 0x4a4760, plinth: 0xe8e3ee, annex: 0xf4efe6, annexGlass: 0x7d7a99,
+  kerb: 0xd9d4e2, soil: 0x8f8499, bush: [0x6fbf7a, 0x5cae6c, 0x86cf86],
+};
+
+// The office building on the left, from the LOD2 building model (game x, z; top = roof edge, world y).
+// Walls run a -> b with the street on their right.
+const WALLS = {
+  corner: { a: [1577.95, 3123.4], b: [1585.55, 3118.4], top: 24.2 },    // cut-off corner at the junction, entrance
+  end: { a: [1585.55, 3118.4], b: [1590.75, 3127.25], top: 24.4 },      // end wall facing the junction
+  front: { a: [1590.75, 3127.25], b: [1613.55, 3104.05], top: 20.3 },   // the long front on Uueturu
+  step: { a: [1613.55, 3104.05], b: [1611.4, 3101.7], top: 20.3 },      // where the front steps back
+  back: { a: [1611.4, 3101.7], b: [1627.5, 3086.45], top: 18.6 },       // set back 3.2 m, up to the Küüni corner
+};
+const TOWER = { s1: 5.73, top: 24.4 };                    // the first metres of the front are a storey higher
+const ROWS = [[9.6, 11.8], [13.3, 15.1], [16.8, 18.6]];   // window bands of the front (world y)
+const GROUPS = { s0: 6.7, pitch: 3.7, w: 3.0, n: 6 };     // six pairs of windows in each band
+const ANNEX = { s0: 5.0, s1: 16.0, depth: 3.2, h: 12.1, cols: 5, rows: 4 };   // white annex, along the back wall
+// in front of the long front, as (s along it, n out from it): the walkway, then the bays, then the lane
+const BAYS = { s0: 3.3, step: 2.6, n: 9, n0: 3.4, n1: 8.4, lineFrom: 0.8, w: 0.14 };
+const ISLAND = { s: 28.7, n: 5.6, hu: 2.75, hv: 1.8 };    // kerbed bush island after the last bay
+const LAMP_S = [7.3, 13.3, 19.3, 24.8], BOLLARD_S = [1.4, 4.2, 7.0];
+// the map has this building's lamps and a sign inside it: they go out to the walkway instead
+const LIGHT = 0, BOLLARD = 8;
+const MOVED = [[0, 1606.3, 3102.5], [0, 1600.8, 3108.1], [0, 1598.1, 3116.5], [18, 1596.9, 3113.5]];
+
+function wallOf({ a, b, top }) {
+  const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
+  return { a, top, len, ux, uz, nx: -uz, nz: ux, yaw: Math.atan2(-uz, ux), at: (s, n) => [a[0] + ux * s - uz * n, a[1] + uz * s + ux * n] };
+}
+
+// props layer: leave out the lamps and the sign the map has inside the building ...
+export function uueturuClear(data, out) {
+  for (const [key, a] of Object.entries(data.sectors)) {
+    for (let k = 0; k < a.length; k += data.stride) {
+      if (MOVED.some(([kind, x, z]) => a[k] === kind && Math.hypot(a[k + 1] - x, a[k + 2] - z) < 0.6)) out.add(`${key}:${k / data.stride}`);
+    }
+  }
+}
+// ... and stand lamp posts along the walkway line, bollards and the sign at the corner
+export function uueturuProps() {
+  const F = wallOf(WALLS.front), out = [];
+  const arm = (Math.atan2(F.nx, -F.nz) * 180) / Math.PI;           // compass bearing of "out from the wall"
+  for (const s of LAMP_S) out.push([LIGHT, ...F.at(s, BAYS.n0), arm]);
+  for (const s of BOLLARD_S) out.push([BOLLARD, ...F.at(s, 2.6), arm]);
+  out.push([18, ...F.at(-1.6, 2.4), 66]);
+  return out;
+}
+
+// building colours: the two parts of this building the map knows become slate grey like the real one
+export function uueturuWalls(walls) {
+  const list = walls && walls.sectors && walls.sectors['3_6'];
+  if (!list) return;
+  for (let k = 0; k < list.length; k += 4) {
+    const x = 1120 + list[k + 1] * 0.1, z = 3040 + list[k + 2] * 0.1;
+    if (list[k] === 486 && Math.hypot(x - 1598.2, z - 3104.8) < 4.5) list[k + 3] = COL.wall;
+  }
+}
 
 function canvasTex(w, h, draw) {
   const c = document.createElement('canvas');
@@ -38,7 +99,7 @@ function diamondTex() {
     g.fillStyle = hex(COL.slate);
     g.fillRect(b, b, w - 2 * b, h - 2 * b);
     // faint joints between the small pavers inside the squares
-    g.strokeStyle = 'rgba(70, 62, 110, 0.10)'; g.lineWidth = 1;
+    g.strokeStyle = 'rgba(40, 36, 60, 0.12)'; g.lineWidth = 1;
     for (let k = b + 16; k < w - b; k += 16) {
       g.beginPath(); g.moveTo(k, b); g.lineTo(k, h - b); g.stroke();
       g.beginPath(); g.moveTo(b, k); g.lineTo(w - b, k); g.stroke();
@@ -107,6 +168,85 @@ export function createUueturu(world, group) {
     for (let o = -half + 0.25; o <= half - 0.25; o += 1.0) quad(pos, cx + rx * o, cz + rz * o, ux, uz, len / 2, 0.25, 0.075);
   }
 
+  // the left side of the street: the building's faces towards the street, the bush island
+  function buildLeft(F, B) {
+    const p = new Parts(), g = (q) => world.heightAt(q[0], q[1]);
+    // a flat box standing against wall W: s0..s1 along it, y0..y1, its back `off` out from the wall
+    const slab = (W, s0, s1, y0, y1, off, thick, hex) => {
+      const [x, z] = W.at((s0 + s1) / 2, off + thick / 2);
+      p.add(BOX(s1 - s0, y1 - y0, thick), hex, x, (y0 + y1) / 2, z, W.yaw);
+    };
+    // a window: dark frame, glass, upright bars
+    const win = (W, s0, s1, y0, y1, bars, glass = COL.glass) => {
+      slab(W, s0 - 0.09, s1 + 0.09, y0 - 0.09, y1 + 0.09, 0.14, 0.05, COL.frame);
+      slab(W, s0, s1, y0, y1, 0.17, 0.05, glass);
+      for (let k = 1; k <= bars; k++) slab(W, s0 + (s1 - s0) * k / (bars + 1) - 0.04, s0 + (s1 - s0) * k / (bars + 1) + 0.04, y0, y1, 0.2, 0.04, COL.frame);
+    };
+    // the wall itself, and a pale plinth that follows the ground
+    const face = (W) => slab(W, 0, W.len, Math.min(g(W.at(0, 0.5)), g(W.at(W.len, 0.5))) - 1, W.top + 0.05, 0.03, 0.11, COL.wall);
+    const plinth = (W, s0 = 0, s1 = W.len, off = 0.14) => {
+      const n = Math.max(1, Math.round((s1 - s0) / 5));
+      for (let k = 0; k < n; k++) {
+        const a = s0 + (s1 - s0) * k / n, b = s0 + (s1 - s0) * (k + 1) / n, ya = g(W.at(a, 0.6)) + 1.25, yb = g(W.at(b, 0.6)) + 1.25;
+        const box = BOX(b - a, 2.2, 0.1), q = box.attributes.position;
+        for (let i = 0; i < q.count; i++) q.setY(i, q.getY(i) + q.getX(i) * (yb - ya) / (b - a));
+        const [x, z] = W.at((a + b) / 2, off + 0.05);
+        p.add(box, COL.plinth, x, (ya + yb) / 2 - 1.1, z, W.yaw);
+      }
+    };
+
+    // ---- the long front: plain tower end, then three bands of six window pairs
+    face(F); slab(F, 0, TOWER.s1, F.top, TOWER.top + 0.05, 0.03, 0.11, COL.wall); plinth(F);
+    for (const [y0, y1] of ROWS) for (let k = 0; k < GROUPS.n; k++) win(F, GROUPS.s0 + GROUPS.pitch * k, GROUPS.s0 + GROUPS.pitch * k + GROUPS.w, y0, y1, 1);
+    // ---- end wall towards the junction: two window pairs on four floors
+    const E = wallOf(WALLS.end);
+    face(E); plinth(E);
+    for (const [y0, y1] of [...ROWS, [20.4, 22.2]]) for (const s0 of [1.5, 5.75]) win(E, s0, s0 + 3.0, y0, y1, 1);
+    // ---- the cut-off corner: glazed stair, entrance under a pale canopy
+    const C = wallOf(WALLS.corner), gc = g(C.at(C.len / 2, 0.6));
+    face(C); plinth(C, 0, 2.6); plinth(C, 6.6, C.len);
+    win(C, 3.0, 6.2, gc + 4.2, C.top - 1.6, 2);
+    for (let y = gc + 6.6; y < C.top - 2; y += 2.4) slab(C, 3.0, 6.2, y - 0.04, y + 0.04, 0.2, 0.04, COL.frame);
+    win(C, 3.3, 5.9, gc + 0.05, gc + 2.7, 1, COL.annexGlass);
+    { const [x, z] = C.at(4.6, 0.95); p.add(BOX(5.0, 0.22, 1.9), COL.plinth, x, gc + 3.15, z, C.yaw); }
+    // ---- where the front steps back, and the set-back wall with the white annex standing out of it
+    const S = wallOf(WALLS.step);
+    face(S); face(B); plinth(S); plinth(B, 0, ANNEX.s0); plinth(B, ANNEX.s1, B.len);
+    const brows = [[7.4, 9.2], [10.9, 12.7], [14.4, 16.2]];
+    for (const [y0, y1] of brows) { win(B, 1.0, 4.0, y0, y1, 1); win(B, ANNEX.s1 + 1.6, ANNEX.s1 + 4.6, y0, y1, 1); }
+    {
+      const A = ANNEX, ga = Math.min(g(B.at(A.s0, A.depth + 0.5)), g(B.at(A.s1, A.depth + 0.5))), top = ga + A.h;
+      const [x, z] = B.at((A.s0 + A.s1) / 2, A.depth / 2);
+      p.add(BOX(A.s1 - A.s0, A.h + 1, A.depth), COL.annex, x, top - (A.h + 1) / 2, z, B.yaw);
+      p.add(BOX(A.s1 - A.s0 + 0.3, 0.25, A.depth + 0.3), COL.plinth, x, top + 0.12, z, B.yaw);       // coping
+      const Aw = { ...B, at: (s, n) => B.at(s, n + A.depth) };                                      // its front face
+      const pitch = (A.s1 - A.s0) / A.cols;
+      for (let r = 0; r < A.rows; r++) for (let c = 0; c < A.cols; c++) {
+        const s0 = A.s0 + pitch * (c + 0.5) - 0.62, y0 = ga + 1.1 + r * 2.85;
+        slab(Aw, s0, s0 + 1.24, y0, y0 + 1.5, 0.0, 0.05, COL.annexGlass);
+        slab(Aw, s0 + 0.58, s0 + 0.66, y0, y0 + 1.5, 0.03, 0.04, COL.annex);
+      }
+      world.addSolids([{ x, z, yaw: B.yaw, hx: (A.s1 - A.s0) / 2, hz: A.depth / 2 }]);
+    }
+
+    // ---- the bush island after the last bay: a low kerb, soil, a clump of bushes
+    {
+      const I = ISLAND, [x, z] = F.at(I.s, I.n), y = g([x, z]);
+      p.add(new THREE.CylinderGeometry(1, 1, 0.6, 22).scale(I.hu, 1, I.hv), COL.kerb, x, y - 0.12, z, F.yaw);
+      p.add(new THREE.CylinderGeometry(1, 1, 0.6, 22).scale(I.hu - 0.2, 1, I.hv - 0.2), COL.soil, x, y - 0.09, z, F.yaw);
+      const blobs = [[-0.9, 0.2, 1.15, 0], [0.5, -0.2, 1.3, 1], [1.3, 0.35, 0.95, 2], [-0.1, 0.5, 1.0, 2], [-1.7, -0.25, 0.8, 1]];
+      for (const [s, n, r, c] of blobs) {
+        const [bx, bz] = F.at(I.s + s, I.n + n);
+        p.add(new THREE.IcosahedronGeometry(r, 1).scale(1.15, 0.85, 1), COL.bush[c], bx, y + r * 0.7, bz, F.yaw + c);
+      }
+      world.addSolids([{ x, z, yaw: F.yaw, hx: I.hu - 0.35, hz: I.hv - 0.3 }]);
+    }
+
+    const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m);
+  }
+
   function build() {
     built = true;
     // ---- the diamond paving: a grid over the street, clipped at buildings, uv in the street's own axes
@@ -143,6 +283,24 @@ export function createUueturu(world, group) {
     }
     for (const z of SIDE_ZEBRAS) zebra(pos, z.c[0], z.c[1], ULIKOOLI[0], ULIKOOLI[1], z.half, 3.4);
     meshFrom(pos, markMat);
+    // ---- in front of the building: plain paved patch where the front steps back, the bay lines
+    const F = wallOf(WALLS.front), B = wallOf(WALLS.back);
+    {
+      const patch = [], [cx, cz] = B.at(1.4, 3.6);
+      quad(patch, cx, cz, B.ux, B.uz, 3.4, 3.6, 0.075);
+      meshFrom(patch, new THREE.MeshLambertMaterial({ color: COL.patch, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5, side: THREE.DoubleSide }));
+      const lines = [], Y = BAYS;
+      const line = (p, q) => {
+        const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
+        quad(lines, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, dx / len, dz / len, len / 2, Y.w / 2, 0.08);
+      };
+      const last = Y.s0 + Y.step * (Y.n - 1);
+      line(F.at(Y.lineFrom, Y.n0), F.at(last, Y.n0));                       // along the walkway
+      line(F.at(Y.lineFrom - 5.6, Y.n0 + 2.2), F.at(Y.lineFrom, Y.n0));     // from the corner kerb
+      for (let k = 0; k < Y.n; k++) line(F.at(Y.s0 + Y.step * k, Y.n0), F.at(Y.s0 + Y.step * k, Y.n1));
+      meshFrom(lines, markMat);
+    }
+    buildLeft(F, B);
     // ---- street names along the lane, read from behind, letter tops to the left
     for (const n of NAMES) {
       const [px, pz] = lerpP(n.i), [tx, tz] = tanAt(n.i);
@@ -165,7 +323,8 @@ export function createUueturu(world, group) {
   return {
     update(x, z) {
       if (built || Math.hypot(ref[0] - x, ref[1] - z) > 700) return;
-      if ([2296, 2318, 2346].every((i) => world.ready(...track.P[i])) && SIDE_ZEBRAS.every((s) => world.ready(...s.c))) build();
+      if ([2296, 2318, 2346].every((i) => world.ready(...track.P[i])) && SIDE_ZEBRAS.every((s) => world.ready(...s.c))
+        && Object.values(WALLS).every((w) => world.ready(...w.a) && world.ready(...w.b))) build();
     },
   };
 }

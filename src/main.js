@@ -29,7 +29,7 @@ import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
 import { veskiRoads } from './race/veski.js';
 import { emajoeVectors } from './race/emajoe.js';
-import { uueturuVectors } from './race/uueturu.js';
+import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { valliWalls } from './race/valli.js';
 
 const $ = (s) => document.querySelector(s);
@@ -107,6 +107,7 @@ async function boot() {
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
+  uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';

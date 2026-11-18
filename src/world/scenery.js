@@ -288,6 +288,14 @@ export function updateTrees(time, cam) {
   realTrees.update(time);
   if (pools && cam) pools.update(cam);
 }
+// A device that struggles gets fewer leafy trees: returns false once there is nothing left to give.
+export function fewerTrees() {
+  if (!realTrees || nearTrees <= 45) return false;
+  nearTrees = Math.max(45, nearTrees * 0.65);
+  realTrees.setLod(nearTrees);
+  if (pools) pools.touch();
+  return true;
+}
 
 function treePools(real, world, opts) {
   const group = new THREE.Group();

@@ -1,8 +1,9 @@
+<!-- Tree lab: the realistic trees on their own, close ones left, flat ones right. Open /tools/treelab.html on the dev server. -->
 <!doctype html><html><body style="margin:0;background:#000"><canvas id="c"></canvas>
 <script type="module">
 import * as THREE from 'three';
-import { createRealTrees } from './src/world/realtrees.js';
-import { createLights } from './src/world/sky.js';
+import { createRealTrees } from '../src/world/realtrees.js';
+import { createLights } from '../src/world/sky.js';
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });

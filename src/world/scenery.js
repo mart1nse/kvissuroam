@@ -282,7 +282,7 @@ function treeSpecies(type, h, crown, r) {
 // to the camera are drawn from one small pool per species, refilled as the camera moves, so only
 // the few hundred trees that can be seen as such cost their full geometry.
 let realTrees = null, pools = null;
-const NEAR_TREES = 150;        // m: the flat picture gives way to the leafy tree (the shaders switch at exactly this)
+let nearTrees = 150;            // m: the flat picture gives way to the leafy tree (the shaders switch at exactly this)
 export function updateTrees(time, cam) {
   if (!realTrees) return;
   realTrees.update(time);
@@ -316,7 +316,7 @@ function treePools(real, world, opts) {
       if (!dirty && Math.hypot(cam.x - lx, cam.z - lz) < 6) return;
       lx = cam.x; lz = cam.z; dirty = false;
       for (const type in pool) (found[type] ||= []).length = 0;
-      world.treesNear(cam.x, cam.z, NEAR_TREES + 10, (s, i) => {
+      world.treesNear(cam.x, cam.z, nearTrees + 10, (s, i) => {
         const list = s.treeKind && found[s.treeKind[i]];
         if (list) list.push(s, i);
       });
@@ -344,9 +344,10 @@ function treePools(real, world, opts) {
 // Returns build(sector) -> { group, setNear(bool) } with that sector's trees.
 // build.near is the group with the leafy close trees, if any: add it to the scene.
 export function createTrees(opts, renderer, world) {
-  realTrees = opts.realTrees ? createRealTrees(renderer, { cards: opts.treeDetail > 0, lod: NEAR_TREES }) : null;
+  nearTrees = opts.treeDetail > 0 ? 150 : 70;          // phones: leafy trees only right around the car
+  realTrees = opts.realTrees ? createRealTrees(renderer, { cards: true, lod: nearTrees }) : null;
   const real = realTrees ? realTrees.species : {};
-  pools = realTrees && opts.treeDetail > 0 ? treePools(real, world, opts) : null;
+  pools = realTrees ? treePools(real, world, opts) : null;
   const near = treeGeometries(opts.treeDetail);
   const far = treeGeometries(0);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });

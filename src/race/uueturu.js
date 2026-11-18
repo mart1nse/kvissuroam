@@ -1,6 +1,6 @@
 // The Vanemuise / Ülikooli / Uueturu junction and Uueturu up to the Küüni plaza (Martin, 18 Nov, street
-// view Aug 2024 and kaldaerofoto Apr 2024), in pastel colours: the zebra crossings round the junction, the
-// street names painted on the road, the diamond paving of Uueturu (dark slate squares between slightly
+// view Aug 2024 and kaldaerofoto Apr 2024), in pastel colours: the zebra crossings round the junction,
+// the diamond paving of Uueturu (dark slate squares between slightly
 // paler bands) from the building fronts to the green, and the left side of the street: the slate office
 // building with its window bands, pale plinth and white annex, the parking bays in front of it, the bush
 // island after the bays, lamp posts, bollards and three parked cars.
@@ -19,7 +19,6 @@ const SIDE_ZEBRAS = [
   { c: [1576.0, 3141.5], half: 5.0 },
 ];
 const ULIKOOLI = [0.70, 0.71];                              // direction of Ülikooli (x, z), from the orthophoto
-const NAMES = [{ text: 'Ülikooli tn', i: 2305.5, lat: 2.2 }, { text: 'Uueturu tn', i: 2318, lat: 1.6 }];
 const DIAMOND = { i0: 2316, i1: 2346, left: -23, right: 7.5, period: 2.6, band: 0.3 };
 const COL = {
   white: 0xfaf8ff, slate: 0x66657e, band: 0x807f9a, patch: 0xb9b5c9,
@@ -117,18 +116,6 @@ function diamondTex() {
   return t;
 }
 
-function nameTex(text) {
-  return canvasTex(1024, 256, (g, w, h) => {
-    g.font = 'bold 200px "Arial Narrow", Arial, sans-serif';
-    g.textBaseline = 'middle'; g.textAlign = 'center';
-    g.lineWidth = 14; g.strokeStyle = 'rgba(70, 60, 95, 0.35)';
-    g.strokeText(text, w / 2, h / 2 + 10);
-    g.fillStyle = '#ffffff';
-    g.fillText(text, w / 2, h / 2 + 10);
-  });
-}
-
-// before the road markings are built: no generated centre line through the junction and on Uueturu
 export function uueturuVectors(vectors) {
   const track = createTrack(), prev = vectors.markSkip;
   vectors.markSkip = (x, z) => {
@@ -337,22 +324,6 @@ export function createUueturu(world, group) {
     }
     buildLeft(F, B);
     parkCars(F);
-    // ---- street names along the lane, read from behind, letter tops to the left
-    for (const n of NAMES) {
-      const [px, pz] = lerpP(n.i), [tx, tz] = tanAt(n.i);
-      const x = px - tz * n.lat, z = pz + tx * n.lat;
-      const g = new THREE.PlaneGeometry(5.0, 1.3, 6, 1);
-      g.rotateX(-Math.PI / 2);
-      const p = g.attributes.position;
-      for (let k = 0; k < p.count; k++) {
-        const lx = p.getX(k), lz = p.getZ(k), wx = x + tx * lx - tz * lz, wz = z + tz * lx + tx * lz;
-        p.setXYZ(k, wx, world.heightAt(wx, wz) + 0.085, wz);
-      }
-      g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: nameTex(n.text), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -7 }));
-      m.receiveShadow = true;
-      group.add(m);
-    }
   }
 
   const ref = track.P[2318];

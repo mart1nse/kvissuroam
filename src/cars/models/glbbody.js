@@ -18,7 +18,7 @@ function load(url) {
         m.material = new THREE.MeshPhysicalMaterial({
           map: s.map, metalnessMap: s.metalnessMap, roughnessMap: s.roughnessMap, normalMap: s.normalMap,
           emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0,
-          metalness: s.metalness, roughness: s.roughness, clearcoat: 0.5, clearcoatRoughness: 0.08,
+          metalness: s.metalness, roughness: s.roughness, clearcoat: 0.5, clearcoatRoughness: 0.08, side: s.side,
         });
         s.dispose();
       }

@@ -31,7 +31,7 @@ const PAVED = [
 ];
 // fence gaps (drives) by side
 const GAPS_E = [[77.5, 91], [101, 108], [136.5, 145], [175, 180]];
-const GAPS_W = [[94.5, 100.5], [124, 134.5], [155, 167], [182, 190]];
+const GAPS_W = [[94.5, 100.5], [124, 134.5], [155, 167], [167, 182], [182, 190]];   // 167-182: no fence at the mouth of the footpath (Martin, 18 Nov)
 const LAMPS = [58, 96, 127.5, 166, 198];           // east verge
 const LIGHT = 0;
 

@@ -162,6 +162,7 @@ export function createProps(world, opts = {}) {
       }
       const m0 = kind === ZEBRA ? null : mark();
       if (kind === ZEBRA) {
+        if (cleared.has(id)) continue;            // a hand-made place paints its own crossings (src/race/lai.js)
         const w = extra || 7, fx = Math.sin(yaw), fz = -Math.cos(yaw);       // along the road
         for (let s = -w / 2 + 0.5; s <= w / 2 - 0.5; s += 1.0) {
           const cx = x - fz * s, cz = z + fx * s;

@@ -18,6 +18,7 @@ import { createJanese } from './world/janese.js';
 import { createParked } from './world/parked.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
+import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createSigns } from './world/signs.js';
@@ -33,6 +34,7 @@ import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
 import { veskiRoads } from './race/veski.js';
 import { emajoeVectors } from './race/emajoe.js';
+import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { valliWalls } from './race/valli.js';
 
@@ -76,7 +78,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, sireli, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -111,8 +113,10 @@ async function boot() {
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
+  laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
+  raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
   terrain = createTerrain(world, renderer, quality);
@@ -132,6 +136,7 @@ async function boot() {
   aksi = createAksi(scene, world, { shadows: !isTouch });
   parked = createParked(scene, world, { shadows: !isTouch, touch: isTouch });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
+  raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
@@ -693,6 +698,7 @@ function frame(ts) {
     parked.update(car, dt, camera.position);
     aksi.update(car, dt);
     pootsmani.update(car);
+    raekoda.update(car);
     kvissentali.update(car);
     sireli.update(car);
     skids.update(car);

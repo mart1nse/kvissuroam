@@ -67,7 +67,8 @@ function archLiner(meshes, p, { r, len, inset, steps = 28 }, rMin) {
 const linerMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 1, metalness: 0, side: THREE.DoubleSide });
 // tail: emissive intensity with { brake, tail (headlights on) }
 // wheelOut: { front, rear } metres to push the visible wheels outward to sit flush with the scanned arches
-export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12, gap: 0.035 }, wheelOut = null } = {}) {
+// onLoad(meshes): called once the scanned body is on the car (for extras shaped to it)
+export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12, gap: 0.035 }, wheelOut = null, onLoad = null } = {}) {
   if (typeof window === 'undefined') return car;
   const state = { brake: false, headlights: false };
   let mat = null;
@@ -89,6 +90,7 @@ export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5,
       car.triangles = (car.triangles || 0) + src.geometry.index.count / 3;
     }
     glow();
+    onLoad?.(meshes);
     // dark wheel wells: the scan has no arch liners, so without these you would see through the car.
     // Each liner is shaped to the arch: rays from the hub find the bodywork, so it never pokes through.
     if (liner) for (const w of Object.values(car.wheels)) car.group.add(archLiner(meshes, w.steer.position, liner, w.steer.position.y + (liner.gap ?? 0.035)));

@@ -21,8 +21,9 @@ const BUILDERS = { w201: buildW201, crv: buildCRV, enyaq: buildEnyaq, rav4: buil
 // Returns a fresh model each call:
 // { group, wheels: { fl, fr, rl, rr: { steer, spin } }, wheelRadius, wheelbase, track,
 //   size: { length, width, height }, setLights({ brake, reverse, headlights }) }
-export function buildCarModel(id) {
+// opts are for the builder (the Enyaq takes { rack: false } and { paint: hex } for a parked one).
+export function buildCarModel(id, opts) {
   const build = BUILDERS[id];
   if (!build) throw new Error(`Unknown car model "${id}"`);
-  return build();
+  return build(opts);
 }

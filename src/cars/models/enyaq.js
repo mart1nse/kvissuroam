@@ -298,7 +298,8 @@ function bikeCarrier(xc, zc, yBase, armSide) {
   return s;
 }
 
-export function buildEnyaq() {
+// rack: false leaves the roof bars and bike carriers off; paint: a body colour other than the black pearl
+export function buildEnyaq({ rack: withRack = true, paint: colour = null } = {}) {
   const body = buildBody({
     top: [[ZF, 0.54], [ZF + 0.005, 0.64, 0.03], [-2.225, 0.76, 0.05], [-2.196, 0.845, 0.05], [-2.14, 0.905, 0.07], [-2.0, 0.952, 0.12], [-1.5, 1.025, 0.25], [-0.97, 1.09, 0.06],
       [-0.08, 1.545, 0.25], [0.45, 1.598, 1.0], [1.6, 1.558, 0.4], [1.98, 1.525, 0.03], [2.05, 1.515, 0.012], [2.055, 1.482, 0.01], [2.335, 1.095, 0.04],
@@ -440,18 +441,28 @@ export function buildEnyaq() {
 
   // --- roof bars and bike carriers
   const zBars = [0.1, 0.85];
-  const rack = roofRack(prTop, railX, zBars);
-  pal.add(rack.soup);
-  const yTray = Math.max(...rack.barTop);
-  const bike = new Soup();
-  bike.add(bikeCarrier(0.3, 0.45, yTray, 1));
-  for (const zb of zBars) bike.add(box(0.06, 0.02, 0.1, { p: [0.3, yTray - 0.004, zb] }, 'gloss'));
-  pal.add(bike.sym());
+  if (withRack) {
+    const rack = roofRack(prTop, railX, zBars);
+    pal.add(rack.soup);
+    const yTray = Math.max(...rack.barTop);
+    const bike = new Soup();
+    bike.add(bikeCarrier(0.3, 0.45, yTray, 1));
+    for (const zb of zBars) bike.add(box(0.06, 0.02, 0.1, { p: [0.3, yTray - 0.004, zb] }, 'gloss'));
+    pal.add(bike.sym());
+  }
 
   // 21-inch wheels: 235/45 R21 front, 255/40 R21 rear. The visible rim runs out to the flange, about 15 mm
   // beyond the 533 mm bead seat diameter.
   const RIM21 = 0.282;
   const wheelFront = { soup: turbineWheel(DIMS.wheelRadiusFront, 0.235, RIM21) };
   const wheel = { soup: turbineWheel(DIMS.wheelRadius, 0.255, RIM21) };
-  return assembleCar({ id: 'enyaq', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
+  const car = assembleCar({ id: 'enyaq', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
+  if (colour !== null) {
+    // its own material: the driven Enyaq keeps the shared black paint
+    const mesh = car.group.getObjectByName('enyaq_paint');
+    mesh.material = mesh.material.clone();
+    mesh.material.color.set(colour);
+    Object.assign(mesh.material, { metalness: 0, roughness: 0.38, clearcoatRoughness: 0.06 });
+  }
+  return car;
 }

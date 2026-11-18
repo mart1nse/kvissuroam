@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
-import { createBuildings, createTrees, updateTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
+import { createBuildings, createTrees, updateTrees, fewerTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
@@ -40,8 +40,8 @@ const params = new URLSearchParams(location.search);
 const quality = isTouch
   ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 380, treeDetail: 0, treeShadows: false, thinTrees: true, anisotropy: 4, far: 2600, loadRadius: 520, xTiles: false, roadTex: 512 }
   : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000, xTiles: true };
-// realistic trees (so far the birch): a trial, switched on with ?trees=real
-quality.realTrees = params.get('trees') === 'real';
+// realistic trees; ?trees=old brings back the simple shapes
+quality.realTrees = params.get('trees') !== 'old';
 if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
 
 const canvas = $('#view');
@@ -876,6 +876,7 @@ function frame(ts) {
   if (slowFrames > 120) {
     slowFrames = 0;
     if (renderer.getPixelRatio() > 1) renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.5));
+    else if (fewerTrees()) { /* leafy trees only closer to the car */ }
     else if (renderer.shadowMap.enabled) { renderer.shadowMap.enabled = false; lights.sun.castShadow = false; }
   }
 }

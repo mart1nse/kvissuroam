@@ -293,6 +293,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #board tbody th { font-weight: 800; font-style: italic; }
 #board td b { margin-right: 8px; }
 #board td small { opacity: .8; }
+#board td .date { opacity: .55; margin-left: 8px; font-size: .82em; white-space: nowrap; }
 #board .none { opacity: .4; }
 #board .mine { font-size: 12px; }
 #board .mine span { font-size: 9px; letter-spacing: .22em; color: var(--pink); }

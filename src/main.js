@@ -42,6 +42,7 @@ import { veskiRoads } from './race/veski.js';
 import { emajoeVectors } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
+import { playtechWalls } from './race/playtech.js';
 import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 
@@ -124,6 +125,7 @@ async function boot() {
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
+  playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand

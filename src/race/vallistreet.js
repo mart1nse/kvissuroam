@@ -88,7 +88,7 @@ export function valliStreetProps() {
 
 // ---------------------------------------------------------------- painting house fronts
 // A picture of a wall, drawn in metres: x along the wall, y up from the house's ground line.
-function facade(wm, y0, y1, ppm, draw) {
+export function facade(wm, y0, y1, ppm, draw) {
   const hm = y1 - y0;
   ppm = Math.min(ppm, 2048 / wm, 2048 / hm);
   const cv = document.createElement('canvas');
@@ -175,7 +175,7 @@ function facade(wm, y0, y1, ppm, draw) {
   t.anisotropy = 8;
   return t;
 }
-const tone = (rgb, k) => `rgb(${Math.min(255, rgb[0] * k) | 0},${Math.min(255, rgb[1] * k) | 0},${Math.min(255, rgb[2] * k) | 0})`;
+export const tone = (rgb, k) => `rgb(${Math.min(255, rgb[0] * k) | 0},${Math.min(255, rgb[1] * k) | 0},${Math.min(255, rgb[2] * k) | 0})`;
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
   return tone([(n >> 16) & 255, (n >> 8) & 255, n & 255], k);

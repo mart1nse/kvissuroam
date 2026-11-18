@@ -17,6 +17,7 @@ import { createProps } from './world/props.js';
 import { createJanese } from './world/janese.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
+import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
@@ -75,7 +76,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -113,6 +114,7 @@ async function boot() {
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
+  raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -130,6 +132,7 @@ async function boot() {
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
+  raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
@@ -689,6 +692,7 @@ function frame(ts) {
     janese.update(car, dt);
     aksi.update(car, dt);
     pootsmani.update(car);
+    raekoda.update(car);
     kvissentali.update(car);
     skids.update(car);
     smoke.update(car, dt, mode === 'drive', mp.smokers());

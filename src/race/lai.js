@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import DATA from './lai.json';
 import { paverTex, lawnTex } from '../world/streetkit.js';
+import { drapeGeometry } from '../world/drape.js';
 
 const BOX = [1370, 2296, 1515, 2440];
 const COL = { cycle: 0xb2a8c8, setts: 0xd9c3cf, red: 0xe9868f, white: 0xfaf8ff };
@@ -63,41 +64,7 @@ export function createLai(world, group) {
   let built = false;
   const corners = [[BOX[0], BOX[1]], [BOX[2], BOX[1]], [BOX[0], BOX[3]], [BOX[2], BOX[3]]];
 
-  // a flat ground mesh from shapes [outer, ...holes], draped on the terrain `lift` metres up
-  function drape(shapes, lift, tile) {
-    const pos = [], uv = [];
-    const v = (p) => { pos.push(p[0], world.heightAt(p[0], p[1]) + lift, p[1]); uv.push(p[0] / tile, p[1] / tile); };
-    const tri = (a, b, c) => {
-      const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
-      const m = Math.max(ab, bc, ca);
-      if (m <= MAX_EDGE) {
-        // wound to face up: a double-sided material lights the back of a face as if it looked down
-        if ((b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) >= 0) { v(a); v(b); v(c); } else { v(a); v(c); v(b); }
-        return;
-      }
-      const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-      if (m === ab) { const d = mid(a, b); tri(a, d, c); tri(d, b, c); }
-      else if (m === bc) { const d = mid(b, c); tri(a, b, d); tri(a, d, c); }
-      else { const d = mid(c, a); tri(a, b, d); tri(d, b, c); }
-    };
-    const open = (r) => (r.length > 3 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.slice(0, -1) : r);
-    for (const s of shapes) {
-      const rings = s.map(open).filter((r) => r.length >= 3);
-      if (!rings.length) continue;
-      const V2 = (r) => r.map(([x, z]) => new THREE.Vector2(x, z));
-      const outer = V2(rings[0]), holes = rings.slice(1).map(V2);
-      const all = [rings[0], ...rings.slice(1)].flat();
-      for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(outer, holes)) tri(all[a], all[b], all[c]);
-    }
-    if (!pos.length) return null;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    const nor = new Float32Array(pos.length);
-    for (let k = 1; k < nor.length; k += 3) nor[k] = 1;            // lit from above whichever way it winds
-    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    return g;
-  }
+  const drape = (shapes, lift, tile) => drapeGeometry(world, shapes, lift, tile, MAX_EDGE);
   const mat = (opts, f) => new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide });
   const add = (g, m) => { if (!g) return; const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); };
   // thin lines (bike symbols) as 9 cm ribbons

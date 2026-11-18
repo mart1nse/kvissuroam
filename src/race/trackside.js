@@ -21,6 +21,7 @@ import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
+import { raekodaClear } from '../world/raekoda.js';
 import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
 
@@ -119,6 +120,7 @@ export function clearProps(data) {
   cornerClear(data, out);
   emajoeClear(data, out);
   laiClear(data, out);
+  raekodaClear(data, out);
   uueturuClear(data, out);
   for (const zn of zones(track)) {
     if (zn.i0 < 0 || zn.i1 >= track.N) continue;

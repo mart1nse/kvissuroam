@@ -21,6 +21,7 @@ import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createTennis } from './tennis.js';
+import { createUueturu } from './uueturu.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -451,6 +452,7 @@ export function createTrackside(world, scene) {
   const veski = createVeski(world, group, merged);
   const emajoe = createEmajoe(world, group);
   const tennis = createTennis(world, group);
+  const uueturu = createUueturu(world, group);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -491,6 +493,7 @@ export function createTrackside(world, scene) {
       veski.update(x, z);
       emajoe.update(x, z);
       tennis.update(x, z);
+      uueturu.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();

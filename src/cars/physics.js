@@ -21,6 +21,7 @@ const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this 
 const DONUT_SWAY = 0.5;          // ...how much the hold wanders in between
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
 const EV_SLIDE_REAR = 0.7;
+const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
 const ABS_HZ = 8;                // anti-lock pressure cycling (spec.abs: 0..1, how much of the lock-up it prevents)      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
 
@@ -89,20 +90,25 @@ export function speedKmh(car) {
   return Math.hypot(car.vx, car.vy) * 3.6;
 }
 
-// A gear picked by hand (keys A and Z): +1 up, -1 down. The gearbox then holds that gear until its revs
-// reach the shift point, and the automatic takes over again. Returns false when the shift cannot be made
-// (an EV, reversing, top or first gear, or a downshift that would over-rev the engine).
+// A gear picked by hand (keys A and Z): +1 up, -1 down. Returns false when the shift cannot be made.
+// An upshift (short shifting a powerful car for traction) is held, without the automatic shifting back
+// down, until that gear reaches the shift point; the automatic then carries on upwards. A downshift may
+// go past the redline, at most two gears below the lowest one that fits, and then brakes the car on the
+// engine with the revs pinned at the limiter; it is held until the car is driven back up to the shift point.
 export function shiftGear(car, dir) {
   const s = car.spec, e = s.engine;
   if (e.type === 'ev' || car.reversing) return false;
   const g = car.gear + dir;
   if (g < 1 || g > s.gears.length) return false;
-  const rpmIn = (Math.abs(car.vx) / s.wheelRadius) * s.gears[g - 1] * s.finalDrive * (60 / (2 * Math.PI));
-  if (dir < 0 && rpmIn > e.redline * 0.97) return false;
+  const rpmIn = (k) => (Math.abs(car.vx) / s.wheelRadius) * s.gears[k - 1] * s.finalDrive * (60 / (2 * Math.PI));
+  if (dir < 0) {
+    let fit = car.gear;
+    while (fit > 1 && rpmIn(fit - 1) <= e.redline) fit--;
+    if (g < fit - 2) return false;
+  }
   car.shiftUp = dir > 0;
   car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
-  // (a downshift that already lands above the shift point holds on up to just short of the limiter)
-  car.manual = dir > 0 ? e.shiftRpm : Math.max(e.shiftRpm, Math.min(rpmIn + 400, e.redline - 150));
+  car.manual = dir > 0 ? 1 : -1;
   return true;
 }
 
@@ -138,9 +144,12 @@ function engineForce(car, throttle, dt) {
   }
   const ratioOf = (g) => (car.reversing ? s.reverse : s.gears[g - 1]) * s.finalDrive;
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
-  // a gear picked by hand is held until it reaches the shift point (or the car stops)
-  // (or the road speed sags below idle in that gear, when the automatic picks a lower gear again)
-  if (car.manual && (car.reversing || vAbs < 1.5 || rpmAt(car.gear) >= car.manual || rpmAt(car.gear) < (e.idle ?? 750) * 0.9)) car.manual = 0;
+  // A gear picked by hand is held until it is driven up to the shift point (a downshift on the engine
+  // brake waits for the throttle), and given up only when the car stops or the revs sag below idle.
+  if (car.manual && (car.reversing || vAbs < 1.5 || rpmAt(car.gear) < (e.idle ?? 750) * 0.9 ||
+      // (or, with the tyres slipping a little, the engine is already on its limiter just short of it)
+      ((rpmAt(car.gear) >= e.shiftRpm || (rpmAt(car.gear) > e.shiftRpm * 0.88 && rpmAt(car.gear) * wAbs >= (e.redline - 50) * vAbs)) &&
+        rpmAt(car.gear) <= e.redline && (car.manual > 0 || throttle > 0.3)))) car.manual = 0;
   if (car.reversing) car.gear = 1;
   else if (car.shiftTimer <= 0 && !car.manual) {
     // kick-down automatic: lowest gear that stays below the shift point
@@ -213,6 +222,13 @@ function engineForce(car, throttle, dt) {
   // (the needle and the engine note follow the bounce closely)
   car.rpm += (rpmTo - car.rpm) * Math.min(1, dt * (wheelRpm > e.redline - 600 || car.shiftTimer > 0 ? 40 : 12));
   car.shiftCut = car.shiftTimer > 0 && car.shiftUp && throttle > 0;
+  // Shifted down by hand past the redline: the engine is held on its limiter and the gearbox drags the
+  // car down to the speed the redline allows in that gear, harder the further over it is.
+  const overRev = !car.reversing && wheelRpm > e.redline + 30 ? (wheelRpm - e.redline) / e.redline : 0;
+  if (overRev > 0) {
+    car.revCut = 0;
+    return -Math.sign(v) * Math.min(0.5, 0.12 + overRev * 2) * s.mass * G;
+  }
   if (throttle <= 0) {
     // engine braking through the converter
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
@@ -665,6 +681,20 @@ function substep(car, input, world, dt) {
       else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
       // (rotating against the wheel already: leave the driver to sort it out)
       if (car.yawRate * turn > -0.2) MZ += turn * (err + DONUT_SWAY * sway * (angP > lo - 0.5 ? 1 : 0)) * w * DONUT * m * G * L * load;
+    }
+  }
+  // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and
+  // the driveline winds up first. The slip-angle model overstates the bite there (and the donut hold
+  // adds its own push), so below about 30 km/h the swing is damped, more so for the cars not driven
+  // only at the rear, whose driven front wheels pull the nose straight.
+  {
+    const lowV = Math.min(1, Math.max(0, (30 - speed * 3.6) / 20));
+    if (lowV > 0) {
+      // (rear-driven cars get less of it; none for the twin-motor EVs, built to hold a donut, or for a
+      // bus, which can only just swing its tail on loose ground as it is)
+      const weak = (s.ref?.powerKw ?? 100) / s.mass < 0.03;
+      const k = LOW_YAW_DAMP * (weak || s.engine.type === 'ev' ? 0 : s.drive === 'rwd' ? 0.25 : 1) * lowV;
+      MZ -= k * car.iz * car.yawRate;
     }
   }
   const uF = Math.min(1, Math.abs(fyF) / capF), uR = Math.min(1, Math.abs(fyR) / capR);

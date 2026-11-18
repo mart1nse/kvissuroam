@@ -10,7 +10,7 @@ export function createHud(world) {
   let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
   let overlay = null;
   const face = $('#dial .face'), needle = $('#dial .needle');
-  let dialMax = 8000, dialRed = 7000, needleShown = -1, needleHot = false;
+  let dialMax = 8000, dialRed = 7000, needleShown = -999, needleV = 0, needleDrawn = -999, needleHot = false;
 
   // The round rev counter: 270 degrees from bottom left round to bottom right, numbers in thousands,
   // red from the rev limiter on (an EV: the motor's top speed).
@@ -37,7 +37,7 @@ export function createHud(world) {
     }
     svg += `<text class="x1000" x="0" y="45">×1000 RPM</text>`;
     face.innerHTML = svg;
-    needleShown = -1;
+    needleShown = -999;
   }            // extra drawing in world coordinates (race track, other players)
 
   // spatial hash of named road segments for the street label
@@ -145,18 +145,29 @@ export function createHud(world) {
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => elToast.classList.remove('show'), ms);
     },
+    // The needle moves every frame (the numbers only a few times a second), eased like a real needle
+    // with a little mass, so the limiter bounce and the shifts sweep instead of jumping.
+    needle(car, dt) {
+      const want = ang(car.rpm || 0);
+      if (needleShown < -900) { needleShown = want; needleV = 0; }
+      // (a critically damped spring, about 50 ms to settle)
+      const w = 38, n = Math.ceil(Math.min(dt, 0.1) * 240), h = Math.min(dt, 0.1) / n;
+      for (let i = 0; i < n; i++) {
+        needleV += (-w * w * (needleShown - want) - 2 * w * needleV) * h;
+        needleShown += needleV * h;
+      }
+      if (Math.abs(needleShown - needleDrawn) > 0.05) {
+        needleDrawn = needleShown;
+        needle.setAttribute('transform', `rotate(${needleShown.toFixed(2)})`);
+      }
+      const hot = (car.rpm || 0) >= dialRed - 50;
+      if (hot !== needleHot) { needleHot = hot; needle.classList.toggle('hot', hot); }
+    },
     update(car) {
       elSpeed.textContent = Math.round(speedKmh(car));
       const ev = spec.engine.type === 'ev';
       // (M: a gear picked by hand with A / Z, held until the shift point)
       elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `${car.manual ? 'M' : 'D'}${car.gear}`;
-      const a = ang(car.rpm || 0);
-      if (Math.abs(a - needleShown) > 0.2) {
-        needleShown = a;
-        needle.setAttribute('transform', `rotate(${a.toFixed(1)})`);
-        const hot = (car.rpm || 0) >= dialRed - 50;
-        if (hot !== needleHot) { needleHot = hot; needle.classList.toggle('hot', hot); }
-      }
       if (--streetTimer <= 0) {
         streetTimer = 5;
         const name = streetAt(car.x, car.z);

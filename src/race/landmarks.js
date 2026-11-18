@@ -21,13 +21,12 @@ export const PARKING = [
   { a: [1812, 2976], b: [1825, 2994], n: 7, perp: true, seed: 6 },
   { a: [1821, 2962], b: [1839, 2978], n: 8, perp: true, seed: 7 },
   { a: [1801, 3026], b: [1839, 2993], n: 18, perp: true, seed: 8 },
-  // Vallikraavi (vallistreet.js): along the kerb under the tower house, the car park under the hill and the
-  // asphalt bays after it. The bays on the park side stay empty, they are on the racing line (Martin, 18 Nov):
+  // Vallikraavi (vallistreet.js): along the kerb under the tower house, the car park under the hill (the
+  // asphalt bays after it stay empty as run-off room). The bays on the park side stay empty, they are on the racing line (Martin, 18 Nov):
   // those cars stand along the left of Ülikooli past Vabank instead
   { a: [1463.8, 3018.3], b: [1440.1, 2976.6], n: 8, seed: 31 },
   { a: [1505.7, 3009.1], b: [1492.1, 3021.6], n: 3, seed: 32 },
   { a: [1426, 3102], b: [1440, 3102], n: 5, perp: true, seed: 33 },
-  { a: [1418, 3098.3], b: [1403, 3097.6], n: 3, seed: 34 },
 ];
 const TERRACE = [1586, 3046];       // café terrace by the start line (moved to the kerb at run time)
 const PLAY = [[1602, 3019, 5.2], [1616, 3031, 4.2]];      // playground rubber discs: x, z, radius

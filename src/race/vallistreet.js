@@ -76,6 +76,16 @@ export function valliStreetWalls(walls) {
   }
 }
 
+// The old lantern posts along the car park kerb, as street furniture (kind 9 in props.js), so a car that
+// runs wide knocks them flat with hardly a bump (Martin, 18 Nov)
+export function valliStreetProps() {
+  const track = createTrack();
+  return [108.5, 113.5, 118.5, 123.5, 128.5].map((i) => {
+    const k = Math.floor(i), f = i - k, a = track.P[k], b = track.P[k + 1], [tx, tz] = track.tan[k], lat = -(track.HW[Math.round(i)] + 0.55);
+    return [9, a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat, 0];
+  });
+}
+
 // ---------------------------------------------------------------- painting house fronts
 // A picture of a wall, drawn in metres: x along the wall, y up from the house's ground line.
 function facade(wm, y0, y1, ppm, draw) {
@@ -618,19 +628,12 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         solids.push({ x, z, yaw: 0, hx: wd / 2, hz: 0.55 });
       }
     }
-    // the old lantern posts along the car park kerb, and lanterns on the brick house wall
+    // lanterns on the house walls (the lantern posts along the car park kerb are props: valliStreetProps)
     const lantern = (x, y, z) => {
       p.add(new THREE.CylinderGeometry(0.13, 0.2, 0.36, 4).rotateY(Math.PI / 4), COL.iron, x, y + 0.02, z, 0);
       p.add(new THREE.ConeGeometry(0.24, 0.2, 4).rotateY(Math.PI / 4), COL.iron, x, y + 0.36, z, 0);
       glow.push(new THREE.SphereGeometry(0.1, 8, 6).translate(x, y + 0.05, z));
     };
-    for (const i of [108.5, 113.5, 118.5, 123.5, 128.5]) {
-      const [x, z] = T(i, -(hw(i) + 0.55)), y = h(x, z);
-      p.add(new THREE.CylinderGeometry(0.045, 0.075, 3.3, 8), COL.iron, x, y + 1.65, z, 0);
-      p.add(new THREE.CylinderGeometry(0.11, 0.13, 0.5, 8), COL.iron, x, y + 0.25, z, 0);
-      lantern(x, y + 3.45, z);
-      solids.push({ x, z, yaw: 0, hx: 0.1, hz: 0.1 });
-    }
     for (const s of [6.5, 16.5, 26.5]) {
       const [x, z] = W.L1.at(s, 0.75);
       put(W.L1, BOX(0.05, 0.05, 0.75), COL.iron, s, 4.1, 0.4);

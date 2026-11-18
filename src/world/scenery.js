@@ -534,7 +534,9 @@ export function createLowObjects(world, opts) {
     if (nb) {
       const B = sector.bushes;
       const step = opts.thinTrees ? 2 : 1;        // phones: every other cell, drawn fatter
-      const im = new THREE.InstancedMesh(bushGeo, bushMat, Math.ceil(nb / step));
+      // leafy lumps in the realistic trees' foliage, or the plain green lumps when the simple trees are on
+      const leafy = realTrees && realTrees.lump ? realTrees.lump() : null;
+      const im = new THREE.InstancedMesh(leafy ? leafy.geometry : bushGeo, leafy ? leafy.material : bushMat, Math.ceil(nb / step));
       let k = 0;
       for (let i = 0; i < nb; i += step) {
         const x = sector.x0 + (B[i * 3] + 0.5) * res, z = sector.z0 + (B[i * 3 + 1] + 0.5) * res;
@@ -548,7 +550,8 @@ export function createLowObjects(world, opts) {
         // one tint per few metres, so a hedge keeps its kind of green, plus a little per lump
         const hsh = Math.abs((Math.floor(x / 6) * 73856093) ^ (Math.floor(z / 6) * 19349663)) % 997 / 997;
         const v = 0.82 + rnd() * 0.3;
-        col.setRGB((0.78 + hsh * 0.3) * v, (0.95 + hsh * 0.1) * v, (0.7 + (1 - hsh) * 0.25) * v);
+        if (leafy) col.setRGB((0.8 + hsh * 0.22) * v * 0.92, (0.9 + hsh * 0.08) * v * 0.92, (0.74 + (1 - hsh) * 0.2) * v * 0.92);
+        else col.setRGB((0.78 + hsh * 0.3) * v, (0.95 + hsh * 0.1) * v, (0.7 + (1 - hsh) * 0.25) * v);
         im.setColorAt(k++, col);
       }
       im.count = k;

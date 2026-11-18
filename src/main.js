@@ -21,6 +21,7 @@ import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsma
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
+import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './world/coop.js';
 import { createDiscGolf } from './world/discgolf.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
@@ -80,7 +81,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, discgolf, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, discgolf, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -121,6 +122,7 @@ async function boot() {
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
+  coopWalls(world.walls);                       // and the Coop Konsum on Aruküla tee
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -133,8 +135,9 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...coopProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
+  coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
@@ -143,6 +146,7 @@ async function boot() {
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
+  coop = createCoop(scene, world, { shadows: !isTouch });
   discgolf = createDiscGolf(scene, world, audio, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
@@ -706,6 +710,7 @@ function frame(ts) {
     raekoda.update(car);
     kvissentali.update(car);
     sireli.update(car);
+    coop.update(car);
     discgolf.update(car, dt);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);

@@ -47,6 +47,8 @@ const WALLS = {
   M1: { a: [1390.1, 3108.35], b: [1391.55, 3094.8], y: 13.2, top: 21.3 },     // the painted gable
 };
 const CENTRE = [1470, 3040];
+// the bays square to the road on the park side: lines only, kept free of cars (they are on the racing line)
+const PARK_BAYS = { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true };
 const COL = {
   concrete: 0xc9c7d0, iron: 0x24232a, white: 0xf6f3fa, blue: 0x7fa0e6, brick: 0xc0725e, stone: 0xa3978c,
   bin: 0x3a3c46, binLid: 0x2c2d36, binGreen: 0x4f8a58, binBrown: 0x8a6248, parasol: 0xf1ecdc,
@@ -250,20 +252,30 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         const [x, z] = w.at(sm, 2.1);
         solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: (s1 - s0) / 2, hz: 1.55 });
       }
-      // terrace deck with a parasol and tables
+      // the terrace deck, bare but for a parasol by the wall
       const y = gnd(w, 4.4, 2.2);
-      put(w, BOX(7.2, 0.5, 3.2), 0x8c8f9c, 4.4, y + 0.25, 2.1);
-      put(w, BOX(7.3, 0.07, 0.07), 0xd8584c, 4.4, y + 0.42, 3.74);
-      put(w, new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), COL.iron, 5.2, y + 1.75, 2.3);
-      put(w, new THREE.ConeGeometry(1.9, 0.55, 4).rotateY(Math.PI / 4), COL.parasol, 5.2, y + 3.0, 2.3);
-      for (const s of [2.2, 3.9, 6.6]) {
-        put(w, new THREE.CylinderGeometry(0.32, 0.32, 0.04, 12), COL.iron, s, y + 1.24, 2.2);
-        put(w, new THREE.CylinderGeometry(0.03, 0.03, 0.72, 6), COL.iron, s, y + 0.87, 2.2);
-        for (const d of [-0.55, 0.55]) put(w, BOX(0.36, 0.5, 0.36), 0x4a4640, s + d * 0.9, y + 0.75, 2.2 + d * 0.5);
-      }
-      for (let s = 1.2; s < 7.8; s += 1.1) put(w, new THREE.IcosahedronGeometry(0.22, 1), s % 2 > 1 ? COL.bloom[0] : COL.shrub[1], s, y + 0.7, 3.55, s);
-      const [x, z] = w.at(4.4, 2.1);
-      solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: 3.6, hz: 1.6 });
+      put(w, BOX(7.2, 1.0, 3.2), 0x8c8f9c, 4.4, y, 2.1);
+      put(w, new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), COL.iron, 5.2, y + 1.75, 0.95);
+      put(w, new THREE.ConeGeometry(1.3, 0.45, 4).rotateY(Math.PI / 4), COL.parasol, 5.2, y + 3.0, 0.95);
+      // The deck is low enough to drive over (Martin, 18 Nov): not a wall but a raised piece of ground with
+      // a short steep edge, so a car climbs it, tilts over its corner or jumps off it. The ground under it
+      // is sampled first, so the top the wheels feel is the flat top that is drawn.
+      const S0 = 0.8, S1 = 8.0, N0 = 0.5, N1 = 3.7, EDGE = 0.55, NS = 13, NN = 7, top = w.y + y + 0.5;
+      const lift = [];
+      for (let j = 0; j < NN; j++) for (let i = 0; i < NS; i++) lift.push(Math.max(0, top - h(...w.at(S0 - EDGE + (S1 - S0 + 2 * EDGE) * i / (NS - 1), N0 - EDGE + (N1 - N0 + 2 * EDGE) * j / (NN - 1)))));
+      const cs = [w.at(S0 - EDGE, N0 - EDGE), w.at(S1 + EDGE, N0 - EDGE), w.at(S0 - EDGE, N1 + EDGE), w.at(S1 + EDGE, N1 + EDGE)];
+      world.addBump({
+        x0: Math.min(...cs.map((q) => q[0])), x1: Math.max(...cs.map((q) => q[0])), z0: Math.min(...cs.map((q) => q[1])), z1: Math.max(...cs.map((q) => q[1])),
+        at(x, z) {
+          const dx = x - w.a[0], dz = z - w.a[1], s = dx * w.ux + dz * w.uz, n = dx * w.nx + dz * w.nz;
+          const d = Math.hypot(Math.max(S0 - s, 0, s - S1), Math.max(N0 - n, 0, n - N1));
+          if (d >= EDGE) return 0;
+          const fi = Math.max(0, Math.min(NS - 1.001, (s - S0 + EDGE) / (S1 - S0 + 2 * EDGE) * (NS - 1))), fj = Math.max(0, Math.min(NN - 1.001, (n - N0 + EDGE) / (N1 - N0 + 2 * EDGE) * (NN - 1)));
+          const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, t = fj - j, k = j * NS + i;
+          const base = (lift[k] * (1 - u) + lift[k + 1] * u) * (1 - t) + (lift[k + NS] * (1 - u) + lift[k + NS + 1] * u) * t;
+          return base * (1 - d / EDGE);
+        },
+      });
     }
 
     // ================= the brick tower house =================
@@ -419,7 +431,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
     });
     put(W.V2, BOX(6.8, 0.3, 2.2), 0x2a2b33, 7.0, 3.1, 1.1);
     for (const s of [4.0, 8.0, 12.0]) {                                       // flag poles in front of the glass grid
-      const [x, z] = W.V1.at(s, 3.2), y = h(x, z);
+      const [x, z] = W.V1.at(s, 1.5), y = h(x, z);
       p.add(new THREE.CylinderGeometry(0.04, 0.06, 8.5, 8), 0xe6e6ee, x, y + 4.25, z, 0);
       solids.push({ x, z, yaw: 0, hx: 0.07, hz: 0.07 });
     }
@@ -568,7 +580,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
       list.push([[[a[0] - nx, a[1] - nz], [b[0] - nx, b[1] - nz], [b[0] + nx, b[1] + nz], [a[0] + nx, a[1] + nz]]]);
     };
     // bays square to the road on the park side, parallel bays under the tower house
-    const rows = [31, 32, 33].map((s) => PARKING.find((r) => r.seed === s));
+    const rows = [PARK_BAYS, ...[32, 33].map((s) => PARKING.find((r) => r.seed === s))];
     for (const row of rows.slice(0, 2)) {
       const dx = row.b[0] - row.a[0], dz = row.b[1] - row.a[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l;
       const depth = row.perp ? 2.5 : 1.1;

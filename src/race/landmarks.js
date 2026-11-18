@@ -21,9 +21,10 @@ export const PARKING = [
   { a: [1812, 2976], b: [1825, 2994], n: 7, perp: true, seed: 6 },
   { a: [1821, 2962], b: [1839, 2978], n: 8, perp: true, seed: 7 },
   { a: [1801, 3026], b: [1839, 2993], n: 18, perp: true, seed: 8 },
-  // Vallikraavi (vallistreet.js): square to the road on the park side, along the kerb under the tower house,
-  // the car park under the hill and the asphalt bays after it
-  { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true, seed: 31 },
+  // Vallikraavi (vallistreet.js): along the kerb under the tower house, the car park under the hill and the
+  // asphalt bays after it. The bays on the park side stay empty, they are on the racing line (Martin, 18 Nov):
+  // those cars stand along the left of Ülikooli past Vabank instead
+  { a: [1463.8, 3018.3], b: [1440.1, 2976.6], n: 8, seed: 31 },
   { a: [1505.7, 3009.1], b: [1492.1, 3021.6], n: 3, seed: 32 },
   { a: [1426, 3102], b: [1440, 3102], n: 5, perp: true, seed: 33 },
   { a: [1418, 3098.3], b: [1403, 3097.6], n: 3, seed: 34 },

@@ -337,14 +337,18 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
     // ================= hedge, gate, fences, thujas =================
     {
       const r = rnd(5);
+      const L = K.leafy;
       const blob = (s, o, rad, y, k, squash = 0.9) => add(new THREE.IcosahedronGeometry(rad, 1).scale(1.05, squash, 1).rotateY(s * 1.7).translate(s, y, o), COL.hedge[k % 3]);
+      const leaf = (s, o, width, height, k, lift = 0) => { const [x, z] = along(s, o), t = 0.86 + (k % 4) * 0.05; L.bush(x, gh(s, o) - 0.08 + lift, z, width, height, s * 1.7 + k, [t, t + 0.03, t]); };
       // the tall leafy hedge in front of the house
       for (let s = 30.6, k = 0; s <= 47.3; s += 0.62, k++) {
         const o = 7.75 + (r() - 0.5) * 0.35, g = gh(s, o);
+        if (L.ok) { leaf(s, o, 2.3 + r() * 0.3, 2.15 + r() * 0.3, k); if (k % 2) leaf(s + 0.3, o - 0.45 + r() * 0.9, 1.9, 1.5, k + 1); continue; }
         blob(s, o, 0.95 + r() * 0.2, g + 1.15 + r() * 0.25, k + (r() * 3 | 0));
         blob(s + 0.3, o - 0.25 + r() * 0.5, 0.8 + r() * 0.15, g + 0.6, k + 1, 0.8);
       }
-      box(30.3, 47.5, 7.0, 8.5, gh(39, 7.7) - 0.4, gh(39, 7.7) + 1.5, COL.hedge[2]);
+      if (L.ok) box(30.6, 47.2, 7.25, 8.25, gh(39, 7.7) - 0.4, gh(39, 7.7) + 1.25, 0x356f3a);
+      else box(30.3, 47.5, 7.0, 8.5, gh(39, 7.7) - 0.4, gh(39, 7.7) + 1.5, COL.hedge[2]);
       // green mesh gate between green posts, the bins behind it
       const GO = 7.7;
       for (const s of [27.15, 29.35]) box(s - 0.04, s + 0.04, GO - 0.04, GO + 0.04, gh(s, GO) - 0.1, gh(s, GO) + 1.65, COL.gate);
@@ -362,11 +366,15 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
         for (const [qs, qy, uu, vv] of [[s, ya, 0, 0], [s1, yb, u, 0], [s1, yb + 1.3, u, 1], [s, ya, 0, 0], [s1, yb + 1.3, u, 1], [s, ya + 1.3, 0, 1]]) { Q.pos.push(qs, qy, GO); Q.uv.push(uu + s / 1.6, vv); }
         box(s - 0.05, s + 0.05, GO + 0.03, GO + 0.13, ya - 0.1, ya + 1.15, 0x8f8478);
       }
-      for (const [s, o, rad] of [[24.4, 10.0, 1.7], [22.3, 10.5, 1.5], [26.0, 9.3, 1.2], [20.3, 9.6, 1.1]]) { blob(s, o, rad, gh(s, o) + rad * 0.85, (s | 0)); blob(s + 0.5, o + 0.6, rad * 0.8, gh(s, o) + rad * 1.5, (s | 0) + 1); }
+      for (const [s, o, rad] of [[24.4, 10.0, 1.7], [22.3, 10.5, 1.5], [26.0, 9.3, 1.2], [20.3, 9.6, 1.1]]) {
+        if (L.ok) { leaf(s, o, rad * 2.5, rad * 1.9, s | 0); leaf(s + 0.5, o + 0.6, rad * 1.9, rad * 1.5, (s | 0) + 1, rad * 0.9); continue; }
+        blob(s, o, rad, gh(s, o) + rad * 0.85, (s | 0)); blob(s + 0.5, o + 0.6, rad * 0.8, gh(s, o) + rad * 1.5, (s | 0) + 1);
+      }
       // towards the neighbour: wire fence with a row of dark thujas behind it
       K.fence(F, 47.6, 64, 7.2, 1.3, 0x8a9a90);
       for (let s = 48.3, k = 0; s < 64; s += 0.78, k++) {
         const o = 8.25 + (r() - 0.5) * 0.15, y = gh(s, o), hgt = 1.5 + r() * 0.7, rad = 0.36 + r() * 0.08;
+        if (L.ok) { const [x, z] = along(s, o); L.thuja(x, y, z, hgt, rad, k); continue; }
         add(new THREE.CylinderGeometry(rad * 0.85, rad, hgt * 0.5, 8).translate(s, y + hgt * 0.25, o), COL.thuja[k % 3]);
         add(new THREE.ConeGeometry(rad * 0.85, hgt * 0.5, 8).translate(s, y + hgt * 0.75, o), COL.thuja[k % 3]);
       }

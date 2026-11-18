@@ -26,7 +26,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mo
 
 export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, onPeople }) {
   const others = new Map();      // id -> remote player
-  let ws = null, myId = null, retry = 1, sendTimer = 0, board = null, online = false;
+  let ws = null, myId = null, retry = 1, sendTimer = 0, shiftHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   let carId = 'w201';
   const labels = document.createElement('div');

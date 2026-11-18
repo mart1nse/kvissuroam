@@ -22,6 +22,7 @@ import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createDiscGolf } from './world/discgolf.js';
+import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { createSkidMarks } from './skidmarks.js';
@@ -80,7 +81,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, discgolf, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -114,6 +115,7 @@ async function boot() {
   snapRoadsToTrack(world.vectors);              // after veskiRoads: it finds its roads by their first point
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
+  janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
@@ -121,6 +123,7 @@ async function boot() {
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
+  janeseWalls(world.walls);                     // and Jänese 1
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -144,6 +147,7 @@ async function boot() {
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   discgolf = createDiscGolf(scene, world, audio, { shadows: !isTouch });
+  janeseMaja = createJaneseMaja(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -707,6 +711,7 @@ function frame(ts) {
     kvissentali.update(car);
     sireli.update(car);
     discgolf.update(car, dt);
+    janeseMaja.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

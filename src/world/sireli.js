@@ -13,6 +13,7 @@ import { realTreeKit } from './scenery.js';
 
 const A = [4020.25, -2310.75], ROT = (10 * Math.PI) / 180, C = Math.cos(ROT), S = Math.sin(ROT);
 const at = (e, n) => [A[0] + e * C + n * S, A[1] + e * S - n * C];
+export const sireliAt = at;       // for what else stands on the plot (discgolf.js)
 const CENTRE = at(-8, 6);
 const FE = { at: (t, lat) => at(t, lat) }, FN = { at: (t, lat) => at(lat, t) };       // frames for the street kit: along e, along n
 

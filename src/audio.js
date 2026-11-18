@@ -315,8 +315,44 @@ export function createAudio() {
     });
   }
 
+  // disc golf putts on the Sireli lawn: 'chains' (the disc rattles into the chains and drops into the cage),
+  // 'clang' (it glances off the cage or the top band), 'thud' (it lands on the grass). level 0..1 by distance.
+  function putt(kind, level = 1) {
+    if (!ctx || ctx.state !== 'running' || !noiseBuf) return;
+    const t0 = ctx.currentTime + 0.01, out = ctx.createGain();
+    out.gain.value = Math.min(1, level) * 0.9;
+    out.connect(master);
+    const burst = (t, dur, type, freq, q, gain) => {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = noiseBuf; src.loop = true; f.type = type; f.frequency.value = freq; f.Q.value = q;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+      src.connect(f); f.connect(g); g.connect(out);
+      src.start(t, Math.random() * 1.5); src.stop(t + dur + 0.02);
+    };
+    const ring = (t, freq, dur, gain, type = 'sine') => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + dur + 0.02);
+    };
+    if (kind === 'chains') {
+      // many small links struck one after another: short bright rings over a hiss, then the disc dropping into the cage
+      burst(t0, 0.32, 'bandpass', 5200, 0.9, 0.5);
+      for (let k = 0; k < 14; k++) ring(t0 + Math.random() * 0.14 + (k > 9 ? 0.12 : 0), 2100 + Math.random() * 5200, 0.12 + Math.random() * 0.34, 0.05 + Math.random() * 0.05);
+      burst(t0 + 0.3, 0.09, 'lowpass', 420, 0.7, 0.45);
+      for (const f of [640, 1010]) ring(t0 + 0.3, f * (0.97 + Math.random() * 0.06), 0.16, 0.05);
+    } else if (kind === 'clang') {
+      burst(t0, 0.05, 'bandpass', 2600, 0.8, 0.5);
+      for (const [f, d, g] of [[410, 0.55, 0.16], [873, 0.5, 0.13], [1492, 0.4, 0.1], [2377, 0.3, 0.07], [3310, 0.2, 0.05]]) ring(t0, f * (0.96 + Math.random() * 0.08), d, g);
+    } else {
+      burst(t0, 0.13, 'lowpass', 240, 0.7, 0.7);
+      burst(t0 + 0.02, 0.22, 'highpass', 3200, 0.5, 0.06);
+    }
+  }
+
   return {
-    start, update, updateRemotes, chime,
+    start, update, updateRemotes, chime, putt,
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
       carId = ev ? null : spec.id;

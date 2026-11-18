@@ -19,6 +19,7 @@ import { createParked } from './world/parked.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
+import { createSireli, sireliWalls } from './world/sireli.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
@@ -75,7 +76,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, sireli, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -113,6 +114,7 @@ async function boot() {
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
+  sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -131,6 +133,7 @@ async function boot() {
   parked = createParked(scene, world, { shadows: !isTouch, touch: isTouch });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
+  sireli = createSireli(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -691,6 +694,7 @@ function frame(ts) {
     aksi.update(car, dt);
     pootsmani.update(car);
     kvissentali.update(car);
+    sireli.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

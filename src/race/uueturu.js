@@ -35,9 +35,6 @@ const WALLS = {
   step: { a: [1613.55, 3104.05], b: [1611.4, 3101.7], top: 20.3 },      // where the front steps back
   back: { a: [1611.4, 3101.7], b: [1627.5, 3086.45], top: 18.6 },       // set back 3.2 m, up to the Küüni corner
 };
-const TOWER = { s1: 5.73, top: 24.4 };                    // the first metres of the front are a storey higher
-const ROWS = [[9.6, 11.8], [13.3, 15.1], [16.8, 18.6]];   // window bands of the front (world y)
-const GROUPS = { s0: 6.7, pitch: 3.7, w: 3.0, n: 6 };     // six pairs of windows in each band
 const ANNEX = { s0: 5.0, s1: 16.0, depth: 3.2, h: 12.1, cols: 5, rows: 4 };   // white annex, along the back wall
 // in front of the long front, as (s along it, n out from it): the walkway, then the bays, then the lane
 const BAYS = { s0: 3.3, step: 2.6, n: 9, n0: 3.4, n1: 8.4, lineFrom: 0.8, w: 0.14 };
@@ -199,20 +196,7 @@ export function createUueturu(world, group) {
       }
     };
 
-    // ---- the long front: plain tower end, then three bands of six window pairs
-    face(F); slab(F, 0, TOWER.s1, F.top, TOWER.top + 0.05, 0.03, 0.11, COL.wall); plinth(F);
-    for (const [y0, y1] of ROWS) for (let k = 0; k < GROUPS.n; k++) win(F, GROUPS.s0 + GROUPS.pitch * k, GROUPS.s0 + GROUPS.pitch * k + GROUPS.w, y0, y1, 1);
-    // ---- end wall towards the junction: two window pairs on four floors
-    const E = wallOf(WALLS.end);
-    face(E); plinth(E);
-    for (const [y0, y1] of [...ROWS, [20.4, 22.2]]) for (const s0 of [1.5, 5.75]) win(E, s0, s0 + 3.0, y0, y1, 1);
-    // ---- the cut-off corner: glazed stair, entrance under a pale canopy
-    const C = wallOf(WALLS.corner), gc = g(C.at(C.len / 2, 0.6));
-    face(C); plinth(C, 0, 2.6); plinth(C, 6.6, C.len);
-    win(C, 3.0, 6.2, gc + 4.2, C.top - 1.6, 2);
-    for (let y = gc + 6.6; y < C.top - 2; y += 2.4) slab(C, 3.0, 6.2, y - 0.04, y + 0.04, 0.2, 0.04, COL.frame);
-    win(C, 3.3, 5.9, gc + 0.05, gc + 2.7, 1, COL.annexGlass);
-    { const [x, z] = C.at(4.6, 0.95); p.add(BOX(5.0, 0.22, 1.9), COL.plinth, x, gc + 3.15, z, C.yaw); }
+    // (the long front, the end wall and the entrance corner are built in playtech.js)
     // ---- where the front steps back, and the set-back wall with the white annex standing out of it
     const S = wallOf(WALLS.step);
     face(S); face(B); plinth(S); plinth(B, 0, ANNEX.s0); plinth(B, ANNEX.s1, B.len);

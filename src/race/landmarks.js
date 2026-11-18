@@ -1,12 +1,11 @@
 // Real things around the spawn and the start/finish, measured from the Land Board's oblique aerial
-// photos (kaldaerofotod, 2024) and orthophoto: the white colonnade, roof band and sign of Tartu Kaubamaja,
-// the row of white kiosks on Küüni, the café terrace at the start line and
+// photos (kaldaerofotod, 2024) and orthophoto: the row of white kiosks on Küüni, the café terrace at the start line and
 // the Barclay park playground. Modelled geometry only (no photos are pasted). Kiosks are solid.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Kaubamaja footprint corners from the LOD2 building model (game x, z), and its roof height (world y)
-const KM = { N: [1735.2, 3015.6], E: [1789.5, 3071.8], S: [1713.8, 3144.9], W: [1659.6, 3088.7], roof: 22.5 };
+const KM = { N: [1735.2, 3015.6], S: [1713.8, 3144.9], W: [1659.6, 3088.7] };      // Kaubamaja itself: src/world/kaubamaja.js
 const KIOSKS = { a: [1652, 3113], b: [1696, 3159], n: 10 };
 // parked cars: kerb rows a -> b with the number of bays (some left empty). The cars themselves are
 // real models that can be shoved: src/world/parked.js
@@ -36,34 +35,6 @@ export const CAR_COLOURS = [0xb9bcc2, 0x8d9197, 0x3b3e44, 0x18191c, 0xe9e9e6, 0x
 export function rnd(seed) {
   let s = seed * 9301 + 49297;
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-}
-
-function canvasTex(w, h, draw) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-}
-
-// "tartu kaubamaja" in red lower case and the black K mark, on a white panel
-function signTex() {
-  return canvasTex(1024, 192, (g, w, h) => {
-    g.fillStyle = '#f6f4f1'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#d0202f';
-    g.font = '600 92px "Helvetica Neue", Arial, sans-serif';
-    g.textBaseline = 'middle';
-    g.fillText('tartu kaubamaja', 40, h / 2 + 4);
-    // the K mark: a bar and two arcs facing away from each other
-    const x = 840, y = h / 2;
-    g.fillStyle = '#141416';
-    g.fillRect(x - 14, y - 70, 26, 140);
-    g.lineWidth = 24; g.strokeStyle = '#141416';
-    g.beginPath(); g.arc(x - 70, y, 68, -0.95, 0.95); g.stroke();
-    g.beginPath(); g.arc(x + 95, y, 68, Math.PI - 0.95, Math.PI + 0.95); g.stroke();
-  });
 }
 
 // collects coloured parts and merges them into one mesh
@@ -122,35 +93,6 @@ export function createLandmarks(world, track) {
     built = true;
     const p = new Parts(), solids = [];
     const g = (x, z) => world.heightAt(x, z);
-
-    // ---- Kaubamaja: slender white columns standing in front of every face, white roof band and first floor slab
-    const corners = [KM.N, KM.E, KM.S, KM.W];
-    const cxm = (KM.N[0] + KM.S[0]) / 2, czm = (KM.N[1] + KM.S[1]) / 2;
-    for (let k = 0; k < 4; k++) {
-      const a = corners[k], b = corners[(k + 1) % 4];
-      const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
-      let nx = uz, nz = -ux;                                       // outward normal
-      if ((a[0] + dx / 2 - cxm) * nx + (a[1] + dz / 2 - czm) * nz < 0) { nx = -nx; nz = -nz; }
-      const off = 0.7, yaw = Math.atan2(-uz, ux);
-      const n = Math.round(len / 6.3);
-      for (let i = 0; i <= n; i++) {
-        const t = i / n, x = a[0] + dx * t + nx * off, z = a[1] + dz * t + nz * off;
-        const y0 = g(x, z) - 0.5, h = KM.roof - y0;
-        p.add(BOX(0.42, h, 0.42), 0xf2f0ec, x, y0 + h / 2, z, yaw);
-      }
-      const mx = a[0] + dx / 2 + nx * off, mz = a[1] + dz / 2 + nz * off;
-      p.add(BOX(len + 2.6, 1.5, 0.5), 0xf4f2ee, mx, KM.roof - 0.55, mz, yaw);                 // roof band
-      const ys = Math.max(g(a[0], a[1]), g(b[0], b[1])) + 5.4;
-      p.add(BOX(len + 2.6, 0.45, 0.3), 0xe8e4de, mx - nx * 0.2, ys, mz - nz * 0.2, yaw);      // first floor slab edge
-      if (k === 1) {
-        // the sign: on the Riia side (S -> E face here runs E -> S), near the south corner, between the columns and the wall
-        const t = 0.72, sx = a[0] + dx * t + nx * 0.7, sz = a[1] + dz * t + nz * 0.7;
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(17, 3.2), new THREE.MeshBasicMaterial({ map: signTex(), fog: true }));
-        sign.position.set(sx, g(sx, sz) + 12.5, sz);
-        sign.rotation.y = Math.atan2(nx, nz);
-        group.add(sign);
-      }
-    }
 
     // ---- white kiosks on Küüni: a row of booths with pointed roofs, serving windows towards Kaubamaja
     {

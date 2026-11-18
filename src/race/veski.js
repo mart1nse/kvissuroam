@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 
 export const VESKI = { i0: 1655, i1: 1810, red: [0.15, 1.9], dash: -1.9 };     // red: from the left road edge inwards
-const FENCE = { i0: 1806, i1: 1842, off: 1.6, height: 0.85, colour: 0xb39d8c, post: 0x988376 };
+const FENCE = { i0: 1806, i1: 1842, off: 1.6, height: 1.15, colour: 0xd98a68, post: 0xbd7254 };   // the orange board fence round the green (Martin, 18 Nov)
 // the Veski centre lines of this stretch in vectors.json (start points)
 const VESKI_ROADS = [[694.0, 2974.3], [760.8, 3107.9], [789.3, 3164.6]];
 

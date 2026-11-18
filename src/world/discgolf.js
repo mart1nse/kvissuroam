@@ -297,6 +297,25 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
     });
   }
 
+  // Nobody gets run over: each person stands in an invisible cushion. A car that comes within `reach` of
+  // them is pushed back out and the speed it had towards them is bounced off.
+  function keepAway(car, px, pz, reach) {
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = -fz, rz = fx;
+    const dx = px - car.x, dz = pz - car.z, hl = car.halfLen || 2.2, hw = car.halfWid || 0.9;
+    const l = dx * fx + dz * fz, w = dx * rx + dz * rz;
+    const cl = Math.max(-hl, Math.min(hl, l)), cw = Math.max(-hw, Math.min(hw, w));       // the nearest point of the car's box
+    let nx = (cl - l) * fx + (cw - w) * rx, nz = (cl - l) * fz + (cw - w) * rz, d = Math.hypot(nx, nz);
+    if (d >= reach) return;
+    if (d < 1e-3) { nx = -dx; nz = -dz; d = Math.hypot(nx, nz) || 1; nx /= d; nz /= d; d = 0; } else { nx /= d; nz /= d; }
+    car.x += nx * (reach - d); car.z += nz * (reach - d);
+    const vx = car.vx * fx + car.vy * rx, vz = car.vx * fz + car.vy * rz, vn = vx * nx + vz * nz;
+    if (vn < 0) {
+      const k = -(1.7 * vn) + 1.5, bx = vx + k * nx, bz = vz + k * nz;                     // bounced back, and a little more
+      car.vx = bx * fx + bz * fz; car.vy = bx * rx + bz * rz;
+      car.hit = Math.max(car.hit || 0, Math.min(3, -vn * 0.3));
+    }
+  }
+
   function update(car, dt) {
     if (!car) return;
     const dx = car.x - BASKET[0], dz = car.z - BASKET[1], d2 = dx * dx + dz * dz;
@@ -308,6 +327,10 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
     if (!plan || plan.n !== n) plan = planRound(n, ground);
     for (let pi = 0; pi < PEOPLE.length; pi++) person(pi, t);
     mum.update(now);
+    if (Math.abs(car.y - basket.group.position.y) < 4) {
+      for (const f of figures) keepAway(car, f.group.position.x, f.group.position.z, 2.2);
+      keepAway(car, MUM[0], MUM[1], 1.8);
+    }
     // sounds, quieter with distance; the chains swing for a moment after a hit
     if (n === lastRound && t > lastT && t - lastT < 1) {
       for (const e of plan.events) {

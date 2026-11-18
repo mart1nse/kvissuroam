@@ -42,6 +42,7 @@ import { emajoeVectors } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { valliWalls } from './race/valli.js';
+import { valliStreetWalls } from './race/vallistreet.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -125,6 +126,7 @@ async function boot() {
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
+  valliStreetWalls(world.walls);                // the houses at the start of Vallikraavi in their colours
   coopWalls(world.walls);                       // and the Coop Konsum on Aruküla tee
   janeseWalls(world.walls);                     // and Jänese 1
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render

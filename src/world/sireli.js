@@ -10,7 +10,6 @@ import * as THREE from 'three';
 import { streetKit, addHouseColours } from './streetkit.js';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
-import { buildCarModel } from '../cars/models/index.js';
 
 const A = [4020.25, -2310.75], ROT = (10 * Math.PI) / 180, C = Math.cos(ROT), S = Math.sin(ROT);
 const at = (e, n) => [A[0] + e * C + n * S, A[1] + e * S - n * C];
@@ -26,6 +25,13 @@ const COL = {
   roof: 0x3f4048, deckSide: 0x5a4034, plinth: 0x8a8990, wood: 0xc9a274, woodDark: 0x8a6a4a, white: 0xf3f2ee, fence: 0x30323a,
   gardenHouse: 0x5c5e68, gardenRoof: 0x97a2b4, sand: 0xe6d6ab, metal: 0xb9bcc4, pipe: 0x2f3036,
 };
+
+// the family's cars side by side on the drive, noses to the carport: [x, z, yaw, model, paint, lift]
+// (stood there by parked.js like every other parked car; lift: the paving lies above the ground)
+export const SIRELI_CARS = [
+  [...at(1.85, -9.6), ROT, 'rav4', 'grey', 0.075],
+  [...at(5.45, -9.5), ROT, 'bz4x', 'white', 0.075],
+];
 
 export function sireliWalls(walls) {
   // the map's house and its carport are hidden: both are modelled here
@@ -516,19 +522,6 @@ export function createSireli(scene, world, { shadows = true } = {}) {
       solid(1.35, -3.6, 1.4, 2.05), solid(7.85, 11.0, 1.15, 1.35), solid(8.0, PORT.n0 + 0.1, 1.0, 0.1), solid(-25, 18.2, 2.8, 4.3, 0),
       solid(-10.4, -9.1, 1.8, 1.8), solid(-5.2, 3.1, 5.2, 1.6), solid(-8.7, 7.6, 1.7, 2.9),
     ]);
-
-    // ---- the family car on the drive, nose under the carport roof
-    setTimeout(() => {
-      const [x, z] = at(4.9, -7.3), yaw = ROT, wb = 2.69;
-      const fx = Math.sin(yaw), fz = -Math.cos(yaw);
-      world.addSolids([{ x, z, yaw: Math.atan2(-fz, fx), hx: 2.3, hz: 0.93 }]);
-      const model = buildCarModel('rav4');
-      model.setLights({ headlights: false });
-      model.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -yaw);
-      model.group.position.set(x, (world.heightAt(x + fx * wb / 2, z + fz * wb / 2) + world.heightAt(x - fx * wb / 2, z - fz * wb / 2)) / 2 + 0.085, z);
-      model.group.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
-      group.add(model.group);
-    }, 500);
   }
 
   return {

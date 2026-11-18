@@ -4,7 +4,6 @@
 // on Järve tänav, a trampoline, an above-ground pool and a mailbox at the gate.
 // Everyone sees the jogger at the same spot: his place on the loop comes from the clock, not the frame count.
 import * as THREE from 'three';
-import { buildCarModel } from '../cars/models/index.js';
 import { buildJogger } from './jogger.js';
 import { Parts, BOX } from '../race/landmarks.js';
 
@@ -17,11 +16,11 @@ const HOUSE_YARD = { x: -1794.2, z: -13267, rx: 3.4, rz: 5.0 };   // the lawn be
 const SPEED = 2.3;                                                  // m/s, an easy 8 km/h
 const CENTRE = [-1789, -13222];
 
-// cars seen in the photos: x, z, heading (rad, 0 = north), model, colour
-const CARS = [
-  [-1769.2, -13229.4, Math.atan2(1, 0.38), 'rav4', 0x3e4146],            // in the drive east of the street
-  [-1763.4, -13168.5, -Math.PI / 2, 'passat', 0x2b2f36],             // on Järve tänav by the flats
-  [-1756.9, -13168.3, Math.PI / 2, 'crv', 0x6d7480],
+// cars seen in the photos: x, z, heading (rad, 0 = north), model, colour. Stood there by parked.js.
+export const AKSI_CARS = [
+  [-1769.2, -13229.4, Math.atan2(1, 0.38), 'rav4', 'grey'],            // in the drive east of the street
+  [-1763.4, -13168.5, -Math.PI / 2, 'passat', 'grey'],             // on Järve tänav by the flats
+  [-1756.9, -13168.3, Math.PI / 2, 'crv', 'silver'],
 ];
 const TRAMPOLINE = [-1748.0, -13241.2, 1.83];
 const POOL = [-1726.0, -13223.0, 2.3];
@@ -100,17 +99,6 @@ export function createAksi(scene, world, opts = {}) {
     built = true;
     const g = (x, z) => world.heightAt(x, z);
     const solids = [];
-    for (const [x, z, h, id, colour] of CARS) {
-      const m = buildCarModel(id);
-      m.setLights?.({ headlights: false });
-      const paint = m.group.getObjectByName(`${id}_paint`);
-      if (paint) { paint.material = paint.material.clone(); paint.material.color.setHex(colour); }
-      m.group.position.set(x, g(x, z), z);
-      m.group.rotation.y = -h;
-      decor.add(m.group);
-      const L = m.size?.length ?? 4.6, W = m.size?.width ?? 1.85;
-      solids.push({ x, z, yaw: Math.PI / 2 - h, hx: L / 2, hz: W / 2 });
-    }
     const p = new Parts();
     // trampoline: black mat on a blue padded ring, legs and a net on poles
     {

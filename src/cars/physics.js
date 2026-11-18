@@ -154,8 +154,14 @@ function engineForce(car, throttle, dt) {
     const road = rpmAt(car.gear);
     // (stopped off the throttle for a second, the gearbox goes back to automatic)
     car.manualStop = throttle <= 0 && vAbs < 1.5 ? (car.manualStop || 0) + dt : 0;
+    // The road speed always trails the tread a little (the tyres creep even when they grip), so with the
+    // engine on its limiter the road revs top out short of the shift point. The hold therefore ends at
+    // 90 % of the shift point, or at 80 % once the engine has been bouncing off its limiter for half a second.
+    const onLimiter = throttle > 0.3 && road * wAbs >= (e.redline - 80) * vAbs;
+    car.manualLim = onLimiter ? (car.manualLim || 0) + dt : 0;
+    const due = road >= e.shiftRpm * 0.9 || (car.manualLim > 0.5 && road >= e.shiftRpm * 0.8);
     if (car.reversing || car.manualStop > 1 ||
-        (road >= e.shiftRpm * 0.97 && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
+        (due && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
   }
   if (car.reversing) car.gear = 1;
   else if (car.shiftTimer <= 0 && !car.manual) {

@@ -1,16 +1,17 @@
 // Real things around the spawn and the start/finish, measured from the Land Board's oblique aerial
 // photos (kaldaerofotod, 2024) and orthophoto: the white colonnade, roof band and sign of Tartu Kaubamaja,
-// the row of white kiosks on Küüni, cars parked along the kerbs, the café terrace at the start line and
-// the Barclay park playground. Modelled geometry only (no photos are pasted). Cars and kiosks are solid.
+// the row of white kiosks on Küüni, the café terrace at the start line and
+// the Barclay park playground. Modelled geometry only (no photos are pasted). Kiosks are solid.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Kaubamaja footprint corners from the LOD2 building model (game x, z), and its roof height (world y)
 const KM = { N: [1735.2, 3015.6], E: [1789.5, 3071.8], S: [1713.8, 3144.9], W: [1659.6, 3088.7], roof: 22.5 };
 const KIOSKS = { a: [1652, 3113], b: [1696, 3159], n: 10 };
-// parked cars: kerb rows a -> b with the number of bays (some left empty)
+// parked cars: kerb rows a -> b with the number of bays (some left empty). The cars themselves are
+// real models that can be shoved: src/world/parked.js
 // (perp: nose-in bays across the row instead of cars nose to tail)
-const PARKING = [
+export const PARKING = [
   { a: [1667, 3047], b: [1700, 3016], n: 8, seed: 1 },      // Kaubamaja, north-west side
   { a: [1554, 3087], b: [1579, 3120], n: 6, seed: 2 },      // the cross street north of the spawn
   // the car park by the river across from Kaubamaja, around the pavilion
@@ -161,21 +162,6 @@ export function createLandmarks(world, track) {
         p.add(BOX(1.9, 0.08, 0.45), 0xd8d4cc, x + fx * 1.3, y + 0.95, z + fz * 1.3, yaw);    // counter
         if (r() < 0.6) p.add(BOX(2.2, 0.3, 0.05), [0xc8323c, 0x2f6f8f, 0x3c8a4f, 0xd8a12c][Math.floor(r() * 4)], x + fx * 1.18, y + 2.25, z + fz * 1.18, yaw);   // name board
         solids.push({ x, z, yaw, hx: 1.3, hz: 1.2 });
-      }
-    }
-
-    // ---- parked cars along the kerbs
-    for (const row of PARKING) {
-      const dx = row.b[0] - row.a[0], dz = row.b[1] - row.a[1], len = Math.hypot(dx, dz);
-      const yaw = Math.atan2(-dz, dx);
-      const r = rnd(row.seed);
-      for (let i = 0; i < row.n; i++) {
-        if (r() < (row.perp ? 0.22 : 0.15)) continue;              // an empty bay
-        const t = (i + 0.5) / row.n, x = row.a[0] + dx * t, z = row.a[1] + dz * t;
-        if (onTrack(x, z, 2) || world.sdfAt(x, z) < 1.6) continue;  // never on the race line or inside a building
-        const cy = yaw + (row.perp ? Math.PI / 2 : 0) + (r() < 0.5 ? Math.PI : 0) + (r() - 0.5) * 0.08;
-        addCar(p, x, g(x, z), z, cy, CAR_COLOURS[Math.floor(r() * CAR_COLOURS.length)], r);
-        solids.push({ x, z, yaw: cy, hx: 2.3, hz: 0.95 });
       }
     }
 

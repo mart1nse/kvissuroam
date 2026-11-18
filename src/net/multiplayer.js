@@ -275,6 +275,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     const now = performance.now() / 1000;
     // send our position while anyone else is online
     sendTimer -= dt;
+    shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     if (active && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       sendTimer = 1 / SEND_HZ;
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
@@ -282,8 +283,10 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
       const r3 = (v) => Math.round(v * 1000) / 1000;
       send({ t: 's', p: [r2(car.x), r2(car.z), r2(car.y), r3(car.yaw), r3(car.pitch), r3(car.roll),
         r2(car.vx * fx + car.vy * rx), r2(car.vx * fz + car.vy * rz), r3(car.steer), car.brake > 0 ? 1 : 0, car.reversing ? 1 : 0,
-        // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke)
-        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(car.throttle || 0), r2(car.boost || 0)] });
+        // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke; the pedal
+        // is sent as lifted during a gear change and for long enough after it to be seen at this send rate,
+        // which cuts the smoke on the other side too)
+        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0)] });
     }
     const W = innerWidth, H = innerHeight;
     for (const o of others.values()) {

@@ -63,7 +63,8 @@ function archLiner(meshes, p, { r, len, inset, steps = 28 }, rMin) {
 }
 const linerMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 1, metalness: 0, side: THREE.DoubleSide });
 // tail: emissive intensity with { brake, tail (headlights on) }
-export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12 } } = {}) {
+// wheelOut: { front, rear } metres to push the visible wheels outward to sit flush with the scanned arches
+export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12 }, wheelOut = null } = {}) {
   if (typeof window === 'undefined') return car;
   const state = { brake: false, headlights: false };
   let mat = null;
@@ -72,6 +73,7 @@ export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5,
   car.setLights = (o = {}) => { Object.assign(state, o); setLights(o); glow(); };
   load(`${import.meta.env.BASE_URL}models/${file}`).then((meshes) => {
     if (!meshes.length) return;
+    if (wheelOut) for (const [k, w] of Object.entries(car.wheels)) w.steer.position.x += Math.sign(w.steer.position.x) * (k[0] === 'f' ? wheelOut.front : wheelOut.rear);
     const keep = new Set(Object.values(car.wheels).map((w) => w.steer));
     for (const o of car.group.children) if (!keep.has(o)) o.visible = false;
     for (const src of meshes) {

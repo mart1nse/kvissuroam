@@ -300,5 +300,5 @@ export function buildCGT() {
   const wheelFront = { soup: gtWheel(0.334, 0.265, 0.2413 + 0.012, 0.02) };
   const car = assembleCar({ id: 'cgt', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   // the procedural body shows until the scanned body (public/models/cgt.glb) has loaded
-  return useGlbBody(tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }), 'cgt.glb', { liner: { r: 0.44, len: 0.28, inset: 0.12 } });
+  return useGlbBody(tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }), 'cgt.glb', { liner: { r: 0.44, len: 0.28, inset: 0.12 }, wheelOut: { front: 0.03, rear: 0.07 } });
 }

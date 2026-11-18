@@ -8,6 +8,7 @@
 // Lap times live in the lobby's SQLite storage (table `laps`). GET /api/laps.csv downloads all
 // of them; GET /api/board gives the best lap per car, all time and today (Tartu time).
 import { DurableObject } from 'cloudflare:workers';
+import { moved } from './moved.js';
 
 const TRACK = 'toomemagi';
 const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital', 'Synth', 'Vapor', 'Electric', 'Midnight', 'Magenta', 'Cyber'];
@@ -23,7 +24,10 @@ const cleanCar = (s) => String(s ?? '').replace(/[^a-z0-9_-]/gi, '').slice(0, 16
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(req) : new Response('Not found', { status: 404 });
+    if (!url.pathname.startsWith('/api/')) {
+      // page loads on the old address go to www.linnaring.com (worker/moved.js)
+      return moved(req, url) || (env.ASSETS ? env.ASSETS.fetch(req) : new Response('Not found', { status: 404 }));
+    }
     const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'));
     return stub.fetch(req);
   },

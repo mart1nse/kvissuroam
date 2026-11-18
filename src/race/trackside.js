@@ -51,7 +51,7 @@ function zones(track) {
 const KERBS = [
   { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.12, edge: 0.07, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
   { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.14, edge: 0.05, back: 0.35, colour: 0xb2adbb },   // Pepleri corner
-  { i0: 1656, i1: 1808, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x87a07a },    // Veski grass strip
+  { i0: 1656, i1: 1722, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x87a07a },    // Veski grass strip up to Juhan Liivi; veski.js lays it from there on
   { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.13, edge: 0.04, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;

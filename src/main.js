@@ -117,10 +117,10 @@ async function boot() {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
   world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
-  veskiRoads(world.vectors);
-  snapRoadsToTrack(world.vectors);              // after veskiRoads: it finds its roads by their first point
+  snapRoadsToTrack(world.vectors);
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
+  veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground

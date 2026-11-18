@@ -121,11 +121,13 @@ export const KIT = {
   thuja: [0x3f7d55, 0x4a8a5c, 0x376f4e], shrub: [0x5fa565, 0x76b86c, 0x4f9560], bloom: 0xeef3e6,
 };
 
-export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6 } = {}) {
+export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6, asphalt: ASPHALT = 0xaba7ba } = {}) {
   const p = new Parts(), leafy = leafyPlants(group, shadows);
   const KINDS = {       // ground covers: height above the terrain, texture tile (m), draw order
     lawn: { lift: 0.06, tile: 4, f: -3 }, paver: { lift: 0.075, tile: 1.6, f: -4 }, red: { lift: 0.075, tile: 1.6, f: -4 },
     dark: { lift: 0.075, tile: 1.6, f: -4 }, concrete: { lift: 0.075, tile: 3, f: -4 }, white: { lift: 0.09, tile: 1, f: -6 },
+    asphalt: { lift: 0.05, tile: 3, f: -3 }, kerb: { lift: 0.06, tile: 1, f: -5 },       // a tarmac pavement and its kerb stones
+    verge: { lift: 0.06, tile: 4, f: -3 },                                               // rougher, deeper green grass beside a road
   };
   const ground = {};
   for (const k of Object.keys(KINDS)) ground[k] = { pos: [], uv: [] };
@@ -210,11 +212,14 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     };
     const decal = (kind, opts) => { const f = KINDS[kind].f; flat(ground[kind], new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide })); };
     if (ground.lawn.pos.length) decal('lawn', { map: lawnTex() });
+    if (ground.verge.pos.length) decal('verge', { map: lawnTex(), color: 0x9fe07c });
     if (ground.paver.pos.length) decal('paver', { map: paverTex([208, 206, 218], 3) });
     if (ground.red.pos.length) decal('red', { map: paverTex([226, 164, 152], 5) });
     if (ground.dark.pos.length) decal('dark', { map: paverTex([150, 150, 166], 9) });
     decal('concrete', { color: 0xd9d6de });
     decal('white', { color: 0xf6f3fa });
+    decal('asphalt', { color: ASPHALT });
+    decal('kerb', { color: 0xd6d3dc });
     if (mesh.pos.length) {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(mesh.pos, 3));

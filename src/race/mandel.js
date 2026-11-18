@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { BOX } from './landmarks.js';
-import { streetKit, wallOf, addHouseColours } from '../world/streetkit.js';
+import { streetKit, wallOf, setHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
 
 // the cafe front from the LOD2 model (game x, z), left to right seen from the street; base and eave (world y)
@@ -30,7 +30,7 @@ const COL = {
 };
 
 export function mandelWalls(walls) {
-  addHouseColours(walls, '2_5', 480, 2400, [{ base: 2989, x: 646.5, z: 2653.1, wall: 0xf4f1ec, reach: 14 }]);
+  setHouseColours(walls, '2_5', 480, 2400, [{ base: 2989, x: 646.5, z: 2653.1, wall: 0xf4f1ec, reach: 14 }]);
 }
 // the box sign for Mandel stays off: the name is painted on the wall
 export function mandelSignSkip(world) {

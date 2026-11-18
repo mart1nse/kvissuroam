@@ -241,3 +241,18 @@ export function addHouseColours(walls, sectorKey, x0, z0, list) {
     a.push(e.base, Math.round((e.x - x0) * 10), Math.round((e.z - z0) * 10), e.wall);
   }
 }
+
+// Colours for houses that may already be in the colour survey: an entry the survey has (same LOD2 base,
+// within 30 m) gets these colours in place, since the survey's own entry would win; the rest are added.
+export function setHouseColours(walls, sectorKey, x0, z0, list) {
+  if (!walls || !walls.sectors) return;
+  const a = walls.sectors[sectorKey] || [], extra = ((walls.extra ||= {})[sectorKey] ||= {}), fresh = [];
+  for (const e of list) {
+    let k = -1;
+    for (let i = 0; i < a.length; i += 4) if (a[i] === e.base && Math.hypot(a[i + 1] / 10 + x0 - e.x, a[i + 2] / 10 + z0 - e.z) < 30) { k = i; break; }
+    if (k < 0) { fresh.push(e); continue; }
+    if (e.wall !== undefined) a[k + 3] = e.wall;
+    extra[k / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide };
+  }
+  addHouseColours(walls, sectorKey, x0, z0, fresh);
+}

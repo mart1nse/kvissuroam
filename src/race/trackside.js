@@ -19,7 +19,7 @@ import { findCorners } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
-import { createEmajoe } from './emajoe.js';
+import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createTennis } from './tennis.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
@@ -115,6 +115,7 @@ export function clearProps(data) {
     }
   }
   cornerClear(data, out);
+  emajoeClear(data, out);
   for (const zn of zones(track)) {
     if (zn.i0 < 0 || zn.i1 >= track.N) continue;
     const hits = [];
@@ -240,7 +241,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
-  out.push(...cornerProps(), ...valliProps());
+  out.push(...cornerProps(), ...valliProps(), ...emajoeProps());
   return out;
 }
 

@@ -120,6 +120,33 @@ function nameTex() {
   });
 }
 
+// the two lamp posts by the bay (Martin, 18 Nov): moved off the bay and its kerb to behind the shelter
+// and the two bins that stood in the bay go onto the pavement either side of the shelter
+const LIGHT = 0, BIN = 4;
+const LAMPS = [
+  { kind: LIGHT, from: [1424.6, 2280.4], i: 970, lat: 10.3 }, { kind: LIGHT, from: [1432.9, 2287.2], i: 977, lat: 10.3 },
+  { kind: BIN, from: [1425.4, 2281.6], i: 966, lat: 7.6 }, { kind: BIN, from: [1416.7, 2267.3], i: 981, lat: 7.6 },
+];
+
+// props layer: leave the map's lamps at the bay out ...
+export function emajoeClear(data, out) {
+  for (const [key, a] of Object.entries(data.sectors)) {
+    for (let k = 0; k < a.length; k += data.stride) {
+      if (LAMPS.some((l) => a[k] === l.kind && Math.hypot(a[k + 1] - l.from[0], a[k + 2] - l.from[1]) < 0.6)) out.add(`${key}:${k / data.stride}`);
+    }
+  }
+}
+// ... and stand them behind the shelter, the lamp still reaching over the road
+export function emajoeProps() {
+  const track = createTrack();
+  return LAMPS.map(({ kind, i, lat }) => {
+    const [tx, tz] = track.tan[i];
+    const x = track.P[i][0] - tz * lat, z = track.P[i][1] + tx * lat;
+    const b = (Math.atan2(tz, tx) * 180) / Math.PI;      // arm towards the road, as the map lamps had it
+    return [kind, x, z, b];
+  });
+}
+
 // before the road markings and map walls are built: no generated centre line on this stretch (it gets its
 // own lines), and the garden wall is drawn by this file instead of as a plain grey map wall
 export function emajoeVectors(vectors) {

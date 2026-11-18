@@ -156,6 +156,87 @@ function sootTex() {
   });
 }
 
+// The same for the scanned body: a thin shell over everything that faces rearward, coloured by a map of where
+// the soot ends up (G: how thick, heaviest on the bumper and round the tailpipe) and how soon it gets there
+// (R: 0 at the tailpipe, 1 at the far top corner). The film spreads out from the pipe as k rises.
+const SOOT_X = 0.92, SOOT_Y0 = 0.16, SOOT_H = 1.28;
+let _sootMap = null;
+function sootMap(pipeX, pipeY) {
+  if (_sootMap) return _sootMap;
+  const N = 256, d = new Uint8Array(N * N * 4);
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const G = 10, grid = Array.from({ length: G * G * 2 }, rnd);
+  const noise = (u, v, o) => {
+    const x = u * (G - 1), y = v * (G - 1), i = Math.min(G - 2, x | 0), j = Math.min(G - 2, y | 0);
+    let fx = x - i, fy = y - j; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    const a = grid[o + j * G + i], b = grid[o + j * G + i + 1], c = grid[o + (j + 1) * G + i], e = grid[o + (j + 1) * G + i + 1];
+    return a + (b - a) * fx + (c - a + (a - b - c + e) * fx) * fy;
+  };
+  // runs where the rain has dragged it down
+  const run = new Float32Array(N * N);
+  for (let i = 0; i < 110; i++) {
+    const x = (rnd() * (N - 4)) | 0, top = (N * (0.25 + rnd() * 0.75)) | 0, len = 14 + rnd() * 70, a = 0.06 + rnd() * 0.2, wd = 1 + ((rnd() * 3) | 0);
+    for (let j = 0; j < len; j++) { const y = top - j; if (y < 0) break; const f = Math.sin(Math.PI * j / len) * a; for (let k = 0; k < wd; k++) run[y * N + x + k] += f; }
+  }
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const pu = (pipeX + SOOT_X) / (2 * SOOT_X), pv = (pipeY - SOOT_Y0) / SOOT_H;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const u = (i + 0.5) / N, v = (j + 0.5) / N;                       // v = 0 at the bottom of the bumper
+    const dx = (u - pu) * 2 * SOOT_X, dy = (v - pv) * SOOT_H, dist = Math.hypot(dx, dy * 0.85);
+    const when = Math.min(1, Math.max(0, dist / 1.5 + (noise(u, v, 0) - 0.5) * 0.24));
+    let thick = 0.4 + 0.5 * (1 - ss(0.3, 0.72, v)) + 0.3 * Math.exp(-dist * dist / 0.2);
+    thick = thick * (0.78 + 0.44 * noise(u, v, G * G)) + run[j * N + i];
+    thick *= ss(0, 0.09, u) * ss(0, 0.09, 1 - u);                     // the air round the corners keeps the edges cleaner
+    const o = (j * N + i) * 4;
+    d[o] = Math.round(when * 255); d[o + 1] = Math.round(Math.min(0.97, thick) * 255); d[o + 3] = 255;
+  }
+  _sootMap = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+  _sootMap.magFilter = _sootMap.minFilter = THREE.LinearFilter; _sootMap.needsUpdate = true;
+  return _sootMap;
+}
+function sootShell(meshes) {
+  const pos = [], nor = [], uv = [], col = [];
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const put = (x, y, z, nx, ny, nz, w) => { pos.push(x, y, z); nor.push(nx, ny, nz); uv.push((x + SOOT_X) / (2 * SOOT_X), (y - SOOT_Y0) / SOOT_H); col.push(1, 1, 1, w); };
+  for (const m of meshes) {
+    const P = m.geometry.attributes.position, Q = m.geometry.attributes.normal, I = m.geometry.index;
+    const decal = m.material.name?.startsWith('ov_');
+    if (decal && m.material.alphaTest > 0) {
+      // a cut-out badge: its quad is mostly see-through, so its soot is a disc the size of the roundel
+      for (let q = 0; q + 3 < P.count; q += 4) {
+        const v = [0, 1, 2, 3].map((k) => new THREE.Vector3().fromBufferAttribute(P, q + k));
+        if (v[0].z < 1.7) continue;
+        const n = new THREE.Vector3().fromBufferAttribute(Q, q), c = v[0].clone().add(v[2]).multiplyScalar(0.5).addScaledVector(n, 0.004);
+        const ax = v[1].clone().sub(v[0]).multiplyScalar(0.5), ay = v[3].clone().sub(v[0]).multiplyScalar(0.5);
+        for (let k = 0; k < 24; k++) {
+          const a0 = k / 24 * Math.PI * 2, a1 = (k + 1) / 24 * Math.PI * 2;
+          put(c.x, c.y, c.z, n.x, n.y, n.z, 1);
+          for (const a of [a0, a1]) put(c.x + ax.x * Math.cos(a) + ay.x * Math.sin(a), c.y + ax.y * Math.cos(a) + ay.y * Math.sin(a), c.z + ax.z * Math.cos(a) + ay.z * Math.sin(a), n.x, n.y, n.z, 1);
+        }
+      }
+      continue;
+    }
+    const off = decal ? 0.004 : 0.003;   // a plate sits proud of the body and hides the body's soot: it gets its own on top
+    for (let t = 0; t < I.count; t += 3) {
+      const a = I.getX(t), b = I.getX(t + 1), c = I.getX(t + 2);
+      // everything behind the rear wheels except what faces forward (inside faces of the scan)
+      if (P.getZ(a) + P.getZ(b) + P.getZ(c) < 5.1 || Q.getZ(a) + Q.getZ(b) + Q.getZ(c) < -0.6) continue;
+      for (const i of [a, b, c]) {
+        const nx = Q.getX(i), ny = Q.getY(i), nz = Q.getZ(i), y = P.getY(i);
+        // none on the flanks or the roof: it thins out as the panel turns away from the airflow behind the car
+        const w = (1 - ss(0.5, 0.92, Math.abs(nx))) * (1 - ss(0.4, 0.8, ny) * ss(1.0, 1.2, y)) * ss(-0.2, 0.05, nz + 0.4 * Math.abs(ny));
+        put(P.getX(i) + nx * off, y + ny * off, P.getZ(i) + nz * off, nx, ny, nz, w);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+  return g;
+}
+
 // ---------------------------------------------------------------- the car
 export function buildPassat() {
   const ZG0 = 2.02, ZG1 = ZRB - 0.1;          // tailgate glass: top and bottom edges (z)
@@ -382,9 +463,29 @@ export function buildPassat() {
   sootMesh.name = 'passat_soot'; sootMesh.visible = false; sootMesh.renderOrder = 2;
   car.group.add(sootMesh);
   // k: 0 = clean .. 1 = black with soot
-  // the soot decal is shaped to the procedural tail, so it stays off once the scanned body is in
-  car.setSoot = (k) => { sootMat.opacity = Math.min(1, k); sootMesh.visible = k > 0.01 && !car.glbLoaded; };
+  // the soot decal above is shaped to the procedural tail; the scanned body gets its own shell once it is in
+  const uK = { value: 0 };
+  let sootShellMesh = null;
+  car.setSoot = (k) => {
+    uK.value = k = Math.min(1, k); sootMat.opacity = k;
+    sootMesh.visible = k > 0.01 && !car.glbLoaded;
+    if (sootShellMesh) sootShellMesh.visible = k > 0.01;
+  };
+  const sootOnScan = (meshes) => {
+    const mat = new THREE.MeshStandardMaterial({ map: sootMap(-0.42, 0.27),   // the tailpipe (spec.exhaust)
+       transparent: true, vertexColors: true, depthWrite: false, roughness: 0.95, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uK = uK;
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uK;')
+        .replace('#include <map_fragment>', `vec4 sm = texture2D( map, clamp( vMapUv, 0.0, 1.0 ) );
+          diffuseColor = vec4( 0.022, 0.019, 0.017, sm.g * smoothstep( 0.8 * sm.r - 0.1, 0.8 * sm.r + 0.3, uK ) );`);
+    };
+    const sh = sootShellMesh = new THREE.Mesh(sootShell(meshes), mat);
+    sh.name = 'passat_soot_scan'; sh.renderOrder = 2; sh.visible = uK.value > 0.01;
+    car.group.add(sh);
+  };
   tintGlass(car, 'passat', { color: 0x2c363e, metalness: 0.78, roughness: 0.05 });
   // the procedural body shows until the scanned body (public/models/passat.glb) has loaded
-  return useGlbBody(tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 } });
+  return useGlbBody(tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 }, onLoad: sootOnScan });
 }

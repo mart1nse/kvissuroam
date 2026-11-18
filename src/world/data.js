@@ -82,6 +82,7 @@ export async function loadWorldData(onProgress = () => {}) {
       s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
+      if (clearings.length) s.trees = clearTrees(s.trees);
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
       for (const b of solids) stamp(s, b);
@@ -90,6 +91,17 @@ export async function loadWorldData(onProgress = () => {}) {
       for (const f of onLoad) f(s);
     }, (err) => { loading--; s.state = 'failed'; console.warn(err); });
     return s.promise;
+  }
+
+  // Rectangles kept free of trees (hand-made places such as the Toome tennis courts): { x0, z0, x1, z1 }
+  const clearings = [];
+  function clearTrees(rec) {
+    const keep = [];
+    for (let i = 0; i < rec.length; i += 6) {
+      const x = rec[i], z = rec[i + 2];
+      if (!clearings.some((c) => x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1)) for (let k = 0; k < 6; k++) keep.push(rec[i + k]);
+    }
+    return keep.length === rec.length ? rec : new Float32Array(keep);
   }
 
   // Extra solid boxes added at run time (parked cars, kiosks): written into the obstacle distance field
@@ -174,6 +186,9 @@ export async function loadWorldData(onProgress = () => {}) {
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
+
+    // Keep trees out of a rectangle in sectors loaded from now on (call before the sectors load).
+    addClearing(r) { clearings.push(r); },
 
     // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
     addSolids(list) {

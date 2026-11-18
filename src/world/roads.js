@@ -8,7 +8,9 @@ const MAIN = new Set(['Põhimaantee', 'Tugimaantee', 'Kõrvalmaantee']);
 export function createRoadMarkings(world) {
   const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
   const bySector = new Map();           // "sx_sz" -> [x1, z1, x2, z2, ...]
+  const skip = world.vectors.markSkip;   // stretches that paint their own lines (src/race/emajoe.js)
   const put = (x1, z1, x2, z2) => {
+    if (skip && skip((x1 + x2) / 2, (z1 + z2) / 2)) return;
     const k = `${Math.floor(((x1 + x2) / 2 - G0) / S)}_${Math.floor(((z1 + z2) / 2 - G0) / S)}`;
     let a = bySector.get(k);
     if (!a) bySector.set(k, (a = []));

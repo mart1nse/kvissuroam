@@ -19,6 +19,8 @@ import { findCorners } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
+import { createEmajoe } from './emajoe.js';
+import { createTennis } from './tennis.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -303,23 +305,11 @@ export function createTrackside(world, scene) {
   let wallSegs = null;           // the ones clear of buildings, once the ground is loaded
   let wallMesh = null;
 
+  // drawn as fieldstone with a brick coping by emajoe.js, like the rest of the garden wall (Martin, 18 Nov)
   function buildWall() {
     wallSegs = segs.filter(([a, b]) => world.sdfAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) > 0.8);
-    const geos = [];
-    for (const [a, b] of wallSegs) {
-      const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
-      const y = Math.min(world.heightAt(a[0], a[1]), world.heightAt(b[0], b[1]));
-      const box = new THREE.BoxGeometry(l + WALL.thick * 0.6, WALL.height + 0.3, WALL.thick);
-      box.rotateY(-Math.atan2(dz, dx));
-      box.translate((a[0] + b[0]) / 2, y + (WALL.height + 0.3) / 2 - 0.3, (a[1] + b[1]) / 2);
-      geos.push([box, 0xe9b9a6]);
-      const cap = new THREE.BoxGeometry(l + WALL.thick * 0.6 + 0.1, 0.1, WALL.thick + 0.12);
-      cap.rotateY(-Math.atan2(dz, dx));
-      cap.translate((a[0] + b[0]) / 2, y + WALL.height + 0.05, (a[1] + b[1]) / 2);
-      geos.push([cap, 0xc79888]);
-    }
-    wallMesh = merged(geos);
-    if (wallMesh) { wallMesh.castShadow = wallMesh.receiveShadow = true; group.add(wallMesh); }
+    emajoe.drawLowWall(wallSegs, WALL.thick);
+    wallMesh = true;
   }
 
   // merge [geometry, colour] pairs into one vertex-coloured mesh
@@ -458,6 +448,8 @@ export function createTrackside(world, scene) {
   const corners = createCorners(world, group, merged);
   const valli = createValli(world, group, merged);
   const veski = createVeski(world, group, merged);
+  const emajoe = createEmajoe(world, group);
+  const tennis = createTennis(world, group);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -496,6 +488,8 @@ export function createTrackside(world, scene) {
       corners.update(x, z);
       valli.update(x, z);
       veski.update(x, z);
+      emajoe.update(x, z);
+      tennis.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();

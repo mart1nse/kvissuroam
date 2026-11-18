@@ -28,6 +28,7 @@ import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
 import { veskiRoads } from './race/veski.js';
+import { emajoeVectors } from './race/emajoe.js';
 import { valliWalls } from './race/valli.js';
 
 const $ = (s) => document.querySelector(s);
@@ -101,6 +102,7 @@ async function boot() {
   veskiRoads(world.vectors);
   snapRoadsToTrack(world.vectors);              // after veskiRoads: it finds its roads by their first point
   valliWalls(world.vectors);
+  emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';

@@ -21,6 +21,12 @@ export const PARKING = [
   { a: [1812, 2976], b: [1825, 2994], n: 7, perp: true, seed: 6 },
   { a: [1821, 2962], b: [1839, 2978], n: 8, perp: true, seed: 7 },
   { a: [1801, 3026], b: [1839, 2993], n: 18, perp: true, seed: 8 },
+  // Vallikraavi (vallistreet.js): square to the road on the park side, along the kerb under the tower house,
+  // the car park under the hill and the asphalt bays after it
+  { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true, seed: 31 },
+  { a: [1505.7, 3009.1], b: [1492.1, 3021.6], n: 3, seed: 32 },
+  { a: [1426, 3102], b: [1440, 3102], n: 5, perp: true, seed: 33 },
+  { a: [1418, 3098.3], b: [1403, 3097.6], n: 3, seed: 34 },
 ];
 const TERRACE = [1586, 3046];       // café terrace by the start line (moved to the kerb at run time)
 const PLAY = [[1602, 3019, 5.2], [1616, 3031, 4.2]];      // playground rubber discs: x, z, radius

@@ -11,7 +11,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 // buildings Martin pointed out as red brick (a point inside each, game x, z)
 const BRICK = [
   [1314, 2187],        // Kroonuaia / Emajõe corner
-  [1540, 3012],        // Vallikraavi 4, the corner house at the Vallikraavi entry
+  [1458, 3075],        // Vallikraavi 4, the red brick house with the statue
 ];
 
 function buildingGeometry(sector, walls) {

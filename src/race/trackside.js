@@ -21,6 +21,7 @@ import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createMandel } from './mandel.js';
+import { createValliStreet } from './vallistreet.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
 import { raekodaClear } from '../world/raekoda.js';
@@ -485,6 +486,7 @@ export function createTrackside(world, scene) {
   const valli = createValli(world, group, merged);
   const veski = createVeski(world, group, merged);
   const mandel = createMandel(world, group);
+  const valliStreet = createValliStreet(world, group);
   const emajoe = createEmajoe(world, group);
   const lai = createLai(world, group);
   const tennis = createTennis(world, group);
@@ -528,6 +530,7 @@ export function createTrackside(world, scene) {
       valli.update(x, z);
       veski.update(x, z);
       mandel.update(x, z);
+      valliStreet.update(x, z);
       emajoe.update(x, z);
       lai.update(x, z);
       tennis.update(x, z);

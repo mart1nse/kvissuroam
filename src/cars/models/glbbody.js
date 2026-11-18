@@ -76,6 +76,7 @@ export function useGlbBody(car, file, { tail = 0.3, brake = 2, liner = { r: 0.5,
     if (wheelOut) for (const [k, w] of Object.entries(car.wheels)) w.steer.position.x += Math.sign(w.steer.position.x) * (k[0] === 'f' ? wheelOut.front : wheelOut.rear);
     const keep = new Set(Object.values(car.wheels).map((w) => w.steer));
     for (const o of car.group.children) if (!keep.has(o)) o.visible = false;
+    car.glbLoaded = true;
     for (const src of meshes) {
       const lit = !!src.material.emissiveMap;
       const m = new THREE.Mesh(src.geometry, lit ? src.material.clone() : src.material);

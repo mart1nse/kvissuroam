@@ -5,6 +5,7 @@
 // with plastic covers. Its DPF is giving up: the tailgate gets a film of soot (setSoot, 0..1).
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint, tintGlass } from './kit.js';
+import { useGlbBody } from './glbbody.js';
 import { part, planLine, sideLine, sweep, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car: 4680 x 1740 x 1500 mm (with rails), wheelbase 2703, track 1498 / 1500, 195/65 R15.
@@ -381,7 +382,9 @@ export function buildPassat() {
   sootMesh.name = 'passat_soot'; sootMesh.visible = false; sootMesh.renderOrder = 2;
   car.group.add(sootMesh);
   // k: 0 = clean .. 1 = black with soot
-  car.setSoot = (k) => { sootMat.opacity = Math.min(1, k); sootMesh.visible = k > 0.01; };
+  // the soot decal is shaped to the procedural tail, so it stays off once the scanned body is in
+  car.setSoot = (k) => { sootMat.opacity = Math.min(1, k); sootMesh.visible = k > 0.01 && !car.glbLoaded; };
   tintGlass(car, 'passat', { color: 0x2c363e, metalness: 0.78, roughness: 0.05 });
-  return tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
+  // the procedural body shows until the scanned body (public/models/passat.glb) has loaded
+  return useGlbBody(tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 } });
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
-import { createBuildings, createTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
+import { createBuildings, createTrees, updateTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
@@ -39,6 +39,8 @@ const params = new URLSearchParams(location.search);
 const quality = isTouch
   ? { pixelRatio: Math.min(devicePixelRatio, 1.5), shadow: 1024, terrainStride: 2, tileRadius: 380, treeDetail: 0, treeShadows: false, thinTrees: true, anisotropy: 4, far: 2600, loadRadius: 520, xTiles: false, roadTex: 512 }
   : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000, xTiles: true };
+// realistic trees: on by default away from phones; ?trees=real or ?trees=old forces either
+quality.realTrees = params.get('trees') ? params.get('trees') === 'real' : !isTouch && params.get('q') !== 'low';
 if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
 
 const canvas = $('#view');
@@ -108,7 +110,8 @@ async function boot() {
   bar.style.width = '88%';
   await new Promise((r) => setTimeout(r));
   const buildBuildings = createBuildings(world.walls);
-  const buildTrees = createTrees(quality);
+  const buildTrees = createTrees(quality, renderer, world);
+  if (buildTrees.near) scene.add(buildTrees.near);
   const buildLow = createLowObjects(world, quality);
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
@@ -839,6 +842,7 @@ function frame(ts) {
   water.update(elapsed);
   edge.mat.uniforms.uCam.value.copy(camera.position);
   edge.mat.uniforms.uTime.value = elapsed;
+  updateTrees(elapsed, camera.position);
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;

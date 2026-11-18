@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "meshoptimizer": "^1.3.0",
     "three": "^0.187.0"
   },
   "devDependencies": {

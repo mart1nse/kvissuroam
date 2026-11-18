@@ -137,7 +137,8 @@ function atlasTex() {
 }
 
 // ---------------------------------------------------------------- the car
-export function buildAudi200() {
+// scan: false keeps the modelled body (parked cars in other colours)
+export function buildAudi200({ scan = true } = {}) {
   const ZG0 = 1.6, ZG1 = ZRB - 0.105;         // tailgate glass: roof edge and bottom edge
   const body = buildBody({
     top: [[ZFB, 0.5], [ZFB + 0.001, 0.6, 0.01], [ZFB + 0.008, 0.705, 0.02], [ZFB + 0.06, 0.735, 0.04], [-1.6, 0.845, 0.5],
@@ -363,5 +364,7 @@ export function buildAudi200() {
   const wheel = { soup: aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
   const car = assembleCar({ id: 'audi200', dims: DIMS, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
   tintGlass(car, 'audi200', { color: 0x34404a, metalness: 0.7, roughness: 0.05 });   // light factory tint
-  return useGlbBody(tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 }), 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 } });
+  tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 });
+  if (!scan) return car;
+  return useGlbBody(car, 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 } });
 }

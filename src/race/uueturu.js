@@ -48,7 +48,7 @@ const LAMP_S = [8.5, 13.7, 18.9, 24.1], BOLLARD_S = [1.4, 4.2, 7.0];   // lamp p
 // Plain solid objects: they do not move when hit.
 const PARKED = [
   { bay: 2, id: 'enyaq', opts: { rack: false, paint: 0xeceeef }, hl: 2.33, hw: 0.94, wb: 2.765, turn: 0.02 },
-  { bay: 4, id: 'mazda6', hl: 2.4, hw: 0.92, wb: 2.75, turn: -0.03 },
+  { bay: 0, id: 'mazda6', hl: 2.4, hw: 0.92, wb: 2.75, turn: -0.03 },     // the first full bay (Martin)
   { bay: 6, id: 'rav4', hl: 2.3, hw: 0.93, wb: 2.69, turn: 0.015 },
 ];
 // the map has this building's lamps and a sign inside it: they go out to the walkway instead

@@ -573,6 +573,21 @@ function spruceGeometry() {
   return b.build();
 }
 
+// One lump of a laser-scanned hedge or bush: a unit clump (1 wide, 1 high, foot at the origin) of six leaf
+// cards, five standing round it facing outwards and one lying over the top. Thousands are drawn, one per
+// half-metre cell, each scaled to the hedge's height, so it has to be this cheap (12 triangles).
+function lumpGeometry() {
+  const b = builder(1, 1), r = rng(909);
+  const shadeAt = (x, y) => Math.min(1, 0.5 + 0.5 * Math.min(1, Math.max(0, y) / 0.8));
+  const normalOf = (x, y, z) => { const l = Math.hypot(x, y - 0.3, z) || 1; return [x / l, (y - 0.3) / l, z / l]; };
+  for (let k = 0; k < 5; k++) {
+    const az = k * 1.2566 + r() * 0.4, d = 0.2 + r() * 0.06;
+    b.card(Math.cos(az) * d, 0.5, Math.sin(az) * d, 1.08, 1.04, az + 1.571, -0.22 + (r() - 0.5) * 0.2, k + (r() < 0.5 ? 4 : 0), normalOf, shadeAt, 0.12, 0.5);
+  }
+  b.card(0, 0.92, 0, 1.05, 1.05, r() * 3, 1.22, 2, normalOf, shadeAt, 0.15, 0.5);
+  return b.build();
+}
+
 // A garden bush, in metres with its foot at the origin: a low dome of the lime's leaf clumps on a
 // few woody stems. Not instanced: placed as an ordinary mesh.
 function bushGeometry() {
@@ -804,5 +819,8 @@ export function createRealTrees(renderer, { cards = true, lod = LOD, only = null
   // a leafy bush in the lime's foliage: a mesh in metres, foot at its origin
   let bushGeo = null;
   const bush = () => (species[0] ? new THREE.Mesh((bushGeo ||= bushGeometry()), species[0].soloMat) : null);
-  return { species, bush, update(t) { uniforms.uTime.value = t; }, setLod(m) { uniforms.uLod.value = m; } };
+  // the unit lump that hedges and bushes from the map data are built of, in the same foliage
+  let lumpGeo = null;
+  const lump = () => (species[0] ? { geometry: (lumpGeo ||= lumpGeometry()), material: species[0].soloMat } : null);
+  return { species, bush, lump, update(t) { uniforms.uTime.value = t; }, setLod(m) { uniforms.uLod.value = m; } };
 }

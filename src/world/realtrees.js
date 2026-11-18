@@ -573,6 +573,31 @@ function spruceGeometry() {
   return b.build();
 }
 
+// A garden bush, in metres with its foot at the origin: a low dome of the lime's leaf clumps on a
+// few woody stems. Not instanced: placed as an ordinary mesh.
+function bushGeometry() {
+  const b = builder(1, 1), r = rng(606);
+  const R = 1.35, top = 2.0;
+  const shadeAt = (x, y, z) => Math.min(1, 0.5 + 0.3 * Math.min(1, Math.hypot(x, z) / R) + 0.25 * Math.min(1, y / top));
+  const normalOf = (x, y, z) => { const l = Math.hypot(x, y - 0.5, z) || 1; return [x / l, (y - 0.5) / l, z / l]; };
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.7 + r(), d = 0.35 + r() * 0.3;
+    b.limb([[Math.cos(a) * 0.12, 0, Math.sin(a) * 0.12, 0.035], [Math.cos(a) * d, 0.7, Math.sin(a) * d, 0.022], [Math.cos(a) * d * 1.6, 1.3, Math.sin(a) * d * 1.6, 0.012]],
+      3, DARK, 224, 1.2, () => 0.7, () => 0);
+  }
+  let variant = 0;
+  const leaf = (x, y, z, az, w, lie) => b.card(x, y, z, w, w * (0.9 + r() * 0.2), az + 1.571 + (r() - 0.5) * 1.4, lie + (r() - 0.5) * 0.6,
+    (variant++ % 4) + (r() < 0.5 ? 4 : 0), normalOf, shadeAt, 0.3, 0.45);
+  for (let i = 0; i < 20; i++) {
+    // from the skirt up over the top
+    const t = (i + 0.5) / 20, el = t * 1.45, az = i * 2.39996 + r() * 0.5;
+    const d = Math.cos(el) * R * (0.8 + r() * 0.15), y = 0.75 + Math.sin(el) * (top - 0.95);
+    leaf(Math.cos(az) * d, y, Math.sin(az) * d, az, 1.35 + r() * 0.45, -t * 0.8);
+  }
+  for (let i = 0; i < 5; i++) { const az = r() * 6.283, d = r() * 0.5; leaf(Math.cos(az) * d, 0.8 + r() * 0.7, Math.sin(az) * d, az, 1.3, 0); }
+  return b.build();
+}
+
 // ---------------------------------------------------------------- materials
 // Shared by the close tree and the flat one: each tree draws itself only on its side of LOD,
 // sways in the wind, and lets some sun through its leaves.
@@ -753,7 +778,8 @@ const SPECIES = {
 };
 
 // Returns species { n: { near, nearMat, far, farMat } } keyed by the species numbers of scenery.js,
-// update(time) to move the wind, and setLod(m) to move the distance where the flat picture takes over.
+// update(time) to move the wind, setLod(m) to move the distance where the flat picture takes over, and
+// bush() for a hand-placed bush.
 // only: a list of species to build (the lab page); cards false leaves out the close trees.
 export function createRealTrees(renderer, { cards = true, lod = LOD, only = null } = {}) {
   const uniforms = { uTime: { value: 0 }, uLod: { value: lod } };
@@ -770,8 +796,13 @@ export function createRealTrees(renderer, { cards = true, lod = LOD, only = null
       far: flatGeometry(sp.halfW),
       // where there are no close trees to take over, the flat one is drawn at every distance
       farMat: treeMaterial(picture, uniforms, { alphaTest: 0.45, lod: cards && lod ? -1 : 0, sway: sp.sway * 0.6, through: sp.through, flat: true }),
+      // for a hand-placed tree that is always drawn in full (the row on the start straight)
+      soloMat: treeMaterial(atlas, uniforms, { alphaTest: 0.4, lod: 0, sway: sp.sway, through: sp.through, flat: false }),
     };
     if (!cards) { near.dispose(); atlas.dispose(); }
   }
-  return { species, update(t) { uniforms.uTime.value = t; }, setLod(m) { uniforms.uLod.value = m; } };
+  // a leafy bush in the lime's foliage: a mesh in metres, foot at its origin
+  let bushGeo = null;
+  const bush = () => (species[0] ? new THREE.Mesh((bushGeo ||= bushGeometry()), species[0].soloMat) : null);
+  return { species, bush, update(t) { uniforms.uTime.value = t; }, setLod(m) { uniforms.uLod.value = m; } };
 }

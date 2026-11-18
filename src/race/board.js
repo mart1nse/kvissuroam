@@ -1,6 +1,7 @@
 // Garage additions: the driver name (changeable, never required) and the lap times board,
 // best lap per car of all time and of today, plus this browser's last laps.
 import { fmtTime, escapeHtml } from './race.js';
+import { createOutline } from './outline.js';
 
 export function createBoard({ mp, race, cars, order }) {
   const menu = document.querySelector('#menu');
@@ -94,6 +95,7 @@ export function createBoard({ mp, race, cars, order }) {
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
   }
   btn.addEventListener('click', show);
+  createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 

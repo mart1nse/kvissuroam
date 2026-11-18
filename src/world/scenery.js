@@ -286,6 +286,8 @@ function treeSpecies(type, h, crown, r) {
 // the few hundred trees that can be seen as such cost their full geometry.
 let realTrees = null, pools = null;
 let nearTrees = 150;            // m: the flat picture gives way to the leafy tree (the shaders switch at exactly this)
+// the realistic tree kit for hand-placed greenery (null with ?trees=old or before createTrees)
+export function realTreeKit() { return realTrees; }
 export function updateTrees(time, cam) {
   if (!realTrees) return;
   realTrees.update(time);
@@ -444,12 +446,81 @@ export function createTrees(opts, renderer, world) {
 }
 
 // ---------------------------------------------------------------- hedges, bushes and fences
+// Bushes and hedges are leafy: each laser-scan cell is a soft round lump, and the lumps of a hedge overlap
+// into one body. A tileable picture of small leaves is laid on them in world space from three sides, so the
+// leaves do not stretch over tall lumps, and the foot of every lump is shaded where light does not reach.
+function bushLeafTexture() {
+  const n = 256, cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const g = cv.getContext('2d');
+  g.fillStyle = 'hsl(112,38%,15%)'; g.fillRect(0, 0, n, n);
+  let sd = 917;
+  const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  // dark depths first, lit leaves last; each leaf drawn again across the edges so the picture tiles
+  for (let layer = 0; layer < 3; layer++) {
+    for (let i = 0; i < 520; i++) {
+      const x = r() * n, y = r() * n, a = r() * 6.283, L = 5 + r() * 6, W = L * (0.42 + r() * 0.16);
+      const light = [19, 28, 38][layer] + r() * 10, hue = 96 + r() * 26, sat = 36 + r() * 18;
+      for (const ox of [-n, 0, n]) for (const oy of [-n, 0, n]) {
+        if (x + ox < -12 || x + ox > n + 12 || y + oy < -12 || y + oy > n + 12) continue;
+        g.save(); g.translate(x + ox, y + oy); g.rotate(a);
+        g.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+        g.beginPath(); g.ellipse(0, 0, L, W, 0, 0, 6.283); g.fill();
+        g.strokeStyle = `hsla(${hue + 10},${sat}%,${light + 12}%,0.45)`; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(-L * 0.8, 0); g.lineTo(L * 0.8, 0); g.stroke();
+        g.restore();
+      }
+    }
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+function bushMaterial() {
+  const mat = new THREE.MeshLambertMaterial({ map: bushLeafTexture() });
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWp;\nvarying vec3 vWn;\nvarying float vFoot;')
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+        vec4 bw = vec4(transformed, 1.0);
+        vec3 bn = objectNormal;
+        #ifdef USE_INSTANCING
+          bw = instanceMatrix * bw; bn = mat3(instanceMatrix) * bn;
+        #endif
+        vWp = (modelMatrix * bw).xyz;
+        vWn = normalize(mat3(modelMatrix) * bn);
+        vFoot = position.y;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWp;\nvarying vec3 vWn;\nvarying float vFoot;')
+      .replace('#include <map_fragment>', `
+        vec3 bwt = pow(abs(vWn), vec3(4.0)); bwt /= bwt.x + bwt.y + bwt.z;
+        const float K = 0.55;                              // one picture covers 1.8 m
+        vec4 leaf = texture2D(map, vWp.zy * K) * bwt.x + texture2D(map, vWp.xz * K + 0.37) * bwt.y + texture2D(map, vWp.xy * K + 0.71) * bwt.z;
+        diffuseColor *= leaf;
+        diffuseColor.rgb *= mix(0.45, 1.0, smoothstep(0.0, 0.55, vFoot));      // dark at the foot`);
+  };
+  mat.customProgramCacheKey = () => 'bush-leaves';
+  return mat;
+}
+
 // Returns build(sector) -> group (or null). Cells come from laser-scan data on a 0.5 m grid.
 export function createLowObjects(world, opts) {
   const res = world.meta.lowres || 0.5;
-  const bushGeo = new THREE.CylinderGeometry(0.34, 0.42, 1, 5, 1).translate(0, 0.5, 0);
+  // a soft lump from the ground up to height 1: a round body on a slightly narrower foot
+  const bushGeo = new THREE.IcosahedronGeometry(0.5, 0);
+  {
+    const q = bushGeo.attributes.position;
+    for (let i = 0; i < q.count; i++) {
+      const y = q.getY(i) + 0.5;
+      q.setXYZ(i, q.getX(i) * (y < 0.2 ? 0.8 : 1), Math.max(0, y), q.getZ(i) * (y < 0.2 ? 0.8 : 1));
+    }
+    bushGeo.computeVertexNormals();
+  }
   const fenceGeo = new THREE.BoxGeometry(res * 1.25, 1, 0.07).translate(0, 0.5, 0);
-  const bushMat = new THREE.MeshLambertMaterial({ flatShading: true });
+  const bushMat = bushMaterial();
   const fenceMat = new THREE.MeshLambertMaterial();
   const FENCE = [0x4a3b30, 0x5d5f66, 0x8a7257, 0x2e2f35, 0x9a9690];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
@@ -470,12 +541,14 @@ export function createLowObjects(world, opts) {
         const h = (B[i * 3 + 2] & 255) / 10;
         p.set(x + (rnd() - 0.5) * 0.15, world.heightAt(x, z) - 0.1, z + (rnd() - 0.5) * 0.15);
         q.setFromAxisAngle(up, rnd() * 6.283);
-        const w = (1.25 + rnd() * 0.35) * (step === 2 ? 1.5 : 1) * (res / 0.5);
-        sc.set(w, h * (0.92 + rnd() * 0.16) + 0.1, w);
+        const w = (1.2 + rnd() * 0.45) * (step === 2 ? 1.45 : 1) * (res / 0.5);
+        sc.set(w * (0.85 + rnd() * 0.3), h * (0.95 + rnd() * 0.14) + 0.25, w * (0.85 + rnd() * 0.3));
         m.compose(p, q, sc);
         im.setMatrixAt(k, m);
-        const v = 0.75 + rnd() * 0.35;
-        col.setRGB(0.045 * v, 0.17 * v, 0.055 * v + rnd() * 0.015);
+        // one tint per few metres, so a hedge keeps its kind of green, plus a little per lump
+        const hsh = Math.abs((Math.floor(x / 6) * 73856093) ^ (Math.floor(z / 6) * 19349663)) % 997 / 997;
+        const v = 0.82 + rnd() * 0.3;
+        col.setRGB((0.78 + hsh * 0.3) * v, (0.95 + hsh * 0.1) * v, (0.7 + (1 - hsh) * 0.25) * v);
         im.setColorAt(k++, col);
       }
       im.count = k;

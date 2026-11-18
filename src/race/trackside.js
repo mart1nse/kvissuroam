@@ -15,6 +15,7 @@
 // Everything left standing can be knocked over (src/world/props.js); the new trees are solid.
 import * as THREE from 'three';
 import { createTrack } from './race.js';
+import { realTreeKit } from '../world/scenery.js';
 import { findCorners } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
@@ -357,6 +358,16 @@ export function createTrackside(world, scene) {
     }
     if (best) { bushAt[0] = best[0]; bushAt[1] = best[1]; }
     const [bx, bz] = bushAt, y = world.heightAt(bx, bz);
+    // a leafy bush like the trees, unless the simple trees are on
+    const kit = realTreeKit();
+    bush = kit && kit.bush();
+    if (bush) {
+      bush.position.set(bx, y - 0.05, bz);
+      bush.scale.set(1.15, 1.1, 1.15);
+      bush.castShadow = true;
+      group.add(bush);
+      return;
+    }
     const greens = [0x3f7a2e, 0x4f8f35, 0x37692a, 0x5c9a3c, 0x456f2c];
     const parts = [];
     let seed = 7;
@@ -433,6 +444,23 @@ export function createTrackside(world, scene) {
     const keep = trees.filter((t) => world.sdfAt(t.x, t.z) > 1.2);
     trees.length = 0;
     trees.push(...keep);
+    // limes like the map's trees, each drawn in full; the simple shapes with ?trees=old
+    const kit = realTreeKit(), lime = kit && kit.species[0];
+    if (lime && lime.near) {
+      treeMesh = new THREE.InstancedMesh(lime.near, lime.soloMat, trees.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+      trees.forEach((t, k) => {
+        // same height and spread as the simple tree had
+        const h = t.h * 0.55 + t.s * 1.9, c = t.s * 2.1;
+        m.compose(new THREE.Vector3(t.x, world.heightAt(t.x, t.z) - 0.1, t.z), q.setFromAxisAngle(up, t.tint * 6.283), new THREE.Vector3(c, h, c));
+        treeMesh.setMatrixAt(k, m);
+        treeMesh.setColorAt(k, col.setScalar(0.92 + t.tint * 0.14));
+      });
+      treeMesh.castShadow = true;
+      treeMesh.frustumCulled = false;
+      group.add(treeMesh);
+      return;
+    }
     const parts = [];
     for (const t of trees) {
       const y = world.heightAt(t.x, t.z);

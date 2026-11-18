@@ -16,7 +16,7 @@ export function createRoadPainter(world, size) {
       for (let sx = Math.floor((x0 - m - G0) / S); sx <= Math.floor((x1 + m - G0) / S); sx++) {
         const k = `${sx}_${sz}`;
         let e = bySector.get(k);
-        if (!e) bySector.set(k, (e = { roads: [], areas: [] }));
+        if (!e) bySector.set(k, (e = { roads: [], areas: [], over: [] }));
         e[kind].push(item);
       }
     }
@@ -28,6 +28,8 @@ export function createRoadPainter(world, size) {
   };
   for (const r of world.vectors.roads) if (r.pts.length > 1 && r.s !== 4) add('roads', r, ...box(r.pts));
   for (const a of world.vectors.areas || []) if (a.t !== 4) add('areas', a, ...box(a.outer));
+  // hand-made places that set the cover themselves, painted over everything else (src/race/lai.js)
+  for (const a of world.vectors.overPaint || []) add('over', a, ...box(a.outer));
   for (const e of bySector.values()) e.roads.sort((p, q) => p.w - q.w);         // wide roads are painted last
 
   const toneOf = (c, stone) => {
@@ -77,7 +79,7 @@ export function createRoadPainter(world, size) {
 
   // paint(sector) -> { cover, tone, hard(i, j) } ; hard: is cell (i, j) of the 1 m surface grid on a painted road
   return (s) => {
-    const e = bySector.get(`${s.sx}_${s.sz}`) || { roads: [], areas: [] };
+    const e = bySector.get(`${s.sx}_${s.sz}`) || { roads: [], areas: [], over: [] };
     const [cv, ctx] = canvas(size, s);
     ctx.fillStyle = '#000';
     ctx.fillRect(s.x0, s.z0, S, S);
@@ -91,6 +93,8 @@ export function createRoadPainter(world, size) {
       line(ctx, r.pts);
       ctx.stroke();
     }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const a of e.over) { ctx.fillStyle = a.cover; ring(ctx, a); ctx.fill('evenodd'); }
     const n2 = size / 2;
     const [tv, tctx] = canvas(n2, s);
     tctx.fillStyle = toneOf(null, false);

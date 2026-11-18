@@ -14,11 +14,12 @@ import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
+const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
 const BAY = { i0: 959, i1: 989, width: 2.9, taper: 6 };  // the bus bay: track indices, width beyond the road edge
 const SHELTER = { i: 973, len: 4.6, depth: 1.55 };
-const DASH = { i0: 944, i1: 991 };                       // dashed line along the right edge of the lane
-const DOUBLE = [943, 953];                               // double centre line at the junction
-const PAVE = { i0: 944, i1: 1004, width: 3.4 };          // river-side pavement
+const DASH = { i0: 948, i1: 991 };                       // dashed line along the right edge of the lane
+const DOUBLE = [948, 953];                               // double centre line at the junction
+const PAVE = { i0: 948, i1: 1004, width: 3.4 };          // river-side pavement
 // the map's wall line round the garden (vectors.json walls, game x, z): Emajõe, the Kroonuaia corner, Kroonuaia
 const GARDEN_WALL = [[1417.2, 2290.9], [1396.6, 2258.5], [1336.4, 2198.0], [1329.8, 2197.9], [1224.4, 2316.8]];
 const GATE = { a: [1437.6, 2321.3], w: 4.4 };            // driveway gate: first post at the end of the low wall
@@ -173,13 +174,25 @@ export function createEmajoe(world, group) {
     }
     out.push([pos, col]);
   }
-  function meshOf(list, mat) {
+  function meshOf(list, mat, up = false) {
     let n = 0;
     for (const [p] of list) n += p.length;
     if (!n) return null;
     const pos = new Float32Array(n), col = new Float32Array(n);
     let o = 0;
     for (const [p, c] of list) { pos.set(p, o); col.set(c, o); o += p.length; }
+    // up: every triangle wound to face the sky, else a double-sided material lights it as if it looked
+    // down and the white lines come out dark grey
+    if (up) {
+      for (let t = 0; t < n; t += 9) {
+        const ax = pos[t], az = pos[t + 2], bx = pos[t + 3], bz = pos[t + 5], cx = pos[t + 6], cz = pos[t + 8];
+        if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) >= 0) continue;
+        for (let q = 0; q < 3; q++) {
+          const a = pos[t + 3 + q]; pos[t + 3 + q] = pos[t + 6 + q]; pos[t + 6 + q] = a;
+          const b = col[t + 3 + q]; col[t + 3 + q] = col[t + 6 + q]; col[t + 6 + q] = b;
+        }
+      }
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -286,7 +299,7 @@ export function createEmajoe(world, group) {
     const edge = (i) => hw(i) - 0.18;
 
     // ---- markings
-    line(E.i0 + 2, E.i1 - 2, () => 0, 0.13, COL.white, 0, 0, marks);                       // solid centre line
+    line(LAI_END, E.i1 - 2, () => 0, 0.13, COL.white, 0, 0, marks);                       // solid centre line
     line(DOUBLE[0], DOUBLE[1], () => -0.24, 0.12, COL.white, 0, 0, marks);                  // its twin at the junction
     line(DASH.i0, BAY.i0 + 3, edge, 0.13, COL.white, 1.2, 1.3, marks);                     // short dashes to the bay
     line(BAY.i0 + 3, BAY.i1 - 3, edge, 0.15, COL.white, 2.8, 2.2, marks);                  // along the bay
@@ -314,7 +327,7 @@ export function createEmajoe(world, group) {
       strip(inner, COL.pave, 0.04, pave);
       strip(outer, COL.kerb, 0.05, pave);
     }
-    for (const [list, mat] of [[marks, markMat], [pave, paveMat]]) { const m = meshOf(list, mat); if (m) group.add(m); }
+    for (const [list, mat, up] of [[marks, markMat, true], [pave, paveMat, false]]) { const m = meshOf(list, mat, up); if (m) group.add(m); }
 
 
     // ---- the glass shelter, its bench and advert, and the bus stop sign

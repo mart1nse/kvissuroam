@@ -31,6 +31,7 @@ import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
 import { veskiRoads } from './race/veski.js';
 import { emajoeVectors } from './race/emajoe.js';
+import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { valliWalls } from './race/valli.js';
 
@@ -109,6 +110,7 @@ async function boot() {
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
+  laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand

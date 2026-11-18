@@ -20,6 +20,7 @@ import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
+import { createLai, laiClear } from './lai.js';
 import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
 
@@ -117,6 +118,7 @@ export function clearProps(data) {
   }
   cornerClear(data, out);
   emajoeClear(data, out);
+  laiClear(data, out);
   uueturuClear(data, out);
   for (const zn of zones(track)) {
     if (zn.i0 < 0 || zn.i1 >= track.N) continue;
@@ -452,6 +454,7 @@ export function createTrackside(world, scene) {
   const valli = createValli(world, group, merged);
   const veski = createVeski(world, group, merged);
   const emajoe = createEmajoe(world, group);
+  const lai = createLai(world, group);
   const tennis = createTennis(world, group);
   const uueturu = createUueturu(world, group);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
@@ -493,6 +496,7 @@ export function createTrackside(world, scene) {
       valli.update(x, z);
       veski.update(x, z);
       emajoe.update(x, z);
+      lai.update(x, z);
       tennis.update(x, z);
       uueturu.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);

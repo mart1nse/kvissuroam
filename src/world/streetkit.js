@@ -49,7 +49,7 @@ function rnd(seed) {
 }
 
 // concrete block paving, 20 x 10 cm stones laid in a running bond; one tile is 1.6 m
-function paverTex(base, seed) {
+export function paverTex(base, seed) {
   return canvasTex(256, 256, (g, w) => {
     const r = rnd(seed), [R, G, B] = base;
     g.fillStyle = `rgb(${R * 0.8 | 0},${G * 0.8 | 0},${B * 0.82 | 0})`; g.fillRect(0, 0, w, w);
@@ -61,7 +61,7 @@ function paverTex(base, seed) {
   });
 }
 // mown lawn: speckled green; one tile is 4 m
-function lawnTex() {
+export function lawnTex() {
   return canvasTex(128, 128, (g, w) => {
     const r = rnd(7);
     g.fillStyle = '#96d878'; g.fillRect(0, 0, w, w);

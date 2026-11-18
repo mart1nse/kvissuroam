@@ -248,7 +248,7 @@ async function boot() {
     scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
   }
   setCar(carId);
-  camYaw = car.yaw; camSnap = true;
+  camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   buildMenu();
   bar.style.width = '100%';
   terrain.update(new THREE.Vector3(car.x, 0, car.z));
@@ -438,7 +438,7 @@ function startDriving() {
   }
   audio.start();
   input.enable(true);
-  camYaw = car.yaw; camSnap = true;
+  camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
 }
 
 function openGarage() {
@@ -456,7 +456,7 @@ function openGarage() {
 
 function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
-  camYaw = car.yaw; camSnap = true;
+  camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
 }
@@ -563,9 +563,12 @@ const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open) 
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
 // C: the chase camera or a drone following the car from above
+let droneYaw = 0;
+const droneDir = new THREE.Vector2(0, -1);   // the car's travel direction, averaged (x, z)
 let camView = localStorage.getItem('kvissuroam.view') === 'drone' ? 'drone' : 'chase';
 input.on('KeyC', unlessMap(() => {
   camView = camView === 'chase' ? 'drone' : 'chase';
+  droneYaw = camYaw; droneDir.set(Math.sin(camYaw), -Math.cos(camYaw));
   try { localStorage.setItem('kvissuroam.view', camView); } catch {}
   camSwoop = 0.7;
 }));
@@ -760,15 +763,33 @@ function frame(ts) {
     if (input.state.look && !board?.open) {
       // B held: look back from just in front of the car's nose, over the roof down the road behind
       const half = car.halfLen;
-      camPos.set(car.x + fx * (half + 3.2), car.y + 2.1 + (cs.up ?? 0) * 0.5, car.z + fz * (half + 3.2));
+      camPos.set(car.x + fx * (half + 6.5), car.y + 2.7 + (cs.up ?? 0) * 0.5, car.z + fz * (half + 6.5));
       camPos.y = Math.max(camPos.y, world.heightAt(camPos.x, camPos.z) + 0.9);
-      camLook.set(car.x - fx * 14, car.y + 0.9, car.z - fz * 14);
+      camLook.set(car.x - fx * 18, car.y + 0.9, car.z - fz * 18);
       wantFov = 62; warp = 0; camSwoop = 0;
     } else if (camView === 'drone') {
-      // a drone following the car from above, heading up, a little behind so the road ahead shows
-      const h = 30 + Math.min(speed, 60) * 0.3;
-      camPos.set(car.x - cx * h * 0.32, camY + h, car.z - cz * h * 0.32);
-      camLook.set(car.x + cx * (4 + speed * 0.15), camY, car.z + cz * (4 + speed * 0.15));
+      // A drone following the car from above, set back so the road coming up shows. It turns with the
+      // direction the car is travelling, averaged over a few seconds: a donut or a quick swerve averages
+      // out to almost nothing and barely moves it, and once the car settles on a new heading it swings
+      // round smoothly.
+      if (speed > 1) {
+        // (backing up, the way the car faces counts, so reversing out of a spot does not turn the view round)
+        const sg = car.vx < -0.5 ? -1 : 1;
+        const tx = sg * (Math.sin(car.yaw) * car.vx + Math.cos(car.yaw) * car.vy), tz = sg * (-Math.cos(car.yaw) * car.vx + Math.sin(car.yaw) * car.vy);
+        const k = 1 - Math.exp(-dt / 2.2);
+        droneDir.x += (tx / speed * Math.min(1, speed / 4) - droneDir.x) * k;
+        droneDir.y += (tz / speed * Math.min(1, speed / 4) - droneDir.y) * k;
+      }
+      const sure = Math.min(1, Math.hypot(droneDir.x, droneDir.y));
+      if (sure > 0.05) {
+        let dd = Math.atan2(droneDir.x, -droneDir.y) - droneYaw;
+        dd = Math.atan2(Math.sin(dd), Math.cos(dd));
+        droneYaw += dd * (1 - Math.exp(-dt * 1.4 * sure * sure));
+      }
+      const dx = Math.sin(droneYaw), dz = -Math.cos(droneYaw);
+      const h = 30 + Math.min(speed, 60) * 0.3, ahead = 12 + Math.min(speed, 60) * 0.5;
+      camPos.set(car.x - dx * h * 0.55, camY + h, car.z - dz * h * 0.55);
+      camLook.set(car.x + dx * ahead, camY, car.z + dz * ahead);
       wantFov = 55; warp = 0;
     }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
@@ -827,6 +848,7 @@ function frame(ts) {
   }
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
+  if (mode === 'drive') hud.needle(car, dt);
   audio.update(car, mode === 'drive' && !bigmap.isOpen);
 
   if (photos?.update(camera, dt)) {

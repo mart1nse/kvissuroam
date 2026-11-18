@@ -2,7 +2,8 @@
 // kaldaerofoto), in pastel colours. Left to right in the direction of the lap Veski is: pavement, a strip
 // of wild grass, the reddish cycle lane, the car lane, pavement (veski.js). Here:
 //   - the orange board fence behind the left pavement, along the green up to the corner
-//   - the kerbed island of wild grass, shrubs and a young tree on the right before the junction
+//   - the kerbed island of wild grass, leafy shrubs and a young tree on the right before the junction
+//     (nothing in it is solid: a car drives straight through)
 //   - the give-way triangles across the lane at the mouth of the junction and the yield sign
 //   - the two houses across the junction: the white functionalist house with the round corner on the left,
 //     the red-brown brick block (the ALKO shop) in front
@@ -11,6 +12,7 @@ import { createTrack } from './race.js';
 import { BOX } from './landmarks.js';
 import { streetKit, setHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
+import { realTreeKit } from '../world/scenery.js';
 
 const CENTRE = [830, 3245];
 const FENCE = { i0: 1772, i1: 1805, off: 3.4, height: 1.2, colour: 0xd98a68, dark: 0xbd7254 };
@@ -89,29 +91,55 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
         const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
         p.add(BOX(l + 0.04, 0.14, 0.14), COL.kerb, mx, h(mx, mz) + 0.07, mz, Math.atan2(-dz, dx));
       }
-      // tall grass tufts and shrubs
-      for (let k = 0; k < 70; k++) {
-        const i = i0 + 0.3 + rnd() * (i1 - i0 - 0.6), lat = lat0 + 0.2 + rnd() * (lat1 - lat0 - 0.4);
-        const [x, z] = T(i, hwAt(i) + lat);
-        const tall = 0.35 + rnd() * 0.45;
-        p.add(new THREE.ConeGeometry(0.12 + rnd() * 0.1, tall, 5), COL.grass[k % 3], x, h(x, z) + tall / 2, z, rnd() * 6);
-      }
-      for (let k = 0; k < 9; k++) {
-        const i = i0 + 1 + k * (i1 - i0 - 2) / 8, lat = lat0 + 0.45 + rnd() * (lat1 - lat0 - 0.9);
-        const [x, z] = T(i, hwAt(i) + lat);
-        K.shrub(x, z, 0.38 + rnd() * 0.3, COL.shrub[k % 3], 0.85);
+      // wild shrubs with tall grass and weeds between them, and a young tree on stakes. All of it is
+      // leafy (the foliage of the realistic trees) and none of it is solid: a car goes straight through.
+      const L = K.leafy, spot = (i, lat) => { const q = T(i, hwAt(i) + lat); return [q[0], h(q[0], q[1]), q[1]]; };
+      if (L.ok) {
+        for (let k = 0; k < 17; k++) {                      // shrubs: knee to chest high, the bigger ones away from the lane
+          const lat = lat0 + 0.4 + rnd() * (lat1 - lat0 - 0.75), big = 0.55 + 0.45 * (lat - lat0) / (lat1 - lat0);
+          const [x, y, z] = spot(i0 + 0.9 + k * (i1 - i0 - 1.8) / 16 + (rnd() - 0.5) * 0.5, lat);
+          const w = (0.8 + rnd() * 0.75) * big, d = 0.82 + rnd() * 0.2;
+          L.bush(x, y - 0.06, z, w, (0.6 + rnd() * 0.65) * big, rnd() * 6.3, [d * (0.86 + rnd() * 0.2), d * (0.96 + rnd() * 0.1), d * (0.8 + rnd() * 0.16)], w * (0.8 + rnd() * 0.4));
+        }
+        for (let k = 0; k < 64; k++) {                      // grass and weeds: slim, paler and yellower
+          const [x, y, z] = spot(i0 + 0.35 + rnd() * (i1 - i0 - 0.7), lat0 + 0.22 + rnd() * (lat1 - lat0 - 0.44));
+          const w = 0.28 + rnd() * 0.3, d = 0.95 + rnd() * 0.2;
+          L.bush(x, y - 0.03, z, w, 0.3 + rnd() * 0.5, rnd() * 6.3, [d * 1.08, d * 1.1, d * (0.62 + rnd() * 0.2)], w);
+        }
+      } else {
+        for (let k = 0; k < 70; k++) {
+          const i = i0 + 0.3 + rnd() * (i1 - i0 - 0.6), lat = lat0 + 0.2 + rnd() * (lat1 - lat0 - 0.4);
+          const [x, z] = T(i, hwAt(i) + lat);
+          const tall = 0.35 + rnd() * 0.45;
+          p.add(new THREE.ConeGeometry(0.12 + rnd() * 0.1, tall, 5), COL.grass[k % 3], x, h(x, z) + tall / 2, z, rnd() * 6);
+        }
+        for (let k = 0; k < 9; k++) {
+          const i = i0 + 1 + k * (i1 - i0 - 2) / 8, lat = lat0 + 0.45 + rnd() * (lat1 - lat0 - 0.9);
+          const [x, z] = T(i, hwAt(i) + lat);
+          K.shrub(x, z, 0.38 + rnd() * 0.3, COL.shrub[k % 3], 0.85);
+        }
       }
       // the young tree with its three stakes
       const [x, z] = T(i0 + (i1 - i0) * 0.62, hwAt(i0) + (lat0 + lat1) / 2), y = h(x, z);
-      p.add(new THREE.CylinderGeometry(0.05, 0.07, 2.4, 7), COL.trunk, x, y + 1.2, z);
-      p.add(new THREE.IcosahedronGeometry(0.95, 1).scale(0.9, 1.25, 0.9), COL.crown[0], x, y + 3.0, z, 0.4);
-      p.add(new THREE.IcosahedronGeometry(0.6, 1), COL.crown[1], x + 0.35, y + 2.5, z - 0.2, 1.1);
+      const kit = realTreeKit(), lime = kit && kit.species[0];
+      if (lime && lime.near) {
+        const tree = new THREE.Mesh(lime.near, lime.soloMat);
+        tree.position.set(x, y - 0.05, z);
+        tree.scale.set(2.3, 4.4, 2.3);
+        tree.rotation.y = 1.9;
+        tree.castShadow = shadows;
+        tree.frustumCulled = false;
+        group.add(tree);
+      } else {
+        p.add(new THREE.CylinderGeometry(0.05, 0.07, 2.4, 7), COL.trunk, x, y + 1.2, z);
+        p.add(new THREE.IcosahedronGeometry(0.95, 1).scale(0.9, 1.25, 0.9), COL.crown[0], x, y + 3.0, z, 0.4);
+        p.add(new THREE.IcosahedronGeometry(0.6, 1), COL.crown[1], x + 0.35, y + 2.5, z - 0.2, 1.1);
+      }
       for (let k = 0; k < 3; k++) {
         const a = k * 2.094, sx = x + Math.cos(a) * 0.3, sz = z + Math.sin(a) * 0.3;
         p.add(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 5), COL.stake, sx, y + 0.8, sz);
       }
       for (const yy of [0.9, 1.45]) p.add(new THREE.TorusGeometry(0.3, 0.015, 4, 12).rotateX(Math.PI / 2), COL.stake, x, y + yy, z);
-      solids.push({ x, z, yaw: 0, hx: 0.25, hz: 0.25 });
     }
 
     // ---- give-way triangles across the lane at the mouth of the junction, pointing at the driver

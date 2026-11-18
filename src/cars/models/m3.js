@@ -302,5 +302,5 @@ export function buildM3() {
   const wheelFront = { soup: mWheel(0.327, 0.245, 0.2413 + 0.012, 0.014) };
   const car = assembleCar({ id: 'm3', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   // the procedural body shows until the scanned body (public/models/m3.glb) has loaded
-  return useGlbBody(tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'm3.glb', { wheelOut: { front: 0.02, rear: 0.02 } });
+  return useGlbBody(tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'm3.glb', { liner: { r: 0.5, len: 0.42, inset: 0.12, gap: 0.004 }, wheelOut: { front: 0.02, rear: 0.035 } });
 }

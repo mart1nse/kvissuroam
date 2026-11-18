@@ -21,6 +21,7 @@ const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this 
 const DONUT_SWAY = 0.5;          // ...how much the hold wanders in between
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
 const EV_SLIDE_REAR = 0.7;
+const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
 const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
 const ABS_HZ = 8;                // anti-lock pressure cycling (spec.abs: 0..1, how much of the lock-up it prevents)      // rear share a two-motor EV moves to while powersliding under 100 km/h
 const RHO = 1.2;
@@ -147,12 +148,13 @@ function engineForce(car, throttle, dt) {
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
   // A gear picked by hand is held until the road speed (not the wheelspin) brings that gear up to the
   // shift point, so second or third can be picked mid burnout or donut and kept while the tyres spin.
-  // A downshift on the engine brake waits for the throttle. Off the throttle the gear is given up when
-  // the car rolls to a stop or the revs sag below idle.
+  // A downshift on the engine brake waits for the throttle. The gear is given up a second after the car
+  // has come to a stop off the throttle.
   if (car.manual) {
     const road = rpmAt(car.gear);
-    const coasting = throttle <= 0;
-    if (car.reversing || (coasting && (vAbs < 1.5 || road < (e.idle ?? 750) * 0.9)) ||
+    // (stopped off the throttle for a second, the gearbox goes back to automatic)
+    car.manualStop = throttle <= 0 && vAbs < 1.5 ? (car.manualStop || 0) + dt : 0;
+    if (car.reversing || car.manualStop > 1 ||
         (road >= e.shiftRpm * 0.97 && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
   }
   if (car.reversing) car.gear = 1;
@@ -549,7 +551,10 @@ function substep(car, input, world, dt) {
       fx = dir * sent;
       // (a little sideways bite always remains, so slides stay catchable)
       fy = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * cap * Math.min(1, sy));
-      const mEq = (motorI * share + 2.5) / (s.wheelRadius * s.wheelRadius);
+      // (Above first gear the spin builds more slowly, GEAR_SPIN_LAG per gear up: a tyre spinning faster
+      // and faster heats, smears and scrubs more rubber, so a shift up mid donut or burnout drops the
+      // revs and lets them climb back gradually instead of flaring straight to the limiter.)
+      const mEq = (motorI * share + 2.5) / (s.wheelRadius * s.wheelRadius) * (e.type === 'ev' || car.reversing ? 1 : 1 + GEAR_SPIN_LAG * (car.gear - 1));
       slipV = Math.max(0, slipV + ((demand - sent) / mEq - car.ax * dir) * dt);
       const spin = Math.max(0, Math.min(1, (kappa - surf.kp) / 0.6));
       spinMax = Math.max(spinMax, spin);

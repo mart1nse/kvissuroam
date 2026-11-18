@@ -43,7 +43,7 @@ import { emajoeVectors } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { valliWalls } from './race/valli.js';
-import { valliStreetWalls } from './race/vallistreet.js';
+import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -145,7 +145,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);

@@ -7,7 +7,7 @@
 // sometimes snap into two or three pieces, on the first impact or when a wheel rolls over them later.
 import * as THREE from 'three';
 
-const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, SIGN0 = 10;
+const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 14;
 
 function part(geo, hex) {
@@ -29,10 +29,15 @@ const SOLID = {
   [BOX]: [box(0.8, 1.15, 0.35, 0, 0.58, 0, 0x7d8a84)],
   // short black street bollard with a reflective band
   [BOLLARD]: [cyl(0.075, 0.82, 0, 0.41, 0, 0x16161b, 8), cyl(0.08, 0.07, 0, 0.7, 0, 0xd8dde6, 8), cyl(0.09, 0.05, 0, 0.84, 0, 0x16161b, 8)],
+  // old town lantern on a slim black post (Vallikraavi): light, falls at a touch
+  [LANTERN]: [cyl(0.075, 3.3, 0, 1.65, 0, 0x24232a, 8), cyl(0.13, 0.5, 0, 0.25, 0, 0x24232a, 8),
+    part(new THREE.CylinderGeometry(0.13, 0.2, 0.36, 4).rotateY(Math.PI / 4).translate(0, 3.47, 0), 0x24232a),
+    part(new THREE.ConeGeometry(0.24, 0.2, 4).rotateY(Math.PI / 4).translate(0, 3.81, 0), 0x24232a)],
   sign: [cyl(0.035, 2.9, 0, 1.45, 0, 0x8a8a94, 5)],
 };
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
+  [LANTERN]: box(0.16, 0.16, 0.16, 0, 3.5, 0, 0xffe2a8),
 };
 const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.07, 1.75), 0xffffff);
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
@@ -43,6 +48,7 @@ const SHAFT = {
   [LIGHT]: { r: 0.09, h: 8.2, hex: 0x55525e, sides: 6, top: SOLID[LIGHT].slice(1), glow: [GLOW[LIGHT]] },
   [POLE]: { r: 0.12, h: 8.5, hex: 0x5a4636, sides: 6, top: [] },
   [SIGNAL]: { r: 0.07, h: 3.4, hex: 0x4a4852, sides: 6, top: SOLID[SIGNAL].slice(1) },
+  [LANTERN]: { r: 0.075, h: 3.3, hex: 0x24232a, sides: 8, top: SOLID[LANTERN].slice(1), glow: [GLOW[LANTERN]] },
   sign: { r: 0.035, h: 2.9, hex: 0x8a8a94, sides: 5, top: [], plate: true },
 };
 const shaftOf = (kind) => (kind >= SIGN0 ? SHAFT.sign : SHAFT[kind]);
@@ -118,8 +124,8 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, sign: 10 };
-const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, sign: 0.08 };
+const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, sign: 10 };
+const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, sign: 0.08 };
 const KNOCK_KEY = 'streetlap.knocked';
 const G = 9.81;
 
@@ -184,6 +190,8 @@ export function createProps(world, opts = {}) {
       if (kind === LIGHT) {
         glow.add(GLOW[LIGHT], x, y, z, cs, sn);
         if (opts.pools !== false) pool.add(POOL, x, y, z, cs, sn);
+      } else if (kind === LANTERN) {
+        glow.add(GLOW[LANTERN], x, y, z, cs, sn);
       } else if (kind === SIGNAL) {
         const r = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
         const on = r < 0.45 ? 0 : r < 0.9 ? 2 : 1;

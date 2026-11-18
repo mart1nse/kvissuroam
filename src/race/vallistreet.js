@@ -250,20 +250,30 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         const [x, z] = w.at(sm, 2.1);
         solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: (s1 - s0) / 2, hz: 1.55 });
       }
-      // terrace deck with a parasol and tables
+      // the terrace deck, bare but for a parasol by the wall
       const y = gnd(w, 4.4, 2.2);
-      put(w, BOX(7.2, 0.5, 3.2), 0x8c8f9c, 4.4, y + 0.25, 2.1);
-      put(w, BOX(7.3, 0.07, 0.07), 0xd8584c, 4.4, y + 0.42, 3.74);
-      put(w, new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), COL.iron, 5.2, y + 1.75, 2.3);
-      put(w, new THREE.ConeGeometry(1.9, 0.55, 4).rotateY(Math.PI / 4), COL.parasol, 5.2, y + 3.0, 2.3);
-      for (const s of [2.2, 3.9, 6.6]) {
-        put(w, new THREE.CylinderGeometry(0.32, 0.32, 0.04, 12), COL.iron, s, y + 1.24, 2.2);
-        put(w, new THREE.CylinderGeometry(0.03, 0.03, 0.72, 6), COL.iron, s, y + 0.87, 2.2);
-        for (const d of [-0.55, 0.55]) put(w, BOX(0.36, 0.5, 0.36), 0x4a4640, s + d * 0.9, y + 0.75, 2.2 + d * 0.5);
-      }
-      for (let s = 1.2; s < 7.8; s += 1.1) put(w, new THREE.IcosahedronGeometry(0.22, 1), s % 2 > 1 ? COL.bloom[0] : COL.shrub[1], s, y + 0.7, 3.55, s);
-      const [x, z] = w.at(4.4, 2.1);
-      solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: 3.6, hz: 1.6 });
+      put(w, BOX(7.2, 1.0, 3.2), 0x8c8f9c, 4.4, y, 2.1);
+      put(w, new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), COL.iron, 5.2, y + 1.75, 0.95);
+      put(w, new THREE.ConeGeometry(1.3, 0.45, 4).rotateY(Math.PI / 4), COL.parasol, 5.2, y + 3.0, 0.95);
+      // The deck is low enough to drive over (Martin, 18 Nov): not a wall but a raised piece of ground with
+      // a short steep edge, so a car climbs it, tilts over its corner or jumps off it. The ground under it
+      // is sampled first, so the top the wheels feel is the flat top that is drawn.
+      const S0 = 0.8, S1 = 8.0, N0 = 0.5, N1 = 3.7, EDGE = 0.55, NS = 13, NN = 7, top = w.y + y + 0.5;
+      const lift = [];
+      for (let j = 0; j < NN; j++) for (let i = 0; i < NS; i++) lift.push(Math.max(0, top - h(...w.at(S0 - EDGE + (S1 - S0 + 2 * EDGE) * i / (NS - 1), N0 - EDGE + (N1 - N0 + 2 * EDGE) * j / (NN - 1)))));
+      const cs = [w.at(S0 - EDGE, N0 - EDGE), w.at(S1 + EDGE, N0 - EDGE), w.at(S0 - EDGE, N1 + EDGE), w.at(S1 + EDGE, N1 + EDGE)];
+      world.addBump({
+        x0: Math.min(...cs.map((q) => q[0])), x1: Math.max(...cs.map((q) => q[0])), z0: Math.min(...cs.map((q) => q[1])), z1: Math.max(...cs.map((q) => q[1])),
+        at(x, z) {
+          const dx = x - w.a[0], dz = z - w.a[1], s = dx * w.ux + dz * w.uz, n = dx * w.nx + dz * w.nz;
+          const d = Math.hypot(Math.max(S0 - s, 0, s - S1), Math.max(N0 - n, 0, n - N1));
+          if (d >= EDGE) return 0;
+          const fi = Math.max(0, Math.min(NS - 1.001, (s - S0 + EDGE) / (S1 - S0 + 2 * EDGE) * (NS - 1))), fj = Math.max(0, Math.min(NN - 1.001, (n - N0 + EDGE) / (N1 - N0 + 2 * EDGE) * (NN - 1)));
+          const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, t = fj - j, k = j * NS + i;
+          const base = (lift[k] * (1 - u) + lift[k + 1] * u) * (1 - t) + (lift[k + NS] * (1 - u) + lift[k + NS + 1] * u) * t;
+          return base * (1 - d / EDGE);
+        },
+      });
     }
 
     // ================= the brick tower house =================

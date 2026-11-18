@@ -107,6 +107,7 @@ export function shiftGear(car, dir) {
     if (g < fit - 2) return false;
   }
   car.shiftUp = dir > 0;
+  if (dir > 0) { car.locked = true; car.carry = 0; }
   car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
   car.manual = dir > 0 ? 1 : -1;
   return true;
@@ -162,6 +163,7 @@ function engineForce(car, throttle, dt) {
       // Shifted like a quick manual: an upshift under power cuts the ignition while the clutch is
       // out (the revs drop to the next gear's), then it bites again; a downshift blips the throttle.
       car.shiftUp = g > car.gear && throttle > 0.3;
+      if (g > car.gear) { car.locked = true; car.carry = 0; }
       car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
     }
   }
@@ -172,7 +174,11 @@ function engineForce(car, throttle, dt) {
   // hold, like dropping the clutch in a manual; a standing start keeps the gentler stallRpm)
   if (throttle < 0.5) car.stabV = vAbs;     // (the road speed when the pedal went down)
   const stallMax = e.rollStallRpm ? e.stallRpm + (e.rollStallRpm - e.stallRpm) * Math.min(1, (car.stabV ?? 0) / 3) ** 2 : e.stallRpm;
-  const stall = e.idle + (stallMax - e.idle) * throttle;
+  // Once it has shifted up the gearbox drives like a manual with the clutch in: the engine turns with the
+  // wheels, so an upshift drops the revs straight to the next gear's, with no converter slip holding them
+  // up. The converter only takes over again for a start in first, or when the revs sag towards idle.
+  if (car.locked && (car.gear === 1 || car.reversing || wheelRpm < (e.idle ?? 750) * 1.3)) car.locked = false;
+  const stall = car.locked ? e.idle : e.idle + (stallMax - e.idle) * throttle;
   const rpm = Math.max(wheelRpm, stall);
   const sr = Math.min(1, wheelRpm / rpm);
   // Turbocharged engines: boost only builds once the exhaust flows enough to
@@ -841,7 +847,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
   car.rpm = car.spec.engine.idle ?? 0;

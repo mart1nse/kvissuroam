@@ -139,6 +139,8 @@ export function palUV(name) {
   if (i < 0) throw new Error('unknown palette entry ' + name);
   return [(i + 0.5) / PAL_NAMES.length, 0.5];
 }
+// palette entry under a palette u coordinate: [colour, roughness, metalness]
+export const palAt = (u) => PALETTE[PAL_NAMES[Math.max(0, Math.min(PAL_NAMES.length - 1, Math.floor(u * PAL_NAMES.length)))]];
 let _shared = null;
 function sharedMaterials() {
   if (_shared) return _shared;

@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
-import { buildCarModel } from '../cars/models/index.js';
 
 const ZEBRAS = [
   { i: 2303.5, w: 4.0 },                                    // across Vanemuise, before the junction
@@ -43,12 +42,12 @@ const ANNEX = { s0: 5.0, s1: 16.0, depth: 3.2, h: 12.1, cols: 5, rows: 4 };   //
 const BAYS = { s0: 3.3, step: 2.6, n: 9, n0: 3.4, n1: 8.4, lineFrom: 0.8, w: 0.14 };
 const ISLAND = { s: 28.7, n: 5.6, hu: 2.75, hv: 1.8 };    // kerbed bush island after the last bay
 const LAMP_S = [8.5, 13.7, 18.9, 24.1], BOLLARD_S = [1.4, 4.2, 7.0];   // lamp posts stand on bay lines
-// cars parked nose-in in the bays (Martin, 18 Nov): bay number from the corner, model, builder options.
-// Plain solid objects: they do not move when hit.
+// cars parked nose-in in the bays (Martin, 18 Nov): bay number from the corner, model, colour.
+// They are stood there by src/world/parked.js (real models that can be shoved).
 const PARKED = [
-  { bay: 2, id: 'enyaq', opts: { rack: false, paint: 0xeceeef }, hl: 2.33, hw: 0.94, wb: 2.765, turn: 0.02 },
-  { bay: 0, id: 'mazda6', hl: 2.4, hw: 0.92, wb: 2.75, turn: -0.03 },     // the first full bay (Martin)
-  { bay: 6, id: 'rav4', hl: 2.3, hw: 0.93, wb: 2.69, turn: 0.015 },
+  { bay: 2, id: 'enyaq', paint: 'white', turn: 0.02 },
+  { bay: 0, id: 'mazda6', paint: 'grey', turn: -0.03 },     // the first full bay (Martin)
+  { bay: 6, id: 'rav4', paint: 'silver', turn: 0.015 },
 ];
 // the map has this building's lamps and a sign inside it: they go out to the walkway instead
 const LIGHT = 0, BOLLARD = 8;
@@ -57,6 +56,15 @@ const MOVED = [[0, 1606.3, 3102.5], [0, 1600.8, 3108.1], [0, 1598.1, 3116.5], [1
 function wallOf({ a, b, top }) {
   const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
   return { a, top, len, ux, uz, nx: -uz, nz: ux, yaw: Math.atan2(-uz, ux), at: (s, n) => [a[0] + ux * s - uz * n, a[1] + uz * s + ux * n] };
+}
+
+// where the parked cars stand: on the paving, which lies 7 cm above the ground it is laid on
+export function uueturuParked() {
+  const F = wallOf(WALLS.front);
+  return PARKED.map((c) => {
+    const [x, z] = F.at(BAYS.s0 + BAYS.step * (c.bay + 0.5), (BAYS.n0 + BAYS.n1) / 2 + 0.1);
+    return { x, z, yaw: Math.atan2(-F.nx, F.nz) + c.turn, id: c.id, paint: c.paint, lift: 0.075 };   // nose to the building
+  });
 }
 
 // props layer: leave out the lamps and the sign the map has inside the building ...
@@ -242,33 +250,6 @@ export function createUueturu(world, group) {
     group.add(m);
   }
 
-  // parked cars: the real models standing still, each on the ground under its wheels and solid
-  function parkCars(F) {
-    const up = new THREE.Vector3(0, 1, 0), qYaw = new THREE.Quaternion(), qTilt = new THREE.Quaternion();
-    PARKED.forEach((c, k) => {
-      const [x, z] = F.at(BAYS.s0 + BAYS.step * (c.bay + 0.5), (BAYS.n0 + BAYS.n1) / 2 + 0.1);
-      const yaw = Math.atan2(-F.nx, F.nz) + c.turn;                  // nose to the building: forward = (sin yaw, -cos yaw)
-      const fx = Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = Math.sin(yaw);
-      world.addSolids([{ x, z, yaw: Math.atan2(-fz, fx), hx: c.hl, hz: c.hw }]);
-      // one car at a time, so that building them does not hold a frame for long
-      setTimeout(() => {
-        const model = buildCarModel(c.id, c.opts);
-        model.setLights({ headlights: false });
-        const h = (l, t) => world.heightAt(x + fx * l + rx * t, z + fz * l + rz * t);
-        const fl = h(c.wb / 2, -0.78), fr = h(c.wb / 2, 0.78), rl = h(-c.wb / 2, -0.78), rr = h(-c.wb / 2, 0.78);
-        const nrm = new THREE.Vector3(0, 1, 0)
-          .addScaledVector(new THREE.Vector3(fx, 0, fz), -(fl + fr - rl - rr) / 2 / c.wb)
-          .addScaledVector(new THREE.Vector3(rx, 0, rz), -(fr + rr - fl - rl) / 2 / 1.56).normalize();
-        qYaw.setFromAxisAngle(up, -yaw);
-        qTilt.setFromUnitVectors(up, nrm);
-        model.group.quaternion.copy(qTilt).multiply(qYaw);
-        model.group.position.set(x, (fl + fr + rl + rr) / 4, z);
-        model.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-        group.add(model.group);
-      }, 400 * (k + 1));
-    });
-  }
-
   function build() {
     built = true;
     // ---- the diamond paving: a grid over the street, clipped at buildings, uv in the street's own axes
@@ -323,7 +304,6 @@ export function createUueturu(world, group) {
       meshFrom(lines, markMat);
     }
     buildLeft(F, B);
-    parkCars(F);
   }
 
   const ref = track.P[2318];

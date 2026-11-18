@@ -238,7 +238,8 @@ function sootShell(meshes) {
 }
 
 // ---------------------------------------------------------------- the car
-export function buildPassat() {
+// scan: false keeps the modelled body (parked cars in other colours: the scanned body is silver only)
+export function buildPassat({ scan = true } = {}) {
   const ZG0 = 2.02, ZG1 = ZRB - 0.1;          // tailgate glass: top and bottom edges (z)
   const YG0 = 1.36, YG1 = 0.95;               // ... and their heights
   const body = buildBody({
@@ -487,5 +488,7 @@ export function buildPassat() {
   };
   tintGlass(car, 'passat', { color: 0x2c363e, metalness: 0.78, roughness: 0.05 });
   // the procedural body shows until the scanned body (public/models/passat.glb) has loaded
-  return useGlbBody(tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 }, onLoad: sootOnScan });
+  tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
+  if (!scan) return car;
+  return useGlbBody(car, 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 }, onLoad: sootOnScan });
 }

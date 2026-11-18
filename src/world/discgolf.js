@@ -6,13 +6,15 @@
 // Figures use the squatter's frame: facing -z, y up, metres, feet on y = 0.
 import * as THREE from 'three';
 import { span, bend } from './squatter.js';
-import { sireliAt as at } from './sireli.js';
+import { sireliAt as at, sireliDeckY } from './sireli.js';
+import { buildTerraceMum } from './terracemum.js';
 
 const SHIN = 0.455, THIGH = 0.47, TORSO = 0.53, ANKLE = 0.085, UPPER = 0.315, FORE = 0.285, HIP = 0.975;
 const lam = (color) => new THREE.MeshLambertMaterial({ color });
 const SKIN = 0xe9c2a8;
 
 const BASKET = at(-15.4, -1.9);
+const MUM = at(-9.05, 2.75);                      // her armchair on the terrace, turned to the basket
 const ROUND = 46, TURN = 2.8, THROW = 1.7, RELEASE = 0.6;       // s: a round, one putting turn, the putting move, release point (share of the move)
 const CHAIN_Y = 1.02, TRAY_Y = 0.7;
 // who: where they putt from (house frame), height scale, speed of the disc and of the walk, clothes
@@ -222,7 +224,7 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
-  let figures = null, basket = null, discs = null, plan = null, lastT = -1, lastRound = -1, chainHit = -10, solid = false;
+  let mum = null, figures = null, basket = null, discs = null, plan = null, lastT = -1, lastRound = -1, chainHit = -10, solid = false;
   const V = new THREE.Vector3();
   const ground = (x, z) => world.heightAt(x, z);
 
@@ -231,6 +233,10 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
     basket.group.position.set(BASKET[0], ground(BASKET[0], BASKET[1]), BASKET[1]);
     group.add(basket.group);
     figures = PEOPLE.map((P) => { const f = buildFigure(P); group.add(f.group); return f; });
+    mum = buildTerraceMum(opts.shadows);
+    mum.group.position.set(MUM[0], sireliDeckY(world), MUM[1]);
+    mum.group.rotation.y = -Math.atan2(BASKET[0] - 2 - MUM[0], -(BASKET[1] - MUM[1]));
+    group.add(mum.group);
     discs = PEOPLE.map((P) => P.discs.map((c) => { const d = buildDisc(c); group.add(d); return d; }));
     if (!opts.shadows) group.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     if (!solid) { world.addSolids([{ x: BASKET[0], z: BASKET[1], yaw: 0, hx: 0.25, hz: 0.25 }]); solid = true; }
@@ -301,6 +307,7 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
     const n = Math.floor(now / ROUND), t = now - n * ROUND;
     if (!plan || plan.n !== n) plan = planRound(n, ground);
     for (let pi = 0; pi < PEOPLE.length; pi++) person(pi, t);
+    mum.update(now);
     // sounds, quieter with distance; the chains swing for a moment after a hit
     if (n === lastRound && t > lastT && t - lastT < 1) {
       for (const e of plan.events) {

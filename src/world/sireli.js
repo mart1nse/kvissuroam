@@ -118,6 +118,15 @@ function textures() {
   };
 }
 
+// the house stands level at the highest ground under it; the terrace boards are DECK above that
+const DECK = 0.32;
+function floorY(world) {
+  let y = -1e9;
+  for (const [e, n] of [[0, 0], [MAIN.w, 0], [MAIN.w, MAIN.l], [0, MAIN.l], [ANNEX.e0, ANNEX.n0], [ANNEX.e0, ANNEX.n1], [PORT.e1, PORT.n0]]) y = Math.max(y, world.heightAt(...at(e, n)));
+  return y + 0.06;
+}
+export const sireliDeckY = (world) => floorY(world) + DECK;
+
 export function createSireli(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
@@ -126,10 +135,7 @@ export function createSireli(scene, world, { shadows = true } = {}) {
   function build() {
     built = true;
     const K = streetKit(world, group, { shadows, fenceColour: COL.fence });       // ground covers, fences, thujas (map coordinates)
-    // the house stands level at the highest ground under it
-    let Y0 = -1e9;
-    for (const [e, n] of [[0, 0], [MAIN.w, 0], [MAIN.w, MAIN.l], [0, MAIN.l], [ANNEX.e0, ANNEX.n0], [ANNEX.e0, ANNEX.n1], [PORT.e1, PORT.n0]]) Y0 = Math.max(Y0, world.heightAt(...at(e, n)));
-    Y0 += 0.06;
+    const Y0 = floorY(world);
     const local = new THREE.Group();                 // the house frame: x = e, z = -n
     local.position.set(A[0], Y0, A[1]);
     local.rotation.y = -ROT;
@@ -303,7 +309,6 @@ export function createSireli(scene, world, { shadows = true } = {}) {
     win(false, X.n1 + 0.03, 1, -5.6, -5.25, 0.4, 2.2, {});
 
     // ================= terrace, canopy and furniture =================
-    const DECK = 0.32;
     {
       const d = (e0, e1, n0, n1) => {
         box(e0, e1, n0, n1, -0.6, DECK - 0.01, COL.deckSide);
@@ -329,7 +334,7 @@ export function createSireli(scene, world, { shadows = true } = {}) {
       for (const de of [-0.6, 0, 0.6]) { chair(tE + de, tN - 0.75, 0); chair(tE + de, tN + 0.75, Math.PI); }
       for (const [e, n] of [[-0.75, 3.9], [-0.75, 4.4]]) chair(e, n, -Math.PI / 2, COL.white);       // two white chairs by the wall
       // two loungers west of the canopy
-      for (const [e, n, yaw] of [[-6.6, 2.5, 0.25], [-7.5, 2.7, 0.1]]) {
+      for (const [e, n, yaw] of [[-6.6, 2.5, 0.25], [-7.4, 2.7, 0.1]]) {
         boxAt(e, n, 0.6, 0.06, 1.25, 0x9a968c, yaw, DECK + 0.32);
         add(BOX(0.6, 0.06, 0.8).rotateX(-0.9).translate(0, 0.3, -0.25).rotateY(yaw).translate(e + Math.sin(yaw) * -0.75, DECK + 0.4, -(n + Math.cos(yaw) * 0.75)), 0x9a968c);
         boxAt(e, n, 0.5, 0.3, 0.9, COL.frame, yaw, DECK);

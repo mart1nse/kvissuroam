@@ -44,10 +44,10 @@ function buildingGeometry(sector, walls) {
     let e = null;
     const a = known.get(base[t]);
     const shelter = cq[t * 3] === cq[t * 3 + 1] && (cq[t * 3] === 70 || cq[t * 3] === 60);     // carports and their posts
-    if (a && !shelter) {
+    if (a) {
       const tx = (pq[t * 3] + pq[t * 3 + 3] + pq[t * 3 + 6]) * 0.05 / 3, tz = (pq[t * 3 + 2] + pq[t * 3 + 5] + pq[t * 3 + 8]) * 0.05 / 3;
       let best = 1e18;
-      for (const k of a) { const d = (k.x - tx) ** 2 + (k.z - tz) ** 2; if (d < best && !(k.reach && d > k.reach * k.reach)) { best = d; e = k; } }
+      for (const k of a) { if (shelter !== !!k.shelter) continue; const d = (k.x - tx) ** 2 + (k.z - tz) ** 2; if (d < best && !(k.reach && d > k.reach * k.reach)) { best = d; e = k; } }
     }
     const key = e ? e.key : base[t] * 64;
     let g = groups.get(key);

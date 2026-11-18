@@ -4,6 +4,7 @@
 // flat-faced 15-inch "Aero" alloys.
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint, tintGlass } from './kit.js';
+import { useGlbBody } from './glbbody.js';
 import { part, planLine, sideLine, sweep, plateShape, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car: 4807 x 1814 x 1422 mm, wheelbase 2687, track 1514 front / 1511 rear, 215/60 ZR15 on 7.5J x 15.
@@ -362,5 +363,5 @@ export function buildAudi200() {
   const wheel = { soup: aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
   const car = assembleCar({ id: 'audi200', dims: DIMS, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
   tintGlass(car, 'audi200', { color: 0x34404a, metalness: 0.7, roughness: 0.05 });   // light factory tint
-  return tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 });
+  return useGlbBody(tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 }), 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 } });
 }

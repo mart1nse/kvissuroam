@@ -286,6 +286,8 @@ function treeSpecies(type, h, crown, r) {
 // the few hundred trees that can be seen as such cost their full geometry.
 let realTrees = null, pools = null;
 let nearTrees = 150;            // m: the flat picture gives way to the leafy tree (the shaders switch at exactly this)
+// the realistic tree kit for hand-placed greenery (null with ?trees=old or before createTrees)
+export function realTreeKit() { return realTrees; }
 export function updateTrees(time, cam) {
   if (!realTrees) return;
   realTrees.update(time);

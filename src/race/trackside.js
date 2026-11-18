@@ -28,6 +28,7 @@ import { createLai, laiClear } from './lai.js';
 import { raekodaClear } from '../world/raekoda.js';
 import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
+import { createPlaytech, playtechProps } from './playtech.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -251,7 +252,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
-  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...uueturuProps());
+  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...uueturuProps(), ...playtechProps());
   return out;
 }
 
@@ -493,6 +494,7 @@ export function createTrackside(world, scene) {
   const lai = createLai(world, group);
   const tennis = createTennis(world, group);
   const uueturu = createUueturu(world, group);
+  const playtech = createPlaytech(world, group);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -538,6 +540,7 @@ export function createTrackside(world, scene) {
       lai.update(x, z);
       tennis.update(x, z);
       uueturu.update(x, z);
+      playtech.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();

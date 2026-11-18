@@ -47,6 +47,8 @@ const WALLS = {
   M1: { a: [1390.1, 3108.35], b: [1391.55, 3094.8], y: 13.2, top: 21.3 },     // the painted gable
 };
 const CENTRE = [1470, 3040];
+// the bays square to the road on the park side: lines only, kept free of cars (they are on the racing line)
+const PARK_BAYS = { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true };
 const COL = {
   concrete: 0xc9c7d0, iron: 0x24232a, white: 0xf6f3fa, blue: 0x7fa0e6, brick: 0xc0725e, stone: 0xa3978c,
   bin: 0x3a3c46, binLid: 0x2c2d36, binGreen: 0x4f8a58, binBrown: 0x8a6248, parasol: 0xf1ecdc,
@@ -429,7 +431,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
     });
     put(W.V2, BOX(6.8, 0.3, 2.2), 0x2a2b33, 7.0, 3.1, 1.1);
     for (const s of [4.0, 8.0, 12.0]) {                                       // flag poles in front of the glass grid
-      const [x, z] = W.V1.at(s, 3.2), y = h(x, z);
+      const [x, z] = W.V1.at(s, 1.5), y = h(x, z);
       p.add(new THREE.CylinderGeometry(0.04, 0.06, 8.5, 8), 0xe6e6ee, x, y + 4.25, z, 0);
       solids.push({ x, z, yaw: 0, hx: 0.07, hz: 0.07 });
     }
@@ -578,7 +580,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
       list.push([[[a[0] - nx, a[1] - nz], [b[0] - nx, b[1] - nz], [b[0] + nx, b[1] + nz], [a[0] + nx, a[1] + nz]]]);
     };
     // bays square to the road on the park side, parallel bays under the tower house
-    const rows = [31, 32, 33].map((s) => PARKING.find((r) => r.seed === s));
+    const rows = [PARK_BAYS, ...[32, 33].map((s) => PARKING.find((r) => r.seed === s))];
     for (const row of rows.slice(0, 2)) {
       const dx = row.b[0] - row.a[0], dz = row.b[1] - row.a[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l;
       const depth = row.perp ? 2.5 : 1.1;

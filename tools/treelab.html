@@ -1,0 +1,30 @@
+<!-- Tree lab: the realistic trees on their own, close ones left, flat ones right. Open /tools/treelab.html on the dev server. -->
+<!doctype html><html><body style="margin:0;background:#000"><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { createRealTrees } from '../src/world/realtrees.js';
+import { createLights } from '../src/world/sky.js';
+const q = new URLSearchParams(location.search);
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(1280, 720); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(q.get('bg') || '#c9a0e8');
+createLights(scene, 0);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x55703a })); scene.add(ground);
+const real = createRealTrees(renderer, { cards: true, lod: 0 });
+const kind = q.get('sp') || '1';
+const sp = real.species[kind];
+const mk = (geo, mat, list) => { const im = new THREE.InstancedMesh(geo, mat, list.length); const m = new THREE.Matrix4(), col = new THREE.Color();
+  list.forEach(([x, z, h, c, rot], k) => { m.compose(new THREE.Vector3(x, -0.15, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), new THREE.Vector3(c, h, c)); im.setMatrixAt(k, m); im.setColorAt(k, col.setRGB(1, 1, 1)); });
+  scene.add(im); return im; };
+// near trees at left, flat versions at right (materials without the distance switch come from lab=1)
+const nearList = [[-9, 0, 19, 9.6, 0.3], [-1, -6, 23, 10, 2.1], [-16, -10, 16, 8, 4]];
+const flatList = [[9, 0, 19, 9.6, 0.3], [17, -6, 23, 10, 2.1]];
+const a = mk(sp.near, sp.nearMat, nearList), b = mk(sp.far, sp.farMat, flatList);
+const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 50), 1280 / 720, 0.3, 3000);
+const cp = (q.get('cam') || '0,6,34,0,9,0').split(',').map(Number);
+cam.position.set(cp[0], cp[1], cp[2]); cam.lookAt(cp[3], cp[4], cp[5]);
+real.update(+(q.get('t') || 0));
+renderer.render(scene, cam); renderer.render(scene, cam);
+window.__done = true;
+</script></body></html>

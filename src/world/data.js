@@ -298,6 +298,25 @@ export async function loadWorldData(onProgress = () => {}) {
       return s.S[r * sn + c];
     },
 
+    // Calls fn(sector, i) for every tree within reach of (x, z); tree i is sector.trees[i * 6 ...].
+    treesNear(x, z, reach, fn) {
+      const sx0 = Math.floor((x - reach - G0) / S), sx1 = Math.floor((x + reach - G0) / S);
+      const sz0 = Math.floor((z - reach - G0) / S), sz1 = Math.floor((z + reach - G0) / S);
+      for (let sx = sx0; sx <= sx1; sx++) for (let sz = sz0; sz <= sz1; sz++) {
+        const s = sectors.get(key(sx, sz));
+        if (s === undefined || s.state !== 'ready' || !s.trees) continue;
+        const g = trunkGrid(s), rec = s.trees;
+        const c0 = Math.max(0, Math.floor((x - reach - s.x0) / TC)), c1 = Math.min(g.nc - 1, Math.floor((x + reach - s.x0) / TC));
+        const r0 = Math.max(0, Math.floor((z - reach - s.z0) / TC)), r1 = Math.min(g.nc - 1, Math.floor((z + reach - s.z0) / TC));
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+          for (let i = g.heads[r * g.nc + c]; i >= 0; i = g.next[i]) {
+            const dx = rec[i * 6] - x, dz = rec[i * 6 + 2] - z;
+            if (dx * dx + dz * dz <= reach * reach) fn(s, i);
+          }
+        }
+      }
+    },
+
     // Tree trunks within reach of (x, z), written to out as flat [x, z, radius, ...]. The physics
     // collides with them as exact circles: the 0.5 m distance field is too coarse for something
     // as thin as a trunk, and a car that got half way past one could not get free again.

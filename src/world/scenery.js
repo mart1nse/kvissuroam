@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createRealTrees } from './realtrees.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------- buildings
@@ -277,46 +278,130 @@ function treeSpecies(type, h, crown, r) {
   return r < 0.28 ? 1 : 0;
 }
 
+// Realistic trees. Far off, a tree is a flat picture in its sector's mesh. The leafy trees close
+// to the camera are drawn from one small pool per species, refilled as the camera moves, so only
+// the few hundred trees that can be seen as such cost their full geometry.
+let realTrees = null, pools = null;
+let nearTrees = 150;            // m: the flat picture gives way to the leafy tree (the shaders switch at exactly this)
+export function updateTrees(time, cam) {
+  if (!realTrees) return;
+  realTrees.update(time);
+  if (pools && cam) pools.update(cam);
+}
+
+function treePools(real, world, opts) {
+  const group = new THREE.Group();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  const pool = {};
+  const make = (type, cap) => {
+    const sp = real[type], old = pool[type];
+    if (old) { group.remove(old); old.dispose(); }
+    const im = new THREE.InstancedMesh(sp.near, sp.nearMat, cap);
+    im.count = 0;
+    im.castShadow = opts.treeShadows;
+    im.frustumCulled = false;          // the instances move with the camera
+    im.matrixAutoUpdate = false;
+    im.setColorAt(0, col.setRGB(1, 1, 1));
+    group.add(im);
+    return (pool[type] = im);
+  };
+  for (const type in real) if (real[type].near) make(type, 256);
+  let lx = Infinity, lz = Infinity, dirty = true;
+  const found = {};
+  return {
+    group,
+    touch() { dirty = true; },         // a sector came or went
+    update(cam) {
+      if (!dirty && Math.hypot(cam.x - lx, cam.z - lz) < 6) return;
+      lx = cam.x; lz = cam.z; dirty = false;
+      for (const type in pool) (found[type] ||= []).length = 0;
+      world.treesNear(cam.x, cam.z, nearTrees + 10, (s, i) => {
+        const list = s.treeKind && found[s.treeKind[i]];
+        if (list) list.push(s, i);
+      });
+      for (const type in pool) {
+        const list = found[type], n = list.length / 2;
+        let im = pool[type];
+        if (n > im.instanceMatrix.count) im = make(type, Math.max(n, im.instanceMatrix.count * 2));
+        for (let k = 0; k < n; k++) {
+          const s = list[k * 2], i = list[k * 2 + 1], rec = s.trees, look = s.treeLook;
+          p.set(rec[i * 6], rec[i * 6 + 1] - 0.15, rec[i * 6 + 2]);
+          q.setFromAxisAngle(up, look[i * 4]);
+          sc.set(rec[i * 6 + 4], rec[i * 6 + 3], rec[i * 6 + 4]);
+          im.setMatrixAt(k, m.compose(p, q, sc));
+          im.setColorAt(k, col.setRGB(look[i * 4 + 1], look[i * 4 + 2], look[i * 4 + 3]));
+        }
+        im.count = n;
+        im.instanceMatrix.needsUpdate = true;
+        im.instanceColor.needsUpdate = true;
+        list.length = 0;               // do not hold on to sectors
+      }
+    },
+  };
+}
+
 // Returns build(sector) -> { group, setNear(bool) } with that sector's trees.
-export function createTrees(opts) {
+// build.near is the group with the leafy close trees, if any: add it to the scene.
+export function createTrees(opts, renderer, world) {
+  nearTrees = opts.treeDetail > 0 ? 150 : 70;          // phones: leafy trees only right around the car
+  realTrees = opts.realTrees ? createRealTrees(renderer, { cards: true, lod: nearTrees }) : null;
+  const real = realTrees ? realTrees.species : {};
+  pools = realTrees ? treePools(real, world, opts) : null;
   const near = treeGeometries(opts.treeDetail);
   const far = treeGeometries(0);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  return (sector) => {
+  const build = (sector) => {
     const rec = sector.trees;
     const n = rec.length / 6;
     if (!n) return null;
     const group = new THREE.Group();
-    const nearMeshes = [], farMeshes = [];
+    const nearMeshes = [], farMeshes = [], alwaysMeshes = [];
     let seed = (sector.sx * 73856093) ^ (sector.sz * 19349663) ^ 99;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
     const lists = near.map(() => []);
+    // what the close-tree pool needs to draw tree i exactly as its flat picture stands: species, turn, tint
+    const kind = pools ? new Uint8Array(n).fill(255) : null, look = pools ? new Float32Array(n * 4) : null;
     for (let i = 0; i < n; i++) {
       if (opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0) continue;
       const pick = Math.abs(Math.sin(rec[i * 6] * 12.9898 + rec[i * 6 + 2] * 78.233) * 43758.5453) % 1;
-      lists[treeSpecies(rec[i * 6 + 5] | 0, rec[i * 6 + 3], rec[i * 6 + 4], pick)].push(i);
+      const type = treeSpecies(rec[i * 6 + 5] | 0, rec[i * 6 + 3], rec[i * 6 + 4], pick);
+      lists[type].push(i);
+      if (kind) kind[i] = type;
     }
+    sector.treeKind = kind; sector.treeLook = look;
+    if (pools) pools.touch();
     for (let type = 0; type < lists.length; type++) {
       const list = lists[type];
       if (!list.length) continue;
-      const im = new THREE.InstancedMesh(far[type], mat, list.length);
+      const sp = real[type];
+      const im = sp ? new THREE.InstancedMesh(sp.far, sp.farMat, list.length) : new THREE.InstancedMesh(far[type], mat, list.length);
       list.forEach((i, k) => {
         const h = rec[i * 6 + 3], c = rec[i * 6 + 4];
         p.set(rec[i * 6], rec[i * 6 + 1] - 0.15, rec[i * 6 + 2]);
-        q.setFromAxisAngle(up, rnd() * 6.283);
+        const turn = rnd() * 6.283;
+        q.setFromAxisAngle(up, turn);
         s.set(c, h, c);
         m.compose(p, q, s);
         im.setMatrixAt(k, m);
         const v = 0.78 + rnd() * 0.4, warm = type < 4 && rnd() < 0.12 ? 0.25 + rnd() * 0.3 : 0;   // a few already turning
-        col.setRGB(v * (1 + warm), v * (0.95 + rnd() * 0.1), v * (0.9 - warm * 0.6));
+        // (a textured tree carries its own colour: only a light tint on top)
+        if (sp) { const t = 0.86 + (v - 0.78) * 0.7; col.setRGB(t * (1 + warm * 0.9), t * (0.97 + rnd() * 0.06), t * (0.94 - warm * 0.8)); }
+        else col.setRGB(v * (1 + warm), v * (0.95 + rnd() * 0.1), v * (0.9 - warm * 0.6));
         im.setColorAt(k, col);
+        if (look) { look[i * 4] = turn; look[i * 4 + 1] = col.r; look[i * 4 + 2] = col.g; look[i * 4 + 3] = col.b; }
       });
       im.instanceMatrix.needsUpdate = true;
       im.computeBoundingSphere();
       im.matrixAutoUpdate = false;
       group.add(im);
+      if (sp) {
+        // the flat tree stays on; close to the camera the pool draws the leafy tree in its place
+        alwaysMeshes.push(im);
+        continue;
+      }
       farMeshes.push(im);
       if (near[type] !== far[type] && opts.treeDetail) {
         // same instances, detailed geometry: shown instead of the far mesh when close
@@ -340,9 +425,11 @@ export function createTrees(opts) {
         for (const x of nearMeshes) x.visible = v;
         for (const x of farMeshes) x.visible = !v;
       },
-      dispose() { for (const x of farMeshes) x.dispose(); },
+      dispose() { for (const x of farMeshes) x.dispose(); for (const x of alwaysMeshes) x.dispose(); sector.treeKind = sector.treeLook = null; if (pools) pools.touch(); },
     };
   };
+  build.near = pools ? pools.group : null;
+  return build;
 }
 
 // ---------------------------------------------------------------- hedges, bushes and fences

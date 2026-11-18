@@ -25,11 +25,12 @@ function buildingGeometry(sector, walls) {
 
   const known = new Map();          // base -> [{x, z, rgb, key}]
   const list = walls && walls.sectors[`${sector.sx}_${sector.sz}`];
+  const extra = (walls && walls.extra && walls.extra[`${sector.sx}_${sector.sz}`]) || {};     // hand-set houses: roof colour, reach
   if (list) {
     for (let i = 0; i < list.length; i += 4) {
       let a = known.get(list[i]);
       if (!a) known.set(list[i], (a = []));
-      a.push({ x: list[i + 1] * 0.1, z: list[i + 2] * 0.1, rgb: list[i + 3], key: list[i] * 64 + a.length + 1 });
+      a.push({ x: list[i + 1] * 0.1, z: list[i + 2] * 0.1, rgb: list[i + 3], key: list[i] * 64 + a.length + 1, ...extra[i / 4] });
     }
   }
 
@@ -46,15 +47,17 @@ function buildingGeometry(sector, walls) {
     if (a && !shelter) {
       const tx = (pq[t * 3] + pq[t * 3 + 3] + pq[t * 3 + 6]) * 0.05 / 3, tz = (pq[t * 3 + 2] + pq[t * 3 + 5] + pq[t * 3 + 8]) * 0.05 / 3;
       let best = 1e18;
-      for (const k of a) { const d = (k.x - tx) ** 2 + (k.z - tz) ** 2; if (d < best) { best = d; e = k; } }
+      for (const k of a) { const d = (k.x - tx) ** 2 + (k.z - tz) ** 2; if (d < best && !(k.reach && d > k.reach * k.reach)) { best = d; e = k; } }
     }
     const key = e ? e.key : base[t] * 64;
     let g = groups.get(key);
     if (!g) groups.set(key, (g = { b: base[t], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9, real: e ? 1 : 0 }));
     for (let i = t; i < t + 3; i++) {
-      const x = pos[i * 3] = pq[i * 3] * 0.05, y = pos[i * 3 + 1] = pq[i * 3 + 1] * 0.01, z = pos[i * 3 + 2] = pq[i * 3 + 2] * 0.05;
+      const x = pq[i * 3] * 0.05, y = pq[i * 3 + 1] * 0.01, z = pq[i * 3 + 2] * 0.05;
+      if (!(e && e.hide)) { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }       // a hidden house keeps no triangles
       nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
-      if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);
+      if (e && kind[i] === 1 && e.roof !== undefined) c.setHex(e.roof, THREE.SRGBColorSpace);
+      else if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);
       else c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       aKind[i] = kind[i]; aBase[i] = base[i] * 0.01; gkey[i] = key;

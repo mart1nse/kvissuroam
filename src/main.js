@@ -16,6 +16,8 @@ import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createJanese } from './world/janese.js';
 import { createAksi, aksiProps } from './world/aksi.js';
+import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
+import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
@@ -72,7 +74,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -108,6 +110,8 @@ async function boot() {
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
+  pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
+  kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -119,10 +123,12 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps()] });
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
+  pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
+  kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -680,6 +686,8 @@ function frame(ts) {
     props.update(car, dt);
     janese.update(car, dt);
     aksi.update(car, dt);
+    pootsmani.update(car);
+    kvissentali.update(car);
     skids.update(car);
     smoke.update(car, dt, mode === 'drive', mp.smokers());
   } else smoke.update(null, dt, false, mp.smokers());

@@ -5,7 +5,7 @@
 //    gate between two red brick posts, and after the gate the wall is higher.
 //  - the bus stop on the right: a bay beside the lane with a yellow zigzag, the dashed line between bay
 //    and lane, a glass shelter with a bench and an advert panel, and the bus stop sign.
-//  - the lane markings: a solid centre line (double at the junction), the street name painted in the lane,
+//  - the lane markings: a solid centre line (double at the junction),
 //    and the pavers on the river side.
 // The map's own wall line along the garden (Emajõe and Kroonuaia) is drawn here in the same style instead
 // of the plain grey map wall; it stays solid through the baked obstacle field.
@@ -18,7 +18,6 @@ const BAY = { i0: 959, i1: 989, width: 2.9, taper: 6 };  // the bus bay: track i
 const SHELTER = { i: 973, len: 4.6, depth: 1.55 };
 const DASH = { i0: 944, i1: 991 };                       // dashed line along the right edge of the lane
 const DOUBLE = [943, 953];                               // double centre line at the junction
-const NAME_AT = 957;                                     // "EMAJÕE TN" painted in the right lane
 const PAVE = { i0: 944, i1: 1004, width: 3.4 };          // river-side pavement
 // the map's wall line round the garden (vectors.json walls, game x, z): Emajõe, the Kroonuaia corner, Kroonuaia
 const GARDEN_WALL = [[1417.2, 2290.9], [1396.6, 2258.5], [1336.4, 2198.0], [1329.8, 2197.9], [1224.4, 2316.8]];
@@ -103,20 +102,6 @@ function advertTex() {
     g.beginPath(); g.arc(80, 140, 34, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#7fc3c0';
     g.fillRect(14, 196, 100, 10); g.fillRect(14, 214, 70, 10);
-  });
-}
-
-// the street name as painted on the road (it runs along the lane), white on transparent
-function nameTex() {
-  return canvasTex(1024, 256, (g, w, h) => {
-    g.font = 'bold 200px "Arial Narrow", Arial, sans-serif';
-    g.textBaseline = 'middle';
-    g.textAlign = 'center';
-    g.lineWidth = 14;
-    g.strokeStyle = 'rgba(70, 60, 95, 0.35)';               // a worn edge so it reads on the pale road
-    g.strokeText('Emajõe tn', w / 2, h / 2 + 10);
-    g.fillStyle = '#ffffff';
-    g.fillText('Emajõe tn', w / 2, h / 2 + 10);
   });
 }
 
@@ -331,25 +316,6 @@ export function createEmajoe(world, group) {
     }
     for (const [list, mat] of [[marks, markMat], [pave, paveMat]]) { const m = meshOf(list, mat); if (m) group.add(m); }
 
-    // the street name in the right lane, read from the junction up the road, letter tops to the left
-    {
-      const i = NAME_AT, [x, z] = at(i, hw(i) * 0.5);
-      const [tx, tz] = track.tan[i];
-      const len = 5.2, wid = 1.4;
-      const g = new THREE.PlaneGeometry(len, wid, 6, 1);
-      g.rotateX(-Math.PI / 2);
-      // plane local x along the road (text reads up the road), letters' tops to the left of the lane
-      const pos = g.attributes.position;
-      for (let k = 0; k < pos.count; k++) {
-        const lx = pos.getX(k), lz = pos.getZ(k);
-        const wx = x + tx * lx - tz * lz, wz = z + tz * lx + tx * lz;
-        pos.setXYZ(k, wx, world.heightAt(wx, wz) + 0.07, wz);
-      }
-      g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: nameTex(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, color: COL.white }));
-      m.receiveShadow = true;
-      group.add(m);
-    }
 
     // ---- the glass shelter, its bench and advert, and the bus stop sign
     const p = new Parts(), solids = [];

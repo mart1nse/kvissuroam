@@ -18,7 +18,10 @@ function load(url) {
         m.material = new THREE.MeshPhysicalMaterial({
           map: s.map, metalnessMap: s.metalnessMap, roughnessMap: s.roughnessMap, normalMap: s.normalMap,
           emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0,
-          metalness: s.metalness, roughness: s.roughness, clearcoat: 0.5, clearcoatRoughness: 0.08, side: s.side,
+          metalness: s.metalness, roughness: s.roughness, clearcoat: s.name.startsWith('ov_') ? 0 : 0.5, clearcoatRoughness: 0.08, side: s.side,
+          alphaTest: s.alphaTest, name: s.name, specularIntensity: s.name.startsWith('ov_') ? 0.15 : 1,   // matt plates: sky glare greys the lettering
+          // plates and badges are flat quads a few mm proud of the body: keep them from z-fighting at a distance
+          polygonOffset: s.name.startsWith('ov_'), polygonOffsetFactor: -2, polygonOffsetUnits: -2,
         });
         s.dispose();
       }

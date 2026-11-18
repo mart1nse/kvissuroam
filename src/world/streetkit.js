@@ -4,6 +4,7 @@
 // line and a distance sideways from it.
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
+import { realTreeKit } from './scenery.js';
 
 // A road frame over a centre line that runs steadily along one map axis (0: x, 1: z). at(t, lat) gives the
 // point at map coordinate t along that axis, `lat` metres sideways (+: to the left of the direction of travel).
@@ -82,13 +83,46 @@ function meshTex() {
   });
 }
 
+// Leafy plants in the foliage of the realistic trees, for hand-placed hedges, bushes and thujas: collect
+// them with bush()/thuja(), then finish() adds one instanced mesh to the group. `ok` is false when the
+// simple trees are on (?trees=old); the caller then draws its plain shapes instead.
+// The bush it is made of is 2.7 m across and 2 m high.
+export function leafyPlants(group, shadows = true) {
+  const kit = realTreeKit(), proto = kit && kit.bush && kit.bush();
+  const list = [];
+  // a bush `width` across and `height` high with its foot at (x, y, z); tint: [r, g, b] multipliers
+  const bush = (x, y, z, width, height, yaw = 0, tint = [1, 1, 1], depth = width) => list.push([x, y, z, width / 2.7, height / 2.0, depth / 2.7, yaw, tint]);
+  // a thuja: a dense dark column, narrower at the top
+  const thuja = (x, y, z, height, r, c = 0, base = [0.5, 0.74, 0.56]) => {
+    const d = 0.86 + (Math.abs(c) % 3) * 0.07, t = base.map((v) => v * d);
+    bush(x, y - 0.05, z, r * 2.3, height * 0.7, c * 1.3, t);
+    bush(x, y + height * 0.28, z, r * 1.6, height * 0.6, c * 1.3 + 2, t);
+    bush(x, y + height * 0.58, z, r * 0.9, height * 0.46, c * 1.3 + 4, t);
+  };
+  function finish() {
+    if (!proto || !list.length) return null;
+    const im = new THREE.InstancedMesh(proto.geometry, proto.material, list.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+    list.forEach((b, k) => {
+      m.compose(new THREE.Vector3(b[0], b[1], b[2]), q.setFromAxisAngle(up, b[6]), new THREE.Vector3(b[3], b[4], b[5]));
+      im.setMatrixAt(k, m);
+      im.setColorAt(k, col.setRGB(b[7][0], b[7][1], b[7][2]));
+    });
+    im.castShadow = shadows; im.receiveShadow = true;
+    im.frustumCulled = false;
+    group.add(im);
+    return im;
+  }
+  return { ok: !!proto, bush, thuja, finish };
+}
+
 export const KIT = {
   frame: 0x4a4b57, glass: 0xa8cfd0, darkGlass: 0x6f8f9c, white: 0xf3f1ee, post: 0xc4c7cf,
   thuja: [0x3f7d55, 0x4a8a5c, 0x376f4e], shrub: [0x5fa565, 0x76b86c, 0x4f9560], bloom: 0xeef3e6,
 };
 
 export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6 } = {}) {
-  const p = new Parts();
+  const p = new Parts(), leafy = leafyPlants(group, shadows);
   const KINDS = {       // ground covers: height above the terrain, texture tile (m), draw order
     lawn: { lift: 0.06, tile: 4, f: -3 }, paver: { lift: 0.075, tile: 1.6, f: -4 }, red: { lift: 0.075, tile: 1.6, f: -4 },
     dark: { lift: 0.075, tile: 1.6, f: -4 }, concrete: { lift: 0.075, tile: 3, f: -4 }, white: { lift: 0.09, tile: 1, f: -6 },
@@ -149,10 +183,13 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
   // ---- plants
   const thuja = (x, z, height, r, c = 0) => {
     const y = h(x, z);
+    if (leafy.ok) { leafy.thuja(x, y, z, height, r, c); return; }
     p.add(new THREE.CylinderGeometry(r * 0.85, r, height * 0.45, 8), KIT.thuja[Math.abs(c) % 3], x, y + height * 0.225, z, c);
     p.add(new THREE.ConeGeometry(r * 0.85, height * 0.55, 8), KIT.thuja[Math.abs(c) % 3], x, y + height * 0.725, z, c);
   };
   const shrub = (x, z, r, hex, squash = 0.8) => {
+    const g = KIT.shrub.indexOf(hex);
+    if (leafy.ok && g >= 0) { leafy.bush(x, h(x, z) - 0.05, z, r * 2.5, r * squash * 1.9, x + z, [0.88 + g * 0.08, 0.92 + g * 0.06, 0.88 + g * 0.06]); return; }
     p.add(new THREE.IcosahedronGeometry(r, 1).scale(1.1, squash, 1), hex, x, h(x, z) + r * squash * 0.75, z, x + z);
   };
   // a box standing on the ground
@@ -185,11 +222,12 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
       g.computeVertexNormals();
       group.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: meshTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, color: fenceColour })));
     }
+    leafy.finish();
     const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
     if (m) { m.castShadow = shadows; m.receiveShadow = true; group.add(m); }
   }
 
-  return { p, h, ribbon, fence, panel, slab, face, win, thuja, shrub, box, finish };
+  return { p, h, ribbon, fence, panel, slab, face, win, thuja, shrub, box, finish, leafy };
 }
 
 // Extra building colours for houses the colour survey did not reach: entries { base (cm), x, z, wall, roof }

@@ -475,6 +475,7 @@ export function createSireli(scene, world, { shadows = true } = {}) {
     const OLIVE = [0x6f8a4a, 0x7d9853, 0x64803f];                 // young thujas, yellower than the street kit's
     const thuja = (e, n, hgt, rad, c) => {
       const [x, z] = at(e, n), y = world.heightAt(x, z), hex = OLIVE[Math.abs(c) % 3];
+      if (K.leafy.ok) { K.leafy.thuja(x, y, z, hgt, rad, c, [0.82, 0.92, 0.55]); return; }
       K.p.add(new THREE.CylinderGeometry(rad * 0.8, rad, hgt * 0.5, 8), hex, x, y + hgt * 0.25, z, c);
       K.p.add(new THREE.ConeGeometry(rad * 0.8, hgt * 0.5, 8), hex, x, y + hgt * 0.75, z, c);
     };

@@ -257,7 +257,17 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         put(w, BOX(s1 - s0, 0.85, 3.0), COL.concrete, sm, y + 0.42, 2.1);
         put(w, BOX(s1 - s0 + 0.1, 0.07, 3.1), 0xdedce4, sm, y + 0.88, 2.1);
         for (let s = s0 + 0.5, k = 0; s < s1 - 0.3; s += 0.8, k++) {
-          for (const n of [1.2, 2.2, 3.1]) put(w, new THREE.IcosahedronGeometry(0.55 + (k % 3) * 0.08, 1).scale(1.1, 0.7, 1), (k + Math.round(n)) % 4 === 0 ? COL.bloom[k % 2] : COL.shrub[(k + Math.round(n * 2)) % 3], s + (n - 2) * 0.2, y + 1.1, n, k);
+          for (const n of [1.2, 2.2, 3.1]) {
+            const flowering = (k + Math.round(n)) % 4 === 0, ss = s + (n - 2) * 0.2;
+            if (!K.leafy.ok) { put(w, new THREE.IcosahedronGeometry(0.55 + (k % 3) * 0.08, 1).scale(1.1, 0.7, 1), flowering ? COL.bloom[k % 2] : COL.shrub[(k + Math.round(n * 2)) % 3], ss, y + 1.1, n, k); continue; }
+            // leafy: dark juniper, and spiraea with its pink flower heads over the leaves
+            const [bx, bz] = w.at(ss, n), wd = 1.45 + (k % 3) * 0.15, t = (k + Math.round(n * 2)) % 3;
+            K.leafy.bush(bx, w.y + y + 0.82, bz, wd, flowering ? 0.95 : 0.8 + t * 0.08, k * 1.9 + n, flowering ? [0.95, 1, 0.9] : [0.6 + t * 0.06, 0.82 + t * 0.04, 0.7 + t * 0.04]);
+            if (flowering) for (let f = 0; f < 11; f++) {
+              const a = f * 2.4 + k, d = 0.12 + ((f * 7) % 5) * 0.11;
+              put(w, new THREE.IcosahedronGeometry(0.075 + (f % 3) * 0.02, 0).scale(1, 0.6, 1), COL.bloom[f % 2], ss + Math.cos(a) * d, y + 1.72 - d * d * 0.9 + (f % 2) * 0.04, n + Math.sin(a) * d, f);
+            }
+          }
         }
         const [x, z] = w.at(sm, 2.1);
         solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: (s1 - s0) / 2, hz: 1.55 });

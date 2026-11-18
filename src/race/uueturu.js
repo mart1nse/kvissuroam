@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
+import { leafyPlants } from '../world/streetkit.js';
 
 const ZEBRAS = [
   { i: 2303.5, w: 4.0 },                                    // across Vanemuise, before the junction
@@ -238,10 +239,13 @@ export function createUueturu(world, group) {
       p.add(new THREE.CylinderGeometry(1, 1, 0.6, 22).scale(I.hu, 1, I.hv), COL.kerb, x, y - 0.12, z, F.yaw);
       p.add(new THREE.CylinderGeometry(1, 1, 0.6, 22).scale(I.hu - 0.2, 1, I.hv - 0.2), COL.soil, x, y - 0.09, z, F.yaw);
       const blobs = [[-0.9, 0.2, 1.15, 0], [0.5, -0.2, 1.3, 1], [1.3, 0.35, 0.95, 2], [-0.1, 0.5, 1.0, 2], [-1.7, -0.25, 0.8, 1]];
+      const L = leafyPlants(group, true);          // leafy bushes, or plain lumps with the simple trees
       for (const [s, n, r, c] of blobs) {
         const [bx, bz] = F.at(I.s + s, I.n + n);
+        if (L.ok) { L.bush(bx, y + 0.1, bz, r * 2.7, r * 1.8, F.yaw + c * 2.1, [0.86 + c * 0.07, 0.92 + c * 0.04, 0.86 + c * 0.05]); continue; }
         p.add(new THREE.IcosahedronGeometry(r, 1).scale(1.15, 0.85, 1), COL.bush[c], bx, y + r * 0.7, bz, F.yaw + c);
       }
+      L.finish();
       world.addSolids([{ x, z, yaw: F.yaw, hx: I.hu - 0.35, hz: I.hv - 0.3 }]);
     }
 

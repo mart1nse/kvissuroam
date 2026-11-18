@@ -145,12 +145,16 @@ function engineForce(car, throttle, dt) {
   }
   const ratioOf = (g) => (car.reversing ? s.reverse : s.gears[g - 1]) * s.finalDrive;
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
-  // A gear picked by hand is held until it is driven up to the shift point (a downshift on the engine
-  // brake waits for the throttle), and given up only when the car stops or the revs sag below idle.
-  if (car.manual && (car.reversing || vAbs < 1.5 || rpmAt(car.gear) < (e.idle ?? 750) * 0.9 ||
-      // (or, with the tyres slipping a little, the engine is already on its limiter just short of it)
-      ((rpmAt(car.gear) >= e.shiftRpm || (rpmAt(car.gear) > e.shiftRpm * 0.88 && rpmAt(car.gear) * wAbs >= (e.redline - 50) * vAbs)) &&
-        rpmAt(car.gear) <= e.redline && (car.manual > 0 || throttle > 0.3)))) car.manual = 0;
+  // A gear picked by hand is held until the road speed (not the wheelspin) brings that gear up to the
+  // shift point, so second or third can be picked mid burnout or donut and kept while the tyres spin.
+  // A downshift on the engine brake waits for the throttle. Off the throttle the gear is given up when
+  // the car rolls to a stop or the revs sag below idle.
+  if (car.manual) {
+    const road = rpmAt(car.gear);
+    const coasting = throttle <= 0;
+    if (car.reversing || (coasting && (vAbs < 1.5 || road < (e.idle ?? 750) * 0.9)) ||
+        (road >= e.shiftRpm * 0.97 && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
+  }
   if (car.reversing) car.gear = 1;
   else if (car.shiftTimer <= 0 && !car.manual) {
     // kick-down automatic: lowest gear that stays below the shift point

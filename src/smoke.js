@@ -7,7 +7,7 @@
 // and at speed the wind thins it out.
 import * as THREE from 'three';
 
-const MAX = 420;           // puffs alive at once
+const MAX = 700;           // puffs alive at once
 const RUB0 = 2.5;          // m/s of tread sliding before a tyre makes any smoke
 const RUB1 = 13;           // ... and where it makes the most
 const RATE = 24;           // puffs per second from one tyre at full smoke
@@ -15,6 +15,7 @@ const WARM = 1.1;          // seconds for a tyre to come up to smoking heat
 const COOL = 0.7;
 const SOOT_BUILD = 1.8;    // seconds of held throttle for a diesel's soot to come up to full
 const SOOT_FADE = 0.2;     // ... and to die away on a lift or a gear change
+const FAR = 350;           // metres: other players' cars further off than this make no smoke here
 const THIN0 = 8, THIN = 35; // m/s: where the wind starts thinning the soot, and how fast (0.64 at 100 km/h)
 
 // One car's soot state (the player's own, or another player's car rebuilt from what it sends).
@@ -72,7 +73,9 @@ export function createSmoke(world) {
   const _v = new THREE.Vector2();
 
   let next = 0, alive = 0, fresh = false;
-  const heat = [0, 0], owed = [0, 0, 0, 0];
+  // one car's tyres: how hot each axle is, and the puffs each wheel still owes
+  const tyreState = () => ({ heat: [0, 0], owed: [0, 0, 0, 0] });
+  const myTyres = tyreState();
 
   function puff(x, y, z, vx, vy, vz, strength, dark = 0) {
     const i = next; next = (next + 1) % MAX; fresh = true;
@@ -120,45 +123,53 @@ export function createSmoke(world) {
     }
   }
 
+  // tyre smoke from one car (ours, or another player's rebuilt from what it sends)
+  function tyres(car, dt, st) {
+    const { heat, owed } = st;
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
+    const ht = car.spec.track / 2;
+    // the car's velocity in the world (vx along the car, vy across it, as in the physics)
+    const wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy;
+    for (let ax = 0; ax < 2; ax++) {
+      const front = ax === 0;
+      const rub = (front ? car.rubF : car.rubR) || 0;
+      const on = Math.max(0, Math.min(1, (rub - RUB0) / (RUB1 - RUB0)));
+      heat[ax] += ((on > 0 ? 1 : 0) - heat[ax]) * Math.min(1, dt / (on > 0 ? WARM : COOL));
+      const strength = heat[ax] * heat[ax] * Math.sqrt(on);
+      if (strength < 0.03) { owed[ax * 2] = owed[ax * 2 + 1] = 0; continue; }
+      const spin = Math.min(6, (front ? car.slipVF : car.slipVR) || 0);
+      for (let sd = 0; sd < 2; sd++) {
+        const w = ax * 2 + sd, along = front ? car.a : -car.b, side = sd ? ht : -ht;
+        const x = car.x + fx * along + sx * side, z = car.z + fz * along + sz * side;
+        owed[w] += RATE * strength * dt;
+        if (owed[w] < 1) continue;
+        if (world.surfaceAt(x, z) !== 1) { owed[w] = 0; continue; }
+        const y = world.groundAt(x, z, car.y + 0.4);
+        while (owed[w] >= 1) {
+          owed[w] -= 1;
+          // thrown back off the tread, carried along with the car for a moment, then left hanging
+          const r = () => Math.random() - 0.5;
+          puff(x + r() * 0.2, y + 0.12, z + r() * 0.2,
+            wvx * 0.28 - fx * spin * 0.3 + r() * 1.1, 0.5 + Math.random() * 0.7, wvz * 0.28 - fz * spin * 0.3 + r() * 1.1, strength);
+        }
+      }
+    }
+  }
+
   // car: the player's car after its physics step; active: false while the game is not being driven
-  // others: other players' smoking cars, [{ id, car }] (multiplayer.js smokers())
+  // others: other players' cars, [car-like] (multiplayer.js remotes()); only the ones near enough to see
   function update(car, dt, active, others = []) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
     for (const o of others) {
-      if (!theirs.has(o.id)) theirs.set(o.id, sootState());
-      exhaust(o.car, dt, theirs.get(o.id));
+      if (o.inWater || (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > FAR * FAR)) continue;
+      let st = theirs.get(o.id);
+      if (!st) theirs.set(o.id, st = { soot: sootState(), tyres: tyreState() });
+      if (o.soot) exhaust(o, dt, st.soot);
+      if (o.tyres) tyres(o, dt, st.tyres);
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
-    if (active && car && !car.inWater) {
-      const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
-      const ht = car.spec.track / 2;
-      // the car's velocity in the world (vx along the car, vy across it, as in the physics)
-      const wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy;
-      for (let ax = 0; ax < 2; ax++) {
-        const front = ax === 0;
-        const rub = (front ? car.rubF : car.rubR) || 0;
-        const on = Math.max(0, Math.min(1, (rub - RUB0) / (RUB1 - RUB0)));
-        heat[ax] += ((on > 0 ? 1 : 0) - heat[ax]) * Math.min(1, dt / (on > 0 ? WARM : COOL));
-        const strength = heat[ax] * heat[ax] * Math.sqrt(on);
-        if (strength < 0.03) { owed[ax * 2] = owed[ax * 2 + 1] = 0; continue; }
-        const spin = Math.min(6, (front ? car.slipVF : car.slipVR) || 0);
-        for (let sd = 0; sd < 2; sd++) {
-          const w = ax * 2 + sd, along = front ? car.a : -car.b, side = sd ? ht : -ht;
-          const x = car.x + fx * along + sx * side, z = car.z + fz * along + sz * side;
-          owed[w] += RATE * strength * dt;
-          if (owed[w] < 1) continue;
-          if (world.surfaceAt(x, z) !== 1) { owed[w] = 0; continue; }
-          const y = world.groundAt(x, z, car.y + 0.4);
-          while (owed[w] >= 1) {
-            owed[w] -= 1;
-            // thrown back off the tread, carried along with the car for a moment, then left hanging
-            const r = () => Math.random() - 0.5;
-            puff(x + r() * 0.2, y + 0.12, z + r() * 0.2,
-              wvx * 0.28 - fx * spin * 0.3 + r() * 1.1, 0.5 + Math.random() * 0.7, wvz * 0.28 - fz * spin * 0.3 + r() * 1.1, strength);
-          }
-        }
-      }
-    } else heat[0] = heat[1] = 0;
+    if (active && car && !car.inWater) tyres(car, dt, myTyres);
+    else myTyres.heat[0] = myTyres.heat[1] = 0;
 
     if (!alive && !fresh) return;
     alive = 0; fresh = false;

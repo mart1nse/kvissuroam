@@ -15,10 +15,12 @@ import { buildDeckBodies } from './world/decks.js';
 import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
 import { createJanese } from './world/janese.js';
+import { createParked } from './world/parked.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
+import { createSireli, sireliWalls } from './world/sireli.js';
 import { createSigns } from './world/signs.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
@@ -76,7 +78,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -116,6 +118,7 @@ async function boot() {
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
+  sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -131,9 +134,11 @@ async function boot() {
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
+  parked = createParked(scene, world, { shadows: !isTouch, touch: isTouch });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
+  sireli = createSireli(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   world.onSectorLoad((s) => {
     terrain.addSector(s);
@@ -690,13 +695,16 @@ function frame(ts) {
     trackside.collide(car);
     props.update(car, dt);
     janese.update(car, dt);
+    parked.update(car, dt, camera.position);
     aksi.update(car, dt);
     pootsmani.update(car);
     raekoda.update(car);
     kvissentali.update(car);
+    sireli.update(car);
     skids.update(car);
-    smoke.update(car, dt, mode === 'drive', mp.smokers());
-  } else smoke.update(null, dt, false, mp.smokers());
+    skids.updateOthers(mp.remotes(), car);
+    smoke.update(car, dt, mode === 'drive', mp.remotes());
+  } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
@@ -873,6 +881,7 @@ function frame(ts) {
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);
   audio.update(car, mode === 'drive' && !bigmap.isOpen);
+  audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
 
   if (photos?.update(camera, dt)) {
     const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it
@@ -900,7 +909,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, props: () => props, janese: () => janese, aksi: () => aksi };
+  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

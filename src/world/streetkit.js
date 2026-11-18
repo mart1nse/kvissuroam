@@ -199,7 +199,7 @@ export function addHouseColours(walls, sectorKey, x0, z0, list) {
   const a = (walls.sectors[sectorKey] ||= []);
   const extra = ((walls.extra ||= {})[sectorKey] ||= {});
   for (const e of list) {
-    extra[a.length / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide };       // hide: the house is modelled by hand instead
+    extra[a.length / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide, shelter: e.shelter };       // hide: the house is modelled by hand instead; shelter: claims a carport
     a.push(e.base, Math.round((e.x - x0) * 10), Math.round((e.z - z0) * 10), e.wall);
   }
 }

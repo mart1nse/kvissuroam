@@ -7,8 +7,49 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="description" content="LINNARING: free driving and lap racing in Tartu." />
-  <title>LINNARING</title>
+  <title>LinnaRing</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a0b3b'/%3E%3Ccircle cx='16' cy='17' r='9' fill='%23ff5fa2'/%3E%3Crect y='18' width='32' height='2' fill='%231a0b3b'/%3E%3Crect y='22' width='32' height='3' fill='%231a0b3b'/%3E%3C/svg%3E" />
+  <link rel="canonical" href="https://www.linnaring.com/" />
+  <script>
+    // Arriving from the old address (worker/moved.js): it hands over the driver name, car, queued
+    // laps and best laps in the URL fragment, once. Only taken from our own old addresses.
+    (function () {
+      var m = /^#moved=(.+)$/.exec(location.hash);
+      if (!m) return;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      try {
+        var from = /^https:\/\/(kvissuroam\.parttime\.workers\.dev|linnaring\.com)(\/|$)/.exec(document.referrer);
+        if (!from || m[1].length > 12000) return;
+        var d = JSON.parse(decodeURIComponent(m[1])), P = 'kvissuroam.';
+        var get = function (k) { return localStorage.getItem(P + k); };
+        var arr = function (k) { try { var v = JSON.parse(get(k)); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+        var done = arr('movedFrom');
+        if (done.indexOf(from[1]) >= 0) return;
+        var lapOk = function (l) { return l && typeof l === 'object' && /^[a-z0-9_-]{1,16}$/i.test(l.car) && l.ms > 0 && l.ms < 36e5; };
+        var laps = arr('laps'), fresh = !laps.length;
+        var name = typeof d.n === 'string' ? d.n.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20) : '';
+        // a browser that has driven no lap here only has an automatic name: the old one wins
+        if (name && (fresh || !get('name'))) localStorage.setItem(P + 'name', name);
+        if (/^[a-z0-9_-]{1,16}$/i.test(d.c) && fresh) localStorage.setItem(P + 'car', d.c);
+        if ((d.v === 'drone' || d.v === 'chase') && !get('view')) localStorage.setItem(P + 'view', d.v);
+        var p = (Array.isArray(d.p) ? d.p : []).filter(lapOk).slice(-100).map(function (l) {
+          return { name: typeof l.name === 'string' ? l.name.replace(/[\u0000-\u001f<>]/g, '').slice(0, 20) : undefined, car: l.car, ms: Math.round(l.ms), at: typeof l.at === 'string' ? l.at.slice(0, 30) : undefined };
+        });
+        if (p.length) localStorage.setItem(P + 'pendingLaps', JSON.stringify(arr('pendingLaps').concat(p).slice(-200)));
+        var l = (Array.isArray(d.l) ? d.l : []).filter(lapOk).slice(0, 60).map(function (x) {
+          var o = { ms: Math.round(x.ms), car: x.car, at: typeof x.at === 'string' ? x.at.slice(0, 30) : undefined };
+          if (typeof x.carShort === 'string') o.carShort = x.carShort.replace(/[<>&"']/g, '').slice(0, 24);
+          if (Array.isArray(x.splits) && x.splits.length <= 20 && x.splits.every(function (n) { return typeof n === 'number'; })) o.splits = x.splits;
+          if (typeof x.cp === 'string') o.cp = x.cp.replace(/[<>&"']/g, '').slice(0, 40);
+          return o;
+        });
+        if (l.length) localStorage.setItem(P + 'laps', JSON.stringify(l.concat(laps).slice(-200)));
+        var s = (Array.isArray(d.s) ? d.s : []).filter(function (k) { return typeof k === 'string' && k.length < 32; }).slice(0, 60);
+        if (s.length) localStorage.setItem(P + 'sentLaps', JSON.stringify(arr('sentLaps').concat(s).slice(-400)));
+        localStorage.setItem(P + 'movedFrom', JSON.stringify(done.concat(from[1])));
+      } catch (e) { /* bad or blocked: start fresh */ }
+    })();
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
@@ -23,7 +64,7 @@
 
   <div id="menu" class="screen hidden">
     <h1 class="logo"><span>LINNA</span><span>RING</span></h1>
-    <p class="tag">FREE DRIVE · TARTU</p>
+    <p class="tag">TIME-ATTACK THE STREET CIRCUIT OR ROAM FREELY</p>
     <div id="cards"></div>
     <button id="drive" class="neon">DRIVE</button>
     <p class="small keys desktop-only">Arrow keys to drive · R back to last dry spot · H back to the start · M map · G garage · N sound · A / Z gear up / down · B look back · C drone view · L lap times</p>

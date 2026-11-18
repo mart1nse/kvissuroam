@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
+import { drapeGeometry } from '../world/drape.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
 const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
@@ -153,7 +154,8 @@ export function createEmajoe(world, group) {
   const bayW = (i) => BAY.width * smooth((i - BAY.i0) / BAY.taper) * smooth((BAY.i1 - i) / BAY.taper);
 
   const markMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide });
-  const paveMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+  const paveMat = new THREE.MeshLambertMaterial({ color: COL.pave, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+  const kerbMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide });
   const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const stoneMat = new THREE.MeshLambertMaterial({ map: stoneTex() });
   let built = false, lowBuilt = false;
@@ -317,17 +319,21 @@ export function createEmajoe(world, group) {
     }
     // ---- the river-side pavement, the kerb of the bay
     {
-      const inner = [], outer = [];
+      // the pavement is draped in 1.5 m triangles wound to the sky: the old 3.4 m quads let the bank poke
+      // through (the holes) and faced down, so they came out dark red; now a light, half see-through pink
+      // that lets the ground show through and blends in (Martin, 18 Nov)
+      const near = [], far = [], outer = [];
       for (let i = PAVE.i0; i <= PAVE.i1; i++) {
-        const fade = smooth((i - PAVE.i0) / 4) * smooth((PAVE.i1 - i) / 4);
+        const fade = Math.max(0.03, smooth((i - PAVE.i0) / 4) * smooth((PAVE.i1 - i) / 4));
         const a = hw(i) + bayW(i) + 0.25, b = a + PAVE.width * fade;
-        inner.push([...at(i, (a + b) / 2), (b - a) / 2]);
+        near.push(at(i, a + 0.1)); far.push(at(i, b));
         outer.push([...at(i, a), 0.14]);
       }
-      strip(inner, COL.pave, 0.04, pave);
-      strip(outer, COL.kerb, 0.05, pave);
+      const g = drapeGeometry(world, [[[...near, ...far.reverse()]]], 0.05, 1, 1.5);
+      if (g) { const m = new THREE.Mesh(g, paveMat); m.receiveShadow = true; group.add(m); }
+      strip(outer, COL.kerb, 0.06, pave);
     }
-    for (const [list, mat, up] of [[marks, markMat, true], [pave, paveMat, false]]) { const m = meshOf(list, mat, up); if (m) group.add(m); }
+    for (const [list, mat] of [[marks, markMat], [pave, kerbMat]]) { const m = meshOf(list, mat, true); if (m) group.add(m); }
 
 
     // ---- the glass shelter, its bench and advert, and the bus stop sign

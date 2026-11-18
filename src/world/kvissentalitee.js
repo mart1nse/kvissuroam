@@ -7,14 +7,15 @@
 // Road frame: t = map x along Kvissentali tee (west to east), lat = metres sideways, + north, - south.
 import * as THREE from 'three';
 import { roadFrame, wallOf, streetKit, addHouseColours, KIT } from './streetkit.js';
-import { BOX, addCar, rnd } from '../race/landmarks.js';
+import { BOX } from '../race/landmarks.js';
+import { buildCarModel } from '../cars/models/index.js';
 
 const ROAD = [[-176.9, 9.4], [145.4, -30.6], [333.6, -54.6]];
 const R = roadFrame(ROAD, 0);
 const KLAOSE = roadFrame([[145.4, -30.6], [146.2, -19.5], [148.9, 16.5]], 1);
 const DRIVE = roadFrame([[69.9, -24], [68.4, 16]], 1);      // the shared drive, square to the road; lat + east
 const EDGE = 3.8, PATH = [-6.2, -8.8];                     // road half width; the foot and cycle path south of it
-const FRONT = -13.4;                                       // the plots' front fence line
+const FRONT = -15.4;                                       // the plots' front fence line, 2 m nearer the houses than the map has it (Martin, 18 Nov)
 const CENTRE = [80, -10];
 const LIGHT = 0, SIGN_CROSSING = 17;
 
@@ -91,20 +92,57 @@ export function createKvissentaliTee(scene, world, { shadows = true } = {}) {
     piece(C.f0 - 0.25, C.f1 + 0.1, 0, C.w + 0.15, C.h, C.h + 0.32, COL.frame);
     piece(C.f0, C.f1, C.w - 0.22, C.w, -0.5, C.h, H.wall);
     piece(C.f1 - 0.2, C.f1, 0, C.w, -0.5, C.h, H.wall);
-    piece(C.f0, C.f0 + C.store[1], 0, C.store[0], -0.5, C.h, COL.slat);
-    {
-      const p0 = at(C.f0, 0), p1 = at(C.f0, C.store[0]), F = p0[0] > p1[0] ? wallOf(p0, p1) : wallOf(p1, p0);    // the store's front, facing the street
-      F.y = y;
-      for (let s = 0.12; s < F.len; s += 0.24) K.slab(F, s, s + 0.07, 0, C.h, 0, 0.03, COL.slatLine);
-      const q0 = at(C.f0, C.store[0]), q1 = at(C.f0 + C.store[1], C.store[0]), G = wallOf(q0, q1), G2 = wallOf(q1, q0);
-      const side = Math.hypot(G.at(1, 1)[0] - at(C.f0 + 1, C.w)[0], G.at(1, 1)[1] - at(C.f0 + 1, C.w)[1]) < Math.hypot(G2.at(1, 1)[0] - at(C.f0 + 1, C.w)[0], G2.at(1, 1)[1] - at(C.f0 + 1, C.w)[1]) ? G : G2;
-      side.y = y;
-      for (let s = 0.12; s < side.len; s += 0.24) K.slab(side, s, s + 0.07, 0, C.h, 0, 0.03, COL.slatLine);
-    }
+    // (the slatted stores at the front of the carports are gone: Martin, 18 Nov)
     K.ribbon({ at: (t, lat) => at(t, lat) }, C.f0 - 1, C.f1 - 0.2, 0.05, C.w - 0.25, 'dark', true);
-    // a car under the roof, nose in
-    const [carX, carZ] = at((C.f0 + C.f1) / 2 + 0.6, C.store[0] + 2.0), r = rnd(H.solar ? 5 : 9);
-    addCar(K.p, carX, K.h(carX, carZ) + 0.08, carZ, N.yaw + Math.PI / 2, H.solar ? 0x8d7f76 : 0x2b2d34, r);
+    // the east carport: the black Mercedes under the roof, nose in, its rear to the street; the navy Porsche
+    // 356 in front of the west house's carport, facing the street (Martin, 18 Nov)
+    const [ax, az] = at(0, C.w / 2), [bx, bz] = at(1, C.w / 2);
+    if (H.carport === 'W') {
+      const [carX, carZ] = at((C.f0 + C.f1) / 2 + 0.4, C.w / 2 - 0.1);
+      parked.push({ id: 'w201', x: carX, z: carZ, yaw: Math.atan2(bx - ax, -(bz - az)), hl: 2.25, hw: 0.86, wb: 2.665 });
+    } else {
+      const [px, pz] = at(C.f0 - 2.6, C.w / 2 - 0.1);
+      porsche = { x: px, z: pz, f: [ax - bx, az - bz] };
+    }
+  }
+  const parked = [];
+  let porsche = null;
+
+  // a Porsche 356 coupé from primitives, local +x forward, standing on the ground at y
+  function porsche356(p, x, y, z, fwd, paint) {
+    const yaw = Math.atan2(-fwd[1], fwd[0]), rx = -fwd[1], rz = fwd[0];
+    const put = (geo, hex, l, h, t) => p.add(geo, hex, x + fwd[0] * l + rx * t, y + h, z + fwd[1] * l + rz * t, yaw);
+    const chrome = 0xdcdce6, glass = 0x2c3040;
+    put(new THREE.CapsuleGeometry(0.8, 2.35, 8, 20).rotateZ(Math.PI / 2).scale(1, 0.47, 1.04), paint, 0, 0.62, 0);       // the round tub
+    for (const l of [1.05, -1.05]) for (const t of [-0.6, 0.6]) {
+      put(new THREE.SphereGeometry(0.46, 16, 10).scale(1.45, 0.78, 0.66), paint, l * (l > 0 ? 1.02 : 1), 0.7, t);     // wing over the wheel
+      put(new THREE.CylinderGeometry(0.32, 0.32, 0.17, 18).rotateX(Math.PI / 2), 0x16161b, l, 0.32, t * 1.13);       // tyre
+      put(new THREE.CylinderGeometry(0.17, 0.17, 0.19, 14).rotateX(Math.PI / 2), chrome, l, 0.32, t * 1.13);          // hubcap
+    }
+    put(new THREE.SphereGeometry(1, 20, 12).scale(1.02, 0.37, 0.7), glass, -0.28, 0.97, 0);                            // glasshouse
+    put(new THREE.SphereGeometry(1, 20, 12).scale(0.86, 0.36, 0.64), paint, -0.34, 1.03, 0);                           // roof over it
+    for (const t of [-0.5, 0.5]) {
+      put(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 14).rotateZ(Math.PI / 2), chrome, 1.74, 0.76, t);              // headlamp ring
+      put(new THREE.CylinderGeometry(0.09, 0.09, 0.09, 14).rotateZ(Math.PI / 2), 0xfff4d6, 1.76, 0.76, t);
+      put(BOX(0.05, 0.07, 0.12), 0xd8434f, -1.95, 0.66, t * 0.9);                                                     // tail lamp
+    }
+    put(BOX(0.07, 0.07, 1.42), chrome, 1.98, 0.42, 0); put(BOX(0.07, 0.07, 1.42), chrome, -1.98, 0.42, 0);              // bumpers
+    put(BOX(0.04, 0.16, 0.42), chrome, -1.93, 0.86, 0);                                                                 // engine lid grille
+  }
+  // a round trampoline with its safety net
+  function trampoline(K, x, z, r = 1.8) {
+    const y = K.h(x, z), mat = 0.92;
+    K.p.add(new THREE.CylinderGeometry(r - 0.2, r - 0.2, 0.03, 28), 0x2c2c34, x, y + mat, z);                         // the jumping mat
+    K.p.add(new THREE.TorusGeometry(r - 0.1, 0.12, 6, 32).rotateX(Math.PI / 2).scale(1, 0.6, 1), 0x4f8fd0, x, y + mat, z);   // padding
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      K.p.add(new THREE.CylinderGeometry(0.03, 0.03, mat + 1.85, 6), 0x8f94a3, px, y + (mat + 1.85) / 2, pz);           // leg and net post
+    }
+    K.p.add(new THREE.TorusGeometry(r, 0.03, 4, 32).rotateX(Math.PI / 2), 0x8f94a3, x, y + mat + 1.8, z);
+    const net = new THREE.Mesh(new THREE.CylinderGeometry(r - 0.02, r - 0.02, 1.78, 32, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x24242c, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
+    net.position.set(x, y + mat + 0.9, z);
+    group.add(net);
   }
 
   function build() {
@@ -145,7 +183,29 @@ export function createKvissentaliTee(scene, world, { shadows = true } = {}) {
       K.box(q[0], q[1], w, hh, 0.38, COL.cabinet, yaw); K.box(q[0], q[1], w + 0.06, 0.06, 0.44, 0xa9a9a6, yaw, hh);
     }
     for (const H of HOUSES) house(K, H);
+    // the dark navy Porsche 356 in front of the west house's carport, facing the street (Martin, 18 Nov)
+    {
+      const { x, z, f } = porsche;
+      porsche356(K.p, x, K.h(x, z) + 0.02, z, f, 0x27325e);
+      world.addSolids([{ x, z, yaw: Math.atan2(-f[1], f[0]), hx: 2.0, hz: 0.84 }]);
+    }
+    // trampolines in the two back gardens (Martin, 18 Nov)
+    trampoline(K, 52.5, 19.0); trampoline(K, 88.0, 17.5);
     K.finish();
+    // the Mercedes: the real model, standing still
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const c of parked) {
+      const fx = Math.sin(c.yaw), fz = -Math.cos(c.yaw);
+      world.addSolids([{ x: c.x, z: c.z, yaw: Math.atan2(-fz, fx), hx: c.hl, hz: c.hw }]);
+      setTimeout(() => {
+        const model = buildCarModel(c.id);
+        model.setLights({ headlights: false });
+        model.group.quaternion.setFromAxisAngle(up, -c.yaw);
+        model.group.position.set(c.x, world.heightAt(c.x, c.z) + 0.02, c.z);
+        model.group.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
+        group.add(model.group);
+      }, 300);
+    }
   }
 
   return {

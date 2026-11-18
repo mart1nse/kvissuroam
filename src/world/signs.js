@@ -96,6 +96,7 @@ export function createSigns(world) {
     const frames = [], poles = [];
     for (let i = 0; i < a.length; i += st) {
       const kind = a[i], x = a[i + 1], y = a[i + 2], z = a[i + 3], yaw = a[i + 4] * Math.PI / 180;
+      if (world.signSkip && world.signSkip(x, z)) continue;          // drawn by hand instead (e.g. a name painted on the wall)
       const w = a[i + 5], h = a[i + 6], text = data.texts[a[i + 7]], style = a[i + 8];
       const nx = Math.sin(yaw), nz = Math.cos(yaw);
       if (kind === 0) {

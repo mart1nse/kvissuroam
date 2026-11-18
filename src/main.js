@@ -24,6 +24,7 @@ import { createSireli, sireliWalls } from './world/sireli.js';
 import { createDiscGolf } from './world/discgolf.js';
 import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja.js';
 import { createSigns } from './world/signs.js';
+import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -123,6 +124,7 @@ async function boot() {
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
   sireliWalls(world.walls);                     // so is Sireli 7a in Kõrveküla
   janeseWalls(world.walls);                     // and Jänese 1
+  mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -134,7 +136,8 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: clearProps, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps()] });
+  mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });

@@ -50,7 +50,7 @@ function rnd(seed) {
 }
 
 // a canvas painted in metres: s along the wall, y up from y0
-function painter(len, y0, y1, ppm) {
+export function painter(len, y0, y1, ppm) {
   const c = document.createElement('canvas');
   c.width = Math.min(4096, Math.round(len * ppm)); c.height = Math.round((y1 - y0) * ppm);
   const g = c.getContext('2d'), kx = c.width / len, ky = c.height / (y1 - y0);
@@ -79,6 +79,12 @@ function painter(len, y0, y1, ppm) {
     text(str, s, y, h, fill, font = '600', align = 'center') {
       g.save(); g.translate(X(s), Y(y)); g.scale(kx / ky, 1);
       g.fillStyle = fill; g.font = `${font} ${h * ky}px "Helvetica Neue", Arial, sans-serif`; g.textAlign = align; g.textBaseline = 'middle';
+      g.fillText(str, 0, 0); g.restore();
+    },
+    // upright text reading bottom to top
+    vtext(str, s, y, h, fill, font = '600') {
+      g.save(); g.translate(X(s), Y(y)); g.rotate(-Math.PI / 2);
+      g.fillStyle = fill; g.font = `${font} ${h * ky}px "Helvetica Neue", Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(str, 0, 0); g.restore();
     },
     texture() {

@@ -134,6 +134,18 @@ export function createHud(world) {
     ctx.beginPath();
     ctx.moveTo(R, R * 1.25 - 13); ctx.lineTo(R + 8, R * 1.25 + 9); ctx.lineTo(R, R * 1.25 + 4); ctx.lineTo(R - 8, R * 1.25 + 9);
     ctx.closePath(); ctx.fill();
+    // north: the map turns with the car, so an N with a small pointer rides round the rim
+    const na = -car.yaw, nx = Math.sin(na), ny = -Math.cos(na);
+    ctx.save();
+    ctx.translate(R + nx * (R - 40), R + ny * (R - 40));
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 7; ctx.lineJoin = 'round';
+    ctx.font = '900 40px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeText('N', 0, 2); ctx.fillText('N', 0, 2);
+    ctx.rotate(na);
+    ctx.fillStyle = '#ff3b4a'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(0, -37); ctx.lineTo(11, -21); ctx.lineTo(-11, -21); ctx.closePath();
+    ctx.stroke(); ctx.fill();
+    ctx.restore();
   }
 
   return {

@@ -657,7 +657,7 @@ function flatGeometry(halfW) {
 // Photograph the close tree, unlit, from the side and from above: the picture the flat tree wears.
 function snapshot(renderer, geo, map, halfW, fill) {
   const W = 768, Hh = 512;
-  const rt = new THREE.WebGLRenderTarget(W, Hh, { samples: 4, depthBuffer: true });
+  const rt = new THREE.WebGLRenderTarget(W, Hh, { depthBuffer: true });      // (no multisampling: its buffers would stay allocated for every species)
   rt.texture.minFilter = THREE.LinearMipmapLinearFilter;
   rt.texture.generateMipmaps = true;
   rt.texture.anisotropy = 4;

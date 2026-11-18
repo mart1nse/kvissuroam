@@ -165,7 +165,7 @@ export class Lobby extends DurableObject {
 
     if (m.t === 's' && me?.id) {
       // position: pass straight on
-      if (Array.isArray(m.p) && m.p.length <= 16) this.broadcast(`{"t":"s","id":"${me.id}","p":${JSON.stringify(m.p)}}`, ws);
+      if (Array.isArray(m.p) && m.p.length <= 24) this.broadcast(`{"t":"s","id":"${me.id}","p":${JSON.stringify(m.p)}}`, ws);
       return;
     }
     if (m.t === 'hello') {

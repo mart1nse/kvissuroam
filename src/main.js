@@ -689,8 +689,9 @@ function frame(ts) {
     pootsmani.update(car);
     kvissentali.update(car);
     skids.update(car);
-    smoke.update(car, dt, mode === 'drive', mp.smokers());
-  } else smoke.update(null, dt, false, mp.smokers());
+    skids.updateOthers(mp.remotes(), car);
+    smoke.update(car, dt, mode === 'drive', mp.remotes());
+  } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
@@ -867,6 +868,7 @@ function frame(ts) {
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);
   audio.update(car, mode === 'drive' && !bigmap.isOpen);
+  audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
 
   if (photos?.update(camera, dt)) {
     const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it
@@ -894,7 +896,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, props: () => props, janese: () => janese, aksi: () => aksi };
+  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, aksi: () => aksi };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

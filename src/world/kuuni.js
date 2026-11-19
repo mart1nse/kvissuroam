@@ -29,6 +29,11 @@ const westW = (s) => 20.05 + (s + 2) * 0.016;                 // where the west 
 const S0 = [1526.0, 2982.0], SU = [-0.668, -0.744], SR = [0.744, -0.668];
 const S = (t, r) => [S0[0] + SU[0] * t + SR[0] * r, S0[1] + SU[1] * t + SR[1] * r];
 const SYAW = Math.atan2(-SU[1], SU[0]);
+// the lindens on the park stretch carry on the row of limes on the right of the start/finish straight
+// (trackside.js: 3.6 m beyond the lap's edge, every 11 m, which ends at t = -14, r = 21.6), and so do their
+// gravel beds, benches, lamp posts and the bin (Martin, 19 Nov: they stood out in the middle of the street)
+const ROW_T = [8, 19, 30, 41];                                // (one at 52 would stand in Poe)
+const ROW = (t) => 21.6 - 0.025 * (t + 14);                  // the row's r, drifting as the start straight's does
 
 // where the generated road lines are left out: Küüni beyond the first corner, the Poe crossing
 const inN = (x, z, s0, s1, w0, w1) => { const dx = x - E0[0], dz = z - E0[1], s = dx * EU[0] + dz * EU[1], w = dx * EL[0] + dz * EL[1]; return s > s0 && s < s1 && w > w0 && w < w1; };
@@ -216,7 +221,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
   const holo = createHologram(scene, world, { ...HOLOGRAM });
 
   // the lindens the map has no trees for: the row in the gravel beds on the park stretch, the planters up the street
-  const PARK_TREES = [12, 21, 30, 39, 47.5].map((t, k) => lime(S(t, 16.2 + (k % 2) * 0.8), 16 + (k % 3) * 1.6, 8.5 + (k % 2)));
+  const PARK_TREES = ROW_T.map((t, k) => lime(S(t, ROW(t)), 16 + (k % 3) * 1.6, 8.5 + (k % 2)));
   const STREET_TREES = PLANTERS.map((s, k) => lime(N(s, 4.6), 12.5 + (k % 3) * 1.0, (12.5 + (k % 3) * 1.0) * 0.58));
   world.addTrees([...PARK_TREES, ...STREET_TREES]);
 
@@ -249,14 +254,15 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
       solids.push({ x: cx, z: cz, yaw: SYAW, hx: (t1 - t0) / 2 + 0.6, hz: 0.65 });
     }
     // gravel beds round the lindens, benches facing the street, lamp posts between
-    for (const [k, t] of [12, 21, 30, 39, 47.5].entries()) {
-      sb(t, 16.4, 6.2, 5.0, -0.2, 0.04, 0xcbbfae);                        // the bed
-      sb(t, 13.8, 6.2, 0.16, -0.2, 0.1, 0xb9b4c2);                         // its kerb
-      if (k < 4) {
-        const tb = t + 4.5;
-        sb(tb, 13.2, 2.0, 0.45, 0.42, 0.48, 0xa8806e); sb(tb, 13.45, 2.0, 0.06, 0.48, 0.92, 0xa8806e);  // seat and back
-        for (const d of [-0.85, 0.85]) sb(tb + d, 13.25, 0.08, 0.5, 0, 0.44, 0x34313f);
-        const [bx, bz] = S(tb, 13.25);
+    for (const [k, t] of ROW_T.entries()) {
+      const r = ROW(t);
+      sb(t, r + 0.2, 6.2, 5.0, -0.2, 0.04, 0xcbbfae);                     // the bed
+      sb(t, r - 2.4, 6.2, 0.16, -0.2, 0.1, 0xb9b4c2);                      // its kerb
+      if (k < ROW_T.length - 1) {
+        const tb = t + 5.5, rb = ROW(tb);                                  // half way to the next tree
+        sb(tb, rb - 3.0, 2.0, 0.45, 0.42, 0.48, 0xa8806e); sb(tb, rb - 2.75, 2.0, 0.06, 0.48, 0.92, 0xa8806e);  // seat and back
+        for (const d of [-0.85, 0.85]) sb(tb + d, rb - 2.95, 0.08, 0.5, 0, 0.44, 0x34313f);
+        const [bx, bz] = S(tb, rb - 2.95);
         solids.push({ x: bx, z: bz, yaw: SYAW, hx: 1.05, hz: 0.35 });
       }
     }
@@ -410,7 +416,8 @@ export function kuuniProps() {
   const LIGHT = 0, BIN = 4;
   const deg = (Math.atan2(SU[0], -SU[1]) * 180) / Math.PI;      // the bearing of the street towards Poe
   const out = [];
-  for (const t of [16.5, 34.5]) { const [x, z] = S(t, 12.9); out.push([LIGHT, x, z, deg - 90]); }      // on the right: the head over the street
-  for (const t of [25.5]) { const [x, z] = S(t, 13.3); out.push([BIN, x, z, deg]); }
+  // on the right, in the row of lindens like the start straight's lamps (1.4 m in front of its trees): the head over the street
+  for (const t of [13.5, 35.5]) { const [x, z] = S(t - 2, ROW(t) - 1.4); out.push([LIGHT, x, z, deg - 90]); }
+  for (const t of [24.5]) { const [x, z] = S(t + 1.6, ROW(t) - 3.0); out.push([BIN, x, z, deg]); }       // beside a bench
   return out;
 }

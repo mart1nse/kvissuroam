@@ -253,8 +253,8 @@ export function setHouseColours(walls, sectorKey, x0, z0, list) {
   if (!walls || !walls.sectors) return;
   const a = walls.sectors[sectorKey] || [], extra = ((walls.extra ||= {})[sectorKey] ||= {}), fresh = [];
   for (const e of list) {
-    let k = -1;
-    for (let i = 0; i < a.length; i += 4) if (a[i] === e.base && Math.hypot(a[i + 1] / 10 + x0 - e.x, a[i + 2] / 10 + z0 - e.z) < 30) { k = i; break; }
+    let k = -1, best = 30;                                             // the nearest one, where two houses share a base
+    for (let i = 0; i < a.length; i += 4) { const d = Math.hypot(a[i + 1] / 10 + x0 - e.x, a[i + 2] / 10 + z0 - e.z); if (a[i] === e.base && d < best) { best = d; k = i; } }
     if (k < 0) { fresh.push(e); continue; }
     if (e.wall !== undefined) a[k + 3] = e.wall;
     extra[k / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide };

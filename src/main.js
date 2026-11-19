@@ -20,6 +20,7 @@ import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
+import { createPepleri, pepleriWalls, pepleriProps } from './world/pepleri.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './world/coop.js';
@@ -85,7 +86,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let kuperjanovi;
+let kuperjanovi, pepleri;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
@@ -134,6 +135,7 @@ async function boot() {
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   veskiEndWalls(world.walls);                   // the white house and the brick block at the end of Veski
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
+  pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -145,7 +147,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps(), ...pepleriProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);
@@ -155,6 +157,7 @@ async function boot() {
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kuperjanovi = createKuperjanovi(scene, world, { shadows: !isTouch });
+  pepleri = createPepleri(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   coop = createCoop(scene, world, { shadows: !isTouch });
@@ -721,6 +724,7 @@ function frame(ts) {
     pootsmani.update(car);
     raekoda.update(car);
     kuperjanovi.update(car);
+    pepleri.update(car);
     kvissentali.update(car);
     sireli.update(car);
     coop.update(car);

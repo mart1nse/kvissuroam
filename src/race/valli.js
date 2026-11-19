@@ -8,9 +8,10 @@ import { createTrack } from './race.js';
 
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
 const ENTRY_SIGN = 90;                       // lap index of the signs, right side against the wall (Martin's pink box)
-// Martin (19 Nov): back against the brick house front, just off the stone step along Vallikraavi 4 (wall B1
-// in vallistreet.js at 11.2 m, 3 m out); the granite steps run 1.8 to 4.8 m out from the wall
-const STATUE = { at: [1467.2, 3058.3] };
+// Martin (19 Nov): back against the brick house front of Vallikraavi 4 (wall B1 in vallistreet.js, 3 m out),
+// then slid along it towards the road (14.5 m along the wall) so a driver coming up sees it; the granite
+// steps end about 1.5 m short of the road edge
+const STATUE = { at: [1464.37, 3056.63] };
 const STEPS = { i0: 94, side: 1, off: 0.25, depth: 2.6, flight: [95, 104], rise: 0.17, top: 1.25 };
 // the corner of the house the steps run up to (its wall meets the road here)
 const HOUSE = [1434.0, 3088.8];

@@ -5,7 +5,7 @@
 //   - the grey stone body set back under the roof: glass strips, the black K ring on the Riia and park
 //     faces, posters, orange board cladding over glazed corners, the black strip with gold circles on Vabaduse
 //   - the entrance canopies on Riia and Küüni, the orange terrace wall and ramp on the Riia side, roof plant
-//   - long wooden benches on the Küüni plaza, the lime trees and steel railing of the Riia median
+//   - low platform benches on the plaza by the car park, the lime trees and steel railing of the Riia median
 // Frame: a runs from the west corner along the Küüni face, b from the west corner along the park face.
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
@@ -295,17 +295,18 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       solids.push({ x: wx, z: wz, yaw: S.yaw, hx: run / 2, hz: 0.25 });
       along(s0 - 6, s0, 2.0, 5.0, fl - 4, fl + 0.02, COL.paving);                    // the landing at its top
     }
-    // ---- Küüni side: the entrance canopy, long wooden benches on the plaza
+    // ---- Küüni side: the entrance canopy; platform benches on the plaza
     {
       const S = SIDES.kuuni, gy = (s) => { const [x, z] = S.at(s, 0.5); return h(x, z); };
       const fl = gy(INSET + 17);
       box(S.at(INSET + 17, -INSET + 1.6), 11, 0.35, 3.2, COL.white, fl + 3.3, S.yaw);
-      const P = SIDES.park;
-      for (let k = 0; k < 5; k++) {
-        const [x, z] = P.at(LB + 6 + k * 1.2, 9 + k * 3.4), y = h(x, z);
-        p.add(BOX(7, 0.12, 0.9), COL.wood, x, y + 0.5, z, P.yaw);
-        for (const e of [-2.9, 0, 2.9]) p.add(BOX(0.14, 0.46, 0.8), 0x7d6a58, x + P.d[0] * e, y + 0.23, z + P.d[1] * e, P.yaw);
-        solids.push({ x, z, yaw: P.yaw, hx: 3.5, hz: 0.45 });
+      // low platform benches on the plaza by the car park, as on the orthophoto and Street View: off the racing
+      // line of the last corner (Martin, 19 Nov), each (a, b) in the roof frame: a along Küüni, b along the park face
+      for (const [a, b] of [[-21, 1.5], [-25.5, -1], [-28.5, 3.5], [-32.5, 0], [-36.5, 3.2]]) {
+        const [x, z] = at(a, b), y = h(x, z), yaw = SIDES.kuuni.yaw;
+        p.add(BOX(3.8, 0.1, 1.7), COL.wood, x, y + 0.42, z, yaw);
+        p.add(BOX(3.5, 0.38, 1.45), 0x55525e, x, y + 0.18, z, yaw);
+        solids.push({ x, z, yaw, hx: 1.9, hz: 0.85 });
       }
     }
 

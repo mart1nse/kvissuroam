@@ -162,7 +162,6 @@ function lantern(P, x, y) {
 }
 
 // The street has no painted lines along the dressed stretch: the map's centre dashes and edge lines go.
-// (Road paint: shown to Martin before and after first, so this is not called from main.js until he says yes.)
 export function arhitektiVectors(vectors) {
   const prev = vectors.markSkip;
   vectors.markSkip = (x, z) => {

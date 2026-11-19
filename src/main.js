@@ -37,7 +37,7 @@ import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './wor
 import { createJaaaeg, jaaaegWalls, jaaaegProps } from './world/jaaaeg.js';
 import { createDiscGolf } from './world/discgolf.js';
 import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja.js';
-import { createArhitekti, arhitektiWalls, arhitektiProps } from './world/arhitekti.js';
+import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -179,6 +179,7 @@ async function boot() {
   kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
+  arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line

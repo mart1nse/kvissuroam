@@ -97,14 +97,14 @@ export function createAudio() {
     o.type = 'sine';
     o.frequency.setValueAtTime(130, t);
     o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
-    g.gain.setValueAtTime(Math.min(0.55, 0.4 * strength), t);
+    g.gain.setValueAtTime(Math.min(0.18, 0.13 * strength), t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
     o.connect(g).connect(master);
     o.start(t); o.stop(t + 0.16);
     if (!noiseBuf) return;
     const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
     src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2;
-    gn.gain.setValueAtTime(Math.min(0.2, 0.15 * strength), t);
+    gn.gain.setValueAtTime(Math.min(0.06, 0.045 * strength), t);
     gn.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
     src.connect(f).connect(gn).connect(master);
     src.start(t, Math.random()); src.stop(t + 0.08);

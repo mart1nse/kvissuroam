@@ -171,6 +171,7 @@ export function createQuality(hooks, caps, opts = {}) {
   if (opts.software) start = Math.min(start, 1);
   const auto = !opts.headless;
   let gov = createGovernor({ levels: levels.length, start });
+  const meter = { frame: 16.7, js: 0 };
   let current = -1, stableMs = 0, savedLevel = start, listeners = [];
 
   function apply(i) {
@@ -193,12 +194,15 @@ export function createQuality(hooks, caps, opts = {}) {
   if (mode !== 'locked') apply(mode === 'auto' && auto ? gov.level : mode === 'auto' ? top : fixed[mode]);
 
   return {
-    levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; },
+    levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
     get auto() { return mode === 'auto' && auto; },
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
     hold(s) { gov.hold(s); },
-    frame(ms) {
+    // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
+    // browser and the graphics card), kept as a running average for the readout
+    frame(ms, jsMs = 0) {
+      if (ms > 0 && ms < 1000) { meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05; }
       if (mode !== 'auto' || !auto) { if (mode !== 'locked') gov.feed(ms); return null; }   // (still measures, for the readout)
       const ch = gov.feed(ms);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }

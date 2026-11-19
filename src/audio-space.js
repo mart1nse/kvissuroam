@@ -94,14 +94,16 @@ export function createSpace(ctx, out, mix = {}) {
   revHp.connect(pre).connect(conv).connect(revOut);
   revOut.connect(comp); revOut.connect(bypass);
 
+  // v: the echoes, reverb and compression on our own car (off: its plain, close-up sound, as before any of
+  // this; the electric cars, and the lite sound); remote: other players' cars into the reverb
   let on = true;
-  function setOn(v) {
+  function setOn(v, remote = v) {
     on = v;
     const t = ctx.currentTime;
     viaComp.gain.setTargetAtTime(on ? 1 : 0, t, 0.03);
     bypass.gain.setTargetAtTime(on ? 0 : 1, t, 0.03);
     erSend.gain.setTargetAtTime(on ? erMix : 0, t, 0.03);
-    remoteSend.gain.setTargetAtTime(on ? tailMix : 0, t, 0.05);
+    remoteSend.gain.setTargetAtTime(remote ? tailMix : 0, t, 0.05);
     if (!on) revSend.gain.setTargetAtTime(0, t, 0.05);
   }
   setOn(true);

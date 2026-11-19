@@ -1,7 +1,8 @@
 // Synthesised engine / wind sound. Starts on the first user gesture.
 // Everything the car itself makes (engine, turbo, tyres, knocks) goes into one bus that runs through the
 // space around it (src/audio-space.js: echoes off the buildings nearby, an outdoor reverb, compression);
-// the wind is at the ears and stays out of it.
+// the wind is at the ears and stays out of it. The electric cars stay out of it too (Martin 2026-11-19: they
+// do not need it): their motor whine and tyres sound as they did before it.
 // Combustion engines run through the engine synthesiser worklet (public/engine-worklet.js, tuned per car
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
@@ -37,7 +38,7 @@ export function createAudio() {
     master.gain.value = muted ? 0 : 0.5;
     master.connect(ctx.destination);
     space = createSpace(ctx, master);
-    if (lite) space.setOn(false);
+    applySpace();
     bus = space.input;
 
     filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 500; filt.Q.value = 1.2;
@@ -313,7 +314,7 @@ export function createAudio() {
     v.d = d;
     const fade = Math.max(0, Math.min(1, (HEAR - d) / 70));
     v.out.gain.setTargetAtTime(Math.pow(Math.min(1, REF / d), 0.8) * fade, t, 0.06);
-    v.rev.gain.setTargetAtTime(0.245 * Math.min(3, Math.pow(Math.max(1, d / REF), 0.45)), t, 0.2);
+    v.rev.gain.setTargetAtTime(v.ev ? 0 : 0.245 * Math.min(3, Math.pow(Math.max(1, d / REF), 0.45)), t, 0.2);
     v.lp.frequency.setTargetAtTime(700 + 11000 * Math.min(1, 14 / d), t, 0.1);
     if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.06);
     const speed = Math.hypot(r.vx, r.vy), vw = speed + r.slipV, b = r.boost;
@@ -427,18 +428,21 @@ export function createAudio() {
     }
   }
 
+  // echoes, reverb and compression on our own car unless it is electric; none at all in the lite sound
+  function applySpace() { space?.setOn(!lite && !ev, !lite); }
   // the space round our own car: called every frame after the camera has moved (world: its obstacle field)
   function updateSpace(world, car, cam, dt, active) {
-    if (!space || ctx.state !== 'running' || !active || lite) return;
+    if (!space || ctx.state !== 'running' || !active || lite || ev) return;
     space.update(world, car, cam, dt);
   }
 
   return {
     start, update, updateRemotes, updateSpace, chime, putt, smash,
-    setLite(v) { if (v === lite) return; lite = v; space?.setOn(!v); },
+    setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
+      applySpace();
       carId = ev ? null : spec.id;
       if (ctx) sendConfig();
     },

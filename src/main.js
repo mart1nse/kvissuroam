@@ -631,12 +631,26 @@ input.on('KeyG', openGarage);
 const toggleMap = () => (bigmap.isOpen ? closeMap() : openMap());
 input.on('KeyM', toggleMap);
 input.on('KeyT', toggleMap);
-input.on('Escape', () => (bigmap.isOpen ? closeMap() : openGarage()));
+input.on('Escape', () => (!optEl.classList.contains('hidden') ? optEl.classList.add('hidden') : bigmap.isOpen ? closeMap() : openGarage()));
 input.on('KeyN', toggleSound);
 // L: the lap times board over the drive (Esc or L again closes it)
 input.on('KeyL', unlessMap(() => (board.open ? board.hide() : board.show())));
 // A / Z: one gear up / down by hand; the automatic takes over again at the shift point
-const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open) shiftGear(car, dir); });
+const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open && !input.wasd) shiftGear(car, dir); });
+// Options (O): WASD driving, which turns the A / Z gear keys off. Off by default; remembered per browser.
+const optEl = $('#options'), optWasd = $('#opt-wasd');
+let wasdSaved = false;
+try { wasdSaved = localStorage.getItem('kvissuroam.wasd') === '1'; } catch {}
+input.setWasd(wasdSaved);
+optWasd.checked = wasdSaved;
+optWasd.addEventListener('change', () => {
+  input.setWasd(optWasd.checked);
+  try { localStorage.setItem('kvissuroam.wasd', optWasd.checked ? '1' : '0'); } catch {}
+  optWasd.blur();                // (so Space and the arrows drive again instead of flipping the box)
+  hud.toast(optWasd.checked ? 'WASD DRIVING ON · A / Z SHIFTS OFF' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
+});
+const toggleOptions = () => optEl.classList.toggle('hidden');
+input.on('KeyO', unlessMap(toggleOptions));
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
 // C: the chase camera or a drone following the car from above
@@ -657,6 +671,8 @@ document.addEventListener('click', (e) => {
   else if (act === 'garage') openGarage();
   else if (act === 'map') openMap();
   else if (act === 'sound') toggleSound();
+  else if (act === 'options') toggleOptions();
+  else if (act === 'options-close') optEl.classList.add('hidden');
 });
 
 // ---------------------------------------------------------------- no page zoom

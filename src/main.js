@@ -287,7 +287,7 @@ async function boot() {
       const ex = q.x - R, ey = q.y - R;
       if (ex * ex + ey * ey < (R - 7) * (R - 7)) {
         ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(p.yaw - car.yaw);
-        playerArrow(ctx, 1); ctx.restore();
+        playerArrow(ctx, 1, p.colour); ctx.restore();
         continue;
       }
       // where the line from our car towards them crosses a circle just inside the rim
@@ -295,8 +295,8 @@ async function boot() {
       const ox = me.x - R, oy = me.y - R, rr = R - 26;      // (pointers made bigger, Martin 2026-11-17)
       const b = ox * ux + oy * uy, t = -b + Math.sqrt(Math.max(0, b * b - (ox * ox + oy * oy - rr * rr)));
       ctx.save(); ctx.translate(me.x + ux * t, me.y + uy * t); ctx.rotate(Math.atan2(ux, -uy));
-      ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(47,243,255,.8)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = p.colour; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
+      ctx.shadowColor = p.colour; ctx.shadowBlur = 8;
       ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(17, 11); ctx.lineTo(-17, 11); ctx.closePath();
       ctx.stroke(); ctx.fill(); ctx.restore();
     }
@@ -315,7 +315,7 @@ async function boot() {
       for (const p of mp.players()) mark(p.x, p.z, () => {
         ctx.lineWidth = 3; ctx.strokeStyle = '#160735'; ctx.strokeText(p.name, 0, -17); ctx.fillStyle = '#fff'; ctx.fillText(p.name, 0, -17);
         ctx.rotate(p.yaw);
-        playerArrow(ctx, 1);
+        playerArrow(ctx, 1, p.colour);
       });
     },
   });
@@ -335,9 +335,9 @@ async function boot() {
   if (params.has('drive')) startDriving();
 }
 
-// another player's car on a map: a cyan arrow pointing forward (up), drawn around the origin
-function playerArrow(ctx, k) {
-  ctx.fillStyle = '#2ff3ff'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
+// another player's car on a map: an arrow in their own colour pointing forward (up), drawn around the origin
+function playerArrow(ctx, k, colour = '#2ff3ff') {
+  ctx.fillStyle = colour; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, -12 * k); ctx.lineTo(8 * k, 9 * k); ctx.lineTo(0, 4.5 * k); ctx.lineTo(-8 * k, 9 * k); ctx.closePath();
   ctx.stroke(); ctx.fill();
 }

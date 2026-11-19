@@ -134,7 +134,7 @@ export function createHud(world) {
     ctx.beginPath();
     ctx.moveTo(R, R * 1.25 - 13); ctx.lineTo(R + 8, R * 1.25 + 9); ctx.lineTo(R, R * 1.25 + 4); ctx.lineTo(R - 8, R * 1.25 + 9);
     ctx.closePath(); ctx.fill();
-    // north: the map turns with the car, so an N with a small pointer rides round the rim
+    // north: the map turns with the car, so an N with a thin white needle rides round the rim
     const na = -car.yaw, nx = Math.sin(na), ny = -Math.cos(na);
     ctx.save();
     ctx.translate(R + nx * (R - 40), R + ny * (R - 40));
@@ -142,8 +142,8 @@ export function createHud(world) {
     ctx.font = '900 40px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.strokeText('N', 0, 2); ctx.fillText('N', 0, 2);
     ctx.rotate(na);
-    ctx.fillStyle = '#ff3b4a'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(0, -37); ctx.lineTo(11, -21); ctx.lineTo(-11, -21); ctx.closePath();
+    ctx.fillStyle = '#fff'; ctx.lineWidth = 3;      // a very narrow white needle, unlike the players' arrows
+    ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(3.5, -21); ctx.lineTo(-3.5, -21); ctx.closePath();
     ctx.stroke(); ctx.fill();
     ctx.restore();
   }

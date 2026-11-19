@@ -78,13 +78,20 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     setTimeout(connect, retry * 1000);
   }
 
+  // each player's own map arrow colour: the first one nobody online has, kept while they stay
+  // (no yellow: our own car; no pink: the race track; no blue: water; no white: the north needle)
+  const COLOURS = ['#2ff3ff', '#7dff5a', '#ff9a3c', '#c08bff', '#ff5a6e', '#3cffb4'];
+  const freeColour = () => {
+    const used = new Set([...others.values()].map((o) => o.colour));
+    return COLOURS.find((c) => !used.has(c)) || COLOURS[others.size % COLOURS.length];
+  };
   function add(p) {
     if (others.has(p.id) || p.id === myId) return others.get(p.id);
     const el = document.createElement('div');
     el.className = 'pname';
     el.textContent = p.name;
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, car: null, model: null, el, buf: [], pose: null, wheel: 0 };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, el, buf: [], pose: null, wheel: 0 };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -365,7 +372,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
-    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
+    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
       n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
       if (!n || n === name) return name;

@@ -169,7 +169,7 @@ export function createSpace(ctx, out, mix = {}) {
     flutter[0].gain.setTargetAtTime(fl, t, 0.1); flutter[1].gain.setTargetAtTime(fl, t, 0.1);
     // the tail: a little everywhere (trees, the ground, far houses), much more between buildings
     const built = walls / taps.length;
-    if (on) revSend.gain.setTargetAtTime((0.18 + 0.42 * built) * tailMix, t, 0.3);
+    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix, t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
     if (near) pre.delayTime.setTargetAtTime(Math.min(0.08, 0.012 + 2 * (wsum / near) / C), t, 0.3);
     return built;
   }

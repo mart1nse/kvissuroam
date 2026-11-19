@@ -12,6 +12,9 @@ const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
 // distance and direction from the camera.
 const VOICES = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 2 : 3;
+// setLite(true), from the graphics auto mode on a machine that can't keep up: no echoes or reverb
+// (the plain engine sound) and only the nearest other car is heard
+let lite = false;
 const HEAR = 240;          // metres: further off than this a car is silent
 const REF = 7;             // metres: at this distance another car is as loud as our own
 const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, which is also what bends its pitch
@@ -34,6 +37,7 @@ export function createAudio() {
     master.gain.value = muted ? 0 : 0.5;
     master.connect(ctx.destination);
     space = createSpace(ctx, master);
+    if (lite) space.setOn(false);
     bus = space.input;
 
     filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 500; filt.Q.value = 1.2;
@@ -350,7 +354,7 @@ export function createAudio() {
       if (d < HEAR) near.push({ r, d });
     }
     near.sort((a, b) => a.d - b.d);
-    if (near.length > VOICES) near.length = VOICES;
+    if (near.length > (lite ? 1 : VOICES)) near.length = lite ? 1 : VOICES;
     for (const v of voices) if (v.id !== null && !near.some((n) => n.r.id === v.id)) release(v);
     const m = cam.matrixWorld.elements;                            // (its first column is the camera's right)
     for (const { r, d } of near) {
@@ -425,12 +429,13 @@ export function createAudio() {
 
   // the space round our own car: called every frame after the camera has moved (world: its obstacle field)
   function updateSpace(world, car, cam, dt, active) {
-    if (!space || ctx.state !== 'running' || !active) return;
+    if (!space || ctx.state !== 'running' || !active || lite) return;
     space.update(world, car, cam, dt);
   }
 
   return {
     start, update, updateRemotes, updateSpace, chime, putt, smash,
+    setLite(v) { if (v === lite) return; lite = v; space?.setOn(!v); },
     get space() { return space; },
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;

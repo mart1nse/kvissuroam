@@ -116,8 +116,13 @@ function sampler(tex) {
 
 // The far version: every surface of the model flattened to coloured vertices (palette and lamp textures
 // are read per triangle), welded and simplified. aMat = (is paint, roughness, metalness).
-function bakeLod(parts, id, tris) {
-  const pos = [], nrm = [], col = [], mat = [];
+// (Typed arrays sized up front and a numeric weld table: building it with growing number lists and a
+// text key per vertex made about a gigabyte of garbage per car park, and an iPhone gave up on the page.)
+export function bakeLod(parts, id, tris) {
+  let cap = 0;
+  for (const { geo } of parts) cap += geo.attributes.position.count;
+  const pos = new Float64Array(cap * 3), nrm = new Float64Array(cap * 3), col = new Float64Array(cap * 3), mat = new Float64Array(cap * 3);
+  let n = 0;                                   // vertices written
   const c = new THREE.Color(), px = [0, 0, 0, 0];
   for (const { geo, mat: m, paint } of parts) {
     if (m.transparent && m.opacity < 0.5) continue;
@@ -136,49 +141,73 @@ function bakeLod(parts, id, tris) {
         c.setRGB(px[0] / 255, px[1] / 255, px[2] / 255, THREE.SRGBColorSpace).multiply(m.color);
       } else c.copy(m.color);
       for (let k = 0; k < 9; k += 3) {
-        pos.push(P[t + k] + N[t + k] * puff, P[t + k + 1] + N[t + k + 1] * puff, P[t + k + 2] + N[t + k + 2] * puff);
-        nrm.push(N[t + k], N[t + k + 1], N[t + k + 2]);
-        col.push(c.r, c.g, c.b); mat.push(isPaint, r, mt);
+        const a = n * 3;
+        pos[a] = P[t + k] + N[t + k] * puff; pos[a + 1] = P[t + k + 1] + N[t + k + 1] * puff; pos[a + 2] = P[t + k + 2] + N[t + k + 2] * puff;
+        nrm[a] = N[t + k]; nrm[a + 1] = N[t + k + 1]; nrm[a + 2] = N[t + k + 2];
+        col[a] = c.r; col[a + 1] = c.g; col[a + 2] = c.b; mat[a] = isPaint; mat[a + 1] = r; mat[a + 2] = mt;
+        n++;
       }
     }
   }
-  // weld: same place, colour and (roughly) normal
-  const seen = new Map(), index = new Uint32Array(pos.length / 3), vp = [], vn = [], vc = [], vm = [];
-  const q = (v, s) => Math.round(v * s);
-  for (let i = 0; i < index.length; i++) {
+  // weld: same place, colour and (roughly) normal. Each vertex gets ten whole numbers (position to
+  // 0.2 mm, normal in thirds, colour in sixtieths, paint or not), kept in an open hash table.
+  const index = new Uint32Array(n), keys = new Int32Array(n * 10), Q = new Int32Array(10);
+  let size = 1024;
+  while (size < n * 2) size *= 2;
+  const table = new Int32Array(size).fill(-1), maskT = size - 1;
+  const vp = new Float64Array(n * 3), vn = new Float64Array(n * 3), vc = new Float64Array(n * 3), vm = new Float64Array(n * 3);
+  let u = 0;                                   // distinct vertices
+  for (let i = 0; i < n; i++) {
     const a = i * 3;
-    const key = `${q(pos[a], 5000)},${q(pos[a + 1], 5000)},${q(pos[a + 2], 5000)},${q(nrm[a], 3)},${q(nrm[a + 1], 3)},${q(nrm[a + 2], 3)},${q(col[a], 60)},${q(col[a + 1], 60)},${q(col[a + 2], 60)},${mat[a]}`;
-    let v = seen.get(key);
-    if (v === undefined) {
-      v = vp.length / 3; seen.set(key, v);
-      vp.push(pos[a], pos[a + 1], pos[a + 2]); vn.push(nrm[a], nrm[a + 1], nrm[a + 2]);
-      vc.push(col[a], col[a + 1], col[a + 2]); vm.push(mat[a], mat[a + 1], mat[a + 2]);
+    Q[0] = Math.round(pos[a] * 5000); Q[1] = Math.round(pos[a + 1] * 5000); Q[2] = Math.round(pos[a + 2] * 5000);
+    Q[3] = Math.round(nrm[a] * 3); Q[4] = Math.round(nrm[a + 1] * 3); Q[5] = Math.round(nrm[a + 2] * 3);
+    Q[6] = Math.round(col[a] * 60); Q[7] = Math.round(col[a + 1] * 60); Q[8] = Math.round(col[a + 2] * 60); Q[9] = mat[a];
+    let h = 0x811c9dc5;
+    for (let k = 0; k < 10; k++) h = Math.imul(h ^ Q[k], 0x01000193);
+    h = (h ^ (h >>> 15)) & maskT;
+    let v;
+    for (;;) {
+      v = table[h];
+      if (v < 0) {
+        v = u++; table[h] = v; keys.set(Q, v * 10);
+        const b = v * 3;
+        vp[b] = pos[a]; vp[b + 1] = pos[a + 1]; vp[b + 2] = pos[a + 2]; vn[b] = nrm[a]; vn[b + 1] = nrm[a + 1]; vn[b + 2] = nrm[a + 2];
+        vc[b] = col[a]; vc[b + 1] = col[a + 1]; vc[b + 2] = col[a + 2]; vm[b] = mat[a]; vm[b + 1] = mat[a + 1]; vm[b + 2] = mat[a + 2];
+        break;
+      }
+      const o = v * 10;
+      let same = true;
+      for (let k = 0; k < 10; k++) if (keys[o + k] !== Q[k]) { same = false; break; }
+      if (same) break;
+      h = (h + 1) & maskT;
     }
     index[i] = v;
   }
   let idx = index;
   if (MeshoptSimplifier.supported) {
     const target = Math.round(tris * (id === 'bus' ? 0.85 : 1)) * 3;
-    idx = MeshoptSimplifier.simplify(index, new Float32Array(vp), 3, target, 0.03, ['ErrorAbsolute'])[0];
+    idx = MeshoptSimplifier.simplify(index, new Float32Array(vp.subarray(0, u * 3)), 3, target, 0.03, ['ErrorAbsolute'])[0];
   }
   // keep only the vertices still in use
-  const remap = new Int32Array(vp.length / 3).fill(-1), op = [], on = [], oc = [], om = [], oi = new Uint32Array(idx.length);
+  const remap = new Int32Array(u).fill(-1), oi = new Uint32Array(idx.length);
+  const op = new Float32Array(u * 3), on = new Float32Array(u * 3), oc = new Float32Array(u * 3), om = new Float32Array(u * 3);
+  let w = 0;
   for (let i = 0; i < idx.length; i++) {
     let v = remap[idx[i]];
     if (v < 0) {
-      v = remap[idx[i]] = op.length / 3;
-      const a = idx[i] * 3;
-      op.push(vp[a], vp[a + 1], vp[a + 2]); on.push(vn[a], vn[a + 1], vn[a + 2]);
-      oc.push(vc[a], vc[a + 1], vc[a + 2]); om.push(vm[a], vm[a + 1], vm[a + 2]);
+      v = remap[idx[i]] = w++;
+      const a = idx[i] * 3, b = v * 3;
+      op[b] = vp[a]; op[b + 1] = vp[a + 1]; op[b + 2] = vp[a + 2]; on[b] = vn[a]; on[b + 1] = vn[a + 1]; on[b + 2] = vn[a + 2];
+      oc[b] = vc[a]; oc[b + 1] = vc[a + 1]; oc[b + 2] = vc[a + 2]; om[b] = vm[a]; om[b + 1] = vm[a + 1]; om[b + 2] = vm[a + 2];
     }
     oi[i] = v;
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(op, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(on, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(oc, 3));
-  g.setAttribute('aMat', new THREE.Float32BufferAttribute(om, 3));
-  g.setIndex(new THREE.BufferAttribute(op.length / 3 > 65535 ? oi : new Uint16Array(oi), 1));
+  g.setAttribute('position', new THREE.BufferAttribute(op.slice(0, w * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(on.slice(0, w * 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(oc.slice(0, w * 3), 3));
+  g.setAttribute('aMat', new THREE.BufferAttribute(om.slice(0, w * 3), 3));
+  g.setIndex(new THREE.BufferAttribute(w > 65535 ? oi : new Uint16Array(oi), 1));
   g.computeBoundingSphere(); g.computeBoundingBox();
   return g;
 }
@@ -308,9 +337,12 @@ export function createParked(scene, world, opts = {}) {
   group.name = 'parked';
   scene.add(group);
 
-  // models are built one at a time, with a pause between, so that no frame waits long
+  // models are built one at a time, with a pause between, so that no frame waits long (on a phone a
+  // longer pause, so the memory each build churns through is given back before the next one, and none
+  // while the screen is dark between the drone shot and the car: pause(true) holds the queue)
   const queue = [];
-  let building = false;
+  let building = false, paused = false;
+  const gap = touch ? 600 : 150;
   function want(id) {
     if (templates.has(id)) return templates.get(id);
     templates.set(id, null);
@@ -319,7 +351,7 @@ export function createParked(scene, world, opts = {}) {
     return null;
   }
   function pump() {
-    if (building || !queue.length) return;
+    if (building || paused || !queue.length) return;
     building = true;
     const run = () => {
       const id = queue.shift();
@@ -331,9 +363,9 @@ export function createParked(scene, world, opts = {}) {
         try { T.lod = bakeLod(T.parts, id, tris); templates.set(id, T); } catch (e) { fail(e); return; }
         building = false;
         pump();
-      }, 120);
+      }, touch ? 300 : 120);
     };
-    MeshoptSimplifier.ready.then(() => setTimeout(run, 150), () => setTimeout(run, 150));
+    MeshoptSimplifier.ready.then(() => setTimeout(run, gap), () => setTimeout(run, gap));
   }
 
   const up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), v1 = new THREE.Vector3(), qYaw = new THREE.Quaternion(), qTilt = new THREE.Quaternion();
@@ -527,5 +559,6 @@ export function createParked(scene, world, opts = {}) {
       order.forEach((b, i) => showNear(b, i < tune.nearMax));
     }
   }
-  return { update, bodies, spots, group, templates, tune };
+  const pause = (v) => { paused = v; if (!v) pump(); };
+  return { update, bodies, spots, group, templates, tune, pause };
 }

@@ -557,6 +557,7 @@ function startDriving() {
   if (intro && fixedIntro) {
     // fade to dark on the drone's view, cut to behind the car while dark, then fade in
     fade = { phase: 'out', t: 0, frames: 0, from: camera.position.clone(), q: camera.quaternion.clone(), fov: camera.fov };
+    parked.pause(true);   // the parked cars' models are built after the fade, one by one, not all at once with the streets
     intro = null;
     terrain.update(new THREE.Vector3(car.x, 0, car.z));
   } else if (intro) {
@@ -1108,14 +1109,18 @@ function frame(ts) {
     if (fade.phase === 'out') {
       camera.quaternion.copy(fade.q);
       fade.t = Math.min(1, fade.t + dt / FADE_OUT);
-      if (fade.t >= 1) { fade.phase = 'hold'; fade.t = 0; camSnap = true; }
+      if (fade.t >= 1) {
+        fade.phase = 'hold'; fade.t = 0; camSnap = true;
+        // let go of whatever the drone looked at that the car won't need, before the car's streets go up
+        world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 100);
+      }
     } else if (fade.phase === 'hold') {
       // stay dark a few frames behind the car while the ground and models around it go up to the GPU
       fade.t += dt; fade.frames++;
       if (fade.frames >= 4 && (world.ready(car.x, car.z) || fade.t > 2)) { fade.phase = 'in'; fade.t = 1; }
     } else {
       fade.t = Math.max(0, fade.t - dt / FADE_IN);
-      if (fade.t <= 0) fade = null;
+      if (fade.t <= 0) { fade = null; parked.pause(false); }
     }
     const o = fade ? (fade.phase === 'hold' ? 1 : smooth(fade.t)) : 0;
     fadeEl.style.opacity = o.toFixed(3);

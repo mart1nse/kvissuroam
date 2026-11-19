@@ -43,6 +43,11 @@ export class Lobby extends DurableObject {
       at TEXT NOT NULL, day TEXT NOT NULL)`);
     this.sql.exec('CREATE INDEX IF NOT EXISTS laps_car ON laps (track, car, ms)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS laps_name ON laps (name COLLATE NOCASE)');
+    // checkpoint split times (JSON list of ms) and which checkpoints they belong to (the client's
+    // CP_KEY), so a driver without a lap of their own can race the record's splits
+    const cols = this.sql.exec('PRAGMA table_info(laps)').toArray().map((c) => c.name);
+    if (!cols.includes('splits')) this.sql.exec('ALTER TABLE laps ADD COLUMN splits TEXT');
+    if (!cols.includes('cp')) this.sql.exec('ALTER TABLE laps ADD COLUMN cp TEXT');
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -99,7 +104,12 @@ export class Lobby extends DurableObject {
     const count = this.sql.exec('SELECT COUNT(*) AS n FROM laps WHERE track = ?', TRACK).one().n;
     // the latest laps by anyone, newest first (the desktop board lists them)
     const recent = this.sql.exec('SELECT name, car, ms, at FROM laps WHERE track = ? ORDER BY at DESC, id DESC LIMIT 20', TRACK).toArray();
-    return { track: TRACK, day, allTime: best(''), today: best('AND day = ?', day), laps: count, recent };
+    // the fastest lap with split times per car and checkpoint layout: what a driver with no lap of
+    // their own in that car compares their checkpoint times with
+    const refs = this.sql.exec(
+      `SELECT car, cp, name, MIN(ms) AS ms, splits FROM laps WHERE track = ? AND splits IS NOT NULL AND cp IS NOT NULL GROUP BY car, cp`, TRACK)
+      .toArray().map((r) => ({ ...r, splits: JSON.parse(r.splits) }));
+    return { track: TRACK, day, allTime: best(''), today: best('AND day = ?', day), laps: count, recent, refs };
   }
 
   async fetch(req) {
@@ -122,7 +132,7 @@ export class Lobby extends DurableObject {
     if (path === '/api/board') return json(this.board());
 
     if (path === '/api/lap' && req.method === 'POST') {
-      // one lap {name, car, ms, at}, or a batch {laps: [...]} of laps a browser kept and resends.
+      // one lap {name, car, ms, at, splits?, cp?}, or a batch {laps: [...]} of laps a browser kept and resends.
       // A lap already stored (same car and same time to the millisecond) is not stored twice, so a
       // browser can safely send again everything it has no confirmation for.
       let body;
@@ -139,7 +149,12 @@ export class Lobby extends DurableObject {
         // been offline for a while), else now
         const t = new Date(l?.at);
         const at = t <= now && now - t < 60 * 86400000 ? t : now;
-        this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day) VALUES (?, ?, ?, ?, ?, ?)', TRACK, name, car, ms, at.toISOString(), tartuDay(at));
+        // split times: rising whole milliseconds inside the lap, with the checkpoint list they are for
+        const sp = Array.isArray(l?.splits) && l.splits.length && l.splits.length <= 12 ? l.splits.map((v) => Math.round(Number(v))) : null;
+        const cp = typeof l?.cp === 'string' && /^[0-9,]{1,80}$/.test(l.cp) ? l.cp : null;
+        const good = sp && cp && sp.length === cp.split(',').length && sp.every((v, k) => v > (k ? sp[k - 1] : 0) && v < ms);
+        this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, cp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          TRACK, name, car, ms, at.toISOString(), tartuDay(at), good ? JSON.stringify(sp) : null, good ? cp : null);
         added.push({ name, car, ms });
       }
       if (!ok.length) return json({ error: 'invalid lap' }, 400);

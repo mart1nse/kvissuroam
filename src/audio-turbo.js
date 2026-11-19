@@ -136,8 +136,10 @@ export function blowOff(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ct
   } else if (kind === 'recirc') {
     const L = Math.min(0.3, 0.26 * P) * lvl;
     let t1 = t;
-    // a valve that opens a touch late lets the compressor surge first
-    if (P > 0.3 && rnd() < (cfg.flutter ?? 0) * (0.4 + 0.6 * P)) t1 = t + surge(ctx, noise, dest, t, P, L * 0.8, rnd) * 0.55;
+    // a valve that opens a touch late lets the compressor surge first: the whoosh follows after the first
+    // couple of flutters (60 ms or so) and the rest of the flutter runs on under it (Martin 2026-11-19:
+    // the whoosh came too late when it waited for most of the flutter, about 0.4 s)
+    if (P > 0.3 && rnd() < (cfg.flutter ?? 0) * (0.4 + 0.6 * P)) t1 = t + Math.min(0.07, surge(ctx, noise, dest, t, P, L * 0.7, rnd) * 0.12);
     steam(ctx, noise, dest, t1, P, L * 0.6, rnd, { dur: 0.3, f0: 1100, f1: 330, depth: 0.45, rate: 9, sizzle: 0.12, chuff: 0.4 });
   } else {
     const L = Math.min(0.16, 0.14 * P) * lvl, dur = 0.45;

@@ -25,7 +25,7 @@ import { createValliStreet, valliStreetClear } from './vallistreet.js';
 import { createBaeriStreet } from './baeristreet.js';
 import { createVeskiEnd } from './veskiend.js';
 import { createKroonuaia } from './kroonuaia.js';
-import { createJakobiLai } from './jakobilai.js';
+import { createJakobiLai, jakobiLaiProps } from './jakobilai.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
 import { raekodaClear } from '../world/raekoda.js';
@@ -259,7 +259,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
-  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...uueturuProps(), ...playtechProps());
+  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...jakobiLaiProps(), ...uueturuProps(), ...playtechProps());
   return out;
 }
 

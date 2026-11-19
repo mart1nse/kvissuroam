@@ -158,6 +158,7 @@ let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let intro = null, introFocus = null;   // drone flyover behind the opening menu
+const dronePos = new THREE.Vector3(), droneLook = new THREE.Vector3();
 let flyIn = null;                // the one second flight from the drone to the chase camera
 // Phones get no drone: a still picture of it behind the opening menu, nothing drawn in 3D until DRIVE,
 // and then straight to the car (the drone, and even a still drone view, stuttered there and ran an
@@ -762,8 +763,11 @@ input.on('KeyC', unlessMap(() => {
   camView = camView === 'chase' ? 'drone' : 'chase';
   droneYaw = camYaw; droneDir.set(Math.sin(camYaw), -Math.cos(camYaw));
   try { localStorage.setItem('kvissuroam.view', camView); } catch {}
-  camSwoop = 0.7;
 }));
+// 0 = chase, 1 = drone; slides between them in VIEW_BLEND seconds when C is pressed. Both rigs are worked
+// out around the car every frame and the camera is placed between them, so it never trails the car.
+const VIEW_BLEND = 0.8;
+let droneMix = camView === 'drone' ? 1 : 0;
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;
@@ -998,7 +1002,11 @@ function frame(ts) {
       camPos.y = Math.max(camPos.y, world.heightAt(camPos.x, camPos.z) + 0.9);
       camLook.set(car.x - cx * 18, car.y + 0.9, car.z - cz * 18);
       wantFov = 62; warp = 0; camSwoop = 0;
-    } else if (camView === 'drone') {
+    } else {
+      droneMix = Math.max(0, Math.min(1, droneMix + (camView === 'drone' ? dt : -dt) / VIEW_BLEND));
+    }
+    const dw = input.state.look && !board?.open ? 0 : smooth(droneMix);
+    if (dw > 0) {
       // A drone following the car from above, set back so the road coming up shows. It turns with the
       // direction the car is travelling, averaged over a few seconds: a donut or a quick swerve averages
       // out to almost nothing and barely moves it, and once the car settles on a new heading it swings
@@ -1019,9 +1027,9 @@ function frame(ts) {
       }
       const dx = Math.sin(droneYaw), dz = -Math.cos(droneYaw);
       const h = 30 + Math.min(speed, 60) * 0.3, ahead = 12 + Math.min(speed, 60) * 0.5;
-      camPos.set(car.x - dx * h * 0.55, camY + h, car.z - dz * h * 0.55);
-      camLook.set(car.x + dx * ahead, camY, car.z + dz * ahead);
-      wantFov = 55; warp = 0;
+      camPos.lerp(dronePos.set(car.x - dx * h * 0.55, camY + h, car.z - dz * h * 0.55), dw);
+      camLook.lerp(droneLook.set(car.x + dx * ahead, camY, car.z + dz * ahead), dw);
+      wantFov += (55 - wantFov) * dw; warp *= 1 - dw;
     }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
     if (flyIn) {

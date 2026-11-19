@@ -12,7 +12,7 @@ export const rgbHex = (rgb) => (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
 
 // ---------------------------------------------------------------- the paint box
 // Drawing in metres on a rectangle of an atlas canvas: x along the wall, y up from the house's ground line.
-function painter(c, px, py, wm, y0, y1, ppm) {
+export function painter(c, px, py, wm, y0, y1, ppm) {
   const X = (x) => px + x * ppm, Y = (y) => py + (y1 - y) * ppm;
   const P = {
     w: wm, y0, y1, c, ppm,
@@ -112,7 +112,7 @@ function painter(c, px, py, wm, y0, y1, ppm) {
 }
 
 // ---------------------------------------------------------------- the atlas
-function createAtlas(size = 2048) {
+export function createAtlas(size = 2048) {
   const pages = [];
   const page = () => {
     const cv = document.createElement('canvas');

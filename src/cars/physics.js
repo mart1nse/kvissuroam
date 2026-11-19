@@ -40,7 +40,7 @@ const FLOOR = 0.13;              // the body never sits lower than this below it
 // 5 cm) and jolts the body; met at less than KERB_GLANCE rad (per 15 cm) the tyre rubs along the face
 // and is turned back off it instead.
 const KERB_STEP = 0.07;
-const KERB_KNOCK = 1.4;
+const KERB_KNOCK = 1.1;
 const KERB_GLANCE = 0.1;
 
 // grip, rolling resistance, tyre stiffness and bumpiness per surface class
@@ -787,7 +787,10 @@ function substep(car, input, world, dt) {
       const ox = sY * lx + cY * ly, oz = -cY * lx + sY * ly;
       const wx = car.x + ox, wz = car.z + oz;
       const kb = world.kerbAt(wx, wz);
-      if (W.h === null || car.airborne || Math.abs(kb - W.h) < 0.002) { W.base = kb; W.bx = wx; W.bz = wz; W.armed = true; }
+      // (level: the kerb field flat under the wheel, checked across it only where it is changing)
+      let level = W.h === null || car.airborne || Math.abs(kb - W.h) < 1e-4;
+      if (!level) level = Math.hypot(world.kerbAt(wx + 0.03, wz) - kb, world.kerbAt(wx, wz + 0.03) - kb) < 0.0045;
+      if (level) { W.base = kb; W.bx = wx; W.bz = wz; W.armed = true; }
       W.h = kb;
       if (!W.armed || kb - W.base < KERB_STEP) continue;
       W.armed = false;
@@ -808,23 +811,24 @@ function substep(car, input, world, dt) {
       const into = -(pvx * nx + pvz * nz), along = Math.abs(pvz * nx - pvx * nz);
       if (into <= 0) continue;
       const sev = Math.min(1.5, Math.max(0.1, (rise - 0.05) / 0.15));
-      const rn = ox * nz - oz * nx, mEff = 1 / (1 / m + (rn * rn) / car.iz);
-      let dv;
+      const rn = ox * nz - oz * nx;
+      let dv, turn = 1;
       if (Math.atan2(into, along) < KERB_GLANCE * sev && into < 2.5) {
         // glancing: back off the kerb with the wheel's speed into it gone (and a little bounce)
         const pen = Math.max(0, (wx - ex) * -nx + (wz - ez) * -nz) + 0.02;
         car.x += nx * pen; car.z += nz * pen;
         W.h = W.base; W.armed = true;
         dv = into * 1.15;
+        turn = 0.35;           // (a tyre wall sliding along the kerb face hardly twists the car)
         car.kerbHit = Math.max(car.kerbHit || 0, 0.3 * sev * Math.min(1, into / 1.5));
       } else {
         dv = Math.min(into, KERB_KNOCK * sev);
         car.kerbHit = Math.max(car.kerbHit || 0, sev * Math.min(1, (into + 0.15 * along) / 4));
         car.jolt = 1;
       }
-      const j = dv * mEff;
+      const j = dv / (1 / m + (turn * rn * rn) / car.iz);
       wvx += (j * nx) / m; wvz += (j * nz) / m;
-      car.yawRate += (rn * j) / car.iz;
+      car.yawRate += (turn * rn * j) / car.iz;
       car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
     }
   }
@@ -909,7 +913,7 @@ function substep(car, input, world, dt) {
   } else {
     const p0 = car.pitch, r0 = car.roll;
     // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
-    const follow = Math.min(1, dt * (9 + 30 * (car.jolt || 0)));
+    const follow = Math.min(1, dt * (9 + 16 * (car.jolt || 0)));
     car.pitch += (tPitch - car.pitch) * follow;
     car.roll += (tRoll - car.roll) * follow;
     const k = Math.min(1, dt * 12);

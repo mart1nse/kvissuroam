@@ -26,11 +26,11 @@ const PAVE = { i0: 948, width: 3.4 };                    // river-side pavement,
 // curve radius of its inner (grass) edge, its edges on the bridge (metres from the middle of the deck),
 // and how far it runs on along the bridge after the bend
 const CORNER = { bridge: 'Kroonuaia sild', from: 1021, r: 2.0, near: 4.1, far: 7.4, on: 3 };
-// The river-side pavement stands on a high kerb, 20 cm (Martin, 19 Nov): the car rolls onto it with a knock
+// The river-side pavement stands on a high kerb, 15 cm with a rounded edge (Martin, 19 Nov: first 20, then lower and a touch gentler): the car rolls onto it with a knock
 // and leans over when its right wheels are up there. It rises in the first metres of the pavement and comes
 // down to the road again before the corner, where the crossing is. edge: the kerb face (m across), back: the
 // grass bank behind the pavement down to the ground, stone: width of the kerb stone on top.
-const KERB = { i0: 950, up: 3, i1: 1019, down: 5, h: 0.2, edge: 0.05, back: 0.9, stone: 0.18 };
+const KERB = { i0: 950, up: 3, i1: 1019, down: 5, h: 0.15, edge: 0.09, back: 0.9, stone: 0.18 };
 // Its tarmac is newer and smoother than the photo's mottled grey suggests, and about as light as the
 // pavements either side (Martin, 19 Nov): [track index, brightness, warmth] as the road tone texture takes
 // them (183, 136 typical; Lai ends at 178, 134). Blue 77 marks the fine-grained tarmac (terrain.js).

@@ -24,6 +24,8 @@ import { createPepleri, pepleriWalls, pepleriProps, pepleriVectors } from './wor
 import { createKaubamaja, kaubamajaWalls } from './world/kaubamaja.js';
 import { createKeskus, keskusWalls, keskusProps } from './world/keskus.js';
 import { createKeskusTee } from './world/keskustee.js';
+import { createOrident, oridentWalls } from './world/orident.js';
+import { createDelta, deltaWalls } from './world/delta.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './world/coop.js';
@@ -34,6 +36,7 @@ import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
 import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear } from './race/kroonuaia.js';
+import { jakobiLaiWalls, jakobiLaiVectors } from './race/jakobilai.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -93,7 +96,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri;
+let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
@@ -128,6 +131,7 @@ async function boot() {
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
+  jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
@@ -148,6 +152,9 @@ async function boot() {
   keskusWalls(world.walls);                     // Kvartal, Tasku and the market hall in their colours
   kaubamajaWalls(world.walls);                  // Kaubamaja is built by hand
   kroonuaiaWalls(world.walls);                  // Kroonuaia and the Jakobi hill: every house in its own colours
+  jakobiLaiWalls(world.walls);                  // house colours along Jakobi and Lai
+  oridentWalls(world.walls);                    // the Orident house on the Baeri/Jakobi corner is built by hand
+  deltaWalls(world.walls);                      // the Delta centre across the river from Lai is built by hand
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
   terrain = createTerrain(world, renderer, quality);
@@ -175,6 +182,8 @@ async function boot() {
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
   keskus = createKeskus(scene, world, { shadows: !isTouch });
   keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
+  orident = createOrident(scene, world, { shadows: !isTouch });
+  delta = createDelta(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   coop = createCoop(scene, world, { shadows: !isTouch });
@@ -746,6 +755,8 @@ function frame(ts) {
     kaubamaja.update(car);
     keskus.update(car);
     keskusTee.update(car);
+    orident.update(car);
+    delta.update(car);
     kvissentali.update(car);
     sireli.update(car);
     coop.update(car);

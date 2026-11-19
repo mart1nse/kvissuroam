@@ -83,6 +83,7 @@ export async function loadWorldData(onProgress = () => {}) {
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
       if (treeMoves.length) moveTrees(s);
+      if (treeAdds.length) addTreesTo(s);
       if (clearings.length) s.trees = clearTrees(s.trees);
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
@@ -111,6 +112,24 @@ export async function loadWorldData(onProgress = () => {}) {
         break;
       }
     }
+  }
+
+  // Hand-placed trees (street rows the map has no trees for): [x, z, height, crown, type], set on the ground
+  const treeAdds = [];
+  function addTreesTo(s) {
+    const add = treeAdds.filter(([x, z]) => x >= s.x0 && x < s.x1 && z >= s.z0 && z < s.z1);
+    if (!add.length) return;
+    const H = s.H, out = new Float32Array(s.trees.length + add.length * 6);
+    out.set(s.trees);
+    let i = s.trees.length;
+    for (const [x, z, height, crown, type = 0] of add) {
+      let fx = Math.min(Math.max((x - s.x0) / hres, 0), hn - 1.001), fz = Math.min(Math.max((z - s.z0) / hres, 0), hn - 1.001);
+      const c = Math.floor(fx), r = Math.floor(fz), k = r * hn + c;
+      fx -= c; fz -= r;
+      const y = ((H[k] * (1 - fx) + H[k + 1] * fx) * (1 - fz) + (H[k + hn] * (1 - fx) + H[k + hn + 1] * fx) * fz) * hs + hoff;
+      out[i++] = x; out[i++] = y; out[i++] = z; out[i++] = height; out[i++] = crown; out[i++] = type;
+    }
+    s.trees = out;
   }
 
   // Rectangles kept free of trees (hand-made places such as the Toome tennis courts): { x0, z0, x1, z1 }
@@ -256,6 +275,8 @@ export async function loadWorldData(onProgress = () => {}) {
     addClearing(r) { clearings.push(r); },
     // Move map trees: f(x, z) returns the new [x, z] or null (call before the sectors load).
     addTreeMove(f) { treeMoves.push(f); },
+    // Plant trees: [[x, z, height, crown, type]] (call before the sectors load).
+    addTrees(list) { treeAdds.push(...list); },
 
     // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
     addSolids(list) {

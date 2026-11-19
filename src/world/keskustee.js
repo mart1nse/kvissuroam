@@ -1,11 +1,23 @@
 // Ground at Kaubamaja, laid over the map's surface (Martin, 18 Nov): the grass of the Riia median under its
-// limes, the lane lines of Riia on both sides of it with the stop lines at the junction, and the red brick
-// paving of the Küüni plaza. Measured from the 2024 orthophoto. No names or numbers are painted on the road.
+// limes, the lane lines of Riia on both sides of it with the stop lines at the junction, and a red tint
+// on the Küüni paving. Measured from the 2024 orthophoto. No names or numbers are painted on the road.
 import * as THREE from 'three';
 import { roadFrame, streetKit } from './streetkit.js';
 
 const S = [1713.8, 3144.9], UB = [0.7189, -0.6951];      // Kaubamaja's south corner, along its Riia face towards the junction
 const CENTRE = [1750, 3120];
+
+// before the road markings are built: Küüni round Kaubamaja's west corner is a pedestrian street, the
+// generated lane lines are left off where the red cross lies (Martin, 19 Nov)
+const KUUNI_END = -216;      // the red brick ends a few metres before Poe (roof-frame a, see redCross)
+export function keskusTeeVectors(vectors) {
+  const W = [1659.6, 3088.7], UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const a = (x - W[0]) * UA[0] + (z - W[1]) * UA[1], b = (x - W[0]) * UB[0] + (z - W[1]) * UB[1];
+    return (a > KUUNI_END - 2 && a < 86 && b > -22 && b < 0) || (a > -26 && a < 1 && b > -27 && b < 8) || (prev ? prev(x, z) : false);
+  };
+}
 
 export function createKeskusTee(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
@@ -27,16 +39,65 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     strip(84, 99, 14.84, 14.96, 'white');
     strip(99, 99.45, 21.2, 33.6, 'white');                                   // stop line towards the junction
     strip(1.5, 1.95, 12.4, 17.3, 'white');                                   // and the one before the Küüni crossing
-    // the Küüni plaza: red brick from the columns out to the kiosk row
-    const W = [1659.6, 3088.7], UA = [0.6943, 0.7197];
-    const FK = roadFrame([[W[0] - UA[0] * 14, W[1] - UA[1] * 14], [W[0] + UA[0] * 92, W[1] + UA[1] * 92]], 0);
-    K.ribbon(FK, W[0] - UA[0] * 10, W[0] + UA[0] * 84, -0.4, -20.5, 'red', true);
-    // the pedestrian street the lap turns into after the last corner: red brick between grey edges, the
-    // grey strip along the office building and round the sculptures (Martin's lines on the aerial, 19 Nov).
-    // In Kaubamaja's roof frame (a along Küüni from the west corner, b along the park face) it runs along a.
-    K.ribbon(FK, W[0] - UA[0] * 60, W[0] - UA[0] * 17, -4, -27, 'red', true);
     K.finish();
+    redCross();
     junction();
+  }
+  // ---- the red brick cross round Kaubamaja's west corner, where the lap turns (Martin, 19 Nov, his lines on
+  // the aerial): Küüni (the pedestrian street and the plaza by the kiosks) crossed by the mouth of Uueturu and
+  // the way into the car park, with rounded inner corners. Only a see-through tint, so the cobbles of the
+  // ground stay as they are and just turn a little red. In Kaubamaja's roof frame: a along the Küüni face from
+  // the west corner, b along the park face (Küüni lies at b < 0, the car park at a < 0).
+  function redCross() {
+    const W = [1659.6, 3088.7], UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];
+    const at = (a, b) => [W[0] + UA[0] * a + UB[0] * b, W[1] + UA[1] * a + UB[1] * b];
+    const BAR = { a0: -85, a1: 84, b0: -20.5, b1: -1.5 };                   // Küüni, the long bar of the cross
+    const ARMS = [{ a0: -14, a1: 0, b0: -25, b1: BAR.b0 },                 // Uueturu side, between the office building and the kiosks
+      { a0: -24, a1: 0, b0: BAR.b1, b1: 6 }];                              // car park side, up to its asphalt
+    const R = 3;                                                            // radius of the inner corners
+    const pos = [];
+    const put = (q) => { const [x, z] = at(q[0], q[1]); pos.push(x, world.heightAt(x, z) + 0.09, z); };
+    const tri = (p, q, r) => {          // wound to face up (the frame is left-handed on the map)
+      const [x1, z1] = at(...p), [x2, z2] = at(...q), [x3, z3] = at(...r);
+      const up = (z2 - z1) * (x3 - x1) - (x2 - x1) * (z3 - z1) > 0;
+      for (const v of up ? [p, q, r] : [p, r, q]) put(v);
+    };
+    // a piece from a0 to a1 between b0 and b1; an edge given as [at a0, at a1] narrows or widens on the way
+    const rect = ({ a0, a1, b0, b1 }) => {
+      const e0 = [].concat(b0), e1 = [].concat(b1), edge = (e, t) => (e.length > 1 ? e[0] + (e[1] - e[0]) * t : e[0]);
+      const na = Math.ceil(a1 - a0), nb = Math.ceil(Math.max(edge(e1, 0) - edge(e0, 0), edge(e1, 1) - edge(e0, 1)));
+      const q = (i, j) => { const t = i / na, lo = edge(e0, t), hi = edge(e1, t); return [a0 + (a1 - a0) * t, lo + (hi - lo) * j / nb]; };
+      for (let i = 0; i < na; i++) for (let j = 0; j < nb; j++) {
+        tri(q(i, j), q(i + 1, j), q(i, j + 1)); tri(q(i + 1, j), q(i + 1, j + 1), q(i, j + 1));
+      }
+    };
+    // an inner corner at c, filling towards (sa, sb): the square off the corner less the circle's quarter
+    const fillet = (c, sa, sb) => {
+      const o = [c[0] + sa * R, c[1] + sb * R], n = 8;
+      for (let k = 0; k < n; k++) {
+        const t0 = (k / n) * Math.PI / 2, t1 = ((k + 1) / n) * Math.PI / 2;
+        const p = (t) => [o[0] - sa * R * Math.cos(t), o[1] - sb * R * Math.sin(t)];
+        tri(c, p(t0), p(t1));
+      }
+    };
+    rect(BAR); ARMS.forEach(rect);
+    // and on along Küüni past the start/finish line, narrowing to the street, almost to Poe (Martin, 19 Nov)
+    rect({ a0: KUUNI_END, a1: BAR.a0, b0: [-17.6, BAR.b0], b1: [-2.6, BAR.b1] });
+    fillet([ARMS[0].a0, BAR.b0], -1, -1);       // by the office building
+    fillet([ARMS[0].a1, BAR.b0], 1, -1);        // by the kiosks
+    fillet([ARMS[1].a0, BAR.b1], -1, 1);        // by the sculptures
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const nor = new Float32Array(pos.length);
+    for (let k = 1; k < nor.length; k += 3) nor[k] = 1;
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({
+      color: 0xe0705e, transparent: true, opacity: 0.3, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide,
+    }));
+    m.receiveShadow = true;
+    m.renderOrder = 1;
+    group.add(m);
   }
   // ---- the junction itself: hatching, the dotted lines that lead turning
   // traffic through, lane lines on the Turu arm. Flat triangles laid on the ground, wound to face up.
@@ -136,7 +197,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([[1650, 3080], [1600, 3050], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1650, 3080], [1600, 3050], [1500, 2940], [1550, 2990], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

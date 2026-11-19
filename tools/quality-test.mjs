@@ -6,7 +6,7 @@ let failed = 0;
 const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
 
 // cost(level) -> frame ms; runs seconds of frames, returns the level history
-function run(levels, start, cost, seconds, jitter = 0.5) {
+function run(levels, start, cost, seconds, jitter = 0.5, gpuCost = null) {
   const g = createGovernor({ levels, start });
   const moves = [];
   let t = 0, seed = 1;
@@ -14,7 +14,7 @@ function run(levels, start, cost, seconds, jitter = 0.5) {
   while (t < seconds * 1000) {
     const ms = Math.max(1, cost(g.level, t) + (rnd() - 0.5) * 2 * jitter);
     t += ms;
-    const ch = g.feed(ms);
+    const ch = g.feed(ms, gpuCost ? gpuCost(g.level, t) : null);
     if (ch) moves.push({ t: Math.round(t / 1000), ...ch });
   }
   return { g, moves };
@@ -69,5 +69,24 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
 
 // 8. hitches (streaming, GC) on a fast machine: no step down
 { const { moves } = run(N, N - 1, (l, t) => (Math.floor(t / 16.67) % 40 === 0 ? 120 : 16.67), 120); check(moves.length === 0, 'occasional long frames do not count'); }
+
+// 9. the graphics card nearly full but keeping up (Martin's Chrome, 13.8 of 16.7 ms): stays on top
+{ const { moves } = run(N, N - 1, () => 16.67, 300, 0.3, () => 13.8); check(moves.length === 0, 'card at 83% stays on top'); }
+
+// 10. the card falls behind while the browser still asks for 60 frames (after a tab switch):
+// steps down until the card keeps up, then climbs back once the warm-up is over, and stays
+{
+  const card = (l, t) => 13.8 * 1.25 ** (l - (N - 1)) * (t < 20000 ? 1.5 : 1);
+  const { g, moves } = run(N, N - 1, () => 16.67, 300, 0.3, card);
+  const down = moves.filter((m) => m.to < m.from).length;
+  check(down >= 1 && moves[0].t < 10, `steps down within seconds when the card falls behind (${moves.map((m) => `${m.t}s ${m.from}->${m.to} ${m.why}`).join(', ')})`);
+  check(g.level === N - 1, `back on top after the warm-up (rung ${g.level})`);
+}
+
+// 11. a card that can't hold the top rung at all: settles one down, does not keep retrying
+{
+  const { g, moves } = run(N, N - 1, () => 16.67, 900, 0.3, (l) => 18 * 1.25 ** (l - (N - 1)));
+  check(g.level === N - 2 && moves.length <= 3, `card too slow for the top settles one down (rung ${g.level}, ${moves.length} moves)`);
+}
 
 process.exit(failed ? 1 : 0);

@@ -876,9 +876,10 @@ document.addEventListener('visibilitychange', () => {
   keepAwake();
   clock.reset?.();
   settle = 1.5;
-  // Chrome lets a hidden tab's memory and code go cold, so the first seconds back can be slow
-  // whatever the graphics: don't let that warm-up push the graphics down
-  gfx.hold(20);
+  // The first seconds back can be slow on the graphics card while it warms up again: after a short
+  // settle that counts like any other slow spell (stepping down helps there, and the rung comes back
+  // once the card has room again)
+  gfx.hold(3);
   back = { at: performance.now(), n: 0, f: 0, js: 0, worst: 0, next: 2000 };
 });
 
@@ -1159,7 +1160,7 @@ function frame(ts) {
   // (not judged: a tab coming back, the city loading after a jump, the phones' menu shot drawn at half rate)
   if (settle > 0 || intro?.fixed || !world.ready(car.x, car.z)) gfx.hold(1);
   const jsMs = performance.now() - t0;
-  const ch = gfx.frame(rawDt * 1000, jsMs);
+  const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms);
   if (back) {
     back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);
     const since = performance.now() - back.at;

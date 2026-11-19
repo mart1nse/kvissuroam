@@ -5,7 +5,9 @@
 // distance, the shadow map, how far the city streams in, and at the bottom a softer, lower
 // resolution picture. When the frame rate has room to spare for a while, it tries one rung up, and if
 // that rung drops it straight back down, the rung is barred for a growing time (twice: for the
-// session), so it never flickers between two settings.
+// session), so it never flickers between two settings. Where the browser lets us time the graphics
+// card, a card close to its limit counts as slow even at a full 60 FPS (frames then queue up and the
+// picture lags behind the keys), and a rung is only climbed when the card has room for it.
 //
 // The levels are plain numbers; createQuality() applies them to the renderer, the sun and the trees. The governor is
 // pure logic so tools/quality-test.mjs can drive it with made-up frame times.
@@ -48,31 +50,42 @@ export function createGovernor({ levels, start = levels - 1 }) {
   let level = Math.max(0, Math.min(levels - 1, start));
   let ceiling = levels - 1;        // highest rung allowed (lowered by rungs that failed)
   let floor = 0;                   // lowest rung allowed (raised when stepping down did not help)
-  let buf = [], sum = 0;
+  let buf = [], sum = 0, gbuf = [];
+  const ratio = new Array(levels).fill(0);   // how much more a rung costs the graphics card than the one below (seen when stepping down)
   let holdMs = 4000;               // the first seconds compile shaders and stream the city: ignore
   let lowRun = 0, highRun = 0, flat = 0;
   let bestFps = 60;                // the screen's rate as far as we know: 60 Hz, or faster once seen, or the cap found below
-  let lastUp = -1e9, clock = 0, before = 0, judgeAfter = false, preFlat = level;
+  let lastUp = -1e9, clock = 0, before = 0, beforeGpu = 0, judgeAfter = false, preFlat = level, stepFrom = level;
   const fails = new Array(levels).fill(0), barredUntil = new Array(levels).fill(0);
   let fps = 0;
 
   function move(to, why) {
     const from = level;
     level = to;
-    buf = []; sum = 0; lowRun = 0; highRun = 0;
+    buf = []; sum = 0; gbuf = []; lowRun = 0; highRun = 0;
     holdMs = 2500;                 // shader rebuilds and new shadow maps take a moment
     if (to > from) lastUp = clock;
     return { from, to, why };
   }
 
-  function verdict(median, spread) {
+  // gpu: the graphics card's ms per frame (median of the window), or null where it can't be measured.
+  // A card that needs more than the screen's frame time still lets the browser ask for frames at the
+  // full rate: the frames queue up and the picture lags behind the keys, at a steady 60 FPS. So a
+  // card close to its limit counts as slow too, and a rung is only climbed when the card has room for it.
+  function verdict(median, spread, gpu) {
     fps = 1000 / median;
     if (fps > bestFps) bestFps = Math.min(240, fps);
     const downAt = Math.min(42, bestFps * 0.72), upAt = Math.min(57, bestFps * 0.93);
+    const budget = 1000 / bestFps, load = gpu == null ? null : gpu / budget;
     // was the last step down worth it? A 30 Hz cap or a busy CPU does not speed up with fewer pixels
     if (judgeAfter) {
       judgeAfter = false;
-      if (fps < before * 1.08 && spread < 4) {
+      const gpuGain = gpu != null && beforeGpu > 0 && gpu < beforeGpu * 0.92;
+      if (gpu != null && beforeGpu > 0) {
+        const steps = stepFrom - level, r = Math.min(3, Math.max(1, beforeGpu / gpu)) ** (1 / Math.max(1, steps));
+        for (let k = level + 1; k <= stepFrom; k++) ratio[k] = r;
+      }
+      if (fps < before * 1.08 && spread < 4 && !gpuGain) {
         if (++flat >= 3) {
           // three steps down bought nothing: the frame rate is capped elsewhere (a 30 Hz battery saver,
           // a busy CPU). Put them back, stop going down, and judge against this rate from now on.
@@ -83,10 +96,11 @@ export function createGovernor({ levels, start = levels - 1 }) {
         }
       } else { flat = 0; preFlat = level; }
     }
-    if (fps < downAt) {
+    const gpuBusy = load != null && load > 0.95;
+    if (fps < downAt || gpuBusy) {
       highRun = 0;
       lowRun++;
-      const bad = fps < downAt * 0.6;           // very slow: act on one window and skip a rung
+      const bad = fps < downAt * 0.6 || (load != null && load > 1.6);   // very slow: act on one window and skip a rung
       if ((lowRun >= 2 || bad) && level > floor) {
         if (clock - lastUp < 12000) {
           // the rung we just climbed to could not hold: bar it, longer each time, for good after two
@@ -94,7 +108,7 @@ export function createGovernor({ levels, start = levels - 1 }) {
           barredUntil[level] = clock + 60000 * 4 ** (fails[level] - 1);
           if (fails[level] >= 2) ceiling = Math.min(ceiling, level - 1);
         }
-        before = fps; judgeAfter = true;
+        before = fps; beforeGpu = gpu ?? 0; stepFrom = level; judgeAfter = true;
         if (flat === 0) preFlat = level;
         return move(Math.max(floor, level - (bad ? 2 : 1)), 'slow');
       }
@@ -102,27 +116,34 @@ export function createGovernor({ levels, start = levels - 1 }) {
       lowRun = 0;
       highRun++;
       const next = level + 1;
-      if (highRun >= 5 && next <= ceiling && clock >= barredUntil[next]) { flat = 0; return move(next, 'room'); }
+      // room on the card for the next rung: this rung's time grown by what the step cost last time
+      // (or by 1.4 when that is not known yet) must stay under 90% of the frame time
+      const cardRoom = load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
+      if (highRun >= 5 && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
     } else { lowRun = 0; highRun = 0; }
     return null;
   }
 
   return {
     get level() { return level; }, get fps() { return fps; }, get ceiling() { return ceiling; }, get floor() { return floor; },
-    hold(s) { holdMs = Math.max(holdMs, s * 1000); buf = []; sum = 0; },
-    // ms: the frame's length; returns { from, to, why } when the level changes
-    feed(ms) {
+    hold(s) { holdMs = Math.max(holdMs, s * 1000); buf = []; sum = 0; gbuf = []; },
+    // ms: the frame's length; gpuMs: the graphics card's time for it if known.
+    // Returns { from, to, why } when the level changes.
+    feed(ms, gpuMs = null) {
       clock += ms;
       if (!(ms > 0)) return null;
       if (holdMs > 0) { holdMs -= ms; return null; }
       if (ms > 1000) { buf = []; sum = 0; return null; }   // a stall (tab, debugger): not a frame rate
       buf.push(ms); sum += ms;
+      if (gpuMs > 0 && gpuMs < 1000) gbuf.push(gpuMs);
       if (sum < WINDOW) return null;
       const s = buf.slice().sort((a, b) => a - b);
       const median = s[s.length >> 1];
       const spread = s[Math.floor(s.length * 0.9)] - s[Math.floor(s.length * 0.1)];
-      buf = []; sum = 0;
-      return verdict(median, spread);
+      let gpu = null;
+      if (gbuf.length >= buf.length / 4) { gbuf.sort((a, b) => a - b); gpu = gbuf[gbuf.length >> 1]; }
+      buf = []; sum = 0; gbuf = [];
+      return verdict(median, spread, gpu);
     },
   };
 }
@@ -232,7 +253,7 @@ export function createQuality(hooks, caps, opts = {}) {
     hold(s) { gov.hold(s); },
     // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
     // browser and the graphics card), kept as a running average for the readout
-    frame(ms, jsMs = 0) {
+    frame(ms, jsMs = 0, gpuMs = null) {
       if (ms > 0 && ms < 1000) {
         meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05;
         win.push(ms); winMs += ms;
@@ -243,8 +264,8 @@ export function createQuality(hooks, caps, opts = {}) {
           win = []; winMs = 0;
         }
       }
-      if (mode !== 'auto' || !auto) { if (mode !== 'locked') gov.feed(ms); return null; }   // (still measures, for the readout)
-      const ch = gov.feed(ms);
+      if (mode !== 'auto' || !auto) { if (mode !== 'locked') gov.feed(ms, gpuMs); return null; }   // (still measures, for the readout)
+      const ch = gov.feed(ms, gpuMs);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }
       stableMs += ms;
       if (stableMs > 20000 && savedLevel !== current) { savedLevel = current; store(AUTOKEY, JSON.stringify({ ladder: ladderId, level: current })); }

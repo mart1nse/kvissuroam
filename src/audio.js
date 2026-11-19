@@ -432,8 +432,13 @@ export function createAudio() {
   function applySpace() { space?.setOn(!lite && !ev, !lite); }
   // the space round our own car: called every frame after the camera has moved (world: its obstacle field)
   function updateSpace(world, car, cam, dt, active) {
-    if (!space || ctx.state !== 'running' || !active || lite || ev) return;
-    space.update(world, car, cam, dt);
+    if (!space || ctx.state !== 'running' || !active || lite) return;
+    // how far off the camera is: the chase camera (6-14 m) hears the car close up, the drone view (C, 35 m
+    // and more) from a distance, with much more of the street ringing round it (Martin 2026-11-19); an
+    // electric car of ours stays dry either way, other cars' reverb follows the view
+    const p = cam.position, dist = Math.hypot(p.x - car.x, p.y - (car.y ?? p.y), p.z - car.z);
+    space.setFar(Math.min(1, Math.max(0, (dist - 16) / 16)));
+    if (!ev) space.update(world, car, cam, dt);
   }
 
   return {

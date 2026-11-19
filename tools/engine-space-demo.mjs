@@ -13,6 +13,8 @@
 //   plays them: blow-off and upshift chirps from src/audio-turbo.js, the whistle in the synth.
 //   --turbo=old: the turbo sounds before that (a sine whistle and a single pssh), for the "before" clip
 //   (with --worklet= the synth from before the whistle moved into it).
+//   --drone: the camera where the drone view (C) puts it, 35-55 m up and back, and the space told how far
+//   off it is (setFar), as audio.js does.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -34,6 +36,7 @@ const dry = !!flag('dry');
 // --mix=er,tail: scale the echoes and the tail (both 1 in the game), to hear them on their own
 const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').map(Number)) : {};
 const TURBO = flag('turbo') ? val('turbo') || 'new' : null;
+const DRONE = !!flag('drone');
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
 const SR = 48000, BLOCK = 128, FPS = 60, T = 22;
@@ -115,7 +118,7 @@ for (const id of ids) {
   core.setConfig(reviveConfig({ ...cfg }));
   const total = T * SR, mono = new Float32Array(total), buf = new Float32Array(BLOCK);
   const poses = [];               // per 1/60 s: car x, z, yaw, camera x, y, z, right x, z
-  let dist = 0, camDist = 6.4, camYaw = null, nextPose = 0;
+  let dist = 0, camDist = 6.4, camYaw = null, nextPose = 0, droneYaw = null;
   // the turbo as audio.js hears it, at the game's 60 Hz: the whistle (for the old oscillator) and events
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false;
@@ -150,7 +153,14 @@ for (const id of ids) {
       camYaw += d * (1 - Math.exp(-(3 + v * 0.08) / FPS));
       camDist += (6.4 + Math.min(v, 55) * 0.035 + Math.min(v, 70) * 0.075 - camDist) * (1 - Math.exp(-5 / FPS));
       const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
-      poses.push(p.x, p.z, p.yaw, p.x - cx * camDist, 2.35, p.z - cz * camDist, Math.cos(camYaw), Math.sin(camYaw));
+      if (DRONE) {
+        // (main.js: the drone turns with the travel direction, slowly, and rises and drops back with speed)
+        if (droneYaw === null) droneYaw = p.yaw;
+        let dd = p.yaw - droneYaw; dd = Math.atan2(Math.sin(dd), Math.cos(dd));
+        droneYaw += dd * (1 - Math.exp(-1.4 / FPS));
+        const dx = Math.sin(droneYaw), dz = -Math.cos(droneYaw), h = 30 + Math.min(v, 60) * 0.3;
+        poses.push(p.x, p.z, p.yaw, p.x - dx * h * 0.55, h, p.z - dz * h * 0.55, Math.cos(droneYaw), Math.sin(droneYaw));
+      } else poses.push(p.x, p.z, p.yaw, p.x - cx * camDist, 2.35, p.z - cz * camDist, Math.cos(camYaw), Math.sin(camYaw));
     }
   }
   if (dry) {
@@ -227,6 +237,8 @@ for (const id of ids) {
       car.x = poses[o]; car.z = poses[o + 1]; car.yaw = poses[o + 2];
       cam.position.x = poses[o + 3]; cam.position.y = poses[o + 4]; cam.position.z = poses[o + 5];
       cam.matrixWorld.elements[0] = poses[o + 6]; cam.matrixWorld.elements[1] = 0; cam.matrixWorld.elements[2] = poses[o + 7];
+      const cd = Math.hypot(cam.position.x - car.x, cam.position.y - car.y, cam.position.z - car.z);
+      space.setFar?.(Math.min(1, Math.max(0, (cd - 16) / 16)));
       const built = space.update(world, car, cam, 1 / FPS);
       if (k % 60 === 0) log.push(`${(k / FPS).toFixed(0)} s built ${built.toFixed(2)} tail ${space.tail.toFixed(2)} walls ${space.taps.map((t) => (t.d > 0 ? t.d.toFixed(0) : '-')).join(' ')}`);
     };

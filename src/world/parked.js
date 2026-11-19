@@ -69,7 +69,8 @@ function allSpots() {
     for (let i = 0; i < row.n; i++) {
       if (r() < (row.perp ? 0.22 : 0.15)) continue;              // an empty bay
       const t = (i + 0.5) / row.n, x = row.a[0] + dx * t, z = row.a[1] + dz * t;
-      const cy = along + (row.perp ? Math.PI / 2 : 0) + (r() < 0.5 ? Math.PI : 0) + (r() - 0.5) * 0.08;
+      const cy = row.head ? Math.atan2(-row.head[1], row.head[0]) + (r() - 0.5) * 0.06
+        : along + (row.perp ? Math.PI / 2 : 0) + (r() < 0.5 ? Math.PI : 0) + (r() - 0.5) * 0.08;
       out.push({ key: `r${row.seed}.${i}`, x, z, yaw: Math.PI / 2 - cy, row: true });
     }
   }

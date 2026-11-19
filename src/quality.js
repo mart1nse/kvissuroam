@@ -119,7 +119,8 @@ export function createGovernor({ levels, start = levels - 1 }) {
       // room on the card for the next rung: this rung's time grown by what the step cost last time
       // (or by 1.4 when that is not known yet) must stay under 90% of the frame time
       const cardRoom = load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
-      if (highRun >= 5 && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
+      // the first minute (a fresh start, or AUTO picked again) climbs after 4 s with room, later after 8 s
+      if (highRun >= (clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
     } else { lowRun = 0; highRun = 0; }
     return null;
   }
@@ -206,10 +207,10 @@ export function createGpuTimer(gl) {
   return out;
 }
 
-const KEY = 'kvissuroam.gfx', AUTOKEY = 'kvissuroam.gfxAuto';
+const KEY = 'kvissuroam.gfx', AUTOKEY = 'kvissuroam.gfxAuto2';   // (2: saved the way below from 19 Nov evening; the old key could hold a passing low)
 export const MODES = ['auto', 'high', 'medium', 'low'];
 
-// Applies levels to the running game. hooks: { renderer, sun, quality, setTrees(m) }.
+// Applies levels to the running game. hooks: { renderer, sun, scene, camera, quality, setTrees(m) }.
 // caps: the device's top settings. opts: { software, locked (fixed by ?q=low), headless (no auto) }.
 export function createQuality(hooks, caps, opts = {}) {
   const levels = deviceLadder(caps);
@@ -222,7 +223,10 @@ export function createQuality(hooks, caps, opts = {}) {
 
   let mode = MODES.includes(read(KEY)) ? read(KEY) : 'auto';
   if (opts.locked) mode = 'locked';
-  // start where this browser settled last time, so a slow machine is not slow again for the first minute
+  // Start where this browser held steady last time, so a slow machine is not slow again for the first
+  // minute. What is saved is the highest level that held 30 s without stepping down, not the last
+  // one: a slow spell (a tab or app switch, a heavy corner) must not make the next visit start low.
+  // Only a level kept lower for two minutes running replaces it.
   let start = top;
   try {
     const saved = JSON.parse(read(AUTOKEY) || 'null');
@@ -235,7 +239,30 @@ export function createQuality(hooks, caps, opts = {}) {
   // rate in the last two seconds (stutter the average hides) and the longest of them
   const meter = { frame: 16.7, js: 0, late: 0, worst: 0 };
   let win = [], winMs = 0;
-  let current = -1, stableMs = 0, savedLevel = start, listeners = [];
+  let current = -1, stableMs = 0, savedLevel = start, heldBest = -1, listeners = [];
+  let warmFor = null, booted = false;              // the shadow setting being prepared in the background, if any
+
+  // Turning the sun's shadow on or off changes the shader of nearly every material, and building them
+  // all at once stalls the game for a moment (half a second on a phone). So the shaders for the new
+  // setting are compiled first, in the background where the browser can (KHR_parallel_shader_compile),
+  // and the switch is made once they are ready.
+  const flip = (want) => { const { renderer, sun } = hooks; renderer.shadowMap.enabled = want; sun.castShadow = want; renderer.shadowMap.needsUpdate = true; };
+  function setShadows(want) {
+    const { renderer, sun, scene, camera } = hooks;
+    if (!scene || !camera || !booted || !renderer.compileAsync) { flip(want); return; }
+    if (warmFor === want) return;
+    warmFor = want;
+    const was = renderer.shadowMap.enabled;
+    let ready;
+    try { renderer.shadowMap.enabled = want; sun.castShadow = want; ready = renderer.compileAsync(scene, camera); }
+    catch { ready = Promise.resolve(); }
+    finally { renderer.shadowMap.enabled = was; sun.castShadow = was; }
+    ready.catch(() => {}).then(() => {
+      if (warmFor !== want) return;
+      warmFor = null;
+      if ((levels[current].shadow > 0) === want && renderer.shadowMap.enabled !== want) flip(want);
+    });
+  }
 
   function apply(i) {
     const l = levels[i], { renderer, sun, quality } = hooks;
@@ -247,7 +274,7 @@ export function createQuality(hooks, caps, opts = {}) {
       sun.shadow.mapSize.set(l.shadow, l.shadow);
       if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     }
-    if (renderer.shadowMap.enabled !== want) { renderer.shadowMap.enabled = want; sun.castShadow = want; renderer.shadowMap.needsUpdate = true; }
+    if (renderer.shadowMap.enabled !== want) setShadows(want);
     hooks.setTrees(l.trees);
     quality.loadRadius = l.load;
     for (const f of listeners) f();
@@ -255,6 +282,7 @@ export function createQuality(hooks, caps, opts = {}) {
 
   const levelFor = (m) => (m === 'auto' ? gov.level : m === 'locked' ? -1 : fixed[m]);
   if (mode !== 'locked') apply(mode === 'auto' && auto ? gov.level : mode === 'auto' ? top : fixed[mode]);
+  booted = true;
 
   return {
     levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
@@ -279,14 +307,16 @@ export function createQuality(hooks, caps, opts = {}) {
       const ch = gov.feed(ms, gpuMs);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }
       stableMs += ms;
-      if (stableMs > 20000 && savedLevel !== current) { savedLevel = current; store(AUTOKEY, JSON.stringify({ ladder: ladderId, level: current })); }
+      if (stableMs > 30000 && current > heldBest) heldBest = current;
+      const keep = stableMs > 120000 && current < savedLevel ? current : heldBest > savedLevel ? heldBest : -1;
+      if (keep >= 0 && keep !== savedLevel) { savedLevel = keep; store(AUTOKEY, JSON.stringify({ ladder: ladderId, level: keep })); }
       return null;
     },
     setMode(m) {
       if (!MODES.includes(m) || mode === 'locked') return;
       mode = m;
       store(KEY, m);
-      if (m === 'auto') { gov = createGovernor({ levels: levels.length, start: current }); }
+      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel) });
       apply(m === 'auto' ? (auto ? gov.level : top) : levelFor(m));
     },
   };

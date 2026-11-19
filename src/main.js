@@ -104,7 +104,7 @@ sky.scale.setScalar(quality.far * 0.9);
 scene.add(sky);
 const lights = createLights(scene, quality.shadow);
 const gpuTimer = createGpuTimer(renderer.getContext());
-const gfx = createQuality({ renderer, sun: lights.sun, quality, setTrees: setTreeDistance }, gfxCaps, {
+const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance }, gfxCaps, {
   locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });

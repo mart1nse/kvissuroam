@@ -345,6 +345,8 @@ export async function loadWorldData(onProgress = () => {}) {
     // Small raised shapes on top of the height field (kerbs finer than its 2 m grid): each is
     // { x0, z0, x1, z1, at(x, z) -> metres }.
     addBump(b) { bumps.push(b); },
+    // How much those raised shapes add at the point: the physics feels a kerb as a step by it.
+    kerbAt(x, z) { return bumps.length === 0 ? 0 : bumpAt(x, z); },
 
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {

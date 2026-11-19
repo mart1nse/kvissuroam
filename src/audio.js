@@ -13,7 +13,7 @@ const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, w
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
-  let skid = 0, spinS = 0, lastLanded = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
+  let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
   let muted = false, ev = false, turbo = false, background = false;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
   let noiseSrc = null, workletReady = false;
@@ -90,6 +90,26 @@ export function createAudio() {
     o.start(t); o.stop(t + 0.25);
   }
 
+  // a wheel rolling up a kerb: a short thud through the suspension and the slap of the tyre on stone
+  function knock(strength) {
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(130, t);
+    o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
+    g.gain.setValueAtTime(Math.min(0.55, 0.4 * strength), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(g).connect(master);
+    o.start(t); o.stop(t + 0.16);
+    if (!noiseBuf) return;
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
+    src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2;
+    gn.gain.setValueAtTime(Math.min(0.2, 0.15 * strength), t);
+    gn.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    src.connect(f).connect(gn).connect(master);
+    src.start(t, Math.random()); src.stop(t + 0.08);
+  }
+
   // turbo blow-off valve venting when the throttle snaps shut on boost
   function psh(strength, dest = master) {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -122,6 +142,9 @@ export function createAudio() {
     const landed = car.landed || 0;
     if (active && !car.inWater && landed > 1 && landed > lastLanded + 0.5) thump(landed);
     lastLanded = landed;
+    const kerb = car.kerbHit || 0;
+    if (active && !car.inWater && kerb > 0.08 && kerb > lastKerb + 0.06) knock(kerb);
+    lastKerb = kerb;
     const v = Math.hypot(car.vx, car.vy);
     const dead = !active || car.inWater;
     const flying = car.airborne && car.airTime > 0.1;

@@ -311,8 +311,8 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
 
     // ---- the Riia median: a steel railing along its Kaubamaja edge and a row of young limes
     {
-      const S = SIDES.riia, OUT = 16.6, list = [];
-      const s0 = 6, s1 = LB - 12, n = Math.round((s1 - s0) / 2.5);
+      const S = SIDES.riia, OUT = 18.9, list = [];
+      const s0 = 6, s1 = LB - 5, n = Math.round((s1 - s0) / 2.5);
       for (let k = 0; k <= n; k++) {
         const s = s0 + (s1 - s0) * k / n, [x, z] = S.at(s, OUT - 1.1), y = h(x, z);
         p.add(BOX(0.07, 1.05, 0.07), COL.steel, x, y + 0.52, z, S.yaw);
@@ -324,7 +324,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       }
       solids.push({ x: S.at((s0 + s1) / 2, OUT - 1.1)[0], z: S.at((s0 + s1) / 2, OUT - 1.1)[1], yaw: S.yaw, hx: (s1 - s0) / 2, hz: 0.12 });
       const r = rnd(17);
-      for (let s = 9; s < LB - 13; s += 6.7) list.push([...S.at(s + r() * 0.8, OUT + 0.3), 6.2 + r() * 1.8, 0.55 + r() * 0.16, r()]);
+      for (let s = 9; s < LB - 6; s += 6.7) list.push([...S.at(s + r() * 0.8, OUT + 0.3), 6.2 + r() * 1.8, 0.55 + r() * 0.16, r()]);
       const kit = realTreeKit(), sp = kit && kit.species && kit.species[0];
       if (sp && sp.near) {
         const im = new THREE.InstancedMesh(sp.near, sp.soloMat, list.length);

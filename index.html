@@ -33,7 +33,7 @@
         if (/^[a-z0-9_-]{1,16}$/i.test(d.c) && fresh) localStorage.setItem(P + 'car', d.c);
         if ((d.v === 'drone' || d.v === 'chase') && !get('view')) localStorage.setItem(P + 'view', d.v);
         var p = (Array.isArray(d.p) ? d.p : []).filter(lapOk).slice(-100).map(function (l) {
-          return { name: typeof l.name === 'string' ? l.name.replace(/[\u0000-\u001f<>]/g, '').slice(0, 20) : undefined, car: l.car, ms: Math.round(l.ms), at: typeof l.at === 'string' ? l.at.slice(0, 30) : undefined };
+          return { name: typeof l.name === 'string' ? l.name.replace(/[\u0000-\u001f<>]/g, '').slice(0, 20) : undefined, car: l.car, ms: Math.round(l.ms), at: typeof l.at === 'string' ? l.at.slice(0, 30) : undefined, k: typeof l.k === 'string' && /^[\w.-]{1,80}$/.test(l.k) ? l.k : undefined };
         });
         if (p.length) localStorage.setItem(P + 'pendingLaps', JSON.stringify(arr('pendingLaps').concat(p).slice(-200)));
         var l = (Array.isArray(d.l) ? d.l : []).filter(lapOk).slice(0, 60).map(function (x) {
@@ -49,6 +49,14 @@
         localStorage.setItem(P + 'movedFrom', JSON.stringify(done.concat(from[1])));
       } catch (e) { /* bad or blocked: start fresh */ }
     })();
+  </script>
+  <script>
+    // The lap ticket (see "Lap tickets" in worker/index.js): asked for before anything else loads,
+    // because the server only stores laps that began after the ticket was issued.
+    window.__lapTicket = fetch('/api/ticket', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { return j && typeof j.key === 'string' ? j.key : null; })
+      .catch(function () { return null; });
   </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>

@@ -13,10 +13,17 @@ import { escapeHtml } from '../race/race.js';
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
 const SENT_KEY = 'kvissuroam.sentLaps';      // laps the server has confirmed, as car|ms
-const LOCAL_LAPS_KEY = 'kvissuroam.laps';    // every lap this browser has driven (race.js)
 const SEND_HZ = 10;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 const RESTITUTION = 0.35;
+const MAX_OTHERS = 150;          // more players than the server lets in are not ours to draw
+// what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
+const cleanName = (s) => String(s || '').normalize('NFC')
+  .replace(/[\u0000-\u001f\u007f-\u009f<>\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g, '')
+  .replace(/(\p{M}{2})\p{M}+/gu, '$1')
+  .replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+// a position from another browser: numbers only (the server checks too; a word in here used to stop the picture)
+const poseOk = (p) => Array.isArray(p) && p.length >= 9 && p.length <= 24 && p.every((v) => typeof v === 'number' && Number.isFinite(v));
 
 const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital'];
 const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo', 'Tiger', 'Wave', 'Fox'];
@@ -26,7 +33,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mo
 
 export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople }) {
   const others = new Map();      // id -> remote player
-  let ws = null, myId = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
+  let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   let carId = 'w201';
   const labels = document.createElement('div');
@@ -40,12 +47,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
 
   fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b && !board) setBoard(b); }).catch(() => {});
 
+  // the lap ticket the page asked for as it opened (index.html); without one the first hello gets one
+  const ticketReady = Promise.resolve(window.__lapTicket).then((k) => { if (typeof k === 'string' && !ticket) ticket = k; }).catch(() => {});
+
   function setBoard(b) { board = b; onBoard?.(b); }
 
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
 
   async function connect() {
     await nameReady;
+    await ticketReady;
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`;
     let sock;
     try { sock = new WebSocket(url); } catch { return schedule(); }
@@ -53,7 +64,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let ping = 0;
     sock.onopen = () => {
       retry = 1; online = true;
-      send({ t: 'hello', name, car: carId });
+      send({ t: 'hello', name, car: carId, k: ticket || undefined });
       ping = setInterval(() => send('ping'), 25000);
       flushLaps();
     };
@@ -87,6 +98,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   };
   function add(p) {
     if (others.has(p.id) || p.id === myId) return others.get(p.id);
+    if (typeof p.id !== 'string' || typeof p.name !== 'string' || others.size >= MAX_OTHERS) return null;
     const el = document.createElement('div');
     el.className = 'pname';
     el.textContent = p.name;
@@ -101,7 +113,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // only once they drive it (see update): someone who has just come online sits in the menu for a while
   // and may look through several cars in the garage.
   function setRemoteCar(o, id) {
-    if (!CARS[id]) id = 'w201';
+    if (typeof id !== 'string' || !Object.hasOwn(CARS, id)) id = 'w201';
     if (o.car === id) return;
     o.car = id;
     const s = CARS[id];
@@ -131,7 +143,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     switch (m.t) {
       case 's': {
         const o = others.get(m.id);
-        if (o && Array.isArray(m.p)) {
+        if (o && poseOk(m.p)) {
           o.buf.push({ t: performance.now() / 1000, p: m.p });
           if (o.buf.length > 30) o.buf.shift();
         }
@@ -139,12 +151,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'welcome':
         myId = m.id;
-        for (const p of m.players) add(p);
+        // the lap ticket: proof of when this browser came online, sent along with every lap (see
+        // "Lap tickets" in worker/index.js); kept across reconnects
+        if (typeof m.key === 'string') ticket = m.key;
+        for (const p of Array.isArray(m.players) ? m.players : []) add(p);
         onPeople?.('count');
         if (m.board) setBoard(m.board);
         break;
       case 'join':
-        add(m);
+        if (!add(m)) break;
         if (onPeople) onPeople('join', m.name); else toast(`${m.name.toUpperCase()} JOINED`, 2600);
         break;
       case 'leave': {
@@ -155,7 +170,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'name': {
         const o = others.get(m.id);
-        if (o) { onPeople?.('rename', m.name, o.name); o.name = m.name; o.el.textContent = m.name; }
+        if (o && typeof m.name === 'string') { onPeople?.('rename', m.name, o.name); o.name = m.name; o.el.textContent = m.name; }
         break;
       }
       case 'car': {
@@ -164,10 +179,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       }
       case 'board':
+        if (!m.board) break;
         setBoard(m.board);
-        if (m.lap && m.lap.name !== name) {
-          const best = m.board.allTime.find((b) => b.car === m.lap.car);
-          if (best && best.ms === m.lap.ms && best.name === m.lap.name) toast(`${m.lap.name.toUpperCase()} SET A ${CARS[m.lap.car]?.short.toUpperCase() ?? ''} RECORD`, 3000);
+        if (m.lap && typeof m.lap.name === 'string' && m.lap.name !== name) {
+          const best = m.board.allTime?.find((b) => b.car === m.lap.car);
+          const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
+          if (best && best.ms === m.lap.ms && best.name === m.lap.name) toast(`${m.lap.name.toUpperCase()} SET A ${short} RECORD`, 3000);
         }
         break;
       default:
@@ -176,16 +193,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
 
   // ---- lap times
   // Laps wait in a queue (kept in memory, and in localStorage when it works) until the server
-  // confirms them. On start every lap this browser drove that the server never confirmed is
-  // queued again: the server ignores ones it already has, so a lap lost to a dropped connection,
-  // a closed tab or a full storage still reaches the board the next time the game is opened.
+  // confirms them, so a lap lost to a dropped connection or a closed tab still reaches the board
+  // the next time the game is opened: the server ignores ones it already has. Each lap carries
+  // the lap ticket this browser held when it was driven; the server stores no lap without one.
   const lapKey = (l) => `${l.car}|${l.ms}`;
   function readJson(k) { try { const v = JSON.parse(lsGet(k)); return Array.isArray(v) ? v : []; } catch { return []; } }
   const sent = new Set(readJson(SENT_KEY));
   const queue = [];
   function enqueue(l) {
     if (!l?.car || !(l.ms > 0) || sent.has(lapKey(l)) || queue.some((q) => lapKey(q) === lapKey(l))) return;
-    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp });
+    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp, k: l.k });
   }
   function saveQueue() { lsSet(PENDING_KEY, JSON.stringify(queue.slice(-200))); }
   function markSent(list) {
@@ -201,7 +218,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     flushing = true;
     let failed = false;
     while (queue.length && !failed) {
-      const batch = queue.slice(0, 50).map((l) => ({ ...l, name: l.name || name }));
+      // (ago: how long since the lap ended by this browser's clock, which is what the server goes by)
+      const batch = queue.slice(0, 50).map((l) => ({ ...l, name: l.name || name, ago: Math.max(0, Date.now() - Date.parse(l.at)) || 0 }));
       try {
         const r = await fetch('/api/lap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ laps: batch }) });
         if (r.ok || (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429)) {
@@ -216,8 +234,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     flushing = false;
     if (queue.length) { clearTimeout(retryTimer); retryTimer = setTimeout(flushLaps, 30000); }
   }
-  // laps driven before this queue existed, or lost on the way (once the name is known)
-  nameReady.then(() => { readJson(LOCAL_LAPS_KEY).forEach(enqueue); saveQueue(); flushLaps(); });
+  nameReady.then(() => flushLaps());
   addEventListener('online', () => flushLaps());
 
   // remote pose at render time, interpolated between the two updates around it
@@ -277,7 +294,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
       const vrel = (wvx - p[6]) * nx + (wvz - p[7]) * nz;
       if (vrel < 0) {
-        const j = -(1 + RESTITUTION) * vrel * 0.5;                // equal masses, our half of the exchange
+        const j = Math.min(30, -(1 + RESTITUTION) * vrel * 0.5);   // equal masses, our half of the exchange (capped: a made-up speed must not throw us off the map)
         const nvx = wvx + j * nx, nvz = wvz + j * nz;
         car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
         // a glancing knock off the car's centre line turns it a little
@@ -383,7 +400,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     remotes() { return fxList; },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
-      n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
+      n = cleanName(n);
       if (!n || n === name) return name;
       name = n; lsSet(NAME_KEY, n);
       send({ t: 'name', name: n });
@@ -391,7 +408,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     submitLap(lap) {
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp });
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined });
       saveQueue();
       flushLaps();
     },

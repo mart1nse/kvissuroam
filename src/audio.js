@@ -236,7 +236,7 @@ export function createAudio() {
       if (sh.chirp && !dead) chirp(ctx, noiseBuf, bus, sh.chirp, t + 0.005);
       if (punch) punch.gain.setTargetAtTime(dead ? 0 : sh.punch, t, 0.01);
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: sh.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: sh.shift ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank, yankId: sh.yankId } });
+        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: sh.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: sh.shift ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank, yankId: sh.yankId, yankTight: sh.yankTight } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev

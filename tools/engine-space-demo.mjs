@@ -173,7 +173,7 @@ for (const id of ids) {
     }
     let cutS = car.shiftCut ? 1 : 0;
     if (shs) { rpm = sh.rpm; if (sh.throttle !== undefined) { thr = sh.throttle; cutS = sh.shift ? 1 : 0; } }
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: cutS, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank || 0, yankId: sh.yankId || 0 });
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: cutS, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank || 0, yankId: sh.yankId || 0, yankTight: sh.yankTight || 0 });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);

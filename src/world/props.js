@@ -329,10 +329,17 @@ export function createProps(world, opts = {}) {
     b.w.addScaledVector(tmpT, j / b.inertia);
   }
   // the car (world velocity cvx, cvz, mass M) hits body b; returns the impulse taken from the car
-  function hit(b, cvx, cvz, M) {
+  // side: which side of the car's path it is on (-1 / +1), so it glances off that way instead of being
+  // carried along ahead of the bumper
+  function hit(b, cvx, cvz, M, side = 0) {
     const sp = Math.hypot(cvx - b.v.x, cvz - b.v.z);
     if (sp < 0.3) return 0;
     tmpN.set((cvx - b.v.x) / sp, 0, (cvz - b.v.z) / sp);
+    if (side) {
+      const turn = side * (0.35 + Math.random() * 0.15);        // 20 to 29 degrees off the car's path
+      const c = Math.cos(turn), s = Math.sin(turn);
+      tmpN.set(tmpN.x * c - tmpN.z * s, 0, tmpN.x * s + tmpN.z * c);
+    }
     // the bumper meets it about half a metre above the ground
     const p = b.obj.position;
     const gy = world.heightAt(p.x, p.z);
@@ -341,11 +348,28 @@ export function createProps(world, opts = {}) {
     const k = 1 / b.mass + tmpT.lengthSq() / b.inertia + 1 / M;
     const j = (1.25 * sp) / k;
     impulse(b, tmpN, j, tmpR);
-    b.v.y += 0.12 * sp + 0.3;
+    b.v.y += Math.min(0.06 * sp + 0.3, 2.5);
     b.w.x += (Math.random() - 0.5) * 0.6; b.w.z += (Math.random() - 0.5) * 0.6;
-    b.asleep = false; b.still = 0; b.age = 0;
+    b.asleep = false; b.still = 0; b.age = 0; b.hitT = now();
     moving.add(b);
     return j;
+  }
+  let clock = 0;
+  const now = () => clock;
+  // something already knocked loose that the car catches up with: flick it out of the way to the side
+  // it is on and let it go, taking only a little speed from the car, so nothing rides along on the bumper
+  function shove(b, car, fx, fz, rx, rz, side) {
+    const fwd = b.v.x * fx + b.v.z * fz, lat = b.v.x * rx + b.v.z * rz;
+    const speed = Math.hypot(car.vx, car.vy);
+    const want = side * (2.5 + 0.12 * speed);
+    const newLat = side * Math.max(side * lat, side * want);
+    const newFwd = Math.max(fwd, Math.min(speed * 0.9, fwd + 3));
+    const dLat = newLat - lat, dFwd = newFwd - fwd;
+    b.v.x += rx * dLat + fx * dFwd; b.v.z += rz * dLat + fz * dFwd;
+    if (b.v.y < 1) b.v.y = 1 + 0.03 * speed;
+    b.asleep = false; b.still = 0; b.age = 0;
+    moving.add(b);
+    return b.mass * Math.hypot(dLat, dFwd) * 0.3;
   }
 
   function step(b, dt) {
@@ -420,7 +444,7 @@ export function createProps(world, opts = {}) {
       // a little kick apart at the break, and a tumble of its own
       pc.v.addScaledVector(off.normalize(), 0.6 + Math.random() * 0.6);
       pc.w.x += (Math.random() - 0.5) * 2; pc.w.z += (Math.random() - 0.5) * 2;
-      pc.age = 0; pc.still = 0; pc.lastPass = b.lastPass; pc.under = 0;
+      pc.age = 0; pc.still = 0; pc.lastPass = b.lastPass; pc.under = 0; pc.hitT = b.hitT;
       moving.add(pc);
       out.push(pc);
     }
@@ -448,7 +472,7 @@ export function createProps(world, opts = {}) {
   // small knock upwards and rolls the pole a little, and a pass over it may snap it.
   const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
   function lying(b) {
-    return b.seg && Math.abs(tmpV.set(0, 1, 0).applyQuaternion(b.obj.quaternion).y) < 0.55;
+    return b.seg && Math.abs(tmpV.set(0, 1, 0).applyQuaternion(b.obj.quaternion).y) < 0.8;
   }
   function driveOver(b, car, wheels, fx, fz, speed) {
     const o = b.obj;
@@ -496,6 +520,7 @@ export function createProps(world, opts = {}) {
   // check the car against the props around it, knock what it touches, move what is flying
   function update(car, dt) {
     if (!data) return;
+    clock += dt;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     const speed = Math.hypot(car.vx, car.vy);
     const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
@@ -505,6 +530,8 @@ export function createProps(world, opts = {}) {
       const sx = Math.floor((car.x - G0) / S), sz = Math.floor((car.z - G0) / S);
       const hw = car.halfWid - 0.25;
       const wheels = [[car.a, -hw], [car.a, hw], [-car.b, -hw], [-car.b, hw]].map(([l, t]) => [car.x + fx * l + rx * t, car.z + fz * l + rz * t]);
+      // the side of the car's centre line a point is on; dead centre picks one at random
+      const sideOf = (px, pz) => { const l = (px - car.x) * rx + (pz - car.z) * rz; return Math.abs(l) > 0.05 ? Math.sign(l) : Math.random() < 0.5 ? -1 : 1; };
       const touches = (px, pz, reach) => {
         const dx = px - car.x, dz = pz - car.z;
         if (dx * dx + dz * dz > 49) return false;
@@ -522,7 +549,7 @@ export function createProps(world, opts = {}) {
           hide(rec, e);
           const b = makeBody(e, rec);
           knocked[e.id] = 1;
-          const j = hit(b, cvx, cvz, M);
+          const j = hit(b, cvx, cvz, M, sideOf(e.x, e.z));
           took += j;
           // sometimes it snaps straight away, more often the faster the car; else maybe later, under a wheel
           if (canBreak(b) && Math.random() < Math.min(0.5, Math.max(0.08, (speed - 6) / 40))) split(b, impactCuts(b.kind));
@@ -538,7 +565,15 @@ export function createProps(world, opts = {}) {
             continue;
           }
           if (!touches(p.x, p.z, b.reach)) continue;
-          const j = hit(b, cvx, cvz, M);
+          const side = sideOf(p.x, p.z);
+          if (clock - (b.hitT ?? -9) < 1.5) {
+            const j = shove(b, car, fx, fz, rx, rz, side);
+            const k = Math.min(j / M, 0.3);
+            cvx -= fx * k; cvz -= fz * k;
+            took += 1e-6;
+            continue;
+          }
+          const j = hit(b, cvx, cvz, M, side);
           if (j) { took += j; cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M; }
         }
       }

@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import KERBS from './kerbs.json';
 import { createTrack } from './race.js';
+import { junctionCorners, cornerAt } from './junctionkerbs.js';
 
 const H = KERBS.h;            // 0.09 m (Martin, 19 Nov: first 10, then 1 cm lower with a smoother edge)
 const EDGE = 0.1;             // the rounded edge of the kerb stone
@@ -25,6 +26,11 @@ export function createTrackKerbs(world, scene) {
   const runs = KERBS.runs.map((r) => ({ ...r, i1: r.i0 + r.w.length - 1, built: false }));
   const by = { '-1': new Int16Array(N).fill(-1), 1: new Int16Array(N).fill(-1) };
   runs.forEach((r, k) => { for (let i = r.i0; i <= r.i1; i++) by[r.s][i] = k; });
+  // the round kerbs at the big junction (src/race/junctionkerbs.js) take over from the runs there
+  const corners = junctionCorners().map((c) => ({ ...c, built: false }));
+  const skipped = new Set();
+  for (const c of corners) for (const [s, i0, i1] of c.skip) for (let i = i0; i <= i1; i++) { by[s][i] = -1; skipped.add(`${s}:${i}`); }
+  const skip = (r, t) => skipped.has(`${r.s}:${Math.floor(t + 1e-6)}`);
 
   // a run's values at a lap index with a fraction (held at the last index)
   const val = (r, key, t) => {
@@ -54,20 +60,31 @@ export function createTrackKerbs(world, scene) {
       }
     }
   }
+  for (const c of corners) {
+    const [bx0, bz0, bx1, bz1] = c.box;
+    for (let x = bx0; x <= bx1 + CELL; x += CELL) for (let z = bz0; z <= bz1 + CELL; z += CELL) cells.add(`${Math.floor(Math.min(x, bx1) / CELL)},${Math.floor(Math.min(z, bz1) / CELL)}`);
+    x0 = Math.min(x0, bx0); z0 = Math.min(z0, bz0); x1 = Math.max(x1, bx1); z1 = Math.max(z1, bz1);
+  }
+  // a run's kerb at (x, z)
+  const runAt = (x, z) => {
+    // (the nearest piece of the lap anywhere: a hint can settle on another stretch that passes within 30 m)
+    const n = track.nearest(x, z);
+    if (n.i < 0 || n.d > 14) return 0;
+    const [tx, tz] = tan[n.i], p = P[n.i];
+    const lat = (x - p[0]) * -tz + (z - p[1]) * tx, s = lat > 0 ? 1 : -1;
+    const k = by[s][n.i];
+    if (k < 0) return 0;
+    const r = runs[k], t = n.i + n.t;
+    const d = Math.abs(lat) - hwAt(t) - val(r, 'f', t);
+    return H * up(r, t) * profile(d, val(r, 'w', t), val(r, 'b', t));
+  };
   world.addBump({
     x0: x0 - 5, z0: z0 - 5, x1: x1 + 5, z1: z1 + 5,
     at(x, z) {
       if (!cells.has(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`)) return 0;
-      // (the nearest piece of the lap anywhere: a hint can settle on another stretch that passes within 30 m)
-      const n = track.nearest(x, z);
-      if (n.i < 0 || n.d > 14) return 0;
-      const [tx, tz] = tan[n.i], p = P[n.i];
-      const lat = (x - p[0]) * -tz + (z - p[1]) * tx, s = lat > 0 ? 1 : -1;
-      const k = by[s][n.i];
-      if (k < 0) return 0;
-      const r = runs[k], t = n.i + n.t;
-      const d = Math.abs(lat) - hwAt(t) - val(r, 'f', t);
-      return H * up(r, t) * profile(d, val(r, 'w', t), val(r, 'b', t));
+      let v = runAt(x, z);
+      for (const c of corners) v = Math.max(v, cornerAt(c, x, z));     // where a corner and a run meet, the higher
+      return v;
     },
     // the raised ground, for the ground tiles to draw in their own look: quads of half a lap index along
     // and up to a metre across, from the top of the rounded edge to the foot of the back slope
@@ -76,6 +93,7 @@ export function createTrackKerbs(world, scene) {
       const y = (p) => world.heightAt(Math.max(tx0, Math.min(tx0 + size, p[0])), Math.max(tz0, Math.min(tz0 + size, p[1]))) + 0.012;
       for (const r of runs) {
         for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
+          if (skip(r, t)) continue;
           const u = Math.min(r.i1, t + 0.5);
           const mid = at((t + u) / 2, r.s * (hwAt(t) + val(r, 'f', t) + 1));
           if (mid[0] < tx0 - 12 || mid[0] > tx0 + size + 12 || mid[1] < tz0 - 12 || mid[1] > tz0 + size + 12) continue;
@@ -89,6 +107,25 @@ export function createTrackKerbs(world, scene) {
             if (!inTile([(A[0] + D[0]) / 2, (A[1] + D[1]) / 2])) continue;
             for (const [a, bb, c] of [[A, B, C], [C, B, D]]) {
               const tri = (bb[1] - a[1]) * (c[0] - a[0]) - (bb[0] - a[0]) * (c[1] - a[1]) >= 0 ? [a, bb, c] : [a, c, bb];
+              for (const p of tri) out.push(p[0], y(p), p[1]);
+            }
+          }
+        }
+      }
+      for (const c of corners) {
+        const [bx0, bz0, bx1, bz1] = c.box;
+        if (bx1 < tx0 || bx0 > tx0 + size || bz1 < tz0 || bz0 > tz0 + size) continue;
+        const ds = [c.edge];
+        for (let d = 1; d < c.w; d += 1) ds.push(d);
+        ds.push(c.w, c.w + c.b * 0.5, c.w + c.b);
+        const pt = (j, d) => { const q = c.pts[j], n = c.vN[j], dd = Math.min(d, c.clamp[j]); return [q[0] + n[0] * dd, q[1] + n[1] * dd]; };
+        for (let j = 0; j < c.pts.length - 1; j++) {
+          if (!c.draw[j] || !c.draw[j + 1]) continue;
+          for (let q = 0; q < ds.length - 1; q++) {
+            const A = pt(j, ds[q]), B = pt(j + 1, ds[q]), C = pt(j, ds[q + 1]), D = pt(j + 1, ds[q + 1]);
+            if (!inTile([(A[0] + D[0]) / 2, (A[1] + D[1]) / 2])) continue;
+            for (const [a, bb, cc] of [[A, B, C], [C, B, D]]) {
+              const tri = (bb[1] - a[1]) * (cc[0] - a[0]) - (bb[0] - a[0]) * (cc[1] - a[1]) >= 0 ? [a, bb, cc] : [a, cc, bb];
               for (const p of tri) out.push(p[0], y(p), p[1]);
             }
           }
@@ -108,6 +145,7 @@ export function createTrackKerbs(world, scene) {
     const quad = (A, B, C, D, c) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(c.r, c.g, c.b); };
     const P3 = (t, d, lift) => { const [x, z] = at(t, r.s * (hwAt(t) + val(r, 'f', t) + d)); return [x, world.heightAt(x, z) + lift, z]; };
     for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
+      if (skip(r, t)) continue;
       const u = Math.min(r.i1, t + 0.5);
       // the face: from just under the road up the rounded edge as the cars feel it, then the stone on top
       const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * EDGE);
@@ -124,8 +162,36 @@ export function createTrackKerbs(world, scene) {
     group.add(m);
   }
 
+  // a corner's kerb stones, the same profile along its own line
+  function buildCorner(c) {
+    c.built = true;
+    const pos = [], col = [];
+    const quad = (A, B, C, D, k) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(k.r, k.g, k.b); };
+    const P3 = (j, d, lift) => { const q = c.pts[j], n = c.vN[j], x = q[0] + n[0] * d, z = q[1] + n[1] * d; return [x, world.heightAt(x, z) + lift, z]; };
+    const E = c.edge, R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * E), ST = E + 0.12;
+    for (let j = 0; j < c.pts.length - 1; j++) {
+      if (!c.draw[j] || !c.draw[j + 1]) continue;
+      const k = j + 1;
+      quad(P3(j, -0.03, -0.03), P3(k, -0.03, -0.03), P3(j, 0, 0.012), P3(k, 0, 0.012), cF);
+      for (let q = 0; q < R.length - 1; q++) quad(P3(j, R[q], 0.012), P3(k, R[q], 0.012), P3(j, R[q + 1], 0.012), P3(k, R[q + 1], 0.012), q < 3 ? cF : cS);
+      quad(P3(j, E, 0.012), P3(k, E, 0.012), P3(j, ST, 0.016), P3(k, ST, 0.016), cS);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, mat);
+    m.receiveShadow = true;
+    group.add(m);
+  }
+
   return {
     update(x, z) {
+      for (const c of corners) {
+        if (c.built) continue;
+        const q = c.pts[c.nC0];
+        if (Math.hypot(q[0] - x, q[1] - z) < 300 && world.ready(...c.pts[0]) && world.ready(...c.pts[c.pts.length - 1])) buildCorner(c);
+      }
       for (const r of runs) {
         if (r.built) continue;
         let near = false, ready = true;

@@ -86,6 +86,10 @@ export function createSpace(ctx, out, mix = {}) {
   const conv = ctx.createConvolver(); conv.normalize = false; conv.buffer = makeIR(ctx);
   const revOut = ctx.createGain(); revOut.gain.value = 0.6;
   input.connect(revSend).connect(revHp);
+  // short loud bursts (the turbo blow-off) go round the compressor, so they punch through the engine
+  // instead of pressing it down, but into the echoes and the reverb all the same
+  const burst = ctx.createGain();
+  burst.connect(out); burst.connect(erSend); burst.connect(revSend);
   remoteIn.connect(remoteSend).connect(revHp);
   revHp.connect(pre).connect(conv).connect(revOut);
   revOut.connect(comp); revOut.connect(bypass);
@@ -175,7 +179,7 @@ export function createSpace(ctx, out, mix = {}) {
   }
 
   return {
-    input, remoteIn, update, setOn,
+    input, remoteIn, burst, update, setOn,
     get on() { return on; },
     // (for tests)
     get taps() { return taps.map((x) => ({ deg: x.deg, d: x.d, g: x.g, delay: x.cur })); },

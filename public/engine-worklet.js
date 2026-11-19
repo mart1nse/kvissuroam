@@ -6,7 +6,10 @@
 // bank's exhaust. The pulses ring through the pipes (feedback combs) and the silencers (resonators), with
 // intake roar, valvetrain / injector ticks, turbo hiss and overrun crackle on top. A loud pulse steepens
 // as it runs down the pipe, so it arrives with a sharp front (edge), and the hard, buzzy harmonics that
-// gives (the rasp that cuts through on a race track) are added by an exciter on the upper band. On the rev limiter
+// gives (the rasp that cuts through on a race track) are added by an exciter on the upper band. A turbo
+// whistles: the compressor's tone (two slightly apart, so it shimmers rather than beeps, and an overtone),
+// the rush of air through it, and a flutter from the exhaust pulses that drive the turbine; after a lift
+// the turbine runs on and its whine falls away (state.shaft). On the rev limiter
 // the ignition is cut: the cylinders only pump air until it returns with a bark. Firing order, bank
 // layout, pipe lengths and the silencer tune come from the car's config (src/engine-sounds.js).
 
@@ -57,8 +60,9 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0 };
-    this.rpm = 800; this.load = 0; this.boost = 0; this.on = 0; this.theta = 0;
+    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0 };
+    this.rpm = 800; this.load = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
+    this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0;
   }
@@ -93,6 +97,9 @@ export class EngineCore {
     this.rasp = c.rasp || 0; this.edge = c.edge || 0;
     this.exHp1 = new Biquad().set('hp', c.raspF || 1100, 0.7, sr); this.exHp2 = new Biquad().set('hp', c.raspF || 1100, 0.7, sr);
     this.exLp = new Biquad().set('lp', c.raspTop || 7000, 0.6, sr); this.exDc = new Biquad().set('hp', 400, 0.7, sr);
+    // turbo whistle: level (0 = none) and pitch scale (a small turbo spins faster and sings higher)
+    this.wh = c.turbo ? c.whistle ?? 1 : 0; this.whF = c.whistleF ?? 1;
+    this.airBp = new Biquad().set('bp', 1500, 1.6, sr);
     this.pulses.length = 0;
   }
 
@@ -142,6 +149,7 @@ export class EngineCore {
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     this.load += (I.throttle - this.load) * kl;
     this.boost += (I.boost - this.boost) * kl;
+    this.shaft += ((I.shaft >= 0 ? I.shaft : I.boost) - this.shaft) * kl;
     this.on += ((I.on ? 1 : 0) - this.on) * (1 - Math.exp(-len / (sr * 0.05)));
     const rpm = this.rpm, load = this.load, rr = rpm / I.redline;
     const bright = c.lp0 + c.lpRpm * rpm / 1000 + c.lpLoad * load - (c.turbo ? c.turboMuffle * (1 - this.boost * 0.5) : 0);
@@ -152,6 +160,16 @@ export class EngineCore {
     const ev = this.events, banks = this.banks, res = this.res, pulses = this.pulses;
     const intake = c.intake * load * (0.15 + rr), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
     const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)), rk = c.raspDrive || 6;
+    // the turbine: on a lift it runs on and spins down (shaft), the whine falling under the blow-off
+    let wl = 0, wf = 0, wd = 0;
+    if (this.wh > 0) {
+      const lifted = I.throttle <= 0, spin = lifted ? Math.max(this.boost, this.shaft * 0.75) : this.boost;
+      wl = 0.055 * this.wh * this.on * (this.boost * this.boost + (lifted ? 0.3 * this.shaft * this.shaft : 0));
+      this.wjit = this.wjit * 0.9 + (n() * 2 - 1) * 0.0015;         // turbulence: the pitch is never quite steady
+      wf = (1400 + rpm * 0.35 * (0.4 + 0.6 * spin)) * this.whF * (1 + this.wjit) / sr;
+      this.airBp.set('bp', wf * sr * 0.6, 1.6, sr);
+      wd = ev.length / 720;                                          // exhaust pulses per crank degree
+    }
 
     for (let s = 0; s < len; s++) {
       const th0 = this.theta; let th1 = th0 + dTheta;
@@ -192,7 +210,15 @@ export class EngineCore {
       else { const ring = this.tickF.run(0); if (this.smooth) y += ring; }
       if (hiss > 0) y += this.hissBp.run(n() * 2 - 1) * hiss;
       y = this.hp.run(y);
-      out[s] = Math.tanh(drive * y) / dn * gain;
+      let o = Math.tanh(drive * y) / dn * gain;
+      if (wl > 1e-5) {
+        this.wp0 += wf; this.wp1 += wf * 1.0071; this.wp2 += wf * 2;
+        if (this.wp0 > 1) this.wp0 -= 1; if (this.wp1 > 1) this.wp1 -= 1; if (this.wp2 > 1) this.wp2 -= 1;
+        const tone = Math.sin(6.2832 * this.wp0) + 0.55 * Math.sin(6.2832 * this.wp1) + 0.14 * Math.sin(6.2832 * this.wp2);
+        const fp = this.theta * wd, am = 1 - 0.14 * (1 + Math.cos(6.2832 * (fp - Math.floor(fp))));
+        o += (tone * 0.6 * am + this.airBp.run(n() * 2 - 1) * 2.2) * wl;
+      }
+      out[s] = o;
       this.n++;
     }
   }

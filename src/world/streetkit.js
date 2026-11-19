@@ -61,26 +61,77 @@ export function paverTex(base, seed) {
     }
   });
 }
-// mown lawn: speckled green; one tile is 4 m
-export function lawnTex() {
-  return canvasTex(128, 128, (g, w) => {
-    const r = rnd(7);
-    g.fillStyle = '#96d878'; g.fillRect(0, 0, w, w);
-    for (let k = 0; k < 2600; k++) {
-      const v = r();
-      g.fillStyle = v < 0.5 ? 'rgba(110,186,96,0.5)' : v < 0.85 ? 'rgba(176,228,128,0.5)' : 'rgba(124,196,108,0.6)';
-      g.fillRect(r() * w, r() * w, 1 + r() * 2, 1 + r() * 3);
-    }
-  });
+// THE grass for every patch of grass laid by hand (Martin, 19 Nov: the painted strips were too contrasty
+// and sharp green). It is the verge of the rebuilt Lai junction (PRs #193, #199): clumps, blades, clover
+// and a few flowers, muted to about half saturation towards the olive-brown orthophoto grass round it so
+// it sits in the map's own grass. One tile is GRASS.tile metres. Flat-coloured grass (extruded islands,
+// vertex-coloured banks) uses GRASS.hex, about the average colour of the texture.
+export const GRASS = { tile: 10, hex: 0x7e9068 };
+let grassCanvas = null;
+const grassCache = new Map();
+// mute a green toward the orthophoto grass, as the texture is muted (half saturation, warmer)
+export function muteGreen(r, g, b) {
+  const l = 0.3 * r + 0.55 * g + 0.15 * b;
+  return [l + (r - l) * 0.5 + 8, l + (g - l) * 0.5 - 4, l + (b - l) * 0.5 - 6].map((v) => Math.max(0, Math.min(255, Math.round(v))));
 }
+function drawGrass() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d'), w = 512;
+  let seed = 23;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = '#6ea85a'; g.fillRect(0, 0, w, w);
+  const blob = (x, y, rad, col) => {
+    for (const ox of [-w, 0, w]) for (const oy of [-w, 0, w]) {
+      const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
+      gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+    }
+  };
+  const clumps = ['rgba(78,138,66,0.55)', 'rgba(92,152,74,0.5)', 'rgba(140,186,96,0.45)', 'rgba(168,184,98,0.35)', 'rgba(70,124,72,0.5)'];
+  for (let k = 0; k < 70; k++) blob(r() * w, r() * w, 20 + r() * 70, clumps[(r() * clumps.length) | 0]);
+  const blades = ['rgba(64,118,58,0.7)', 'rgba(98,158,80,0.6)', 'rgba(132,182,100,0.55)', 'rgba(84,140,70,0.65)', 'rgba(158,188,108,0.45)'];
+  for (let k = 0; k < 14000; k++) {
+    const x = r() * w, y = r() * w, l = 2 + r() * 5, a = -Math.PI / 2 + (r() - 0.5) * 1.2;
+    g.strokeStyle = blades[(r() * blades.length) | 0]; g.lineWidth = 1 + r() * 0.8;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  for (let k = 0; k < 160; k++) {                       // clover patches: darker round leaves
+    const x = r() * w, y = r() * w;
+    g.fillStyle = 'rgba(60,112,62,0.6)';
+    for (let q = 0; q < 6; q++) { g.beginPath(); g.arc(x + (r() - 0.5) * 8, y + (r() - 0.5) * 8, 1.6 + r(), 0, Math.PI * 2); g.fill(); }
+  }
+  const flowers = ['rgba(255,255,250,0.9)', 'rgba(255,236,150,0.9)', 'rgba(222,196,240,0.85)'];
+  for (let k = 0; k < 110; k++) { g.fillStyle = flowers[(r() * 3) | 0]; g.beginPath(); g.arc(r() * w, r() * w, 0.9 + r() * 0.9, 0, Math.PI * 2); g.fill(); }
+  const img = g.getImageData(0, 0, w, w), d = img.data;
+  for (let i = 0; i < d.length; i += 4) [d[i], d[i + 1], d[i + 2]] = muteGreen(d[i], d[i + 1], d[i + 2]);
+  g.putImageData(img, 0, 0);
+  return c;
+}
+// the grass texture for geometry whose UVs count in units of `uvMetres` (one canvas, shared)
+export function grassTex(uvMetres = GRASS.tile) {
+  if (grassCache.has(uvMetres)) return grassCache.get(uvMetres);
+  grassCanvas ??= drawGrass();
+  const t = new THREE.CanvasTexture(grassCanvas);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  t.repeat.set(uvMetres / GRASS.tile, uvMetres / GRASS.tile);
+  grassCache.set(uvMetres, t);
+  return t;
+}
+// lawns use the same grass (UVs in 4 m tiles)
+export function lawnTex() { return grassTex(4); }
 // concrete grid pavers with grass in the holes, 40 cm blocks; one tile is 1.2 m
 export function turfTex() {
+  const rgb = (c, a = 1) => `rgba(${muteGreen(...c).join(',')},${a})`;
+  const HOLE = rgb([134, 196, 108]), BLADE = [rgb([160, 214, 120], 0.8), rgb([96, 160, 84], 0.8)];
   return canvasTex(192, 192, (g, w) => {
     const r = rnd(11);
     g.fillStyle = '#c9c6d2'; g.fillRect(0, 0, w, w);
     for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) for (const [u, v] of [[8, 8], [36, 8], [8, 36], [36, 36]]) {
-      g.fillStyle = '#86c46c'; g.fillRect(a * 64 + u, b * 64 + v, 20, 20);
-      for (let k = 0; k < 14; k++) { g.fillStyle = r() < 0.5 ? 'rgba(160,214,120,0.8)' : 'rgba(96,160,84,0.8)'; g.fillRect(a * 64 + u + r() * 18, b * 64 + v + r() * 18, 2, 3); }
+      g.fillStyle = HOLE; g.fillRect(a * 64 + u, b * 64 + v, 20, 20);
+      for (let k = 0; k < 14; k++) { g.fillStyle = r() < 0.5 ? BLADE[0] : BLADE[1]; g.fillRect(a * 64 + u + r() * 18, b * 64 + v + r() * 18, 2, 3); }
     }
   });
 }
@@ -223,7 +274,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     };
     const decal = (kind, opts) => { const f = KINDS[kind].f; flat(ground[kind], new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide })); };
     if (ground.lawn.pos.length) decal('lawn', { map: lawnTex() });
-    if (ground.verge.pos.length) decal('verge', { map: lawnTex(), color: 0x9fe07c });
+    if (ground.verge.pos.length) decal('verge', { map: lawnTex() });     // the same grass as lawn now (was tinted deeper green)
     if (ground.paver.pos.length) decal('paver', { map: paverTex([208, 206, 218], 3) });
     if (ground.red.pos.length) decal('red', { map: paverTex([226, 164, 152], 5) });
     if (ground.dark.pos.length) decal('dark', { map: paverTex([150, 150, 166], 9) });

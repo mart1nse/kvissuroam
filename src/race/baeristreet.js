@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { BOX, rnd } from './landmarks.js';
-import { streetKit, wallOf, setHouseColours, lawnTex } from '../world/streetkit.js';
+import { streetKit, wallOf, setHouseColours, grassTex } from '../world/streetkit.js';
 import { facade } from './vallistreet.js';
 import { drapeGeometry } from '../world/drape.js';
 
@@ -857,7 +857,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.renderOrder = order; group.add(mesh);
     };
     softMesh(soft.paint, { color: 0xf59aa8 }, 0.72);
-    softMesh(soft.grass, { map: lawnTex(), color: 0x9fe07c }, 1, -5, 1);
+    softMesh(soft.grass, { map: grassTex(1.6) }, 1, -5, 1);     // the shared grass; this mesh's UVs count in 1.6 m
     softMesh(soft.brick, { map: footpathTex() }, 1, -6, 2);
     K.finish();
     if (solids.length) world.addSolids(solids);

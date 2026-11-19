@@ -235,7 +235,7 @@ function loadLocal() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; }
 }
 
-export function createRace({ world, scene, toast, onLap, bestFor }) {
+export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
   const track = createTrack();
   const edges = createEdges(track, world);
   scene.add(edges.group);
@@ -251,7 +251,8 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
   panel.innerHTML = `<div class="lt"><span class="lbl">LAP</span><b id="laptime">0:00.00</b></div>
     <div class="lb"><span class="lbl">BEST <span id="lapcar"></span></span><b id="lapbest"></b></div>
     <ol id="laplast"></ol><div id="lapmsg"></div>`;
-  // checkpoint split: time at the checkpoint and +/- against this browser's best lap in this car
+  // checkpoint split: time at the checkpoint and +/- against this browser's best lap in this car,
+  // or, before there is one, against the lap record's splits
   const split = document.createElement('div');
   split.id = 'lapsplit';
   split.className = 'hidden';
@@ -265,19 +266,24 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
     clearTimeout(splitTimer);
     splitTimer = setTimeout(() => split.classList.add('hidden'), 3200);
   }
-  // this browser's best lap in a car that has checkpoint times
+  // the lap to compare with: this browser's best lap in the car that has checkpoint times for the
+  // current checkpoints, else the fastest such lap anyone drove in it (the record, once the record
+  // was driven with split times), marked rec so the HUD says whose times they are
   const bestSplits = (carId) => {
     let b = null;
     for (const l of laps) if (l.car === carId && l.splits && l.cp === CP_KEY && (!b || l.ms < b.ms)) b = l;
-    return b;
+    if (b) return b;
+    const r = refFor?.(carId, CP_KEY);
+    return r && r.splits.length === TRACK.checkpoints.length ? { ...r, rec: true } : null;
   };
+  const vs = (ref) => (ref?.rec ? ` · VS ${escapeHtml(String(ref.name).toUpperCase())}` : '');
   document.querySelector('#hud').appendChild(panel);
   const elTime = panel.querySelector('#laptime'), elBest = panel.querySelector('#lapbest'), elCar = panel.querySelector('#lapcar');
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
 
   const st = {
     running: false, t0: 0, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
-    prev: null, prevTime: 0, splits: [],
+    prev: null, prevTime: 0, splits: [], ref: null,
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -383,9 +389,9 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                 const lapT = tc - st.t0;
                 const missed = track.checkpoints.length - st.cps.size;
                 if (missed === 0 && lapT > MIN_LAP) {
-                  const ref = bestSplits(carId);
+                  const ref = st.ref;
                   const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY };
-                  showSplit('FINISH', lapT, ref ? ref.ms / 1000 : null);
+                  showSplit(`FINISH${vs(ref)}`, lapT, ref ? ref.ms / 1000 : null);
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);
                   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(laps)); } catch { /* private mode */ }
@@ -397,6 +403,7 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
                 } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
               } else toast('GO!', 1200);
               st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
           if (st.running) {
@@ -405,8 +412,9 @@ export function createRace({ world, scene, toast, onLap, bestFor }) {
               st.cps.add(cp.i);
               const t = time - st.t0;
               st.splits[k] = Math.round(t * 1000);
-              const ref = bestSplits(carId)?.splits?.[k];
-              showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, ref == null ? null : ref / 1000);
+              if (!st.ref) st.ref = bestSplits(carId);
+              const ref = st.ref?.splits?.[k];
+              showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}${vs(st.ref)}`, t, ref == null ? null : ref / 1000);
             });
             if (!onTrack) {
               st.off += moved;

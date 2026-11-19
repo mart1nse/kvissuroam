@@ -257,6 +257,7 @@ async function boot() {
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     onLap: (lap) => mp.submitLap(lap),
+    refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
       let mine = null;

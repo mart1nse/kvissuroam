@@ -2,11 +2,14 @@
 
 export function createInput(root) {
   const state = { up: 0, down: 0, left: 0, right: 0, handbrake: 0, look: 0 };
-  // (A and Z shift gears, so A/D no longer steer; W and S still work as gas and brake. B is held to look back.)
+  // Arrow keys drive. By default A and Z shift gears (see main.js); WASD mode (the options panel) makes
+  // W/A/S/D drive instead and leaves the gearbox to the automatic. B is held to look back.
   const keys = new Map([
     ['ArrowUp', 'up'], ['ArrowDown', 'down'], ['ArrowLeft', 'left'], ['ArrowRight', 'right'],
-    ['KeyW', 'up'], ['KeyS', 'down'], ['Space', 'handbrake'], ['KeyB', 'look'],
+    ['Space', 'handbrake'], ['KeyB', 'look'],
   ]);
+  const WASD = [['KeyW', 'up'], ['KeyA', 'left'], ['KeyS', 'down'], ['KeyD', 'right']];
+  let wasd = false;
   const actions = new Map();   // code -> callback
   let enabled = false;
 
@@ -56,6 +59,12 @@ export function createInput(root) {
   return {
     state,
     on(code, fn) { actions.set(code, fn); },
+    get wasd() { return wasd; },
+    setWasd(v) {
+      wasd = !!v;
+      for (const [code, k] of WASD) { if (wasd) keys.set(code, k); else keys.delete(code); }
+      for (const k in state) state[k] = 0;
+    },
     enable(v) { enabled = v; if (!v) { for (const k in state) state[k] = 0; held.clear(); refresh(); } },
   };
 }

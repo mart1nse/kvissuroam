@@ -10,8 +10,10 @@ data marks as elevated (e: 1 in vectors.json), followed some way past both ends,
     structure really is and at its real height, with piers where no road runs below;
   - the stretches on a walled ramp up to it (road surface well above the terrain of the game):
     a deck with solid walls down to the ground (wall: 1).
-They replace the dry-land spans that terrain.py made (k: 1 without w). Road lines that run along a
-new deck are marked e: 1, so their lane lines are drawn on it. A new deck over water keeps the name and the look (w, n, b) of the bridge it replaces. Tunnel lids (k: 0) are laid again.
+They replace the dry-land spans that terrain.py made (k: 1 without w). Where a river bridge still runs over land at its ends,
+the ground under it is raised into an earth bank (fill_ends), so the deck does not start as a bare slab over
+the slope down to the water. Road lines that run along a
+new deck are marked e: 1, so their lane lines are drawn on it. A new deck over water keeps the name and the look (w, n, b) of the bridge it replaces. Tunnel lids (k: 0) are laid on the first run and kept on later ones.
 """
 import gzip
 import json
@@ -558,6 +560,102 @@ def repair_under(decks):
     return changed
 
 
+_surf = {}
+
+
+def water(x, z):
+    """The game's own water (surface class 4) at world points."""
+    x, z = np.atleast_1d(np.asarray(x, float)), np.atleast_1d(np.asarray(z, float))
+    out = np.zeros(x.shape, bool)
+    sx, sz = np.floor((x - G0) / S).astype(int), np.floor((z - G0) / S).astype(int)
+    SN = meta['surface']['n']
+    for k in set(zip(sx.ravel().tolist(), sz.ravel().tolist())):
+        if k not in _surf:
+            p = f'{DATA}/sec/{k[0]}_{k[1]}.kvs'
+            if not os.path.exists(p):
+                _surf[k] = None
+            else:
+                b = open(p, 'rb').read()
+                b = gzip.decompress(b) if b[:2] == b'\x1f\x8b' else b
+                _surf[k] = np.frombuffer(b, 'u1', SN * SN, 32 + HN * HN * 2).reshape(SN, SN)
+        g = _surf[k]
+        if g is None:
+            continue
+        m = (sx == k[0]) & (sz == k[1])
+        c = np.clip(((x[m] - G0 - k[0] * S) / S * SN).astype(int), 0, SN - 1)
+        r = np.clip(((z[m] - G0 - k[1] * S) / S * SN).astype(int), 0, SN - 1)
+        out[m] = g[r, c] == 4
+    return out
+
+
+def fill_ends(decks, changed):
+    """A river bridge comes off the bank on an earth ramp. Where the deck still runs over land at its two
+    ends, the terrain under it is raised to just below the deck, with a bank falling 1:1 beside it, so that
+    the deck does not rise from the road as a bare slab over a slope down to the water; towards the water
+    the bank falls 1:1 too. A path that comes
+    up onto the deck from the bank climbs the bank at 1:4; a road or path that passes beside or under the
+    bridge end stays as it is."""
+    import shapely
+    beside = [r for r in R if r.get('e') != 1 and len(r['pts']) > 1]
+    under = [LineString([p[:2] for p in r['pts']]) for r in beside]
+    reach = [r.get('w', 4) / 2 + 1.5 for r in beside]
+    tree = STRtree(under)
+    n = 0
+    for d in decks:
+        if not d.get('w') or d.get('wall'):
+            continue
+        poly = d['_poly']
+        P2 = np.array([q[:2] for q in d['pts']])
+        cum = np.r_[0, np.cumsum(np.hypot(*np.diff(P2, axis=0).T))]
+        wet = water(P2[:, 0], P2[:, 1])
+        if not wet.any():
+            continue
+        first, last = np.argmax(wet), len(wet) - 1 - np.argmax(wet[::-1])
+        lo, hi = min(cum[first] - 2, 30), max(cum[last] + 2, cum[-1] - 30)   # the land ends, 30 m at most
+        hc = deck_height(d)
+        end_of = lambda x, z: (lambda s: (s <= lo) | (s >= hi))(cum[cKDTree(P2).query(np.c_[np.ravel(x), np.ravel(z)])[1]])
+        # paths that come up onto a land end of the deck
+        joins = set()
+        for i, r in enumerate(beside):
+            if r['type'] not in ('Kergliiklustee', 'Rada'):
+                continue
+            ends = [p[:2] for p in (r['pts'][0], r['pts'][-1]) if poly.buffer(0.5).contains(Point(p[:2]))]
+            if not ends or not end_of(*np.array(ends).T).all():
+                continue
+            joins.add(i)
+        x0, z0, x1, z1 = poly.buffer(14).bounds
+        nx0, nz0 = np.ceil((x0 - G0) / 2) * 2 + G0, np.ceil((z0 - G0) / 2) * 2 + G0
+        NX, NZ = np.meshgrid(np.arange(nx0, x1, 2.0), np.arange(nz0, z1, 2.0))
+        NX, NZ = NX.ravel(), NZ.ravel()
+        st = cum[cKDTree(P2).query(np.c_[NX, NZ])[1]]
+        beyond = np.maximum(0, np.minimum(st - lo, hi - st))   # how far past a land end, towards the water
+        near = shapely.contains_xy(poly.buffer(14), NX, NZ) & (beyond < 14)
+        NX, NZ, beyond = NX[near], NZ[near], beyond[near]
+        out = np.array([poly.exterior.distance(Point(x, z)) for x, z in zip(NX, NZ)]) * ~shapely.contains_xy(poly, NX, NZ)
+        out = np.maximum(out, beyond)                          # the bank falls away beside the deck and in front of it
+        top = hc(NX, NZ) - 0.12
+        old = terrain(NX, NZ)
+        # metres to the water's edge, on a 1 m grid: the bank comes down to the water at 1:1.5 at most
+        WX, WZ = np.meshgrid(np.arange(x0 - 20, x1 + 21), np.arange(z0 - 20, z1 + 21))
+        dw = ndimage.distance_transform_edt(~water(WX.ravel(), WZ.ravel()).reshape(WX.shape))
+        dw = dw[np.clip(np.round(NZ - (z0 - 20)).astype(int), 0, WX.shape[0] - 1), np.clip(np.round(NX - (x0 - 20)).astype(int), 0, WX.shape[1] - 1)]
+        for x, z, t, o, w, e in zip(NX, NZ, top, old, dw, out):
+            if w < 1.5 or not np.isfinite(o):
+                continue
+            hits = [i for i in tree.query(Point(x, z).buffer(8)) if under[i].distance(Point(x, z)) < reach[i]]
+            lip = e == 0 and t - o < 1.0                       # under the deck, too low for anything to pass
+            if any(i not in joins for i in hits) and not lip:
+                continue                                       # a road or path past or under the bridge end
+            t = t - (e * 0.25 if hits else e)                  # the bank 1:1, a path on it 1:4
+            t = min(t, o + (w - 1.5) / 1.5)
+            if t - o < 0.1:
+                continue
+            k = (float(x), float(z))
+            changed[k] = max(changed.get(k, -1e9), float(t))
+            n += 1
+    return n
+
+
 def write_heights(changed):
     """Write node heights into the sector files (a node on a sector edge is in both)."""
     per = {}
@@ -636,9 +734,11 @@ def main():
     for r in R:
         if r.pop('el', None):
             r.pop('e', None)
-    vec['decks'] = [d for d in vec['decks'] if d.get('src') != 'lidar']
-    water = [(ribbon_poly(d), d) for d in vec['decks'] if d.get('w')]
+    # (a bridge over water takes its name and look from the deck it replaces, which on a second run is
+    # the one this tool made the first time)
     olds = [(LineString([p[:2] for p in d['pts']]), d) for d in vec['decks'] if d['k'] == 1]
+    rerun = any(d.get('src') == 'lidar' for d in vec['decks'])
+    vec['decks'] = [d for d in vec['decks'] if d.get('src') != 'lidar']
     decks, log = [], []
     chs = list(chains())
     car = [c for c in chs if c['type'] not in ('Kergliiklustee', 'Rada')]
@@ -688,10 +788,14 @@ def main():
     piers(decks)
     marked = mark_roads(decks)
     changed = repair_under(decks)
+    print('terrain nodes raised under river bridge ends:', fill_ends(decks, changed))
     print('made-up slopes down from a bridge end (x, z, drop):', landings)
     print(len(decks), 'new decks;', len(vec['decks']) - len(kept), 'old spans replaced;', marked, 'road pieces marked;', len(changed), 'terrain nodes repaired')
     vec['decks'] = kept + [{k: v for k, v in d.items() if not k.startswith('_')} for d in decks]
-    print('tunnel lids laid (new, old):', lay_lids())
+    if rerun:                                                  # the lids were laid on the first run
+        print('tunnel lids kept as they are')
+    else:
+        print('tunnel lids laid (new, old):', lay_lids())
     if WRITE:
         secs = write_heights(changed)
         json.dump(vec, open(f'{DATA}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))

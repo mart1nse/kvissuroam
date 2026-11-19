@@ -23,6 +23,7 @@
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const CUT_HEARD = 0.1;     // s: how long an upshift's ignition cut is heard
+const BITE_HEARD = 0.12;   // s: when an upshift's gear is heard going in, however long the change takes
 const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chirp (Martin 2026-11-19: a bit
                            // less, in balance with the rev struggle)
 
@@ -37,9 +38,9 @@ export function createShiftSound() {
     let clunk = null, chirp = 0;
     lastT = t;
     // an upshift under power: the revs hang, sinking at the flywheel's rate, while the clutch is out
-    const cut = !!car.shiftCut;
+    const cut = !!car.shiftCut, drop = e.revDrop ?? 3200;
     if (cut && !wasCut) { hold = Math.max(car.rpm, lastRpm); cutAt = t; }
-    if (cut) hold = Math.max(car.rpm, hold - (e.revDrop ?? 3200) * dt);
+    if (cut && bAt < cutAt) hold = Math.max(car.rpm, hold - drop * dt);
     wasCut = cut;
     lastRpm = car.rpm;
     if (lastGear && car.gear < lastGear && !car.reversing && v > 3 && car.throttle < 0.5) {
@@ -52,16 +53,24 @@ export function createShiftSound() {
       const jump = (was * (s.gears[car.gear - 1] / s.gears[lastGear - 1] - 1)) / e.redline;
       clunk = { k: k * clamp(jump * 3.5, 0.2, 1), after: (car.shiftLen || 0.2) * 0.75 };
     }
-    // an upshift biting (by hand a touch harder)
+    // an upshift biting (by hand a touch harder). It is heard BITE_HEARD into the change, however long the
+    // change takes (a quarter of a second on most cars, which sounded like a pause between the gears,
+    // Martin 2026-11-19), so the drive itself comes back (car.bite) a moment after the sound of it.
     const bite = car.bite || 0;
-    if (bite > lastBite + 0.05 && !clunk) {
-      bAt = t; bk = KICK * Math.min(1, bite * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
+    const soon = cut && bAt < cutAt && t - cutAt >= BITE_HEARD && car.throttle > 0.3;
+    if (!clunk && t - bAt > 0.2 && (soon || bite > lastBite + 0.05)) {
+      bAt = t; bk = KICK * Math.min(1, (soon ? car.throttle : bite) * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
       clunk = { k: bk, after: 0, up: true };
-      // how far above the new gear's speed the revs still are: the gear wrenches them down
-      yank = Math.max(0, hold - car.rpm); yankId++;
+      // how far above the new gear's speed the revs still are when it bites (as far as they would have
+      // sunk by the end of the change, so the swing is as big as it is with the bite heard at the end):
+      // the gear wrenches them down
+      const left = soon ? Math.max(0, (car.shiftLen || 0) - (t - cutAt)) : 0;
+      yank = Math.max(0, Math.max(car.rpm, hold - drop * left) - car.rpm); yankId++;
       // (a hard one, in a low gear on paving, chirps the driven tyres)
       if (car.gear <= 3 && car.surface === 1) chirp = bk * clamp(yank / e.redline * 6, 0, 1) * (car.gear === 2 ? 1 : 0.6);
     }
+    // (the change as heard: from the lift until the gear is heard going in)
+    const changing = cut && bAt < cutAt;
     hold = cut ? hold : 0;
     lastBite = bite;
     lastGear = car.reversing ? 1 : car.gear;
@@ -75,15 +84,15 @@ export function createShiftSound() {
     // (the revs flare past the lower gear's, up to 16 %, short of the redline)
     let rpm = Math.min(car.rpm * (1 + 0.16 * blip), Math.max(car.rpm, e.redline * 0.985));
     if (over > 0) rpm = Math.max(rpm, e.redline * (1 + 0.035 * over));
-    if (cut) rpm = Math.max(rpm, hold);
+    if (changing) rpm = Math.max(rpm, hold);
     rpm = Math.min(rpm, e.redline * 1.04);
     // punch: how much of the engine to send round the compressor as well, so the blip and the bark hit
     // instead of being pressed down with the rest
     // The ignition is only heard cut for the first 0.1 s of an upshift, however long the change takes: the
     // F40 and the Carrera GT take a quarter of a second and their sound died for too long (Martin
-    // 2026-11-19). The rest of the change the engine runs on part throttle, revs hanging, until it bites.
-    const cutSound = cut && t - cutAt < CUT_HEARD;
-    const throttle = cut && !cutSound ? car.throttle * 0.4 : car.throttle;
+    // 2026-11-19). Then the engine runs on part throttle, revs hanging, until the gear is heard biting.
+    const cutSound = changing && t - cutAt < CUT_HEARD;
+    const throttle = changing && !cutSound ? car.throttle * 0.4 : car.throttle;
     return { rpm, throttle, shift: cutSound, blip, crackle, bark, over, clunk, chirp, yank, yankId, punch: Math.max(1.2 * bark, 0.65 * blip) };
   }
   return {

@@ -88,7 +88,7 @@ export function valliStreetProps() {
 
 // ---------------------------------------------------------------- painting house fronts
 // A picture of a wall, drawn in metres: x along the wall, y up from the house's ground line.
-function facade(wm, y0, y1, ppm, draw) {
+export function facade(wm, y0, y1, ppm, draw) {
   const hm = y1 - y0;
   ppm = Math.min(ppm, 2048 / wm, 2048 / hm);
   const cv = document.createElement('canvas');

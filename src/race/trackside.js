@@ -22,6 +22,7 @@ import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createMandel } from './mandel.js';
 import { createValliStreet } from './vallistreet.js';
+import { createBaeriStreet } from './baeristreet.js';
 import { createVeskiEnd } from './veskiend.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
@@ -488,6 +489,7 @@ export function createTrackside(world, scene) {
   const veski = createVeski(world, group, merged);
   const mandel = createMandel(world, group);
   const valliStreet = createValliStreet(world, group);
+  const baeriStreet = createBaeriStreet(world, group);
   const veskiEnd = createVeskiEnd(world, group);
   const emajoe = createEmajoe(world, group);
   const lai = createLai(world, group);
@@ -533,6 +535,7 @@ export function createTrackside(world, scene) {
       veski.update(x, z);
       mandel.update(x, z);
       valliStreet.update(x, z);
+      baeriStreet.update(x, z);
       veskiEnd.update(x, z);
       emajoe.update(x, z);
       lai.update(x, z);

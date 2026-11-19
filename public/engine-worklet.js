@@ -4,7 +4,9 @@
 // The sound is built the way a real engine makes it: the crank turns through its 720 degree cycle, every
 // cylinder fires at its own crank angle in firing order, and each firing sends a pressure pulse down its
 // bank's exhaust. The pulses ring through the pipes (feedback combs) and the silencers (resonators), with
-// intake roar, valvetrain / injector ticks, turbo hiss and overrun crackle on top. On the rev limiter
+// intake roar, valvetrain / injector ticks, turbo hiss and overrun crackle on top. A loud pulse steepens
+// as it runs down the pipe, so it arrives with a sharp front (edge), and the hard, buzzy harmonics that
+// gives (the rasp that cuts through on a race track) are added by an exciter on the upper band. On the rev limiter
 // the ignition is cut: the cylinders only pump air until it returns with a bark. Firing order, bank
 // layout, pipe lengths and the silencer tune come from the car's config (src/engine-sounds.js).
 
@@ -85,6 +87,12 @@ export class EngineCore {
     this.intakeLp = new Biquad().set('lp', c.intakeF * 2, 0.6, sr);
     this.tickF = this.smooth ? new Biquad().set('bp', c.tickF || 3500, 1.1, sr) : new Biquad().set('hp', c.tickF || 3500, 0.8, sr);
     this.hissBp = this.smooth ? new Biquad().set('bp', 1900, 1.2, sr) : new Biquad().set('bp', 2600, 0.9, sr);
+    // rasp: the upper band of the exhaust note driven into an uneven soft clip (a pressure wave steepens on
+    // its high side only), which adds harmonics of the firing note, then band-limited so it buzzes and does
+    // not hiss
+    this.rasp = c.rasp || 0; this.edge = c.edge || 0;
+    this.exHp1 = new Biquad().set('hp', c.raspF || 1100, 0.7, sr); this.exHp2 = new Biquad().set('hp', c.raspF || 1100, 0.7, sr);
+    this.exLp = new Biquad().set('lp', c.raspTop || 7000, 0.6, sr); this.exDc = new Biquad().set('hp', 400, 0.7, sr);
     this.pulses.length = 0;
   }
 
@@ -113,7 +121,10 @@ export class EngineCore {
     const tau = clamp(tauDeg / (rpm * 6) * this.sr, this.sr * 0.00022, this.sr * 0.004);
     // no two combustions are alike: the pulse also lands a fraction of a degree early or late
     const late = Math.max(0, (n() * 2 - 1) * c.jitter / (rpm * 6) * this.sr);
-    if (this.pulses.length < 24) this.pulses.push({ bank: ev.bank, amp, nz, tau, t: -late });
+    // (edge: the pulse rises in a fraction of its blowdown time, the front of a near-shock wave; louder and
+    // more so under load)
+    const rise = tau * (1 - this.edge * (0.55 + 0.3 * this.load));
+    if (this.pulses.length < 24) this.pulses.push({ bank: ev.bank, amp, nz, tau, rise, t: -late });
     // valvetrain / injector tick for this cylinder. With smoothTop it is heard at idle and low revs, then
     // lost under the engine (kept up on a loud engine, the ticks run together into a sharp hiss)
     const quiet = clamp(1 - (rpm - this.in.idle) / (0.3 * this.in.redline), 0, 1);
@@ -140,6 +151,7 @@ export class EngineCore {
     const dTheta = rpm * 6 / sr;
     const ev = this.events, banks = this.banks, res = this.res, pulses = this.pulses;
     const intake = c.intake * load * (0.15 + rr), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
+    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)), rk = c.raspDrive || 6;
 
     for (let s = 0; s < len; s++) {
       const th0 = this.theta; let th1 = th0 + dTheta;
@@ -155,18 +167,23 @@ export class EngineCore {
       for (let p = pulses.length - 1; p >= 0; p--) {
         const P = pulses[p];
         if (P.t < 0) { P.t++; continue; }
-        const x = P.t / P.tau;
+        const x = P.t < P.rise ? P.t / P.rise : 1 + (P.t - P.rise) / P.tau;
         const e = x * Math.exp(1 - x);
         const v = P.amp * e * (1 - P.nz + P.nz * (n() * 2 - 1) * 1.7);
         if (P.bank === 0) b0 += v; else b1 += v;
         env += e * P.amp;
-        if (++P.t > P.tau * 9) pulses.splice(p, 1);
+        if (++P.t > P.rise + P.tau * 8) pulses.splice(p, 1);
       }
       let y = banks.length > 1 ? banks[0].run(b0) + banks[1].run(b1) : banks[0].run(b0 + b1);
       // silencers / body resonances
       let r = y * c.dry;
       for (let k = 0; k < res.length; k++) r += res[k].f.run(y) * res[k].g;
       y = this.lp2.run(this.lp1.run(r));
+      if (rasp > 0) {
+        const u = this.exHp2.run(this.exHp1.run(y)) * rk;
+        const w = u > 0 ? u / (1 + u) : u / (1 - 0.35 * u);        // uneven soft clip
+        y += this.exDc.run(this.exLp.run(w)) * rasp;
+      }
       // induction roar follows the intake pulses
       const roar = this.intakeBp.run(n() * 2 - 1);
       y += (this.smooth ? this.intakeLp.run(roar) : roar) * env * intake;

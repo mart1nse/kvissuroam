@@ -1,7 +1,11 @@
 // Synthesised engine / wind sound. Starts on the first user gesture.
+// Everything the car itself makes (engine, turbo, tyres, knocks) goes into one bus that runs through the
+// space around it (src/audio-space.js: echoes off the buildings nearby, an outdoor reverb, compression);
+// the wind is at the ears and stays out of it.
 // Combustion engines run through the engine synthesiser worklet (public/engine-worklet.js, tuned per car
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
+import { createSpace } from './audio-space.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -15,6 +19,7 @@ export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
   let muted = false, ev = false, turbo = false, background = false;
+  let bus = null, space = null, spaceOn = true;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
   let noiseSrc = null, workletReady = false;
   const voices = [];
@@ -27,19 +32,22 @@ export function createAudio() {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 0.5;
     master.connect(ctx.destination);
+    space = createSpace(ctx, master);
+    space.setOn(spaceOn);
+    bus = space.input;
 
     filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 500; filt.Q.value = 1.2;
     engGain = ctx.createGain(); engGain.gain.value = 0;
     osc1 = ctx.createOscillator(); osc1.type = 'sawtooth';
     osc2 = ctx.createOscillator(); osc2.type = 'square';
     const g2 = ctx.createGain(); g2.gain.value = 0.45;
-    osc1.connect(filt); osc2.connect(g2).connect(filt); filt.connect(engGain).connect(master);
+    osc1.connect(filt); osc2.connect(g2).connect(filt); filt.connect(engGain).connect(bus);
     osc1.start(); osc2.start();
     loadSynth();
 
     whine = ctx.createOscillator(); whine.type = 'sine';
     whineGain = ctx.createGain(); whineGain.gain.value = 0;
-    whine.connect(whineGain).connect(master); whine.start();
+    whine.connect(whineGain).connect(bus); whine.start();
 
     const len = ctx.sampleRate * 2;
     const buf = noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -54,11 +62,11 @@ export function createAudio() {
     // tyre scrub: the same noise through a narrow band, kept very quiet
     skidFilt = ctx.createBiquadFilter(); skidFilt.type = 'bandpass'; skidFilt.frequency.value = 1300; skidFilt.Q.value = 5;
     skidGain = ctx.createGain(); skidGain.gain.value = 0;
-    noise.connect(skidFilt).connect(skidGain).connect(master);
+    noise.connect(skidFilt).connect(skidGain).connect(bus);
     // wheelspin: the thin howl of a tyre spinning on paving, kept well under the engine
     spinFilt = ctx.createBiquadFilter(); spinFilt.type = 'bandpass'; spinFilt.frequency.value = 800; spinFilt.Q.value = 6;
     spinGain = ctx.createGain(); spinGain.gain.value = 0;
-    noise.connect(spinFilt).connect(spinGain).connect(master);
+    noise.connect(spinFilt).connect(spinGain).connect(bus);
     noise.start();
     noiseSrc = noise;
   }
@@ -69,13 +77,15 @@ export function createAudio() {
       workletReady = true;
       synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
       synthGain = ctx.createGain(); synthGain.gain.value = ENGINE_LEVEL;
-      synth.connect(synthGain).connect(master);
+      synth.connect(synthGain).connect(bus);
       sendConfig();
     }).catch(() => { synth = null; });
   }
+  // DRY (space off) is the sound as it was before it: no echoes or reverb, and no exhaust rasp either
+  const tuned = (cfg) => (spaceOn ? cfg : { ...cfg, rasp: 0, edge: 0 });
   function sendConfig() {
     synthCfg = ENGINE_SOUNDS[carId] || null;
-    if (synth && synthCfg) synth.port.postMessage({ config: synthCfg });
+    if (synth && synthCfg) synth.port.postMessage({ config: tuned(synthCfg) });
   }
 
   // dull thud of the suspension taking a landing; strength is the sink rate in m/s
@@ -86,7 +96,7 @@ export function createAudio() {
     o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
     g.gain.setValueAtTime(Math.min(0.9, 0.12 * strength), t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-    o.connect(g).connect(master);
+    o.connect(g).connect(bus);
     o.start(t); o.stop(t + 0.25);
   }
 
@@ -99,14 +109,14 @@ export function createAudio() {
     o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
     g.gain.setValueAtTime(Math.min(0.18, 0.13 * strength), t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
-    o.connect(g).connect(master);
+    o.connect(g).connect(bus);
     o.start(t); o.stop(t + 0.16);
     if (!noiseBuf) return;
     const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
     src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2;
     gn.gain.setValueAtTime(Math.min(0.06, 0.045 * strength), t);
     gn.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-    src.connect(f).connect(gn).connect(master);
+    src.connect(f).connect(gn).connect(bus);
     src.start(t, Math.random()); src.stop(t + 0.08);
   }
 
@@ -122,13 +132,13 @@ export function createAudio() {
       o.frequency.exponentialRampToValueAtTime(70, t + 0.25);
       g.gain.setValueAtTime(0.28 * L, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-      o.connect(g).connect(master);
+      o.connect(g).connect(bus);
       o.start(t); o.stop(t + 0.32);
       const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
       src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = 520; f.Q.value = 5;
       gn.gain.setValueAtTime(0.5 * L, t);
       gn.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-      src.connect(f).connect(gn).connect(master);
+      src.connect(f).connect(gn).connect(bus);
       src.start(t, Math.random()); src.stop(t + 0.5);
     }
     if (!panes) return;
@@ -139,7 +149,7 @@ export function createAudio() {
       gn.gain.setValueAtTime(0.0001, t);
       gn.gain.exponentialRampToValueAtTime(0.45 * G, t + 0.008);
       gn.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      src.connect(f).connect(gn).connect(master);
+      src.connect(f).connect(gn).connect(bus);
       src.start(t, Math.random()); src.stop(t + 0.4);
     }
     const n = 10 + 8 * panes;
@@ -150,13 +160,13 @@ export function createAudio() {
       g.gain.setValueAtTime(0.0001, at);
       g.gain.exponentialRampToValueAtTime(0.05 * G * (0.4 + Math.random()), at + 0.003);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05 + Math.random() * 0.07);
-      o.connect(g).connect(master);
+      o.connect(g).connect(bus);
       o.start(at); o.stop(at + 0.14);
     }
   }
 
   // turbo blow-off valve venting when the throttle snaps shut on boost
-  function psh(strength, dest = master) {
+  function psh(strength, dest = bus) {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.8;
     f.frequency.setValueAtTime(3200, t);
@@ -177,7 +187,7 @@ export function createAudio() {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.09, t + 0.03);
     g.gain.setTargetAtTime(0.0001, t + 0.25, 0.22);
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(bus);
     src.start(t, Math.random()); src.stop(t + 1.3);
   }
 
@@ -262,6 +272,9 @@ export function createAudio() {
     v.out = ctx.createGain(); v.out.gain.value = 0;
     v.mix.connect(v.lp).connect(v.delay).connect(v.out);
     if (ctx.createStereoPanner) { v.pan = ctx.createStereoPanner(); v.out.connect(v.pan).connect(master); } else v.out.connect(master);
+    // (and into the reverb, which falls off slower than the car itself: a car far off sounds roomier)
+    v.rev = ctx.createGain(); v.rev.gain.value = 0;
+    v.out.connect(v.rev).connect(space.remoteIn);
     v.engGain = ctx.createGain(); v.engGain.gain.value = ENGINE_LEVEL; v.engGain.connect(v.mix);
     v.whine = ctx.createOscillator(); v.whine.type = 'sine';
     v.whineGain = ctx.createGain(); v.whineGain.gain.value = 0;
@@ -292,7 +305,7 @@ export function createAudio() {
         v.synth.connect(v.engGain);
       } catch { v.synth = null; }
     }
-    if (v.synth) v.synth.port.postMessage(v.cfg ? { config: v.cfg, state: { on: 0 } } : { state: { on: 0 } });
+    if (v.synth) v.synth.port.postMessage(v.cfg ? { config: tuned(v.cfg), state: { on: 0 } } : { state: { on: 0 } });
     // start silent and already at the right delay, so a car coming into earshot does not sweep in
     v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(0, t);
     v.delay.delayTime.cancelScheduledValues(t); v.delay.delayTime.setValueAtTime(Math.min(0.95, d / SOUND), t);
@@ -306,6 +319,7 @@ export function createAudio() {
     v.d = d;
     const fade = Math.max(0, Math.min(1, (HEAR - d) / 70));
     v.out.gain.setTargetAtTime(Math.pow(Math.min(1, REF / d), 0.8) * fade, t, 0.06);
+    v.rev.gain.setTargetAtTime(0.35 * Math.min(3, Math.pow(Math.max(1, d / REF), 0.45)), t, 0.2);
     v.lp.frequency.setTargetAtTime(700 + 11000 * Math.min(1, 14 / d), t, 0.1);
     if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.06);
     const speed = Math.hypot(r.vx, r.vy), vw = speed + r.slipV, b = r.boost;
@@ -419,8 +433,24 @@ export function createAudio() {
     }
   }
 
+  // the space round our own car: called every frame after the camera has moved (world: its obstacle field)
+  function updateSpace(world, car, cam, dt, active) {
+    if (!space || ctx.state !== 'running' || !active) return;
+    space.update(world, car, cam, dt);
+  }
+
   return {
-    start, update, updateRemotes, chime, putt, smash,
+    start, update, updateRemotes, updateSpace, chime, putt, smash,
+    // SPACE in Options: the echoes, reverb and compression on (true) or the plain, close-up sound (false)
+    setSpace(on) {
+      if (spaceOn === !!on) return;
+      spaceOn = !!on; space?.setOn(spaceOn);
+      if (!ctx) return;
+      sendConfig();
+      for (const v of voices) if (v.synth && v.cfg) v.synth.port.postMessage({ config: tuned(v.cfg) });
+    },
+    get spaceOn() { return spaceOn; },
+    get space() { return space; },
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
       carId = ev ? null : spec.id;

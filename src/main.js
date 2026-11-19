@@ -48,7 +48,7 @@ import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches } from './race/corners.js';
 import { veskiRoads } from './race/veski.js';
-import { emajoeVectors } from './race/emajoe.js';
+import { emajoeVectors, levelEmajoeWall } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
 import { playtechWalls } from './race/playtech.js';
@@ -192,6 +192,7 @@ async function boot() {
   discgolf = createDiscGolf(scene, world, audio, { shadows: !isTouch });
   janeseMaja = createJaneseMaja(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
+  levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);

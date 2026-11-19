@@ -47,7 +47,10 @@ download address is in its header; all sheets of the map are about 6 GB), and
 `python3 tools/bake/lidar_decks.py GRIDS public/data --write` then replaces the spans of `terrain.py` with decks
 at their real height and width, adds walled ramps (`wall: 1`), piers (`pr`), per-side railings (`rs`), clears
 the terrain under open spans and lays a lid (`k: 0`) wherever a tunnel road passes under another road or path.
-It can be run again on its own output. Check with `node tools/overpass-test.mjs --drive`, which walks every
+A river bridge is cut back to where the scan finds the bridge itself (the street before it is laid to the
+scanned ground and rises to it), and its land ends get an earth bank.
+It can be run again on its own output (start from the committed data: a second run on top of a first one
+lets the banks near the water creep up a little). Check with `node tools/overpass-test.mjs --drive`, which walks every
 road near a deck for steps, ditches and obstacles and drives a car over and under each span.
 World frame: x = east − E0, z = −(north − N0), y = height − H0, in L-EST97 metres.
 

@@ -20,7 +20,11 @@ const BAY = { i0: 959, i1: 989, width: 2.9, taper: 6 };  // the bus bay: track i
 const SHELTER = { i: 973, len: 4.6, depth: 1.55 };
 const DASH = { i0: 948, i1: 991 };                       // dashed line along the right edge of the lane
 const DOUBLE = [948, 953];                               // double centre line at the junction
-const PAVE = { i0: 948, i1: 1004, width: 3.4 };          // river-side pavement
+const PAVE = { i0: 948, width: 3.4 };                    // river-side pavement, from here to the bridge
+// at the Kroonuaia junction the pavement turns right round the corner onto the bridge (Martin, 19 Nov):
+// curve radius of its inner (grass) edge, its edges on the bridge (metres from the middle of the deck),
+// and how far it runs on along the bridge after the bend
+const CORNER = { bridge: 'Kroonuaia sild', from: 1021, r: 2.0, near: 4.1, far: 7.4, on: 3 };
 // the map's wall line round the garden (vectors.json walls, game x, z): Emajõe, the Kroonuaia corner, Kroonuaia
 const GARDEN_WALL = [[1417.2, 2290.9], [1396.6, 2258.5], [1336.4, 2198.0], [1329.8, 2197.9], [1224.4, 2316.8]];
 const GATE = { a: [1437.6, 2321.3], w: 4.4 };            // driveway gate: first post at the end of the low wall
@@ -115,23 +119,40 @@ const LAMPS = [
   { kind: BIN, from: [1425.4, 2281.6], i: 966, lat: 7.6 }, { kind: BIN, from: [1416.7, 2267.3], i: 981, lat: 7.6 },
 ];
 
-// props layer: leave the map's lamps at the bay out ...
+// What the map has on the last 60 m to the Kroonuaia junction but Street View (Aug 2024) does not
+// (Martin, 19 Nov): the river side has one lamp post by the pavement, the lamps and a bin down by the
+// riverside path, and the traffic light at the corner with its give-way and crossing signs; the map had
+// seven lamp posts, five signal heads, six signs, a box and two benches there, most of them the corner's
+// own things placed again further back. The same false crossing stood on the garden-wall side.
+// [kind, x, z] of the map's props.
+const GONE = [
+  [3, 1380.0, 2223.9], [0, 1377.3, 2222.7], [0, 1372.7, 2218.2], [0, 1371.5, 2214.0], [11, 1370.1, 2215.5],
+  [2, 1366.0, 2211.3], [17, 1365.8, 2211.1], [6, 1365.2, 2210.6], [2, 1358.4, 2203.6], [2, 1357.1, 2202.4],
+  [11, 1353.6, 2198.9], [0, 1353.3, 2198.5], [17, 1349.2, 2194.5], [11, 1346.9, 2192.0], [2, 1344.4, 2189.6],
+  [3, 1338.3, 2185.9],
+  [2, 1358.2, 2218.5], [17, 1356.1, 2219.6], [1, 1357.0, 2217.3], [11, 1348.3, 2211.0], [1, 1349.0, 2210.2],
+  [2, 1348.9, 2209.2], [0, 1349.3, 2209.5],
+];
+const CROSSING = [17, 1340.5, 2185.7, 143, 7];            // the blue crossing sign, on the corner post above the give-way sign
+
+// props layer: leave the map's lamps at the bay out, and the things that are not there ...
 export function emajoeClear(data, out) {
   for (const [key, a] of Object.entries(data.sectors)) {
     for (let k = 0; k < a.length; k += data.stride) {
-      if (LAMPS.some((l) => a[k] === l.kind && Math.hypot(a[k + 1] - l.from[0], a[k + 2] - l.from[1]) < 0.6)) out.add(`${key}:${k / data.stride}`);
+      const near = ([kind, x, z]) => a[k] === kind && Math.hypot(a[k + 1] - x, a[k + 2] - z) < 0.6;
+      if (LAMPS.some((l) => near([l.kind, ...l.from])) || GONE.some(near)) out.add(`${key}:${k / data.stride}`);
     }
   }
 }
 // ... and stand them behind the shelter, the lamp still reaching over the road
 export function emajoeProps() {
   const track = createTrack();
-  return LAMPS.map(({ kind, i, lat }) => {
+  return [...LAMPS.map(({ kind, i, lat }) => {
     const [tx, tz] = track.tan[i];
     const x = track.P[i][0] - tz * lat, z = track.P[i][1] + tx * lat;
     const b = (Math.atan2(tz, tx) * 180) / Math.PI;      // arm towards the road, as the map lamps had it
     return [kind, x, z, b];
-  });
+  }), CROSSING];
 }
 
 // before the road markings and map walls are built: no generated centre line on this stretch (it gets its
@@ -144,6 +165,55 @@ export function emajoeVectors(vectors) {
   };
   const first = GARDEN_WALL[GARDEN_WALL.length - 1];
   vectors.walls = (vectors.walls || []).filter((w) => !w.some((p) => Math.hypot(p[0] - first[0], p[1] - first[1]) < 0.5));
+}
+
+// The strip between the kerb and the garden wall is laid level with the street, from the gate to the
+// corner, so the foot of the wall runs straight: the terrain model had bumps of up to 30 cm along the
+// wall, and the ground rose and fell against it (Martin, 19 Nov). Done to the height data as each piece
+// of the map loads, after levelTrackShoulders.
+export function levelEmajoeWall(world) {
+  const track = createTrack();
+  const { P } = track;
+  const hm = world.meta.height, hn = hm.n, res = hm.res;
+  const segs = [[GATE.a, GARDEN_WALL[0]], [GARDEN_WALL[0], GARDEN_WALL[1]], [GARDEN_WALL[1], GARDEN_WALL[2]]];
+  const dist = (x, z) => Math.min(...segs.map(([a, b]) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
+    return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
+  }));
+  const xs = segs.flat().map((p) => p[0]), zs = segs.flat().map((p) => p[1]);
+  const box = [Math.min(...xs) - 6, Math.min(...zs) - 6, Math.max(...xs) + 6, Math.max(...zs) + 6];
+  world.onSectorLoad((s) => {
+    const H = s.H;
+    if (!H) return;
+    const span = (hn - 1) * res;
+    if (s.x0 > box[2] || s.x0 + span < box[0] || s.z0 > box[3] || s.z0 + span < box[1]) return;
+    const at = (x, z) => {
+      let fx = Math.max(0, Math.min(hn - 1.001, (x - s.x0) / res)), fz = Math.max(0, Math.min(hn - 1.001, (z - s.z0) / res));
+      const c = Math.floor(fx), r = Math.floor(fz);
+      fx -= c; fz -= r;
+      const i = r * hn + c;
+      return ((H[i] * (1 - fx) + H[i + 1] * fx) * (1 - fz) + (H[i + hn] * (1 - fx) + H[i + hn + 1] * fx) * fz);
+    };
+    const edits = [];
+    for (let r = 0; r < hn; r++) {
+      const z = s.z0 + r * res;
+      if (z < box[1] || z > box[3]) continue;
+      for (let c = 0; c < hn; c++) {
+        const x = s.x0 + c * res;
+        if (x < box[0] || x > box[2] || dist(x, z) > 4) continue;
+        const n = track.nearest(x, z, 1000);
+        if (n.i < E.i0 + 8 || n.i > E.i1 - 3) continue;
+        const j = n.i + 1, cx = P[n.i][0] + (P[j][0] - P[n.i][0]) * n.t, cz = P[n.i][1] + (P[j][1] - P[n.i][1]) * n.t;
+        const [tx, tz] = track.tan[n.i];
+        if ((x - cx) * -tz + (z - cz) * tx > 0) continue;          // the river side
+        const behind = n.d - dist(cx, cz);                          // metres past the wall line, away from the street
+        const w = behind <= 1 ? 1 : 1 - smooth((behind - 1) / 2.5);
+        if (w > 0) edits.push([r * hn + c, at(cx, cz), w]);
+      }
+    }
+    for (const [k, road, w] of edits) H[k] = Math.round(H[k] + (road - H[k]) * w);
+  });
 }
 
 export function createEmajoe(world, group) {
@@ -161,7 +231,7 @@ export function createEmajoe(world, group) {
   let built = false, lowBuilt = false;
 
   // ---- flat things on the ground: a quad strip along a polyline [[x, z, halfWidth], ...]
-  function strip(pts, colour, lift, out) {
+  function strip(pts, colour, lift, out, heightAt = (x, z) => world.heightAt(x, z)) {
     const c = new THREE.Color(colour);
     const pos = [], col = [];
     for (let k = 0; k < pts.length - 1; k++) {
@@ -169,7 +239,7 @@ export function createEmajoe(world, group) {
       const p0 = pts[Math.max(0, k - 1)], p3 = pts[Math.min(pts.length - 1, k + 2)];
       const side = (p, q, w0) => { const dx = q[0] - p[0], dz = q[1] - p[1], l = Math.hypot(dx, dz) || 1; return [-dz / l * w0, dx / l * w0]; };
       const [na, ma] = side(p0, pts[k + 1], aw), [nb, mb] = side(pts[k], p3, bw);
-      const v = (x, z) => [x, world.heightAt(x, z) + lift, z];
+      const v = (x, z) => [x, heightAt(x, z) + lift, z];
       const A0 = v(ax - na, az - ma), A1 = v(ax + na, az + ma), B0 = v(bx - nb, bz - mb), B1 = v(bx + nb, bz + mb);
       pos.push(...A0, ...B0, ...A1, ...A1, ...B0, ...B1);
       for (let q = 0; q < 6; q++) col.push(c.r, c.g, c.b);
@@ -229,13 +299,17 @@ export function createEmajoe(world, group) {
       const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
       if (l < 0.05) continue;
       const ya = world.heightAt(a[0], a[1]), yb = world.heightAt(b[0], b[1]);
+      // where the wall runs straight on into the next piece, no end faces and no overlap there (they
+      // showed as seams down the wall)
+      const straight = (p, q, r) => p && r && Math.abs((q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0])) < 0.02 * Math.hypot(q[0] - p[0], q[1] - p[1]) * Math.hypot(r[0] - q[0], r[1] - q[1]);
+      const openA = straight(pts[k - 1], a, b), openB = straight(a, b, pts[k + 2]);
       let h0 = -0.4;
       for (const L of layers) {
         const h1 = L.top;
         const t = L.thick / 2, ext = L.ext || 0;
         const nx = -dz / l * t, nz = dx / l * t;
         const ex = dx / l * ext, ez = dz / l * ext;
-        const A = [a[0] - ex, a[1] - ez], B = [b[0] + ex, b[1] + ez];
+        const A = openA ? a : [a[0] - ex, a[1] - ez], B = openB ? b : [b[0] + ex, b[1] + ez];
         const P = (p, s, y) => [p[0] + nx * s, y, p[1] + nz * s];
         const corners = [
           P(A, -1, ya + h0), P(B, -1, yb + h0), P(A, -1, ya + h1), P(B, -1, yb + h1),
@@ -243,6 +317,7 @@ export function createEmajoe(world, group) {
         ];
         const faces = [[0, 1, 2, 3], [5, 4, 7, 6], [2, 3, 6, 7], [4, 0, 6, 2], [1, 5, 3, 7]];
         for (const f of faces) {
+          if ((f === faces[3] && openA) || (f === faces[4] && openB)) continue;
           const [q0, q1, q2, q3] = f.map((i) => corners[i]);
           if (L.tex) {
             const span = f === faces[3] || f === faces[4] ? L.thick : l;
@@ -295,6 +370,43 @@ export function createEmajoe(world, group) {
     wallMeshes(stone, flat);
   }
 
+  // The two edges of the pavement round the corner onto the bridge: each runs on straight from the
+  // street and from the bridge until they meet, and bends there on a quadratic curve (the kerb on the
+  // outside, the grass edge on the inside), then runs CORNER.on metres along the bridge. Null if the
+  // bridge is not in the map.
+  function cornerEdges() {
+    const deck = world.decks.find((d) => d.name === CORNER.bridge);
+    if (!deck || deck.pts.length < 3) return null;
+    const p0 = deck.pts[0], p1 = deck.pts[2];
+    const l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+    const dx = (p1[0] - p0[0]) / l, dz = (p1[1] - p0[1]) / l;          // along the bridge
+    let nx = -dz, nz = dx;                                                  // across it, towards Emajõe
+    const q = track.P[CORNER.from];
+    if ((q[0] - p0[0]) * nx + (q[1] - p0[1]) * nz < 0) { nx = -nx; nz = -nz; }
+    const [ux, uz] = track.tan[CORNER.from];
+    const a = hw(CORNER.from) + 0.25;
+    const one = (lat, off, r) => {
+      const [ax, az] = at(CORNER.from, lat), bx = p0[0] + nx * off, bz = p0[1] + nz * off;
+      const det = dx * uz - ux * dz;
+      const t = ((bz - az) * dx - (bx - ax) * dz) / det;
+      const X = [ax + ux * t, az + uz * t];
+      const A = [X[0] - ux * r, X[1] - uz * r], B = [X[0] + dx * r, X[1] + dz * r];
+      const pts = [];
+      for (let k = 0; k <= 8; k++) {
+        const s = k / 8, w0 = (1 - s) * (1 - s), w1 = 2 * (1 - s) * s, w2 = s * s;
+        pts.push([A[0] * w0 + X[0] * w1 + B[0] * w2, A[1] * w0 + X[1] * w1 + B[1] * w2]);
+      }
+      return { X, u: [ux, uz], r, pts, sB: (B[0] - p0[0]) * dx + (B[1] - p0[1]) * dz };
+    };
+    const far = one(a + PAVE.width, CORNER.far, CORNER.r);
+    const near = one(a + 0.1, CORNER.near, CORNER.r + CORNER.far - CORNER.near);
+    const end = Math.max(near.sB, far.sB) + CORNER.on;
+    for (const [e, off] of [[near, CORNER.near], [far, CORNER.far]]) {
+      for (let s = e.sB + 1.5; s < end + 0.01; s += 1.5) e.pts.push([p0[0] + nx * off + dx * s, p0[1] + nz * off + dz * s]);
+    }
+    return { near, far };
+  }
+
   function build() {
     built = true;
     const marks = [], pave = [];
@@ -323,15 +435,26 @@ export function createEmajoe(world, group) {
       // through (the holes) and faced down, so they came out dark red; now a light, half see-through pink
       // that lets the ground show through and blends in (Martin, 18 Nov)
       const near = [], far = [], outer = [];
-      for (let i = PAVE.i0; i <= PAVE.i1; i++) {
-        const fade = Math.max(0.03, smooth((i - PAVE.i0) / 4) * smooth((PAVE.i1 - i) / 4));
+      const turn = cornerEdges();
+      // (without the bridge in the map it stops short of the junction, as it did before)
+      const before = (p, e) => !e || (p[0] - e.X[0]) * e.u[0] + (p[1] - e.X[1]) * e.u[1] < -e.r;
+      let inN = true, inF = true;
+      for (let i = PAVE.i0; i <= (turn ? E.i1 : 1004); i++) {
+        const fade = Math.max(0.03, smooth((i - PAVE.i0) / 4) * (turn ? 1 : smooth((1004 - i) / 4)));
         const a = hw(i) + bayW(i) + 0.25, b = a + PAVE.width * fade;
-        near.push(at(i, a + 0.1)); far.push(at(i, b));
-        outer.push([...at(i, a), 0.14]);
+        inN = inN && before(at(i, a + 0.1), turn && turn.near);
+        inF = inF && before(at(i, b), turn && turn.far);
+        if (inN) { near.push(at(i, a + 0.1)); outer.push([...at(i, a), 0.14]); }
+        if (inF) far.push(at(i, b));
       }
-      const g = drapeGeometry(world, [[[...near, ...far.reverse()]]], 0.05, 1, 1.5);
+      if (turn) {                                        // round the corner and on along the bridge
+        near.push(...turn.near.pts); far.push(...turn.far.pts);
+        for (const p of turn.near.pts) outer.push([...p, 0.14]);
+      }
+      const top = { heightAt: (x, z) => world.topAt(x, z, 1) };
+      const g = drapeGeometry(top, [[[...near, ...far.reverse()]]], 0.05, 1, 1.5);
       if (g) { const m = new THREE.Mesh(g, paveMat); m.receiveShadow = true; group.add(m); }
-      strip(outer, COL.kerb, 0.06, pave);
+      strip(outer, COL.kerb, 0.06, pave, top.heightAt);
     }
     for (const [list, mat] of [[marks, markMat], [pave, kerbMat]]) { const m = meshOf(list, mat, true); if (m) group.add(m); }
 
@@ -413,7 +536,14 @@ export function createEmajoe(world, group) {
       { top: HIGH.stone + HIGH.render + 0.09, thick: HIGH.thick + 0.26, colour: 0xd98d7f, ext: 0.04 },
       { top: HIGH.stone + HIGH.render + 0.17, thick: HIGH.thick - 0.1, colour: 0xc87868, ext: 0.04 },
     ];
-    wallParts(GARDEN_WALL.slice(0, 4), high, stone, flat);
+    // in pieces of a few metres, so it stands on the levelled strip along Emajõe (levelEmajoeWall)
+    const dense = [];
+    for (let k = 0; k < 3; k++) {
+      const a = GARDEN_WALL[k], b = GARDEN_WALL[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 4));
+      for (let j = 0; j < n; j++) dense.push([a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n]);
+    }
+    dense.push(GARDEN_WALL[3]);
+    wallParts(dense, high, stone, flat);
     wallParts(GARDEN_WALL.slice(3), stoneHigh, stone, flat);
     wallMeshes(stone, flat);
     // brick gate posts with grey caps, and the iron gate between them

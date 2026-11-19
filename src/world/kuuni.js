@@ -266,9 +266,10 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
         solids.push({ x: bx, z: bz, yaw: SYAW, hx: 1.05, hz: 0.35 });
       }
     }
-    // the yellow kvass trailer by the Poe corner, with its umbrella and a table
+    // the yellow kvass trailer by the Poe corner, with its umbrella and a table: moved right with the lindens
+    // (4 m, like their beds and benches), so it stands in front of the row and not in the street
     {
-      const t = 43.5, r = 11.4, [x, z] = S(t, r), y = h(x, z);
+      const t = 43.5, r = ROW(t) - 4.7, [x, z] = S(t, r), y = h(x, z);
       const tank = new THREE.CylinderGeometry(1.0, 1.0, 3.4, 20).rotateZ(Math.PI / 2);
       p.add(tank, 0xf6c048, x, y + 1.55, z, SYAW);
       for (const d of [-1.7, 1.7]) p.add(new THREE.SphereGeometry(1.0, 16, 10).scale(0.35, 1, 1), 0xf6c048, ...S(t + d, r).flatMap((v, i) => (i ? [y + 1.55, v] : [v])), SYAW);

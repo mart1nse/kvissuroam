@@ -94,21 +94,6 @@ function stoneTex() {
   return t;
 }
 
-// the blue bus stop sign: a white bus on blue
-function busSignTex() {
-  return canvasTex(128, 128, (g, w, h) => {
-    g.fillStyle = '#6f9fe0'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#ffffff'; g.fillRect(6, 6, w - 12, h - 12);
-    g.fillStyle = '#6f9fe0'; g.fillRect(12, 12, w - 24, h - 24);
-    g.fillStyle = '#ffffff';
-    g.fillRect(28, 40, 72, 40);                                // body
-    g.fillStyle = '#6f9fe0';
-    for (let k = 0; k < 3; k++) g.fillRect(34 + k * 22, 46, 16, 14);   // windows
-    g.fillStyle = '#ffffff';
-    g.beginPath(); g.arc(44, 84, 8, 0, Math.PI * 2); g.arc(86, 84, 8, 0, Math.PI * 2); g.fill();
-  });
-}
-
 // the advert in the shelter: a soft gradient poster with a few shapes, lit from inside
 function advertTex() {
   return canvasTex(128, 256, (g, w, h) => {
@@ -167,7 +152,15 @@ export function emajoeProps() {
     const x = track.P[i][0] - tz * lat, z = track.P[i][1] + tx * lat;
     const b = (Math.atan2(tz, tx) * 180) / Math.PI;      // arm towards the road, as the map lamps had it
     return [kind, x, z, b];
-  }), CROSSING];
+  }), CROSSING, busSign(track)];
+}
+
+// the bus stop sign at the start of the bay, on a pole that snaps off when hit like the other signs (Martin, 19 Nov)
+const BUS_SIGN = 30;
+function busSign(track) {
+  const i = BAY.i0 + 4, [tx, tz] = track.tan[i];
+  const lat = track.HW[i] + BAY.width * smooth((i - BAY.i0) / BAY.taper) * smooth((BAY.i1 - i) / BAY.taper) + 0.55;
+  return [BUS_SIGN, track.P[i][0] - tz * lat, track.P[i][1] + tx * lat, (Math.atan2(-tx, tz) * 180) / Math.PI];
 }
 
 // before the road markings and map walls are built: no generated centre line on this stretch (it gets its
@@ -595,16 +588,7 @@ export function createEmajoe(world, group) {
       shelter = { box: { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 }, y, H };
       solids.push(shelter.box);
     }
-    {
-      const i = BAY.i0 + 4, lat = hw(BAY.i0 + 4) + bayW(BAY.i0 + 4) + 0.55;
-      const [x, z] = at(i, lat), y = world.heightAt(x, z);
-      const [ux, uz] = track.tan[i], yaw = Math.atan2(-uz, ux);
-      p.add(new THREE.CylinderGeometry(0.04, 0.04, 2.9, 8), COL.pole, x, y + 1.45, z);
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshLambertMaterial({ map: busSignTex(), side: THREE.DoubleSide }));
-      sign.position.set(x, y + 2.5, z);
-      sign.rotation.y = yaw + Math.PI / 2;
-      group.add(sign);
-    }
+    // (the bus stop sign is a prop that snaps off when hit: emajoeProps)
 
     // ---- the garden wall: driveway gate, then the high wall along the map's wall line
     const stone = { pos: [], uv: [] }, flat = { pos: [], col: [] };

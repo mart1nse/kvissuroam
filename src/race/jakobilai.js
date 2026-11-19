@@ -64,6 +64,13 @@ export function jakobiLaiVectors(vectors) {
   }
 }
 
+// the bus stop sign on a pole at the kerb, a few metres before the shelter: a prop, so it snaps off when hit
+// like the other signs (Martin, 19 Nov)
+export function jakobiLaiProps() {
+  const track = createTrack(), i = STOP.i - 4, [tx, tz] = track.tan[i], lat = track.HW[STOP.i] + 0.6;
+  return [[30, track.P[i][0] - tz * lat, track.P[i][1] + tx * lat, (Math.atan2(-tx, tz) * 180) / Math.PI]];
+}
+
 export function createJakobiLai(world, group) {
   const track = createTrack();
   let built = false;
@@ -169,24 +176,7 @@ export function createJakobiLai(world, group) {
       const box = { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 };
       breakableShelter(world, group, { box, y, H: Hs, frame, panes, glass: COL.glass, opacity: 0.32 });
       solids.push(box);
-      // the sign on a pole at the kerb, a few metres before the shelter
-      const [sx, sz] = T(i - 4, hw(i) + 0.6), sy = h(sx, sz);
-      p.add(new THREE.CylinderGeometry(0.04, 0.04, 2.9, 8), COL.pole, sx, sy + 1.45, sz);
-      const c = document.createElement('canvas');
-      c.width = c.height = 128;
-      const g = c.getContext('2d');
-      g.fillStyle = '#6f9fe0'; g.fillRect(0, 0, 128, 128);
-      g.fillStyle = '#ffffff'; g.fillRect(6, 6, 116, 116);
-      g.fillStyle = '#6f9fe0'; g.fillRect(12, 12, 104, 104);
-      g.fillStyle = '#ffffff'; g.fillRect(28, 40, 72, 40);
-      g.fillStyle = '#6f9fe0'; for (let k = 0; k < 3; k++) g.fillRect(34 + k * 22, 46, 16, 14);
-      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(44, 84, 8, 0, Math.PI * 2); g.arc(86, 84, 8, 0, Math.PI * 2); g.fill();
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
-      sign.position.set(sx, sy + 2.5, sz);
-      sign.rotation.y = yaw + Math.PI / 2;
-      group.add(sign);
+      // (the bus stop sign before it is a prop that snaps off when hit: jakobiLaiProps)
     }
 
     const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));

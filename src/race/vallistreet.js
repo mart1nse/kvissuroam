@@ -47,8 +47,10 @@ const WALLS = {
   M1: { a: [1390.1, 3108.35], b: [1391.55, 3094.8], y: 13.2, top: 21.3 },     // the painted gable
 };
 const CENTRE = [1470, 3040];
-// the bays square to the road on the park side: lines only, kept free of cars (they are on the racing line)
-const PARK_BAYS = { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true };
+// the bays square to the road on the park side: lines only, kept free of cars (they are on the racing line);
+// they reach 2.5 m towards the road from the row line and stop 0.1 m past it, where the grass begins
+// (the map's paving ends 0.35..1.25 m past it; Martin, 19 Nov: they ran out onto the grass)
+const PARK_BAYS = { a: [1501.4, 2999.9], b: [1484.5, 3015.4], n: 9, perp: true, back: 0.1 };
 const COL = {
   concrete: 0xc9c7d0, iron: 0x24232a, white: 0xf6f3fa, blue: 0x7fa0e6, brick: 0xc0725e, stone: 0xa3978c,
   bin: 0x3a3c46, binLid: 0x2c2d36, binGreen: 0x4f8a58, binBrown: 0x8a6248, parasol: 0xf1ecdc,
@@ -298,30 +300,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         const [x, z] = w.at(sm, 2.1);
         solids.push({ x, z, yaw: Math.atan2(-w.uz, w.ux), hx: (s1 - s0) / 2, hz: 1.55 });
       }
-      // the terrace deck, bare but for a parasol by the wall
-      const y = gnd(w, 4.4, 2.2);
-      put(w, BOX(7.2, 1.0, 3.2), 0x8c8f9c, 4.4, y, 2.1);
-      put(w, new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), COL.iron, 5.2, y + 1.75, 0.95);
-      put(w, new THREE.ConeGeometry(1.3, 0.45, 4).rotateY(Math.PI / 4), COL.parasol, 5.2, y + 3.0, 0.95);
-      // The deck is low enough to drive over (Martin, 18 Nov): not a wall but a raised piece of ground with
-      // a short steep edge, so a car climbs it, tilts over its corner or jumps off it. The ground under it
-      // is sampled first, so the top the wheels feel is the flat top that is drawn.
-      const S0 = 0.8, S1 = 8.0, N0 = 0.5, N1 = 3.7, EDGE = 0.55, NS = 13, NN = 7, top = w.y + y + 0.5;
-      const lift = [];
-      for (let j = 0; j < NN; j++) for (let i = 0; i < NS; i++) lift.push(Math.max(0, top - h(...w.at(S0 - EDGE + (S1 - S0 + 2 * EDGE) * i / (NS - 1), N0 - EDGE + (N1 - N0 + 2 * EDGE) * j / (NN - 1)))));
-      const cs = [w.at(S0 - EDGE, N0 - EDGE), w.at(S1 + EDGE, N0 - EDGE), w.at(S0 - EDGE, N1 + EDGE), w.at(S1 + EDGE, N1 + EDGE)];
-      world.addBump({
-        x0: Math.min(...cs.map((q) => q[0])), x1: Math.max(...cs.map((q) => q[0])), z0: Math.min(...cs.map((q) => q[1])), z1: Math.max(...cs.map((q) => q[1])),
-        at(x, z) {
-          const dx = x - w.a[0], dz = z - w.a[1], s = dx * w.ux + dz * w.uz, n = dx * w.nx + dz * w.nz;
-          const d = Math.hypot(Math.max(S0 - s, 0, s - S1), Math.max(N0 - n, 0, n - N1));
-          if (d >= EDGE) return 0;
-          const fi = Math.max(0, Math.min(NS - 1.001, (s - S0 + EDGE) / (S1 - S0 + 2 * EDGE) * (NS - 1))), fj = Math.max(0, Math.min(NN - 1.001, (n - N0 + EDGE) / (N1 - N0 + 2 * EDGE) * (NN - 1)));
-          const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, t = fj - j, k = j * NS + i;
-          const base = (lift[k] * (1 - u) + lift[k + 1] * u) * (1 - t) + (lift[k + NS] * (1 - u) + lift[k + NS + 1] * u) * t;
-          return base * (1 - d / EDGE);
-        },
-      });
+      // (the terrace deck beside it, a raised slab on the inside of the first corner, is gone: Martin, 19 Nov)
     }
 
     // ================= the brick tower house =================
@@ -629,14 +608,14 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
     const rows = [PARK_BAYS, ...[32, 33].map((s) => PARKING.find((r) => r.seed === s))];
     for (const row of rows.slice(0, 2)) {
       const dx = row.b[0] - row.a[0], dz = row.b[1] - row.a[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l;
-      const depth = row.perp ? 2.5 : 1.1;
+      const depth = row.perp ? 2.5 : 1.1, back = row.back ?? depth;     // reach towards the road, and away from it
       let nx = -uz, nz = ux;
-      for (let k = 0; k <= row.n; k++) {
-        const x = row.a[0] + dx * k / row.n, z = row.a[1] + dz * k / row.n;
-        line(whites, [x - nx * depth, z - nz * depth], [x + nx * depth, z + nz * depth]);
-      }
       const side = track.nearest(row.a[0] + nx, row.a[1] + nz).d < track.nearest(row.a[0] - nx, row.a[1] - nz).d ? 1 : -1;      // the road side of the row
       nx *= side; nz *= side;
+      for (let k = 0; k <= row.n; k++) {
+        const x = row.a[0] + dx * k / row.n, z = row.a[1] + dz * k / row.n;
+        line(whites, [x - nx * back, z - nz * back], [x + nx * depth, z + nz * depth]);
+      }
       line(blues, [row.a[0] + nx * depth, row.a[1] + nz * depth], [row.b[0] + nx * depth, row.b[1] + nz * depth], 0.1);
     }
     // the car park under the hill: paving, bay lines, then the asphalt bays with blue lines along the street

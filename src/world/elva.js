@@ -48,6 +48,18 @@ export const ELVA_CARS = [
   [...L(35.5, 3.15), SOUTH_WEST, 'passat', 'white', 0.03],
 ];
 
+// The street has no painted lines along the dressed stretch (the air photos show bare asphalt): the map's
+// centre dashes and edge lines go from Elva between 33 and 37 and from the mouth of the lane.
+export function elvaVectors(vectors) {
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const rx = x - O[0], rz = z - O[1], s = rx * D[0] + rz * D[1], v = rx * N[0] + rz * N[1];
+    if (s > -45 && s < 45 && v > -4 && v < 4) return true;                // Elva itself
+    if (s > 10 && s < 18.5 && v > 0 && v < 34) return true;               // the lane up to Riia street
+    return prev ? prev(x, z) : false;
+  };
+}
+
 // ---------------------------------------------------------------- colours
 const COL = {
   white: '#eceae2', white2: '#e4e2da', cream: '#ece6d2', cream2: '#e3dcc6', white37: '#e9e7df',

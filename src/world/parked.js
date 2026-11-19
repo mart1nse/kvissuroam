@@ -150,34 +150,30 @@ export function bakeLod(parts, id, tris) {
     }
   }
   // weld: same place, colour and (roughly) normal. Each vertex gets ten whole numbers (position to
-  // 0.2 mm, normal in thirds, colour in sixtieths, paint or not), kept in an open hash table.
-  const index = new Uint32Array(n), keys = new Int32Array(n * 10), Q = new Int32Array(10);
+  // 0.2 mm, normal in thirds, colour in sixtieths, paint or not), kept in an open hash table that
+  // holds the first vertex of each kind (its numbers are worked out again to compare).
+  const index = new Uint32Array(n), first = new Int32Array(n), Q = new Int32Array(10), R = new Int32Array(10);
+  const quant = (a, o) => {
+    o[0] = Math.round(pos[a] * 5000); o[1] = Math.round(pos[a + 1] * 5000); o[2] = Math.round(pos[a + 2] * 5000);
+    o[3] = Math.round(nrm[a] * 3); o[4] = Math.round(nrm[a + 1] * 3); o[5] = Math.round(nrm[a + 2] * 3);
+    o[6] = Math.round(col[a] * 60); o[7] = Math.round(col[a + 1] * 60); o[8] = Math.round(col[a + 2] * 60); o[9] = mat[a];
+  };
   let size = 1024;
   while (size < n * 2) size *= 2;
   const table = new Int32Array(size).fill(-1), maskT = size - 1;
-  const vp = new Float64Array(n * 3), vn = new Float64Array(n * 3), vc = new Float64Array(n * 3), vm = new Float64Array(n * 3);
   let u = 0;                                   // distinct vertices
   for (let i = 0; i < n; i++) {
-    const a = i * 3;
-    Q[0] = Math.round(pos[a] * 5000); Q[1] = Math.round(pos[a + 1] * 5000); Q[2] = Math.round(pos[a + 2] * 5000);
-    Q[3] = Math.round(nrm[a] * 3); Q[4] = Math.round(nrm[a + 1] * 3); Q[5] = Math.round(nrm[a + 2] * 3);
-    Q[6] = Math.round(col[a] * 60); Q[7] = Math.round(col[a + 1] * 60); Q[8] = Math.round(col[a + 2] * 60); Q[9] = mat[a];
+    quant(i * 3, Q);
     let h = 0x811c9dc5;
     for (let k = 0; k < 10; k++) h = Math.imul(h ^ Q[k], 0x01000193);
     h = (h ^ (h >>> 15)) & maskT;
     let v;
     for (;;) {
       v = table[h];
-      if (v < 0) {
-        v = u++; table[h] = v; keys.set(Q, v * 10);
-        const b = v * 3;
-        vp[b] = pos[a]; vp[b + 1] = pos[a + 1]; vp[b + 2] = pos[a + 2]; vn[b] = nrm[a]; vn[b + 1] = nrm[a + 1]; vn[b + 2] = nrm[a + 2];
-        vc[b] = col[a]; vc[b + 1] = col[a + 1]; vc[b + 2] = col[a + 2]; vm[b] = mat[a]; vm[b + 1] = mat[a + 1]; vm[b + 2] = mat[a + 2];
-        break;
-      }
-      const o = v * 10;
+      if (v < 0) { v = u++; table[h] = v; first[v] = i; break; }
+      quant(first[v] * 3, R);
       let same = true;
-      for (let k = 0; k < 10; k++) if (keys[o + k] !== Q[k]) { same = false; break; }
+      for (let k = 0; k < 10; k++) if (R[k] !== Q[k]) { same = false; break; }
       if (same) break;
       h = (h + 1) & maskT;
     }
@@ -186,27 +182,27 @@ export function bakeLod(parts, id, tris) {
   let idx = index;
   if (MeshoptSimplifier.supported) {
     const target = Math.round(tris * (id === 'bus' ? 0.85 : 1)) * 3;
-    idx = MeshoptSimplifier.simplify(index, new Float32Array(vp.subarray(0, u * 3)), 3, target, 0.03, ['ErrorAbsolute'])[0];
+    const vp = new Float32Array(u * 3);
+    for (let v = 0; v < u; v++) { const a = first[v] * 3; vp[v * 3] = pos[a]; vp[v * 3 + 1] = pos[a + 1]; vp[v * 3 + 2] = pos[a + 2]; }
+    idx = MeshoptSimplifier.simplify(index, vp, 3, target, 0.03, ['ErrorAbsolute'])[0];
   }
   // keep only the vertices still in use
-  const remap = new Int32Array(u).fill(-1), oi = new Uint32Array(idx.length);
-  const op = new Float32Array(u * 3), on = new Float32Array(u * 3), oc = new Float32Array(u * 3), om = new Float32Array(u * 3);
-  let w = 0;
+  const remap = new Int32Array(u).fill(-1), oi = new Uint32Array(idx.length), keep = [];
   for (let i = 0; i < idx.length; i++) {
     let v = remap[idx[i]];
-    if (v < 0) {
-      v = remap[idx[i]] = w++;
-      const a = idx[i] * 3, b = v * 3;
-      op[b] = vp[a]; op[b + 1] = vp[a + 1]; op[b + 2] = vp[a + 2]; on[b] = vn[a]; on[b + 1] = vn[a + 1]; on[b + 2] = vn[a + 2];
-      oc[b] = vc[a]; oc[b + 1] = vc[a + 1]; oc[b + 2] = vc[a + 2]; om[b] = vm[a]; om[b + 1] = vm[a + 1]; om[b + 2] = vm[a + 2];
-    }
+    if (v < 0) { v = remap[idx[i]] = keep.length; keep.push(first[idx[i]]); }
     oi[i] = v;
   }
+  const w = keep.length, op = new Float32Array(w * 3), on = new Float32Array(w * 3), oc = new Float32Array(w * 3), om = new Float32Array(w * 3);
+  for (let v = 0; v < w; v++) {
+    const a = keep[v] * 3, b = v * 3;
+    for (let k = 0; k < 3; k++) { op[b + k] = pos[a + k]; on[b + k] = nrm[a + k]; oc[b + k] = col[a + k]; om[b + k] = mat[a + k]; }
+  }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(op.slice(0, w * 3), 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(on.slice(0, w * 3), 3));
-  g.setAttribute('color', new THREE.BufferAttribute(oc.slice(0, w * 3), 3));
-  g.setAttribute('aMat', new THREE.BufferAttribute(om.slice(0, w * 3), 3));
+  g.setAttribute('position', new THREE.BufferAttribute(op, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(on, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(oc, 3));
+  g.setAttribute('aMat', new THREE.BufferAttribute(om, 3));
   g.setIndex(new THREE.BufferAttribute(w > 65535 ? oi : new Uint16Array(oi), 1));
   g.computeBoundingSphere(); g.computeBoundingBox();
   return g;
@@ -338,10 +334,9 @@ export function createParked(scene, world, opts = {}) {
   scene.add(group);
 
   // models are built one at a time, with a pause between, so that no frame waits long (on a phone a
-  // longer pause, so the memory each build churns through is given back before the next one, and none
-  // while the screen is dark between the drone shot and the car: pause(true) holds the queue)
+  // longer pause, so the memory each build churns through is given back before the next one)
   const queue = [];
-  let building = false, paused = false;
+  let building = false;
   const gap = touch ? 600 : 150;
   function want(id) {
     if (templates.has(id)) return templates.get(id);
@@ -351,7 +346,7 @@ export function createParked(scene, world, opts = {}) {
     return null;
   }
   function pump() {
-    if (building || paused || !queue.length) return;
+    if (building || !queue.length) return;
     building = true;
     const run = () => {
       const id = queue.shift();
@@ -559,6 +554,5 @@ export function createParked(scene, world, opts = {}) {
       order.forEach((b, i) => showNear(b, i < tune.nearMax));
     }
   }
-  const pause = (v) => { paused = v; if (!v) pump(); };
-  return { update, bodies, spots, group, templates, tune, pause };
+  return { update, bodies, spots, group, templates, tune };
 }

@@ -160,7 +160,8 @@ function engineForce(car, throttle, dt) {
     const onLimiter = throttle > 0.3 && road * wAbs >= (e.redline - 80) * vAbs;
     car.manualLim = onLimiter ? (car.manualLim || 0) + dt : 0;
     const due = road >= e.shiftRpm * 0.9 || (car.manualLim > 0.5 && road >= e.shiftRpm * 0.8);
-    if (car.reversing || car.manualStop > 1 ||
+    // (a downshift is for braking into a corner: flooring it again hands the choice back to the automatic)
+    if (car.reversing || car.manualStop > 1 || (car.manual < 0 && throttle >= 0.9) ||
         (due && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
   }
   if (car.reversing) car.gear = 1;

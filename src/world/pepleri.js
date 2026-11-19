@@ -84,12 +84,9 @@ export function pepleriProps() {
 // parked cars: [x, z, yaw, model, paint, lift] (stood there by parked.js, they can be shoved)
 const carAt = (i, lat, id, paint, turn = 0) => { const q = beside(i, lat); return [q.x, q.z, q.yaw + turn, id, paint, 0.04]; };
 export const PEPLERI_CARS = [
-  [1102.2, 3238.7, Math.PI / 2, 'rav4', 'white', 0.04], [1108.6, 3238.8, Math.PI / 2, 'mazda6', 'silver', 0.04],          // under Mainor's windows
   [1082.8, 3252.6, -Math.PI / 2, 'rav4', 'white', 0.04], [1073.5, 3263.5, 1.4, 'f31', 'black', 0.04],                      // on the church square
-  carAt(1965.2, -6.3, 'passat', 'silver'), carAt(1972.5, -6.3, 'mazda6', 'silver'), carAt(1978.5, -6.3, 'rav4', 'silver'),   // along the yellow block
   carAt(2030, -6.3, 'mazda6', 'blue'), carAt(2036.2, -6.3, 'rav4', 'black'),
-  carAt(2050, -6.4, 'passat', 'blue'), carAt(2054.6, -6.4, 'audi200', 'black'),
-  [1243.4, 3432.6, 1.05, 'rav4', 'white', 0.04], [1230.2, 3434.4, 2.63, 'passat', 'grey', 0.04], [1231.8, 3437.2, 2.63, 'mazda6', 'black', 0.04],   // the car park at Vanemuise
+  // none on the outside of the bend by Mainor and the yellow block, none inside the turn onto Vanemuise (Martin, 19 Nov)
 ];
 
 // ---------------------------------------------------------------- painted walls
@@ -528,7 +525,6 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
         }
       };
       const along = (i0, i1, lat, width, height) => { const a = beside(i0, lat), b = beside(i1, lat); hedge([a.x, a.z], [b.x, b.z], width, height); };
-      along(2060.5, 2066.5, -8.2, 1.3, 1.5);                                                // in front of the car park at Vanemuise
       hedge([1228.6, 3466.5], [1240.6, 3488.2], 1.4, 1.6); hedge([1232.2, 3464.6], [1244.0, 3486.0], 1.4, 1.6);       // the clipped rows past the junction
       // the slatted fence with thujas behind it on the right before the junction
       { const a = beside(2039, 7.4), b = beside(2052, 7.4), F = wallOf([b.x, b.z], [a.x, a.z]), fy = Math.min(hAt(a.x, a.z), hAt(b.x, b.z));
@@ -566,6 +562,11 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       const street = (c, d) => ({ at: (t, lat) => [c[0] + d[0] * t - d[1] * lat, c[1] + d[1] * t + d[0] * lat] });
       zebra(street([1151.3, 3292.6], [0.872, -0.49]), -2, 2, -4, 4);                                  // Tiigi, towards the centre
       zebra(street([1113.6, 3317.2], [0.872, -0.49]), -2, 2, -4, 4);                                  // Tiigi, behind the church
+      // inside the turn onto Vanemuise: a narrow kerbed strip of grass pavers between the road and the car park
+      { const left = (d) => ({ at: (t, u) => { const q = beside(t, -(hw(t) + d(t, u))); return [q.x, q.z]; } }), nose = (t) => Math.min(1, (t - 2056.5) / 1.2, (2066.8 - t) / 1.2);
+        K.ribbon(left((t, u) => -0.03 + u * 0.16), 2056.5, 2066.8, 0, 1, 'kerb', true);
+        K.ribbon(left((t, u) => 0.13 + u * Math.max(0.05, 1.25 * nose(t))), 2056.5, 2066.8, 0, 1, 'turf', true);
+        K.ribbon(left((t, u) => 0.13 + Math.max(0.05, 1.25 * nose(t)) + u * 0.14), 2056.5, 2066.8, 0, 1, 'kerb', true); }
       // Vanemuise: the solid lines of the two cycle lanes
       for (const side of [-1, 1]) K.ribbon(F, LANES.i0, LANES.i1, side * LANES.at - 0.07, side * LANES.at + 0.07, 'white', true);
       K.finish();

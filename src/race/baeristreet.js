@@ -123,6 +123,9 @@ export function baeriStreetWalls(walls) {
   ]);
 }
 
+// the iron fence round the Vallikraavi bend: lap indexes, metres outside the road edge on the left
+const FENCE = { i0: 243, i1: 286, off: 4.1 };
+
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
 // lantern posts, lamp poles and signs: all knockable props
 export function baeriStreetProps() {
@@ -133,7 +136,8 @@ export function baeriStreetProps() {
     out.push([kind, track.P[k][0] - tz * lat, track.P[k][1] + tx * lat, face ? bearing(-tx, -tz) : bearing(-tz * -side, tx * -side)]);
   };
   // upper Vallikraavi
-  for (const i of [152, 176, 196, 246, 262, 277]) at(LIGHT, i, -1, 1.5, false);
+  for (const i of [152, 176, 196]) at(LIGHT, i, -1, 1.5, false);
+  for (const i of [246, 262, 277]) at(LIGHT, i, -1, FENCE.off + 0.7, false);     // behind the iron fence (Martin, 19 Nov)
   at(POLE, 220, -1, 1.7);
   at(LANTERN, 211, -1, 2.3);
   at(NO_ENTRY, 217, 1, 1.3, true);
@@ -223,6 +227,21 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     return [a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat];
   };
   const hw = (i) => track.HW[Math.round(i)];
+  // the map's trees on the verge and pavement outside the Vallikraavi bend stand just behind the fence
+  // instead (Martin, 19 Nov)
+  if (world.addTreeMove) {
+    const mid = track.P[Math.round((FENCE.i0 + FENCE.i1) / 2)];
+    world.addTreeMove((x, z) => {
+      if (Math.hypot(x - mid[0], z - mid[1]) > 70) return null;
+      const n = track.nearest(x, z, Math.round((FENCE.i0 + FENCE.i1) / 2));
+      if (!n || n.i < FENCE.i0 - 2 || n.i > FENCE.i1 + 2) return null;
+      const [tx, tz] = track.tan[n.i], dx = x - track.P[n.i][0], dz = z - track.P[n.i][1];
+      const lat = -dx * tz + dz * tx, along = dx * tx + dz * tz, out = -lat - hw(n.i);
+      if (lat > 0 || out > FENCE.off + 1.2) return null;
+      const want = -(hw(n.i) + FENCE.off + 1.3);
+      return [track.P[n.i][0] + tx * along - tz * want, track.P[n.i][1] + tz * along + tx * want];
+    });
+  }
   // points along the road edge, `off` metres outside it, about `step` metres apart
   const edge = (i0, i1, side, off, step = 2.6) => {
     const raw = [];
@@ -249,7 +268,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
   function build(zone) {
     const K = streetKit(world, group, { shadows });
     const { p } = K;
-    const extra = [], glow = [];
+    const extra = [], glow = [], solids = [];
     const iron = { pos: [], uv: [] }, boards = { pos: [], uv: [] };
     const lit = rnd(57 + zone);
     const on = (chance = 0.2) => lit() < chance;
@@ -350,7 +369,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
 
     // ---- fences, walls, stairs (none of them solid)
     // iron bars on a low concrete footing between square concrete posts with caps
-    const ironFence = (pts, { height = 1.25, foot = 0.35 } = {}) => {
+    const ironFence = (pts, { height = 1.25, foot = 0.35, solid = false } = {}) => {
       for (let k = 0; k < pts.length; k++) {
         const q = pts[k], y = h(q[0], q[1]);
         p.add(BOX(0.36, height + 0.2, 0.36), COL.concrete, q[0], y + (height + 0.2) / 2, q[1], k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : 0);
@@ -359,6 +378,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         const S = seg(q, pts[k + 1]);
         p.add(BOX(S.l, foot, 0.2), 0x8a8680, S.mx, h(S.mx, S.mz) + foot / 2 - 0.02, S.mz, S.yaw);
         quad(iron, q, pts[k + 1], foot - 0.03, height - foot, 0, S.l / 0.5);
+        if (solid) solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2 + 0.2, hz: 0.22 });
       }
     };
     // three rough rails on short posts
@@ -568,7 +588,9 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       // shrubs by the no-entry sign where the path climbs the hill
       for (const [i, o] of [[214, 2.6], [215, 3.2], [216, 2.4]]) K.shrub(...T(i, hw(i) + o), 0.9, COL.hedge[i % 3], 0.9);
       // the old iron fence on concrete posts round the bend and on towards Baeri
-      ironFence(edge(243, 286, -1, 2.7, 2.7));
+      // solid, and back in the grass behind a verge as in the street view (Martin, 19 Nov)
+      ironFence(edge(FENCE.i0, FENCE.i1, -1, FENCE.off, 2.7), { solid: true });
+      for (let i = FENCE.i0; i < FENCE.i1; i++) K.ribbon(F, i, i + 1, -(hw(i) + 2.4), -(hw(i) + 4.6), 'lawn');
       // the stone terraces in the hollow: rows of old steps on the slope
       {
         const c = [1086, 3123], e = 2;
@@ -745,6 +767,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       deco(paint.white, 0.1, 1, { color: 0xf6f3fa }, -7);
     }
     K.finish();
+    if (solids.length) world.addSolids(solids);
     for (const [g, m] of extra) { const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); }
     const flat = (G, mat) => {
       if (!G.pos.length) return;

@@ -73,6 +73,17 @@ export function lawnTex() {
     }
   });
 }
+// concrete grid pavers with grass in the holes, 40 cm blocks; one tile is 1.2 m
+export function turfTex() {
+  return canvasTex(192, 192, (g, w) => {
+    const r = rnd(11);
+    g.fillStyle = '#c9c6d2'; g.fillRect(0, 0, w, w);
+    for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) for (const [u, v] of [[8, 8], [36, 8], [8, 36], [36, 36]]) {
+      g.fillStyle = '#86c46c'; g.fillRect(a * 64 + u, b * 64 + v, 20, 20);
+      for (let k = 0; k < 14; k++) { g.fillStyle = r() < 0.5 ? 'rgba(160,214,120,0.8)' : 'rgba(96,160,84,0.8)'; g.fillRect(a * 64 + u + r() * 18, b * 64 + v + r() * 18, 2, 3); }
+    }
+  });
+}
 // welded mesh panel: upright wires close together, a few cross wires; one tile is 0.5 m wide and the panel high
 function meshTex() {
   return canvasTex(64, 128, (g, w, h) => {
@@ -127,7 +138,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     lawn: { lift: 0.06, tile: 4, f: -3 }, paver: { lift: 0.075, tile: 1.6, f: -4 }, red: { lift: 0.075, tile: 1.6, f: -4 },
     dark: { lift: 0.075, tile: 1.6, f: -4 }, concrete: { lift: 0.075, tile: 3, f: -4 }, white: { lift: 0.09, tile: 1, f: -6 },
     asphalt: { lift: 0.05, tile: 3, f: -3 }, kerb: { lift: 0.06, tile: 1, f: -5 },       // a tarmac pavement and its kerb stones
-    verge: { lift: 0.06, tile: 4, f: -3 },                                               // rougher, deeper green grass beside a road
+    verge: { lift: 0.06, tile: 4, f: -3 }, turf: { lift: 0.07, tile: 1.2, f: -4 },     // turf: grass growing through concrete grid pavers                                               // rougher, deeper green grass beside a road
   };
   const ground = {};
   for (const k of Object.keys(KINDS)) ground[k] = { pos: [], uv: [] };
@@ -216,6 +227,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     if (ground.paver.pos.length) decal('paver', { map: paverTex([208, 206, 218], 3) });
     if (ground.red.pos.length) decal('red', { map: paverTex([226, 164, 152], 5) });
     if (ground.dark.pos.length) decal('dark', { map: paverTex([150, 150, 166], 9) });
+    if (ground.turf.pos.length) decal('turf', { map: turfTex() });
     decal('concrete', { color: 0xd9d6de });
     decal('white', { color: 0xf6f3fa });
     decal('asphalt', { color: ASPHALT });

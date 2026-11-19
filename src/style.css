@@ -185,13 +185,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   width: clamp(44px, 6vw, 60px); height: clamp(44px, 6vw, 60px); font-size: clamp(20px, 2.8vw, 28px); line-height: 1; padding: 0;
   background: rgba(18, 6, 43, .8); border: 1.5px solid rgba(47, 243, 255, .7); border-radius: 4px; color: var(--cyan); text-shadow: 0 0 8px var(--cyan);
 }
-/* north is always up on the city map: a red pointer over an N, top left */
+/* north is always up on the city map: a thin white needle over an N, top left */
 .mapnorth {
   position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); pointer-events: none;
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 10px 5px; border-radius: 4px; background: rgba(18, 6, 43, .72);
   font-size: clamp(17px, 2.2vw, 22px); font-weight: 900; line-height: 1; color: #fff;
 }
-.mapnorth i { width: 0; height: 0; border: solid transparent; border-width: 0 .42em .62em; border-bottom-color: #ff3b4a; }
+.mapnorth i { width: 0; height: 0; border: solid transparent; border-width: 0 .13em .75em; border-bottom-color: #fff; }
 body:not(.touch) .touch-only { display: none; }
 
 /* ---- touch pedals */
@@ -420,3 +420,15 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
   #trackmap .cap { font-size: 9px; letter-spacing: .18em; }
 }
 @media (max-height: 430px), (max-width: 1000px) and (max-height: 860px) { #trackmap { display: none; } }
+
+/* ---- options panel (desktop, O) */
+#options { position: fixed; z-index: 9; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(10px, env(safe-area-inset-right)); width: min(330px, 90vw); padding: 14px 16px 12px;
+  background: rgba(18, 6, 43, .9); border: 1.5px solid rgba(47, 243, 255, .7); border-radius: 6px; box-shadow: 0 0 18px rgba(47, 243, 255, .3); pointer-events: auto; }
+#options.hidden { display: none; }
+#options h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .24em; font-style: italic; color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+#options .opt { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+#options .opt input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--hot); flex-shrink: 0; }
+#options .opt b { display: block; font-size: 13px; letter-spacing: .12em; color: #fff; }
+#options .opt small { display: block; margin-top: 3px; font-size: 11px; line-height: 1.35; opacity: .8; }
+#options .optkeys { margin: 10px 0 10px 28px; font-size: 11px; opacity: .6; }
+#options button { padding: 6px 16px; font-size: 11px; letter-spacing: .2em; }

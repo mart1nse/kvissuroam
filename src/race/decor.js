@@ -92,6 +92,11 @@ function bannerTex() {
   });
 }
 
+// The Lai -> Vabaduse -> Emajõe junction is two left turns in a row. Since its outline follows the rebuilt
+// kerbs (19 Nov) the second, by the bridge, measures sharper, but the corner board and the corner
+// clearing (SPECIAL 920 in trackside.js) belong at the first, the turn off Lai.
+const PINNED = [920];
+
 export function findCorners(track) {
   const { P, N } = track;
   const head = (i) => {
@@ -108,6 +113,13 @@ export function findCorners(track) {
     for (let k = -20; k <= 20 && peak; k++) if (Math.abs(turn[(i + k + N) % N]) > Math.abs(a)) peak = false;
     if (peak) out.push({ i, dir: Math.sign(a) });        // +1: right turn (z is south), -1: left
   }
+  // corners placed by hand: they replace whatever the search found within 20 points of them
+  for (const p of PINNED) {
+    const k = out.findIndex((c) => Math.min(Math.abs(c.i - p), N - Math.abs(c.i - p)) <= 20);
+    const c = { i: p, dir: Math.sign(turn[p]) };
+    if (k >= 0) out[k] = c; else out.push(c);
+  }
+  out.sort((a, b) => a.i - b.i);
   return out;
 }
 

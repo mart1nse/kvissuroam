@@ -9,9 +9,11 @@ const KM = { N: [1735.2, 3015.6], S: [1713.8, 3144.9], W: [1659.6, 3088.7] };   
 const KIOSKS = { a: [1652, 3113], b: [1696, 3159], n: 10 };
 // parked cars: kerb rows a -> b with the number of bays (some left empty). The cars themselves are
 // real models that can be shoved: src/world/parked.js
-// (perp: nose-in bays across the row instead of cars nose to tail)
+// (perp: nose-in bays across the row instead of cars nose to tail; head: the heading [x, z] of cars in angled bays)
 export const PARKING = [
-  { a: [1667, 3047], b: [1700, 3016], n: 8, seed: 1 },      // Kaubamaja, north-west side
+  // Kaubamaja's car park (keskustee.js draws the bays): the row by the columns, noses in, and the one along the trees
+  { a: [1662.4, 3076.6], b: [1716.36, 3024.43], n: 25, head: [0.961, 0.276], seed: 1 },
+  { a: [1650.94, 3064.73], b: [1711.38, 3006.3], n: 28, head: [-0.961, -0.276], seed: 41 },
   { a: [1554, 3087], b: [1579, 3120], n: 6, seed: 2 },      // the cross street north of the spawn
   // the car park by the river across from Kaubamaja, around the pavilion
   { a: [1731, 2951], b: [1779, 2943], n: 18, perp: true, seed: 3 },
@@ -173,7 +175,7 @@ export function createLandmarks(world, track) {
       if (built) return;
       const [kx, kz] = KM.W;
       if (Math.hypot(kx - x, kz - z) < 900 && world.ready(KM.N[0], KM.N[1]) && world.ready(KM.S[0], KM.S[1])
-        && world.ready(TERRACE[0], TERRACE[1]) && world.ready(PARKING[1].a[0], PARKING[1].a[1])) build();
+        && world.ready(TERRACE[0], TERRACE[1]) && world.ready(...PARKING.find((r) => r.seed === 2).a)) build();
     },
   };
 }

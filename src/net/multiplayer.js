@@ -78,13 +78,20 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     setTimeout(connect, retry * 1000);
   }
 
+  // each player's own map arrow colour: the first one nobody online has, kept while they stay
+  // (no yellow: our own car; no pink: the race track; no blue: water; no white: the north needle)
+  const COLOURS = ['#2ff3ff', '#7dff5a', '#ff9a3c', '#c08bff', '#ff5a6e', '#3cffb4'];
+  const freeColour = () => {
+    const used = new Set([...others.values()].map((o) => o.colour));
+    return COLOURS.find((c) => !used.has(c)) || COLOURS[others.size % COLOURS.length];
+  };
   function add(p) {
     if (others.has(p.id) || p.id === myId) return others.get(p.id);
     const el = document.createElement('div');
     el.className = 'pname';
     el.textContent = p.name;
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, car: null, model: null, el, buf: [], pose: null, wheel: 0 };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, el, buf: [], pose: null, wheel: 0 };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -170,7 +177,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
   const queue = [];
   function enqueue(l) {
     if (!l?.car || !(l.ms > 0) || sent.has(lapKey(l)) || queue.some((q) => lapKey(q) === lapKey(l))) return;
-    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at });
+    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp });
   }
   function saveQueue() { lsSet(PENDING_KEY, JSON.stringify(queue.slice(-200))); }
   function markSent(list) {
@@ -365,7 +372,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
-    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
+    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
     setName(n) {
       n = String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
       if (!n || n === name) return name;
@@ -375,7 +382,7 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     submitLap(lap) {
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at });
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp });
       saveQueue();
       flushLaps();
     },
@@ -386,6 +393,11 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     bestFor(id) {
       const b = board?.allTime?.find((r) => r.car === id);
       return b ? { ms: b.ms, name: b.name } : null;
+    },
+    // the fastest lap anyone drove in this car with split times for these checkpoints
+    refFor(id, cp) {
+      const r = board?.refs?.find((x) => x.car === id && x.cp === cp && Array.isArray(x.splits));
+      return r ? { ms: r.ms, name: r.name, splits: r.splits } : null;
     },
     labelHtml: escapeHtml,
   };

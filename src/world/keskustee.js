@@ -31,6 +31,10 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     const W = [1659.6, 3088.7], UA = [0.6943, 0.7197];
     const FK = roadFrame([[W[0] - UA[0] * 14, W[1] - UA[1] * 14], [W[0] + UA[0] * 92, W[1] + UA[1] * 92]], 0);
     K.ribbon(FK, W[0] - UA[0] * 10, W[0] + UA[0] * 84, -0.4, -20.5, 'red', true);
+    // the pedestrian street the lap turns into after the last corner: red brick between grey edges, the
+    // grey strip along the office building and round the sculptures (Martin's lines on the aerial, 19 Nov).
+    // In Kaubamaja's roof frame (a along Küüni from the west corner, b along the park face) it runs along a.
+    K.ribbon(FK, W[0] - UA[0] * 60, W[0] - UA[0] * 17, -4, -27, 'red', true);
     K.finish();
     junction();
   }
@@ -96,13 +100,43 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
       group.add(m);
     };
     flat(white, 0xf6f3fa, -7);
+    carPark(seg);
+  }
+  // ---- Kaubamaja's car park along the park face (Street View Aug 2024, kaldaerofoto Apr 2019): a row of
+  // angled bays by the columns and one along the tree verge, blue bay lines, the yellow hatched box at the
+  // entrance at the far end and a yellow line along the kerb by the plaza
+  function carPark(seg) {
+    const W = [1659.6, 3088.7], UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];
+    const at = (a, b) => [W[0] + UA[0] * a + UB[0] * b, W[1] + UA[1] * a + UB[1] * b];
+    const blue = [], yellow = [];
+    const ROWS = [[-4, -9.5], [-20.5, -26]], LEAN = 5.5 / Math.tan(Math.PI / 3), STEP = 2.6 / Math.sin(Math.PI / 3);
+    for (const [a0, a1] of ROWS) {
+      const b1 = a0 === -4 ? 90 : 97;
+      for (let b = 12; b <= b1; b += STEP) seg(at(a0, b), at(a1, b - LEAN), 0.12, blue);
+      seg(at(a1, 12 - LEAN), at(a1, b1 - LEAN), 0.12, blue);                         // the line across the bay ends
+    }
+    // the hatched box before the first bays at the entrance end, and the kerb line by the plaza
+    const box = [[-4, 92], [-9.5, 92], [-9.5, 101], [-4, 101]].map(([a, b]) => at(a, b));
+    for (let k = 0; k < 4; k++) seg(box[k], box[(k + 1) % 4], 0.14, yellow);
+    seg(box[0], box[2], 0.14, yellow); seg(box[1], box[3], 0.14, yellow);
+    seg(at(-4, 3), at(-4, 12), 0.12, yellow);
+    for (const [pos, colour] of [[blue, 0x7fa6e8], [yellow, 0xf2d36b]]) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const nor = new Float32Array(pos.length);
+      for (let k = 1; k < nor.length; k += 3) nor[k] = 1;
+      g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: colour, polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -7, side: THREE.DoubleSide }));
+      m.receiveShadow = true;
+      group.add(m);
+    }
   }
 
   return {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([[1650, 3080], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1650, 3080], [1600, 3050], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

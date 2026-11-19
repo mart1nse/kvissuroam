@@ -82,6 +82,7 @@ export async function loadWorldData(onProgress = () => {}) {
       s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
+      if (treeMoves.length) moveTrees(s);
       if (clearings.length) s.trees = clearTrees(s.trees);
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
@@ -91,6 +92,25 @@ export async function loadWorldData(onProgress = () => {}) {
       for (const f of onLoad) f(s);
     }, (err) => { loading--; s.state = 'failed'; console.warn(err); });
     return s.promise;
+  }
+
+  // Hand-made places that move map trees ((x, z) => [x, z] or null): applied as a sector loads, the tree
+  // set on the ground of its new spot
+  const treeMoves = [];
+  function moveTrees(s) {
+    const rec = s.trees, H = s.H;
+    for (let i = 0; i < rec.length; i += 6) {
+      for (const f of treeMoves) {
+        const to = f(rec[i], rec[i + 2]);
+        if (!to) continue;
+        let fx = Math.min(Math.max((to[0] - s.x0) / hres, 0), hn - 1.001), fz = Math.min(Math.max((to[1] - s.z0) / hres, 0), hn - 1.001);
+        const c = Math.floor(fx), r = Math.floor(fz), k = r * hn + c;
+        fx -= c; fz -= r;
+        const y = ((H[k] * (1 - fx) + H[k + 1] * fx) * (1 - fz) + (H[k + hn] * (1 - fx) + H[k + hn + 1] * fx) * fz) * hs + hoff;
+        rec[i] = to[0]; rec[i + 1] += y - (rec[i + 1]); rec[i + 2] = to[1];
+        break;
+      }
+    }
   }
 
   // Rectangles kept free of trees (hand-made places such as the Toome tennis courts): { x0, z0, x1, z1 }
@@ -234,6 +254,8 @@ export async function loadWorldData(onProgress = () => {}) {
 
     // Keep trees out of a rectangle in sectors loaded from now on (call before the sectors load).
     addClearing(r) { clearings.push(r); },
+    // Move map trees: f(x, z) returns the new [x, z] or null (call before the sectors load).
+    addTreeMove(f) { treeMoves.push(f); },
 
     // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
     addSolids(list) {

@@ -21,12 +21,9 @@ const LOOK_AHEAD = 150;  // metres ahead along the loop the camera looks at, dow
 // gentle climbs and dips on top of the path heights: [metres up/down, metres along the loop per wave]
 const SWELL = [[26, 760], [11, 270]];
 
-// On phones the drone holds still on one fixed view (streaming the map in under a moving camera and
-// the one second flight to the car stutter there): SHOTS are places along the loop, 0..1, to pick from.
-// They are all over the old town right by the start line, so the streets the drone shows are the
-// ones the car starts in: a phone never holds two parts of the city at once (an iPhone ran out of
-// memory and reloaded the page when the drone was over the river a kilometre away).
-const SHOTS = [0.6, 0.65, 0.7];
+// ?fixedintro holds the drone still on one view: SHOTS are places along the loop, 0..1, to pick from
+// (?shot= picks one). The phones' still menu picture, public/menu-still.jpg, is shot 0.3 taken this way.
+const SHOTS = [0.1, 0.3, 0.4];   // Kaarsild, the river bend by Vabadussild, along the river past the centre
 
 export function createIntro(world, { fixed = false, shot = null } = {}) {
   const ground = (x, z) => Math.max(world.meta.riverLevel ?? -2.5, world.coarseHeight(x, z));

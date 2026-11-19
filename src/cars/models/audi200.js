@@ -55,14 +55,16 @@ function aeroWheel(R, width, rimR) {
 // three rows of diamonds), a wide polished step lip with a ring of small bolts, a raised gold hub with five
 // lug bolts and a silver cap with a black badge. Axis on X, outer face toward +X.
 function bbsWheel(R, width, rimR) {
-  const s = new Soup(), hw = width / 2, sh = R - rimR;
-  s.add(lathe([[rimR - 0.006, -hw * 0.8], [rimR + sh * 0.3, -hw * 0.98], [rimR + sh * 0.7, -hw], [R - 0.014, -hw * 0.92], [R - 0.004, -hw * 0.76], [R, -hw * 0.45],
-    [R, hw * 0.45], [R - 0.004, hw * 0.76], [R - 0.014, hw * 0.92], [rimR + sh * 0.7, hw], [rimR + sh * 0.3, hw * 0.98], [rimR - 0.006, hw * 0.8]], 'rubber', 56));
-  s.add(lathe([[rimR - 0.012, hw * 0.78], [rimR - 0.012, -hw * 0.7]], 'darkalloy', 40));
+  // a wide rim in a tyre of the same width: the beads sit near the tyre's edges, the sidewalls stand almost upright
+  // and the polished lip comes out flush with the tyre wall
+  const s = new Soup(), hw = width / 2, sh = R - rimR, xb = hw * 0.93;
+  s.add(lathe([[rimR - 0.006, -xb], [rimR + sh * 0.3, -hw * 0.99], [rimR + sh * 0.7, -hw], [R - 0.014, -hw * 0.92], [R - 0.004, -hw * 0.76], [R, -hw * 0.45],
+    [R, hw * 0.45], [R - 0.004, hw * 0.76], [R - 0.014, hw * 0.92], [rimR + sh * 0.7, hw], [rimR + sh * 0.3, hw * 0.99], [rimR - 0.006, xb]], 'rubber', 56));
+  s.add(lathe([[rimR - 0.012, xb], [rimR - 0.012, -xb]], 'darkalloy', 40));
   s.add(fromGeo(new THREE.CircleGeometry(rimR - 0.01, 32), { p: [-hw * 0.4, 0, 0], r: [0, Math.PI / 2, 0] }, 'well'));
   s.add(cyl(rimR * 0.72, rimR * 0.72, 0.022, 32, { p: [-hw * 0.12, 0, 0], r: [0, 0, Math.PI / 2] }, 'darkalloy'));
   // polished lip: rolled outer edge, wide flat face, then the step down to the mesh
-  const rL = rimR - 0.05, xl = hw * 0.86, xo = xl - 0.03;
+  const rL = rimR - 0.05, xl = hw * 0.97, xo = xl - 0.03;
   s.add(lathe([[rimR - 0.004, xl - 0.012], [rimR + 0.003, xl - 0.003], [rimR + 0.001, xl + 0.002], [rimR - 0.006, xl + 0.003], [rL + 0.004, xl],
     [rL, xl - 0.004], [rL - 0.001, xo - 0.002], [rL - 0.004, xo - 0.012]], 'polished', 72));
   // the mesh's outer ring, sitting at the foot of the step

@@ -19,7 +19,7 @@ import { drapeGeometry } from '../world/drape.js';
 const BOX = [1370, 2296, 1515, 2440];
 const COL = { cycle: 0xb2a8c8, setts: 0xd9c3cf, red: 0xe9868f, white: 0xfaf8ff };
 const ZEBRA = 7;
-const ISLE = { h: 0.1, edge: 0.06, face: 0xa9a5b5 };
+const ISLE = { h: 0.09, edge: 0.1, face: 0xa9a5b5 };      // (Martin, 19 Nov: 1 cm lower, a smoother edge)
 const MAX_EDGE = 1.5;                       // triangles are split down to this so they follow the ground
 
 const inBox = (x, z) => x > BOX[0] && x < BOX[2] && z > BOX[1] && z < BOX[3];

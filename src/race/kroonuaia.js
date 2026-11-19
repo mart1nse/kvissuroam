@@ -250,7 +250,7 @@ const SIGNS = [
   [1419, 1, 1.3, [28, 22, 27]],
 ];
 const ISLANDS = [1206.2, 1273.8, 1314.4];          // the small kerbed islands with the keep-right arrow
-const ISLE = { a: 1.26, c: 0.74, h: 0.12, edge: 0.08 };   // their half length and width, the kerb height
+const ISLE = { a: 1.26, c: 0.74, h: 0.11, edge: 0.12 };   // their half length and width, the kerb height
 const BOLLARDS = { i0: 1412, i1: 1427, n: 7, off: 0.45 };      // along the left edge before the Veski turn
 // zebra crossings: the map has one too early at the start and two in the bend that are not there; the photos
 // show one past the brown house and one before the Jakobi junction

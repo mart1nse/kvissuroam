@@ -1,4 +1,4 @@
-// Pavements along the lap stand on a 10 cm kerb (Martin, 19 Nov: "a 10 cm kerb at most pavements, mainly
+// Pavements along the lap stand on a 9 cm kerb (Martin, 19 Nov: "a 10 cm kerb at most pavements, mainly
 // on the race track"). Where they are comes from src/race/kerbs.json, found from the map: for each lap index
 // and side, the paved strip that starts at the road's edge, left out at junction mouths, where cars are
 // parked at the kerb, and where a hand-made kerb is already in place. Each run of it is
@@ -12,10 +12,10 @@ import * as THREE from 'three';
 import KERBS from './kerbs.json';
 import { createTrack } from './race.js';
 
-const H = KERBS.h;            // 0.10 m
-const EDGE = 0.06;            // the rounded edge of the kerb stone
+const H = KERBS.h;            // 0.09 m (Martin, 19 Nov: first 10, then 1 cm lower with a smoother edge)
+const EDGE = 0.1;             // the rounded edge of the kerb stone
 const TAPER = 2;              // lap indices (about 4 m) for the kerb to come down at the end of a run
-const STONE = 0.16;           // the kerb stone's top, drawn in stone colour
+const STONE = EDGE + 0.12;    // the kerb stone's top, drawn in stone colour
 const COL = { face: 0xa9a5b5, stone: 0xc9c5d3 };
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
@@ -109,11 +109,11 @@ export function createTrackKerbs(world, scene) {
     const P3 = (t, d, lift) => { const [x, z] = at(t, r.s * (hwAt(t) + val(r, 'f', t) + d)); return [x, world.heightAt(x, z) + lift, z]; };
     for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
       const u = Math.min(r.i1, t + 0.5);
-      const road = (tt) => P3(tt, -0.03, -0.03);
-      const top = (tt) => { const p = P3(tt, EDGE + 0.01, 0.012); p[1] -= 0.008; return p; };
-      const base = (tt) => { const [x, , z] = P3(tt, 0, 0); return [x, top(tt)[1], z]; };
-      quad(road(t), road(u), base(t), base(u), cF);                                          // the face
-      quad(base(t), base(u), P3(t, STONE, 0.016), P3(u, STONE, 0.016), cS);                // the stone on top
+      // the face: from just under the road up the rounded edge as the cars feel it, then the stone on top
+      const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * EDGE);
+      quad(P3(t, -0.03, -0.03), P3(u, -0.03, -0.03), P3(t, 0, 0.012), P3(u, 0, 0.012), cF);
+      for (let q = 0; q < R.length - 1; q++) quad(P3(t, R[q], 0.012), P3(u, R[q], 0.012), P3(t, R[q + 1], 0.012), P3(u, R[q + 1], 0.012), q < 3 ? cF : cS);
+      quad(P3(t, EDGE, 0.012), P3(u, EDGE, 0.012), P3(t, STONE, 0.016), P3(u, STONE, 0.016), cS);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

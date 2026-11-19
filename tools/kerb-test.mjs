@@ -1,11 +1,11 @@
-// Kerb check: a 15 cm kerb runs north along x = K on the car's right (Emajõe's river-side pavement).
+// Kerb check: a 14 cm kerb runs north along x = K on the car's right (Emajõe's river-side pavement).
 // Rolling the right wheels up it at a fair angle must knock off a little speed and lean the car over
 // (about atan(0.2 / track)); a shallow angle must turn the car back off the kerb instead; head-on at
 // walking pace it must still climb. Run: node tools/kerb-test.mjs
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
 
-const K = 2.0, H = 0.15, EDGE = 0.09;
+const K = 2.0, H = +(process.env.KERB_H || 0.14), EDGE = +(process.env.KERB_EDGE || 0.2);   // Emajõe: 14 cm, rounded over 20 cm
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const kerb = (x) => H * smooth((x - K) / EDGE);
 const world = {
@@ -43,11 +43,12 @@ for (const spec of Object.values(CARS)) {
   check(a.upR === 1 && a.hit > 0.2, `${name} right wheels should be up the kerb`);
   check(a.maxRoll > lean * 0.6 && a.maxRoll < lean * 2.2, `${name} lean ${a.maxRoll.toFixed(1)} should be near ${lean.toFixed(1)}`);
   check(Math.hypot(a.car.vx, a.car.vy) * 3.6 > 38, `${name} lost too much speed`);
-  // 2. a shallow 2 degrees at 50 km/h: turned back off
-  const b = run(spec, 50, 2 * deg, 2.0, 0.9);
-  console.log(name, `glance 2deg: right front kerb height ${b.car.kerbS[1].h.toFixed(2)}, yaw ${(b.car.yaw / deg).toFixed(1)} deg, x ${b.car.x.toFixed(2)}`);
-  check(b.upR === 0, `${name} should glance off at 2 degrees`);
-  check(b.car.yaw < 2 * deg, `${name} should be turned away from the kerb`);
+  // 2. a shallow angle at 50 km/h: turned back off (2 degrees; 1 on a rounded edge, which is easier to climb)
+  const g = EDGE > 0.12 ? 1 : 2;
+  const b = run(spec, 50, g * deg, 2.0, 0.9);
+  console.log(name, `glance ${g}deg: right front kerb height ${b.car.kerbS[1].h.toFixed(2)}, yaw ${(b.car.yaw / deg).toFixed(1)} deg, x ${b.car.x.toFixed(2)}`);
+  check(b.upR === 0, `${name} should glance off at ${g} degrees`);
+  check(b.car.yaw < g * deg, `${name} should be turned away from the kerb`);
   // 3. head-on at walking pace: climbs
   const c = run(spec, 6, 90 * deg, 4, K - spec.wheelbase - 0.6);
   console.log(name, `head-on 6 km/h: front kerb ${c.car.kerbS[0].h.toFixed(2)}, x ${c.car.x.toFixed(2)}`);

@@ -26,7 +26,7 @@ export function createAudio() {
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
-  let synth = null, synthGain = null, synthCfg = null, carId = null;
+  let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null;
   let noiseSrc = null, workletReady = false;
   const voices = [];
   const shiftSound = createShiftSound();
@@ -85,6 +85,9 @@ export function createAudio() {
       synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
       synthGain = ctx.createGain(); synthGain.gain.value = ENGINE_LEVEL;
       synth.connect(synthGain).connect(bus);
+      // (a gear change's blip and bark also go round the compressor, so they hit: src/audio-shift.js)
+      punch = ctx.createGain(); punch.gain.value = 0;
+      synthGain.connect(punch).connect(space.burst);
       sendConfig();
     }).catch(() => { synth = null; });
   }
@@ -226,11 +229,13 @@ export function createAudio() {
         wasShift = !!car.shiftCut;
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
-      // a downshift blips, crackles and clunks; too far down by hand, the engine is dragged over its limit
+      // a downshift blips, crackles and clunks, an upshift barks as it bites; too far down by hand, the
+      // engine is dragged over its limit
       const sh = shiftSound.step(car, t);
-      if (sh.clunk && !dead) clunk(ctx, noiseBuf, bus, sh.clunk.k, t + 0.005 + sh.clunk.after);
+      if (sh.clunk && !dead) clunk(ctx, noiseBuf, sh.clunk.up ? space.burst : bus, sh.clunk.k, t + 0.005 + sh.clunk.after, sh.clunk.up);
+      if (punch) punch.gain.setTargetAtTime(dead ? 0 : sh.punch, t, 0.01);
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over } });
+        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev

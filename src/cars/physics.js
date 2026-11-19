@@ -197,7 +197,12 @@ function engineForce(car, throttle, dt) {
       car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
     }
   }
-  if (car.shiftTimer > 0) car.shiftTimer -= dt;
+  if (car.shiftTimer > 0) {
+    car.shiftTimer -= dt;
+    // an upshift under power biting: the drive comes back all at once (the sound's bark and the body's
+    // kick follow `bite`; it takes nothing from the pace)
+    if (car.shiftTimer <= 0 && car.shiftUp && throttle > 0.3) car.bite = throttle;
+  }
   const wheelRpm = (wAbs / s.wheelRadius) * ratioOf(car.gear) * (60 / (2 * Math.PI));
   // torque converter: engine speed never drops below stall while the throttle is open
   // (rollStallRpm: once rolling, a flat-out stab lets the engine flare higher before the converter takes
@@ -306,6 +311,7 @@ export function stepCar(car, input, world, dtFrame) {
   car.landed *= Math.exp(-dtFrame * 6);
   if (car.kerbHit) car.kerbHit *= Math.exp(-dtFrame * 8);
   if (car.jolt) car.jolt *= Math.exp(-dtFrame * 10);
+  if (car.bite) car.bite = car.bite > 0.01 ? car.bite * Math.exp(-dtFrame * 7) : 0;
 }
 
 function substep(car, input, world, dt) {
@@ -918,7 +924,8 @@ function substep(car, input, world, dt) {
   // ---- body attitude
   car.y = Math.max(car.hy, groundY - 0.06);     // the drawn wheels may sink a little, not through the road
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);
-  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x);
+  // (an upshift biting snaps the body back on its springs a little harder than the pull alone: bite)
+  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.022;
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with
@@ -927,7 +934,7 @@ function substep(car, input, world, dt) {
   } else {
     const p0 = car.pitch, r0 = car.roll;
     // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
-    const follow = Math.min(1, dt * (9 + 16 * (car.jolt || 0)));
+    const follow = Math.min(1, dt * (9 + 16 * Math.max(car.jolt || 0, car.bite || 0)));
     car.pitch += (tPitch - car.pitch) * follow;
     car.roll += (tRoll - car.roll) * follow;
     const k = Math.min(1, dt * 12);
@@ -947,6 +954,6 @@ export function resetCar(car, pose) {
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
-  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.kerbS = null;
+  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;
 }

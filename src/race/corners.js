@@ -7,12 +7,13 @@ import { createTrack, ROUND } from './race.js';
 
 const SIGN0 = 10, KEEP_RIGHT = SIGN0 + 13, BENCH = 3;
 const KROON = 1035;
+const LINE = { from: 1029.6, to: 1052 };      // the white edge line round the Kroonuaia corner: after the crossing, on up Kroonuaia
 // raised islands down the middle of the road: i0, i1 along the lap, half-width, lateral offset (+ right)
 const ISLANDS = [
   { i0: 675, i1: 681, hw: 0.75, off: 0 },        // Jakobi, before the Lai junction
   { i0: 693, i1: 698, hw: 0.7, off: 0 },         // the mouth of Lai
 ];
-const ISLAND = { height: 0.13, edge: 0.06, top: 0xaea7b2, kerb: 0xd0ccd6 };
+const ISLAND = { height: 0.12, edge: 0.1, top: 0xaea7b2, kerb: 0xd0ccd6 };
 // street furniture to take away: [kind, x, z]
 const REMOVE = [[BENCH, 1338.3, 2185.9]];          // the bench on the right before Kroonuaia
 const BARRIER = { off: 0.5, height: 0.38, width: 1.4, ramp: 0.35, rail: 0.6 };       // wide enough that one side of the car rides up on it (Martin, 17 Nov: more tilt)
@@ -44,6 +45,12 @@ export function pavedPatches() {
   const dx = f.c[0] - (f.a[0] + f.b[0]) / 2, dz = f.c[1] - (f.a[1] + f.b[1]) / 2, l = Math.hypot(dx, dz) || 1;
   const c = [f.c[0] + (dx / l) * 0.5, f.c[1] + (dz / l) * 0.5];
   return [{ t: 1, outer: [c, ...f.curve, c] }];
+}
+
+// the same corner painted as kerbed street (cover R+G, src/world/roadtex.js), so the ground's kerb line
+// runs round the curve along the low barrier instead of in the old square corner (Martin, 19 Nov)
+export function cornerOverPaint() {
+  return pavedPatches().map((a) => ({ outer: a.outer, cover: '#ff0' }));
 }
 
 // ids to drop from the props layer
@@ -199,6 +206,53 @@ export function createCorners(world, group, merged) {
     parts.push([post, 0x9a9eaa]);
     barrier = merged(parts);
     if (barrier) { barrier.castShadow = barrier.receiveShadow = true; group.add(barrier); }
+    // the white edge line round the corner, 30 cm in from the kerb, from past the crossing on Emajõe on up
+    // Kroonuaia (Martin, 19 Nov: the line follows the low fence, the kerb stones between them)
+    {
+      const pos = [], W = 0.07, IN = 0.3;
+      const pts = [];
+      for (let j = 0; j < f.curve.length; j++) {
+        const q = f.curve[j], b = bline[j], l = Math.hypot(b[0] - q[0], b[1] - q[1]) || 1;
+        const p = [q[0] - (b[0] - q[0]) / l * IN, q[1] - (b[1] - q[1]) / l * IN];
+        const n = track.nearest(p[0], p[1], KROON);
+        if (n.i + n.t >= LINE.from) pts.push(p);
+      }
+      const { P, HW, tan } = track;
+      for (let i = KROON + 9; i <= LINE.to; i++) pts.push([P[i][0] + tan[i][1] * (HW[i] - IN), P[i][1] - tan[i][0] * (HW[i] - IN)]);
+      for (let k = 0; k < pts.length - 1; k++) {
+        const a = pts[k], b = pts[k + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
+        const nx = -dz / l * W, nz = dx / l * W;
+        const A = [a[0] - nx, a[1] - nz], B = [b[0] - nx, b[1] - nz], C = [a[0] + nx, a[1] + nz], D = [b[0] + nx, b[1] + nz];
+        const y = (q) => world.heightAt(q[0], q[1]) + 0.02;
+        for (const [u, v, w] of [[A, B, C], [C, B, D]]) {
+          const up = (v[1] - u[1]) * (w[0] - u[0]) - (v[0] - u[0]) * (w[1] - u[1]) >= 0;
+          for (const q of up ? [u, v, w] : [u, w, v]) pos.push(q[0], y(q), q[1]);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xfaf8ff, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      m.receiveShadow = true;
+      group.add(m);
+    }
+    // kerb stones between the kerb line (the curve) and the barrier, on the ground as the cars feel it
+    {
+      const pos = [], up = (a, b, c) => (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) >= 0;
+      const P3 = (p) => [p[0], world.heightAt(p[0], p[1]) + 0.015, p[1]];
+      const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      for (let j = 0; j < f.curve.length - 1; j++) {
+        const A = lerp(f.curve[j], bline[j], 0.04), B = lerp(f.curve[j + 1], bline[j + 1], 0.04);
+        const C = lerp(f.curve[j], bline[j], 0.9), D = lerp(f.curve[j + 1], bline[j + 1], 0.9);
+        for (const [a, b, c] of [[A, B, C], [C, B, D]]) for (const q of up(a, b, c) ? [a, b, c] : [a, c, b]) pos.push(...P3(q));
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: ISLAND.kerb, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+      m.receiveShadow = true;
+      group.add(m);
+    }
   }
 
   const near = (x, z, px, pz) => Math.hypot(px - x, pz - z) < 700;

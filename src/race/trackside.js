@@ -51,11 +51,12 @@ function zones(track) {
 }
 // mountable kerbs: from the road edge (+off) inwards `width` metres, `height` high, with edges `edge`
 // (towards the road) and `back` (the far side) wide; sharp edges make the car hop
+// (Martin, 19 Nov: every kerb along the lap 1 cm lower, with a smoother edge)
 const KERBS = [
-  { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.12, edge: 0.07, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
-  { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.14, edge: 0.05, back: 0.35, colour: 0xb2adbb },   // Pepleri corner
-  { i0: 1656, i1: 1722, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x87a07a },    // Veski grass strip up to Juhan Liivi; veski.js lays it from there on
-  { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.13, edge: 0.04, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
+  { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.11, edge: 0.11, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
+  { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.13, edge: 0.09, back: 0.35, colour: 0xb2adbb },   // Pepleri corner
+  { i0: 1656, i1: 1722, side: -1, off: 0, width: 1.5, height: 0.11, edge: 0.09, back: 0.08, colour: 0x87a07a },    // Veski grass strip up to Juhan Liivi; veski.js lays it from there on
+  { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.12, edge: 0.08, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
 const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };    // bollards: i0, i1, off; pad: i0, i1, off0, off1

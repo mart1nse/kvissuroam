@@ -27,15 +27,19 @@ const PAVE = { i0: 948, width: 3.4 };                    // river-side pavement,
 // curve radius of its inner (grass) edge, its edges on the bridge (metres from the middle of the deck),
 // and how far it runs on along the bridge after the bend
 const CORNER = { bridge: 'Kroonuaia sild', from: 1021, r: 2.0, near: 4.1, far: 7.4, on: 3 };
-// The river-side pavement stands on a high kerb, 15 cm with a rounded edge (Martin, 19 Nov: first 20, then lower and a touch gentler): the car rolls onto it with a knock
+// The river-side pavement stands on a high kerb, 15 cm with a rounded edge (Martin, 19 Nov: first 20, then lower and a touch gentler,
+// then the edge rounder still, over 20 cm, so it is easier to drive onto but still knocks and tilts the car,
+// and 1 cm lower like every kerb along the lap: 14 cm): the car rolls onto it with a knock
 // and leans over when its right wheels are up there. It rises in the first metres of the pavement and comes
 // down to the road again before the corner, where the crossing is. edge: the kerb face (m across), back: the
 // grass bank behind the pavement down to the ground, stone: width of the kerb stone on top.
-const KERB = { i0: 950, up: 3, i1: 1019, down: 5, h: 0.15, edge: 0.09, back: 0.9, stone: 0.18 };
+const KERB = { i0: 950, up: 3, i1: 1019, down: 5, h: 0.14, edge: 0.2, back: 0.9, stone: 0.18 };
 // Its tarmac is newer and smoother than the photo's mottled grey suggests, and about as light as the
 // pavements either side (Martin, 19 Nov): [track index, brightness, warmth] as the road tone texture takes
 // them (183, 136 typical; Lai ends at 178, 134). Blue 77 marks the fine-grained tarmac (terrain.js).
-const TONE = [[940, 178, 134, 0], [947, 206, 133, 77], [1024, 206, 133, 77], [1032, 183, 135, 0]];
+// It runs on round the Kroonuaia corner (to 1052) so the old square edge line of the photo hardly shows
+// there: the corner has its own line round the barrier (src/race/corners.js).
+const TONE = [[940, 178, 134, 0], [947, 206, 133, 77], [1024, 206, 133, 77], [1036, 192, 134, 77], [1050, 186, 135, 77], [1056, 183, 135, 0]];
 // the map's wall line round the garden (vectors.json walls, game x, z): Emajõe, the Kroonuaia corner, Kroonuaia
 const GARDEN_WALL = [[1417.2, 2290.9], [1396.6, 2258.5], [1336.4, 2198.0], [1329.8, 2197.9], [1224.4, 2316.8]];
 const GATE = { a: [1437.6, 2321.3], w: 4.4 };            // driveway gate: first post at the end of the low wall
@@ -526,13 +530,14 @@ export function createEmajoe(world, group) {
         const step = 0.5;
         for (let t = PAVE.i0; t < last - 1e-6; t += step) {
           const u = Math.min(last, t + step);
-          // face: from just under the road to the top edge of the stone (rounded off by 1 cm)
+          // face: from just under the road up the rounded edge (it follows the bump the cars feel), the
+          // lower part in the face colour and the round-over in stone, then the stone on top
           const yRoad = (tt) => world.heightAt(...atT(tt, kerbFace(tt) - 0.02));
           const F = (tt, d, y) => { const [x, z] = atT(tt, kerbFace(tt) + d); return [x, y, z]; };
-          const topY = (tt) => world.heightAt(...atT(tt, kerbFace(tt) + KERB.edge + 0.01)) + 0.05;
-          quad(F(t, -0.01, yRoad(t) - 0.04), F(u, -0.01, yRoad(u) - 0.04), F(t, 0.0, topY(t) - 0.01), F(u, 0.0, topY(u) - 0.01), cF);
-          quad(F(t, 0.0, topY(t) - 0.01), F(u, 0.0, topY(u) - 0.01), F(t, 0.03, topY(t)), F(u, 0.03, topY(u)), cK);
-          quad(F(t, 0.03, topY(t)), F(u, 0.03, topY(u)), P3(t, 0.24, 0.055), P3(u, 0.24, 0.055), cK);
+          const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * KERB.edge);
+          quad(F(t, -0.01, yRoad(t) - 0.04), F(u, -0.01, yRoad(u) - 0.04), P3(t, R[0], 0.012), P3(u, R[0], 0.012), cF);
+          for (let q = 0; q < R.length - 1; q++) quad(P3(t, R[q], 0.012), P3(u, R[q], 0.012), P3(t, R[q + 1], 0.012), P3(u, R[q + 1], 0.012), q < 2 ? cF : cK);
+          quad(P3(t, KERB.edge, 0.012), P3(u, KERB.edge, 0.012), P3(t, KERB.edge + 0.14, 0.055), P3(u, KERB.edge + 0.14, 0.055), cK);
           // the bank: from the back of the pavement down to the ground beside it
           if (t >= PAVE.i0 + 3) for (let k = 0; k < 3; k++) {
             const d0 = KW - 0.05 + (KERB.back + 0.1) * k / 3, d1 = KW - 0.05 + (KERB.back + 0.1) * (k + 1) / 3;

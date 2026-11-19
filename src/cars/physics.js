@@ -811,9 +811,12 @@ function substep(car, input, world, dt) {
       const into = -(pvx * nx + pvz * nz), along = Math.abs(pvz * nx - pvx * nz);
       if (into <= 0) continue;
       const sev = Math.min(1.5, Math.max(0.1, (rise - 0.05) / 0.15));
+      // a rounded edge (gentle slope across the face) takes less of a knock than a sharp one (Martin, 19 Nov):
+      // slope at the face against the 2.5 of a 15 cm kerb with a 9 cm edge, down to about half
+      const soft = Math.min(1, Math.max(0.5, nl / (2 * e) / 2.5));
       const rn = ox * nz - oz * nx;
       let dv, turn = 1;
-      if (Math.atan2(into, along) < KERB_GLANCE * sev && into < 2.5) {
+      if (Math.atan2(into, along) < KERB_GLANCE * sev * soft && into < 2.5) {
         // glancing: back off the kerb with the wheel's speed into it gone (and a little bounce)
         const pen = Math.max(0, (wx - ex) * -nx + (wz - ez) * -nz) + 0.02;
         car.x += nx * pen; car.z += nz * pen;
@@ -822,9 +825,9 @@ function substep(car, input, world, dt) {
         turn = 0.35;           // (a tyre wall sliding along the kerb face hardly twists the car)
         car.kerbHit = Math.max(car.kerbHit || 0, 0.3 * sev * Math.min(1, into / 1.5));
       } else {
-        dv = Math.min(into, KERB_KNOCK * sev);
-        car.kerbHit = Math.max(car.kerbHit || 0, sev * Math.min(1, (into + 0.15 * along) / 4));
-        car.jolt = 1;
+        dv = Math.min(into, KERB_KNOCK * sev * soft);
+        car.kerbHit = Math.max(car.kerbHit || 0, sev * (0.5 + 0.5 * soft) * Math.min(1, (into + 0.15 * along) / 4));
+        car.jolt = Math.max(car.jolt || 0, 0.5 + 0.5 * soft);
       }
       const j = dv / (1 / m + (turn * rn * rn) / car.iz);
       wvx += (j * nx) / m; wvz += (j * nz) / m;

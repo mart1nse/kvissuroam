@@ -16,7 +16,7 @@ export const VESKI = { i0: 1655, i1: 1823, red: [0.15, 1.9], colour: 0xa27c7e };
 const LINE = { i0: 1657.5, i1: 1820.6, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
 // the grass strip beyond the left edge: a mountable kerb, narrow past the houses, wider along the green
 // (towards the junction it is a planted bed, a little narrower where the fence comes in, with a rounded end)
-const STRIP = { i0: 1730, i1: 1819.8, height: 0.1, edge: 0.14, back: 0.12, wide: [1756, 1764], narrow: [1811, 1818, 0.3], nose: 1.3 };
+const STRIP = { i0: 1730, i1: 1819.8, height: 0.09, edge: 0.18, back: 0.12, wide: [1756, 1764], narrow: [1811, 1818, 0.3], nose: 1.3 };
 const LEFT = { i0: 1730, i1: 1821 };                                                 // the pavement, out to the board fence
 const RIGHT = { runs: [[1730, 1753.5], [1760.5, ISLAND_END + 1.5]], width: 2.2, island: [1793, 1797.5] };   // it passes behind the island
 // the orange board fence round the green (Martin, 18 Nov): it carries on from the fence along the street

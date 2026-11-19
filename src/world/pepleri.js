@@ -9,11 +9,12 @@
 //   - the bird and the blue abstract painted on the gables at the Tiigi crossing, a third on the gable
 //     over the car park at Vanemuise
 //   - plank fences, hedges, thujas, a hydrant, lamps and signs (all the posts can be knocked over)
-// Nothing here touches the road surface or its paint.
+// The ground: block paving on the church square, zebra crossings at Tiigi and at Vanemuise, and on Vanemuise
+// after the turn the two solid lines that set the cycle lanes off (no centre line there).
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { createTrack } from '../race/race.js';
-import { setHouseColours, leafyPlants } from './streetkit.js';
+import { setHouseColours, leafyPlants, streetKit } from './streetkit.js';
 
 const CENTRE = [1150, 3340];
 const COL = {
@@ -46,6 +47,16 @@ export function pepleriWalls(walls) {
 
 // ---------------------------------------------------------------- along the lap
 let TRACK = null;
+const LANES = { i0: 2081, i1: 2128, at: 2.15 };       // Vanemuise: solid lines this far either side of the middle
+// before the road markings are built: Vanemuise after the turn has cycle lane lines, not a centre line
+export function pepleriVectors(vectors) {
+  TRACK ||= createTrack();
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const n = TRACK.nearest(x, z);
+    return (n.i >= LANES.i0 - 1 && n.i <= LANES.i1 + 1 && n.d < 3) || (prev ? prev(x, z) : false);
+  };
+}
 // a point beside the lap at track index i, `lat` metres to the right of the direction of travel, and the heading there
 function beside(i, lat) {
   TRACK ||= createTrack();
@@ -534,6 +545,30 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
         if (leafy.ok) leafy.bush(q.x, hAt(q.x, q.z) - 0.1, q.z, r * 2, r * 1.3, i, [0.85, 0.95, 0.85]);
         else p.add(new THREE.IcosahedronGeometry(r, 1).scale(1, 0.7, 1), 0x5fa565, q.x, hAt(q.x, q.z) + r * 0.5, q.z, 0);
       }
+    }
+
+    // ================================================================ the ground
+    {
+      const K = streetKit(world, group, { shadows });
+      const hw = (t) => { const k = Math.floor(t); return TRACK.HW[k] + (TRACK.HW[k + 1] - TRACK.HW[k]) * (t - k); };
+      const F = { at: (t, lat) => { const q = beside(t, lat); return [q.x, q.z]; } };                 // along the lap, metres right of the middle
+      const right = (d) => ({ at: (t, u) => { const q = beside(t, hw(t) + d(t, u)); return [q.x, q.z]; } });
+      // the church square: a kerb, a band of pale paving along the street, darker blocks across the square
+      K.ribbon(right((t, u) => -0.03 + u * 0.18), 1921, 1947, 0, 1, 'kerb', true);
+      for (let b = 0; b < 2; b++) K.ribbon(right((t, u) => 0.15 + u * 2.5), 1921, 1947, b / 2, (b + 1) / 2, 'paver');
+      for (let b = 0; b < 16; b++) K.ribbon(right((t, u) => 2.65 + u * 22), 1921, 1947, b / 16, (b + 1) / 16, 'dark');
+      // a zebra: stripes half a metre wide lying along the road it crosses
+      const zebra = (frame, t0, t1, lat0, lat1) => { for (let l = lat0 + 0.25; l + 0.5 <= lat1; l += 1.0) K.ribbon(frame, t0, t1, l, l + 0.5, 'white', true); };
+      zebra(F, 1989.7, 1992.0, -4.6, 4.6);                                                            // across Pepleri at Tiigi
+      zebra(F, 2064.9, 2067.2, -4.5, 4.5);                                                            // across Pepleri before Vanemuise
+      zebra(F, 2078.2, 2080.5, -3.7, 3.7);                                                            // across Vanemuise after the turn
+      // the side streets' zebras, in their own frames: t along the street, lat across it
+      const street = (c, d) => ({ at: (t, lat) => [c[0] + d[0] * t - d[1] * lat, c[1] + d[1] * t + d[0] * lat] });
+      zebra(street([1151.3, 3292.6], [0.872, -0.49]), -2, 2, -4, 4);                                  // Tiigi, towards the centre
+      zebra(street([1113.6, 3317.2], [0.872, -0.49]), -2, 2, -4, 4);                                  // Tiigi, behind the church
+      // Vanemuise: the solid lines of the two cycle lanes
+      for (const side of [-1, 1]) K.ribbon(F, LANES.i0, LANES.i1, side * LANES.at - 0.07, side * LANES.at + 0.07, 'white', true);
+      K.finish();
     }
 
     leafy.finish();

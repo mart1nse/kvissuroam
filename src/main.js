@@ -59,6 +59,7 @@ import { playtechWalls } from './race/playtech.js';
 import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
+import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -110,6 +111,7 @@ let buildCarModel = null;
 let startPose;
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
+let wetAt = null;                // where and when the car went into the water: { x, z, t }
 let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -546,6 +548,7 @@ function openGarage() {
 
 function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
+  wetAt = null;
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
@@ -553,22 +556,35 @@ function place(pose) {
 
 function goHome() {
   history.length = 0;
+  wetAt = null;
   place(startPose);
 }
 
-function goLastSpot() {
-  // newest safe pose that is at least three seconds old, so we do not land on the brink again
-  const now = car.time;
-  let pick = null;
-  while (history.length) {
-    const h = history[history.length - 1];
-    if (now - h.t >= 3 || history.length === 1) { pick = h; break; }
-    history.pop();
+// R: back to the newest remembered spot that is dry. After a plunge into the water that is a spot at
+// least three seconds before the car went in and 15 m from where it did, with no water round it (on a
+// bridge: the whole car on the deck); if no such spot is remembered, the nearest dry street.
+let respawning = false;
+async function goLastSpot() {
+  if (respawning) return;
+  respawning = true;
+  try {
+    const sx = wetAt ? wetAt.x : car.x, sz = wetAt ? wetAt.z : car.z;
+    const opts = wetAt ? { ref: wetAt.t, sx, sz, minAge: 3, minDist: 15 } : { ref: car.time, sx, sz, minAge: 3, minDist: 0 };
+    let pick = pickFromHistory(world, history, opts);
+    for (let k = 0; pick?.wait && k < 20; k++) {
+      // (a spot far back along the route may be in a part of the map that is not loaded any more)
+      await world.loadAround(pick.wait.x, pick.wait.z, 80);
+      if (!world.ready(pick.wait.x, pick.wait.z)) history.pop();
+      pick = pickFromHistory(world, history, opts);
+    }
+    if (pick?.wait) pick = null;
+    if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
+    if (!pick) return goHome();
+    place(pick);
+    race?.hopped(pick.x, pick.z);
+  } finally {
+    respawning = false;
   }
-  if (!pick) return goHome();
-  history.pop();
-  place(pick);
-  race?.hopped(pick.x, pick.z);
 }
 
 // ---------------------------------------------------------------- city map
@@ -593,19 +609,25 @@ function insideBoundary(x, z) {
   return inside;
 }
 
-const freeGround = (x, z) => world.surfaceAt(x, z) !== SURFACE.WATER && world.sdfAt(x, z) > 1.6;
-
 // Drop the car where the map was tapped: on the street if the tap was on or
-// next to one (facing along it, in the right-hand lane), otherwise exactly on
-// the spot. If the spot is a building or the river, the nearest street is used.
+// next to one (facing along it, in the right-hand lane, on the deck of a bridge),
+// otherwise exactly on the spot. If the spot is a building, the river or right
+// beside the water, the nearest dry street is used.
 async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
+  // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
+  const ok = (p) => {
+    if (!p) return null;
+    const y = dryLevel(world, p);
+    return y === null ? null : { ...p, y };
+  };
   const onRoad = (maxD) => {
     const r = bigmap.nearestRoad(x, z, maxD);
     if (!r) return null;
     const o = Math.min(r.w / 4, 1.7);
-    return { x: r.x + Math.cos(r.yaw) * o, z: r.z + Math.sin(r.yaw) * o, yaw: r.yaw, name: r.name };
+    const px = r.x + Math.cos(r.yaw) * o, pz = r.z + Math.sin(r.yaw) * o;
+    return { x: px, z: pz, yaw: r.yaw, name: r.name, y: r.e === 1 ? world.topAt(px, pz, 1) : undefined };
   };
   dropping = true;
   try {
@@ -616,12 +638,18 @@ async function dropAt(x, z) {
     if (tn.i >= 0 && tn.d < race.track.HW[tn.i] + 15) {
       const T = race.track, i = tn.i, t = T.tan[i];
       const tx = T.P[i][0] + (T.P[(i + 1) % T.N][0] - T.P[i][0]) * tn.t, tz = T.P[i][1] + (T.P[(i + 1) % T.N][1] - T.P[i][1]) * tn.t;
-      if (freeGround(tx, tz)) pose = { x: tx, z: tz, yaw: Math.atan2(t[0], -t[1]), name: bigmap.nearestRoad(tx, tz, 20)?.name };
+      const r = bigmap.nearestRoad(tx, tz, 20);
+      pose = ok({ x: tx, z: tz, yaw: Math.atan2(t[0], -t[1]), name: r?.name, y: r?.e === 1 ? world.topAt(tx, tz, 1) : undefined });
     }
-    if (!pose) pose = onRoad(22);
-    if (!pose && freeGround(x, z)) pose = { x, z, yaw: car.yaw };
-    if (!pose) pose = onRoad(250);
-    if (!pose || !freeGround(pose.x, pose.z)) { hud.toast('NO ROOM FOR THE CAR THERE', 1800); return; }
+    if (!pose) pose = ok(onRoad(22));
+    if (!pose) pose = ok({ x, z, yaw: car.yaw });
+    if (!pose) pose = ok(onRoad(250));
+    if (!pose) {
+      // the river, a pond or a wall all round: the nearest dry street
+      pose = searchDry(world, x, z, bigmap.nearestRoad, { from: 0, to: 250 });
+      if (pose) pose.name = bigmap.nearestRoad(pose.x, pose.z, 20)?.name;
+    }
+    if (!pose) { hud.toast('NO ROOM FOR THE CAR THERE', 1800); return; }
     closeMap();
     history.length = 0;
     place(pose);
@@ -808,10 +836,16 @@ function frame(ts) {
   if (mode === 'drive') {
     // remember safe ground
     histTimer -= dt;
-    if (histTimer <= 0 && !car.inWater && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
+    if (car.inWater && !wetAt) wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime };
+    else if (!car.inWater) wetAt = null;
+    if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
-      history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time });
-      if (history.length > 80) history.shift();
+      // (standing still adds nothing: the list then reaches further back along the route)
+      const last = history[history.length - 1];
+      if (!last || Math.hypot(car.x - last.x, car.z - last.z) > 3) {
+        history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time });
+        if (history.length > 120) history.shift();
+      }
     }
     $('#sunk').classList.toggle('hidden', !car.sunk);   // gone again if the car drifts out onto land
     // 0-100 stopwatch

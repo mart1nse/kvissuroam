@@ -94,7 +94,7 @@ export const ENGINE_SOUNDS = {
     intake: 0.55, intakeF: 950, intakeQ: 1.1, tick: 0.06, tickF: 3000,
     jitter: 2.0, lope: 14, drive: 2.4, gain: 0.85, idleVol: 0.32,
     edge: 0.5, rasp: 0.4,
-    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05, smoothTop: true, whistle: 1, whistleF: 0.95,
+    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05, smoothTop: true, whistle: 1.4, whistleF: 0.95,
   },
   // Porsche Carrera GT: 5.7 litre 68 degree V10 born as a Le Mans racing engine, firing order
   // 1-6-5-10-2-7-3-8-4-9. Each crankpin carries one cylinder of each bank, so the firing intervals alternate

@@ -247,6 +247,9 @@ for (const id of ids) {
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);
+  // (--gain=<x>: scale the clip, to keep loud lifts from clipping the WAV)
+  const og = Number(val('gain') || 1);
+  if (og !== 1) for (const c of [L, R]) for (let i = 0; i < c.length; i++) c[i] *= og;
   writeWav(`${out}/${id}.wav`, [L, R]);
   console.log(`${id}: dry rms ${rms(mono).toFixed(3)}, with space rms ${rms(L).toFixed(3)} / ${rms(R).toFixed(3)}, offline render ${(stats.ms / 1000).toFixed(2)} s for ${T} s`);
   for (const l of stats.log) console.log('   ', l);

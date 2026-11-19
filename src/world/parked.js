@@ -28,15 +28,17 @@ const PAINT = {
   white: [0xe8e9e8, true], black: [0x0b0b0d], silver: [0xb3b7bc], grey: [0x3a3d42], bronze: [0x86704f],
   blue: [0x1d3c6e], red: [0x5a0f15], cyan: [0x1fa9cf], lilac: [0x50294e],
 };
-// the mix Martin asked for: mostly Passat, Mazda and RAV4, a few bZ4X and BMW
-const MODELS = [['passat', 26], ['mazda6', 25], ['rav4', 25], ['bz4x', 7], ['f31', 7]];
+// the mix Martin asked for: mostly Passat, Mazda and RAV4, a few bZ4X and BMW, and (19 Nov) Tesla Model 3 and
+// 2010 Honda Accord saloons
+const MODELS = [['passat', 22], ['mazda6', 21], ['rav4', 21], ['bz4x', 7], ['f31', 7], ['model3', 9], ['accord', 9]];
 // ordinary colours first, a few bronze and blue, fewer dark red
 const COLOURS = [['white', 20], ['black', 16], ['silver', 20], ['grey', 18], ['bronze', 6], ['blue', 6], ['red', 3]];
-const BMW_COLOURS = ['cyan', 'white', 'black'];
+// models that come only in some colours (taken in turn)
+const ONLY = { f31: ['cyan', 'white', 'black'], model3: ['white', 'black', 'blue'], accord: ['white', 'silver', 'black', 'blue'] };
 // the two or three Audis: which car of the list (in order) becomes one, and its colour
 const AUDIS = [[9, 'lilac'], [37, 'silver'], [61, 'black']];
 const OPTS = { passat: { scan: false }, audi200: { scan: false }, enyaq: { rack: false } };
-const MASS = { f31: 1580 };
+const MASS = { f31: 1580, model3: 1850, accord: 1530 };
 // buses at stops (bus stop places from OpenStreetMap, moved to the kerb seen in the orthophoto):
 // x, z, heading. Ten in the centre and one at Klaose in Kvissentali.
 const BUS_STOPS = [
@@ -72,8 +74,12 @@ function allSpots() {
     }
   }
   const ids = deck(MODELS, out.length, 5), paints = deck(COLOURS, out.length, 9);
-  let bmw = 0;
-  out.forEach((s, i) => { s.id = ids[i]; s.paint = s.id === 'f31' ? BMW_COLOURS[bmw++ % BMW_COLOURS.length] : paints[i]; });
+  const turn = {};
+  out.forEach((s, i) => {
+    s.id = ids[i];
+    const only = ONLY[s.id];
+    s.paint = only ? only[(turn[s.id] = (turn[s.id] ?? -1) + 1) % only.length] : paints[i];
+  });
   for (const [k, paint] of AUDIS) if (out[k]) Object.assign(out[k], { id: 'audi200', paint });
   uueturuParked().forEach((c, i) => out.push({ key: `u${i}`, ...c }));
   AKSI_CARS.forEach(([x, z, yaw, id, paint], i) => out.push({ key: `a${i}`, x, z, yaw, id, paint }));

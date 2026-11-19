@@ -4,6 +4,7 @@ import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/s
 import { createTerrain } from './world/terrain.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
+import { createGarage } from './garage.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
@@ -442,11 +443,12 @@ function setCar(id, now = false) {
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
   // (behind the opening drone flight the car isn't on screen, so picking one only marks it: it is built
-  // when DRIVE is pressed, and choosing stays instant. In the garage later it is swapped at once, as you see it.)
-  if ((intro || still) && model && !now) {
-    // (behind the phones' still picture it is built a moment after the last pick, so it is ready for DRIVE)
-    clearTimeout(pickTimer);
-    if (still) pickTimer = setTimeout(() => { if (still && car.spec.id !== carId) setCar(carId, true); }, 700);
+  // when DRIVE is pressed, and choosing stays instant. In the garage later it is swapped as you see it.)
+  clearTimeout(pickTimer);
+  if (mode === 'menu' && model && !now) {
+    // (behind the phones' still picture it is built a moment after the last pick, so it is ready for DRIVE;
+    // in the garage, with the car in view, once its card has slid into place, so the slide stays smooth)
+    if (!intro) pickTimer = setTimeout(() => { if (mode === 'menu' && car.spec.id !== carId) setCar(carId, true); }, still ? 700 : 320);
     layoutMenu();
     return;
   }
@@ -471,130 +473,26 @@ function setCar(id, now = false) {
   layoutMenu();
 }
 
-// ---- garage menu: the groups side by side, each a stack of cards. The group's current car is in
-// front and the next few peek out below it, each further back and smaller. Sliding a stack (drag
-// up or down, the mouse wheel, or the up and down keys) brings the next car forward.
-let groups = [];                 // [{ ids, front, el, cards }]
-// Cards behind the front one: their size, and how much of each shows below the one in front of it
-// (the next car shows about three quarters of itself, then less each step back). Short screens show less.
-const STACK = { scale: [1, 0.92, 0.84, 0.76], show: [1, 0.75, 0.55, 0.38] };
-const STACK_MID = { scale: [1, 0.92, 0.84], show: [1, 0.72, 0.42] };
-const STACK_LOW = { scale: [1, 0.9, 0.8], show: [1, 0.45, 0.32] };
-const STACK_PHONE = { scale: [1, 0.92], show: [1, 0.36] };      // a phone on its side: one car peeks out, name only
-
+// ---- garage menu: the groups side by side, each a reel of cards (see garage.js)
+let garage = null;
 function layoutMenu() {
-  const st = innerHeight <= 430 ? STACK_PHONE : innerHeight < 560 ? STACK_LOW : innerHeight < 760 ? STACK_MID : STACK, last = st.scale.length - 1;
-  // where each card's top sits, in front-card heights (they shrink towards their top edge)
-  const top = [0], bottom = [1];
-  for (let k = 1; k <= last; k++) { bottom[k] = bottom[k - 1] + st.show[k] * st.scale[k]; top[k] = bottom[k] - st.scale[k]; }
-  let tallest = 0;
-  for (const g of groups) {
-    const n = g.ids.length;
-    const i = g.ids.indexOf(carId);
-    if (i >= 0) g.front = i;
-    g.el.classList.toggle('sel', i >= 0);
-    g.el.querySelector('.gn').textContent = `${g.front + 1}/${n}`;
-    g.cards.forEach((c, j) => {
-      const k = (j - g.front + n) % n, kk = Math.min(k, last);
-      c.style.setProperty('--k', k);
-      c.style.transform = k === 0 ? '' : `translateY(${(top[kk] * 100).toFixed(1)}%) scale(${st.scale[kk]})`;
-      c.classList.toggle('front', k === 0);
-      c.classList.toggle('gone', k > last);
-      c.classList.toggle('sel', c.dataset.id === carId);
-      c.tabIndex = k === 0 ? 0 : -1;
-    });
-    tallest = Math.max(tallest, bottom[Math.min(n - 1, last)]);
-  }
-  stackRoom = tallest - 1;
-  padStacks();
-}
-
-// The cards overlap in one grid cell, so each stack is given room below for the ones behind, in front-card
-// heights. That needs the cards' real height, which is 0 while the menu is still hidden behind the loading
-// screen, so it is measured again whenever a card changes size (shown, resized, rotated, fonts loaded).
-let stackRoom = 0;
-function padStacks() {
-  const h = Math.max(0, ...groups.map((g) => g.cards[g.front].offsetHeight));
-  if (!h) return;
-  for (const g of groups) g.el.querySelector('.stack').style.paddingBottom = `${Math.round(stackRoom * h)}px`;
-}
-const cardSizes = typeof ResizeObserver === 'function' ? new ResizeObserver(() => padStacks()) : null;
-
-function slideGroup(g, d) {
-  const n = g.ids.length;
-  setCar(g.ids[(g.front + d + n) % n]);
+  garage?.sync(carId);
+  const d = $('#drivecar');
+  if (d) d.textContent = CARS[carId].short;
 }
 
 function buildMenu() {
-  const cards = $('#cards');
-  cards.innerHTML = '';
   // (a car left out of every group still gets a place, at the end of the last one)
   const listed = new Set(CAR_GROUPS.flatMap((g) => g.ids));
   const defs = CAR_GROUPS.map((g, i) => ({ name: g.name, ids: [...g.ids, ...(i === CAR_GROUPS.length - 1 ? CAR_ORDER.filter((id) => !listed.has(id)) : [])] }));
-  let swiped = false, drag = null, lastWheel = 0;
-  groups = defs.map((def) => {
-    const el = document.createElement('div');
-    el.className = 'group';
-    el.innerHTML = `<h4><span>${def.name}</span><b class="gn"></b></h4><div class="stack"></div>`;
-    const stack = el.querySelector('.stack');
-    const g = { ids: def.ids, front: 0, el, cards: [] };
-    for (const id of def.ids) {
-      const s = CARS[id];
-      const c = document.createElement('button');
-      c.className = 'card';
-      c.dataset.id = id;
-      c.innerHTML = `<div class="yr">${s.year}</div><h3>${s.name}</h3><p>${s.blurb}</p>
-        <dl><div><dt>POWER</dt><dd>${s.ref.powerKw} kW</dd></div><div><dt>${s.ref.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${s.ref.zeroTo50 ?? s.ref.zeroTo100} s</dd></div><div><dt>TOP</dt><dd>${s.ref.top}</dd></div></dl>`;
-      // (a tap on the front card picks it, a tap on one peeking out behind brings it forward)
-      c.addEventListener('click', () => { if (!swiped) setCar(id); });
-      stack.appendChild(c);
-      g.cards.push(c);
-    }
-    // up and down arrows on the right edge of the front card, so it is plain the stack can be slid
-    if (def.ids.length > 1) {
-      const nav = document.createElement('div');
-      nav.className = 'nav';
-      stack.classList.add('has-nav');
-      nav.innerHTML = '<button class="up" aria-label="Previous car">&#9650;</button><button class="dn" aria-label="Next car">&#9660;</button>';
-      nav.querySelector('.up').addEventListener('click', () => slideGroup(g, -1));
-      nav.querySelector('.dn').addEventListener('click', () => slideGroup(g, 1));
-      nav.addEventListener('pointerdown', (e) => e.stopPropagation());
-      stack.appendChild(nav);
-    }
-    stack.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const now = performance.now();
-      if (Math.abs(e.deltaY) < 4 || now - lastWheel < 260) return;
-      lastWheel = now;
-      slideGroup(g, Math.sign(e.deltaY));
-    }, { passive: false });
-    stack.addEventListener('pointerdown', (e) => { drag = { g, y: e.clientY }; });
-    cards.appendChild(el);
-    return g;
-  });
-  // drag the front card up to bring the next car forward, down to go back
-  addEventListener('pointerup', (e) => {
-    if (!drag) return;
-    const dy = e.clientY - drag.y, g = drag.g;
-    drag = null;
-    if (Math.abs(dy) < 24) return;
-    swiped = true;
-    setTimeout(() => { swiped = false; }, 0);
-    slideGroup(g, dy < 0 ? 1 : -1);
-  });
-  addEventListener('pointercancel', () => { drag = null; });
+  garage = createGarage({ root: $('#cards'), cars: CARS, groups: defs, picked: carId, onPick: (id) => setCar(id) });
   layoutMenu();
-  for (const g of groups) for (const c of g.cards) cardSizes?.observe(c);
-  addEventListener('resize', layoutMenu);
   $('#drive').addEventListener('click', startDriving);
   addEventListener('keydown', (e) => {
     if (mode !== 'menu' || board?.open) return;
-    const gi = Math.max(0, groups.findIndex((g) => g.ids.includes(carId))), g = groups[gi];
-    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
-      const h = groups[(gi + (e.code === 'ArrowRight' ? 1 : groups.length - 1)) % groups.length];
-      setCar(h.ids[h.front]);
-    } else if (e.code === 'ArrowDown') slideGroup(g, 1);
-    else if (e.code === 'ArrowUp') slideGroup(g, -1);
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') garage.step(e.code === 'ArrowRight' ? 1 : -1);
+    else if (e.code === 'ArrowDown') garage.slide(1);
+    else if (e.code === 'ArrowUp') garage.slide(-1);
     else if (e.code === 'Enter' || e.code === 'Space') startDriving();
   });
 }

@@ -9,11 +9,14 @@ export function createBoard({ mp, race, cars, order }) {
 
   const row = document.createElement('div');
   row.id = 'menurow';
-  row.innerHTML = `<label id="driver"><span>DRIVER</span><span class="field"><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" /><i class="caret"></i></span></label>`;
+  // the row under the cars: DRIVE in the middle, the driver's name to its left and the lap times to its right
+  row.innerHTML = `<label id="driver" title="Your name on the lap times: type to change it"><span class="lbl">DRIVER</span><span class="field"><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" aria-label="Driver name" /><i class="caret"></i></span>
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17l1-4L14 3l3 3L7 16z M12 5l3 3"/></svg></label>`;
   drive.replaceWith(row);
   row.appendChild(drive);
   const btn = document.createElement('button');
-  btn.id = 'boardbtn'; btn.className = 'neon alt'; btn.textContent = 'LAP TIMES';
+  btn.id = 'boardbtn';
+  btn.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="11.5" r="6.5"/><path d="M10 11.5V8M8 2.5h4M10 2.5V5M15.5 6l1.2-1.2"/></svg><span>LAP TIMES</span>';
   row.appendChild(btn);
 
   const input = row.querySelector('#drivername');
@@ -49,7 +52,7 @@ export function createBoard({ mp, race, cars, order }) {
   input.addEventListener('input', unfresh);
   // typing a name must not drive the menu (arrows switch cars, Enter / Space start)
   input.addEventListener('keydown', (e) => {
-    if (fresh && ['ArrowLeft', 'ArrowRight', 'Enter', 'Space'].includes(e.code)) {
+    if (fresh && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Space'].includes(e.code)) {
       e.preventDefault();          // let the menu have it, the name stays picked while cars switch
       if (e.code === 'Enter' || e.code === 'Space') input.blur();
       return;

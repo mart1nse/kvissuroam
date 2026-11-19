@@ -14,7 +14,8 @@ const MATS = {
 function edges(d, i, out, inset = 0) {
   const P = d.pts, a = P[Math.max(i - 1, 0)], b = P[Math.min(i + 1, P.length - 1)];
   const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
-  const nx = -dz / l * (d.hw - inset), nz = dx / l * (d.hw - inset);
+  const hw = (d.ws ? d.ws[i] : d.hw) - inset;                 // a deck can change width along its length
+  const nx = -dz / l * hw, nz = dx / l * hw;
   out[0] = P[i][0] + nx; out[1] = P[i][1] + nz; out[2] = P[i][0] - nx; out[3] = P[i][1] - nz;
   return out;
 }
@@ -221,6 +222,16 @@ export function buildDeckBodies(world, s) {
       const q = P[i], r = q.length - 1, h = depth(d, i);
       quad(body, [e0[0], q[2], e0[1]], [e0[2], q[r], e0[3]], [e0[0], q[2] - h, e0[1]], [e0[2], q[r] - h, e0[3]]);
     };
+    const railOn = (i, bit) => (d.rs ? (d.rs[i] & d.rs[i + 1] & bit) !== 0 : d.rail && i >= d.rail[0] && i < d.rail[1]);
+    // piers of a long span over dry land: a wall across under the deck, where no road runs below
+    for (const [px, pz] of d.pr || []) {
+      if (px < s.x0 || px >= s.x0 + S || pz < s.z0 || pz >= s.z0 + S) continue;
+      let k = 0, best = Infinity;
+      for (let i = 0; i < P.length; i++) { const q = Math.hypot(P[i][0] - px, P[i][1] - pz); if (q < best) { best = q; k = i; } }
+      const a = P[Math.max(k - 1, 0)], b = P[Math.min(k + 1, last)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const top = Math.min(P[k][2], P[k][P[k].length - 1]) - SLAB + 0.05;
+      block(body, px, world.heightAt(px, pz) - 0.6, pz, (b[0] - a[0]) / l, (b[1] - a[1]) / l, 0.45, (d.ws ? d.ws[k] : d.hw) * 0.8, top);
+    }
     const mid = Math.floor(last / 2);
     if (d.w && inRect(d, Math.min(mid, last - 1), s.x0, s.z0, S)) structure(world, d, out);
     for (let i = 0; i < last; i++) {
@@ -229,14 +240,26 @@ export function buildDeckBodies(world, s) {
       const a = P[i], b = P[i + 1], r = a.length - 1, ha = depth(d, i), hb = depth(d, i + 1);
       const la = [e0[0], a[2], e0[1]], ra = [e0[2], a[r], e0[3]], lb = [e1[0], b[2], e1[1]], rb = [e1[2], b[r], e1[3]];
       const dn = (p, h) => [p[0], p[1] - h, p[2]];
+      if (d.wall) {
+        // a ramp between retaining walls: solid sides down into the ground, and a parapet on top
+        const foot = (p) => Math.min(p[1] - 0.2, world.heightAt(p[0], p[2])) - 0.5;
+        for (const [pa, pb, bit] of [[la, lb, 1], [ra, rb, 2]]) {
+          const up = railOn(i, bit) ? 0.85 : 0;
+          quad(body, [pa[0], pa[1] + up, pa[2]], [pb[0], pb[1] + up, pb[2]], [pa[0], foot(pa), pa[2]], [pb[0], foot(pb), pb[2]]);
+        }
+        continue;
+      }
       quad(body, dn(la, ha), dn(ra, ha), dn(lb, hb), dn(rb, hb));          // underside
       quad(body, la, lb, dn(la, ha), dn(lb, hb));                          // sides
       quad(body, ra, rb, dn(ra, ha), dn(rb, hb));
       if (i === 0) beam(0);
       if (i === last - 1) beam(last);
-      if (d.rail && i >= d.rail[0] && i < d.rail[1]) {
+      if (railOn(i, 1) || railOn(i, 2)) {
         edges(d, i, e0, 0.15); edges(d, i + 1, e1, 0.15);
-        for (const [xa, za, ya, xb, zb, yb] of [[e0[0], e0[1], a[2], e1[0], e1[1], b[2]], [e0[2], e0[3], a[r], e1[2], e1[3], b[r]]]) {
+        const sides = [];
+        if (railOn(i, 1)) sides.push([e0[0], e0[1], a[2], e1[0], e1[1], b[2]]);
+        if (railOn(i, 2)) sides.push([e0[2], e0[3], a[r], e1[2], e1[3], b[r]]);
+        for (const [xa, za, ya, xb, zb, yb] of sides) {
           // a low kerb, two bars and a post, instead of a solid wall
           for (const [lo, hi] of [[0, 0.22], [0.5, 0.58], [RAIL - 0.1, RAIL]]) quad(rail, [xa, ya + lo, za], [xb, yb + lo, zb], [xa, ya + hi, za], [xb, yb + hi, zb]);
           const k = 0.1 / (Math.hypot(xb - xa, zb - za) || 1);

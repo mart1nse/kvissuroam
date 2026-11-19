@@ -51,6 +51,7 @@ import { createPeople } from './net/people.js';
 import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches, cornerOverPaint } from './race/corners.js';
+import { junctionOverPaint } from './race/junctionkerbs.js';
 import { veskiRoads } from './race/veski.js';
 import { emajoeVectors, levelEmajoeWall } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
@@ -154,7 +155,7 @@ async function boot() {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
   world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
-  world.vectors.overPaint = [...(world.vectors.overPaint || []), ...cornerOverPaint()];   // and the kerb line round them
+  world.vectors.overPaint = [...(world.vectors.overPaint || []), ...cornerOverPaint(), ...junctionOverPaint()];   // and the kerb line round them
   snapRoadsToTrack(world.vectors);
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe

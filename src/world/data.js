@@ -137,37 +137,82 @@ export async function loadWorldData(onProgress = () => {}) {
   const decks = (vectors.decks || []).map((d) => {
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const p of d.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
-    const m = d.hw + 2;
-    return { kind: d.k, hw: d.hw, pts: d.pts, rail: d.rail || null, w: d.w || 0, b: d.b || '', name: d.n || '', x0: x0 - m, z0: z0 - m, x1: x1 + m, z1: z1 + m };
+    const m = (d.ws ? Math.max(...d.ws) : d.hw) + 2;
+    // ws: half width at each station where it varies; rs: which sides have a railing at each station (1 left, 2 right)
+    return { kind: d.k, hw: d.hw, pts: d.pts, ws: d.ws || null, rs: d.rs || null, wall: d.wall || 0, pr: d.pr || null, rail: d.rail || null, w: d.w || 0, b: d.b || '', name: d.n || '', x0: x0 - m, z0: z0 - m, x1: x1 + m, z1: z1 + m };
   });
-  const hit = { y: 0, lat: 0, nx: 0, nz: 0, deck: null, seg: 0 };
-  // Deck over the point, if any: fills "hit" and returns true.
-  function deckAt(x, z) {
-    for (let k = 0; k < decks.length; k++) {
-      const d = decks[k];
-      if (x < d.x0 || x > d.x1 || z < d.z0 || z > d.z1) continue;
-      const P = d.pts;
-      for (let i = 0; i < P.length - 1; i++) {
-        const a = P[i], b = P[i + 1];
-        const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz;
-        let t = ((x - a[0]) * dx + (z - a[1]) * dz) / l2;
-        if (t < -0.2 || t > 1.2) continue;
-        const l = Math.sqrt(l2), nx = -dz / l, nz = dx / l;
-        const lat = (x - a[0]) * nx + (z - a[1]) * nz;
-        if (lat < -d.hw || lat > d.hw) continue;
-        if ((t < 0 && i > 0) || (t > 1 && i < P.length - 2)) { if (t < -0.02 || t > 1.02) continue; }   // the next segment has it
-        else if (t < 0 || t > 1) continue;
-        t = t < 0 ? 0 : t > 1 ? 1 : t;
-        // heights run from the left edge to the right edge of the deck
-        const m = a.length - 3, f = Math.min(m - 1e-6, ((d.hw - lat) / (2 * d.hw)) * m), j = 2 + Math.floor(f), u = f - Math.floor(f);
-        const ya = a[j] + (a[j + 1] - a[j]) * u, yb = b[j] + (b[j + 1] - b[j]) * u;
-        hit.y = ya + (yb - ya) * t; hit.lat = lat; hit.nx = nx; hit.nz = nz; hit.deck = d; hit.seg = i;
-        return true;
-      }
+  const hit = { y: 0, lat: 0, nx: 0, nz: 0, deck: null, seg: 0, hw: 0 };
+  const cand = { y: 0, lat: 0, nx: 0, nz: 0, seg: 0, hw: 0 };
+  // Where deck d is over the point: fills "cand" and returns true.
+  function onDeck(d, x, z) {
+    const P = d.pts, W = d.ws;
+    for (let i = 0; i < P.length - 1; i++) {
+      const a = P[i], b = P[i + 1];
+      const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz;
+      let t = ((x - a[0]) * dx + (z - a[1]) * dz) / l2;
+      if (t < -0.2 || t > 1.2) continue;
+      const l = Math.sqrt(l2), nx = -dz / l, nz = dx / l;
+      const lat = (x - a[0]) * nx + (z - a[1]) * nz;
+      const tc = t < 0 ? 0 : t > 1 ? 1 : t;
+      const hw = W ? W[i] + (W[i + 1] - W[i]) * tc : d.hw;           // a deck can change width along its length
+      if (lat < -hw || lat > hw) continue;
+      if ((t < 0 && i > 0) || (t > 1 && i < P.length - 2)) { if (t < -0.2 || t > 1.2) continue; }     // on the outside of a bend no segment has it squarely
+      else if (t < -0.15 || t > 1.15) continue;              // (a hand's breadth past the end: the next deck starts there)
+      t = tc;
+      // heights run from the left edge to the right edge of the deck
+      const m = a.length - 3, f = Math.min(m - 1e-6, ((hw - lat) / (2 * hw)) * m), j = 2 + Math.floor(f), u = f - Math.floor(f);
+      const ya = a[j] + (a[j + 1] - a[j]) * u, yb = b[j] + (b[j + 1] - b[j]) * u;
+      cand.y = ya + (yb - ya) * t; cand.lat = lat; cand.nx = nx; cand.nz = nz; cand.seg = i; cand.hw = hw;
+      return true;
     }
     return false;
   }
-  const UNDER = 1.6;        // a car lower than this below a deck is on the ground under it
+  // The deck over the point, if any: fills "hit" and returns true. Decks can be stacked (a viaduct over
+  // the lid of a tunnel), so of those over the point it is the highest one that is below yMax; with
+  // low set (and the terrain height t), spans with room to drive under do not count.
+  function deckAt(x, z, yMax = Infinity, low = false, t = 0) {
+    let found = false;
+    for (let k = 0; k < decks.length; k++) {
+      const d = decks[k];
+      if (x < d.x0 || x > d.x1 || z < d.z0 || z > d.z1) continue;
+      if (!onDeck(d, x, z) || cand.y >= yMax || (found && cand.y <= hit.y)) continue;
+      if (low && d.kind === 1 && cand.y - t > 1.5) continue;
+      hit.y = cand.y; hit.lat = cand.lat; hit.nx = cand.nx; hit.nz = cand.nz; hit.seg = cand.seg; hit.hw = cand.hw; hit.deck = d;
+      found = true;
+    }
+    return found;
+  }
+  const UNDER = 1.1;        // a car lower than this below a deck is on the ground under it (1.5 m with what the physics adds)
+
+  // Piers under the long spans: [x, z, along x, along z, half width across, top]. Only a car below the deck meets them.
+  const piers = [];
+  for (const d of decks) {
+    for (const [px, pz] of d.pr || []) {
+      const P = d.pts;
+      let k = 0, best = Infinity;
+      for (let i = 0; i < P.length; i++) { const q = Math.hypot(P[i][0] - px, P[i][1] - pz); if (q < best) { best = q; k = i; } }
+      const a = P[Math.max(k - 1, 0)], b = P[Math.min(k + 1, P.length - 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      piers.push([px, pz, (b[0] - a[0]) / l, (b[1] - a[1]) / l, (d.ws ? d.ws[k] : d.hw) * 0.8, Math.min(P[k][2], P[k][P[k].length - 1])]);
+    }
+  }
+  function pierPush(x, z, y, r, out) {
+    for (let k = 0; k < piers.length; k++) {
+      const p = piers[k];
+      if (Math.abs(x - p[0]) > p[4] + 4 || Math.abs(z - p[1]) > p[4] + 4 || y > p[5] - UNDER) continue;
+      const dx = x - p[0], dz = z - p[1];
+      const al = dx * p[2] + dz * p[3], ac = -dx * p[3] + dz * p[2];          // along the bridge, across it
+      const qa = Math.abs(al) - 0.45, qc = Math.abs(ac) - p[4];
+      const dist = Math.hypot(Math.max(qa, 0), Math.max(qc, 0)) + Math.min(Math.max(qa, qc), 0);
+      if (dist >= r) continue;
+      // out through the nearer face
+      let na, nc;
+      if (qa > 0 || qc > 0) { na = Math.max(qa, 0) * Math.sign(al); nc = Math.max(qc, 0) * Math.sign(ac); const l = Math.hypot(na, nc) || 1; na /= l; nc /= l; }
+      else if (qa > qc) { na = Math.sign(al) || 1; nc = 0; } else { na = 0; nc = Math.sign(ac) || 1; }
+      out[0] = na * p[2] - nc * p[3]; out[1] = na * p[3] + nc * p[2]; out[2] = r - dist;
+      return true;
+    }
+    return false;
+  }
 
   const bumps = [];
   function bumpAt(x, z) {
@@ -261,35 +306,36 @@ export async function loadWorldData(onProgress = () => {}) {
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {
       const t = this.heightAt(x, z);
-      if (decks.length === 0 || !deckAt(x, z)) return t;
-      return hit.y > t && y > hit.y - UNDER ? hit.y : t;
+      if (decks.length === 0 || !deckAt(x, z, y + UNDER)) return t;
+      return hit.y > t ? hit.y : t;
     },
 
     // Topmost surface for something drawn along a road. level: 1 on a bridge, -1 in a tunnel, 0 otherwise.
     topAt(x, z, level = 0) {
       const t = this.heightAt(x, z);
-      if (level < 0 || decks.length === 0 || !deckAt(x, z)) return t;
-      if (hit.deck.kind === 1 && level < 1 && hit.y - t > 1.5) return t;     // the road under a bridge
+      if (level < 0 || decks.length === 0 || !deckAt(x, z, Infinity, level < 1, t)) return t;     // level 0: the road under a bridge
       return Math.max(t, hit.y);
     },
 
     // Railing of a bridge span: when a car at height y is against it, writes the push direction and
     // depth to out[0..2] and returns true.
     railPush(x, z, y, halfWidth, out) {
-      if (decks.length === 0 || !deckAt(x, z)) return false;
+      if (piers.length !== 0 && pierPush(x, z, y, halfWidth + 0.25, out)) return true;
+      if (decks.length === 0 || !deckAt(x, z, y + UNDER)) return false;
       const d = hit.deck;
-      if (d.rail === null || hit.seg < d.rail[0] || hit.seg >= d.rail[1] || y < hit.y - UNDER) return false;
-      const lim = Math.max(0.2, d.hw - 0.25 - halfWidth);
+      const sgn = hit.lat > 0 ? -1 : 1;
+      if (d.rs !== null) { if (!(d.rs[hit.seg] & d.rs[hit.seg + 1] & (hit.lat > 0 ? 1 : 2))) return false; }
+      else if (d.rail === null || hit.seg < d.rail[0] || hit.seg >= d.rail[1]) return false;
+      const lim = Math.max(0.2, hit.hw - 0.25 - halfWidth);
       const over = Math.abs(hit.lat) - lim;
       if (over <= 0) return false;
-      const sgn = hit.lat > 0 ? -1 : 1;
       out[0] = hit.nx * sgn; out[1] = hit.nz * sgn; out[2] = over;
       return true;
     },
 
     // Surface class under the point. With y (a car's height), a bridge deck it is level with counts as paved.
     surfaceAt(x, z, y) {
-      if (y !== undefined && decks.length !== 0 && deckAt(x, z) && y > hit.y - UNDER && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
+      if (y !== undefined && decks.length !== 0 && deckAt(x, z, y + UNDER) && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       const s = find(x, z);
       if (s === null) return SURFACE.GRASS;
       let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);
@@ -366,5 +412,20 @@ export async function loadWorldData(onProgress = () => {}) {
       return out;
     },
   };
+  // The retaining walls of ramps are solid for everything, above and below (the obstacle field is flat).
+  const wallBoxes = [];
+  for (const d of decks) {
+    if (!d.wall || !d.rs) continue;
+    const P = d.pts;
+    for (let i = 0; i < P.length - 1; i++) {
+      for (const [bit, sg] of [[1, 1], [2, -1]]) {
+        if (!(d.rs[i] & d.rs[i + 1] & bit)) continue;
+        const a = P[i], b = P[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
+        const hw = (d.ws ? (d.ws[i] + d.ws[i + 1]) / 2 : d.hw) * sg;
+        wallBoxes.push({ x: (a[0] + b[0]) / 2 - (dz / l) * hw, z: (a[1] + b[1]) / 2 + (dx / l) * hw, yaw: Math.atan2(-dz, dx), hx: l / 2 + 0.15, hz: 0.2 });
+      }
+    }
+  }
+  if (wallBoxes.length) world.addSolids(wallBoxes);
   return world;
 }

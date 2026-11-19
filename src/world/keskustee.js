@@ -32,12 +32,77 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     const FK = roadFrame([[W[0] - UA[0] * 14, W[1] - UA[1] * 14], [W[0] + UA[0] * 92, W[1] + UA[1] * 92]], 0);
     K.ribbon(FK, W[0] - UA[0] * 10, W[0] + UA[0] * 84, -0.4, -20.5, 'red', true);
     K.finish();
+    junction();
   }
+  // ---- the junction itself: hatching, the dotted lines that lead turning
+  // traffic through, lane lines on the Turu arm. Flat triangles laid on the ground, wound to face up.
+  function junction() {
+    const white = [];
+    const y = (x, z, lift) => world.heightAt(x, z) + lift;
+    const tri = (out, a, b, c, lift) => {
+      const up = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) > 0;
+      for (const q of up ? [a, b, c] : [a, c, b]) out.push(q[0], y(q[0], q[1], lift), q[1]);
+    };
+    const seg = (a, b, w, out = white, lift = 0.1) => {
+      const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, nx = -dz / l * w / 2, nz = dx / l * w / 2;
+      const q = [[a[0] + nx, a[1] + nz], [a[0] - nx, a[1] - nz], [b[0] + nx, b[1] + nz], [b[0] - nx, b[1] - nz]];
+      tri(out, q[0], q[1], q[2], lift); tri(out, q[2], q[1], q[3], lift);
+    };
+    // a line along a polyline: solid, or marks `on` metres long every `step` metres
+    const line = (pts, w, on = 0, step = 0) => {
+      let carry = 0;
+      for (let k = 1; k < pts.length; k++) {
+        const a = pts[k - 1], b = pts[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!on) { seg(a, b, w); continue; }
+        for (let s = carry; s < l; s += step) {
+          const e = Math.min(l, s + on), p = (t) => [a[0] + (b[0] - a[0]) * t / l, a[1] + (b[1] - a[1]) * t / l];
+          seg(p(s), p(e), w);
+        }
+        carry = (carry - l) % step; if (carry < 0) carry += step;
+      }
+    };
+    // the islands themselves are left as the map has them (Martin, 19 Nov: the pale patches looked wrong)
+    // dotted lines leading the turns through the junction
+    const dots = (pts) => {
+      const fine = [];
+      for (let k = 0; k < pts.length - 1; k++) for (let t = 0; t < 4; t++) {            // Catmull-Rom through the measured points
+        const p0 = pts[Math.max(0, k - 1)], p1 = pts[k], p2 = pts[k + 1], p3 = pts[Math.min(pts.length - 1, k + 2)], u = t / 4;
+        fine.push([0, 1].map((i) => 0.5 * (2 * p1[i] + (p2[i] - p0[i]) * u + (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * u * u + (3 * p1[i] - p0[i] - 3 * p2[i] + p3[i]) * u * u * u)));
+      }
+      fine.push(pts[pts.length - 1]);
+      line(fine, 0.14, 0.5, 1.5);
+    };
+    dots([[1805, 3076.6], [1808.5, 3074.5], [1813, 3073.6], [1817.5, 3074], [1821, 3075]]);
+    dots([[1811, 3069.5], [1816, 3071.75], [1821, 3072.75], [1826.5, 3072.25], [1830, 3071]]);
+    dots([[1829, 3060], [1825, 3063.5], [1822.5, 3067.5], [1821.25, 3072.5], [1821.25, 3077.5], [1822.5, 3082.5], [1825, 3087.5], [1828.5, 3092], [1833, 3096]]);
+    dots([[1825, 3077], [1830, 3080], [1834, 3084]]);
+    // the hatched strip between the two directions of the bridge arm
+    {
+      const a = [1831.75, 3063.5], b = [1850.25, 3044.75], l = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / l, uz = (b[1] - a[1]) / l, nx = -uz, nz = ux, hw = 1.6;
+      for (const o of [-hw, hw]) seg([a[0] + nx * o, a[1] + nz * o], [b[0] + nx * o, b[1] + nz * o], 0.14);
+      for (let s = 0.8; s < l - 1.2; s += 1.9) seg([a[0] + ux * s + nx * hw, a[1] + uz * s + nz * hw], [a[0] + ux * (s + 1.3) - nx * hw, a[1] + uz * (s + 1.3) - nz * hw], 0.4);
+    }
+    // Turu arm towards Kvartal's far side: solid lane lines out of the junction
+    for (const [x, z] of [[1837.3, 3082.2], [1839.5, 3080.0], [1841.8, 3077.7]]) seg([x + 1.5, z + 1.5], [x + 9.5, z + 9.5], 0.12);
+    const flat = (pos, colour, f) => {
+      if (!pos.length) return;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const nor = new Float32Array(pos.length);
+      for (let k = 1; k < nor.length; k += 3) nor[k] = 1;
+      g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: colour, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide }));
+      m.receiveShadow = true;
+      group.add(m);
+    };
+    flat(white, 0xf6f3fa, -7);
+  }
+
   return {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([[1650, 3080], [1720, 3160], [1805, 3085], [1770, 3110]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1650, 3080], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

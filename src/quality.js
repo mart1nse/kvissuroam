@@ -45,10 +45,10 @@ export function deviceLadder(caps) {
 
 // The governor. feed(ms) once per drawn frame with that frame's length; it returns the new level
 // index when it decides to move, else -1. hold(s) pauses judging (after a change, a tab switch).
-export function createGovernor({ levels, start = levels - 1 }) {
+export function createGovernor({ levels, start = levels - 1, top = levels - 1 }) {
   const WINDOW = 2000;              // ms of frames per verdict
-  let level = Math.max(0, Math.min(levels - 1, start));
-  let ceiling = levels - 1;        // highest rung allowed (lowered by rungs that failed)
+  let level = Math.max(0, Math.min(levels - 1, top, start));
+  let ceiling = Math.max(0, Math.min(levels - 1, top));   // highest rung allowed (lowered by rungs that failed, or by a crash)
   let floor = 0;                   // lowest rung allowed (raised when stepping down did not help)
   let buf = [], sum = 0, gbuf = [];
   const ratio = new Array(levels).fill(0);   // how much more a rung costs the graphics card than the one below (seen when stepping down)
@@ -234,7 +234,37 @@ export function createQuality(hooks, caps, opts = {}) {
   } catch {}
   if (opts.software) start = Math.min(start, 1);
   const auto = !opts.headless;
-  let gov = createGovernor({ levels: levels.length, start });
+
+  // Crash guard. A phone that runs out of memory kills the page and reloads it, with no warning the
+  // page can catch. So while the game is on screen it keeps a mark saying so (with its level), and
+  // takes it away when it is hidden or closed. A mark still there at the next start means the page
+  // died on screen: auto then keeps at least one level below that one (fewer streamed streets, smaller
+  // shadow map), lower again after another crash. After 10 minutes on screen at that cap without a
+  // crash, the next visit may go one level higher again.
+  const ALIVE = 'kvissuroam.alive', CAPKEY = 'kvissuroam.gfxCap';
+  let cap = top, crashed = false;
+  try {
+    const c = JSON.parse(read(CAPKEY) || 'null');
+    if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
+    const alive = JSON.parse(read(ALIVE) || 'null');
+    if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
+      crashed = true;
+      cap = Math.max(0, Math.min(cap, alive.level - 1));
+      store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap }));
+      console.warn(`The last visit ended on screen at level ${alive.level + 1} (out of memory?): auto graphics stay at ${cap + 1} or lower`);
+    }
+  } catch {}
+  start = Math.min(start, cap);
+  const markAlive = () => { if (!opts.headless && current >= 0) store(ALIVE, JSON.stringify({ ladder: ladderId, level: current })); };
+  const markGone = () => { try { localStorage.removeItem(ALIVE); } catch {} };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => (document.hidden ? markGone() : markAlive()));
+    addEventListener('pagehide', markGone);
+    addEventListener('pageshow', markAlive);
+  }
+  let capMs = 0;                   // time on screen at the cap this visit (lifts it by one for the next)
+
+  let gov = createGovernor({ levels: levels.length, start, top: cap });
   // the readout: averages, plus the frames that came more than half again later than the screen's
   // rate in the last two seconds (stutter the average hides) and the longest of them
   const meter = { frame: 16.7, js: 0, late: 0, worst: 0 };
@@ -268,6 +298,7 @@ export function createQuality(hooks, caps, opts = {}) {
     const l = levels[i], { renderer, sun, quality } = hooks;
     if (i === current) return;
     current = i;
+    if (typeof document === 'undefined' || !document.hidden) markAlive();
     if (renderer.getPixelRatio() !== l.dpr) renderer.setPixelRatio(l.dpr);
     const want = l.shadow > 0;
     if (want && sun.shadow.mapSize.x !== l.shadow) {
@@ -286,7 +317,7 @@ export function createQuality(hooks, caps, opts = {}) {
 
   return {
     levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
-    get auto() { return mode === 'auto' && auto; },
+    get auto() { return mode === 'auto' && auto; }, get cap() { return cap < top ? cap : null; }, crashed,
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
     hold(s) { gov.hold(s); },
@@ -307,6 +338,10 @@ export function createQuality(hooks, caps, opts = {}) {
       const ch = gov.feed(ms, gpuMs);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }
       stableMs += ms;
+      if (cap < top && current === cap && ms < 1000 && (capMs += ms) > 600000) {
+        capMs = -Infinity;           // once per visit
+        store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap + 1 }));
+      }
       if (stableMs > 30000 && current > heldBest) heldBest = current;
       const keep = stableMs > 120000 && current < savedLevel ? current : heldBest > savedLevel ? heldBest : -1;
       if (keep >= 0 && keep !== savedLevel) { savedLevel = keep; store(AUTOKEY, JSON.stringify({ ladder: ladderId, level: keep })); }
@@ -316,7 +351,7 @@ export function createQuality(hooks, caps, opts = {}) {
       if (!MODES.includes(m) || mode === 'locked') return;
       mode = m;
       store(KEY, m);
-      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel) });
+      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap });
       apply(m === 'auto' ? (auto ? gov.level : top) : levelFor(m));
     },
   };

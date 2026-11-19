@@ -128,6 +128,7 @@ const REV_CUT_TIME = 0.03, REV_CUT_DROP = 120;
 // braking, the automatic shifts down once the lower gear lands under this share of the shift point (an
 // engine's brakeDown, for the sports cars that keep their revs up)
 const BRAKE_DOWN = 0.8;
+const BRAKE_LIFT = 500;         // rpm (on a 7000 rpm engine, in proportion on others) more on top of that (Martin 2026-11-19)
 // a repeatable 0..1 'random' number, so every car runs the same on every screen
 const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
@@ -189,7 +190,8 @@ function engineForce(car, throttle, dt) {
     // (off the throttle each downshift comes at a slightly different point, up to 4 % of the shift point
     // either way under braking, half that coasting, so a long stop doesn't land on the same revs every
     // time, Martin 2026-11-19)
-    const downAt = throttle > 0.5 ? 0.9 : 0.55 + ((e.brakeDown ?? BRAKE_DOWN) - 0.55) * braking + (car.downJit || 0) * (0.5 + 0.5 * braking);
+    const brakeAt = Math.min(0.95, (e.brakeDown ?? BRAKE_DOWN) + BRAKE_LIFT * (e.redline / 7000) / e.shiftRpm);
+    const downAt = throttle > 0.5 ? 0.9 : 0.55 + (brakeAt - 0.55) * braking + (car.downJit || 0) * (0.5 + 0.5 * braking);
     if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
     else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * downAt) g--;
     if (g !== car.gear) {

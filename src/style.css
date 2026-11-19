@@ -207,6 +207,11 @@ body:not(.touch) .touch-only { display: none; }
 .pad button small { font-size: 8px; letter-spacing: .1em; color: #fff; opacity: .85; text-shadow: none; }
 .pad button.gas { height: clamp(96px, 34vh, 160px); border-color: var(--hot); color: var(--hot); text-shadow: 0 0 10px var(--hot); }
 .pad button.brake { border-color: var(--sun); color: var(--sun); text-shadow: 0 0 10px var(--sun); }
+/* phones: the car's name, small, under the BRAKE and GAS buttons */
+.pad.right #carname { position: absolute; top: 100%; left: 0; right: 0; margin-top: 7px; text-align: center; white-space: nowrap;
+  font-size: 8px; letter-spacing: .16em; color: #fff; opacity: .5; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
+/* phones: the fade from the drone shot to the car */
+#fade { position: fixed; inset: 0; z-index: 50; background: #07020f; opacity: 0; visibility: hidden; pointer-events: none; }
 .pad button.held { background: rgba(255, 255, 255, .28); transform: scale(.96); }
 body.touch #dash { right: 50%; bottom: auto; top: max(4px, env(safe-area-inset-top)); transform: translateX(50%); --d: clamp(104px, 31vh, 150px); }
 body.touch #toast { top: 34%; }

@@ -115,6 +115,15 @@ let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // ch
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let intro = null, introFocus = null;   // drone flyover behind the opening menu
 let flyIn = null;                // the one second flight from the drone to the chase camera
+// On phones the drone holds one fixed view and pressing DRIVE fades through dark straight to the car
+// (the moving drone and the flight down stutter there while the map streams in). ?fixedintro tries it on a desktop.
+const fixedIntro = isTouch || params.has('fixedintro');
+let fade = null;                 // { phase: 'out' | 'hold' | 'in', t, ... } the fade from the drone shot to the car
+const fadeEl = document.createElement('div');
+// (on phones the car's name sits small under the GAS and BRAKE buttons, not under the rev counter)
+if (isTouch) $('#touch .pad.right').appendChild($('#carname'));
+fadeEl.id = 'fade';
+document.body.appendChild(fadeEl);
 let launch = null;               // 0-100 km/h stopwatch
 let tunnel = 0, tunnelShown = -1;  // high speed tunnel vision, 0..1
 const tunnelEl = document.createElement('div');
@@ -239,7 +248,7 @@ async function boot() {
   const s0 = world.meta.start;
   const jobs = [world.loadAround(s0.x, s0.z, 200)];
   if (!params.has('drive') && !params.has('nointro')) {
-    intro = createIntro(world);
+    intro = createIntro(world, { fixed: fixedIntro, shot: params.has('shot') ? +params.get('shot') : null });
     introFocus = intro.start();
     jobs.push(world.loadAround(introFocus.x, introFocus.z, 450));
   }
@@ -513,7 +522,12 @@ function startDriving() {
   if (mode === 'drive') return;
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
-  if (intro) {
+  if (intro && fixedIntro) {
+    // fade to dark on the drone's view, cut to behind the car while dark, then fade in
+    fade = { phase: 'out', t: 0, frames: 0, from: camera.position.clone(), q: camera.quaternion.clone(), fov: camera.fov };
+    intro = null;
+    terrain.update(new THREE.Vector3(car.x, 0, car.z));
+  } else if (intro) {
     // fly from wherever the drone is to the chase position behind the car
     flyIn = { t: 0, from: camera.position.clone(), q0: camera.quaternion.clone(), fov: camera.fov };
     intro = null;
@@ -523,13 +537,25 @@ function startDriving() {
   $('#hud').classList.remove('hidden');
   if (isTouch) {
     $('#touch').classList.remove('hidden');
-    const el = document.documentElement;
-    (el.requestFullscreen?.({ navigationUI: 'hide' }) ?? Promise.reject()).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+    wantFull = true;
+    goFull();
   }
   audio.start();
   input.enable(true);
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
 }
+
+// Full screen on phones. The browser drops it when you switch to another app and only lets a page ask
+// again from a tap, so after the first DRIVE any tap while not in full screen asks for it again.
+let wantFull = false, fullAsked = false;
+function goFull() {
+  const el = document.documentElement;
+  if (document.fullscreenElement || fullAsked || !el.requestFullscreen) return;
+  fullAsked = true;
+  el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {})
+    .finally(() => { fullAsked = false; });
+}
+for (const ev of ['pointerup', 'touchend']) addEventListener(ev, () => { if (wantFull && !document.hidden) goFull(); }, { passive: true, capture: true });
 
 function openGarage() {
   if (mode !== 'drive') return;
@@ -717,11 +743,12 @@ if (window.visualViewport) {
 
 // ---------------------------------------------------------------- frame loop
 const FLY_IN = 1;                 // seconds from the drone to behind the car
+const FADE_OUT = 0.35, FADE_IN = 0.55;   // phones: seconds to dark on the drone shot, and back up behind the car
 const smooth = (t) => t * t * (3 - 2 * t);
 const flyQ = new THREE.Quaternion();
 const clock = new THREE.Timer();
 let photos = null, treesHidden = false;
-let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
+let lastDraw = -1e9, slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 
@@ -946,8 +973,26 @@ function frame(ts) {
   const tv = mode === 'drive' ? tunnel : 0;
   if (Math.abs(tv - tunnelShown) > 0.004) { tunnelShown = tv; tunnelEl.style.opacity = tv.toFixed(3); }
   if (window.__cam) { camera.position.fromArray(window.__cam, 0); camLook.fromArray(window.__cam, 3); camera.fov = window.__cam[6] ?? 55; }   // test hook
+  if (fade?.phase === 'out') { camera.position.copy(fade.from); camera.fov = fade.fov; }   // the drone's view stays put while it darkens
   camera.updateProjectionMatrix();
   camera.lookAt(camLook);
+  if (fade) {
+    if (fade.phase === 'out') {
+      camera.quaternion.copy(fade.q);
+      fade.t = Math.min(1, fade.t + dt / FADE_OUT);
+      if (fade.t >= 1) { fade.phase = 'hold'; fade.t = 0; camSnap = true; }
+    } else if (fade.phase === 'hold') {
+      // stay dark a few frames behind the car while the ground and models around it go up to the GPU
+      fade.t += dt; fade.frames++;
+      if (fade.frames >= 4 && (world.ready(car.x, car.z) || fade.t > 2)) { fade.phase = 'in'; fade.t = 1; }
+    } else {
+      fade.t = Math.max(0, fade.t - dt / FADE_IN);
+      if (fade.t <= 0) fade = null;
+    }
+    const o = fade ? (fade.phase === 'hold' ? 1 : smooth(fade.t)) : 0;
+    fadeEl.style.opacity = o.toFixed(3);
+    fadeEl.style.visibility = o > 0 ? 'visible' : 'hidden';
+  }
   if (flyIn) {
     // turn from the drone's view to the chase view a little ahead of the move, so the car is in frame on arrival
     camera.quaternion.slerpQuaternions(flyIn.q0, flyQ.copy(camera.quaternion), smooth(Math.min(1, flyIn.t / 0.8)));
@@ -986,7 +1031,10 @@ function frame(ts) {
     for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = !hideTrees;
     treesHidden = hideTrees;
     photos.render(scene, camera, model.group);
-  } else {
+  } else if (!(intro?.fixed && ts - lastDraw < 30)) {
+    // (the still drone shot behind the menu on a phone is drawn at about 30 frames a second, which
+    // looks the same and leaves the phone cooler for the drive)
+    lastDraw = ts;
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
     renderer.render(scene, camera);
   }
@@ -1006,7 +1054,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn || !!fade; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

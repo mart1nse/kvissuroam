@@ -61,7 +61,8 @@ const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
 const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };    // bollards: i0, i1, off; pad: i0, i1, off0, off1
 const VANEMUISE = { bollards: [2276, 2299, 0.45], sign: [2262, 1.1] };
 const PLAYGROUND = [[1602, 3019, 5.2], [1616, 3031, 4.2]];     // landmarks.js, the Barclay park play area
-const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11 };
+const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11, treeFrom: 2354 };
+// treeFrom: no trees before this index, the corner by Kaubamaja is open paving (Martin, 19 Nov: none behind the START LINE board)
 const WALL = { height: 1.0, thick: 0.45 };
 // the botanical garden wall, traced by Martin on the Maa-amet map (16 Nov): from the corner of Lai 40
 // along the back of the Lai pavement, round the corner and up Emajõe (game x, z)
@@ -446,6 +447,9 @@ export function createTrackside(world, scene) {
     const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     for (const [x, z] of walk(line, st.treeEvery, 3)) {
       if (Math.hypot(x - s0[0], z - s0[1]) < 7) continue;
+      let bi = st.i0, bd = Infinity;
+      for (let j = st.i0; j <= st.i1; j++) { const q = track.P[j % track.N], d = (q[0] - x) ** 2 + (q[1] - z) ** 2; if (d < bd) { bd = d; bi = j; } }
+      if (bi < st.treeFrom) continue;
       if (PLAYGROUND.some(([px, pz, pr]) => Math.hypot(x - px, z - pz) < pr + 1.5)) continue;
       trees.push({ x, z, h: 5.5 + r() * 2, s: 2.1 + r() * 0.8, tint: r() });
     }

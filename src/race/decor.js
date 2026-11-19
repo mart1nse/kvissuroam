@@ -112,6 +112,7 @@ export function findCorners(track) {
 }
 
 const START_LEFT = 7;                  // metres the START LINE billboard sits left of its old spot
+const START_BACK = 12;                 // and metres further on, past the corner (Martin, 19 Nov: 10-15 m back)
 
 export function createDecor(track, world) {
   const { P, HW, N, tan } = track;
@@ -147,7 +148,7 @@ export function createDecor(track, world) {
       // (Martin, 2026-11-17: moved left towards the road so the trees on the right no longer hide it)
       const o2 = HW[c.i] + 3.2 - START_LEFT;
       items.push({
-        x: px + tin[0] * HW[c.i] * 0.4 + ox * o2, z: pz + tin[1] * HW[c.i] * 0.4 + oz * o2,
+        x: px + tin[0] * (HW[c.i] * 0.4 + START_BACK) + ox * o2, z: pz + tin[1] * (HW[c.i] * 0.4 + START_BACK) + oz * o2,
         yaw: Math.atan2(-tin[0], -tin[1]), big: true, mesh: null, phase: 0,
       });
       continue;

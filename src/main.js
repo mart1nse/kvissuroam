@@ -16,6 +16,7 @@ import { createRoadMarkings } from './world/roads.js';
 import { buildDeckBodies } from './world/decks.js';
 import { createWalls } from './world/walls.js';
 import { createProps } from './world/props.js';
+import { fixRoadProps } from './world/roadprops.js';
 import { createJanese } from './world/janese.js';
 import { createParked } from './world/parked.js';
 import { createAksi, aksiProps } from './world/aksi.js';
@@ -117,6 +118,7 @@ const input = createInput(document.body);
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, parked;
+let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -212,7 +214,7 @@ async function boot() {
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);
@@ -1191,7 +1193,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn || !!fade; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf };
+  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

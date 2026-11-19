@@ -622,6 +622,8 @@ export function createProps(world, opts = {}) {
     }
     return best && { id: best.id, kind: best.kind, x: best.x, y: best.y, z: best.z };
   };
+  // every surveyed and hand-placed prop with its id (for tests: node tools/road-props-check.mjs)
+  attach.all = () => (data ? Object.entries(data.sectors).flatMap(([key, a]) => { const r = []; for (let k = 0; k < a.length; k += data.stride) r.push({ id: `${key}:${k / data.stride}`, kind: a[k], x: a[k + 1], z: a[k + 2], cleared: cleared.has(`${key}:${k / data.stride}`) }); return r; }) : []);
   attach.loose = (id) => { for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) return { p: b.obj.position.toArray(), q: b.obj.quaternion.toArray(), asleep: b.asleep, v: b.v.toArray(), w: b.w.toArray(), still: b.still }; return null; };
   attach._raw = (id) => { const r = []; for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) r.push(b); r.wake = (b) => { b.asleep = false; b.age = 0; b.still = 0; moving.add(b); }; return r; };
   attach.bodies = (id) => { const r = []; for (const rec of live.values()) for (const b of rec.loose) if (b.id === id) r.push({ idx: b.idx, p: b.obj.position.toArray(), lying: !!lying(b), asleep: b.asleep, ax: b.seg && new THREE.Vector3(0, 1, 0).applyQuaternion(b.obj.quaternion).toArray() }); return r; };

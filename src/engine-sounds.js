@@ -21,7 +21,8 @@
 //          crackle: the pops a car without them gets after a blip (default 0.06, none for the diesels);
 //          howl, howlTeeth: level and pitch (teeth per crank turn) of the gear howl when over-revved.
 // yank, yankHz: size (x the revs still to come down) and rate of the swing as an upshift's gear wrenches
-//          the revs down (defaults 1 and 8.2 Hz).
+//          the revs down (defaults 0.55 and 8.2 Hz; Martin 2026-11-19 found 1 too much beside the
+//          softer hit).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -107,7 +108,7 @@ export const ENGINE_SOUNDS = {
   // 68 and 76 degrees; each bank is an even-firing five with its own exhaust. Dry sump, tiny flywheel and
   // almost no silencing: a clean, hard, very high wail with a loud induction howl right behind the seats.
   cgt: {
-    yank: 0.55, yankHz: 6.6,      // (a smaller, slower struggle than the F40's, Martin 2026-11-19)
+    yankHz: 6.6,                  // (a slower struggle than the others', Martin 2026-11-19)
     seed: 980, order: [1, 6, 5, 10, 2, 7, 3, 8, 4, 9], banks: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
     fireAt: [0, 68, 144, 212, 288, 356, 432, 500, 576, 644],
     pipes: [{ len: 0.74, fb: -0.52, damp: 0.66 }, { len: 0.78, fb: -0.52, damp: 0.66 }],

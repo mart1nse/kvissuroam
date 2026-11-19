@@ -39,7 +39,7 @@ import { createJaaaeg, jaaaegWalls, jaaaegProps } from './world/jaaaeg.js';
 import { createDiscGolf } from './world/discgolf.js';
 import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja.js';
 import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
-import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
+import { createElva, elvaWalls } from './world/elva.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -216,7 +216,6 @@ async function boot() {
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
-  if (params.get('elvapaint') !== null) elvaVectors(world.vectors);     // TEMP preview
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line

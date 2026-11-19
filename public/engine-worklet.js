@@ -61,8 +61,8 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0 };
-    this.rpm = 800; this.load = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
+    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0 };
+    this.rpm = 800; this.load = 0; this.ld = 0; this.blip = 0; this.crk = 0; this.ovr = 0; this.hp0 = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0;
@@ -107,10 +107,11 @@ export class EngineCore {
   set(o) { Object.assign(this.in, o); }
 
   fire(ev) {
-    const c = this.cfg, rpm = this.rpm, n = this.noise;
-    const overrun = this.load < 0.05 && rpm > this.in.idle + 500;
-    let amp = (c.base + (1 - c.base) * this.load) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough);
-    let nz = c.noise * (0.6 + 0.8 * this.load), tauDeg = c.pulseDeg * (0.85 + 0.3 * this.load);
+    const c = this.cfg, rpm = this.rpm, n = this.noise, ld = this.ld, ov = this.ovr;
+    const overrun = ld < 0.05 && rpm > this.in.idle + 500;
+    // (dragged past the redline the valves float: every firing comes out different)
+    let amp = (c.base + (1 - c.base) * ld) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough * (1 + 5 * ov));
+    let nz = c.noise * (0.6 + 0.8 * ld), tauDeg = c.pulseDeg * (0.85 + 0.3 * ld);
     if (this.in.cut || this.in.shift) {
       // ignition cut on the rev limiter (or for an upshift): the cylinder only pumps air, and on a hot,
       // loud engine some of the unburnt charge goes off in the exhaust (a shift crackles more)
@@ -123,15 +124,18 @@ export class EngineCore {
     }
     if (overrun) {
       amp *= c.overrun ?? 0.8;
-      // fuel cut on the overrun: unburnt mixture now and then lights in the hot exhaust
-      if (c.pops && n() < c.pops * clamp((rpm - 2500) / 3000, 0, 1)) { amp = 1.6 + n() * 1.4; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
-    }
+      // fuel cut on the overrun: unburnt mixture now and then lights in the hot exhaust, much more just
+      // after a downshift's blip (crackle) and when the engine is dragged past its redline (over)
+      const pp = c.pops || 0, cr = this.crk;
+      const pop = (pp * (1 + 5 * cr) + (c.crackle ?? 0.06) * cr + (pp ? 0.12 : 0.04) * ov) * clamp((rpm - 2500) / 3000, 0, 1);
+      if (pop > 0 && n() < pop) { amp = 1.6 + n() * 1.4; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
+    } else if (ov > 0.05 && n() < 0.08 * ov) amp *= 0.3;          // (a misfire)
     const tau = clamp(tauDeg / (rpm * 6) * this.sr, this.sr * 0.00022, this.sr * 0.004);
     // no two combustions are alike: the pulse also lands a fraction of a degree early or late
-    const late = Math.max(0, (n() * 2 - 1) * c.jitter / (rpm * 6) * this.sr);
+    const late = Math.max(0, (n() * 2 - 1) * c.jitter * (1 + 3 * ov) / (rpm * 6) * this.sr);
     // (edge: the pulse rises in a fraction of its blowdown time, the front of a near-shock wave; louder and
     // more so under load)
-    const rise = tau * (1 - this.edge * (0.55 + 0.3 * this.load));
+    const rise = tau * (1 - this.edge * (0.55 + 0.3 * ld));
     if (this.pulses.length < 24) this.pulses.push({ bank: ev.bank, amp, nz, tau, rise, t: -late });
     // valvetrain / injector tick for this cylinder. With smoothTop it is heard at idle and low revs, then
     // lost under the engine (kept up on a loud engine, the ticks run together into a sharp hiss)
@@ -149,10 +153,15 @@ export class EngineCore {
     const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 : 0;
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     this.load += (I.throttle - this.load) * kl;
+    // a downshift's blip opens the throttle faster than the pedal smoothing would let it (src/audio-shift.js)
+    this.blip += ((I.blip || 0) - this.blip) * (1 - Math.exp(-len / (sr * 0.012)));
+    this.crk += ((I.crackle || 0) - this.crk) * kr;
+    this.ovr += ((I.over || 0) - this.ovr) * (1 - Math.exp(-len / (sr * 0.04)));
+    this.ld = Math.max(this.load, this.blip);
     this.boost += (I.boost - this.boost) * kl;
     this.shaft += ((I.shaft >= 0 ? I.shaft : I.boost) - this.shaft) * kl;
     this.on += ((I.on ? 1 : 0) - this.on) * (1 - Math.exp(-len / (sr * 0.05)));
-    const rpm = this.rpm, load = this.load, rr = rpm / I.redline;
+    const rpm = this.rpm, load = this.ld, rr = rpm / I.redline, ov = this.ovr;
     const bright = c.lp0 + c.lpRpm * rpm / 1000 + c.lpLoad * load - (c.turbo ? c.turboMuffle * (1 - this.boost * 0.5) : 0);
     this.lp1.set('lp', bright, 0.6, sr); this.lp2.set('lp', bright * 1.6, 0.5, sr);
     const gain = c.gain * this.on * (c.idleVol + (1 - c.idleVol) * (0.45 * rr + 0.55 * load * (0.5 + 0.5 * rr)));
@@ -160,7 +169,11 @@ export class EngineCore {
     const dTheta = rpm * 6 / sr;
     const ev = this.events, banks = this.banks, res = this.res, pulses = this.pulses;
     const intake = c.intake * load * (0.15 + rr), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
-    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)), rk = c.raspDrive || 6;
+    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)) * (1 + ov), rk = c.raspDrive || 6;
+    // over-rev: the straight-cut gears howl as the wheels drag the engine past its limit
+    // (its pitch wanders a little with the shaft's wind-up, so it is not a pure test tone)
+    if (ov > 0.001) this.hjit = (this.hjit || 0) * 0.85 + (n() * 2 - 1) * 0.004;
+    const hl = 0.05 * ov * this.on * (c.howl ?? 1), hf = rpm / 60 * (c.howlTeeth ?? 19) * (1 + (this.hjit || 0)) / sr;
     // the turbine: heard as soon as it starts to spin, sweeping up as it spools (the build-up), on a lift
     // it runs on and spins down (shaft), the whine falling under the blow-off
     let wl = 0, wf = 0, wd = 0, wfd = 0, wsp = 0;
@@ -225,6 +238,10 @@ export class EngineCore {
       if (hiss > 0) y += this.hissBp.run(n() * 2 - 1) * hiss;
       y = this.hp.run(y);
       let o = Math.tanh(drive * y) / dn * gain;
+      if (hl > 1e-4) {
+        this.hp0 += hf; if (this.hp0 > 1) this.hp0 -= 1;
+        o += (Math.sin(6.2832 * this.hp0) + 0.35 * Math.sin(12.566 * this.hp0)) * hl * (0.75 + 0.25 * Math.sin(6.2832 * this.theta / 720 * ev.length));
+      }
       if (wl > 1e-5) {
         this.wp0 += wf; this.wp1 += wf * 1.0071; this.wp2 += wf * 2;
         if (this.wp0 > 1) this.wp0 -= 1; if (this.wp1 > 1) this.wp1 -= 1; if (this.wp2 > 1) this.wp2 -= 1;

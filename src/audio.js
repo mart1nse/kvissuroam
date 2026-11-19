@@ -8,6 +8,7 @@
 import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace } from './audio-space.js';
 import { blowOff, shiftChirp } from './audio-turbo.js';
+import { createShiftSound, clunk } from './audio-shift.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -28,6 +29,7 @@ export function createAudio() {
   let synth = null, synthGain = null, synthCfg = null, carId = null;
   let noiseSrc = null, workletReady = false;
   const voices = [];
+  const shiftSound = createShiftSound();
 
   function start() {
     if (ctx) { ctx.resume?.(); return; }
@@ -224,8 +226,11 @@ export function createAudio() {
         wasShift = !!car.shiftCut;
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
+      // a downshift blips, crackles and clunks; too far down by hand, the engine is dragged over its limit
+      const sh = shiftSound.step(car, t);
+      if (sh.clunk && !dead) clunk(ctx, noiseBuf, bus, sh.clunk.k, t + 0.005 + sh.clunk.after);
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 } });
+        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev
@@ -446,7 +451,7 @@ export function createAudio() {
     setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {
-      ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
+      ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0; shiftSound.reset();
       applySpace();
       carId = ev ? null : spec.id;
       if (ctx) sendConfig();

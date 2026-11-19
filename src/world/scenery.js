@@ -51,7 +51,7 @@ function buildingGeometry(sector, walls) {
     }
     const key = e ? e.key : base[t] * 64;
     let g = groups.get(key);
-    if (!g) groups.set(key, (g = { b: base[t], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9, real: e ? 1 : 0 }));
+    if (!g) groups.set(key, (g = { b: base[t], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9, real: e ? 1 : 0, plain: !!(e && e.plain) }));
     for (let i = t; i < t + 3; i++) {
       const x = pq[i * 3] * 0.05, y = pq[i * 3 + 1] * 0.01, z = pq[i * 3 + 2] * 0.05;
       if (!(e && e.hide)) { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }       // a hidden house keeps no triangles
@@ -60,7 +60,7 @@ function buildingGeometry(sector, walls) {
       else if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);
       else c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-      aKind[i] = kind[i]; aBase[i] = base[i] * 0.01; gkey[i] = key;
+      aKind[i] = e && e.plain && kind[i] === 2 ? 0 : kind[i]; aBase[i] = base[i] * 0.01; gkey[i] = key;
       if (x < g.x0) g.x0 = x; if (x > g.x1) g.x1 = x;
       if (z < g.z0) g.z0 = z; if (z > g.z1) g.z1 = z;
       if (y > g.top) g.top = y;
@@ -74,7 +74,8 @@ function buildingGeometry(sector, walls) {
     g.eavesH = Math.min(h, g.eaves > 1e8 ? h : g.eaves - b * 0.01);
     g.style = (h >= 10.5 ? 1 : area > 420 ? 2 : 0) + g.real * 4;      // +4: the wall colour is the real one
     if (g.brick) g.style = 5;                                           // red brick with a real colour
-    g.seed = Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
+    if (g.plain) g.style = 4;                                           // smooth render in its real colour, windows added by hand
+    g.seed = g.plain ? 0 : Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
   const brick = new THREE.Color().setRGB(0.55, 0.25, 0.18, THREE.SRGBColorSpace);
   for (let i = 0; i < nv; i++) {

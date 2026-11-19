@@ -16,7 +16,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { realTreeKit } from '../world/scenery.js';
-import { findCorners } from './decor.js';
+import { findCorners, startBoardSpot } from './decor.js';
 import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
@@ -251,9 +251,10 @@ export function extraProps() {
   // 7. lamp posts along the right of the start/finish straight, lamps over the road
   const st = STRAIGHT;
   const lampLine = sideLineWrap(track, st.i0, st.i1, st.side, st.lampOff);
-  const s0 = track.P[0];
+  const s0 = track.P[0], board = startBoardSpot(track);
   for (const [x, z] of walk(lampLine, st.lampEvery, 6)) {
     if (Math.hypot(x - s0[0], z - s0[1]) < 6) continue;          // keep clear of the gantry posts
+    if (board && Math.hypot(x - board.x, z - board.z) < 12) continue;   // and of the START LINE billboard (Martin, 19 Nov)
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }

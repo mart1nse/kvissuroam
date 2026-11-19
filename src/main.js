@@ -741,16 +741,22 @@ input.on('KeyL', () => showOverlay('laps'));
 // A / Z: one gear up / down by hand; the automatic takes over again at the shift point
 const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open && !input.wasd) shiftGear(car, dir); });
 // Options (O): WASD driving, which turns the A / Z gear keys off. Off by default; remembered per browser.
-const optEl = $('#options'), optWasd = $('#opt-wasd');
+const optEl = $('#options'), optKeys = $('#opt-keys');
 let wasdSaved = false;
 try { wasdSaved = localStorage.getItem('kvissuroam.wasd') === '1'; } catch {}
 input.setWasd(wasdSaved);
-optWasd.checked = wasdSaved;
-optWasd.addEventListener('change', () => {
-  input.setWasd(optWasd.checked);
-  try { localStorage.setItem('kvissuroam.wasd', optWasd.checked ? '1' : '0'); } catch {}
-  optWasd.blur();                // (so Space and the arrows drive again instead of flipping the box)
-  hud.toast(optWasd.checked ? 'WASD DRIVING ON · A / Z SHIFTS OFF' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
+const showKeys = () => { for (const b of optKeys.children) b.classList.toggle('on', (b.dataset.keys === 'wasd') === input.wasd); };
+showKeys();
+optKeys.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-keys]');
+  if (!b) return;
+  b.blur();                      // (so Space and the arrows drive again instead of pressing the button)
+  const on = b.dataset.keys === 'wasd';
+  if (on === input.wasd) return;
+  input.setWasd(on);
+  try { localStorage.setItem('kvissuroam.wasd', on ? '1' : '0'); } catch {}
+  showKeys();
+  hud.toast(on ? 'WASD DRIVING · AUTOMATIC GEARBOX' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
 });
 // Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
 const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);

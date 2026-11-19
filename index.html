@@ -67,7 +67,7 @@
     <p class="tag">TIME-ATTACK THE STREET CIRCUIT OR ROAM FREELY</p>
     <div id="cards"></div>
     <button id="drive" class="neon">DRIVE</button>
-    <p class="small keys desktop-only">Arrow keys to drive (WASD in options, O) · R back to last dry spot · H back to the start · M map · G garage · N sound · A / Z gear up / down · B look back · C drone view · L lap times</p>
+    <p class="small keys desktop-only">Arrow keys to drive · R back to last dry spot · H back to the start · M map · G garage · N sound · A / Z gear up / down · B look back · C drone view · L lap times</p>
     <p class="small attribution" id="attribution"></p>
   </div>
 
@@ -82,9 +82,11 @@
     </div>
     <div id="options" class="hidden">
       <h3>OPTIONS</h3>
-      <label class="opt"><input type="checkbox" id="opt-wasd"><span><b>WASD DRIVING</b><small>W A S D drive and steer. The gearbox stays automatic: A / Z gear shifts are off.</small></span></label>
-      <p class="small optkeys">Off: arrow keys drive, A / Z shift up / down by hand.</p>
-      <div class="opt gfx"><span><b>GRAPHICS</b><small>AUTO lowers the detail when the frame rate drops and raises it again when there is room.</small></span></div>
+      <h4>CONTROLS</h4>
+      <div class="opt"><span><b>KEYS</b><small>Arrows drive. A / Z shift gears, or WASD drives with an automatic gearbox.</small></span></div>
+      <div id="opt-keys" class="seg"><button data-keys="az">ARROWS + A / Z GEARS</button><button data-keys="wasd">WASD</button></div>
+      <h4>GRAPHICS</h4>
+      <div class="opt gfx"><span><b>DETAIL</b><small>AUTO lowers the detail when the frame rate drops and raises it again when there is room.</small></span></div>
       <div id="opt-gfx" class="seg"><button data-gfx="auto">AUTO</button><button data-gfx="high">HIGH</button><button data-gfx="medium">MEDIUM</button><button data-gfx="low">LOW</button></div>
       <p class="small optkeys" id="opt-gfxnow"></p>
       <p class="small optwarn hidden" id="opt-gpu"></p>

@@ -1,31 +1,45 @@
 // What a gear change sounds like (combustion cars only; the electric cars have one gear):
 //
 // - a blip on a downshift: the throttle snaps wide open for a moment while the clutch is out, the engine
-//   roars and the revs flare up past the lower gear's before the clutch drags them back ("BWAAP", about a
-//   quarter of a second, Martin 2026-11-19: a roar, a growl); a quick downshift by hand (Z) blips harder
-//   than the automatic, and each one straight after another harder still
+//   roars with a heavy growl and the revs flare up past the lower gear's before the clutch drags them back
+//   ("BWAAAP", about a third of a second, Martin 2026-11-19: a roar, a growl, then a tad longer and
+//   heavier); a quick downshift by hand (Z) blips harder than the automatic, and each one straight after
+//   another harder still
 // - crackle: after the blip the throttle shuts on high revs, and the fuel left in the hot exhaust goes off
 //   in pops and crackles for a moment (much more on the cars that already pop, the F40, Carrera GT, M3)
 // - a clunk: the driveline taking up its slack as the clutch bites, harder the bigger the jump in revs
-// - the bite of an upshift under power: when the clutch takes up the new gear the engine barks (the
-//   first firings after the ignition cut, harder and raspier), with a deep thunk through the driveline
-//   (Martin 2026-11-19: more violent); the body kicks back with it (car.bite in physics.js)
+// - an upshift under power: while the clutch is out the revs only sink at the rate the flywheel lets them
+//   (engine.revDrop), so when the new gear goes in they are still well above its speed and the gear has
+//   to wrench them down: they are yanked down past it and swing back a couple of times as the driveline
+//   winds up and springs back (Martin 2026-11-19: "a short rev struggle"), the engine barks through it
+//   (the first firings after the ignition cut, harder and raspier), a deep thunk goes through the
+//   driveline, the tyres chirp on a hard one, and the body kicks back and shudders (car.bite in physics.js)
 // - over-rev: shifted down by hand too far (src/cars/physics.js lets Z drop up to two gears past the
 //   redline), the engine is dragged over its limit by the wheels: it screams a little past the redline,
 //   rough and misfiring (valve float), with the straight-cut gears howling under it
 //
-// The blip, crackle, bark and over-rev are played by the engine synthesiser (public/engine-worklet.js: its
-// blip, crackle, bark and over inputs); the clunks are short sounds of their own.
+// The blip, crackle, bark, yank and over-rev are played by the engine synthesiser (public/engine-worklet.js:
+// its blip, crackle, bark, yank and over inputs); the clunks and the chirp are short sounds of their own.
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+const CUT_HEARD = 0.1;     // s: how long an upshift's ignition cut is heard
 
 export function createShiftSound() {
   let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0;
-  // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, and `clunk`
-  // (strength 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts
+  let lastT = 0, lastRpm = 0, wasCut = false, hold = 0, yankId = 0, yank = 0, cutAt = -9;
+  // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
+  // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
+  // (strength) when the tyres chirp on an upshift
   function step(car, t) {
-    const s = car.spec, e = s.engine, v = Math.hypot(car.vx, car.vy);
-    let clunk = null;
+    const s = car.spec, e = s.engine, v = Math.hypot(car.vx, car.vy), dt = Math.min(0.1, Math.max(0, t - lastT));
+    let clunk = null, chirp = 0;
+    lastT = t;
+    // an upshift under power: the revs hang, sinking at the flywheel's rate, while the clutch is out
+    const cut = !!car.shiftCut;
+    if (cut && !wasCut) { hold = Math.max(car.rpm, lastRpm); cutAt = t; }
+    if (cut) hold = Math.max(car.rpm, hold - (e.revDrop ?? 3200) * dt);
+    wasCut = cut;
+    lastRpm = car.rpm;
     if (lastGear && car.gear < lastGear && !car.reversing && v > 3 && car.throttle < 0.5) {
       const byHand = car.manual < 0;
       run = t - at < 0.6 ? run + 1 : 0;           // another one straight after the last: Z Z Z
@@ -41,12 +55,17 @@ export function createShiftSound() {
     if (bite > lastBite + 0.05 && !clunk) {
       bAt = t; bk = Math.min(1, bite * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
       clunk = { k: bk, after: 0, up: true };
+      // how far above the new gear's speed the revs still are: the gear wrenches them down
+      yank = Math.max(0, hold - car.rpm); yankId++;
+      // (a hard one, in a low gear on paving, chirps the driven tyres)
+      if (car.gear <= 3 && car.surface === 1) chirp = bk * clamp(yank / e.redline * 6, 0, 1) * (car.gear === 2 ? 1 : 0.6);
     }
+    hold = cut ? hold : 0;
     lastBite = bite;
     lastGear = car.reversing ? 1 : car.gear;
-    // the blip: wide open in 30 ms, held for 90, then shut over about 100
+    // the blip: wide open in 35 ms, held for 125, then shut over about 130
     const since = t - at;
-    const shape = since < 0.03 ? since / 0.03 : since < 0.12 ? 1 : Math.exp(-(since - 0.12) / 0.07);
+    const shape = since < 0.035 ? since / 0.035 : since < 0.16 ? 1 : Math.exp(-(since - 0.16) / 0.09);
     const blip = since < 0.6 ? k * shape : 0;
     const crackle = since < 1.8 ? k * clamp((since - 0.08) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
     const sb = t - bAt, bark = sb < 0.8 ? bk * Math.exp(-sb / 0.16) : 0;
@@ -54,12 +73,21 @@ export function createShiftSound() {
     // (the revs flare past the lower gear's, up to 16 %, short of the redline)
     let rpm = Math.min(car.rpm * (1 + 0.16 * blip), Math.max(car.rpm, e.redline * 0.985));
     if (over > 0) rpm = Math.max(rpm, e.redline * (1 + 0.035 * over));
+    if (cut) rpm = Math.max(rpm, hold);
     rpm = Math.min(rpm, e.redline * 1.04);
     // punch: how much of the engine to send round the compressor as well, so the blip and the bark hit
     // instead of being pressed down with the rest
-    return { rpm, blip, crackle, bark, over, clunk, punch: Math.max(0.9 * bark, 0.5 * blip) };
+    // The ignition is only heard cut for the first 0.1 s of an upshift, however long the change takes: the
+    // F40 and the Carrera GT take a quarter of a second and their sound died for too long (Martin
+    // 2026-11-19). The rest of the change the engine runs on part throttle, revs hanging, until it bites.
+    const cutSound = cut && t - cutAt < CUT_HEARD;
+    const throttle = cut && !cutSound ? car.throttle * 0.4 : car.throttle;
+    return { rpm, throttle, shift: cutSound, blip, crackle, bark, over, clunk, chirp, yank, yankId, punch: Math.max(1.2 * bark, 0.65 * blip) };
   }
-  return { step, reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; } };
+  return {
+    step,
+    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; },
+  };
 }
 
 // the clunk: a low shunt through the driveline and the clack of the gear going in (up: an upshift
@@ -95,4 +123,18 @@ export function clunk(ctx, noise, dest, k, t = ctx.currentTime + 0.005, up = fal
   gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
   src.connect(f).connect(gn).connect(dest);
   src.start(t, Math.random() * Math.max(0.01, noise.duration - 0.1)); src.stop(t + 0.05);
+}
+
+// the driven tyres chirping as an upshift bites hard: a short squeal, falling a little in pitch
+export function chirp(ctx, noise, dest, k, t = ctx.currentTime + 0.005) {
+  if (k <= 0.03 || !noise) return;
+  const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  src.buffer = noise; f.type = 'bandpass'; f.Q.value = 4;
+  f.frequency.setValueAtTime(1750, t);
+  f.frequency.exponentialRampToValueAtTime(1250, t + 0.14);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.09 * k, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  src.connect(f).connect(g).connect(dest);
+  src.start(t, Math.random() * Math.max(0.01, noise.duration - 0.3)); src.stop(t + 0.2);
 }

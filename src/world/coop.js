@@ -8,7 +8,7 @@
 // Everything is measured in the shop's own frame: e metres along the front (east +), n metres north, from the
 // front's west corner; y above the paving at the door. The car park is square to this frame.
 import * as THREE from 'three';
-import { streetKit, addHouseColours } from './streetkit.js';
+import { streetKit, addHouseColours, GRASS } from './streetkit.js';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
 
@@ -21,7 +21,7 @@ const CAN = { s0: 9.0, s1: 35.3, y0: 3.17, y1: 3.78, d: 2.25 };      // the entr
 const DOOR = { s0: 12.6, s1: 16.5, y1: 2.95 };
 const COL = {
   navy: 0x323a5a, navyDark: 0x262c44, white: 0xf1eee8, concrete: 0xb9b6b8, roof: 0xdcdde3, cap: 0x23283a, metal: 0xaeb2bc,
-  frame: 0x23252b, black: 0x1b1c20, orange: 0xf0742a, kerb: 0xd9d5d2, grass: 0x8fd07a, wood: 0xc9a274, letter: 0xf6f5f2,
+  frame: 0x23252b, black: 0x1b1c20, orange: 0xf0742a, kerb: 0xd9d5d2, grass: GRASS.hex, wood: 0xc9a274, letter: 0xf6f5f2,
 };
 // the footpath between the bank and the car park leans with the road: its centre line at n
 const pathE = (n) => -3.0 + (n + 10) * 0.064;

@@ -13,7 +13,7 @@
 // Street names are never painted on the ground (Martin, 18 Nov).
 import * as THREE from 'three';
 import DATA from './lai.json';
-import { paverTex } from '../world/streetkit.js';
+import { paverTex, grassTex } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
 
 const BOX = [1370, 2296, 1515, 2440];
@@ -59,51 +59,6 @@ export function laiClear(data, out) {
       if ((a[k] === ZEBRA && s) || s === 'road') out.add(`${key}:${k / data.stride}`);
     }
   }
-}
-
-// the verges' grass (Martin, 19 Nov): darker than the street lawns, with soft clumps of darker and
-// sun-yellowed grass, short blades and a few clover and daisy dots; 512 px tile = 10 m, seamless
-function vergeTex() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d'), w = 512;
-  let seed = 23;
-  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  g.fillStyle = '#6ea85a'; g.fillRect(0, 0, w, w);
-  const blob = (x, y, rad, col) => {
-    for (const ox of [-w, 0, w]) for (const oy of [-w, 0, w]) {
-      const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
-      gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
-    }
-  };
-  const clumps = ['rgba(78,138,66,0.55)', 'rgba(92,152,74,0.5)', 'rgba(140,186,96,0.45)', 'rgba(168,184,98,0.35)', 'rgba(70,124,72,0.5)'];
-  for (let k = 0; k < 70; k++) blob(r() * w, r() * w, 20 + r() * 70, clumps[(r() * clumps.length) | 0]);
-  const blades = ['rgba(64,118,58,0.7)', 'rgba(98,158,80,0.6)', 'rgba(132,182,100,0.55)', 'rgba(84,140,70,0.65)', 'rgba(158,188,108,0.45)'];
-  for (let k = 0; k < 14000; k++) {
-    const x = r() * w, y = r() * w, l = 2 + r() * 5, a = -Math.PI / 2 + (r() - 0.5) * 1.2;
-    g.strokeStyle = blades[(r() * blades.length) | 0]; g.lineWidth = 1 + r() * 0.8;
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
-  }
-  for (let k = 0; k < 160; k++) {                       // clover patches: darker round leaves
-    const x = r() * w, y = r() * w;
-    g.fillStyle = 'rgba(60,112,62,0.6)';
-    for (let q = 0; q < 6; q++) { g.beginPath(); g.arc(x + (r() - 0.5) * 8, y + (r() - 0.5) * 8, 1.6 + r(), 0, Math.PI * 2); g.fill(); }
-  }
-  const flowers = ['rgba(255,255,250,0.9)', 'rgba(255,236,150,0.9)', 'rgba(222,196,240,0.85)'];
-  for (let k = 0; k < 110; k++) { g.fillStyle = flowers[(r() * 3) | 0]; g.beginPath(); g.arc(r() * w, r() * w, 0.9 + r() * 0.9, 0, Math.PI * 2); g.fill(); }
-  // muted toward the olive-brown of the orthophoto grass around it, so the edge does not jump out
-  const img = g.getImageData(0, 0, w, w), d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const l = 0.3 * d[i] + 0.55 * d[i + 1] + 0.15 * d[i + 2];
-    d[i] = l + (d[i] - l) * 0.5 + 8; d[i + 1] = l + (d[i + 1] - l) * 0.5 - 4; d[i + 2] = l + (d[i + 2] - l) * 0.5 - 6;
-  }
-  g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  return t;
 }
 
 export function createLai(world, group) {
@@ -158,7 +113,7 @@ export function createLai(world, group) {
     built = true;
     const sett = paverTex([224, 200, 212], 11);
     sett.repeat.set(1, 2);                                   // square 10 cm setts from the 20 x 10 cm bond
-    add(drape(DATA.areas.grass, 0.06, 10), mat({ map: vergeTex() }, -3));
+    add(drape(DATA.areas.grass, 0.06, 10), mat({ map: grassTex() }, -3));    // the verges: the shared grass (grassTex in streetkit.js) began here
     add(drape(DATA.areas.paver, 0.075, 1.6), mat({ map: paverTex([208, 206, 218], 3) }, -4));
     add(drape(DATA.areas.setts, 0.075, 1.6), mat({ map: sett }, -4));
     add(drape(DATA.areas.cycle, 0.07, 1), mat({ color: COL.cycle }, -4));

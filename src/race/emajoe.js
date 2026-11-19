@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { drapeGeometry } from '../world/drape.js';
-import { paverTex } from '../world/streetkit.js';
+import { paverTex, GRASS } from '../world/streetkit.js';
 import { breakableShelter } from '../world/shelter.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
@@ -44,7 +44,7 @@ const HIGH = { stone: 1.15, render: 0.95, cope: 0.13, thick: 0.62 };
 
 const COL = {
   render: 0xf3e6df, cope: 0xd98d7f, brick: 0xd99282, postCap: 0xb9bac8, iron: 0x3f4a55,
-  white: 0xfaf8ff, yellow: 0xffd768, pave: 0xf0c9c0, paveRGB: [226, 208, 218], kerb: 0xdcd8e4, kerbFace: 0xaaa5b8, bank: 0x86a86e,
+  white: 0xfaf8ff, yellow: 0xffd768, pave: 0xf0c9c0, paveRGB: [226, 208, 218], kerb: 0xdcd8e4, kerbFace: 0xaaa5b8, bank: GRASS.hex,
   frame: 0x464b59, roof: 0x575c6b, bench: 0xa98670, pole: 0x9a9eab,
 };
 

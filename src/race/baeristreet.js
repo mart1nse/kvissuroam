@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { BOX, rnd } from './landmarks.js';
-import { streetKit, wallOf, setHouseColours, paverTex } from '../world/streetkit.js';
+import { streetKit, wallOf, setHouseColours, lawnTex } from '../world/streetkit.js';
 import { facade } from './vallistreet.js';
 import { drapeGeometry } from '../world/drape.js';
 
@@ -125,7 +125,30 @@ export function baeriStreetWalls(walls) {
 
 // the iron fence round the Vallikraavi bend: lap indexes, metres outside the road edge on the left
 const FENCE = { i0: 243, i1: 286, off: 4.1 };
-const HALF = 1.6;                                        // half width of the brick cycle path on the left of Baeri (TUNING)
+// the left side of Baeri past the tennis courts, from Martin's Street View (19 Nov): granite kerb, a strip of
+// grass with the trees in it, then a grey brick footpath with an odd red brick. gap: grass width (m) beyond
+// the kerb, widening down the hill
+const SIDE = { i0: 471, i1: 541, kerb: 0.2, path: 2.6, gap: [[471, 0.9], [490, 1.2], [505, 2.0], [516, 2.5], [541, 2.5]] };
+const sideGap = (i) => {
+  const g = SIDE.gap;
+  for (let k = 1; k < g.length; k++) if (i <= g[k][0]) { const [i0, a] = g[k - 1], [i1, b] = g[k]; return a + (b - a) * Math.max(0, i - i0) / (i1 - i0); }
+  return g[g.length - 1][1];
+};
+// grey pavers (a few shades), roughly one in ten a faded red; 16 rows of 20 x 10 cm bricks to a 1.6 m tile
+function footpathTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'), r = rnd(23);
+  g.fillStyle = '#8f8b92'; g.fillRect(0, 0, 256, 256);
+  for (let row = 0; row < 16; row++) for (let k = -1; k < 8; k++) {
+    const red = r() < 0.1, v = 0.9 + r() * 0.16;
+    const [R, G, B] = red ? [196, 128, 130] : [184, 180, 186];
+    g.fillStyle = `rgb(${Math.min(255, R * v) | 0},${Math.min(255, G * v) | 0},${Math.min(255, B * v) | 0})`;
+    g.fillRect(k * 32 + (row % 2) * 16 + 1, row * 16 + 1, 30, 14);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+}
 
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
 // lantern posts, lamp poles and signs: all knockable props
@@ -228,6 +251,26 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     return [a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat];
   };
   const hw = (i) => track.HW[Math.round(i)];
+  // trees standing on the new footpath on the left of Baeri move just behind it, onto the bank
+  if (world.addTreeMove) {
+    const mid = Math.round((SIDE.i0 + SIDE.i1) / 2), c = track.P[mid];
+    world.addTreeMove((x, z) => {
+      if (Math.hypot(x - c[0], z - c[1]) > 90) return null;
+      const n = track.nearest(x, z, mid);
+      if (!n || n.i < SIDE.i0 || n.i > SIDE.i1) return null;
+      const [tx, tz] = track.tan[n.i], dx = x - track.P[n.i][0], dz = z - track.P[n.i][1];
+      const lat = -dx * tz + dz * tx, along = dx * tx + dz * tz, out = -lat - hw(n.i), g = sideGap(n.i);
+      if (lat > 0 || out < g - 0.3 || out > g + SIDE.path + 1.6) return null;
+      const want = -(hw(n.i) + g + SIDE.path + 1.4);
+      return [track.P[n.i][0] + tx * along - tz * want, track.P[n.i][1] + tz * along + tx * want];
+    });
+  }
+  // the avenue: broadleaved trees down the middle of the grass strip, about every 13 m
+  if (world.addTrees) {
+    const row = [];
+    for (let i = SIDE.i0 + 3, k = 0; i < SIDE.i1 - 2; i += 6, k++) row.push([...T(i, -(hw(i) + (SIDE.kerb + sideGap(i)) / 2)), 16 + (k % 3) * 1.7, 8 + (k % 2), 0]);
+    world.addTrees(row);
+  }
   // the map's trees on the verge and pavement outside the Vallikraavi bend stand just behind the fence
   // instead (Martin, 19 Nov)
   if (world.addTreeMove) {
@@ -447,8 +490,8 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     const pave = (i0, i1, a, b, kind = 'paver') => { for (let i = i0; i < i1; i++) K.ribbon(F, i, i + 1, (a(i) + a(i + 1)) / 2, (b(i) + b(i + 1)) / 2, kind); };
     // a see-through pastel lane on the ground along a line of [x, z] points: fades in and out over `fade`
     // metres at the ends and over the outer 0.25 m at the sides, so it lies on the paving like paint
-    const soft = { paint: [], brick: [] };
-    const softLane = (line, half, fade = 4, list = soft.paint) => {
+    const soft = { paint: [], brick: [], grass: [] };
+    const softLane = (line, half, fade = 4, list = soft.paint, edge = 0.25) => {
       const pts = [];                                            // resampled every 0.6 m
       for (let k = 0; k < line.length - 1; k++) {
         const [ax, az] = line[k], [bx, bz] = line[k + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.6));
@@ -457,7 +500,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       pts.push(line[line.length - 1]);
       let len = 0; const at = pts.map((p0, k) => (len += k ? Math.hypot(p0[0] - pts[k - 1][0], p0[1] - pts[k - 1][1]) : 0));
       const ease = (u) => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
-      const across = [[-half, 0], [-half + 0.25, 1], [half - 0.25, 1], [half, 0]];
+      const across = [[-half, 0], [-half + edge, 1], [half - edge, 1], [half, 0]];
       const rows = pts.map((p0, k) => {
         const a = pts[Math.max(0, k - 1)], b = pts[Math.min(pts.length - 1, k + 1)];
         let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
@@ -780,8 +823,18 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       softLane([...Array(17)].map((_, k) => T(540 + k * 0.6, -(hw(540 + k * 0.6) - 0.95))), 0.75, 2.5);
       for (let i = 541; i < 549; i += 0.5) for (const o of [0.2, 1.55]) band(paint.white, i, i + 0.25, () => -(hw(i) - o), () => -(hw(i) - o - 0.15), 0.25);
       for (const side of [-1, 1]) band(paint.white, 556, 614, (i) => side * (hw(i) - 1.25), (i) => side * (hw(i) - 1.1));
-      // the red cycle path on the left lies on the map's own footpath (the grey strip), not beside it
-      softLane([[863.2, 2888.5], [863, 2870], [862, 2855], [861, 2847], [848, 2809], [844, 2797], [844, 2791], [843, 2788], [837, 2782], [837, 2769], [835.6, 2759]], HALF, 5, soft.brick);
+      // the left side past the tennis courts: granite kerb, grass strip (the trees moved into it at load), grey brick footpath
+      band(paint.kerb, SIDE.i0, SIDE.i1, (i) => -hw(i), (i) => -(hw(i) + SIDE.kerb));
+      pave(SIDE.i0, SIDE.i1, (i) => -(hw(i) + SIDE.kerb), (i) => -(hw(i) + sideGap(i)), 'verge');
+      {
+        const line = [];
+        for (let i = SIDE.i0; i <= SIDE.i1 - 1; i += 0.5) line.push(T(i, -(hw(i) + sideGap(i) + SIDE.path / 2)));
+        softLane(line, SIDE.path / 2, 2.5, soft.brick, 0.05);
+        // grass along the far side of the footpath, fading out into the bank, so the map's grey path under it is gone
+        const out = [];
+        for (let i = SIDE.i0; i <= SIDE.i1 - 1; i += 0.5) out.push(T(i, -(hw(i) + sideGap(i) + SIDE.path + 0.6)));
+        softLane(out, 1.2, 2.5, soft.grass, 0.9);
+      }
       pave(528, 614, (i) => hw(i) + 0.2, (i) => hw(i) + 2.4, 'red');
       { const [x, z] = T(533.4, hw(533) + 3.3); K.box(x, z, 0.34, 0.5, 0.26, COL.bin, 0, 0.75); }
     }
@@ -793,18 +846,19 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       deco(paint.red, 0.08, 1, { color: 0xd98a80 }, -6);
       deco(paint.white, 0.1, 1, { color: 0xf6f3fa }, -7);
     }
-    const softMesh = (list, opts, alpha) => {
+    const softMesh = (list, opts, alpha, f = -6, order = 1) => {
       if (!list.length) return;
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(list.flatMap((v) => v.slice(0, 3)), 3));
       g.setAttribute('color', new THREE.Float32BufferAttribute(list.flatMap((v) => [1, 1, 1, v[3] * alpha]), 4));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(list.flatMap((v) => [v[4], v[5]]), 2));
       g.setAttribute('normal', new THREE.Float32BufferAttribute(list.flatMap(() => [0, 1, 0]), 3));
-      const m = new THREE.MeshLambertMaterial({ ...opts, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
-      const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.renderOrder = 1; group.add(mesh);
+      const m = new THREE.MeshLambertMaterial({ ...opts, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f });
+      const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.renderOrder = order; group.add(mesh);
     };
     softMesh(soft.paint, { color: 0xf59aa8 }, 0.72);
-    softMesh(soft.brick, { map: paverTex([206, 128, 132], 5) }, 0.85);   // darker red brick than the far pavement, a little see-through
+    softMesh(soft.grass, { map: lawnTex(), color: 0x9fe07c }, 1, -5, 1);
+    softMesh(soft.brick, { map: footpathTex() }, 1, -6, 2);
     K.finish();
     if (solids.length) world.addSolids(solids);
     for (const [g, m] of extra) { const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); }

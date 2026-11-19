@@ -9,12 +9,13 @@ const CENTRE = [1750, 3120];
 
 // before the road markings are built: Küüni round Kaubamaja's west corner is a pedestrian street, the
 // generated lane lines are left off where the red cross lies (Martin, 19 Nov)
+const KUUNI_END = -216;      // the red brick ends a few metres before Poe (roof-frame a, see redCross)
 export function keskusTeeVectors(vectors) {
   const W = [1659.6, 3088.7], UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];
   const prev = vectors.markSkip;
   vectors.markSkip = (x, z) => {
     const a = (x - W[0]) * UA[0] + (z - W[1]) * UA[1], b = (x - W[0]) * UB[0] + (z - W[1]) * UB[1];
-    return (a > -88 && a < 86 && b > -22 && b < 0) || (a > -26 && a < 1 && b > -27 && b < 8) || (prev ? prev(x, z) : false);
+    return (a > KUUNI_END - 2 && a < 86 && b > -22 && b < 0) || (a > -26 && a < 1 && b > -27 && b < 8) || (prev ? prev(x, z) : false);
   };
 }
 
@@ -61,11 +62,13 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
       const up = (z2 - z1) * (x3 - x1) - (x2 - x1) * (z3 - z1) > 0;
       for (const v of up ? [p, q, r] : [p, r, q]) put(v);
     };
+    // a piece from a0 to a1 between b0 and b1; an edge given as [at a0, at a1] narrows or widens on the way
     const rect = ({ a0, a1, b0, b1 }) => {
-      const na = Math.ceil(a1 - a0), nb = Math.ceil(b1 - b0);
+      const e0 = [].concat(b0), e1 = [].concat(b1), edge = (e, t) => (e.length > 1 ? e[0] + (e[1] - e[0]) * t : e[0]);
+      const na = Math.ceil(a1 - a0), nb = Math.ceil(Math.max(edge(e1, 0) - edge(e0, 0), edge(e1, 1) - edge(e0, 1)));
+      const q = (i, j) => { const t = i / na, lo = edge(e0, t), hi = edge(e1, t); return [a0 + (a1 - a0) * t, lo + (hi - lo) * j / nb]; };
       for (let i = 0; i < na; i++) for (let j = 0; j < nb; j++) {
-        const A0 = a0 + (a1 - a0) * i / na, A1 = a0 + (a1 - a0) * (i + 1) / na, B0 = b0 + (b1 - b0) * j / nb, B1 = b0 + (b1 - b0) * (j + 1) / nb;
-        tri([A0, B0], [A1, B0], [A0, B1]); tri([A1, B0], [A1, B1], [A0, B1]);
+        tri(q(i, j), q(i + 1, j), q(i, j + 1)); tri(q(i + 1, j), q(i + 1, j + 1), q(i, j + 1));
       }
     };
     // an inner corner at c, filling towards (sa, sb): the square off the corner less the circle's quarter
@@ -78,6 +81,8 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
       }
     };
     rect(BAR); ARMS.forEach(rect);
+    // and on along Küüni past the start/finish line, narrowing to the street, almost to Poe (Martin, 19 Nov)
+    rect({ a0: KUUNI_END, a1: BAR.a0, b0: [-17.6, BAR.b0], b1: [-2.6, BAR.b1] });
     fillet([ARMS[0].a0, BAR.b0], -1, -1);       // by the office building
     fillet([ARMS[0].a1, BAR.b0], 1, -1);        // by the kiosks
     fillet([ARMS[1].a0, BAR.b1], -1, 1);        // by the sculptures
@@ -192,7 +197,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([[1650, 3080], [1600, 3050], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1650, 3080], [1600, 3050], [1500, 2940], [1550, 2990], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

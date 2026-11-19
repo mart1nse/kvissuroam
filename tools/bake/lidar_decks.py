@@ -10,7 +10,9 @@ data marks as elevated (e: 1 in vectors.json), followed some way past both ends,
     structure really is and at its real height, with piers where no road runs below;
   - the stretches on a walled ramp up to it (road surface well above the terrain of the game):
     a deck with solid walls down to the ground (wall: 1).
-They replace the dry-land spans that terrain.py made (k: 1 without w). Where a river bridge still runs over land at its ends,
+They replace the dry-land spans that terrain.py made (k: 1 without w). A river bridge that the map starts in the junction
+before it is cut back to where the scan finds the bridge, and the street there is laid to the scanned ground (trim_land_ends).
+Where a river bridge still runs over land at its ends,
 the ground under it is raised into an earth bank (fill_ends), so the deck does not start as a bare slab over
 the slope down to the water. Road lines that run along a
 new deck are marked e: 1, so their lane lines are drawn on it. A new deck over water keeps the name and the look (w, n, b) of the bridge it replaces. Tunnel lids (k: 0) are laid on the first run and kept on later ones.
@@ -588,6 +590,133 @@ def water(x, z):
     return out
 
 
+def set_node(x, z, h):
+    """Change one node of the terrain cache (a node on a sector edge is in both), so later steps see it."""
+    fx, fz = (x - G0) / S, (z - G0) / S
+    for sx in {int(np.floor(fx)), int(np.floor(fx - 1e-9))}:
+        for sz in {int(np.floor(fz)), int(np.floor(fz - 1e-9))}:
+            H = sector(sx, sz)
+            c, r = int(round((x - G0 - sx * S) / 2)), int(round((z - G0 - sz * S) / 2))
+            if H is not None and 0 <= c < HN and 0 <= r < HN:
+                H[r, c] = h
+
+
+def ground_at(x, z):
+    """The ground the laser scan saw, as a 3 x 3 m median (no single kerb or drain): ground class, else
+    unclassified, else bridge deck."""
+    x, z = np.atleast_1d(np.asarray(x, float)), np.atleast_1d(np.asarray(z, float))
+    out = np.full(x.shape, np.nan)
+    for name in ('g', 'u', 'b'):
+        v = np.stack([lidar(name, x + i, z + j) for i in (-1, 0, 1) for j in (-1, 0, 1)])
+        with np.errstate(all='ignore'):
+            m = np.where(np.isfinite(v).sum(0) >= 3, np.nanmedian(v, 0), np.nan)
+        out = np.where(np.isfinite(out), out, m)
+    return out
+
+
+def trim_land_ends(decks):
+    """The map data often starts a river bridge in the middle of the junction before it (Kroonuaia sild
+    at Emajõe), so its deck rose out of the street as a slab with a dark side. The deck is cut back to
+    where the laser scan finds the bridge itself (class 17) under its centre line, if it lay on the
+    ground anyway over the part cut off; that part of the street, its corners and a few metres round it
+    are laid to the ground the scan saw, rising to the end of the deck. Returns the terrain edits."""
+    import shapely
+    changed = {}
+    for d in decks:
+        if not d.get('w') or d.get('wall'):
+            continue
+        pts = d['pts']
+        P = np.array([q[:2] for q in pts])
+        n = len(P)
+        if n < 10:
+            continue
+        gx, gz = np.gradient(P[:, 0]), np.gradient(P[:, 1])
+        gl = np.hypot(gx, gz) + 1e-9
+        o = np.array([-1.0, 0.0, 1.0])
+        has_b = np.isfinite(lidar('b', P[:, :1] - gz[:, None] / gl[:, None] * o, P[:, 1:] + gx[:, None] / gl[:, None] * o)).sum(1) >= 2
+        wet = water(P[:, 0], P[:, 1])
+        hc = np.array([q[2 + (len(q) - 3) // 2] for q in pts])
+        gnd = ground_at(P[:, 0], P[:, 1])
+        a, b = 0, n - 1
+        while a < n and not has_b[a] and not wet[a]:
+            a += 1
+        while b > a and not has_b[b] and not wet[b]:
+            b -= 1
+        cut = []
+        for lo, hi in ((0, a), (b + 1, n)):
+            if hi - lo < 1:
+                cut.append(False)
+                continue
+            g = gnd[lo:hi]
+            ok = np.isfinite(g)
+            cut.append(ok.mean() >= 0.5 and bool((np.abs(g[ok] - hc[lo:hi][ok]) < 0.4).all()))
+        a = a if cut[0] else 0
+        b = b if cut[1] else n - 1
+        if (a == 0 and b == n - 1) or b - a < 6:
+            continue
+        ws = np.array(d.get('ws') or [d['hw']] * n)
+        parts = ([(0, a, a)] if a > 0 else []) + ([(b, n - 1, b)] if b < n - 1 else [])
+        print('river bridge cut back to the laser scan: %-22s %d + %d stations, now (%.0f, %.0f) to (%.0f, %.0f)' % (
+            d.get('n', ''), a, n - 1 - b, P[a, 0], P[a, 1], P[b, 0], P[b, 1]))
+        off_cuts = []
+        for lo, hi, end in parts:
+            rec = {'pts': pts[lo:hi + 1], 'hw': d['hw'], 'ws': list(ws[lo:hi + 1])}
+            off_cuts.append((ribbon_poly(rec), end))
+        d['pts'] = pts[a:b + 1]
+        if d.get('ws'):
+            d['ws'] = d['ws'][a:b + 1]
+            d['hw'] = round(float(max(d['ws'])), 2)
+        d['_poly'] = ribbon_poly(d)
+        for poly, end in off_cuts:
+            x0, z0, x1, z1 = poly.buffer(4).bounds
+            nx0, nz0 = np.ceil((x0 - G0) / 2) * 2 + G0, np.ceil((z0 - G0) / 2) * 2 + G0
+            NX, NZ = np.meshgrid(np.arange(nx0, x1, 2.0), np.arange(nz0, z1, 2.0))
+            NX, NZ = NX.ravel(), NZ.ravel()
+            # along: metres into the deck from its new end (negative: in the street before it); side: to the left
+            j = end + 1 if end == a else end - 1
+            ex, ez = P[end]
+            tx, tz = P[j] - P[end]
+            tl = np.hypot(tx, tz) + 1e-9
+            tx, tz = tx / tl, tz / tl
+            along = (NX - ex) * tx + (NZ - ez) * tz
+            side = -(NX - ex) * tz + (NZ - ez) * tx
+            if end != a:                                       # the deck runs the other way: its left is on our right
+                side = -side
+            half = ws[end]
+            under = np.abs(side) < half + 0.3
+            sel = shapely.contains_xy(poly.buffer(4), NX, NZ) & ~(under & (along > 2.5))
+            NX, NZ, along, side, under = NX[sel], NZ[sel], along[sel], side[sel], under[sel]
+            if not len(NX):
+                continue
+            out = np.array([poly.distance(Point(x, z)) for x, z in zip(NX, NZ)])
+            w = 1 - np.clip((out - 0.5) / 3.5, 0, 1) ** 2 * (3 - 2 * np.clip((out - 0.5) / 3.5, 0, 1))
+            want = ground_at(NX, NZ)
+
+            def deck_y(k, sd):                                 # deck top at station k, sd metres to its left
+                q = pts[k]
+                u = np.clip(sd / ws[k], -1, 1)
+                return q[3] + (q[2] - q[3]) * np.maximum(u, 0) + (q[4] - q[3]) * np.maximum(-u, 0)
+            # the first metres of the deck lie just under the ground, so its end and its sides there are
+            # buried and the street runs on onto it without a step; before it, the street rises to it
+            top = deck_y(end, np.clip(side, -half, half)) + 0.04
+            step = np.hypot(*(P[j] - P[end])) + 1e-9
+            on = deck_y(end, side) + (deck_y(j, side) - deck_y(end, side)) * np.clip(along / step, 0, 1) + 0.04
+            ramp = under & (along > -4) & (along <= 0) & np.isfinite(want)
+            want = np.where(ramp, want + (top - want) * (1 + along / 4), want)
+            want = np.where(under & (along > 0), on, want)
+            w = np.where(under & (along > -4), 1.0, w)
+            old = terrain(NX, NZ)
+            for x, z, h, o_, ww in zip(NX, NZ, want, old, w):
+                if not (np.isfinite(h) and np.isfinite(o_)):
+                    continue
+                v = o_ + (h - o_) * ww
+                if abs(v - o_) < 0.02:
+                    continue
+                changed[(float(x), float(z))] = float(v)
+                set_node(float(x), float(z), float(v))
+    return changed
+
+
 def fill_ends(decks, changed):
     """A river bridge comes off the bank on an earth ramp. Where the deck still runs over land at its two
     ends, the terrain under it is raised to just below the deck, with a bank falling 1:1 beside it, so that
@@ -640,6 +769,10 @@ def fill_ends(decks, changed):
         dw = ndimage.distance_transform_edt(~water(WX.ravel(), WZ.ravel()).reshape(WX.shape))
         dw = dw[np.clip(np.round(NZ - (z0 - 20)).astype(int), 0, WX.shape[0] - 1), np.clip(np.round(NX - (x0 - 20)).astype(int), 0, WX.shape[1] - 1)]
         for x, z, t, o, w, e in zip(NX, NZ, top, old, dw, out):
+            k = (float(x), float(z))
+            # on a second run the bank of the first is already in the terrain, and repair_under has just
+            # taken it down again where it runs under the deck: from that ground, the bank goes back up
+            o = min(o, changed.get(k, o))
             if w < 1.5 or not np.isfinite(o):
                 continue
             hits = [i for i in tree.query(Point(x, z).buffer(8)) if under[i].distance(Point(x, z)) < reach[i]]
@@ -648,9 +781,8 @@ def fill_ends(decks, changed):
                 continue                                       # a road or path past or under the bridge end
             t = t - (e * 0.25 if hits else e)                  # the bank 1:1, a path on it 1:4
             t = min(t, o + (w - 1.5) / 1.5)
-            if t - o < 0.1:
+            if t - o < 0.1 and k not in changed:
                 continue
-            k = (float(x), float(z))
             changed[k] = max(changed.get(k, -1e9), float(t))
             n += 1
     return n
@@ -774,6 +906,7 @@ def main():
                 d['kind'], ch['name'][:34], ch['type'], d['x'][0], d['z'][0], d['x'][-1], d['z'][-1], len(d['x']), d['hw'].min(), d['hw'].max(),
                 d['h'][:, 1].min(), d['h'][:, 1].max(), d['clear'].min(), d['clear'].max()))
     print('\n'.join(log))
+    trimmed = trim_land_ends(decks)
     # the old dry-land spans that a new deck replaces
     area = unary_union([d['_poly'] for d in decks]) if decks else Polygon()
     kept = []
@@ -788,6 +921,8 @@ def main():
     piers(decks)
     marked = mark_roads(decks)
     changed = repair_under(decks)
+    changed.update({k: v for k, v in trimmed.items() if k not in changed})
+    print('terrain nodes laid to the scanned ground where river bridges were cut back:', len(trimmed))
     print('terrain nodes raised under river bridge ends:', fill_ends(decks, changed))
     print('made-up slopes down from a bridge end (x, z, drop):', landings)
     print(len(decks), 'new decks;', len(vec['decks']) - len(kept), 'old spans replaced;', marked, 'road pieces marked;', len(changed), 'terrain nodes repaired')

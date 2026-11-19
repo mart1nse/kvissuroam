@@ -94,10 +94,15 @@ const FRAG = /* glsl */`
     float glitch = step(0.86, hash(slot)) * step(abs(uv.y - hash(slot + 3.1)), 0.05);
     uv.x += glitch * (hash(slot + 7.7) - 0.5) * 0.06;
     vec3 c = texture2D(map, uv).rgb;
-    float scan = 0.78 + 0.22 * sin(uv.y * 900.0 - uTime * 9.0);
+    float scan = 0.86 + 0.14 * sin(uv.y * 900.0 - uTime * 9.0);
     float sweep = smoothstep(0.0, 0.04, 0.04 - abs(fract(uTime * 0.18) - uv.y)) * 0.6;
     float flick = 0.92 + 0.08 * sin(uTime * 23.0) * sin(uTime * 3.1);
-    gl_FragColor = vec4(c * (scan + sweep) * flick * uFade, 1.0);
+    // drawn over the scene rather than added to it: where the tubes are bright they cover what is behind
+    // (trees, sky) so the cyan-green holds; the soft glow only dims the background a little
+    float lum = max(c.r, max(c.g, c.b));
+    float k = (scan + sweep) * flick * uFade;
+    float a = clamp(lum * 1.6, 0.0, 0.94) * scan * uFade;      // the scan lines thin the picture rather than darken it
+    gl_FragColor = vec4(min(c * vec3(0.9, 1.0, 1.12) * 1.35, vec3(1.0)) * k, a);
   }`;
 
 export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6 }) {
@@ -114,7 +119,9 @@ export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6
   loadFont().then((ok) => { if (ok) { drawLogo(cv); tex.needsUpdate = true; } });
   const uniforms = { map: { value: tex }, uTime: { value: 0 }, uFade: { value: 1 } };
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false };
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, ...add }));
+  // premultiplied 'over': colour + background * (1 - alpha)
+  const over = { ...add, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor };
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, ...over }));
   board.position.y = lift + height / 2;
   board.renderOrder = 10;
   const turn = new THREE.Group();

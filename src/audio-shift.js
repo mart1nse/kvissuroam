@@ -21,10 +21,10 @@
 // The blip, crackle, bark, yank and over-rev are played by the engine synthesiser (public/engine-worklet.js:
 // its blip, crackle, bark, yank and over inputs); the clunks and the chirp are short sounds of their own.
 
-import { ENGINE_SOUNDS } from './engine-sounds.js';
-
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const CUT_HEARD = 0.1;     // s: how long an upshift's ignition cut is heard
+const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chirp (Martin 2026-11-19: a bit
+                           // less, in balance with the rev struggle)
 
 export function createShiftSound() {
   let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0;
@@ -55,9 +55,7 @@ export function createShiftSound() {
     // an upshift biting (by hand a touch harder)
     const bite = car.bite || 0;
     if (bite > lastBite + 0.05 && !clunk) {
-      // (kick: how hard this car's upshifts hit, src/engine-sounds.js)
-      const kick = ENGINE_SOUNDS[s.id]?.kick ?? 1;
-      bAt = t; bk = Math.min(1, bite * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm))) * kick;
+      bAt = t; bk = KICK * Math.min(1, bite * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
       clunk = { k: bk, after: 0, up: true };
       // how far above the new gear's speed the revs still are: the gear wrenches them down
       yank = Math.max(0, hold - car.rpm); yankId++;

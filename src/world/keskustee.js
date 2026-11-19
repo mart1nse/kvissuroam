@@ -7,6 +7,17 @@ import { roadFrame, streetKit } from './streetkit.js';
 const S = [1713.8, 3144.9], UB = [0.7189, -0.6951];      // Kaubamaja's south corner, along its Riia face towards the junction
 const CENTRE = [1750, 3120];
 
+// before the road markings are built: Küüni round Kaubamaja's west corner is a pedestrian street, the
+// generated lane lines are left off where the red cross lies (Martin, 19 Nov)
+export function keskusTeeVectors(vectors) {
+  const W = [1659.6, 3088.7], UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const a = (x - W[0]) * UA[0] + (z - W[1]) * UA[1], b = (x - W[0]) * UB[0] + (z - W[1]) * UB[1];
+    return (a > -88 && a < 86 && b > -22 && b < 0) || (a > -26 && a < 1 && b > -27 && b < 8) || (prev ? prev(x, z) : false);
+  };
+}
+
 export function createKeskusTee(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);

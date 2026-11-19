@@ -16,6 +16,7 @@
 //          turbo hiss. Without it their noise turns into a sharp hiss; quieter engines keep a brighter top.
 // edge:    0..1, how much sharper the front of each exhaust pulse is than its tail (loud pulses steepen in
 //          the pipe); rasp: level of the buzzy upper harmonics this gives (raspF Hz and up, raspDrive).
+// whistle: turbo whistle level (turbo cars), whistleF: its pitch scale (small turbos spin faster, higher).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -43,7 +44,7 @@ export const ENGINE_SOUNDS = {
     intake: 0.2, intakeF: 520, intakeQ: 1.3, tick: 0.09, tickF: 2600,
     jitter: 1.4, lope: 5, drive: 1.9, gain: 0.8, idleVol: 0.42,
     edge: 0.2, rasp: 0.1,
-    turbo: true, turboMuffle: 320, hiss: 0.035,
+    turbo: true, turboMuffle: 320, hiss: 0.035, whistle: 0.85, whistleF: 1.15,
   },
   // Honda R20A2: 2.0 SOHC 16-valve i-VTEC four, 1-3-4-2, 4-2-1 manifold (1+4, 2+3), quiet SUV silencing.
   crv: {
@@ -93,7 +94,7 @@ export const ENGINE_SOUNDS = {
     intake: 0.55, intakeF: 950, intakeQ: 1.1, tick: 0.06, tickF: 3000,
     jitter: 2.0, lope: 14, drive: 2.4, gain: 0.85, idleVol: 0.32,
     edge: 0.5, rasp: 0.4,
-    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05, smoothTop: true,
+    turbo: true, turboMuffle: 350, hiss: 0.03, pops: 0.05, smoothTop: true, whistle: 1, whistleF: 0.95,
   },
   // Porsche Carrera GT: 5.7 litre 68 degree V10 born as a Le Mans racing engine, firing order
   // 1-6-5-10-2-7-3-8-4-9. Each crankpin carries one cylinder of each bank, so the firing intervals alternate
@@ -123,7 +124,7 @@ export const ENGINE_SOUNDS = {
     intake: 0.3, intakeF: 600, intakeQ: 1.3, tick: 0.02, tickF: 4200,
     jitter: 1.2, lope: 9, drive: 1.7, gain: 0.8, idleVol: 0.3,
     edge: 0.4, rasp: 0.3,
-    turbo: true, turboMuffle: 220, hiss: 0.02,
+    turbo: true, turboMuffle: 220, hiss: 0.02, whistle: 0.5, whistleF: 1.1,
   },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy
@@ -151,6 +152,6 @@ export const ENGINE_SOUNDS = {
     intake: 0.25, intakeF: 380, intakeQ: 1.2, tick: 0.008, tickF: 3000,
     jitter: 0.8, lope: 5, drive: 1.4, gain: 0.95, idleVol: 0.38,
     edge: 0.15, rasp: 0.05,
-    turbo: true, turboMuffle: 180, hiss: 0.015,
+    turbo: true, turboMuffle: 180, hiss: 0.015, whistle: 0.35, whistleF: 0.7,
   },
 };

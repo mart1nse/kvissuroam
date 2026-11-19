@@ -9,6 +9,10 @@
 //
 // Run: NODE_PATH=$(npm root -g) node tools/engine-space-demo.mjs <outdir> [carIds] [--worklet=<old worklet>] [--dry]
 //   writes <outdir>/<id>.wav (stereo). --dry leaves the space out (with --worklet: the "before" clip).
+//   --turbo: a run with lifts on boost (a long one, quick ones, a coast) and the turbo sounds as audio.js
+//   plays them: blow-off and upshift chirps from src/audio-turbo.js, the whistle in the synth.
+//   --turbo=old: the turbo sounds before that (a sine whistle and a single pssh), for the "before" clip
+//   (with --worklet= the synth from before the whistle moved into it).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -29,6 +33,7 @@ const wl = resolve(val('worklet') || resolve(root, 'public/engine-worklet.js'));
 const dry = !!flag('dry');
 // --mix=er,tail: scale the echoes and the tail (both 1 in the game), to hear them on their own
 const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').map(Number)) : {};
+const TURBO = flag('turbo') ? val('turbo') || 'new' : null;
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
 const SR = 48000, BLOCK = 128, FPS = 60, T = 22;
@@ -41,6 +46,11 @@ function script(t) {
   if (t < 15.5) return { up: 1 };
   if (t < 18.5) return { up: 0 };
   return { up: 0.3 };
+}
+// floored from standstill, a long lift on full boost, a quick lift, a lift-blip-lift, a coast, and again
+function turboScript(t) {
+  const on = [[0.8, 6], [7.3, 10], [10.35, 12.6], [13.05, 13.4], [16, 19.5]];
+  return { up: on.some(([a, b]) => t >= a && t < b) ? 1 : 0 };
 }
 
 // ---- the track and the obstacle field round it
@@ -106,18 +116,34 @@ for (const id of ids) {
   const total = T * SR, mono = new Float32Array(total), buf = new Float32Array(BLOCK);
   const poses = [];               // per 1/60 s: car x, z, yaw, camera x, y, z, right x, z
   let dist = 0, camDist = 6.4, camYaw = null, nextPose = 0;
+  // the turbo as audio.js hears it, at the game's 60 Hz: the whistle (for the old oscillator) and events
+  const tb = spec.engine.turbo, tWh = [], tEv = [];
+  let lastBoost = 0, lastPsh = -9, wasShift = false;
   for (let i = 0; i < total; i += BLOCK) {
-    const t = i / SR, s = script(t);
+    const t = i / SR, s = TURBO ? turboScript(t) : script(t);
     if (!s.hold) stepCar(car, { up: s.up }, flat, BLOCK / SR);
     let rpm = car.rpm, thr = car.throttle;
     if (s.hold) { rpm = s.up ? Math.min(spec.engine.idle + (t - 2) * 7000, 4200) : Math.max(spec.engine.idle, 4200 - (t - 2.5) * 4000); thr = s.up; }
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 });
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);
     dist += v * BLOCK / SR;
     if (t >= nextPose) {
       nextPose += 1 / FPS;
+      if (TURBO && tb) {
+        const b = car.boost || 0;
+        tWh.push(t, 1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), 0.016 * b * b * (tb.whistle ?? 1));
+        if (car.throttle > 0) {
+          lastBoost = Math.max(lastBoost * 0.99, b);
+          if (TURBO !== 'old' && car.shiftCut && !wasShift && b > 0.5) tEv.push({ t, k: 'chirp', P: b });
+        } else {
+          if (TURBO === 'old' && lastBoost > 0.5 && t - lastPsh > 0.6) { tEv.push({ t, k: 'psh', P: lastBoost * (tb.whistle ?? 1) }); lastPsh = t; }
+          if (TURBO !== 'old' && lastBoost > 0.3 && t - lastPsh > 0.4) { tEv.push({ t, k: 'bov', P: lastBoost }); lastPsh = t; }
+          lastBoost = 0;
+        }
+        wasShift = !!car.shiftCut;
+      }
       const p = along(dist + 2);
       if (camYaw === null) camYaw = p.yaw;
       let d = p.yaw - camYaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -138,13 +164,14 @@ for (const id of ids) {
   x0 -= 60; z0 -= 60; x1 += 60; z1 += 60;
   const nx = Math.ceil((x1 - x0) / 0.5) + 1, nz = Math.ceil((z1 - z0) / 0.5) + 1, grid = new Float32Array(nx * nz);
   for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) grid[r * nx + c] = sdfAt(x0 + c * 0.5, z0 + r * 0.5);
+  if (flag('no-engine')) mono.fill(0);          // (--no-engine: only the blow-off, to check its level)
   server.files.set('/__in/mono', Buffer.from(mono.buffer));
   server.files.set('/__in/poses', Buffer.from(new Float32Array(poses).buffer));
   server.files.set('/__in/grid', Buffer.from(grid.buffer));
   const page = await browser.newPage();
   page.on('console', (m) => console.log('  [page]', m.text()));
   await page.goto(`http://127.0.0.1:${server.port}/`);
-  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX }) => {
+  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB }) => {
     const { createSpace } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
@@ -169,6 +196,31 @@ for (const id of ids) {
     const space = createSpace(ctx, back, MIX);
     src.connect(lvl).connect(space.input); src.start(0);
     const n = poses.length / 8, log = [];
+    if (TB) {
+      // the turbo sounds straight into the car bus, as in audio.js
+      let seed = 4242;
+      const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+      const noise = ctx.createBuffer(1, 2 * SR, SR), nd = noise.getChannelData(0);
+      for (let i = 0; i < nd.length; i++) nd[i] = rnd() * 2 - 1;
+      const bus = TB.old ? space.input : space.burst;
+      if (TB.old) {
+        const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; g.gain.value = 0;
+        o.connect(g).connect(bus); o.start(0);
+        for (let k = 0; k < TB.wh.length; k += 3) { o.frequency.setTargetAtTime(TB.wh[k + 1], TB.wh[k], 0.08); g.gain.setTargetAtTime(TB.wh[k + 2], TB.wh[k], 0.08); }
+        // the blow-off as it was: one band-passed burst of noise falling in pitch
+        for (const e of TB.ev) {
+          const t = e.t, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g2 = ctx.createGain();
+          src.buffer = noise; f.type = 'bandpass'; f.Q.value = 0.8;
+          f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(1100, t + 0.35);
+          g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(Math.min(0.12, 0.13 * e.P), t + 0.02); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+          src.connect(f).connect(g2).connect(bus); src.start(t, rnd()); src.stop(t + 0.45);
+        }
+      } else {
+        const { blowOff, shiftChirp } = await import('/src/audio-turbo.js');
+        for (const e of TB.ev) (e.k === 'bov' ? blowOff : shiftChirp)(ctx, noise, bus, e.P, TB.bov, rnd, e.t + 0.005);
+      }
+      log.push(`turbo events: ${TB.ev.map((e) => `${e.k} ${e.t.toFixed(2)} s P ${e.P.toFixed(2)}`).join(', ')}`);
+    }
     const car = { x: 0, z: 0, yaw: 0, y: 0 }, cam = { position: { x: 0, y: 0, z: 0 }, matrixWorld: { elements: new Float32Array(16) } };
     const step = (k) => {
       const o = k * 8;
@@ -191,7 +243,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

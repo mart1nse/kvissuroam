@@ -166,6 +166,7 @@ export const CARS = {
         fullRpm: 1900,          // ...and is on full boost from here
         spool: 1.5,             // an old VNT turbo: a short wait before it comes in when you floor it
         dump: 6,
+        bov: { kind: 'diesel', level: 0.9 },     // no throttle and no valve: the boost only breathes off
       },
       stallRpm: 2000,
       converterGain: 1.9,
@@ -273,6 +274,9 @@ export const CARS = {
         fullRpm: 4300,          // ...and can reach 1.1 bar from here
         spool: 1.6,             // spool-up rate (1/s) at the redline, slower at low revs: the famous lag
         dump: 9,                // the wastegate / blow-off dumps boost almost at once when you lift
+        // blow-off valves open to the air: a loud pssh that often chatters out in chunks, and a quick
+        // tsh-tsh on an upshift on boost (src/audio-turbo.js)
+        bov: { kind: 'vent', level: 1, chunks: 1, flutter: 0.15, shiftChirp: 0.45 },
       },
       stallRpm: 3600,
       rollStallRpm: 4200,       // floored on the move it bites like a dropped clutch: higher revs, and the rears go up in smoke once the boost arrives
@@ -359,6 +363,7 @@ export const CARS = {
         spool: 3.2,
         dump: 9,
         whistle: 0.5,           // a small, well-silenced turbo
+        bov: { kind: 'recirc', level: 0.8, flutter: 0.7 },   // a diverter valve: a whoosh, often after a stu-tu-tu of compressor surge
       },
       stallRpm: 2900,
       converterGain: 1.8,
@@ -448,6 +453,7 @@ export const CARS = {
         spool: 2.4,
         dump: 6,
         whistle: 0.35,
+        bov: { kind: 'recirc', level: 0.5, flutter: 0 },
       },
       stallRpm: 1300,           // torque converter
       converterGain: 1.6,

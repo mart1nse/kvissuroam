@@ -6,6 +6,7 @@
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace } from './audio-space.js';
+import { blowOff, shiftChirp } from './audio-turbo.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -17,7 +18,7 @@ const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, w
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
-  let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
+  let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
@@ -162,19 +163,6 @@ export function createAudio() {
     }
   }
 
-  // turbo blow-off valve venting when the throttle snaps shut on boost
-  function psh(strength, dest = bus) {
-    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.8;
-    f.frequency.setValueAtTime(3200, t);
-    f.frequency.exponentialRampToValueAtTime(1100, t + 0.35);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.min(0.12, 0.13 * strength), t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    src.connect(f).connect(g).connect(dest);
-    src.start(t, Math.random()); src.stop(t + 0.45);
-  }
-
   // air brakes: the long, low hiss of the valves venting once a bus has braked to a stop
   function airPsh() {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -213,21 +201,26 @@ export function createAudio() {
       whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
       whineGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
     } else {
-      // turbos whistle as they spool, rising in pitch with boost and revs
+      // turbos whistle as they spool, rising in pitch with boost and revs (inside the engine synthesiser;
+      // the oscillator is only for browsers without it), and vent their boost when the throttle shuts
       const b = car.boost || 0;
       if (turbo) {
+        const tb = car.spec.engine.turbo;
         whine.frequency.setTargetAtTime(1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
-        whineGain.gain.setTargetAtTime(dead ? 0 : 0.016 * b * b * (car.spec.engine.turbo.whistle ?? 1), t, 0.08);
+        whineGain.gain.setTargetAtTime(dead || (synth && synthCfg) ? 0 : 0.016 * b * b * (tb.whistle ?? 1), t, 0.08);
         // (lastBoost: the boost built while the throttle was open, vented once it closes)
-        if (car.throttle > 0) lastBoost = Math.max(lastBoost * 0.99, b);
-        else {
-          if (!dead && lastBoost > 0.5 && t - lastPsh > 0.6) { psh(lastBoost * (car.spec.engine.turbo.whistle ?? 1)); lastPsh = t; }
+        if (car.throttle > 0) {
+          lastBoost = Math.max(lastBoost * 0.99, b);
+          if (car.shiftCut && !wasShift && !dead && b > 0.5) shiftChirp(ctx, noiseBuf, space.burst, b, tb.bov);
+        } else {
+          if (!dead && lastBoost > 0.3 && t - lastPsh > 0.4) { blowOff(ctx, noiseBuf, space.burst, lastBoost, tb.bov); lastPsh = t; }
           lastBoost = 0;
         }
+        wasShift = !!car.shiftCut;
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 } });
+        synth.port.postMessage({ state: { rpm: car.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev
@@ -327,10 +320,10 @@ export function createAudio() {
       if (e.turbo) {
         const wh = e.turbo.whistle ?? 1;
         v.whine.frequency.setTargetAtTime(1400 + r.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
-        v.whineGain.gain.setTargetAtTime(0.016 * b * b * wh, t, 0.08);
+        v.whineGain.gain.setTargetAtTime(v.synth && v.cfg ? 0 : 0.016 * b * b * wh, t, 0.08);
         if (r.throttle > 0.02) v.lastBoost = Math.max(v.lastBoost * 0.99, b);
         else {
-          if (v.lastBoost > 0.5 && t - v.lastPsh > 0.6) { psh(v.lastBoost * wh, v.mix); v.lastPsh = t; }
+          if (v.lastBoost > 0.3 && t - v.lastPsh > 0.4) { blowOff(ctx, noiseBuf, v.mix, v.lastBoost, e.turbo.bov); v.lastPsh = t; }
           v.lastBoost = 0;
         }
       } else v.whineGain.gain.setTargetAtTime(0, t, 0.05);

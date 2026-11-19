@@ -8,7 +8,7 @@
 import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace } from './audio-space.js';
 import { blowOff, shiftChirp } from './audio-turbo.js';
-import { createShiftSound, clunk } from './audio-shift.js';
+import { createShiftSound, clunk, chirp } from './audio-shift.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -233,9 +233,10 @@ export function createAudio() {
       // engine is dragged over its limit
       const sh = shiftSound.step(car, t);
       if (sh.clunk && !dead) clunk(ctx, noiseBuf, sh.clunk.up ? space.burst : bus, sh.clunk.k, t + 0.005 + sh.clunk.after, sh.clunk.up);
+      if (sh.chirp && !dead) chirp(ctx, noiseBuf, bus, sh.chirp, t + 0.005);
       if (punch) punch.gain.setTargetAtTime(dead ? 0 : sh.punch, t, 0.01);
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: car.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark } });
+        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: sh.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: sh.shift ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank, yankId: sh.yankId } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev

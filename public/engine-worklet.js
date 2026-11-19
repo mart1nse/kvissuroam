@@ -61,8 +61,9 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0 };
-    this.rpm = 800; this.load = 0; this.ld = 0; this.blip = 0; this.crk = 0; this.ovr = 0; this.hp0 = 0; this.brk = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
+    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0, yank: 0, yankId: 0 };
+    this.rpm = 800; this.load = 0; this.ld = 0; this.blip = 0; this.crk = 0; this.ovr = 0; this.hp0 = 0; this.brk = 0;
+    this.rpmE = 800; this.yId = 0; this.yA = 0; this.yT = 9; this.yk = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0;
@@ -107,14 +108,17 @@ export class EngineCore {
   set(o) { Object.assign(this.in, o); }
 
   fire(ev) {
-    const c = this.cfg, rpm = this.rpm, n = this.noise, ld = this.ld, ov = this.ovr;
+    const c = this.cfg, rpm = this.rpmE, n = this.noise, ld = this.ld, ov = this.ovr;
     const overrun = ld < 0.05 && rpm > this.in.idle + 500;
     // (dragged past the redline the valves float: every firing comes out different)
     let amp = (c.base + (1 - c.base) * ld) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough * (1 + 5 * ov));
     let nz = c.noise * (0.6 + 0.8 * ld), tauDeg = c.pulseDeg * (0.85 + 0.3 * ld);
     // an upshift biting: the first firings in the new gear bark, harder and sharper (src/audio-shift.js)
     const bk = this.brk;
-    if (bk > 0.02) { amp *= 1 + 1.4 * bk; tauDeg *= 1 - 0.25 * bk; }
+    if (bk > 0.02) { amp *= 1 + 1.6 * bk; tauDeg *= 1 - 0.25 * bk; }
+    // (and through the yank the combustion is loaded hard while the gear drags the revs down, eased as
+    // they spring back: the firings swell and thin with the swing)
+    if (this.yk) { amp *= 1 + 0.45 * this.yk; nz *= 1 + 0.5 * Math.abs(this.yk); }
     if (this.in.cut || this.in.shift) {
       // ignition cut on the rev limiter (or for an upshift): the cylinder only pumps air, and on a hot,
       // loud engine some of the unburnt charge goes off in the exhaust (a shift crackles more)
@@ -154,7 +158,22 @@ export class EngineCore {
     const kr = 1 - Math.exp(-len / (sr * 0.025)), kl = 1 - Math.exp(-len / (sr * 0.06));
     // a touch of idle lope: real engines never hold their idle exactly
     const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 : 0;
+    // an upshift's gear going in with the revs still above its speed (src/audio-shift.js): the revs are
+    // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a
+    // couple of swings as the driveline winds up and springs back
+    if (I.yankId !== this.yId) {
+      this.yId = I.yankId; this.yA = I.yank || 0; this.yT = 0;
+      if (this.yA > 0) this.rpm = Math.max(300, I.rpm);
+    }
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
+    let yOff = 0; this.yk = 0;
+    if (this.yA > 0 && this.yT < 0.45) {
+      const env = Math.exp(-this.yT / 0.08), sw = Math.cos(6.2832 * 8.2 * this.yT);
+      yOff = this.yA * env * sw;
+      this.yk = Math.min(1, this.yA / I.redline * 5) * env * sw;
+      this.yT += len / sr;
+    }
+    this.rpmE = Math.max(300, this.rpm + yOff);
     this.load += (I.throttle - this.load) * kl;
     // a downshift's blip opens the throttle faster than the pedal smoothing would let it (src/audio-shift.js)
     this.blip += ((I.blip || 0) - this.blip) * (1 - Math.exp(-len / (sr * 0.012)));
@@ -165,16 +184,17 @@ export class EngineCore {
     this.boost += (I.boost - this.boost) * kl;
     this.shaft += ((I.shaft >= 0 ? I.shaft : I.boost) - this.shaft) * kl;
     this.on += ((I.on ? 1 : 0) - this.on) * (1 - Math.exp(-len / (sr * 0.05)));
-    const rpm = this.rpm, load = this.ld, rr = rpm / I.redline, ov = this.ovr;
+    const rpm = this.rpmE, load = this.ld, rr = rpm / I.redline, ov = this.ovr, bl = this.blip;
     const bright = c.lp0 + c.lpRpm * rpm / 1000 + c.lpLoad * load - (c.turbo ? c.turboMuffle * (1 - this.boost * 0.5) : 0);
     this.lp1.set('lp', bright, 0.6, sr); this.lp2.set('lp', bright * 1.6, 0.5, sr);
     const gain = c.gain * this.on * (c.idleVol + (1 - c.idleVol) * (0.45 * rr + 0.55 * load * (0.5 + 0.5 * rr))) * (1 + 0.45 * this.brk);
-    const drive = c.drive * (0.6 + 0.4 * load), dn = Math.tanh(drive);
+    // (a downshift's blip drives the engine harder into its saturation: a heavier growl)
+    const drive = c.drive * (0.6 + 0.4 * load) * (1 + 0.5 * bl), dn = Math.tanh(drive);
     const dTheta = rpm * 6 / sr;
     const ev = this.events, banks = this.banks, res = this.res, pulses = this.pulses;
-    const intake = c.intake * load * (0.15 + rr), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
+    const intake = c.intake * load * (0.15 + rr) * (1 + 1.5 * bl), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
     // (more growl in a downshift's blip, and more still in an upshift's bark)
-    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)) * (1 + ov + 0.6 * this.blip + 1.2 * this.brk), rk = c.raspDrive || 6;
+    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)) * (1 + ov + bl + 1.2 * this.brk), rk = c.raspDrive || 6;
     // over-rev: the straight-cut gears howl as the wheels drag the engine past its limit
     // (its pitch wanders a little with the shaft's wind-up, so it is not a pure test tone)
     if (ov > 0.001) this.hjit = (this.hjit || 0) * 0.85 + (n() * 2 - 1) * 0.004;

@@ -201,7 +201,7 @@ function engineForce(car, throttle, dt) {
     car.shiftTimer -= dt;
     // an upshift under power biting: the drive comes back all at once (the sound's bark and the body's
     // kick follow `bite`; it takes nothing from the pace)
-    if (car.shiftTimer <= 0 && car.shiftUp && throttle > 0.3) car.bite = throttle;
+    if (car.shiftTimer <= 0 && car.shiftUp && throttle > 0.3) { car.bite = throttle; car.biteAt = car.time; }
   }
   const wheelRpm = (wAbs / s.wheelRadius) * ratioOf(car.gear) * (60 / (2 * Math.PI));
   // torque converter: engine speed never drops below stall while the throttle is open
@@ -924,8 +924,10 @@ function substep(car, input, world, dt) {
   // ---- body attitude
   car.y = Math.max(car.hy, groundY - 0.06);     // the drawn wheels may sink a little, not through the road
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);
-  // (an upshift biting snaps the body back on its springs a little harder than the pull alone: bite)
-  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.022;
+  // (an upshift biting snaps the body back on its springs a little harder than the pull alone, and it
+  // shudders as the driveline winds up and springs back: bite)
+  const shud = car.bite ? 0.6 + 0.4 * Math.cos((car.time - (car.biteAt ?? car.time)) * 53) : 0;
+  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud;
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with

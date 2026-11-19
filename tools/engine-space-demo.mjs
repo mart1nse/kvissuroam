@@ -168,10 +168,12 @@ for (const id of ids) {
       nextSh += 1 / FPS;
       sh = shs.step(car, t);
       if (sh.clunk) sEv.push({ t: t + 0.005 + sh.clunk.after, k: sh.clunk.k, up: !!sh.clunk.up });
+      if (sh.chirp) sEv.push({ t: t + 0.005, k: sh.chirp, chirp: true });
       if (sh.punch !== undefined) sPunch.push(t, sh.punch);
     }
-    if (shs) rpm = sh.rpm;
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark });
+    let cutS = car.shiftCut ? 1 : 0;
+    if (shs) { rpm = sh.rpm; if (sh.throttle !== undefined) { thr = sh.throttle; cutS = sh.shift ? 1 : 0; } }
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: cutS, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank || 0, yankId: sh.yankId || 0 });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);
@@ -283,11 +285,14 @@ for (const id of ids) {
     }
     if (SEV.length) {
       // the downshift clunks, into the car bus as in audio.js
-      const { clunk } = await import('/src/audio-shift.js');
+      const { clunk, chirp } = await import('/src/audio-shift.js');
       const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
       let sd = 99; for (let i = 0; i < d.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; d[i] = sd / 2147483648 - 1; }
-      for (const e of SEV) clunk(ctx, nb, e.up ? space.burst : space.input, e.k, e.t, e.up);
-      log.push(`clunks: ${SEV.map((e) => `${e.t.toFixed(2)} s ${e.up ? 'up' : 'down'} ${e.k.toFixed(2)}`).join(', ')}`);
+      for (const e of SEV) {
+        if (e.chirp) chirp?.(ctx, nb, space.input, e.k, e.t);
+        else clunk(ctx, nb, e.up ? space.burst : space.input, e.k, e.t, e.up);
+      }
+      log.push(`clunks: ${SEV.map((e) => `${e.t.toFixed(2)} s ${e.chirp ? 'chirp' : e.up ? 'up' : 'down'} ${e.k.toFixed(2)}`).join(', ')}`);
     }
     const car = { x: 0, z: 0, yaw: 0, y: 0 }, cam = { position: { x: 0, y: 0, z: 0 }, matrixWorld: { elements: new Float32Array(16) } };
     const step = (k) => {

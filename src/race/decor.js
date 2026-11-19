@@ -126,6 +126,19 @@ export function findCorners(track) {
 const START_LEFT = 7;                  // metres the START LINE billboard sits left of its old spot
 const START_BACK = 12;                 // and metres further on, past the corner (Martin, 19 Nov: 10-15 m back)
 
+// where the big START LINE billboard stands: beyond the outside kerb of the first corner after the spawn
+// (a left turn), on two posts (Martin, 2026-11-17: moved left towards the road so the trees on the right no longer hide it)
+export function startBoardSpot(track, corners = findCorners(track)) {
+  const { P, HW, N, tan } = track;
+  const sp = track.spawnI ?? 0;
+  const c = corners.reduce((b, k) => (((k.i - sp + N) % N) < ((b.i - sp + N) % N) ? k : b), corners[0]);
+  if (!c || c.dir >= 0) return null;
+  const tin = tan[(c.i - 14 + N) % N], [px, pz] = P[c.i];
+  const ox = -tin[1], oz = tin[0];                          // outward side of the left turn
+  const o2 = HW[c.i] + 3.2 - START_LEFT, back = HW[c.i] * 0.4 + START_BACK;
+  return { corner: c, x: px + tin[0] * back + ox * o2, z: pz + tin[1] * back + oz * o2, yaw: Math.atan2(-tin[0], -tin[1]) };
+}
+
 export function createDecor(track, world) {
   const { P, HW, N, tan } = track;
   const group = new THREE.Group();          // corner boards: shown with the kerb glow
@@ -156,13 +169,8 @@ export function createDecor(track, world) {
     const ox = tin[1] * c.dir, oz = -tin[0] * c.dir;        // outward side of the turn (left of travel for a right turn)
     const off = HW[c.i] * 0.55;
     if (c === first && c.dir < 0) {
-      // the big START LINE billboard stands beyond the outside kerb, on two posts
-      // (Martin, 2026-11-17: moved left towards the road so the trees on the right no longer hide it)
-      const o2 = HW[c.i] + 3.2 - START_LEFT;
-      items.push({
-        x: px + tin[0] * (HW[c.i] * 0.4 + START_BACK) + ox * o2, z: pz + tin[1] * (HW[c.i] * 0.4 + START_BACK) + oz * o2,
-        yaw: Math.atan2(-tin[0], -tin[1]), big: true, mesh: null, phase: 0,
-      });
+      const { x, z, yaw } = startBoardSpot(track, corners);
+      items.push({ x, z, yaw, big: true, mesh: null, phase: 0 });
       continue;
     }
     items.push({

@@ -46,7 +46,7 @@ import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
-import { createTextureShrinker } from './world/phonetex.js';
+import { createPhoneTextures } from './world/phonetex.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople } from './net/people.js';
@@ -106,6 +106,18 @@ const gfx = createQuality({ renderer, sun: lights.sun, quality, setTrees: setTre
   locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
+// Effects follow the graphics level too: once auto has had to go below full sharpness the tyre and
+// soot smoke is thinned out, and on the bottom rungs the engine sound loses its echoes and reverb,
+// only the nearest other car is heard and other cars smoke only close by.
+function applyFx() {
+  const l = gfx.levels[gfx.level];
+  if (!l) return;
+  const top = gfx.levels[gfx.levels.length - 1].dpr;
+  const k = l.dpr >= Math.min(1, top) ? 1 : l.dpr >= 0.9 ? 0.6 : 0.35;
+  smoke?.setDetail(k);
+  audio.setLite(k < 0.5);
+}
+gfx.onChange(applyFx);
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -140,9 +152,17 @@ let flyIn = null;                // the one second flight from the drone to the 
 // that is how public/menu-still.jpg is made.
 const fixedIntro = params.has('fixedintro');
 let still = isTouch && !params.has('drive');
-// phones: the biggest pictures go to the graphics card as copies of at most a megapixel (an iPhone
-// reloaded the page from lack of memory once today's hand-built streets were in). ?smalltex tries it on a desktop.
-const shrinker = (isTouch || params.has('smalltex')) && params.get('smalltex') !== '0' ? createTextureShrinker() : null;
+// phones: pictures go to the graphics card at most a megapixel, and the canvas a picture was painted
+// on is let go once the card has it (an iPhone reloaded the page from lack of memory once today's
+// hand-built streets were in): see world/phonetex.js. ?smalltex tries it on a desktop, ?smalltex=0 turns
+// it off, ?smalltex=keep only makes the pictures smaller.
+const shrinker = (isTouch || params.has('smalltex')) && params.get('smalltex') !== '0'
+  ? createPhoneTextures(renderer, { release: params.get('smalltex') !== 'keep' }) : null;
+// Behind the still picture the game warms up, unseen: a few frames are drawn from beside the car, each
+// reaching further, so the pictures and models of the start go to the graphics card a few at a time
+// (not all in the first frame after DRIVE), and their canvases are let go while the menu is still up.
+const WARM_FRAMES = 20;
+let warm = 0, warmSkip = 0, pickTimer = 0;
 // (on phones the car's name sits small under the GAS and BRAKE buttons, not under the rev counter)
 if (isTouch) $('#touch .pad.right').appendChild($('#carname'));
 document.body.classList.toggle('still', still);
@@ -296,6 +316,7 @@ async function boot() {
   skids = createSkidMarks(world);
   scene.add(skids.mesh);
   smoke = createSmoke(world);
+  applyFx();
   scene.add(smoke.points);
   mp = createMultiplayer({
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
@@ -386,7 +407,7 @@ async function boot() {
   buildMenu();
   bar.style.width = '100%';
   terrain.update(new THREE.Vector3(car.x, 0, car.z));
-  shrinker?.shrink(scene);
+  shrinker?.scan(scene);
   $('#loading').classList.add('hidden');
   $('#menu').classList.remove('hidden');
   mode = 'menu';
@@ -405,7 +426,13 @@ function setCar(id, now = false) {
   localStorage.setItem('kvissuroam.car', id);
   // (behind the opening drone flight the car isn't on screen, so picking one only marks it: it is built
   // when DRIVE is pressed, and choosing stays instant. In the garage later it is swapped at once, as you see it.)
-  if ((intro || still) && model && !now) { layoutMenu(); return; }
+  if ((intro || still) && model && !now) {
+    // (behind the phones' still picture it is built a moment after the last pick, so it is ready for DRIVE)
+    clearTimeout(pickTimer);
+    if (still) pickTimer = setTimeout(() => { if (still && car.spec.id !== carId) setCar(carId, true); }, 700);
+    layoutMenu();
+    return;
+  }
   const spec = CARS[id];
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
@@ -419,6 +446,7 @@ function setCar(id, now = false) {
   model.group.rotation.order = 'YXZ';
   model.group.traverse((o) => { o.layers.enable(1); if (o.isMesh) { o.castShadow = true; } });   // layer 1: drawn again over street photos
   scene.add(model.group);
+  if (shrinker) { const m = model; m.ready?.then(() => { shrinker.again(m.group); shrinker.scan(m.group); }, () => {}); }   // (a scanned body arrives later, with its own pictures)
   audio.setCar(spec);
   hud.setCar(spec);
   mp?.setCar(id);
@@ -1126,7 +1154,7 @@ function frame(ts) {
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;
-    if (shrinker && ++shrinkTick % 4 === 0) shrinker.shrink(scene);   // (once a second: what the city streamed in since)
+    if (shrinker && ++shrinkTick % 4 === 0) shrinker.scan(scene);   // (once a second: what the city streamed in since)
     trackside.update(car.x, car.z);
     trackKerbs.update(car.x, car.z);
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
@@ -1146,11 +1174,15 @@ function frame(ts) {
     for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = !hideTrees;
     treesHidden = hideTrees;
     photos.render(scene, camera, model.group);
-  } else if (!still) {          // (behind the phones' still menu picture nothing is drawn)
+  } else if (!still || (warm < WARM_FRAMES && world.ready(car.x, car.z) && ++warmSkip % 4 === 0)) {
+    // (behind the phones' still menu picture nothing is drawn, but for the warm-up frames: see WARM_FRAMES)
+    const far = camera.far;
+    if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
     gpuTimer.begin();
     renderer.render(scene, camera);
     gpuTimer.end();
+    if (still) camera.far = far;
   }
 
   // ---- graphics quality follows the measured frame rate (src/quality.js)
@@ -1175,7 +1207,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, shrunkMB: () => shrinker?.savedMB ?? 0, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, tex: () => shrinker?.stats, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

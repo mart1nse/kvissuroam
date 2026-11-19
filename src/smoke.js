@@ -73,6 +73,9 @@ export function createSmoke(world) {
   const _v = new THREE.Vector2();
 
   let next = 0, alive = 0, fresh = false;
+  // how much smoke is made, 1 = all of it: the graphics auto mode thins it out on a machine that
+  // can't keep up (fewer puffs, and other cars' smoke only from close by), see setDetail
+  let thinK = 1, far = FAR;
   // one car's tyres: how hot each axle is, and the puffs each wheel still owes
   const tyreState = () => ({ heat: [0, 0], owed: [0, 0, 0, 0] });
   const myTyres = tyreState();
@@ -107,7 +110,7 @@ export function createSmoke(world) {
     // at speed the airstream tears the cloud apart: the same soot, spread thinner
     const thin = 1 / (1 + Math.max(0, Math.abs(car.vx) - THIN0) / THIN);
     if (strength < 0.04 || car.reversing) { sootOwed = 0; return; }
-    sootOwed += (16 + 44 * strength) * dt;
+    sootOwed += (16 + 44 * strength) * thinK * dt;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
     const along = -(car.b + ex.back);
     const x = car.x + fx * along + sx * ex.x, z = car.z + fz * along + sz * ex.x;
@@ -141,7 +144,7 @@ export function createSmoke(world) {
       for (let sd = 0; sd < 2; sd++) {
         const w = ax * 2 + sd, along = front ? car.a : -car.b, side = sd ? ht : -ht;
         const x = car.x + fx * along + sx * side, z = car.z + fz * along + sz * side;
-        owed[w] += RATE * strength * dt;
+        owed[w] += RATE * thinK * strength * dt;
         if (owed[w] < 1) continue;
         if (world.surfaceAt(x, z) !== 1) { owed[w] = 0; continue; }
         const y = world.groundAt(x, z, car.y + 0.4);
@@ -161,7 +164,7 @@ export function createSmoke(world) {
   function update(car, dt, active, others = []) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
     for (const o of others) {
-      if (o.inWater || (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > FAR * FAR)) continue;
+      if (o.inWater || (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > far * far)) continue;
       let st = theirs.get(o.id);
       if (!st) theirs.set(o.id, st = { soot: sootState(), tyres: tyreState() });
       if (o.soot) exhaust(o, dt, st.soot);
@@ -192,5 +195,5 @@ export function createSmoke(world) {
     points.visible = alive > 0;
   }
 
-  return { points, update, get count() { return alive; } };
+  return { points, update, get count() { return alive; }, setDetail(k) { thinK = k; far = k < 0.5 ? 90 : k < 1 ? 180 : FAR; } };
 }

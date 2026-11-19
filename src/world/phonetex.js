@@ -1,18 +1,33 @@
-// Phones: smaller copies of the biggest pictures before they go to the graphics card.
+// Phones: the game's pictures kept small, and only once.
 //
-// An iPhone kills the page when it runs out of memory, and most of the game's graphics memory is a
-// few large pictures: the far ground photo (3024 x 4292, about 70 MB once on the card) and the painted
-// house fronts and street surfaces of the hand-built streets (2048 x 2048, 1024 x 4000 ...). On a phone
-// screen a quarter of the pixels looks the same. shrink(root) swaps every picture over MAX_PX for a
-// copy of at most MAX_PX; it can be called again and again (new things get added as the city loads).
-// A picture whose code paints it again later (its texture's version goes up) gets a fresh copy, and
-// one that keeps changing gets its own full-size picture back.
+// An iPhone kills the page when it runs out of memory, and most of the game's memory is pictures: the
+// far ground photo (3024 x 4292, about 70 MB once on the graphics card) and the painted house fronts and
+// street surfaces of the hand-built streets (2048 x 2048, 1024 x 4000 ...). Every painted picture is
+// also held twice: the canvas it was painted on, and the copy on the graphics card.
+//
+// scan(root), called again and again (new things are added as the city loads), does two things:
+//  - a picture over MAX_PX goes to the card as a copy of at most MAX_PX (on a phone screen it looks
+//    the same). A canvas whose code paints it again before it is let go gets a fresh copy;
+//  - once a painted picture has been on the card unchanged for a few seconds its canvas is let go:
+//    made a quarter the size each way, a sixteenth of the memory. From then on the texture ignores
+//    needsUpdate: the card's copy is the full one. (The small picture stays so that a texture made
+//    from the same canvas later, a clone with another wrap mode say, still gets a picture, if a soft
+//    one.) A picture that is still being painted now and then (its version keeps going up) is left alone.
 const MAX_PX = 1024 * 1024;
+const SETTLE = 3000;            // ms a picture must have been on the card, unchanged, before its canvas goes
 
-export function createTextureShrinker(maxPx = MAX_PX) {
-  const done = new WeakMap();          // texture -> { orig, ver, redraws }
-  const seen = new WeakSet();          // materials already looked through, with nothing to do
-  let saved = 0;
+export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true } = {}) {
+  const state = new WeakMap();         // texture -> { orig, ver, redraws, upAt, done }
+  const users = new WeakMap();         // canvas -> Set of textures drawn from it
+  const gone = new WeakSet();          // canvases let go (now a small stand-in)
+  const seenMat = new WeakSet();
+  const watch = new Set();             // textures not finished with yet
+  let saved = 0, freed = 0, nFreed = 0, dynamic = 0;
+  const freeze = (t) => Object.defineProperty(t, 'needsUpdate', { set() {}, configurable: true });
+
+  const isCanvas = (i) => typeof HTMLCanvasElement !== 'undefined' && i instanceof HTMLCanvasElement;
+  const isImg = (i) => typeof HTMLImageElement !== 'undefined' && i instanceof HTMLImageElement;
+  const isBitmap = (i) => typeof ImageBitmap !== 'undefined' && i instanceof ImageBitmap;
 
   function copy(img, w, h) {
     const k = Math.sqrt(maxPx / (w * h));
@@ -23,51 +38,91 @@ export function createTextureShrinker(maxPx = MAX_PX) {
     g.drawImage(img, 0, 0, c.width, c.height);
     return c;
   }
+  const use = (c, t) => { let s = users.get(c); if (!s) users.set(c, (s = new Set())); s.add(t); };
+  const onCard = (t) => t.version > 0 && renderer.properties.has(t) && renderer.properties.get(t).__version === t.version;
+  function drop(c) {
+    if (gone.has(c)) return;
+    gone.add(c);
+    if (c.width * c.height <= 64 * 64) return;
+    const g = c.getContext('2d');
+    if (!g) return;                                  // (not a painted canvas: leave it)
+    const w = Math.max(16, Math.round(c.width / 4)), h = Math.max(16, Math.round(c.height / 4));
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    tmp.getContext('2d').drawImage(c, 0, 0, w, h);
+    freed += (c.width * c.height - w * h) * 4; nFreed++;
+    c.width = w; c.height = h;                       // (this lets the big picture go at once)
+    g.drawImage(tmp, 0, 0);
+    tmp.width = tmp.height = 0;
+  }
 
-  // returns whether to keep an eye on this texture (not loaded yet, or a copy that may need redoing)
-  function texture(t) {
-    const d = done.get(t);
-    if (d) {
-      if (d.ver === Infinity) return false;
-      if (t.version === d.ver) return true;
-      // painted again by its own code: copy the new picture, or give up on one that keeps changing
-      if (++d.redraws > 3) { t.image = d.orig; t.needsUpdate = true; d.ver = Infinity; return false; }
-      t.image = copy(d.orig, d.orig.width, d.orig.height); t.needsUpdate = true; d.ver = t.version;
+  // false: nothing (more) to do for this texture
+  function step(t, now) {
+    let st = state.get(t);
+    if (!st) {
+      const img = t.image;
+      if (!img || t.isDataTexture || t.isCompressedTexture || t.isVideoTexture || t.isRenderTargetTexture || t.isCubeTexture) return false;
+      if (!isCanvas(img) && !isImg(img) && !isBitmap(img)) return false;
+      if (isImg(img) && !(img.complete && img.naturalWidth)) return true;   // not loaded yet: look again later
+      if (isCanvas(img) && gone.has(img)) return false;   // (a later texture from a canvas already let go)
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (!w || !h) return false;
+      st = { orig: null, ver: t.version, redraws: 0, upAt: 0 };
+      if (w * h > maxPx) {
+        t.image = copy(img, w, h);
+        t.needsUpdate = true;
+        st.ver = t.version;
+        saved += (w * h - t.image.width * t.image.height) * 4 * 1.33;
+        if (isCanvas(img)) st.orig = img;            // (watched for its code painting it again)
+        else if (isBitmap(img)) img.close?.();       // (a decoded photo from a model file: not needed again)
+      }
+      if (!isCanvas(t.image)) return false;          // a photo the browser holds: nothing to let go
+      state.set(t, st);
+      use(t.image, t); if (st.orig) use(st.orig, t);
+    }
+    if (t.version !== st.ver) {
+      // painted again by its own code
+      st.redraws++; st.upAt = 0;
+      if (st.orig) {
+        if (st.redraws > 3) { t.image = st.orig; st.orig = null; t.needsUpdate = true; dynamic++; return false; }   // keeps changing: its own full picture back
+        t.image = copy(st.orig, st.orig.width, st.orig.height); t.needsUpdate = true; use(t.image, t);
+      } else if (st.redraws > 3) { dynamic++; return false; }
+      st.ver = t.version;
       return true;
     }
-    const img = t.image;
-    if (!img || t.isDataTexture || t.isCompressedTexture || t.isVideoTexture || t.isRenderTargetTexture || t.isCubeTexture) return false;
-    const isCanvas = typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement;
-    const isImg = typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement;
-    const isBitmap = typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap;
-    if (!isCanvas && !isImg && !isBitmap) return false;
-    if (isImg && !(img.complete && img.naturalWidth)) return true;   // not loaded yet: look again later
-    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-    if (!w || !h || w * h <= maxPx) return false;
-    t.image = copy(img, w, h);
-    t.needsUpdate = true;
-    saved += (w * h - t.image.width * t.image.height) * 4 * 1.33;
-    // (a photo is never painted again, so it is let go; a canvas is watched for its code painting it)
-    if (!isCanvas) { done.set(t, { ver: Infinity }); return false; }
-    done.set(t, { orig: img, ver: t.version, redraws: 0 });
-    return true;
+    if (!release) return !!st.orig;
+    if (!onCard(t)) { st.upAt = 0; return true; }
+    if (!st.upAt) { st.upAt = now; return true; }
+    if (now - st.upAt < SETTLE) return true;
+    // on the card and settled: let the canvases go, unless another texture still needs one of them
+    for (const c of [t.image, st.orig]) {
+      if (!c) continue;
+      for (const o of users.get(c) || []) if (o !== t && !onCard(o)) return true;
+    }
+    for (const c of [t.image, st.orig]) if (c) for (const o of users.get(c) || []) freeze(o);
+    drop(t.image); if (st.orig) drop(st.orig);
+    st.orig = null;
+    return false;
   }
 
   function material(m) {
-    if (seen.has(m)) return;
-    let again = false;
-    for (const v of Object.values(m)) if (v?.isTexture) again = texture(v) || again;
-    if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u?.value?.isTexture) again = texture(u.value) || again;
-    if (!again) seen.add(m);
+    if (seenMat.has(m)) return;
+    seenMat.add(m);
+    for (const v of Object.values(m)) if (v?.isTexture) watch.add(v);
+    if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u?.value?.isTexture) watch.add(u.value);
   }
 
   return {
-    shrink(root) {
+    scan(root) {
       root.traverse((o) => {
         if (!o.material) return;
         if (Array.isArray(o.material)) o.material.forEach(material); else material(o.material);
       });
+      const now = performance.now();
+      for (const t of watch) if (!step(t, now)) watch.delete(t);
     },
-    get savedMB() { return saved / 1e6; },
+    // look at this material again (a texture was put on it after it was first seen)
+    again(root) { root.traverse((o) => { for (const m of [o.material].flat()) if (m) seenMat.delete(m); }); },
+    get stats() { return { shrunkMB: saved / 1e6, freedMB: freed / 1e6, freed: nFreed, watching: watch.size, dynamic }; },
   };
 }

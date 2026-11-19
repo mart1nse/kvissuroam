@@ -17,7 +17,7 @@ const HW = DIMS.width / 2;
 const AY = 0.325, AR = 0.365;                // wheel arches
 // soft shoulder line through the door handles
 const WAIST = [[ZFB, 0.69], [-1.0, 0.735], [1.0, 0.765], [ZRB, 0.78]], FOLD = 0.006;
-const R17 = 0.325;                           // 225/50 R17 on the BBS wheels
+const R18 = 0.326;                           // 245/40 R18 on the BBS wheels
 const PAINT = 0x50294e;                      // dark lilac metallic with a hint of deep cherry red
 
 // ---------------------------------------------------------------- wheel
@@ -51,7 +51,7 @@ function aeroWheel(R, width, rimR) {
   return s;
 }
 
-// 17-inch BBS RS style three-piece wheel: a gold cross-spoke mesh centre (30 V-spokes each way, crossing in
+// 18-inch BBS RS style three-piece wheel: a gold cross-spoke mesh centre (30 V-spokes each way, crossing in
 // three rows of diamonds), a wide polished step lip with a ring of small bolts, a raised gold hub with five
 // lug bolts and a silver cap with a black badge. Axis on X, outer face toward +X.
 function bbsWheel(R, width, rimR) {
@@ -405,12 +405,13 @@ export function buildAudi200({ scan = true } = {}) {
     pal.add(cyl(0.002, 0.0035, 0.5, 6, { p: [ax, ay + 0.24, az + 0.09], r: [0.38, 0, 0] }, 'plastic'));
   }
 
-  // the player's car runs 17-inch BBS wheels (225/50 R17) and sits 2 cm lower; parked ones keep the 15-inch Aeros
-  const dims = scan ? { ...DIMS, wheelRadius: R17 } : DIMS;
-  const wheel = { soup: scan ? bbsWheel(R17, 0.215, 0.2159 + 0.012) : aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
+  // the player's car runs 18-inch BBS wheels on low, wide 245/40 R18 tyres (the extra width goes inward) and sits
+  // 2 cm lower; parked ones keep the 15-inch Aeros
+  const dims = scan ? { ...DIMS, wheelRadius: R18 } : DIMS;
+  const wheel = { soup: scan ? bbsWheel(R18, 0.245, 0.2286 + 0.012) : aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
   const car = assembleCar({ id: 'audi200', dims, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
   tintGlass(car, 'audi200', { color: 0x34404a, metalness: 0.7, roughness: 0.05 });   // light factory tint
   tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 });
   if (!scan) return car;
-  return useGlbBody(car, 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 }, lower: 0.02 });
+  return useGlbBody(car, 'audi200.glb', { wheelOut: { front: 0.03, rear: 0.03 }, lower: 0.02 });
 }

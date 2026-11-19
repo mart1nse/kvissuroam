@@ -46,6 +46,7 @@ import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
+import { createTextureShrinker } from './world/phonetex.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople } from './net/people.js';
@@ -139,6 +140,9 @@ let flyIn = null;                // the one second flight from the drone to the 
 // that is how public/menu-still.jpg is made.
 const fixedIntro = params.has('fixedintro');
 let still = isTouch && !params.has('drive');
+// phones: the biggest pictures go to the graphics card as copies of at most a megapixel (an iPhone
+// reloaded the page from lack of memory once today's hand-built streets were in). ?smalltex tries it on a desktop.
+const shrinker = (isTouch || params.has('smalltex')) && params.get('smalltex') !== '0' ? createTextureShrinker() : null;
 // (on phones the car's name sits small under the GAS and BRAKE buttons, not under the rev counter)
 if (isTouch) $('#touch .pad.right').appendChild($('#carname'));
 document.body.classList.toggle('still', still);
@@ -382,6 +386,7 @@ async function boot() {
   buildMenu();
   bar.style.width = '100%';
   terrain.update(new THREE.Vector3(car.x, 0, car.z));
+  shrinker?.shrink(scene);
   $('#loading').classList.add('hidden');
   $('#menu').classList.remove('hidden');
   mode = 'menu';
@@ -860,7 +865,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const flyQ = new THREE.Quaternion();
 const clock = new THREE.Timer();
 let photos = null, treesHidden = false;
-let tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
+let shrinkTick = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 
@@ -1121,6 +1126,7 @@ function frame(ts) {
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;
+    if (shrinker && ++shrinkTick % 4 === 0) shrinker.shrink(scene);   // (once a second: what the city streamed in since)
     trackside.update(car.x, car.z);
     trackKerbs.update(car.x, car.z);
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
@@ -1169,7 +1175,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, shrunkMB: () => shrinker?.savedMB ?? 0, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

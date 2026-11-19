@@ -21,7 +21,7 @@ import { createCorners, cornerClear, cornerProps } from './corners.js';
 import { createValli, valliProps } from './valli.js';
 import { createVeski } from './veski.js';
 import { createMandel } from './mandel.js';
-import { createValliStreet } from './vallistreet.js';
+import { createValliStreet, valliStreetClear } from './vallistreet.js';
 import { createBaeriStreet } from './baeristreet.js';
 import { createVeskiEnd } from './veskiend.js';
 import { createKroonuaia } from './kroonuaia.js';
@@ -131,6 +131,7 @@ export function clearProps(data) {
   laiClear(data, out);
   raekodaClear(data, out);
   uueturuClear(data, out);
+  valliStreetClear(data, out);
   for (const zn of zones(track)) {
     if (zn.i0 < 0 || zn.i1 >= track.N) continue;
     const hits = [];

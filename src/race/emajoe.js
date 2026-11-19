@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { drapeGeometry } from '../world/drape.js';
+import { paverTex } from '../world/streetkit.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
 const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
@@ -25,6 +26,15 @@ const PAVE = { i0: 948, width: 3.4 };                    // river-side pavement,
 // curve radius of its inner (grass) edge, its edges on the bridge (metres from the middle of the deck),
 // and how far it runs on along the bridge after the bend
 const CORNER = { bridge: 'Kroonuaia sild', from: 1021, r: 2.0, near: 4.1, far: 7.4, on: 3 };
+// The river-side pavement stands on a high kerb, 20 cm (Martin, 19 Nov): the car rolls onto it with a knock
+// and leans over when its right wheels are up there. It rises in the first metres of the pavement and comes
+// down to the road again before the corner, where the crossing is. edge: the kerb face (m across), back: the
+// grass bank behind the pavement down to the ground, stone: width of the kerb stone on top.
+const KERB = { i0: 950, up: 3, i1: 1019, down: 5, h: 0.2, edge: 0.05, back: 0.9, stone: 0.18 };
+// Its tarmac is newer and smoother than the photo's mottled grey suggests, and about as light as the
+// pavements either side (Martin, 19 Nov): [track index, brightness, warmth] as the road tone texture takes
+// them (183, 136 typical; Lai ends at 178, 134). Blue 77 marks the fine-grained tarmac (terrain.js).
+const TONE = [[940, 178, 134, 0], [947, 206, 133, 77], [1024, 206, 133, 77], [1032, 183, 135, 0]];
 // the map's wall line round the garden (vectors.json walls, game x, z): Emajõe, the Kroonuaia corner, Kroonuaia
 const GARDEN_WALL = [[1417.2, 2290.9], [1396.6, 2258.5], [1336.4, 2198.0], [1329.8, 2197.9], [1224.4, 2316.8]];
 const GATE = { a: [1437.6, 2321.3], w: 4.4 };            // driveway gate: first post at the end of the low wall
@@ -33,7 +43,7 @@ const HIGH = { stone: 1.15, render: 0.95, cope: 0.13, thick: 0.62 };
 
 const COL = {
   render: 0xf3e6df, cope: 0xd98d7f, brick: 0xd99282, postCap: 0xb9bac8, iron: 0x3f4a55,
-  white: 0xfaf8ff, yellow: 0xffd768, pave: 0xf0c9c0, kerb: 0xdcd8e4,
+  white: 0xfaf8ff, yellow: 0xffd768, pave: 0xf0c9c0, paveRGB: [226, 208, 218], kerb: 0xdcd8e4, kerbFace: 0xaaa5b8, bank: 0x86a86e,
   frame: 0x464b59, roof: 0x575c6b, bench: 0xa98670, pole: 0x9a9eab,
 };
 
@@ -163,6 +173,18 @@ export function emajoeVectors(vectors) {
     const n = track.nearest(x, z, 990);
     return n.i >= E.i0 && n.i <= E.i1 && n.d < track.HW[n.i] + 1;
   };
+  // the lighter, smoother tarmac, over the whole width of the street and the bus bay
+  const out = (vectors.toneOver ||= []);
+  const side = (i, lat) => { const [tx, tz] = track.tan[i]; return [track.P[i][0] - tz * lat, track.P[i][1] + tx * lat]; };
+  const bay = (i) => BAY.width * smooth((i - BAY.i0) / BAY.taper) * smooth((BAY.i1 - i) / BAY.taper);
+  for (let i = TONE[0][0]; i < TONE[TONE.length - 1][0]; i++) {
+    let k = 0;
+    while (TONE[k + 1][0] < i + 0.5) k++;
+    const [a, ...ta] = TONE[k], [b, ...tb] = TONE[k + 1], u = (i + 0.5 - a) / (b - a);
+    const [l, w, f] = ta.map((v, q) => Math.round(v + (tb[q] - v) * u));
+    const L0 = track.HW[i] + 0.6, L1 = track.HW[i + 1] + 0.6;
+    out.push({ outer: [side(i, -L0), side(i + 1, -L1), side(i + 1, L1 + bay(i + 1)), side(i, L0 + bay(i))], tone: `rgb(${l},${w},${f})` });
+  }
   const first = GARDEN_WALL[GARDEN_WALL.length - 1];
   vectors.walls = (vectors.walls || []).filter((w) => !w.some((p) => Math.hypot(p[0] - first[0], p[1] - first[1]) < 0.5));
 }
@@ -223,8 +245,45 @@ export function createEmajoe(world, group) {
   const hw = (i) => track.HW[i];
   const bayW = (i) => BAY.width * smooth((i - BAY.i0) / BAY.taper) * smooth((BAY.i1 - i) / BAY.taper);
 
+  // ---- the high kerb: a step in the ground for the cars (world.addBump), drawn in build()
+  // (t: a track index with a fraction; lateral offsets from the centre line, + towards the river)
+  const lerpT = (t, f) => { const i = Math.floor(t), u = t - i; return f(i) + (f(i + 1) - f(i)) * u; };
+  const atT = (t, lat) => {
+    const i = Math.floor(t), u = t - i, [ax, az] = track.P[i], [bx, bz] = track.P[i + 1];
+    const tx = track.tan[i][0] + (track.tan[i + 1][0] - track.tan[i][0]) * u, tz = track.tan[i][1] + (track.tan[i + 1][1] - track.tan[i][1]) * u;
+    const l = Math.hypot(tx, tz) || 1;
+    return [ax + (bx - ax) * u - (tz / l) * lat, az + (bz - az) * u + (tx / l) * lat];
+  };
+  const kerbFace = (t) => lerpT(t, hw) + bayW(t) + 0.12;                   // the face of the kerb, 13 cm in front of the kerb strip's middle
+  const KW = 0.13 + PAVE.width;                                              // from the face to the back of the pavement
+  const kerbUp = (t) => smooth((t - KERB.i0) / KERB.up) * smooth((KERB.i1 - t) / KERB.down);
+  const kerbProfile = (t, d) => {
+    if (d <= 0 || d >= KW + KERB.back) return 0;
+    return KERB.h * kerbUp(t) * smooth(d / KERB.edge) * (d > KW ? smooth((KW + KERB.back - d) / KERB.back) : 1);
+  };
+  {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = KERB.i0; i <= KERB.i1; i++) {
+      for (const lat of [kerbFace(i), kerbFace(i) + KW + KERB.back]) {
+        const [x, z] = atT(i, lat);
+        x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z);
+      }
+    }
+    const hint = Math.round((KERB.i0 + KERB.i1) / 2);
+    world.addBump({
+      x0: x0 - 1, z0: z0 - 1, x1: x1 + 1, z1: z1 + 1,
+      at(x, z) {
+        const n = track.nearest(x, z, hint), t = n.i + n.t;
+        if (n.i < 0 || t <= KERB.i0 || t >= KERB.i1) return 0;
+        const [tx, tz] = track.tan[n.i], P = track.P[n.i];
+        return kerbProfile(t, (x - P[0]) * -tz + (z - P[1]) * tx - kerbFace(t));
+      },
+    });
+  }
+
   const markMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide });
-  const paveMat = new THREE.MeshLambertMaterial({ color: COL.pave, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+  // the pavement: concrete pavers, solid now that it stands up on its kerb
+  const paveMat = new THREE.MeshLambertMaterial({ map: paverTex(COL.paveRGB, 5), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
   const kerbMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide });
   const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const stoneMat = new THREE.MeshLambertMaterial({ map: stoneTex() });
@@ -438,23 +497,55 @@ export function createEmajoe(world, group) {
       const turn = cornerEdges();
       // (without the bridge in the map it stops short of the junction, as it did before)
       const before = (p, e) => !e || (p[0] - e.X[0]) * e.u[0] + (p[1] - e.X[1]) * e.u[1] < -e.r;
-      let inN = true, inF = true;
+      let inN = true, inF = true, last = PAVE.i0;
       for (let i = PAVE.i0; i <= (turn ? E.i1 : 1004); i++) {
         const fade = Math.max(0.03, smooth((i - PAVE.i0) / 4) * (turn ? 1 : smooth((1004 - i) / 4)));
         const a = hw(i) + bayW(i) + 0.25, b = a + PAVE.width * fade;
         inN = inN && before(at(i, a + 0.1), turn && turn.near);
         inF = inF && before(at(i, b), turn && turn.far);
-        if (inN) { near.push(at(i, a + 0.1)); outer.push([...at(i, a), 0.14]); }
+        if (inN) { near.push(at(i, a + 0.1)); last = i; }
         if (inF) far.push(at(i, b));
       }
+      outer.push([...at(last, hw(last) + bayW(last) + 0.25), 0.14]);
       if (turn) {                                        // round the corner and on along the bridge
         near.push(...turn.near.pts); far.push(...turn.far.pts);
         for (const p of turn.near.pts) outer.push([...p, 0.14]);
       }
       const top = { heightAt: (x, z) => world.topAt(x, z, 1) };
-      const g = drapeGeometry(top, [[[...near, ...far.reverse()]]], 0.05, 1, 1.5);
+      const g = drapeGeometry(top, [[[...near, ...far.reverse()]]], 0.05, 1.6, 1.5);
       if (g) { const m = new THREE.Mesh(g, paveMat); m.receiveShadow = true; group.add(m); }
-      strip(outer, COL.kerb, 0.06, pave, top.heightAt);
+      if (outer.length > 1) strip(outer, COL.kerb, 0.06, pave, top.heightAt);
+      // the kerb along the straight: its face down to the road, the stone on top, and behind the pavement
+      // the grass bank down to the ground
+      {
+        const pos = [], col = [];
+        const cK = new THREE.Color(COL.kerb), cF = new THREE.Color(COL.kerbFace), cB = new THREE.Color(COL.bank);
+        const quad = (A, B, C, D, c) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(c.r, c.g, c.b); };
+        const P3 = (t, d, lift) => { const [x, z] = atT(t, kerbFace(t) + d); return [x, world.heightAt(x, z) + lift, z]; };
+        const step = 0.5;
+        for (let t = PAVE.i0; t < last - 1e-6; t += step) {
+          const u = Math.min(last, t + step);
+          // face: from just under the road to the top edge of the stone (rounded off by 1 cm)
+          const yRoad = (tt) => world.heightAt(...atT(tt, kerbFace(tt) - 0.02));
+          const F = (tt, d, y) => { const [x, z] = atT(tt, kerbFace(tt) + d); return [x, y, z]; };
+          const topY = (tt) => world.heightAt(...atT(tt, kerbFace(tt) + KERB.edge + 0.01)) + 0.05;
+          quad(F(t, -0.01, yRoad(t) - 0.04), F(u, -0.01, yRoad(u) - 0.04), F(t, 0.0, topY(t) - 0.01), F(u, 0.0, topY(u) - 0.01), cF);
+          quad(F(t, 0.0, topY(t) - 0.01), F(u, 0.0, topY(u) - 0.01), F(t, 0.03, topY(t)), F(u, 0.03, topY(u)), cK);
+          quad(F(t, 0.03, topY(t)), F(u, 0.03, topY(u)), P3(t, 0.24, 0.055), P3(u, 0.24, 0.055), cK);
+          // the bank: from the back of the pavement down to the ground beside it
+          if (t >= PAVE.i0 + 3) for (let k = 0; k < 3; k++) {
+            const d0 = KW - 0.05 + (KERB.back + 0.1) * k / 3, d1 = KW - 0.05 + (KERB.back + 0.1) * (k + 1) / 3;
+            quad(P3(t, d0, 0.045), P3(u, d0, 0.045), P3(t, d1, 0.04), P3(u, d1, 0.04), cB);
+          }
+        }
+        const kg = new THREE.BufferGeometry();
+        kg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        kg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        kg.computeVertexNormals();
+        const km = new THREE.Mesh(kg, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+        km.receiveShadow = true;
+        group.add(km);
+      }
     }
     for (const [list, mat] of [[marks, markMat], [pave, kerbMat]]) { const m = meshOf(list, mat, true); if (m) group.add(m); }
 

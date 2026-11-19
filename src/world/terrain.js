@@ -89,9 +89,13 @@ function groundMaterial(map, detail, overview, mask) {
           float shade = clamp(pow(tn.r * 255.0 / 183.0, 1.25), 0.5, 1.3);
           float warm = (tn.g - 0.5) * 0.8;
           vec3 tint = vec3(1.0 + warm, 1.0, 1.0 - warm);
-          vec3 asphalt = vec3(0.235, 0.228, 0.232) * tint * shade * (0.6 + 0.55 * grain) * (0.85 + 0.3 * dB);
+          // (a tone with blue a little above zero marks newer, smoother tarmac laid by hand: finer grain,
+          // and the patches of the photo show through less, src/race/emajoe.js)
+          float fine = smoothstep(0.12, 0.22, tn.b) * (1.0 - smoothstep(0.34, 0.4, tn.b));
+          float rough = mix((0.6 + 0.55 * grain) * (0.85 + 0.3 * dB), (0.82 + 0.18 * grain) * (0.95 + 0.1 * dB), fine);
+          vec3 asphalt = vec3(0.235, 0.228, 0.232) * tint * shade * rough;
           float lum = dot(diffuseColor.rgb, vec3(0.33));
-          asphalt *= 0.85 + 0.4 * smoothstep(0.45, 0.9, lum);
+          asphalt *= mix(0.85 + 0.4 * smoothstep(0.45, 0.9, lum), 1.0, fine * 0.8);
           // setts: rows of cut stones with dark joints, each stone its own shade
           vec2 cp = vWxz * vec2(4.6, 7.2);
           cp.x += 0.5 * mod(floor(cp.y), 2.0);
@@ -101,7 +105,7 @@ function groundMaterial(map, detail, overview, mask) {
           float nearK = 1.0 - smoothstep(14.0, 50.0, dist);
           vec3 setts = mix(vec3(0.27, 0.25, 0.245), vec3(0.43, 0.39, 0.37), ch) * mix(0.42, 1.0, joint) * (0.8 + 0.3 * grain);
           setts = mix(vec3(0.31, 0.285, 0.275) * (0.85 + 0.3 * dB), setts, nearK) * tint * mix(1.0, shade, 0.6);
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(asphalt, setts, stone), mix(0.82, 0.92, stone) * paved);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(asphalt, setts, stone), mix(mix(0.82, 0.95, fine), 0.92, stone) * paved);
           // kerb stone along streets
           float kerb = smoothstep(0.42 - uKerb * 0.8, 0.42, rdS.g) * (1.0 - smoothstep(0.42, 0.42 + uKerb * 0.8, rdS.g)) * (1.0 - smoothstep(60.0, 160.0, dist));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.49) * (0.8 + 0.3 * grain), kerb * 0.85);
@@ -115,7 +119,7 @@ function groundMaterial(map, detail, overview, mask) {
           float green = smoothstep(0.0, 0.06, diffuseColor.g - max(diffuseColor.r, diffuseColor.b) + 0.03);
           diffuseColor.rgb *= mix(1.0, 0.72 + 1.3 * blades, soft * green * k);
           diffuseColor.rgb *= mix(0.55, 1.0, mk.g);                 // contact shadow along walls
-          gWet = paved * (1.0 - 0.6 * stone) * (0.55 + 0.9 * (dB - 0.5));   // damp asphalt, patchy
+          gWet = paved * (1.0 - 0.6 * stone) * (1.0 - 0.5 * fine) * (0.55 + 0.9 * (dB - 0.5));   // damp asphalt, patchy
         #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         #ifdef USE_MASK

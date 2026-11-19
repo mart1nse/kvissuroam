@@ -35,6 +35,13 @@ const DAMP = 2 * 0.5 * Math.sqrt(SPRING);
 const STATIC = G / SPRING;
 const BUMP = STATIC + 0.09;      // travel where the bump stops start
 const FLOOR = 0.13;              // the body never sits lower than this below its ride height
+// Raised kerbs (world.kerbAt): a wheel whose kerb height jumps by more than KERB_STEP in one step has met
+// a kerb face. Climbing it takes up to KERB_KNOCK m/s of the wheel's speed into the kerb (per 15 cm above
+// 5 cm) and jolts the body; met at less than KERB_GLANCE rad (per 15 cm) the tyre rubs along the face
+// and is turned back off it instead.
+const KERB_STEP = 0.07;
+const KERB_KNOCK = 1.4;
+const KERB_GLANCE = 0.1;
 
 // grip, rolling resistance, tyre stiffness and bumpiness per surface class
 // kp / tail describe traction under wheelspin: grip peaks at slip ratio kp and
@@ -286,6 +293,8 @@ export function stepCar(car, input, world, dtFrame) {
   car.time += dtFrame;
   car.hit *= Math.exp(-dtFrame * 4);
   car.landed *= Math.exp(-dtFrame * 6);
+  if (car.kerbHit) car.kerbHit *= Math.exp(-dtFrame * 8);
+  if (car.jolt) car.jolt *= Math.exp(-dtFrame * 10);
 }
 
 function substep(car, input, world, dt) {
@@ -767,6 +776,59 @@ function substep(car, input, world, dt) {
     car.hit = Math.max(car.hit, -vn);
   };
 
+  // ---- kerbs: each wheel remembers the kerb height where it last ran level and where that was; when it
+  // has risen KERB_STEP above it, the wheel has met a kerb face between there and here
+  if (world.kerbAt) {
+    const KS = car.kerbS || (car.kerbS = Array.from({ length: 4 }, () => ({ h: null, base: 0, bx: 0, bz: 0, armed: false })));
+    const sY = Math.sin(car.yaw), cY = Math.cos(car.yaw);
+    for (let k = 0; k < 4; k++) {
+      const W = KS[k];
+      const lx = k < 2 ? car.a : -car.b, ly = k % 2 ? hw : -hw;
+      const ox = sY * lx + cY * ly, oz = -cY * lx + sY * ly;
+      const wx = car.x + ox, wz = car.z + oz;
+      const kb = world.kerbAt(wx, wz);
+      if (W.h === null || car.airborne || Math.abs(kb - W.h) < 0.002) { W.base = kb; W.bx = wx; W.bz = wz; W.armed = true; }
+      W.h = kb;
+      if (!W.armed || kb - W.base < KERB_STEP) continue;
+      W.armed = false;
+      // where on the way it rose, which way the kerb faces there, and how high it is (its top a little behind the face)
+      const dx = wx - W.bx, dz = wz - W.bz;
+      let t0 = 0, t1 = 1;
+      for (let q = 0; q < 7; q++) {
+        const tm = (t0 + t1) / 2;
+        if (world.kerbAt(W.bx + dx * tm, W.bz + dz * tm) - W.base > (kb - W.base) / 2) t1 = tm; else t0 = tm;
+      }
+      const ex = W.bx + dx * t1, ez = W.bz + dz * t1, e = 0.03;
+      let nx = world.kerbAt(ex - e, ez) - world.kerbAt(ex + e, ez), nz = world.kerbAt(ex, ez - e) - world.kerbAt(ex, ez + e);
+      const nl = Math.hypot(nx, nz);
+      if (nl < 1e-6) continue;
+      nx /= nl; nz /= nl;
+      const rise = Math.max(kb, world.kerbAt(ex - nx * 0.15, ez - nz * 0.15)) - W.base;
+      const pvx = wvx - car.yawRate * oz, pvz = wvz + car.yawRate * ox;
+      const into = -(pvx * nx + pvz * nz), along = Math.abs(pvz * nx - pvx * nz);
+      if (into <= 0) continue;
+      const sev = Math.min(1.5, Math.max(0.1, (rise - 0.05) / 0.15));
+      const rn = ox * nz - oz * nx, mEff = 1 / (1 / m + (rn * rn) / car.iz);
+      let dv;
+      if (Math.atan2(into, along) < KERB_GLANCE * sev && into < 2.5) {
+        // glancing: back off the kerb with the wheel's speed into it gone (and a little bounce)
+        const pen = Math.max(0, (wx - ex) * -nx + (wz - ez) * -nz) + 0.02;
+        car.x += nx * pen; car.z += nz * pen;
+        W.h = W.base; W.armed = true;
+        dv = into * 1.15;
+        car.kerbHit = Math.max(car.kerbHit || 0, 0.3 * sev * Math.min(1, into / 1.5));
+      } else {
+        dv = Math.min(into, KERB_KNOCK * sev);
+        car.kerbHit = Math.max(car.kerbHit || 0, sev * Math.min(1, (into + 0.15 * along) / 4));
+        car.jolt = 1;
+      }
+      const j = dv * mEff;
+      wvx += (j * nx) / m; wvz += (j * nz) / m;
+      car.yawRate += (rn * j) / car.iz;
+      car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
+    }
+  }
+
   // tree trunks: exact circles against the body rectangle
   const trunks = world.trunksNear ? world.trunksNear(car.x, car.z, Math.hypot(hl, hwid) + 1.2, tmpT) : null;
   if (trunks && trunks.length) {
@@ -846,8 +908,10 @@ function substep(car, input, world, dt) {
     car.roll += car.rollRate * dt;
   } else {
     const p0 = car.pitch, r0 = car.roll;
-    car.pitch += (tPitch - car.pitch) * Math.min(1, dt * 9);
-    car.roll += (tRoll - car.roll) * Math.min(1, dt * 9);
+    // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
+    const follow = Math.min(1, dt * (9 + 30 * (car.jolt || 0)));
+    car.pitch += (tPitch - car.pitch) * follow;
+    car.roll += (tRoll - car.roll) * follow;
     const k = Math.min(1, dt * 12);
     car.pitchRate += (Math.max(-0.7, Math.min(0.7, (car.pitch - p0) / dt)) - car.pitchRate) * k;
     car.rollRate += (Math.max(-0.5, Math.min(0.5, (car.roll - r0) / dt)) - car.rollRate) * k;
@@ -865,6 +929,6 @@ export function resetCar(car, pose) {
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
-  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0;
+  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;
 }

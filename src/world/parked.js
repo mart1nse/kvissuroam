@@ -19,6 +19,7 @@ import { uueturuParked } from '../race/uueturu.js';
 import { AKSI_CARS } from './aksi.js';
 import { SIRELI_CARS } from './sireli.js';
 import { COOP_CARS } from './coop.js';
+import { PEPLERI_CARS } from './pepleri.js';
 import { JAAAEG_CARS } from './jaaaeg.js';
 
 // ---------------------------------------------------------------- what stands where
@@ -78,6 +79,7 @@ function allSpots() {
   AKSI_CARS.forEach(([x, z, yaw, id, paint], i) => out.push({ key: `a${i}`, x, z, yaw, id, paint }));
   SIRELI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `s${i}`, x, z, yaw, id, paint, lift }));
   COOP_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `c${i}`, x, z, yaw, id, paint, lift }));
+  PEPLERI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `p${i}`, x, z, yaw, id, paint, lift }));
   JAAAEG_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `j${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;

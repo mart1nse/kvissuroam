@@ -32,7 +32,7 @@ const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chir
 const FIRST_KICK = 1.35, FIRST_YANK = 0.6;
 
 export function createShiftSound() {
-  let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0;
+  let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0, flare = 0.16;
   let lastT = 0, lastRpm = 0, wasCut = false, hold = 0, yankId = 0, yank = 0, tight = 0, cutAt = -9;
   // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
   // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
@@ -52,6 +52,7 @@ export function createShiftSound() {
       run = t - at < 0.6 ? run + 1 : 0;           // another one straight after the last: Z Z Z
       k = Math.min(1, (byHand ? 1 : 0.75) + 0.1 * run);
       at = t;
+      flare = 0.16 * (0.85 + 0.3 * Math.random());   // (no two blips quite alike)
       // the jump in revs the clutch has to take up
       const was = (Math.abs(car.vx) / s.wheelRadius) * s.gears[lastGear - 1] * s.finalDrive * (60 / (2 * Math.PI));
       const jump = (was * (s.gears[car.gear - 1] / s.gears[lastGear - 1] - 1)) / e.redline;
@@ -88,8 +89,8 @@ export function createShiftSound() {
     const crackle = since < 1.8 ? k * clamp((since - 0.08) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
     const sb = t - bAt, bark = sb < 0.8 ? bk * Math.exp(-sb / 0.16) : 0;
     const over = clamp((car.overRev || 0) * 6, 0, 1);
-    // (the revs flare past the lower gear's, up to 16 %, short of the redline)
-    let rpm = Math.min(car.rpm * (1 + 0.16 * blip), Math.max(car.rpm, e.redline * 0.985));
+    // (the revs flare past the lower gear's, about 16 %, short of the redline)
+    let rpm = Math.min(car.rpm * (1 + flare * blip), Math.max(car.rpm, e.redline * 0.985));
     if (over > 0) rpm = Math.max(rpm, e.redline * (1 + 0.035 * over));
     if (changing) rpm = Math.max(rpm, hold);
     rpm = Math.min(rpm, e.redline * 1.04);

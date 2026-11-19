@@ -186,7 +186,10 @@ function engineForce(car, throttle, dt) {
     // first gear is still left until the car is nearly down to a crawl (taken early, the next stab of the
     // throttle would have it bouncing between first and second on spinning tyres)
     const braking = g > 2 ? Math.min(1, (car.brake || 0) / 0.5) : 0;
-    const downAt = throttle > 0.5 ? 0.9 : 0.55 + ((e.brakeDown ?? BRAKE_DOWN) - 0.55) * braking;
+    // (off the throttle each downshift comes at a slightly different point, up to 4 % of the shift point
+    // either way under braking, half that coasting, so a long stop doesn't land on the same revs every
+    // time, Martin 2026-11-19)
+    const downAt = throttle > 0.5 ? 0.9 : 0.55 + ((e.brakeDown ?? BRAKE_DOWN) - 0.55) * braking + (car.downJit || 0) * (0.5 + 0.5 * braking);
     if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
     else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * downAt) g--;
     if (g !== car.gear) {
@@ -195,6 +198,10 @@ function engineForce(car, throttle, dt) {
       car.shiftUp = g > car.gear && throttle > 0.3;
       if (g > car.gear) { car.locked = true; car.carry = 0; }
       car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
+      // (where the next downshift comes, drawn afresh at each change: from the time, so a test drives the
+      // same way every run)
+      const h = Math.sin(car.time * 12.9898 + g * 78.233) * 43758.5453;
+      car.downJit = 0.04 * (2 * (h - Math.floor(h)) - 1);
     }
   }
   if (car.shiftTimer > 0) {

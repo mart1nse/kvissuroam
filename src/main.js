@@ -30,7 +30,7 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
-import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear } from './race/kroonuaia.js';
+import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear, kroonuaiaRoads } from './race/kroonuaia.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -124,6 +124,7 @@ async function boot() {
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
+  kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground

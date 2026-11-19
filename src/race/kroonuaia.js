@@ -250,6 +250,10 @@ const SIGNS = [
 ];
 const ISLANDS = [1206.2, 1273.8, 1314.4];          // the small kerbed islands with the keep-right arrow
 const BOLLARDS = { i0: 1412, i1: 1427, n: 7, off: 0.45 };      // along the left edge before the Veski turn
+// zebra crossings: the map has one too early at the start and two in the bend that are not there; the photos
+// show one past the brown house and one before the Jakobi junction
+const ZEBRA_OFF = [1054, 1229, 1243], ZEBRA_ON = [1073, 1316];
+const ZEBRAS = [1073, 1208, 1278, 1316, 1418];                 // every crossing on the stretch: the centre line stops for them
 const inStretch = (i) => (i > 1038 && i < 1321) || (i > 1335 && i < 1429);
 
 export function kroonuaiaProps() {
@@ -259,6 +263,7 @@ export function kroonuaiaProps() {
     const yaw = (Math.atan2(-tx, tz) * 180) / Math.PI;
     faces.forEach((f, n) => out.push([f, x, z, yaw, n * 8]));
   }
+  for (const i of ZEBRA_ON) { const [tx, tz] = track.tan[i]; out.push([7, ...T(i, 0), (Math.atan2(tx, -tz) * 180) / Math.PI, track.HW[i] * 2]); }
   for (let k = 0; k < BOLLARDS.n; k++) {
     const i = BOLLARDS.i0 + (BOLLARDS.i1 - BOLLARDS.i0) * k / (BOLLARDS.n - 1);
     out.push([8, ...T(i, -(track.HW[Math.round(i)] + BOLLARDS.off)), 0]);
@@ -271,13 +276,40 @@ export function kroonuaiaClear(data) {
   for (const key of ['2_4', '3_4', '2_5', '3_5']) {
     const a = data.sectors[key] || [];
     for (let k = 0; k < a.length; k += data.stride) {
-      if (a[k] < 10) continue;
+      if (a[k] < 10 && a[k] !== 7) continue;
       const n = track.nearest(a[k + 1], a[k + 2], 1200);
+      if (a[k] === 7) { if (n.d < 3 && ZEBRA_OFF.some((i) => Math.abs(n.i - i) < 4)) out.push(`${key}:${k / data.stride}`); continue; }
       if (inStretch(n.i) && n.d < track.HW[n.i] + 9) out.push(`${key}:${k / data.stride}`);
     }
   }
   return out;
 }
+// before the road markings are built: these streets paint their own lines
+export function kroonuaiaRoads(vectors) {
+  const track = createTrack(), prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const n = track.nearest(x, z, 1200);
+    return (n.i >= PAINT.i0 && n.i <= PAINT.i1 && n.d < 2.5) || (prev ? prev(x, z) : false);
+  };
+}
+// road paint from the photos, in lap indexes (about 2 m each) and metres right of the centre line
+const PAINT = {
+  i0: 1040, i1: 1429,
+  // centre line: [from, to, metres painted, metres bare] (bare 0: solid), 'double' for the pair at the top of Jakobi
+  centre: [[1040, 1212, 3, 4.5], [1256, 1326, 1.5, 2.5], [1333, 1400, 1, 0], [1400, 1428, 1, 0, 'double']],
+  bus: { i0: 1104, i1: 1117, teeth: 5, in: 0.35, out: 2.5 },          // yellow zigzag on the right, measured from the kerb
+  // painted build-outs with bars: [from, to, side, widest (m), taper in (indexes), taper out, bar every (m), bar width]
+  hatch: [[1220, 1240, 1, 2.3, 1.5, 11, 3.2, 0.45], [1232, 1251, -1, 1.2, 4, 4, 2.6, 0.4], [1406, 1428, -1, 1.5, 3, 0.5, 3.4, 0.6]],
+  blue: { at: [1283.5, 1286.5, 1289.5, 1292.5, 1295.5], side: -1, len: 2.3 },     // parking bay marks on the left
+  // patched and newer tarmac: [from, to, lat from, lat to, darkness]
+  patch: [
+    [1046, 1066, -3.7, -1.9, 0.14], [1050, 1071, 2.9, 3.7, 0.18], [1084, 1087, -0.6, 1.8, 0.2],
+    [1097.5, 1100.5, -0.4, 2.4, 0.24], [1100, 1102, -3.2, -1.3, 0.2], [1118, 1121, 0.3, 3.4, 0.16], [1136, 1144, -3.6, -2.6, 0.18],
+    [1152, 1155, -1.2, 1.6, 0.2], [1176, 1186, 1.8, 3.4, 0.14], [1228, 1256, -4.3, 0.2, 0.13], [1262, 1265, 0.4, 3.2, 0.2],
+    [1286, 1300, 0.3, 2.3, 0.15], [1304, 1306.5, -3.4, -0.6, 0.2], [1344, 1349, -2.2, 1.0, 0.18], [1367, 1370, 0.5, 3.6, 0.2],
+    [1385, 1392, -3.7, -1.6, 0.15], [1406, 1409, 0.4, 3.0, 0.2],
+  ],
+};
 // fences: [lap index from, to, side, metres beyond the road edge, height, [r, g, b], style, solid]
 // styles: 'boards' close boards, 'pickets' with gaps, 'rails' posts and two rails, 'iron' thin black bars
 const FENCES = [
@@ -397,6 +429,72 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
     for (let i = 1358; i < 1372; i += 2.2) { const [x, z] = T(i, -(hw(i) + 3.4)); if (world.sdfAt(x, z) > 0.5) p.add(new THREE.SphereGeometry(0.42, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x9a98a4, x, h(x, z), z, 0); }
     // steps and railing at the Helen Doron door
     { const [x, z] = [936.6, 2591.4]; if (world.sdfAt(x, z) > 0.1) for (let k = 0; k < 3; k++) K.box(x + k * 0.3, z + k * 0.16, 1.4, 0.16, 0.34, 0xa8a4a8, Math.atan2(-0.88, 0.48) + Math.PI / 2, k * 0.16); }
+
+    // ================= road paint and patched tarmac =================
+    {
+      const WHITE = [0.98, 0.97, 1], YELLOW = [1, 0.84, 0.36], BLUE = [0.42, 0.62, 0.95];
+      const paint = { pos: [], col: [] }, patch = { pos: [], col: [] };
+      // a flat four-cornered piece on the ground, wound top up
+      const quad = (q, a, b, c, d, rgb, lift = 0.07) => {
+        const up = (b[1] - a[1]) * (d[0] - a[0]) - (b[0] - a[0]) * (d[1] - a[1]) > 0;
+        for (const v of up ? [a, b, c, a, c, d] : [a, c, b, a, d, c]) { q.pos.push(v[0], h(v[0], v[1]) + lift, v[1]); q.col.push(rgb[0], rgb[1], rgb[2]); }
+      };
+      // a stripe along the road between two offsets (numbers or functions of the lap index)
+      const along = (q, i0, i1, la, lb, rgb, lift) => {
+        const f = (l, i) => (typeof l === 'function' ? l(i) : l), n = Math.max(1, Math.ceil((i1 - i0) / 0.5));
+        for (let k = 0; k < n; k++) {
+          const a = i0 + (i1 - i0) * k / n, b = i0 + (i1 - i0) * (k + 1) / n;
+          quad(q, T(a, f(la, a)), T(b, f(la, b)), T(b, f(lb, b)), T(a, f(lb, a)), rgb, lift);
+        }
+      };
+      // a straight painted bar from one point to another
+      const bar = (q, a, b, w, rgb) => {
+        const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, nx = -dz / l * w / 2, nz = dx / l * w / 2, n = Math.max(1, Math.ceil(l / 1.2));
+        for (let k = 0; k < n; k++) {
+          const p = [a[0] + dx * k / n, a[1] + dz * k / n], r = [a[0] + dx * (k + 1) / n, a[1] + dz * (k + 1) / n];
+          quad(q, [p[0] - nx, p[1] - nz], [r[0] - nx, r[1] - nz], [r[0] + nx, r[1] + nz], [p[0] + nx, p[1] + nz], rgb);
+        }
+      };
+      const M = 2.03;                                   // metres per lap index here
+      const atZebra = (i) => ZEBRAS.some((z) => Math.abs(i - z) < 2.6);
+      for (const [i0, i1, on, off, kind] of PAINT.centre) {
+        if (!off) {
+          for (let i = i0; i < i1; i += 0.5) {
+            if (atZebra(i + 0.25)) continue;
+            if (kind === 'double') { along(paint, i, i + 0.5, -0.21, -0.09, WHITE); along(paint, i, i + 0.5, 0.09, 0.21, WHITE); }
+            else along(paint, i, i + 0.5, -0.06, 0.06, WHITE);
+          }
+        } else for (let i = i0; i + on / M <= i1; i += (on + off) / M) if (!atZebra(i) && !atZebra(i + on / M)) along(paint, i, i + on / M, -0.06, 0.06, WHITE);
+      }
+      // the bus stop's yellow zigzag
+      { const B = PAINT.bus, n = B.teeth * 2;
+        for (let k = 0; k < n; k++) {
+          const a = B.i0 + (B.i1 - B.i0) * k / n, b = B.i0 + (B.i1 - B.i0) * (k + 1) / n;
+          bar(paint, T(a, hw(a) - (k % 2 ? B.out : B.in)), T(b, hw(b) - (k % 2 ? B.in : B.out)), 0.12, YELLOW);
+        }
+        along(paint, B.i0, B.i1, (i) => hw(i) - B.out - 0.06, (i) => hw(i) - B.out + 0.06, YELLOW); }
+      // build-outs: an edge line swinging off the kerb and bars across the dead ground
+      for (const [i0, i1, side, wide, tin, tout, every, bw] of PAINT.hatch) {
+        const sm = (t) => { const u = Math.min(1, Math.max(0, t)); return u * u * (3 - 2 * u); };
+        const w = (i) => wide * sm((i - i0) / tin) * sm((i1 - i) / tout);
+        along(paint, i0, i1, (i) => side * (hw(i) - w(i) - 0.07), (i) => side * (hw(i) - w(i) + 0.07), WHITE);
+        for (let i = i0 + every / M / 2; i < i1; i += every / M) if (w(i) > 0.5) bar(paint, T(i + 0.5, side * (hw(i) - 0.12)), T(i - 0.3, side * (hw(i) - w(i) + 0.1)), bw, WHITE);
+      }
+      for (const i of PAINT.blue.at) bar(paint, T(i, PAINT.blue.side * (hw(i) - 0.15)), T(i, PAINT.blue.side * (hw(i) - PAINT.blue.len)), 0.13, BLUE);
+      for (const [i0, i1, la, lb, dark] of PAINT.patch) along(patch, i0, i1, la, lb, [dark, dark, dark], 0.045);
+      const mesh = (q, mat) => {
+        if (!q.pos.length) return;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(q.pos, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(q.col, 3));
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.matrixAutoUpdate = false; group.add(m);
+      };
+      mesh(paint, new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      // patches darken the tarmac under them: black at the opacity given per patch (kept in the vertex colour)
+      const pm = new THREE.MeshBasicMaterial({ color: 0x1a1620, vertexColors: false, transparent: true, opacity: 0.17, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      mesh(patch, pm);
+    }
 
     K.finish();
     for (const q of extra) {

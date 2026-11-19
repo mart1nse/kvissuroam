@@ -2,7 +2,8 @@
 // The group's current car sits in the middle slot, the car before it shows as a slim tab above and
 // the next one as a tab below; the reel goes round. Sliding it (drag up or down, a tap on a tab, the
 // mouse wheel, the up and down keys) moves every card one slot, and the cards follow the finger while
-// it drags.
+// it drags. A tab is the same card cut down to its name: between the slots the name stays readable and
+// glides from its place in the tab to its place on the card, while the rest fades in below it.
 const CHEVRON = '<svg viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 10 2l8 8"/></svg>';
 const SLIDE_MS = 300;
 const mod = (i, n) => ((i % n) + n) % n;
@@ -17,9 +18,9 @@ export function createGarage({ root, cars, groups: defs, picked, onPick }) {
 
   function face(id) {
     const s = cars[id], r = s.ref;
-    return `<span class="tab"><b>${s.name}</b><i>${r.powerKw} kW</i></span>
-      <span class="full" data-yr="${s.year}">
-        <span class="yr">${s.year}</span><h3>${s.name}</h3><p>${s.blurb}</p>
+    // (the name twice, in the same place: on one line for the tab, on up to two for the full card)
+    return `<span class="full" data-yr="${s.year}">
+        <span class="yr">${s.year}</span><span class="nm"><h3 class="one">${s.name}</h3><h3 class="two">${s.name}</h3></span><p>${s.blurb}</p>
         <dl>
           <div><dt>POWER</dt><dd>${r.powerKw}<small>kW</small></dd><u><i style="width:${pct(r.powerKw / maxKw)}"></i></u></div>
           <div><dt>${r.zeroTo50 ? '0–50' : '0–100'}</dt><dd>${r.zeroTo50 ?? r.zeroTo100}<small>s</small></dd><u><i style="width:${pct(minSecs / secs(r))}"></i></u></div>
@@ -28,6 +29,8 @@ export function createGarage({ root, cars, groups: defs, picked, onPick }) {
       </span>`;
   }
 
+  // (the row may be dragged sideways on a very narrow screen, but never up or down)
+  root.addEventListener('scroll', () => { if (root.scrollTop) root.scrollTop = 0; }, { passive: true });
   let current = picked;          // the car that DRIVE will start
   let drag = null, swiped = false, lastWheel = 0, raf = 0;
   root.innerHTML = '';
@@ -64,7 +67,16 @@ export function createGarage({ root, cars, groups: defs, picked, onPick }) {
 
   // ---- sizes, read from the style sheet: the card, the tab and the gap between them
   let H = 0, T = 0, G = 0;
+  // where the card's text sits while the card is a tab: shifted and shrunk so the name's first line lies
+  // beside the arrow, in the middle of the tab (worked out from the first card that is laid out)
+  const TAB_SCALE = 0.8;
+  let tab = null;
+  function tabShift(c) {
+    const nm = c.querySelector('.nm'), em = parseFloat(getComputedStyle(root).fontSize) || 10;
+    tab = { x: 2.6 * em - TAB_SCALE * nm.offsetLeft, y: (T - 3 - TAB_SCALE * nm.querySelector('.one').offsetHeight) / 2 - TAB_SCALE * nm.offsetTop };
+  }
   function measure() {
+    tab = null;
     const reel = groups[0].reel;
     G = parseFloat(getComputedStyle(reel).rowGap) || 0;
     T = root.querySelector('.step')?.offsetHeight || 0;
@@ -73,15 +85,20 @@ export function createGarage({ root, cars, groups: defs, picked, onPick }) {
   }
 
   // where a card sits, `o` slots away from the middle: 0 is the full card, -1 and 1 are the tabs
+  // (a card on its way out past a tab is squeezed against the reel's edge, so nothing ever reaches outside the reel)
   function place(c, o) {
-    const a = Math.abs(o), f = clamp01(1 - a);
-    const top = o <= 0 ? (T + G) * (o + 1) : o <= 1 ? T + G + (H + G) * o : T + G + (H + G) * (o - 1) + T + (H - T) * (2 - o) + G;
+    const a = Math.abs(o), f = clamp01(1 - a), out = clamp01(a - 1);
+    const h = a <= 1 ? T + (H - T) * f : T * (1 - out);
+    const top = o < -1 ? 0 : o <= 0 ? (T + G) * (o + 1) : o <= 1 ? T + G + (H + G) * o : 2 * (T + G) + H - h;
     c.style.transform = `translate3d(0,${top.toFixed(1)}px,0)`;
-    c.style.height = `${(T + (H - T) * f).toFixed(1)}px`;
+    c.style.height = `${h.toFixed(1)}px`;
     c.style.opacity = clamp01((1.55 - a) / 0.55).toFixed(3);
-    // (the tab's name fades out before the card's own text fades in, so the two never show at once)
-    c.style.setProperty('--full', clamp01((f - 0.45) / 0.45).toFixed(3));
-    c.style.setProperty('--tab', clamp01((0.4 - f) / 0.4).toFixed(3));
+    if (!tab) tabShift(c);
+    const k = 1 - f;
+    c.firstElementChild.style.transform = `translate(${(tab.x * k).toFixed(1)}px,${(tab.y * k).toFixed(1)}px) scale(${(1 - (1 - TAB_SCALE) * k).toFixed(3)})`;
+    c.style.setProperty('--f', f.toFixed(3));
+    c.style.setProperty('--two', clamp01((f - 0.38) / 0.16).toFixed(3));    // the name's second line
+    c.style.setProperty('--rest', clamp01((f - 0.12) / 0.5).toFixed(3));    // everything but the name
     c.classList.toggle('front', a < 0.5);
     c.tabIndex = a < 0.5 ? 0 : -1;
   }

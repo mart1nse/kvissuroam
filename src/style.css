@@ -65,7 +65,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   --H: 13.4em; --T: 3em; --G: .55em;
   font-size: clamp(10px, min(1.1vw, 1.9vh), 18px);
   display: flex; flex: none; gap: clamp(12px, 2vw, 30px); align-items: flex-start; justify-content: safe center; width: 100%; margin-top: auto;
-  overflow-x: auto; padding: 8px 22px 12px; box-sizing: border-box; scrollbar-width: none; overscroll-behavior-x: contain;
+  overflow-x: auto; overflow-y: hidden; padding: 8px 22px 12px; box-sizing: border-box; scrollbar-width: none; overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
 /* (touch is switched off everywhere else on the page; the row may still be dragged sideways) */
@@ -87,39 +87,35 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   position: absolute; left: 0; right: 0; top: 0; height: var(--T); padding: 0; overflow: hidden; text-align: left; font-size: 1em;
   background: linear-gradient(165deg, rgba(52, 18, 104, .86), rgba(18, 6, 43, .9) 62%); border: 1.5px solid rgba(255, 95, 162, .34); border-radius: .5em;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  --full: 0; --tab: 1; transition: border-color .2s, box-shadow .2s;
+  --f: 0; --two: 0; --rest: 0; transition: border-color .2s, box-shadow .2s;
 }
 .card.front { border-color: rgba(255, 95, 162, .75); box-shadow: 0 .5em 1.6em rgba(8, 2, 24, .45); }
 .card.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 26px rgba(47, 243, 255, .5), inset 0 0 22px rgba(47, 243, 255, .1); }
 .card:focus-visible, .step:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
-/* a card as a tab: just the car's name and power */
-.card .tab {
-  position: absolute; left: 0; right: 0; top: 0; height: calc(var(--T) - 3px); padding: 0 .9em 0 2.6em; opacity: var(--tab);
-  display: flex; align-items: center; gap: .8em;
-}
-.card .tab b { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic; font-weight: 800; opacity: .82; }
-.card .tab i { flex: none; font-style: normal; font-size: .8em; font-weight: 700; letter-spacing: .04em; opacity: .55; white-space: nowrap; }
-/* the full card: year, name and what it is at the top, the three figures with their bars along the bottom */
+/* The card's text: year, name and what it is at the top, the three figures with their bars along the
+   bottom. As a tab the card is cut down to its name: garage.js shifts and shrinks this block so the name
+   lies beside the arrow, and sets --f (0 a tab, 1 the full card), --two and --rest for the fades. */
 .card .full {
-  position: absolute; left: 0; right: 0; top: 0; height: calc(var(--H) - 3px); padding: 1em 1.15em 1em; opacity: var(--full);
-  display: flex; flex-direction: column;
+  position: absolute; left: 0; right: 0; top: 0; height: calc(var(--H) - 3px); padding: 1em 1.15em 1em;
+  display: flex; flex-direction: column; transform-origin: 0 0;
 }
 .card .full::before {
   content: attr(data-yr); position: absolute; right: .1em; top: -.06em; font-size: 4.6em; line-height: 1; font-style: italic; font-weight: 900;
-  color: transparent; -webkit-text-stroke: 1px rgba(255, 255, 255, .1); pointer-events: none;
+  color: transparent; -webkit-text-stroke: 1px rgba(255, 255, 255, .1); pointer-events: none; opacity: var(--rest);
 }
-.card .yr { font-size: .8em; letter-spacing: .25em; color: var(--sun); }
-.card h3 {
-  margin: .2em 0 .35em; font-size: 1.36em; line-height: 1.16; font-style: italic; font-weight: 800; position: relative;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
-}
+.card .yr { font-size: .8em; letter-spacing: .25em; color: var(--sun); opacity: var(--rest); }
+/* the name, twice in one place: on one line for the tab, on two for the card; they swap as the card grows */
+.card .nm { position: relative; display: block; margin: .2em 0 .35em; font-size: 1.36em; opacity: calc(.84 + .16 * var(--f)); }
+.card h3 { margin: 0; font-size: 1em; line-height: 1.16; font-style: italic; font-weight: 800; }
+.card .one { position: absolute; left: 0; top: 0; width: calc(100% / .8 - 1.4em); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: calc(1 - var(--two)); }
+.card .two { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; opacity: var(--two); }
 .card p {
-  margin: 0; font-size: .8em; opacity: .78; letter-spacing: .04em; line-height: 1.38; position: relative;
+  margin: 0; font-size: .8em; color: rgba(255, 255, 255, .78); letter-spacing: .04em; line-height: 1.38; position: relative; opacity: var(--rest);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
-.card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin: auto 0 0; }
+.card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin: auto 0 0; opacity: var(--rest); }
 .card dl div { min-width: 0; }
-.card dt { font-size: .68em; letter-spacing: .14em; color: var(--pink); }
+.card dt { font-size: max(.68em, 7px); letter-spacing: .14em; color: var(--pink); }
 .card dd { margin: .1em 0 .4em; font-size: 1.16em; font-weight: 800; white-space: nowrap; }
 .card dd small { margin-left: .25em; font-size: .58em; font-weight: 700; letter-spacing: .06em; opacity: .6; }
 .card u { display: block; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .13); overflow: hidden; }
@@ -267,8 +263,14 @@ body.touch .desktop-only { display: none; }
   .group { gap: .3em; }
   .card .yr { display: none; }
   .card .full { padding: .75em 1em .8em; }
-  .card .full::before, .card .tab i { display: none; }
-  .card h3 { margin-top: 0; font-size: 1.3em; }
+  .card .full::before { display: none; }
+  .card .nm { margin-top: 0; font-size: 1.3em; }
+}
+/* a phone browser that keeps its address bar on screen (before the first tap takes the game full screen) */
+@media (max-height: 340px) {
+  #menu .logo { font-size: min(8vw, 12vh); }
+  #menu .attribution { display: none; }
+  #cards { --H: 8.6em; --T: 2.9em; font-size: 9px; }
 }
 
 /* ---- race: lap panel, names over other cars, driver name, lap times board */
@@ -350,6 +352,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #boardbtn svg { flex: none; width: 1.4em; height: 1.4em; fill: none; stroke: var(--cyan); stroke-width: 1.7; stroke-linecap: round; }
 #drive:active, #boardbtn:active { transform: scale(.97); }
 @media (max-height: 430px) { #menurow { --bh: 36px; } }
+@media (max-height: 340px) { #menurow { --bh: 32px; } }
 @media (hover: hover) and (pointer: fine) {
   #drive:hover { box-shadow: 0 0 40px rgba(255, 43, 214, .95), inset 0 0 18px rgba(255, 255, 255, .4); }
   #boardbtn:hover { background: rgba(47, 243, 255, .24); }

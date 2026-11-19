@@ -526,8 +526,9 @@ function startDriving() {
 }
 
 // Full screen on phones. The browser drops it when you switch to another app and only lets a page ask
-// again from a tap, so after the first DRIVE any tap while not in full screen asks for it again.
-let wantFull = false, fullAsked = false;
+// again from a tap, so any tap while not in full screen asks for it again. That starts with the first
+// tap in the opening menu, where the browser's own bars leave the garage little room.
+let wantFull = isTouch, fullAsked = false;
 function goFull() {
   const el = document.documentElement;
   if (document.fullscreenElement || fullAsked || !el.requestFullscreen) return;

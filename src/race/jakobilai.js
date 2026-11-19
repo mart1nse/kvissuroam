@@ -9,6 +9,7 @@ import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { setHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
+import { breakableShelter } from '../world/shelter.js';
 
 const STOP = { i: 786, zig0: 779, zig1: 795, zigW: 1.7, wall0: 776, wall1: 800, wallOff: 3.7, shelterOff: 1.9 };
 const CENTRE = [1205, 2495];
@@ -140,13 +141,15 @@ export function createJakobiLai(world, group) {
     }
 
     // ---- the shelter: dark frame, glass back and ends, roof, bench; the bus stop sign before it
+    // (it can be smashed: the glass bursts, the frame bends, src/world/shelter.js)
     {
       const i = STOP.i, [tx, tz] = track.tan[i], [rx, rz] = right(i);
       const L = 4.2, D = 1.45, Hs = 2.45;
       const [cx, cz] = T(i, hw(i) + STOP.shelterOff + D / 2);
       const y = h(cx, cz) + 0.02, yaw = Math.atan2(-tz, tx);
       const W = (lu, lr) => [cx + tx * lu + rx * lr, cz + tz * lu + rz * lr];
-      const add = (geo, colour, lu, yy, lr) => { const [x, z] = W(lu, lr); p.add(geo, colour, x, y + yy, z, yaw); };
+      const sp = new Parts();
+      const add = (geo, colour, lu, yy, lr) => { const [x, z] = W(lu, lr); sp.add(geo, colour, x, y + yy, z, yaw); };
       for (const lu of [-L / 2, -L / 6, L / 6, L / 2]) add(BOX(0.07, Hs, 0.07), COL.frame, lu, Hs / 2, D / 2);
       for (const lu of [-L / 2, L / 2]) add(BOX(0.07, Hs, 0.07), COL.frame, lu, Hs / 2, -D / 2);
       add(BOX(L + 0.35, 0.1, D + 0.3), COL.roof, 0, Hs + 0.05, 0);
@@ -155,18 +158,17 @@ export function createJakobiLai(world, group) {
       add(BOX(L * 0.6, 0.05, 0.4), COL.bench, 0, 0.46, D / 2 - 0.3);
       add(BOX(L * 0.6, 0.3, 0.04), COL.bench, 0, 0.7, D / 2 - 0.1);
       for (const lu of [-L * 0.25, L * 0.25]) add(BOX(0.05, 0.46, 0.36), COL.frame, lu, 0.23, D / 2 - 0.3);
-      const gm = new THREE.MeshLambertMaterial({ color: COL.glass, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
-      const pane = (lu, lr, w, ang) => {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, Hs - 0.3), gm);
-        const [x, z] = W(lu, lr);
-        m.position.set(x, y + Hs / 2 + 0.05, z);
-        m.rotation.y = yaw + ang;
-        group.add(m);
-      };
-      pane(0, D / 2, L, 0);
-      pane(-L / 2, 0, D, Math.PI / 2);
-      pane(L / 2, 0, D, Math.PI / 2);
-      solids.push({ x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 });
+      const y0 = y + 0.2, y1 = y + Hs - 0.1;
+      const panes = [
+        { a: W(-L / 2, D / 2), b: W(L / 2, D / 2), y0, y1 },
+        { a: W(-L / 2, -D / 2), b: W(-L / 2, D / 2), y0, y1 },
+        { a: W(L / 2, -D / 2), b: W(L / 2, D / 2), y0, y1 },
+      ];
+      const frame = sp.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
+      if (frame) { frame.castShadow = frame.receiveShadow = true; group.add(frame); }
+      const box = { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 };
+      breakableShelter(world, group, { box, y, H: Hs, frame, panes, glass: COL.glass, opacity: 0.32 });
+      solids.push(box);
       // the sign on a pole at the kerb, a few metres before the shelter
       const [sx, sz] = T(i - 4, hw(i) + 0.6), sy = h(sx, sz);
       p.add(new THREE.CylinderGeometry(0.04, 0.04, 2.9, 8), COL.pole, sx, sy + 1.45, sz);

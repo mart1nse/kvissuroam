@@ -11,7 +11,8 @@
 // Every wall is a painted picture on the map's own wall (src/world/houseskin.js). No street names on the road.
 import * as THREE from 'three';
 import { createTrack } from './race.js';
-import { BOX } from './landmarks.js';
+import { BOX, Parts } from './landmarks.js';
+import { breakableShelter } from '../world/shelter.js';
 import { skinHouses, rgbHex, paintTexture, tone } from '../world/houseskin.js';
 import { streetKit, setHouseColours } from '../world/streetkit.js';
 
@@ -426,13 +427,17 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       const G = 0x2f5a4c;
       const at = (s, n) => [x + tx * s - tz * n, z + tz * s + tx * n];                      // s along the road, n away from it
       K.ribbon({ at: (t, lat) => T(t, lat) }, 1104.5, 1123, hw(1112) + 4.4, hw(1112) + 12, 'lawn');
-      for (const s of [-2.0, 0, 2.0]) for (const n of [-0.7, 0.7]) { const [px, pz] = at(s, n); p.add(BOX(0.08, 2.35, 0.08), G, px, y + 1.18, pz, yaw); }
-      { const [px, pz] = at(0, 0); p.add(BOX(4.5, 0.1, 1.9), 0x3a4a48, px, y + 2.42, pz, yaw); p.add(BOX(4.3, 0.06, 0.06), G, px, y + 2.3, pz, yaw); }
-      { const [px, pz] = at(0, 0.45); p.add(BOX(2.6, 0.06, 0.4), 0x8a6a50, px, y + 0.48, pz, yaw); for (const s of [-1.1, 1.1]) { const [qx, qz] = at(s, 0.45); p.add(BOX(0.06, 0.46, 0.34), G, qx, y + 0.24, qz, yaw); } }
-      const glass = new THREE.MeshLambertMaterial({ color: 0xbfe0e2, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false });
-      const pane = (s0, n0, s1, n1) => { const a = at(s0, n0), b = at(s1, n1), g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([a[0], y + 0.25, a[1], b[0], y + 0.25, b[1], b[0], y + 2.25, b[1], a[0], y + 0.25, a[1], b[0], y + 2.25, b[1], a[0], y + 2.25, a[1]], 3)); g.computeVertexNormals(); group.add(new THREE.Mesh(g, glass)); };
-      pane(-2.0, 0.7, 2.0, 0.7); pane(-2.0, -0.7, -2.0, 0.7); pane(2.0, -0.2, 2.0, 0.7);
-      solids.push({ x, z, yaw: Math.atan2(-tz, tx), hx: 2.1, hz: 0.8 });
+      // the frame bends and the glass bursts when a car hits it (src/world/shelter.js)
+      const sp = new Parts();
+      for (const s of [-2.0, 0, 2.0]) for (const n of [-0.7, 0.7]) { const [px, pz] = at(s, n); sp.add(BOX(0.08, 2.35, 0.08), G, px, y + 1.18, pz, yaw); }
+      { const [px, pz] = at(0, 0); sp.add(BOX(4.5, 0.1, 1.9), 0x3a4a48, px, y + 2.42, pz, yaw); sp.add(BOX(4.3, 0.06, 0.06), G, px, y + 2.3, pz, yaw); }
+      { const [px, pz] = at(0, 0.45); sp.add(BOX(2.6, 0.06, 0.4), 0x8a6a50, px, y + 0.48, pz, yaw); for (const s of [-1.1, 1.1]) { const [qx, qz] = at(s, 0.45); sp.add(BOX(0.06, 0.46, 0.34), G, qx, y + 0.24, qz, yaw); } }
+      const panes = [[-2.0, 0.7, 2.0, 0.7], [-2.0, -0.7, -2.0, 0.7], [2.0, -0.2, 2.0, 0.7]].map(([s0, n0, s1, n1]) => ({ a: at(s0, n0), b: at(s1, n1), y0: y + 0.25, y1: y + 2.25 }));
+      const frame = sp.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
+      if (frame) { frame.castShadow = shadows; frame.receiveShadow = true; group.add(frame); }
+      const box = { x, z, yaw: Math.atan2(-tz, tx), hx: 2.1, hz: 0.8 };
+      breakableShelter(world, group, { box, y, H: 2.47, frame, panes, glass: 0xbfe0e2, opacity: 0.38 });
+      solids.push(box);
       const [bx, bz] = at(-3.1, 0.3); p.add(new THREE.CylinderGeometry(0.2, 0.17, 0.75, 10), 0x2f8a78, bx, y + 0.5, bz, 0);       // the green bin
     }
 

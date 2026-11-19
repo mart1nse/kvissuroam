@@ -110,6 +110,51 @@ export function createAudio() {
     src.start(t, Math.random()); src.stop(t + 0.08);
   }
 
+  // a car into a bus shelter: the clang of the bent frame, and with `panes` broken the burst of glass and
+  // the tinkle of the pieces landing (level 0..1.5 from how hard the hit was)
+  function smash(panes, level = 1) {
+    if (!ctx || ctx.state !== 'running' || !noiseBuf) return;
+    const t = ctx.currentTime + 0.005, L = Math.max(0.2, Math.min(1.5, level));
+    {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(170, t);
+      o.frequency.exponentialRampToValueAtTime(70, t + 0.25);
+      g.gain.setValueAtTime(0.28 * L, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.connect(g).connect(master);
+      o.start(t); o.stop(t + 0.32);
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
+      src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = 520; f.Q.value = 5;
+      gn.gain.setValueAtTime(0.5 * L, t);
+      gn.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      src.connect(f).connect(gn).connect(master);
+      src.start(t, Math.random()); src.stop(t + 0.5);
+    }
+    if (!panes) return;
+    const G = Math.min(1, 0.6 + 0.2 * panes) * L;
+    {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), gn = ctx.createGain();
+      src.buffer = noiseBuf; f.type = 'highpass'; f.frequency.value = 2600;
+      gn.gain.setValueAtTime(0.0001, t);
+      gn.gain.exponentialRampToValueAtTime(0.45 * G, t + 0.008);
+      gn.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      src.connect(f).connect(gn).connect(master);
+      src.start(t, Math.random()); src.stop(t + 0.4);
+    }
+    const n = 10 + 8 * panes;
+    for (let k = 0; k < n; k++) {
+      const at = t + 0.03 + Math.random() ** 1.6 * 0.9, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 2800 + Math.random() * 4200;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.05 * G * (0.4 + Math.random()), at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05 + Math.random() * 0.07);
+      o.connect(g).connect(master);
+      o.start(at); o.stop(at + 0.14);
+    }
+  }
+
   // turbo blow-off valve venting when the throttle snaps shut on boost
   function psh(strength, dest = master) {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -375,7 +420,7 @@ export function createAudio() {
   }
 
   return {
-    start, update, updateRemotes, chime, putt,
+    start, update, updateRemotes, chime, putt, smash,
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;
       carId = ev ? null : spec.id;

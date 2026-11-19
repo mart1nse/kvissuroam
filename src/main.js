@@ -990,11 +990,13 @@ function frame(ts) {
     let wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw);
     if (input.state.look && !board?.open) {
-      // B held: look back from just in front of the car's nose, over the roof down the road behind
+      // B held: look back from just in front of the car's nose, over the roof down the road behind. The rig
+      // swings on the chase camera's eased heading (camYaw), so in a turn it drags behind the car a little
+      // instead of being bolted to it.
       const half = car.halfLen;
-      camPos.set(car.x + fx * (half + 6.5), car.y + 2.7 + (cs.up ?? 0) * 0.5, car.z + fz * (half + 6.5));
+      camPos.set(car.x + cx * (half + 6.5), car.y + 2.7 + (cs.up ?? 0) * 0.5, car.z + cz * (half + 6.5));
       camPos.y = Math.max(camPos.y, world.heightAt(camPos.x, camPos.z) + 0.9);
-      camLook.set(car.x - fx * 18, car.y + 0.9, car.z - fz * 18);
+      camLook.set(car.x - cx * 18, car.y + 0.9, car.z - cz * 18);
       wantFov = 62; warp = 0; camSwoop = 0;
     } else if (camView === 'drone') {
       // A drone following the car from above, set back so the road coming up shows. It turns with the

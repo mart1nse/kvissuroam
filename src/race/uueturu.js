@@ -20,6 +20,9 @@ const SIDE_ZEBRAS = [
 ];
 const ULIKOOLI = [0.70, 0.71];                              // direction of Ülikooli (x, z), from the orthophoto
 const DIAMOND = { i0: 2316, i1: 2346, left: -23, right: 7.5, period: 2.6, band: 0.3 };
+// the plaza corner: a point on Ülikooli's centre line and its half width; the paving ends at the line from the
+// corner of the Ülikooli wing to the end of the zebra over Uueturu (Martin, 19 Nov: "a tad smaller")
+const PLAZA = { i0: 2306, left: -26, o: [1576.0, 3141.5], clear: 4.6, edge: [[1577.0, 3124.2], [1586.8, 3138.9]] };
 const COL = {
   white: 0xfaf8ff, slate: 0x66657e, band: 0x807f9a, patch: 0xb9b5c9,
   wall: 0x8885a4, glass: 0xa8cfd0, frame: 0x4a4760, plinth: 0xe8e3ee, annex: 0xf4efe6, annexGlass: 0x7d7a99,
@@ -244,16 +247,17 @@ export function createUueturu(world, group) {
     {
       const pos = [], uv = [];
       const D = DIAMOND, [ox, oz] = track.P[D.i0], [ax, az] = tanAt((D.i0 + D.i1) / 2);
-      for (let i = D.i0; i < D.i1; i++) {
-        const fade0 = Math.min(1, (i - D.i0 + 1) / 2), fade1 = Math.min(1, (D.i1 - i) / 3);
+      const lay = (i0, i1, left, right, keep = () => true) => {
+      for (let i = i0; i < i1; i++) {
+        const fade0 = i0 === D.i0 ? Math.min(1, (i - D.i0 + 1) / 2) : 1, fade1 = i1 === D.i1 ? Math.min(1, (D.i1 - i) / 3) : 1;
         const side = (k, lat) => {
           const [tx, tz] = track.tan[k];
           return [track.P[k][0] - tz * lat, track.P[k][1] + tx * lat];
         };
-        for (let lat = D.left; lat < D.right; lat += 1) {
+        for (let lat = left; lat < right; lat += 1) {
           if (fade0 * fade1 < 1 && Math.abs(lat + 0.5) > track.HW[i] + 0.5) continue;
           const c = side(i, lat + 0.5);
-          if (world.sdfAt(c[0], c[1]) < 0.3) continue;
+          if (world.sdfAt(c[0], c[1]) < 0.3 || !keep(c, lat)) continue;
           const p = [side(i, lat), side(i, lat + 1), side(i + 1, lat), side(i + 1, lat + 1)];
           const V = (q) => {
             const dx = q[0] - ox, dz = q[1] - oz;
@@ -264,6 +268,12 @@ export function createUueturu(world, group) {
           V(p[0]); V(p[1]); V(p[2]); V(p[2]); V(p[1]); V(p[3]);
         }
       }
+      };
+      lay(D.i0, D.i1, D.left, D.right);
+      // the plaza in front of the Playtech entrance: the same lattice, up to the kerb of Ülikooli
+      const PL = PLAZA;
+      lay(PL.i0, D.i0, PL.left, -3, (c, lat) => lat + 1 < -(track.HW[PL.i0] + 0.6) && ULIKOOLI[0] * (c[1] - PL.o[1]) - ULIKOOLI[1] * (c[0] - PL.o[0]) < -PL.clear
+        && (PL.edge[1][0] - PL.edge[0][0]) * (c[1] - PL.edge[0][1]) - (PL.edge[1][1] - PL.edge[0][1]) * (c[0] - PL.edge[0][0]) < 0);
       meshFrom(pos, new THREE.MeshLambertMaterial({ map: diamondTex(), polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide }), uv);
     }
     // ---- zebras on the lap and over Ülikooli

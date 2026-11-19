@@ -40,6 +40,15 @@ straight on the 2 m grid of the game.
 `python3 tools/bake/reheight.py SRC public/data` rebuilds only the heights and the decks of the
 existing sector files; it needs the terrain model sheets and `etak_bbox.json` (ETAK
 *Transportation* and *Waterbodies*).
+Decks from the laser scan (`lidar_decks.py`, after the bake or after `reheight.py`): the terrain model does
+not know how high or how wide a bridge is, and a viaduct on walled ramps is missing from it. The lidar point
+cloud has bridge decks as their own class. `lidar_grid.py` turns one 1 km lidar tile into height grids (the
+download address is in its header; all sheets of the map are about 6 GB), and
+`python3 tools/bake/lidar_decks.py GRIDS public/data --write` then replaces the spans of `terrain.py` with decks
+at their real height and width, adds walled ramps (`wall: 1`), piers (`pr`), per-side railings (`rs`), clears
+the terrain under open spans and lays a lid (`k: 0`) wherever a tunnel road passes under another road or path.
+It can be run again on its own output. Check with `node tools/overpass-test.mjs --drive`, which walks every
+road near a deck for steps, ditches and obstacles and drives a car over and under each span.
 World frame: x = east − E0, z = −(north − N0), y = height − H0, in L-EST97 metres.
 
 Detail area: `detail_area.json` outlines a zone (Kvissentali) that gets extra-sharp orthophoto

@@ -14,7 +14,8 @@ const MATS = {
 function edges(d, i, out, inset = 0) {
   const P = d.pts, a = P[Math.max(i - 1, 0)], b = P[Math.min(i + 1, P.length - 1)];
   const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
-  const nx = -dz / l * (d.hw - inset), nz = dx / l * (d.hw - inset);
+  const hw = (d.ws ? d.ws[i] : d.hw) - inset;                 // a deck can change width along its length
+  const nx = -dz / l * hw, nz = dx / l * hw;
   out[0] = P[i][0] + nx; out[1] = P[i][1] + nz; out[2] = P[i][0] - nx; out[3] = P[i][1] - nz;
   return out;
 }
@@ -28,6 +29,7 @@ const inRect = (d, i, x0, z0, size) => {
 export function deckTopGeometry(world, x0, z0, size) {
   const pos = [], uv = [], e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
+    if (d.own) continue;                                 // drawn by whoever added it (the Äksi piers)
     if (d.x1 < x0 || d.x0 > x0 + size || d.z1 < z0 || d.z0 > z0 + size) continue;
     const P = d.pts;
     for (let i = 0; i < P.length - 1; i++) {
@@ -134,6 +136,43 @@ function block(out, x, y0, z, dx, dz, along, across, y1) {
   quad(out, c(-1, -1, y1), c(1, -1, y1), c(-1, 1, y1), c(1, 1, y1));
 }
 
+// Vabadussild as it is (Martin, 18 Nov, street views of Aug 2024 and the orthophoto): one white box arch
+// that springs from beside the deck on the Lai side, crosses over the road at a slant and comes down on the
+// far side by the Delta building, with dark hangers fanning down to both edges of the deck.
+const VABADUS = { a: [1458.0, 2303.0], b: [1507.0, 2266.0], rise: 19, w: 1.3, h: 0.95 };
+function vabadusArch(d, out) {
+  const { a, b, rise, w, h } = VABADUS;
+  const P = d.pts, dir = [P[P.length - 1][0] - P[0][0], P[P.length - 1][1] - P[0][1]], dl = Math.hypot(dir[0], dir[1]);
+  const ux = dir[0] / dl, uz = dir[1] / dl;
+  const o = [0, 0, 0, 0, 0], q = [0, 0, 0, 0, 0];
+  const station = (x, z) => (x - P[0][0]) * ux + (z - P[0][1]) * uz;
+  const lateral = (x, z) => -(x - P[0][0]) * uz + (z - P[0][1]) * ux;        // to the left, as at() counts it
+  const deckY = (x, z) => { at(d, Math.max(0, Math.min(d.len, station(x, z))), 0, o); return o[1]; };
+  const ya = deckY(...a) - 0.6, yb = deckY(...b) - 0.6;
+  const n = 36, pts = [];
+  for (let k = 0; k <= n; k++) {
+    const u = k / n, x = a[0] + (b[0] - a[0]) * u, z = a[1] + (b[1] - a[1]) * u;
+    // a little fuller than a parabola, so the legs rise steeply as on the real bridge
+    const s = Math.sin(Math.PI * u), y = ya + (yb - ya) * u + (rise + 0.6) * Math.pow(s, 0.8);
+    pts.push([x, y, z]);
+  }
+  for (let k = 0; k < n; k++) bar(out.white, pts[k], pts[k + 1], w, h);
+  // concrete feet
+  for (const [x, z, y] of [[a[0], a[1], ya], [b[0], b[1], yb]]) block(out.concrete, x, y - 3, z, ux, uz, 1.4, 1.4, y + 0.6);
+  // hangers: from the arch down to the edge of the deck at the same station on both sides
+  for (let k = 4; k <= n - 4; k += 2) {
+    const [x, y, z] = pts[k], t = station(x, z), lat = lateral(x, z);
+    if (t < 1 || t > d.len - 1) continue;
+    for (const side of [-1, 1]) {
+      const el = side * (d.hw - 0.3);
+      if (Math.abs(el - lat) > 16) continue;
+      at(d, t, el, q);
+      if (y - q[1] < 2) continue;
+      bar(out.dark, [x, y - h / 2, z], [q[0], q[1] + 0.3, q[2]], 0.06, 0.06);
+    }
+  }
+}
+
 // Everything of a bridge that is not its deck: piers, arches, pylon and cables, lamp posts.
 function structure(world, d, out) {
   const o = [0, 0, 0, 0, 0], q = [0, 0, 0, 0, 0];
@@ -143,7 +182,8 @@ function structure(world, d, out) {
     const slim = d.b === 'cable' || d.b === 'steelarch';
     block(out.concrete, o[0], foot, o[2], o[3], o[4], slim ? 0.5 : 0.75, d.hw * (slim ? 0.45 : 0.82), o[1] - 0.5);
   }
-  if (d.b === 'arch' || d.b === 'steelarch') {
+  if (d.name === 'Vabadussild') vabadusArch(d, out);
+  else if (d.b === 'arch' || d.b === 'steelarch') {
     // two ribs, one along each edge, with hangers down to the deck
     const [t0, t1] = d.main, span = t1 - t0, rise = d.b === 'arch' ? span * 0.16 : span * 0.14;
     const m = d.b === 'arch' ? out.white : out.steel, sec = d.b === 'arch' ? [0.75, 0.9] : [0.6, 0.8];
@@ -212,6 +252,7 @@ export function buildDeckBodies(world, s) {
   const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [] };
   const body = out.concrete, e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
+    if (d.own) continue;
     if (d.x1 < s.x0 || d.x0 > s.x0 + S || d.z1 < s.z0 || d.z0 > s.z0 + S) continue;
     measure(d);
     const P = d.pts, last = P.length - 1;
@@ -221,6 +262,16 @@ export function buildDeckBodies(world, s) {
       const q = P[i], r = q.length - 1, h = depth(d, i);
       quad(body, [e0[0], q[2], e0[1]], [e0[2], q[r], e0[3]], [e0[0], q[2] - h, e0[1]], [e0[2], q[r] - h, e0[3]]);
     };
+    const railOn = (i, bit) => (d.rs ? (d.rs[i] & d.rs[i + 1] & bit) !== 0 : d.rail && i >= d.rail[0] && i < d.rail[1]);
+    // piers of a long span over dry land: a wall across under the deck, where no road runs below
+    for (const [px, pz] of d.pr || []) {
+      if (px < s.x0 || px >= s.x0 + S || pz < s.z0 || pz >= s.z0 + S) continue;
+      let k = 0, best = Infinity;
+      for (let i = 0; i < P.length; i++) { const q = Math.hypot(P[i][0] - px, P[i][1] - pz); if (q < best) { best = q; k = i; } }
+      const a = P[Math.max(k - 1, 0)], b = P[Math.min(k + 1, last)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const top = Math.min(P[k][2], P[k][P[k].length - 1]) - SLAB + 0.05;
+      block(body, px, world.heightAt(px, pz) - 0.6, pz, (b[0] - a[0]) / l, (b[1] - a[1]) / l, 0.45, (d.ws ? d.ws[k] : d.hw) * 0.8, top);
+    }
     const mid = Math.floor(last / 2);
     if (d.w && inRect(d, Math.min(mid, last - 1), s.x0, s.z0, S)) structure(world, d, out);
     for (let i = 0; i < last; i++) {
@@ -229,14 +280,26 @@ export function buildDeckBodies(world, s) {
       const a = P[i], b = P[i + 1], r = a.length - 1, ha = depth(d, i), hb = depth(d, i + 1);
       const la = [e0[0], a[2], e0[1]], ra = [e0[2], a[r], e0[3]], lb = [e1[0], b[2], e1[1]], rb = [e1[2], b[r], e1[3]];
       const dn = (p, h) => [p[0], p[1] - h, p[2]];
+      if (d.wall) {
+        // a ramp between retaining walls: solid sides down into the ground, and a parapet on top
+        const foot = (p) => Math.min(p[1] - 0.2, world.heightAt(p[0], p[2])) - 0.5;
+        for (const [pa, pb, bit] of [[la, lb, 1], [ra, rb, 2]]) {
+          const up = railOn(i, bit) ? 0.85 : 0;
+          quad(body, [pa[0], pa[1] + up, pa[2]], [pb[0], pb[1] + up, pb[2]], [pa[0], foot(pa), pa[2]], [pb[0], foot(pb), pb[2]]);
+        }
+        continue;
+      }
       quad(body, dn(la, ha), dn(ra, ha), dn(lb, hb), dn(rb, hb));          // underside
       quad(body, la, lb, dn(la, ha), dn(lb, hb));                          // sides
       quad(body, ra, rb, dn(ra, ha), dn(rb, hb));
       if (i === 0) beam(0);
       if (i === last - 1) beam(last);
-      if (d.rail && i >= d.rail[0] && i < d.rail[1]) {
+      if (railOn(i, 1) || railOn(i, 2)) {
         edges(d, i, e0, 0.15); edges(d, i + 1, e1, 0.15);
-        for (const [xa, za, ya, xb, zb, yb] of [[e0[0], e0[1], a[2], e1[0], e1[1], b[2]], [e0[2], e0[3], a[r], e1[2], e1[3], b[r]]]) {
+        const sides = [];
+        if (railOn(i, 1)) sides.push([e0[0], e0[1], a[2], e1[0], e1[1], b[2]]);
+        if (railOn(i, 2)) sides.push([e0[2], e0[3], a[r], e1[2], e1[3], b[r]]);
+        for (const [xa, za, ya, xb, zb, yb] of sides) {
           // a low kerb, two bars and a post, instead of a solid wall
           for (const [lo, hi] of [[0, 0.22], [0.5, 0.58], [RAIL - 0.1, RAIL]]) quad(rail, [xa, ya + lo, za], [xb, yb + lo, zb], [xa, ya + hi, za], [xb, yb + hi, zb]);
           const k = 0.1 / (Math.hypot(xb - xa, zb - za) || 1);

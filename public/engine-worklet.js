@@ -168,9 +168,11 @@ export class EngineCore {
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
-      const env = Math.exp(-this.yT / 0.08), sw = Math.cos(6.2832 * 8.2 * this.yT);
-      yOff = this.yA * env * sw;
-      this.yk = Math.min(1, this.yA / I.redline * 5) * env * sw;
+      // (per car: yank, the size of the swing, and yankHz, how fast it swings; a slower one dies slower)
+      const c = this.cfg, hz = c.yankHz ?? 8.2, a = this.yA * (c.yank ?? 1);
+      const env = Math.exp(-this.yT / (0.08 * 8.2 / hz)), sw = Math.cos(6.2832 * hz * this.yT);
+      yOff = a * env * sw;
+      this.yk = Math.min(1, a / I.redline * 5) * env * sw;
       this.yT += len / sr;
     }
     this.rpmE = Math.max(300, this.rpm + yOff);

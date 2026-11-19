@@ -21,6 +21,7 @@ import { SIRELI_CARS } from './sireli.js';
 import { COOP_CARS } from './coop.js';
 import { PEPLERI_CARS } from './pepleri.js';
 import { JAAAEG_CARS } from './jaaaeg.js';
+import { ARHITEKTI_CARS } from './arhitekti.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -88,6 +89,7 @@ function allSpots() {
   COOP_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `c${i}`, x, z, yaw, id, paint, lift }));
   PEPLERI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `p${i}`, x, z, yaw, id, paint, lift }));
   JAAAEG_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `j${i}`, x, z, yaw, id, paint, lift }));
+  ARHITEKTI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ar${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

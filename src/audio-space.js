@@ -16,7 +16,7 @@ const C = 343;
 // ray directions, degrees from straight ahead, positive to the right
 const RAYS = [-90, 90, -40, 40, -140, 140, 0];
 const MAXD = 45;           // metres: walls further off than this are not heard as an echo
-const REFL = 0.75;         // share of the sound a house front sends back
+const REFL = 0.6;          // share of the sound a house front sends back (2 dB under the first cut, Martin 2026-11-19)
 const SLEW = 0.03;         // s/s: how fast an echo delay may glide (a 3% pitch bend at most)
 
 // Impulse response of an open, built-up place: decorrelated noise in both ears dying away over `len`
@@ -165,11 +165,11 @@ export function createSpace(ctx, out, mix = {}) {
     }
     // flutter only between two facing walls, and less the wider the street
     const L = taps[0].d, R = taps[1].d;
-    const fl = L > 0 && R > 0 ? 0.35 * Math.min(1, 14 / (L + R)) : 0;
+    const fl = L > 0 && R > 0 ? 0.3 * Math.min(1, 14 / (L + R)) : 0;
     flutter[0].gain.setTargetAtTime(fl, t, 0.1); flutter[1].gain.setTargetAtTime(fl, t, 0.1);
     // the tail: a little everywhere (trees, the ground, far houses), much more between buildings
     const built = walls / taps.length;
-    if (on) revSend.gain.setTargetAtTime((0.18 + 0.42 * built) * tailMix, t, 0.3);
+    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix, t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
     if (near) pre.delayTime.setTargetAtTime(Math.min(0.08, 0.012 + 2 * (wsum / near) / C), t, 0.3);
     return built;
   }

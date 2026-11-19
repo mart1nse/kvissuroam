@@ -319,7 +319,7 @@ export function createAudio() {
     v.d = d;
     const fade = Math.max(0, Math.min(1, (HEAR - d) / 70));
     v.out.gain.setTargetAtTime(Math.pow(Math.min(1, REF / d), 0.8) * fade, t, 0.06);
-    v.rev.gain.setTargetAtTime(0.35 * Math.min(3, Math.pow(Math.max(1, d / REF), 0.45)), t, 0.2);
+    v.rev.gain.setTargetAtTime(0.245 * Math.min(3, Math.pow(Math.max(1, d / REF), 0.45)), t, 0.2);
     v.lp.frequency.setTargetAtTime(700 + 11000 * Math.min(1, 14 / d), t, 0.1);
     if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.06);
     const speed = Math.hypot(r.vx, r.vy), vw = speed + r.slipV, b = r.boost;

@@ -22,6 +22,7 @@ import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
 import { createKaubamaja, kaubamajaWalls } from './world/kaubamaja.js';
 import { createKeskus, keskusWalls, keskusProps } from './world/keskus.js';
+import { createKeskusTee } from './world/keskustee.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './world/coop.js';
@@ -89,7 +90,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let kuperjanovi, kaubamaja, keskus;
+let kuperjanovi, kaubamaja, keskus, keskusTee;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
@@ -165,6 +166,7 @@ async function boot() {
   kuperjanovi = createKuperjanovi(scene, world, { shadows: !isTouch });
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
   keskus = createKeskus(scene, world, { shadows: !isTouch });
+  keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   coop = createCoop(scene, world, { shadows: !isTouch });
@@ -733,6 +735,7 @@ function frame(ts) {
     kuperjanovi.update(car);
     kaubamaja.update(car);
     keskus.update(car);
+    keskusTee.update(car);
     kvissentali.update(car);
     sireli.update(car);
     coop.update(car);

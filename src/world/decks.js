@@ -28,6 +28,7 @@ const inRect = (d, i, x0, z0, size) => {
 export function deckTopGeometry(world, x0, z0, size) {
   const pos = [], uv = [], e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
+    if (d.own) continue;                                 // drawn by whoever added it (the Äksi piers)
     if (d.x1 < x0 || d.x0 > x0 + size || d.z1 < z0 || d.z0 > z0 + size) continue;
     const P = d.pts;
     for (let i = 0; i < P.length - 1; i++) {
@@ -212,6 +213,7 @@ export function buildDeckBodies(world, s) {
   const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [] };
   const body = out.concrete, e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
+    if (d.own) continue;
     if (d.x1 < s.x0 || d.x0 > s.x0 + S || d.z1 < s.z0 || d.z0 > s.z0 + S) continue;
     measure(d);
     const P = d.pts, last = P.length - 1;

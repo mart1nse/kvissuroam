@@ -19,7 +19,7 @@ export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false;
   let muted = false, ev = false, turbo = false, background = false;
-  let bus = null, space = null, spaceOn = true;
+  let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null;
   let noiseSrc = null, workletReady = false;
   const voices = [];
@@ -33,7 +33,6 @@ export function createAudio() {
     master.gain.value = muted ? 0 : 0.5;
     master.connect(ctx.destination);
     space = createSpace(ctx, master);
-    space.setOn(spaceOn);
     bus = space.input;
 
     filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 500; filt.Q.value = 1.2;
@@ -81,11 +80,9 @@ export function createAudio() {
       sendConfig();
     }).catch(() => { synth = null; });
   }
-  // DRY (space off) is the sound as it was before it: no echoes or reverb, and no exhaust rasp either
-  const tuned = (cfg) => (spaceOn ? cfg : { ...cfg, rasp: 0, edge: 0 });
   function sendConfig() {
     synthCfg = ENGINE_SOUNDS[carId] || null;
-    if (synth && synthCfg) synth.port.postMessage({ config: tuned(synthCfg) });
+    if (synth && synthCfg) synth.port.postMessage({ config: synthCfg });
   }
 
   // dull thud of the suspension taking a landing; strength is the sink rate in m/s
@@ -305,7 +302,7 @@ export function createAudio() {
         v.synth.connect(v.engGain);
       } catch { v.synth = null; }
     }
-    if (v.synth) v.synth.port.postMessage(v.cfg ? { config: tuned(v.cfg), state: { on: 0 } } : { state: { on: 0 } });
+    if (v.synth) v.synth.port.postMessage(v.cfg ? { config: v.cfg, state: { on: 0 } } : { state: { on: 0 } });
     // start silent and already at the right delay, so a car coming into earshot does not sweep in
     v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(0, t);
     v.delay.delayTime.cancelScheduledValues(t); v.delay.delayTime.setValueAtTime(Math.min(0.95, d / SOUND), t);
@@ -441,15 +438,6 @@ export function createAudio() {
 
   return {
     start, update, updateRemotes, updateSpace, chime, putt, smash,
-    // SPACE in Options: the echoes, reverb and compression on (true) or the plain, close-up sound (false)
-    setSpace(on) {
-      if (spaceOn === !!on) return;
-      spaceOn = !!on; space?.setOn(spaceOn);
-      if (!ctx) return;
-      sendConfig();
-      for (const v of voices) if (v.synth && v.cfg) v.synth.port.postMessage({ config: tuned(v.cfg) });
-    },
-    get spaceOn() { return spaceOn; },
     get space() { return space; },
     setCar(spec) {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0;

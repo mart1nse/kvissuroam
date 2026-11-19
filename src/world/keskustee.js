@@ -34,10 +34,10 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     K.finish();
     junction();
   }
-  // ---- the junction itself: paved islands with their kerb lines, hatching, the dotted lines that lead turning
+  // ---- the junction itself: hatching, the dotted lines that lead turning
   // traffic through, lane lines on the Turu arm. Flat triangles laid on the ground, wound to face up.
   function junction() {
-    const white = [], pave = [];
+    const white = [];
     const y = (x, z, lift) => world.heightAt(x, z) + lift;
     const tri = (out, a, b, c, lift) => {
       const up = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) > 0;
@@ -61,19 +61,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
         carry = (carry - l) % step; if (carry < 0) carry += step;
       }
     };
-    const island = (pts) => {
-      for (let k = 1; k < pts.length - 1; k++) tri(pave, pts[0], pts[k], pts[k + 1], 0.085);
-      line([...pts, pts[0]], 0.16);
-    };
-    // islands (2024 orthophoto)
-    island([[1798.5, 3070], [1803.75, 3071.25], [1800, 3075.5]]);                       // off Kaubamaja's east corner
-    island([[1816, 3089], [1819, 3087], [1823, 3091], [1817, 3092.5]]);                   // at the end of the Riia median
-    island([[1834, 3071], [1842, 3078.5], [1838, 3082], [1833, 3075]]);                   // Turu arm, towards Tasku
-    island([[1832, 3088.5], [1840, 3090], [1838, 3096], [1833, 3094]]);                   // Turu arm, towards Kvartal
-    island([[1819.6, 3049], [1821, 3049.3], [1821.2, 3052.2], [1820, 3052]]);             // the small one by the flower bed
-    // the paved nose of the Riia median with its chevrons
-    island([[1806, 3085.2], [1808.2, 3083.4], [1815, 3089.5], [1812.6, 3092.6]]);
-    for (let k = 0; k < 3; k++) { const cx = 1808.6 + k * 2.1, cz = 3086.4 + k * 2.0; line([[cx - 0.9, cz + 0.9], [cx + 0.75, cz + 0.6], [cx + 0.9, cz - 1.0]], 0.3); }
+    // the islands themselves are left as the map has them (Martin, 19 Nov: the pale patches looked wrong)
     // dotted lines leading the turns through the junction
     const dots = (pts) => {
       const fine = [];
@@ -107,7 +95,6 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
       m.receiveShadow = true;
       group.add(m);
     };
-    flat(pave, 0xdcd8e2, -5);
     flat(white, 0xf6f3fa, -7);
   }
 

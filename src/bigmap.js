@@ -167,7 +167,7 @@ export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
   root.querySelector('[data-map="out"]').addEventListener('click', () => zoomAt(W / 2, H / 2, 1 / 1.6));
   addEventListener('resize', () => { if (open) { resize(); clamp(); redraw(); } });
 
-  // Nearest drivable street to a world point: { x, z, yaw, d } or null.
+  // Nearest drivable street to a world point: { x, z, yaw, d, w, name, e } or null (e: 1 on a bridge, -1 in a tunnel).
   function nearestRoad(x, z, maxD = 80) {
     let best = maxD, hit = null;
     roads.forEach((r, i) => {
@@ -179,7 +179,7 @@ export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
         const dx = x1 - x0, dz = z1 - z0;
         const t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1)));
         const d = Math.hypot(x - x0 - dx * t, z - z0 - dz * t);
-        if (d < best) { best = d; hit = { x: x0 + dx * t, z: z0 + dz * t, yaw: Math.atan2(dx, -dz), d, w: r.w, name: r.name }; }
+        if (d < best) { best = d; hit = { x: x0 + dx * t, z: z0 + dz * t, yaw: Math.atan2(dx, -dz), d, w: r.w, name: r.name, e: r.e || 0 }; }
       }
     });
     return hit;

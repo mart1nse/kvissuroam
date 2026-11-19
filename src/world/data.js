@@ -347,6 +347,13 @@ export async function loadWorldData(onProgress = () => {}) {
     addBump(b) { bumps.push(b); },
     // How much those raised shapes add at the point: the physics feels a kerb as a step by it.
     kerbAt(x, z) { return bumps.length === 0 ? 0 : bumpAt(x, z); },
+    // The raised ground of those shapes that draw it as ground (a bump with top(x0, z0, size, out)
+    // pushes triangles [x, y, z, ...] in that square), for the ground tiles to draw with their own look.
+    bumpTops(x0, z0, size) {
+      const out = [];
+      for (const b of bumps) if (b.top && !(b.x1 < x0 || b.x0 > x0 + size || b.z1 < z0 || b.z0 > z0 + size)) b.top(x0, z0, size, out);
+      return out.length ? out : null;
+    },
 
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {

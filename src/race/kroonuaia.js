@@ -249,6 +249,7 @@ const SIGNS = [
   [1419, 1, 1.3, [28, 22, 27]],
 ];
 const ISLANDS = [1206.2, 1273.8, 1314.4];          // the small kerbed islands with the keep-right arrow
+const ISLE = { a: 1.26, c: 0.74, h: 0.12, edge: 0.08 };   // their half length and width, the kerb height
 const BOLLARDS = { i0: 1412, i1: 1427, n: 7, off: 0.45 };      // along the left edge before the Veski turn
 // zebra crossings: the map has one too early at the start and two in the bend that are not there; the photos
 // show one past the brown house and one before the Jakobi junction
@@ -326,6 +327,24 @@ const FENCES = [
 export function createKroonuaia(world, group, { shadows = true } = {}) {
   const track = createTrack();
   let built = false;
+
+  // the islands stand on their kerb for the cars too (Martin, 19 Nov): a 12 cm oval, rounded at the edge
+  const isleAt = ISLANDS.map((I) => {
+    const [x, z] = frameOf(track)(I, -0.2), [tx, tz] = track.tan[Math.floor(I)];
+    return { I, x, z, tx, tz };
+  });
+  for (const o of isleAt) {
+    world.addBump({
+      x0: o.x - 1.6, z0: o.z - 1.6, x1: o.x + 1.6, z1: o.z + 1.6,
+      at(x, z) {
+        const dx = x - o.x, dz = z - o.z, a = dx * o.tx + dz * o.tz, c = -dx * o.tz + dz * o.tx;
+        const r = Math.hypot(a / ISLE.a, c / ISLE.c);
+        if (r >= 1) return 0;
+        const u = Math.min(1, ((1 - r) * ISLE.c) / ISLE.edge);
+        return ISLE.h * u * u * (3 - 2 * u);
+      },
+    });
+  }
 
   function build() {
     built = true;
@@ -419,7 +438,8 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
 
     // ================= the islands at the crossings =================
     for (const I of ISLANDS) {
-      const [x, z] = T(I, -0.2), [tx, tz] = track.tan[Math.floor(I)], yaw = Math.atan2(-tz, tx), y = h(x, z);
+      // (the ground beside the island: under it the bump already lifts the height)
+      const [x, z] = T(I, -0.2), [tx, tz] = track.tan[Math.floor(I)], yaw = Math.atan2(-tz, tx), y = (h(...T(I - 1, -0.2)) + h(...T(I + 1, -0.2))) / 2;
       p.add(new THREE.CylinderGeometry(0.62, 0.74, 0.13, 14).scale(1.7, 1, 1), 0xf0c84a, x, y + 0.07, z, yaw);
       for (const a of [-0.8, 0, 0.8]) p.add(BOX(0.2, 0.135, 1.2), 0x2a2a30, x + tx * a, y + 0.07, z + tz * a, yaw);
     }

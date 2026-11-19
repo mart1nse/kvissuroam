@@ -326,6 +326,21 @@ export function createTerrain(world, renderer, opts) {
           group.add(top);
           mesh.userData.deck = top;
         }
+        // raised pavements on top of the ground (world.addBump with a top): the same look, 10 cm up
+        const kt = world.bumpTops ? world.bumpTops(x0, z0, tile) : null;
+        if (kt) {
+          const kuv = new Float32Array((kt.length / 3) * 2);
+          for (let k = 0, q = 0; k < kt.length; k += 3, q += 2) { kuv[q] = (kt[k] - x0) / tile; kuv[q + 1] = 1 - (kt[k + 2] - z0) / tile; }
+          const kg = new THREE.BufferGeometry();
+          kg.setAttribute('position', new THREE.Float32BufferAttribute(kt, 3));
+          kg.setAttribute('uv', new THREE.BufferAttribute(kuv, 2));
+          kg.computeVertexNormals();
+          const km = new THREE.Mesh(kg, matLow);
+          km.receiveShadow = true;
+          km.matrixAutoUpdate = false;
+          group.add(km);
+          mesh.userData.kerb = km;
+        }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
         const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
@@ -341,6 +356,7 @@ export function createTerrain(world, renderer, opts) {
       group.remove(ch.mesh);
       ch.mesh.geometry.dispose();
       if (ch.mesh.userData.deck) { group.remove(ch.mesh.userData.deck); ch.mesh.userData.deck.geometry.dispose(); }
+      if (ch.mesh.userData.kerb) { group.remove(ch.mesh.userData.kerb); ch.mesh.userData.kerb.geometry.dispose(); }
       if (ch.matHi) { ch.matHi.map.dispose(); ch.matHi.dispose(); }
       if (ch.matX) { ch.matX.map.dispose(); ch.matX.dispose(); }
     }
@@ -348,7 +364,7 @@ export function createTerrain(world, renderer, opts) {
     if (s.mask) { s.mask.refs = 1; releaseMask(s); }
   }
 
-  const setMat = (ch, m) => { ch.mesh.material = m; if (ch.mesh.userData.deck) ch.mesh.userData.deck.material = m; };
+  const setMat = (ch, m) => { ch.mesh.material = m; if (ch.mesh.userData.deck) ch.mesh.userData.deck.material = m; if (ch.mesh.userData.kerb) ch.mesh.userData.kerb.material = m; };
 
   // ---- hi-res tile streaming around the camera
   let loading = 0;

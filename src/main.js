@@ -760,6 +760,26 @@ if (gpu.software) {
     : 'Your browser is drawing the game without the graphics card, so it runs slowly. Turn on hardware (graphics) acceleration in the browser settings and restart it.';
   el.classList.remove('hidden');
 }
+// Sound space: LIVE puts the car into the street round it (echoes off the buildings, reverb, compression),
+// DRY is the plain close-up sound. ?space=0 starts dry. Remembered per browser.
+let spaceSaved = params.get('space') !== '0';
+try { const v = localStorage.getItem('kvissuroam.space'); if (v !== null && !params.has('space')) spaceSaved = v === '1'; } catch {}
+audio.setSpace(spaceSaved);
+function showSpace() { for (const b of $('#opt-space').children) b.classList.toggle('on', (b.dataset.space === 'live') === audio.spaceOn); }
+showSpace();
+function setSpace(on) {
+  audio.setSpace(on);
+  try { localStorage.setItem('kvissuroam.space', audio.spaceOn ? '1' : '0'); } catch {}
+  showSpace();
+  hud.toast(audio.spaceOn ? 'SOUND LIVE · RASP, ECHOES, REVERB' : 'SOUND DRY · AS BEFORE', 1600);
+}
+document.getElementById('opt-space').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-space]');
+  if (!b) return;
+  b.blur();
+  setSpace(b.dataset.space === 'live');
+});
+input.on('KeyV', () => setSpace(!audio.spaceOn));     // V: switch between the two while driving, to compare
 const toggleOptions = () => { optEl.classList.toggle('hidden'); showGfx(true); };
 input.on('KeyO', unlessMap(toggleOptions));
 input.on('KeyA', shiftBy(1));
@@ -1110,6 +1130,7 @@ function frame(ts) {
   if (mode === 'drive') hud.needle(car, dt);
   audio.update(car, mode === 'drive' && !bigmap.isOpen);
   audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
+  audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen);
 
   if (photos?.update(camera, dt)) {
     const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it

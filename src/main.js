@@ -64,7 +64,7 @@ import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
-import { createQuality, probeGpu, createGpuTimer } from './quality.js';
+import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -119,6 +119,17 @@ function applyFx() {
   audio.setLite(k < 0.5);
 }
 gfx.onChange(applyFx);
+// Weak desktops get the phones' lighter setup as well: pictures kept small and held once, a still picture
+// behind the opening menu and fewer, simpler parked cars. A desktop counts as weak when the browser says
+// so before anything is drawn (weakDesktop in quality.js), when graphics are set to LOW, or when auto
+// graphics settled below full sharpness the last time. One that turns out slow while driving gets the
+// small pictures then (see liteLate in the frame loop); the rest from its next visit. ?lite tries it
+// on any computer, ?lite=0 turns it off. (Test runs draw without a graphics card: they stay full.)
+const lowRung = () => { const l = gfx.levels[gfx.level]; return !!l && l.dpr < Math.min(1, gfx.levels[gfx.levels.length - 1].dpr); };
+let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 'asked for with ?lite'
+  : navigator.webdriver ? '' : weakDesktop(gpu) || (lowRung() ? (gfx.mode === 'auto' ? 'slow last time' : 'graphics set low') : '');
+const lite = isTouch || !!liteWhy;
+if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -152,13 +163,15 @@ let flyIn = null;                // the one second flight from the drone to the 
 // iPhone out of memory). ?fixedintro holds the desktop drone on one view (shot=0..1 along its loop):
 // that is how public/menu-still.jpg is made.
 const fixedIntro = params.has('fixedintro');
-let still = isTouch && !params.has('drive');
+let still = lite && !params.has('drive');
 // phones: pictures go to the graphics card at most a megapixel, and the canvas a picture was painted
 // on is let go once the card has it (an iPhone reloaded the page from lack of memory once today's
 // hand-built streets were in): see world/phonetex.js. ?smalltex tries it on a desktop, ?smalltex=0 turns
 // it off, ?smalltex=keep only makes the pictures smaller.
-const shrinker = (isTouch || params.has('smalltex')) && params.get('smalltex') !== '0'
+let shrinker = (lite || params.has('smalltex')) && params.get('smalltex') !== '0'
   ? createPhoneTextures(renderer, { release: params.get('smalltex') !== 'keep' }) : null;
+let lowSince = 0;                // since when auto graphics has been below full sharpness (desktops; see liteLate)
+const liteLate = !isTouch && params.get('lite') !== '0' && params.get('smalltex') !== '0';
 // Behind the still picture the game warms up, unseen: a few frames are drawn from beside the car, each
 // reaching further, so the pictures and models of the start go to the graphics card a few at a time
 // (not all in the first frame after DRIVE), and their canvases are let go while the menu is still up.
@@ -247,7 +260,7 @@ async function boot() {
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
-  parked = createParked(scene, world, { shadows: !isTouch, touch: isTouch });
+  parked = createParked(scene, world, { shadows: !isTouch, touch: lite });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
   angerja = createAngerja(scene, world, { shadows: !isTouch });
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
@@ -821,7 +834,7 @@ function showGfx(force) {
   const m = gfx.meter;
   const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)}${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms)`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -1159,7 +1172,15 @@ function frame(ts) {
   tileTimer -= dt;
   if (tileTimer <= 0) {
     tileTimer = 0.25;
-    if (shrinker && ++shrinkTick % 4 === 0) shrinker.scan(scene);   // (once a second: what the city streamed in since)
+    if (++shrinkTick % 4 === 0) {
+      // (once a second: what the city streamed in since)
+      if (shrinker) shrinker.scan(scene);
+      else if (liteLate && mode === 'drive' && gfx.auto && lowRung()) {
+        // a desktop that auto graphics has kept below full sharpness for 20 s: small pictures from now on
+        lowSince ||= performance.now();
+        if (performance.now() - lowSince > 20000) { shrinker = createPhoneTextures(renderer, { perScan: 3 }); liteWhy = 'slow in this drive'; console.info('Light mode: small pictures from now on (slow in this drive)'); }
+      } else lowSince = 0;
+    }
     trackside.update(car.x, car.z);
     trackKerbs.update(car.x, car.z);
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
@@ -1212,7 +1233,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, tex: () => shrinker?.stats, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, tex: () => shrinker?.stats, get lite() { return liteWhy; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

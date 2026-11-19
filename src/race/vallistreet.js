@@ -85,7 +85,7 @@ const PARK_PROPS = [
   // [kind, track index, metres out from the road edge (left)]
   [11, 106.5, 0.6],   // Europark no-parking sign at the car park entrance
   [11, 116.6, 0.5],   // no stopping, where the kerbside bays begin
-  [9, 128.5, 0.55],   // the one lantern post left on the road side, by the mural
+  [9, 123.8, 0.55],   // the one lantern post left on the road side, 10 m before the mural (Martin, 19 Nov)
   [9, 114.5, 10.2],   // lantern posts on the grass line at the back of the car park
   [9, 124.5, 9.1],
   [21, 119.5, 8.7],   // blue parking sign on the grass line

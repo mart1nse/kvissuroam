@@ -24,11 +24,13 @@ import { createMandel } from './mandel.js';
 import { createValliStreet } from './vallistreet.js';
 import { createBaeriStreet } from './baeristreet.js';
 import { createVeskiEnd } from './veskiend.js';
+import { createKroonuaia } from './kroonuaia.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
 import { raekodaClear } from '../world/raekoda.js';
 import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
+import { createPlaytech, playtechProps } from './playtech.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -51,7 +53,7 @@ function zones(track) {
 const KERBS = [
   { i0: 672, i1: 702, side: -1, off: 0, width: 5, height: 0.12, edge: 0.07, back: 0.5, colour: 0xbdb6c8 },        // Jakobi -> Lai
   { i0: 2046, i1: 2104, side: -1, off: 0, width: 1.5, height: 0.14, edge: 0.05, back: 0.35, colour: 0xb2adbb },   // Pepleri corner
-  { i0: 1656, i1: 1808, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x87a07a },    // Veski grass strip
+  { i0: 1656, i1: 1722, side: -1, off: 0, width: 1.5, height: 0.12, edge: 0.05, back: 0.08, colour: 0x87a07a },    // Veski grass strip up to Juhan Liivi; veski.js lays it from there on
   { i0: 2226, i1: 2297, side: 1, off: 0, width: 3.2, height: 0.13, edge: 0.04, back: 0.6, colour: 0xa7a2b2 },     // Vanemuise, right
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
@@ -252,7 +254,7 @@ export function extraProps() {
     const n = track.nearest(x, z), [tx, tz] = track.tan[n.i];
     out.push([LIGHT, x, z, bearing(tz * st.side, -tx * st.side)]);
   }
-  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...uueturuProps());
+  out.push(...cornerProps(), ...valliProps(), ...emajoeProps(), ...uueturuProps(), ...playtechProps());
   return out;
 }
 
@@ -491,10 +493,12 @@ export function createTrackside(world, scene) {
   const valliStreet = createValliStreet(world, group);
   const baeriStreet = createBaeriStreet(world, group);
   const veskiEnd = createVeskiEnd(world, group);
+  const kroonuaia = createKroonuaia(world, group);
   const emajoe = createEmajoe(world, group);
   const lai = createLai(world, group);
   const tennis = createTennis(world, group);
   const uueturu = createUueturu(world, group);
+  const playtech = createPlaytech(world, group);
   const readyAll = (pts) => pts.every(([x, z]) => world.ready(x, z));
   const near = (p, x, z, r = 800) => Math.hypot(p[0] - x, p[1] - z) < r;
 
@@ -537,10 +541,12 @@ export function createTrackside(world, scene) {
       valliStreet.update(x, z);
       baeriStreet.update(x, z);
       veskiEnd.update(x, z);
+      kroonuaia.update(x, z);
       emajoe.update(x, z);
       lai.update(x, z);
       tennis.update(x, z);
       uueturu.update(x, z);
+      playtech.update(x, z);
       for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
       if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
       if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();

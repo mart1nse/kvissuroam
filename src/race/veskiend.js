@@ -2,8 +2,8 @@
 // kaldaerofoto), in pastel colours. Left to right in the direction of the lap Veski is: pavement, a strip
 // of wild grass, the reddish cycle lane, the car lane, pavement (veski.js). Here:
 //   - the orange board fence behind the left pavement, along the green up to the corner
-//   - the kerbed island of wild grass, leafy shrubs and a young tree on the right before the junction
-//     (nothing in it is solid: a car drives straight through)
+//   - the kerbed island on the right up to the junction: wild grass, leafy shrubs, pale grasses and dark
+//     red perennials, a young tree and two red benches (nothing in it is solid: a car drives straight through)
 //   - the give-way triangles across the lane at the mouth of the junction and the yield sign
 //   - the two houses across the junction: the white functionalist house with the round corner on the left,
 //     the red-brown brick block (the ALKO shop) in front
@@ -16,11 +16,18 @@ import { realTreeKit } from '../world/scenery.js';
 
 const CENTRE = [830, 3245];
 const FENCE = { i0: 1772, i1: 1805, off: 3.4, height: 1.2, colour: 0xd98a68, dark: 0xbd7254 };
-const ISLAND = { i0: 1797, i1: 1809.5, lat0: 0.25, lat1: 2.1 };
+// the island: from the lane's kerb (lat0) out to lat1, a little wider (+wide[2]) from where the pavement swings out
+const ISLAND = { i0: 1797, i1: 1816.5, lat0: 0.25, lat1: 2.1, wide: [1803, 1808, 0.7], tree: 1814.4, benches: [1810.3, 1812.1] };
+const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+export const islandOuter = (t) => ISLAND.lat1 + ISLAND.wide[2] * smooth((t - ISLAND.wide[0]) / (ISLAND.wide[1] - ISLAND.wide[0]));
+export const ISLAND_END = ISLAND.i1;
+// tints of the leafy bush: the pale blue-green grass by the junction and the dark red perennials
+const PALE = [1.7, 1.5, 3.2], RED = [1.75, 0.24, 0.95];
+const grassy = (t, r) => r < 0.12 + 0.75 * smooth((t - 1811.5) / 3) || (t < ISLAND.i0 + 2.5 && r < 0.6);
 const YIELD_AT = 1810.5;                                   // the give-way line across the lane
 const COL = {
   grass: [0x7fa86a, 0x93b874, 0x6f9a60], shrub: [0x4f8a55, 0x5f9a5c, 0x6aa866], kerb: 0xd2cfd8, trunk: 0x7a6152,
-  stake: 0xc9b49a, white: 0xfaf8ff, crown: [0x6fae6a, 0x7cba72],
+  stake: 0xc9b49a, white: 0xfaf8ff, crown: [0x6fae6a, 0x7cba72], bench: 0xe2584e, benchDark: 0xb9443e,
 };
 
 // the white house on the left, the brick block in front (LOD2 bases in cm, sector 2_6)
@@ -76,14 +83,18 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
       }
     }
 
-    // ---- the island on the right: a low kerb round wild grass, shrubs and a young tree on stakes
+    // ---- the island on the right, up to the junction: a low kerb round grasses, perennials and shrubs, a
+    // young tree on stakes and two red benches on the pavement side. All the plants are leafy (the foliage
+    // of the realistic trees) and nothing here is solid: a car goes straight through.
     {
-      const { i0, i1, lat0, lat1 } = ISLAND;
-      K.ribbon({ at: (t, lat) => T(t, hwAt(t) + lat) }, i0, i1, lat0, lat1, 'lawn');
+      const { i0, i1, lat0 } = ISLAND, lat1 = islandOuter;
+      const F = (t, u) => T(t, hwAt(t) + lat0 + u * (lat1(t) - lat0));          // u: 0 at the lane, 1 at the pavement
+      K.ribbon({ at: F }, i0, i1, 0, 0.5, 'lawn');
+      K.ribbon({ at: F }, i0, i1, 0.5, 1, 'lawn');
       // kerb all round
       const ring = [];
-      for (let i = i0; i <= i1; i += 0.5) ring.push(T(i, hwAt(i) + lat0));
-      for (let i = i1; i >= i0; i -= 0.5) ring.push(T(i, hwAt(i) + lat1));
+      for (let i = i0; i <= i1; i += 0.5) ring.push(F(i, 0));
+      for (let i = i1; i >= i0; i -= 0.5) ring.push(F(i, 1));
       ring.push(ring[0]);
       for (let k = 0; k < ring.length - 1; k++) {
         const a = ring[k], b = ring[k + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
@@ -91,36 +102,48 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
         const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
         p.add(BOX(l + 0.04, 0.14, 0.14), COL.kerb, mx, h(mx, mz) + 0.07, mz, Math.atan2(-dz, dx));
       }
-      // wild shrubs with tall grass and weeds between them, and a young tree on stakes. All of it is
-      // leafy (the foliage of the realistic trees) and none of it is solid: a car goes straight through.
-      const L = K.leafy, spot = (i, lat) => { const q = T(i, hwAt(i) + lat); return [q[0], h(q[0], q[1]), q[1]]; };
+      const L = K.leafy, wide = (t) => lat1(t) - lat0;
+      const spot = (t, d) => { const q = T(t, hwAt(t) + lat0 + d); return [q[0], h(q[0], q[1]), q[1]]; };
+      const byBench = (t) => ISLAND.benches.some((bi) => Math.abs(t - bi) < 0.75);
       if (L.ok) {
-        for (let k = 0; k < 17; k++) {                      // shrubs: knee to chest high, the bigger ones away from the lane
-          const lat = lat0 + 0.4 + rnd() * (lat1 - lat0 - 0.75), big = 0.55 + 0.45 * (lat - lat0) / (lat1 - lat0);
-          const [x, y, z] = spot(i0 + 0.9 + k * (i1 - i0 - 1.8) / 16 + (rnd() - 0.5) * 0.5, lat);
-          const w = (0.8 + rnd() * 0.75) * big, d = 0.82 + rnd() * 0.2;
-          L.bush(x, y - 0.06, z, w, (0.6 + rnd() * 0.65) * big, rnd() * 6.3, [d * (0.86 + rnd() * 0.2), d * (0.96 + rnd() * 0.1), d * (0.8 + rnd() * 0.16)], w * (0.8 + rnd() * 0.4));
+        const n = Math.round((i1 - i0) * 1.35);
+        for (let k = 0; k < n; k++) {                       // shrubs: knee to chest high, the bigger ones away from the lane
+          const t = i0 + 0.9 + k * (i1 - i0 - 1.8) / (n - 1) + (rnd() - 0.5) * 0.5, wd = wide(t) - (byBench(t) ? 0.8 : 0);
+          const d = 0.4 + rnd() * (wd - 0.75), big = 0.55 + 0.45 * d / wd;
+          const [x, y, z] = spot(t, d);
+          const w = (0.8 + rnd() * 0.75) * big, g = 0.82 + rnd() * 0.2;
+          // towards the junction the bed is mostly pale blue-green grass, in broad clumps
+          if (grassy(t, rnd())) L.bush(x, y - 0.05, z, w * 1.15, (0.5 + rnd() * 0.3) * big, rnd() * 6.3, PALE.map((c) => c * (0.92 + rnd() * 0.16)), w * 1.15);
+          else L.bush(x, y - 0.06, z, w, (0.6 + rnd() * 0.65) * big, rnd() * 6.3, [g * (0.86 + rnd() * 0.2), g * (0.96 + rnd() * 0.1), g * (0.8 + rnd() * 0.16)], w * (0.8 + rnd() * 0.4));
         }
-        for (let k = 0; k < 64; k++) {                      // grass and weeds: slim, paler and yellower
-          const [x, y, z] = spot(i0 + 0.35 + rnd() * (i1 - i0 - 0.7), lat0 + 0.22 + rnd() * (lat1 - lat0 - 0.44));
-          const w = 0.28 + rnd() * 0.3, d = 0.95 + rnd() * 0.2;
-          L.bush(x, y - 0.03, z, w, 0.3 + rnd() * 0.5, rnd() * 6.3, [d * 1.08, d * 1.1, d * (0.62 + rnd() * 0.2)], w);
+        for (let k = 0; k < (i1 - i0) * 5; k++) {           // grass and weeds: slim, paler and yellower
+          const t = i0 + 0.35 + rnd() * (i1 - i0 - 0.7);
+          const [x, y, z] = spot(t, 0.22 + rnd() * (wide(t) - 0.44 - (byBench(t) ? 0.7 : 0)));
+          const w = 0.28 + rnd() * 0.3, g = 0.95 + rnd() * 0.2;
+          L.bush(x, y - 0.03, z, w, 0.3 + rnd() * 0.5, rnd() * 6.3, grassy(t, rnd()) ? PALE.map((c) => c * g) : [g * 1.08, g * 1.1, g * (0.62 + rnd() * 0.2)], w);
+        }
+        for (let k = 0; k < 16; k++) {                      // dark red perennials: slim spikes in twos and threes
+          const t = i0 + 1 + rnd() * (i1 - i0 - 2), d0 = 0.3 + rnd() * (wide(t) - 0.6 - (byBench(t) ? 0.7 : 0));
+          for (let j = 0; j < 3; j++) {
+            const [x, y, z] = spot(t + (rnd() - 0.5) * 0.25, Math.max(0.2, d0 + (rnd() - 0.5) * 0.3));
+            L.bush(x, y - 0.02, z, 0.15 + rnd() * 0.08, 0.4 + rnd() * 0.28, rnd() * 6.3, RED, 0.15);
+          }
         }
       } else {
-        for (let k = 0; k < 70; k++) {
-          const i = i0 + 0.3 + rnd() * (i1 - i0 - 0.6), lat = lat0 + 0.2 + rnd() * (lat1 - lat0 - 0.4);
-          const [x, z] = T(i, hwAt(i) + lat);
+        for (let k = 0; k < (i1 - i0) * 5.5; k++) {
+          const t = i0 + 0.3 + rnd() * (i1 - i0 - 0.6);
+          const [x, y, z] = spot(t, 0.2 + rnd() * (wide(t) - 0.4));
           const tall = 0.35 + rnd() * 0.45;
-          p.add(new THREE.ConeGeometry(0.12 + rnd() * 0.1, tall, 5), COL.grass[k % 3], x, h(x, z) + tall / 2, z, rnd() * 6);
+          p.add(new THREE.ConeGeometry(0.12 + rnd() * 0.1, tall, 5), COL.grass[k % 3], x, y + tall / 2, z, rnd() * 6);
         }
-        for (let k = 0; k < 9; k++) {
-          const i = i0 + 1 + k * (i1 - i0 - 2) / 8, lat = lat0 + 0.45 + rnd() * (lat1 - lat0 - 0.9);
-          const [x, z] = T(i, hwAt(i) + lat);
+        for (let k = 0; k < 15; k++) {
+          const t = i0 + 1 + k * (i1 - i0 - 2) / 14;
+          const [x, , z] = spot(t, 0.45 + rnd() * (wide(t) - 0.9));
           K.shrub(x, z, 0.38 + rnd() * 0.3, COL.shrub[k % 3], 0.85);
         }
       }
       // the young tree with its three stakes
-      const [x, z] = T(i0 + (i1 - i0) * 0.62, hwAt(i0) + (lat0 + lat1) / 2), y = h(x, z);
+      const [x, y, z] = spot(ISLAND.tree, wide(ISLAND.tree) * 0.5);
       const kit = realTreeKit(), lime = kit && kit.species[0];
       if (lime && lime.near) {
         const tree = new THREE.Mesh(lime.near, lime.soloMat);
@@ -140,6 +163,18 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
         p.add(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 5), COL.stake, sx, y + 0.8, sz);
       }
       for (const yy of [0.9, 1.45]) p.add(new THREE.TorusGeometry(0.3, 0.015, 4, 12).rotateX(Math.PI / 2), COL.stake, x, y + yy, z);
+      // the two red slatted benches in the edge of the bed, their backs to the plants
+      for (const bi of ISLAND.benches) {
+        const k = Math.floor(bi), [tx, tz] = track.tan[k], rx = -tz, rz = tx, yaw = Math.atan2(-tz, tx);
+        const c = T(bi, hwAt(bi) + lat1(bi) - 0.42), y0 = h(c[0], c[1]) + 0.08;
+        const part = (w, hh, d, hex, a, b, yy) => p.add(BOX(w, hh, d), hex, c[0] + tx * a + rx * b, y0 + yy, c[1] + tz * a + rz * b, yaw);
+        for (const b of [0.02, 0.15, 0.28]) part(1.7, 0.04, 0.11, COL.bench, 0, b, 0.45);
+        for (const yy of [0.62, 0.77]) part(1.7, 0.11, 0.035, COL.bench, 0, -0.1, yy);
+        for (const a of [-0.72, 0.72]) {
+          part(0.05, 0.43, 0.38, COL.benchDark, a, 0.13, 0.215);
+          part(0.05, 0.86, 0.05, COL.benchDark, a, -0.13, 0.43);
+        }
+      }
     }
 
     // ---- give-way triangles across the lane at the mouth of the junction, pointing at the driver

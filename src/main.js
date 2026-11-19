@@ -20,6 +20,8 @@ import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
+import { createKaubamaja, kaubamajaWalls } from './world/kaubamaja.js';
+import { createKeskus, keskusWalls, keskusProps } from './world/keskus.js';
 import { createKvissentaliTee, kvissentaliProps, kvissentaliWalls } from './world/kvissentalitee.js';
 import { createSireli, sireliWalls } from './world/sireli.js';
 import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './world/coop.js';
@@ -28,6 +30,7 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
+import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear } from './race/kroonuaia.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -42,6 +45,7 @@ import { veskiRoads } from './race/veski.js';
 import { emajoeVectors } from './race/emajoe.js';
 import { laiVectors } from './race/lai.js';
 import { uueturuVectors, uueturuWalls } from './race/uueturu.js';
+import { playtechWalls } from './race/playtech.js';
 import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
@@ -86,7 +90,7 @@ addEventListener('resize', () => {
 
 const input = createInput(document.body);
 const audio = createAudio();
-let kuperjanovi;
+let kuperjanovi, kaubamaja, keskus;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
@@ -117,14 +121,15 @@ async function boot() {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
   world.vectors.areas = [...(world.vectors.areas || []), ...pavedPatches()];      // rounded kerbs on the lap
-  veskiRoads(world.vectors);
-  snapRoadsToTrack(world.vectors);              // after veskiRoads: it finds its roads by their first point
+  snapRoadsToTrack(world.vectors);
   valliWalls(world.vectors);
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
+  veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
+  playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
   raekodaWalls(world.walls);                    // Raekoja plats: its houses in their colours, the town hall by hand
   kvissentaliWalls(world.walls);                // Kvissentali tee 10 and 12 are built by hand
@@ -135,6 +140,9 @@ async function boot() {
   janeseWalls(world.walls);                     // and Jänese 1
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   veskiEndWalls(world.walls);                   // the white house and the brick block at the end of Veski
+  keskusWalls(world.walls);                     // Kvartal, Tasku and the market hall in their colours
+  kaubamajaWalls(world.walls);                  // Kaubamaja is built by hand
+  kroonuaiaWalls(world.walls);                  // Kroonuaia and the Jakobi hill: every house in its own colours
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -147,7 +155,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps(), ...baeriStreetProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);
@@ -157,6 +165,8 @@ async function boot() {
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kuperjanovi = createKuperjanovi(scene, world, { shadows: !isTouch });
+  kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
+  keskus = createKeskus(scene, world, { shadows: !isTouch });
   kvissentali = createKvissentaliTee(scene, world, { shadows: !isTouch });
   sireli = createSireli(scene, world, { shadows: !isTouch });
   coop = createCoop(scene, world, { shadows: !isTouch });
@@ -723,6 +733,8 @@ function frame(ts) {
     pootsmani.update(car);
     raekoda.update(car);
     kuperjanovi.update(car);
+    kaubamaja.update(car);
+    keskus.update(car);
     kvissentali.update(car);
     sireli.update(car);
     coop.update(car);

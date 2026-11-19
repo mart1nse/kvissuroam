@@ -1,24 +1,40 @@
 // Veski from the Näituse crossing to Kuperjanovi (Martin, 16 Nov), left to right in the direction of
-// the lap: pavement, grass strip, a narrow reddish lane, the car lane, pavement. The grass strip is a
-// raised kerb (trackside.js KERBS), the red lane a coloured band on the road, and the dashed line moves
-// over to the edge of the car lane. A low wooden fence round the inside of the left turn onto
+// the lap: pavement, grass strip, a narrow reddish lane, the car lane, pavement. The red lane is a
+// coloured band on the road with a line of long dashes between it and the car lane. From the Juhan Liivi
+// junction to the end (Martin, 18 Nov, his numbered street view) the rest is laid here as well: the
+// kerbed strip of grass beyond the left edge of the road, the tarmac pavement behind it and the pavement
+// on the right; before Juhan Liivi the houses stand at the edge of the road and the strip is a plain
+// raised kerb (trackside.js KERBS). A low wooden fence round the inside of the left turn onto
 // Kuperjanovi stops the car cutting across the corner.
 import * as THREE from 'three';
 import { createTrack } from './race.js';
+import { streetKit } from '../world/streetkit.js';
+import { islandOuter, ISLAND_END } from './veskiend.js';
 
-export const VESKI = { i0: 1655, i1: 1810, red: [0.15, 1.9], dash: -1.9 };     // red: from the left road edge inwards
-const FENCE = { i0: 1806, i1: 1842, off: 1.6, height: 1.15, colour: 0xd98a68, post: 0xbd7254 };   // the orange board fence round the green (Martin, 18 Nov)
-// the Veski centre lines of this stretch in vectors.json (start points)
-const VESKI_ROADS = [[694.0, 2974.3], [760.8, 3107.9], [789.3, 3164.6]];
+export const VESKI = { i0: 1655, i1: 1810, red: [0.15, 1.9], colour: 0xa27c7e };     // red: from the left road edge inwards
+const LINE = { i0: 1657.5, i1: 1807.5, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
+// the grass strip beyond the left edge: a mountable kerb, narrow past the houses, wider along the green
+// (towards the junction it is a planted bed, a little narrower where the fence comes in, with a rounded end)
+const STRIP = { i0: 1730, i1: 1819.8, height: 0.1, edge: 0.14, back: 0.12, wide: [1756, 1764], narrow: [1811, 1818, 0.3], nose: 1.3 };
+const LEFT = { i0: 1730, i1: 1821 };                                                 // the pavement, out to the board fence
+const RIGHT = { runs: [[1730, 1753.5], [1760.5, ISLAND_END + 1.5]], width: 2.2, island: [1793, 1797.5] };   // it passes behind the island
+// the orange board fence round the green (Martin, 18 Nov): it carries on from the fence along the street
+// (veskiend.js, 3.4 m off) and comes in to 1.6 m for the inside of the corner
+const FENCE = { i0: 1805, i1: 1842, off: [1806, 1818, 3.4, 1.6], height: 1.15, colour: 0xd98a68, post: 0xbd7254 };
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const ramp = (t, a, b) => smooth((t - a) / (b - a));
+const fenceOff = (t) => FENCE.off[2] + (FENCE.off[3] - FENCE.off[2]) * ramp(t, FENCE.off[0], FENCE.off[1]);
+const stripWidth = (t) => (t <= STRIP.i0 || t >= STRIP.i1 ? 0
+  : (0.9 + 0.5 * ramp(t, ...STRIP.wide) - STRIP.narrow[2] * ramp(t, STRIP.narrow[0], STRIP.narrow[1])) * ramp(t, STRIP.i0, STRIP.i0 + 1.2) * Math.sqrt(1 - ramp(t, STRIP.i1 - STRIP.nose, STRIP.i1)));
 
-// before the road markings are built: the dashed line of Veski sits between the car lane and the red lane
+// before the road markings are built: this stretch paints its own line, between the car lane and the red lane
 export function veskiRoads(vectors) {
-  for (const r of vectors.roads) {
-    if (r.name !== 'Veski tänav' || !r.pts.length) continue;
-    if (VESKI_ROADS.some(([x, z]) => Math.hypot(r.pts[0][0] - x, r.pts[0][1] - z) < 0.5)) r.mark = VESKI.dash;
-  }
+  const track = createTrack(), prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const n = track.nearest(x, z);
+    return (n.i >= VESKI.i0 - 1 && n.i <= VESKI.i1 + 1 && n.d < 3.2) || (prev ? prev(x, z) : false);
+  };
 }
 
 function edgePoint(track, i, side, off) {
@@ -27,8 +43,90 @@ function edgePoint(track, i, side, off) {
   return [track.P[k][0] - tz * side * o, track.P[k][1] + tx * side * o];
 }
 
-export function createVeski(world, group, merged) {
+export function createVeski(world, group, merged, { shadows = true } = {}) {
   const track = createTrack();
+  // a point at a fractional track index, `lat` metres to the right of the centre line
+  const hwAt = (t) => { const k = Math.floor(t); return track.HW[k] + (track.HW[k + 1] - track.HW[k]) * (t - k); };
+  const at = (t, lat) => {
+    const k = Math.floor(t), f = t - k, a = track.P[k], b = track.P[k + 1], [tx, tz] = track.tan[k];
+    return [a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat];
+  };
+  const left = (d) => ({ at: (t, u) => at(t, -(hwAt(t) + d(t, u))) });       // d: metres beyond the left edge of the road
+  const right = (d) => ({ at: (t, u) => at(t, hwAt(t) + d(t, u)) });
+
+  // ---- the grass strip is a low kerb the car can mount
+  {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = Math.floor(STRIP.i0); i <= Math.ceil(STRIP.i1); i++) {
+      const p = at(i, -hwAt(i));
+      x0 = Math.min(x0, p[0]); z0 = Math.min(z0, p[1]); x1 = Math.max(x1, p[0]); z1 = Math.max(z1, p[1]);
+    }
+    const hint = Math.round((STRIP.i0 + STRIP.i1) / 2);
+    world.addBump({
+      x0: x0 - 3, z0: z0 - 3, x1: x1 + 3, z1: z1 + 3,
+      at(x, z) {
+        const n = track.nearest(x, z, hint), t = n.i + n.t;
+        if (n.i < 0 || t <= STRIP.i0 || t >= STRIP.i1) return 0;
+        const [tx, tz] = track.tan[n.i], P = track.P[n.i];
+        const d = (x - P[0]) * tz - (z - P[1]) * tx - track.HW[n.i], w = stripWidth(t);
+        if (d <= 0 || d >= w) return 0;
+        return STRIP.height * smooth(d / STRIP.edge) * smooth((w - d) / STRIP.back);
+      },
+    });
+  }
+
+  // ---- from Juhan Liivi to the end: kerb stones, grass, pavements, and the line of the whole stretch
+  let street = false;
+  function buildStreet() {
+    street = true;
+    const K = streetKit(world, group, { shadows });
+    // 2 the grass strip: kerb stones on the face towards the road, grass on top and down the back
+    const top = (t) => Math.max(0.16, stripWidth(t) - STRIP.back);
+    K.ribbon(left((t, u) => -0.03 + u * (Math.min(0.13, stripWidth(t)) + 0.03)), STRIP.i0, STRIP.i1, 0, 1, 'kerb', true);
+    K.ribbon(left((t, u) => Math.min(stripWidth(t), 0.13 + u * (top(t) - 0.13))), STRIP.i0, STRIP.i1, 0, 1, 'verge', true);
+    K.ribbon(left((t, u) => Math.min(stripWidth(t), top(t) + u * STRIP.back)), STRIP.i0, STRIP.i1, 0, 1, 'verge', true);
+    // 1 the pavement behind it, out to the houses and then the board fence
+    const outer = (t) => fenceOff(t) - 0.1;
+    for (let b = 0; b < 5; b++) K.ribbon(left((t, u) => stripWidth(t) + u * (outer(t) - stripWidth(t))), LEFT.i0, LEFT.i1, b / 5, (b + 1) / 5, 'asphalt');
+    // 5 the pavement on the right, with its kerb; it swings out behind the island at the end
+    const out = (t) => (islandOuter(t) - 0.1) * ramp(t, RIGHT.island[0], RIGHT.island[1]);
+    for (const [a, b] of RIGHT.runs) {
+      K.ribbon(right((t, u) => -0.03 + u * 0.17), a, Math.min(b, RIGHT.island[0] + 1), 0, 1, 'kerb');
+      for (let k = 0; k < 4; k++) K.ribbon(right((t, u) => 0.14 + out(t) + u * (RIGHT.width - 0.14)), a, b, k / 4, (k + 1) / 4, 'asphalt');
+    }
+    // the line between the red lane and the car lane: long dashes, short gaps
+    const line = left((t, u) => -(LINE.at[0] + u * (LINE.at[1] - LINE.at[0])));
+    for (let t = LINE.i0; t + LINE.dash <= LINE.i1; t += LINE.dash + LINE.gap) K.ribbon(line, t, t + LINE.dash, 0, 1, 'white', true);
+    // weeds and a few low shrubs in the grass towards the end, where it grows wild, and the planted bed at
+    // the junction: shrubs, dark red perennials and a mass of pale blue-green grass at its end (not solid)
+    if (K.leafy.ok) {
+      let seed = 23;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const spot = (t, d) => { const q = at(t, -(hwAt(t) + d)); return [q[0], world.heightAt(q[0], q[1]), q[1]]; };
+      const PALE = [1.7, 1.5, 3.2], RED = [1.75, 0.24, 0.95];
+      for (let k = 0; k < 84; k++) {
+        const t = 1776 + Math.pow(rnd(), 0.7) * 43, w = stripWidth(t);
+        if (w < 0.5) continue;
+        const [x, y, z] = spot(t, 0.3 + rnd() * (w - 0.5)), big = k % 9 === 0, s = big ? 0.6 + rnd() * 0.3 : 0.26 + rnd() * 0.26, d = 0.9 + rnd() * 0.22;
+        K.leafy.bush(x, y - 0.03, z, s, big ? 0.5 + rnd() * 0.3 : 0.28 + rnd() * 0.4, rnd() * 6.3, big ? [d * 0.9, d, d * 0.84] : [d * 1.08, d * 1.1, d * 0.66], s);
+      }
+      for (let k = 0; k < 22; k++) {
+        const t = 1806.5 + k * 0.58 + (rnd() - 0.5) * 0.3, w = stripWidth(t);
+        if (w < 0.6) continue;
+        const [x, y, z] = spot(t, 0.4 + rnd() * (w - 0.7)), d = 0.86 + rnd() * 0.2, s = 0.7 + rnd() * 0.45;
+        if (t > 1814.5 || k % 5 === 4) K.leafy.bush(x, y - 0.05, z, s * 1.15, 0.5 + rnd() * 0.25, rnd() * 6.3, PALE.map((c) => c * (0.92 + rnd() * 0.16)), s * 1.15);
+        else K.leafy.bush(x, y - 0.06, z, s, 0.6 + rnd() * 0.5, rnd() * 6.3, [d * 0.92, d, d * 0.84], s);
+      }
+      for (let k = 0; k < 8; k++) {
+        const t = 1806 + rnd() * 9, w = stripWidth(t);
+        for (let j = 0; j < 3; j++) {
+          const [x, y, z] = spot(t + (rnd() - 0.5) * 0.25, 0.3 + rnd() * (w - 0.6));
+          K.leafy.bush(x, y - 0.02, z, 0.15 + rnd() * 0.08, 0.4 + rnd() * 0.28, rnd() * 6.3, RED, 0.15);
+        }
+      }
+    }
+    K.finish();
+  }
 
   // ---- the red lane: a band along the left edge of the road
   let lane = null;
@@ -49,7 +147,7 @@ export function createVeski(world, group, merged) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
-    lane = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x957d82, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+    lane = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: VESKI.colour, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     lane.receiveShadow = true;
     group.add(lane);
   }
@@ -57,7 +155,7 @@ export function createVeski(world, group, merged) {
   // ---- the fence round the inside of the corner
   const fence = [];
   for (let i = FENCE.i0; i <= FENCE.i1; i++) {
-    const p = edgePoint(track, i, -1, FENCE.off);
+    const p = edgePoint(track, i, -1, fenceOff(i));
     const q = fence[fence.length - 1];
     if (q) {
       const [tx, tz] = track.tan[i];
@@ -106,6 +204,11 @@ export function createVeski(world, group, merged) {
         let ok = true;
         for (let i = VESKI.i0; i <= VESKI.i1 && ok; i += 6) ok = world.ready(...track.P[i]);
         if (ok) buildLane();
+      }
+      if (!street && near(x, z, laneRef)) {
+        let ok = true;
+        for (let i = VESKI.i0; i <= LEFT.i1 && ok; i += 3) ok = world.ready(...at(i, -hwAt(i) - 3)) && world.ready(...at(i, hwAt(i) + 4));
+        if (ok) buildStreet();
       }
       if (!fenceSegs && near(x, z, fence[0]) && fence.every((p) => world.ready(p[0], p[1]))) buildFence();
     },

@@ -61,7 +61,7 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0, yank: 0, yankId: 0 };
+    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0, yank: 0, yankId: 0, yankTight: 0 };
     this.rpm = 800; this.load = 0; this.ld = 0; this.blip = 0; this.crk = 0; this.ovr = 0; this.hp0 = 0; this.brk = 0;
     this.rpmE = 800; this.yId = 0; this.yA = 0; this.yT = 9; this.yk = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
@@ -162,15 +162,16 @@ export class EngineCore {
     // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a
     // couple of swings as the driveline winds up and springs back
     if (I.yankId !== this.yId) {
-      this.yId = I.yankId; this.yA = I.yank || 0; this.yT = 0;
+      this.yId = I.yankId; this.yA = I.yank || 0; this.yT = 0; this.yTi = I.yankTight || 0;
       if (this.yA > 0) this.rpm = Math.max(300, I.rpm);
     }
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
-      // (per car: yank, the size of the swing, and yankHz, how fast it swings; a slower one dies slower)
-      const c = this.cfg, hz = c.yankHz ?? 8.2, a = this.yA * (c.yank ?? 0.55);
-      const env = Math.exp(-this.yT / (0.08 * 8.2 / hz)), sw = Math.cos(6.2832 * hz * this.yT);
+      // (per car: yank, the size of the swing, and yankHz, how fast it swings; a slower one dies slower.
+      // yankTight (1st to 2nd): the gear snaps in, the swing 60 % faster and over in half the time)
+      const c = this.cfg, ti = this.yTi || 0, hz0 = c.yankHz ?? 8.2, hz = hz0 * (1 + 0.6 * ti), a = this.yA * (c.yank ?? 0.55);
+      const env = Math.exp(-this.yT / (0.08 * 8.2 / hz0 / (1 + ti))), sw = Math.cos(6.2832 * hz * this.yT);
       yOff = a * env * sw;
       this.yk = Math.min(1, a / I.redline * 5) * env * sw;
       this.yT += len / sr;

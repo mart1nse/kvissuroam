@@ -14,6 +14,7 @@ import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { drapeGeometry } from '../world/drape.js';
 import { paverTex } from '../world/streetkit.js';
+import { breakableShelter } from '../world/shelter.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
 const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
@@ -552,7 +553,8 @@ export function createEmajoe(world, group) {
 
     // ---- the glass shelter, its bench and advert, and the bus stop sign
     const p = new Parts(), solids = [];
-    const glass = [];
+    const glass = [], sp = new Parts(), adverts = [];
+    let shelter = null;
     {
       const i = SHELTER.i, [ux, uz] = track.tan[i], [rx, rz] = right(i);
       const lat = hw(i) + BAY.width + 0.25 + 0.6 + SHELTER.depth / 2;
@@ -560,7 +562,7 @@ export function createEmajoe(world, group) {
       const y = Math.max(world.heightAt(cx, cz), world.heightAt(...at(i, hw(i) + BAY.width + 0.3))) + 0.05;
       const yaw = Math.atan2(-uz, ux);
       const W = (lu, lr) => [cx + ux * lu + rx * lr, cz + uz * lu + rz * lr];
-      const add = (geo, colour, lu, yy, lr) => { const [x, z] = W(lu, lr); p.add(geo, colour, x, y + yy, z, yaw); };
+      const add = (geo, colour, lu, yy, lr) => { const [x, z] = W(lu, lr); sp.add(geo, colour, x, y + yy, z, yaw); };      // the frame: bends when hit
       const L = SHELTER.len, D = SHELTER.depth, H = 2.45;
       p.add(BOX(L + 0.5, 0.12, D + 0.4), COL.pave, cx, y - 0.04, cz, yaw);                    // slab
       for (const lu of [-L / 2, -L / 6, L / 6, L / 2]) {
@@ -583,9 +585,10 @@ export function createEmajoe(world, group) {
         const [x, z] = W(-L / 2 + s * 0.085, 0);
         ad.position.set(x, y + 1.2, z);
         ad.rotation.y = yaw + (s < 0 ? -Math.PI / 2 : Math.PI / 2);
-        group.add(ad);
+        adverts.push(ad);
       }
-      solids.push({ x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 });
+      shelter = { box: { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 }, y, H };
+      solids.push(shelter.box);
     }
     {
       const i = BAY.i0 + 4, lat = hw(BAY.i0 + 4) + bayW(BAY.i0 + 4) + 0.55;
@@ -660,13 +663,15 @@ export function createEmajoe(world, group) {
 
     const m = p.mesh(solidMat);
     if (m) { m.castShadow = m.receiveShadow = true; group.add(m); }
-    const glassMat = new THREE.MeshLambertMaterial({ color: 0xcfe6f2, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false });
-    for (const [[x, z], w, yaw, y, H] of glass) {
-      const g = new THREE.Mesh(new THREE.PlaneGeometry(w, H - 0.25), glassMat);
-      g.position.set(x, y + 0.15 + (H - 0.25) / 2, z);
-      g.rotation.y = yaw;
-      group.add(g);
-    }
+    // the shelter can be smashed: its glass bursts and its frame bends (src/world/shelter.js)
+    const panes = glass.map(([[x, z], w, yaw, y, H]) => {
+      const ux = Math.cos(yaw) * w / 2, uz = -Math.sin(yaw) * w / 2;
+      return { a: [x - ux, z - uz], b: [x + ux, z + uz], y0: y + 0.15, y1: y + H - 0.1 };
+    });
+    const frame = sp.mesh(solidMat);
+    if (frame) { frame.castShadow = frame.receiveShadow = true; group.add(frame); }
+    for (const ad of adverts) group.add(ad);
+    breakableShelter(world, group, { ...shelter, frame, bendAlso: adverts, panes, glass: 0xcfe6f2, opacity: 0.32 });
     world.addSolids(solids);
   }
 

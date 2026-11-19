@@ -9,6 +9,7 @@ import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createTrackKerbs } from './race/trackkerbs.js';
+import { updateShelters } from './world/shelter.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
@@ -775,6 +776,7 @@ function frame(ts) {
     mp.collide(car);
     trackside.collide(car);
     props.update(car, dt);
+    updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames
     janese.update(car, dt);
     parked.update(car, dt, camera.position);
     aksi.update(car, dt);

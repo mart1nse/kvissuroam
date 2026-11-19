@@ -575,8 +575,14 @@ function goFull() {
 }
 for (const ev of ['pointerup', 'touchend']) addEventListener(ev, () => { if (wantFull && !document.hidden) goFull(); }, { passive: true, capture: true });
 
+let drivenOnce = false;
+// (in the garage Esc goes back to the car, once there is a drive to go back to; the lap times board
+// catches its own Esc first)
+addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'menu' && drivenOnce && !board?.open) { e.preventDefault(); e.stopImmediatePropagation(); startDriving(); } }, true);
 function openGarage() {
   if (mode !== 'drive') return;
+  drivenOnce = true;
+  board?.hide(); optEl.classList.add('hidden');
   closeMap();
   mode = 'menu';
   input.enable(false);
@@ -706,18 +712,32 @@ function toggleSound() {
   $('#soundbtn').classList.toggle('off', audio.muted);
 }
 
-const unlessMap = (fn) => () => { if (!bigmap?.isOpen) fn(); };
-input.on('KeyR', unlessMap(goLastSpot));
-input.on('KeyH', unlessMap(goHome));
-input.on('Home', unlessMap(goHome));
-input.on('KeyG', openGarage);
-const toggleMap = () => (bigmap.isOpen ? closeMap() : openMap());
+// ---- screens over the drive: the city map, the lap times and the options. Only one is open at a time.
+// Their keys work from any of them: M / L / O jump straight to that screen (the same key again closes it),
+// Esc goes back to the car, and from the car Esc opens the garage. R, H and G close whatever is open first.
+// The driving keys (C, A / Z) wait until the car is back on screen.
+const overlayOpen = () => (bigmap?.isOpen ? 'map' : board?.open ? 'laps' : !optEl.classList.contains('hidden') ? 'options' : null);
+function closeOverlays() { closeMap(); board?.hide(); optEl.classList.add('hidden'); }
+function showOverlay(name) {
+  const was = overlayOpen();
+  closeOverlays();
+  if (was === name || mode !== 'drive') return;
+  if (name === 'map') openMap();
+  else if (name === 'laps') board.show();
+  else if (name === 'options') { optEl.classList.remove('hidden'); showGfx(true); }
+}
+const unlessMap = (fn) => () => { if (!overlayOpen()) fn(); };
+const closingFirst = (fn) => () => { closeOverlays(); fn(); };
+input.on('KeyR', closingFirst(goLastSpot));
+input.on('KeyH', closingFirst(goHome));
+input.on('Home', closingFirst(goHome));
+input.on('KeyG', closingFirst(openGarage));
+const toggleMap = () => showOverlay('map');
 input.on('KeyM', toggleMap);
 input.on('KeyT', toggleMap);
-input.on('Escape', () => (!optEl.classList.contains('hidden') ? optEl.classList.add('hidden') : bigmap.isOpen ? closeMap() : openGarage()));
+input.on('Escape', () => (overlayOpen() ? closeOverlays() : openGarage()));
 input.on('KeyN', toggleSound);
-// L: the lap times board over the drive (Esc or L again closes it)
-input.on('KeyL', unlessMap(() => (board.open ? board.hide() : board.show())));
+input.on('KeyL', () => showOverlay('laps'));
 // A / Z: one gear up / down by hand; the automatic takes over again at the shift point
 const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open && !input.wasd) shiftGear(car, dir); });
 // Options (O): WASD driving, which turns the A / Z gear keys off. Off by default; remembered per browser.
@@ -781,8 +801,8 @@ document.getElementById('opt-space').addEventListener('click', (e) => {
   setSpace(b.dataset.space === 'live');
 });
 input.on('KeyV', () => setSpace(!audio.spaceOn));     // V: switch between the two while driving, to compare
-const toggleOptions = () => { optEl.classList.toggle('hidden'); showGfx(true); };
-input.on('KeyO', unlessMap(toggleOptions));
+const toggleOptions = () => showOverlay('options');
+input.on('KeyO', toggleOptions);
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
 // C: the chase camera or a drone following the car from above
@@ -801,7 +821,7 @@ document.addEventListener('click', (e) => {
   if (act === 'reset') goLastSpot();
   else if (act === 'home') goHome();
   else if (act === 'garage') openGarage();
-  else if (act === 'map') openMap();
+  else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
   else if (act === 'sound') toggleSound();
   else if (act === 'options') toggleOptions();
   else if (act === 'options-close') optEl.classList.add('hidden');

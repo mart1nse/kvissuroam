@@ -16,6 +16,7 @@ import { createTrack } from './race.js';
 import { BOX, rnd } from './landmarks.js';
 import { streetKit, wallOf, setHouseColours } from '../world/streetkit.js';
 import { facade } from './vallistreet.js';
+import { drapeGeometry } from '../world/drape.js';
 
 // wall lines from the LOD2 model (game x, z), the open side on the right-hand side going a -> b; top: world y
 const WALLS = {
@@ -83,7 +84,7 @@ const WALLS = {
 const ZONES = [
   { c: [1290, 3090], ready: [[1360, 3090], [1300, 3085], [1240, 3100], [1185, 3130], [1100, 3110]], keys: ['S60', 'S60e', 'S60w', 'N64', 'N97', 'N97e', 'N97w', 'N75', 'N75e', 'N75w', 'S33a', 'S33b', 'S33c', 'S33d', 'S33e', 'S33f', 'S33w', 'N18', 'N18e', 'Y1', 'Y2', 'Y3', 'Y4', 'K1', 'K2', 'K3', 'K4', 'R1', 'R2', 'R3', 'R4', 'R5'] },
   { c: [980, 3020], ready: [[1060, 3050], [980, 3025], [900, 3010], [860, 2960]], keys: ['O1', 'O2', 'O3'] },
-  { c: [880, 2700], ready: [[850, 2760], [850, 2710], [890, 2680], [930, 2650]], keys: ['G1', 'G2', 'P1', 'P2', 'B1', 'B2', 'J1', 'J2', 'J3', 'A1', 'A2', 'A3', 'W1', 'W2', 'X1', 'X2', 'X3', 'U1'] },
+  { c: [880, 2700], ready: [[866, 2890], [862, 2830], [850, 2760], [850, 2710], [890, 2680], [930, 2650]], keys: ['G1', 'G2', 'P1', 'P2', 'B1', 'B2', 'J1', 'J2', 'J3', 'A1', 'A2', 'A3', 'W1', 'W2', 'X1', 'X2', 'X3', 'U1'] },
 ];
 const COL = {
   granite: 0x7c7c88, graniteTop: 0x9a9aa6, concrete: 0x98948e, iron: 0x26252c, wood: 0x8a7868, woodDark: 0x6e5f54,
@@ -193,6 +194,22 @@ function posterTex() {         // the round poster column's skin
   c.fillStyle = '#9a9792'; c.fillRect(0, 236, 512, 20); c.fillRect(0, 0, 512, 30);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+
+function gutterTex() {         // round field stones set in a strip along the kerb; one tile is 1.6 m
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const c = cv.getContext('2d'), r = rnd(31);
+  c.fillStyle = '#4f4a50'; c.fillRect(0, 0, 256, 256);
+  const tones = [[168, 160, 166], [142, 136, 146], [186, 174, 172], [128, 124, 136], [176, 158, 156]];
+  for (let y = 0; y < 256; y += 21) for (let x = (y / 21) % 2 ? -10 : 0; x < 256; x += 22) {
+    const t = tones[Math.floor(r() * tones.length)], k = 0.85 + r() * 0.3;
+    c.fillStyle = tone(t, k);
+    c.beginPath(); c.ellipse(x + 11 + r() * 3, y + 10 + r() * 3, 9 + r() * 2, 8 + r() * 2, r() * 3, 0, 7); c.fill();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   return t;
 }
 
@@ -396,6 +413,21 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       glow.push(new THREE.SphereGeometry(0.11, 8, 6).translate(x, w.y + y + 0.3, z));
     };
 
+    // ---- the road surface (lat > 0 to the right of the lap)
+    const F = { at: (t, lat) => T(t, lat) };
+    const paint = { gutter: [], kerb: [], white: [], red: [] };
+    // a band along the road between lateral offsets a(i) and b(i)
+    const band = (list, i0, i1, a, b, step = 1) => {
+      for (let i = i0; i < i1 - 1e-6; i += step) {
+        const j = Math.min(i1, i + step);
+        list.push([[T(i, a(i)), T(j, a(j)), T(j, b(j)), T(i, b(i))]]);
+      }
+    };
+    const pave = (i0, i1, a, b, kind = 'paver') => { for (let i = i0; i < i1; i++) K.ribbon(F, i, i + 1, (a(i) + a(i + 1)) / 2, (b(i) + b(i + 1)) / 2, kind); };
+    const zebra = (i, bars = 6) => {
+      const w = hw(i) * 2 - 0.6;
+      for (let k = 0; k < bars; k++) { const lat = -w / 2 + (w - 0.5) * k / (bars - 1); band(paint.white, i - 1.0, i + 1.0, () => lat, () => lat + 0.5, 2); }
+    };
     if (zone === 0) buildValli();
     if (zone === 1) buildToome();
     if (zone === 2) buildJakobi();
@@ -551,6 +583,13 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       }
       // the stair with handrails up the bank on the right, to the path under the trees
       stair(T(266.5, hw(266) + 2.2), T(268.5, hw(268) + 8.5), 1.5);
+      // the road: strips of round cobbles along both kerbs, granite kerbstones, herringbone pavements
+      for (const side of [-1, 1]) {
+        band(paint.gutter, 131, 289, (i) => side * (hw(i) - 0.85), (i) => side * (hw(i) + 0.02));
+        band(paint.kerb, 131, 289, (i) => side * (hw(i) + 0.02), (i) => side * (hw(i) + 0.2));
+      }
+      pave(199, 287, (i) => -(hw(i) + 0.2), (i) => -(hw(i) + 2.4));
+      pave(205, 290, (i) => hw(i) + 0.2, (i) => hw(i) + 2.0);
     }
 
     // ============================================================ Baeri under Toomemägi
@@ -575,6 +614,10 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       stair(T(403, -(hw(403) + 3.0)), T(403.5, -(hw(403) + 12.5)), 1.8);
       // the stair on the right bank near the junction
       stair(T(331, hw(331) + 4.0), T(333, hw(333) + 10.5), 1.6);
+      // the road: the crossing by the lanterns, the paved pavement with its granite kerb on the left
+      zebra(322);
+      pave(292, 330, (i) => -(hw(i) + 0.2), (i) => -(hw(i) + 2.3));
+      band(paint.kerb, 292, 330, (i) => -(hw(i) + 0.02), (i) => -(hw(i) + 0.2));
     }
 
     // ============================================================ Baeri down to Jakobi
@@ -683,9 +726,24 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         p.add(new THREE.CylinderGeometry(0.78, 0.82, 0.3, 20), 0x9a9792, x, y + 0.15, z, 0);
       }
       stair(T(550.5, hw(550) + 5.0), T(552, hw(552) + 13.5), 2.2);
+      // the road: the short-dashed cycle lane line down the left past the tennis courts, the red cycle
+      // crossing at the corner, the solid lane lines between the houses, red and grey brick pavements
+      for (let i = 470; i < 540; i += 1) band(paint.white, i, i + 0.5, () => -(hw(i) - 1.45), () => -(hw(i) - 1.3), 0.5);
+      band(paint.red, 541, 549, (i) => -(hw(i) - 0.2), (i) => -(hw(i) - 1.7));
+      for (let i = 541; i < 549; i += 0.5) for (const o of [0.2, 1.55]) band(paint.white, i, i + 0.25, () => -(hw(i) - o), () => -(hw(i) - o - 0.15), 0.25);
+      for (const side of [-1, 1]) band(paint.white, 556, 614, (i) => side * (hw(i) - 1.25), (i) => side * (hw(i) - 1.1));
+      pave(470, 540, (i) => -(hw(i) + 1.6), (i) => -(hw(i) + 4.0), 'red');
+      pave(528, 614, (i) => hw(i) + 0.2, (i) => hw(i) + 2.4, 'red');
       { const [x, z] = T(533.4, hw(533) + 3.3); K.box(x, z, 0.34, 0.5, 0.26, COL.bin, 0, 0.75); }
     }
 
+    {
+      const deco = (list, lift, tile, opts, f) => { if (!list.length) return; const g = drapeGeometry(world, list, lift, tile, 1.5); if (g) extra.push([g, new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide })]); };
+      deco(paint.gutter, 0.07, 1.6, { map: gutterTex() }, -5);
+      deco(paint.kerb, 0.1, 1, { color: 0xb9b6c0 }, -6);
+      deco(paint.red, 0.08, 1, { color: 0xd98a80 }, -6);
+      deco(paint.white, 0.1, 1, { color: 0xf6f3fa }, -7);
+    }
     K.finish();
     for (const [g, m] of extra) { const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); }
     const flat = (G, mat) => {

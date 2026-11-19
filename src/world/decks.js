@@ -136,6 +136,43 @@ function block(out, x, y0, z, dx, dz, along, across, y1) {
   quad(out, c(-1, -1, y1), c(1, -1, y1), c(-1, 1, y1), c(1, 1, y1));
 }
 
+// Vabadussild as it is (Martin, 18 Nov, street views of Aug 2024 and the orthophoto): one white box arch
+// that springs from beside the deck on the Lai side, crosses over the road at a slant and comes down on the
+// far side by the Delta building, with dark hangers fanning down to both edges of the deck.
+const VABADUS = { a: [1458.0, 2303.0], b: [1507.0, 2266.0], rise: 19, w: 1.3, h: 0.95 };
+function vabadusArch(d, out) {
+  const { a, b, rise, w, h } = VABADUS;
+  const P = d.pts, dir = [P[P.length - 1][0] - P[0][0], P[P.length - 1][1] - P[0][1]], dl = Math.hypot(dir[0], dir[1]);
+  const ux = dir[0] / dl, uz = dir[1] / dl;
+  const o = [0, 0, 0, 0, 0], q = [0, 0, 0, 0, 0];
+  const station = (x, z) => (x - P[0][0]) * ux + (z - P[0][1]) * uz;
+  const lateral = (x, z) => -(x - P[0][0]) * uz + (z - P[0][1]) * ux;        // to the left, as at() counts it
+  const deckY = (x, z) => { at(d, Math.max(0, Math.min(d.len, station(x, z))), 0, o); return o[1]; };
+  const ya = deckY(...a) - 0.6, yb = deckY(...b) - 0.6;
+  const n = 36, pts = [];
+  for (let k = 0; k <= n; k++) {
+    const u = k / n, x = a[0] + (b[0] - a[0]) * u, z = a[1] + (b[1] - a[1]) * u;
+    // a little fuller than a parabola, so the legs rise steeply as on the real bridge
+    const s = Math.sin(Math.PI * u), y = ya + (yb - ya) * u + (rise + 0.6) * Math.pow(s, 0.8);
+    pts.push([x, y, z]);
+  }
+  for (let k = 0; k < n; k++) bar(out.white, pts[k], pts[k + 1], w, h);
+  // concrete feet
+  for (const [x, z, y] of [[a[0], a[1], ya], [b[0], b[1], yb]]) block(out.concrete, x, y - 3, z, ux, uz, 1.4, 1.4, y + 0.6);
+  // hangers: from the arch down to the edge of the deck at the same station on both sides
+  for (let k = 4; k <= n - 4; k += 2) {
+    const [x, y, z] = pts[k], t = station(x, z), lat = lateral(x, z);
+    if (t < 1 || t > d.len - 1) continue;
+    for (const side of [-1, 1]) {
+      const el = side * (d.hw - 0.3);
+      if (Math.abs(el - lat) > 16) continue;
+      at(d, t, el, q);
+      if (y - q[1] < 2) continue;
+      bar(out.dark, [x, y - h / 2, z], [q[0], q[1] + 0.3, q[2]], 0.06, 0.06);
+    }
+  }
+}
+
 // Everything of a bridge that is not its deck: piers, arches, pylon and cables, lamp posts.
 function structure(world, d, out) {
   const o = [0, 0, 0, 0, 0], q = [0, 0, 0, 0, 0];
@@ -145,7 +182,8 @@ function structure(world, d, out) {
     const slim = d.b === 'cable' || d.b === 'steelarch';
     block(out.concrete, o[0], foot, o[2], o[3], o[4], slim ? 0.5 : 0.75, d.hw * (slim ? 0.45 : 0.82), o[1] - 0.5);
   }
-  if (d.b === 'arch' || d.b === 'steelarch') {
+  if (d.name === 'Vabadussild') vabadusArch(d, out);
+  else if (d.b === 'arch' || d.b === 'steelarch') {
     // two ribs, one along each edge, with hangers down to the deck
     const [t0, t1] = d.main, span = t1 - t0, rise = d.b === 'arch' ? span * 0.16 : span * 0.14;
     const m = d.b === 'arch' ? out.white : out.steel, sec = d.b === 'arch' ? [0.75, 0.9] : [0.6, 0.8];

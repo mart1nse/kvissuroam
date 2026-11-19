@@ -10,9 +10,10 @@ import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { streetKit } from '../world/streetkit.js';
 import { islandOuter, ISLAND_END } from './veskiend.js';
+import { drapeGeometry } from '../world/drape.js';
 
-export const VESKI = { i0: 1655, i1: 1810, red: [0.15, 1.9], colour: 0xa27c7e };     // red: from the left road edge inwards
-const LINE = { i0: 1657.5, i1: 1807.5, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
+export const VESKI = { i0: 1655, i1: 1823, red: [0.15, 1.9], colour: 0xa27c7e };     // red: from the left road edge inwards; it runs out into the junction
+const LINE = { i0: 1657.5, i1: 1820.6, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
 // the grass strip beyond the left edge: a mountable kerb, narrow past the houses, wider along the green
 // (towards the junction it is a planted bed, a little narrower where the fence comes in, with a rounded end)
 const STRIP = { i0: 1730, i1: 1819.8, height: 0.1, edge: 0.14, back: 0.12, wide: [1756, 1764], narrow: [1811, 1818, 0.3], nose: 1.3 };
@@ -20,6 +21,8 @@ const LEFT = { i0: 1730, i1: 1821 };                                            
 const RIGHT = { runs: [[1730, 1753.5], [1760.5, ISLAND_END + 1.5]], width: 2.2, island: [1793, 1797.5] };   // it passes behind the island
 // the orange board fence round the green (Martin, 18 Nov): it carries on from the fence along the street
 // (veskiend.js, 3.4 m off) and comes in to 1.6 m for the inside of the corner
+// the bicycle and the arrow painted in the red lane before the junction; the lane is ridden against the lap
+const SYMBOL = { bike: 1817.2, arrow: 1815.3, at: 1.02, size: 0.82, long: 1.5, line: 0.09 };
 const FENCE = { i0: 1805, i1: 1842, off: [1806, 1818, 3.4, 1.6], height: 1.15, colour: 0xd98a68, post: 0xbd7254 };
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -97,6 +100,39 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
     // the line between the red lane and the car lane: long dashes, short gaps
     const line = left((t, u) => -(LINE.at[0] + u * (LINE.at[1] - LINE.at[0])));
     for (let t = LINE.i0; t + LINE.dash <= LINE.i1; t += LINE.dash + LINE.gap) K.ribbon(line, t, t + LINE.dash, 0, 1, 'white', true);
+    // the bicycle and the arrow in the red lane, drawn the way a rider coming from the junction reads them:
+    // picture x across the lane to the rider's right, picture y along the lane ahead of the rider
+    {
+      const shapes = [], S = SYMBOL;
+      const frame = (t) => {
+        const k = Math.floor(t), [tx, tz] = track.tan[k], c = at(t, -(hwAt(t) - S.at));
+        return (x, y) => [c[0] + tz * x * S.size - tx * y * S.size * S.long, c[1] - tx * x * S.size - tz * y * S.size * S.long];
+      };
+      const lineOf = (pts, w) => {
+        for (let k = 0; k < pts.length - 1; k++) {
+          const [ax, az] = pts[k], [bx, bz] = pts[k + 1], l = Math.hypot(bx - ax, bz - az);
+          if (l < 1e-3) continue;
+          const nx = (-(bz - az) / l) * w / 2, nz = ((bx - ax) / l) * w / 2;
+          shapes.push([[[ax - nx, az - nz], [bx - nx, bz - nz], [bx + nx, bz + nz], [ax + nx, az + nz]]]);
+        }
+      };
+      const pt = frame(S.bike);
+      const wheel = (cx) => { const q = []; for (let k = 0; k <= 16; k++) q.push(pt(cx + Math.cos(k / 16 * 6.283) * 0.3, Math.sin(k / 16 * 6.283) * 0.3)); return q; };
+      lineOf(wheel(-0.5), S.line); lineOf(wheel(0.5), S.line);
+      lineOf([pt(-0.5, 0), pt(-0.1, 0.42), pt(0.38, 0.42), pt(0.5, 0)], S.line);
+      lineOf([pt(-0.5, 0), pt(0, 0), pt(0.38, 0.42)], S.line);
+      lineOf([pt(0, 0), pt(-0.16, 0.55)], S.line); lineOf([pt(-0.27, 0.56), pt(-0.04, 0.56)], S.line);
+      lineOf([pt(0.38, 0.42), pt(0.33, 0.62), pt(0.46, 0.64)], S.line);
+      const ar = frame(S.arrow);
+      shapes.push([[ar(-0.06, -0.55), ar(0.06, -0.55), ar(0.06, 0.25), ar(-0.06, 0.25)]]);
+      shapes.push([[ar(-0.24, 0.2), ar(0.24, 0.2), ar(0, 0.62)]]);
+      const g = drapeGeometry(world, shapes, 0.085, 1, 1.5);
+      if (g) {
+        const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xf6f3fa, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide }));
+        m.receiveShadow = true;
+        group.add(m);
+      }
+    }
     // weeds and a few low shrubs in the grass towards the end, where it grows wild, and the planted bed at
     // the junction: shrubs, dark red perennials and a mass of pale blue-green grass at its end (not solid)
     if (K.leafy.ok) {

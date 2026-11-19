@@ -25,6 +25,7 @@ import { createValliStreet } from './vallistreet.js';
 import { createBaeriStreet } from './baeristreet.js';
 import { createVeskiEnd } from './veskiend.js';
 import { createKroonuaia } from './kroonuaia.js';
+import { createJakobiLai } from './jakobilai.js';
 import { createEmajoe, emajoeClear, emajoeProps } from './emajoe.js';
 import { createLai, laiClear } from './lai.js';
 import { raekodaClear } from '../world/raekoda.js';
@@ -494,6 +495,7 @@ export function createTrackside(world, scene) {
   const baeriStreet = createBaeriStreet(world, group);
   const veskiEnd = createVeskiEnd(world, group);
   const kroonuaia = createKroonuaia(world, group);
+  const jakobiLai = createJakobiLai(world, group);
   const emajoe = createEmajoe(world, group);
   const lai = createLai(world, group);
   const tennis = createTennis(world, group);
@@ -542,6 +544,7 @@ export function createTrackside(world, scene) {
       baeriStreet.update(x, z);
       veskiEnd.update(x, z);
       kroonuaia.update(x, z);
+      jakobiLai.update(x, z);
       emajoe.update(x, z);
       lai.update(x, z);
       tennis.update(x, z);

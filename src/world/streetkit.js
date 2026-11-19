@@ -146,13 +146,16 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
   const h = (x, z) => world.heightAt(x, z);
 
   // ground cover between t0..t1 along the road and lat0..lat1 across it; not laid inside buildings unless forced
+  // (lat0 and lat1 may be functions of t, for a strip whose edges move smoothly along the road)
   function ribbon(F, t0, t1, lat0, lat1, kind = 'lawn', force = false) {
-    const G = ground[kind], n = Math.max(1, Math.round(Math.abs(t1 - t0))), m = Math.max(1, Math.round(Math.abs(lat1 - lat0) / 1.25));
+    const A = typeof lat0 === 'function' ? lat0 : () => lat0, B = typeof lat1 === 'function' ? lat1 : () => lat1;
+    const G = ground[kind], n = Math.max(1, Math.round(Math.abs(t1 - t0))), m = Math.max(1, Math.round(Math.abs(B((t0 + t1) / 2) - A((t0 + t1) / 2)) / 1.25));
+    const L = (t, j) => A(t) + (B(t) - A(t)) * j / m;
     for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
-      const ta = t0 + (t1 - t0) * i / n, tb = t0 + (t1 - t0) * (i + 1) / n, la = lat0 + (lat1 - lat0) * j / m, lb = lat0 + (lat1 - lat0) * (j + 1) / m;
-      const c = F.at((ta + tb) / 2, (la + lb) / 2);
+      const ta = t0 + (t1 - t0) * i / n, tb = t0 + (t1 - t0) * (i + 1) / n, tm = (ta + tb) / 2;
+      const c = F.at(tm, (L(tm, j) + L(tm, j + 1)) / 2);
       if (!force && world.sdfAt(c[0], c[1]) < 0.15) continue;
-      const q = [F.at(ta, la), F.at(ta, lb), F.at(tb, la), F.at(tb, lb)];
+      const q = [F.at(ta, L(ta, j)), F.at(ta, L(ta, j + 1)), F.at(tb, L(tb, j)), F.at(tb, L(tb, j + 1))];
       // wound so that the top is the front face, whichever way the frame runs
       const up = (q[1][1] - q[0][1]) * (q[2][0] - q[0][0]) - (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) > 0;
       for (const k of up ? [0, 1, 2, 2, 1, 3] : [0, 2, 1, 1, 2, 3]) {

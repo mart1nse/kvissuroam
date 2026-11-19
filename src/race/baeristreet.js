@@ -129,6 +129,8 @@ const FENCE = { i0: 243, i1: 286, off: 4.1 };
 // grass with the trees in it, then a grey brick footpath with an odd red brick. gap: grass width (m) beyond
 // the kerb, widening down the hill
 const SIDE = { i0: 471, i1: 541, kerb: 0.2, path: 2.6, gap: [[471, 0.9], [490, 1.2], [505, 2.0], [516, 2.5], [541, 2.5]] };
+// the right-hand pavement going up Vallikraavi: leaves the kerb over i a..b, gap metres of grass, back over c..d
+const VRIGHT = { a: 213, b: 217, c: 248, d: 254, gap: 3.0 };
 const sideGap = (i) => {
   const g = SIDE.gap;
   for (let k = 1; k < g.length; k++) if (i <= g[k][0]) { const [i0, a] = g[k - 1], [i1, b] = g[k]; return a + (b - a) * Math.max(0, i - i0) / (i1 - i0); }
@@ -265,6 +267,8 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       return [track.P[n.i][0] + tx * along - tz * want, track.P[n.i][1] + tz * along + tx * want];
     });
   }
+  // trees in the grass strip on the right going up Vallikraavi
+  if (world.addTrees) world.addTrees([223, 232, 241].map((i, k) => [...T(i, hw(i) + 0.2 + VRIGHT.gap / 2), 15 + k * 1.5, 7.5, 0]));
   // the avenue: broadleaved trees down the middle of the grass strip, about every 13 m
   if (world.addTrees) {
     const row = [];
@@ -487,7 +491,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         list.push([[T(i, a(i)), T(j, a(j)), T(j, b(j)), T(i, b(i))]]);
       }
     };
-    const pave = (i0, i1, a, b, kind = 'paver') => { for (let i = i0; i < i1; i++) K.ribbon(F, i, i + 1, (a(i) + a(i + 1)) / 2, (b(i) + b(i + 1)) / 2, kind); };
+    const pave = (i0, i1, a, b, kind = 'paver') => K.ribbon(F, i0, i1, a, b, kind);       // edges follow a(i), b(i) smoothly
     // a see-through pastel lane on the ground along a line of [x, z] points: fades in and out over `fade`
     // metres at the ends and over the outer 0.25 m at the sides, so it lies on the paving like paint
     const soft = { paint: [], brick: [], grass: [] };
@@ -680,7 +684,14 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         band(paint.kerb, 131, 289, (i) => side * (hw(i) + 0.02), (i) => side * (hw(i) + 0.2));
       }
       pave(199, 287, (i) => -(hw(i) + 0.2), (i) => -(hw(i) + 2.4));
-      pave(205, 290, (i) => hw(i) + 0.2, (i) => hw(i) + 2.0);
+      // the right-hand pavement going up: at the kerb past the flats, then it steps away up the bank leaving
+      // a strip of grass with trees between it and the kerb, and comes back to the kerb before the bend (Martin, 19 Nov)
+      const vOff = (i) => {
+        const { a, b, c, d, gap } = VRIGHT, sm = (u) => u * u * (3 - 2 * u);
+        return i <= a || i >= d ? 0 : i < b ? gap * sm((i - a) / (b - a)) : i <= c ? gap : gap * sm((d - i) / (d - c));
+      };
+      pave(205, 290, (i) => hw(i) + 0.2 + vOff(i), (i) => hw(i) + 2.0 + vOff(i));
+      pave(VRIGHT.a, VRIGHT.d, (i) => hw(i) + 0.2, (i) => hw(i) + 0.25 + vOff(i), 'verge');        // the streets' shared grass
     }
 
     // ============================================================ Baeri under Toomemägi

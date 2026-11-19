@@ -91,6 +91,13 @@ function vergeTex() {
   }
   const flowers = ['rgba(255,255,250,0.9)', 'rgba(255,236,150,0.9)', 'rgba(222,196,240,0.85)'];
   for (let k = 0; k < 110; k++) { g.fillStyle = flowers[(r() * 3) | 0]; g.beginPath(); g.arc(r() * w, r() * w, 0.9 + r() * 0.9, 0, Math.PI * 2); g.fill(); }
+  // muted toward the olive-brown of the orthophoto grass around it, so the edge does not jump out
+  const img = g.getImageData(0, 0, w, w), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = 0.3 * d[i] + 0.55 * d[i + 1] + 0.15 * d[i + 2];
+    d[i] = l + (d[i] - l) * 0.5 + 8; d[i + 1] = l + (d[i + 1] - l) * 0.5 - 4; d[i + 2] = l + (d[i + 2] - l) * 0.5 - 6;
+  }
+  g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

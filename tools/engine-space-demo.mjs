@@ -155,8 +155,8 @@ for (const id of ids) {
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false;
   // the downshift sounds as audio.js has them, at the game's 60 Hz
-  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' ? createShiftSound() : null, sEv = [], gLog = [];
-  let sh = { blip: 0, crackle: 0, over: 0, rpm: 0 }, nextSh = 0, lastG = 1;
+  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [];
+  let sh = { blip: 0, crackle: 0, over: 0, bark: 0, rpm: 0 }, nextSh = 0, lastG = 1;
   for (let i = 0; i < total; i += BLOCK) {
     const t = i / SR, s = drv ? drv(t, car) : TURBO ? turboScript(t) : script(t);
     if (s.z) shiftGear(car, -1);
@@ -167,10 +167,11 @@ for (const id of ids) {
     if (shs && t >= nextSh) {
       nextSh += 1 / FPS;
       sh = shs.step(car, t);
-      if (sh.clunk) sEv.push({ t: t + 0.005 + sh.clunk.after, k: sh.clunk.k });
+      if (sh.clunk) sEv.push({ t: t + 0.005 + sh.clunk.after, k: sh.clunk.k, up: !!sh.clunk.up });
+      if (sh.punch !== undefined) sPunch.push(t, sh.punch);
     }
     if (shs) rpm = sh.rpm;
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over });
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);
@@ -225,7 +226,7 @@ for (const id of ids) {
   page.on('console', (m) => console.log('  [page]', m.text()));
   await page.goto(`http://127.0.0.1:${server.port}/`);
   if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
-  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV }) => {
+  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP }) => {
     const { createSpace } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
@@ -249,6 +250,11 @@ for (const id of ids) {
     back.connect(ctx.destination);
     const space = createSpace(ctx, back, MIX);
     src.connect(lvl).connect(space.input); src.start(0);
+    if (SP.length) {
+      // a gear change's blip and bark round the compressor as well, as audio.js does
+      const pg = ctx.createGain(); pg.gain.value = 0; lvl.connect(pg).connect(space.burst);
+      for (let k = 0; k < SP.length; k += 2) pg.gain.setTargetAtTime(SP[k + 1], SP[k], 0.01);
+    }
     const n = poses.length / 8, log = [];
     if (TB) {
       // the turbo sounds straight into the car bus, as in audio.js
@@ -280,8 +286,8 @@ for (const id of ids) {
       const { clunk } = await import('/src/audio-shift.js');
       const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
       let sd = 99; for (let i = 0; i < d.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; d[i] = sd / 2147483648 - 1; }
-      for (const e of SEV) clunk(ctx, nb, space.input, e.k, e.t);
-      log.push(`clunks: ${SEV.map((e) => `${e.t.toFixed(2)} s ${e.k.toFixed(2)}`).join(', ')}`);
+      for (const e of SEV) clunk(ctx, nb, e.up ? space.burst : space.input, e.k, e.t, e.up);
+      log.push(`clunks: ${SEV.map((e) => `${e.t.toFixed(2)} s ${e.up ? 'up' : 'down'} ${e.k.toFixed(2)}`).join(', ')}`);
     }
     const car = { x: 0, z: 0, yaw: 0, y: 0 }, cam = { position: { x: 0, y: 0, z: 0 }, matrixWorld: { elements: new Float32Array(16) } };
     const step = (k) => {
@@ -307,7 +313,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

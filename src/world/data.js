@@ -138,7 +138,7 @@ export async function loadWorldData(onProgress = () => {}) {
     const keep = [];
     for (let i = 0; i < rec.length; i += 6) {
       const x = rec[i], z = rec[i + 2];
-      if (!clearings.some((c) => x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1)) for (let k = 0; k < 6; k++) keep.push(rec[i + k]);
+      if (!clearings.some((c) => (c.test ? c.test(x, z) : x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1))) for (let k = 0; k < 6; k++) keep.push(rec[i + k]);
     }
     return keep.length === rec.length ? rec : new Float32Array(keep);
   }
@@ -272,7 +272,7 @@ export async function loadWorldData(onProgress = () => {}) {
     pending: () => loading,
 
     // Keep trees out of a rectangle in sectors loaded from now on (call before the sectors load).
-    addClearing(r) { clearings.push(r); },
+    addClearing(r) { clearings.push(r); },          // { x0, z0, x1, z1 }, or { test(x, z) } for any shape
     // Move map trees: f(x, z) returns the new [x, z] or null (call before the sectors load).
     addTreeMove(f) { treeMoves.push(f); },
     // Plant trees: [[x, z, height, crown, type]] (call before the sectors load).

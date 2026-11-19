@@ -70,7 +70,7 @@ const COL = {
 // ---------------------------------------------------------------- painted walls
 // A wall is a flat rectangle from a to b (seen from outside, a on the left) from y0 to y1 above the house's
 // ground line gy, painted in metres by draw(P) (x along the wall from a, y up from gy) into a shared atlas.
-function facadeKit(group, shadows) {
+export function facadeKit(group, shadows) {
   const atlas = createAtlas(2048), jobs = [];
   function wall(a, b, gy, y0, y1, base, draw, { ppm = 36, off = 0.025 } = {}) {
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -113,7 +113,7 @@ function facadeKit(group, shadows) {
 }
 
 // render with faint mottling and rain streaks
-function render(P, len, y0, y1, col, seed, weather = 0.7) {
+export function render(P, len, y0, y1, col, seed, weather = 0.7) {
   const r = rnd(seed);
   P.r(0, y0, len, y1, col);
   for (let k = 0; k < len * (y1 - y0) * 0.6; k++) {
@@ -134,19 +134,19 @@ function peel(P, x, y, w, h, seed, under = '#a9a8a2') {
   }
 }
 // a white PVC window of two (or more) casements, with a sill
-const win = (P, x0, ya, x1, yb, { glass = COL.glass, bars = 1, frame = COL.frame, sill = 0.05 } = {}) =>
+export const win = (P, x0, ya, x1, yb, { glass = COL.glass, bars = 1, frame = COL.frame, sill = 0.05 } = {}) =>
   P.win(x0, ya, x1, yb, { frame, glass, fw: 0.07, bars, T: false, surround: 0, sill, sc: '#d8d6d0' });
 // a plain door leaf in a frame, from the ground line y up
-function door(P, x0, x1, y, h, col, { frame = '#3c3a38', glass = null, boards = 0, handle = '#c9c9c9' } = {}) {
+export function door(P, x0, x1, y, h, col, { frame = '#3c3a38', glass = null, boards = 0, handle = '#c9c9c9' } = {}) {
   P.r(x0 - 0.06, y, x1 + 0.06, y + h + 0.06, frame);
   P.r(x0, y, x1, y + h, col);
   if (boards) for (let x = x0 + boards; x < x1 - 0.01; x += boards) P.r(x - 0.012, y, x + 0.012, y + h, tone(hex(col), 0.72));
   if (glass) P.r(x0 + 0.12, y + h * 0.55, x1 - 0.12, y + h - 0.12, glass);
   P.r(x1 - 0.14, y + h * 0.47, x1 - 0.09, y + h * 0.5, handle);
 }
-const hex = (css) => { const n = parseInt(css.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+export const hex = (css) => { const n = parseInt(css.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 // weathered vertical planks
-function planks(P, x0, y0, x1, y1, rgb, seed, pitch = 0.11) {
+export function planks(P, x0, y0, x1, y1, rgb, seed, pitch = 0.11) {
   const r = rnd(seed);
   for (let x = x0; x < x1; x += pitch) {
     const v = 0.8 + r() * 0.35;
@@ -155,7 +155,7 @@ function planks(P, x0, y0, x1, y1, rgb, seed, pitch = 0.11) {
   }
 }
 // a black lantern on the wall
-function lantern(P, x, y) {
+export function lantern(P, x, y) {
   P.r(x - 0.03, y - 0.05, x + 0.03, y + 0.15, '#2a2a2e');
   P.poly([[x - 0.09, y + 0.05], [x + 0.09, y + 0.05], [x + 0.07, y - 0.2], [x - 0.07, y - 0.2]], '#2c2c31');
   P.r(x - 0.05, y - 0.16, x + 0.05, y + 0.02, '#d9d2b8');
@@ -535,7 +535,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
 }
 
 // ---------------------------------------------------------------- pieces
-function canvasTex(w, hh, draw, repeat = true) {
+export function canvasTex(w, hh, draw, repeat = true) {
   const c = document.createElement('canvas');
   c.width = w; c.height = hh;
   draw(c.getContext('2d'), w, hh);
@@ -558,7 +558,7 @@ function corrugatedTex() {
   });
 }
 // ground textures: [texture, tile metres]
-function groundTextures() {
+export function groundTextures() {
   const speck = (base, n, spread, seed, dots = 1.6) => (g, w) => {
     const r = rnd(seed);
     g.fillStyle = `rgb(${base.join(',')})`; g.fillRect(0, 0, w, w);
@@ -606,7 +606,7 @@ function groundTextures() {
   };
 }
 // textured ground strips laid in a road frame (like streetKit's ribbon, but with these textures)
-function groundLayer(world, group) {
+export function groundLayer(world, group) {
   const lists = new Map();
   const h = (x, z) => world.heightAt(x, z);
   function lay(T, F, t0, t1, lat0, lat1, lift) {
@@ -638,7 +638,7 @@ function groundLayer(world, group) {
 }
 // a picket fence or gate leaf from a to b, its feet at y0, its top top(u) (u 0..1 along it): one textured
 // quad with the pickets cut out of it
-function fenceMesh(group, a, b, y0, top, rgb, seed, { gap = 0.035, width = 0.085, rails = null } = {}, shadows = true) {
+export function fenceMesh(group, a, b, y0, top, rgb, seed, { gap = 0.035, width = 0.085, rails = null } = {}, shadows = true) {
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]), hmax = Math.max(...[0, 0.25, 0.5, 0.75, 1].map(top)) + 0.02, ppm = 120;
   const tex = canvasTex(Math.round(len * ppm), Math.round(hmax * ppm), (g, w, hh) => {
     const r = rnd(seed);
@@ -662,7 +662,7 @@ function fenceMesh(group, a, b, y0, top, rgb, seed, { gap = 0.035, width = 0.085
   group.add(m);
 }
 // a small sign or plate facing yaw (0: +z), w x h metres, its picture drawn on a canvas
-function signPlate(group, x, y, z, yaw, w, hh, draw) {
+export function signPlate(group, x, y, z, yaw, w, hh, draw) {
   const tex = canvasTex(Math.round(w * 400), Math.round(hh * 400), draw, false);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
   m.position.set(x, y, z); m.rotation.y = yaw;

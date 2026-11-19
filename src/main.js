@@ -18,6 +18,7 @@ import { createJanese } from './world/janese.js';
 import { createParked } from './world/parked.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
+import { createAngerja, angerjaWalls } from './world/angerja.js';
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
 import { createKuuni, kuuniWalls, kuuniProps, kuuniVectors } from './world/kuuni.js';
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
@@ -98,7 +99,7 @@ addEventListener('resize', () => {
 const input = createInput(document.body);
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, parked;
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
@@ -151,6 +152,7 @@ async function boot() {
   valliStreetWalls(world.walls);                // the houses at the start of Vallikraavi in their colours
   coopWalls(world.walls);                       // and the Coop Konsum on Aruküla tee
   janeseWalls(world.walls);                     // and Jänese 1
+  angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   veskiEndWalls(world.walls);                   // the white house and the brick block at the end of Veski
@@ -181,6 +183,7 @@ async function boot() {
   aksi = createAksi(scene, world, { shadows: !isTouch });
   parked = createParked(scene, world, { shadows: !isTouch, touch: isTouch });
   pootsmani = createPootsmani(scene, world, { shadows: !isTouch });
+  angerja = createAngerja(scene, world, { shadows: !isTouch });
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kuuni = createKuuni(scene, world, { shadows: !isTouch });
   kuuni.holo.bindClicks(camera, canvas);         // the Anderson's hologram opens the taproom's site
@@ -774,6 +777,7 @@ function frame(ts) {
     parked.update(car, dt, camera.position);
     aksi.update(car, dt);
     pootsmani.update(car);
+    angerja.update(car);
     raekoda.update(car);
     kuuni.update(car);
     kuperjanovi.update(car);

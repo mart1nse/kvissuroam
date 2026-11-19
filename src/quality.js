@@ -146,6 +146,34 @@ export function probeGpu() {
   return out;
 }
 
+// How long the graphics card takes to draw a frame, where the browser allows measuring it
+// (EXT_disjoint_timer_query_webgl2: desktop Chrome and Edge; Safari and Firefox usually hide it).
+// begin() / end() around renderer.render; ms is a running average, or null when not measurable.
+export function createGpuTimer(gl) {
+  const ext = gl && gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  const out = { ms: null, available: !!ext, begin() {}, end() {} };
+  if (!ext) return out;
+  const free = [], pending = [];
+  let open = null;
+  out.begin = () => {
+    if (open || pending.length > 4) return;          // results come a few frames late; don't pile up
+    open = free.pop() || gl.createQuery();
+    gl.beginQuery(ext.TIME_ELAPSED_EXT, open);
+  };
+  out.end = () => {
+    if (open) { gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push(open); open = null; }
+    while (pending.length && gl.getQueryParameter(pending[0], gl.QUERY_RESULT_AVAILABLE)) {
+      const q = pending.shift();
+      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
+      free.push(q);
+      if (gl.getParameter(ext.GPU_DISJOINT_EXT)) continue;   // the clock jumped: result is junk
+      const ms = ns / 1e6;
+      out.ms = out.ms == null ? ms : out.ms + (ms - out.ms) * 0.1;
+    }
+  };
+  return out;
+}
+
 const KEY = 'kvissuroam.gfx', AUTOKEY = 'kvissuroam.gfxAuto';
 export const MODES = ['auto', 'high', 'medium', 'low'];
 
@@ -171,7 +199,10 @@ export function createQuality(hooks, caps, opts = {}) {
   if (opts.software) start = Math.min(start, 1);
   const auto = !opts.headless;
   let gov = createGovernor({ levels: levels.length, start });
-  const meter = { frame: 16.7, js: 0 };
+  // the readout: averages, plus the frames that came more than half again later than the screen's
+  // rate in the last two seconds (stutter the average hides) and the longest of them
+  const meter = { frame: 16.7, js: 0, late: 0, worst: 0 };
+  let win = [], winMs = 0;
   let current = -1, stableMs = 0, savedLevel = start, listeners = [];
 
   function apply(i) {
@@ -202,7 +233,16 @@ export function createQuality(hooks, caps, opts = {}) {
     // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
     // browser and the graphics card), kept as a running average for the readout
     frame(ms, jsMs = 0) {
-      if (ms > 0 && ms < 1000) { meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05; }
+      if (ms > 0 && ms < 1000) {
+        meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05;
+        win.push(ms); winMs += ms;
+        if (winMs >= 2000) {
+          const s = win.slice().sort((a, b) => a - b), base = s[s.length >> 2];
+          meter.late = win.filter((x) => x > base * 1.5).length;
+          meter.worst = s[s.length - 1];
+          win = []; winMs = 0;
+        }
+      }
       if (mode !== 'auto' || !auto) { if (mode !== 'locked') gov.feed(ms); return null; }   // (still measures, for the readout)
       const ch = gov.feed(ms);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }

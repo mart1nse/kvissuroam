@@ -249,7 +249,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
   function build(zone) {
     const K = streetKit(world, group, { shadows });
     const { p } = K;
-    const extra = [], glow = [];
+    const extra = [], glow = [], solids = [];
     const iron = { pos: [], uv: [] }, boards = { pos: [], uv: [] };
     const lit = rnd(57 + zone);
     const on = (chance = 0.2) => lit() < chance;
@@ -350,7 +350,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
 
     // ---- fences, walls, stairs (none of them solid)
     // iron bars on a low concrete footing between square concrete posts with caps
-    const ironFence = (pts, { height = 1.25, foot = 0.35 } = {}) => {
+    const ironFence = (pts, { height = 1.25, foot = 0.35, solid = false } = {}) => {
       for (let k = 0; k < pts.length; k++) {
         const q = pts[k], y = h(q[0], q[1]);
         p.add(BOX(0.36, height + 0.2, 0.36), COL.concrete, q[0], y + (height + 0.2) / 2, q[1], k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : 0);
@@ -359,6 +359,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         const S = seg(q, pts[k + 1]);
         p.add(BOX(S.l, foot, 0.2), 0x8a8680, S.mx, h(S.mx, S.mz) + foot / 2 - 0.02, S.mz, S.yaw);
         quad(iron, q, pts[k + 1], foot - 0.03, height - foot, 0, S.l / 0.5);
+        if (solid) solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2 + 0.2, hz: 0.22 });
       }
     };
     // three rough rails on short posts
@@ -568,7 +569,9 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       // shrubs by the no-entry sign where the path climbs the hill
       for (const [i, o] of [[214, 2.6], [215, 3.2], [216, 2.4]]) K.shrub(...T(i, hw(i) + o), 0.9, COL.hedge[i % 3], 0.9);
       // the old iron fence on concrete posts round the bend and on towards Baeri
-      ironFence(edge(243, 286, -1, 2.7, 2.7));
+      // solid, and back in the grass behind a verge as in the street view (Martin, 19 Nov)
+      ironFence(edge(243, 286, -1, 4.1, 2.7), { solid: true });
+      for (let i = 243; i < 286; i++) K.ribbon(F, i, i + 1, -(hw(i) + 2.4), -(hw(i) + 4.6), 'lawn');
       // the stone terraces in the hollow: rows of old steps on the slope
       {
         const c = [1086, 3123], e = 2;
@@ -745,6 +748,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       deco(paint.white, 0.1, 1, { color: 0xf6f3fa }, -7);
     }
     K.finish();
+    if (solids.length) world.addSolids(solids);
     for (const [g, m] of extra) { const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); }
     const flat = (G, mat) => {
       if (!G.pos.length) return;

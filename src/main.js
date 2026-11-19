@@ -61,7 +61,7 @@ import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
-import { createQuality, probeGpu } from './quality.js';
+import { createQuality, probeGpu, createGpuTimer } from './quality.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -99,6 +99,7 @@ const sky = createSky();
 sky.scale.setScalar(quality.far * 0.9);
 scene.add(sky);
 const lights = createLights(scene, quality.shadow);
+const gpuTimer = createGpuTimer(renderer.getContext());
 const gfx = createQuality({ renderer, sun: lights.sun, quality, setTrees: setTreeDistance }, gfxCaps, {
   locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
@@ -768,7 +769,7 @@ function showGfx(force) {
   for (const b of $('#opt-gfx').children) b.classList.toggle('on', b.dataset.gfx === gfx.mode);
   const l = gfx.levels[gfx.level];
   const m = gfx.meter;
-  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} of ${m.frame.toFixed(1)} ms)`;
+  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)}${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms)`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
     : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}`;
 }
@@ -1149,7 +1150,9 @@ function frame(ts) {
     // looks the same and leaves the phone cooler for the drive)
     lastDraw = ts;
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
+    gpuTimer.begin();
     renderer.render(scene, camera);
+    gpuTimer.end();
   }
 
   // ---- graphics quality follows the measured frame rate (src/quality.js)
@@ -1161,7 +1164,7 @@ function frame(ts) {
     back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);
     const since = performance.now() - back.at;
     if (since >= back.next) {
-      console.info(`back in the tab +${Math.round(since / 1000)} s: ${(1000 * back.n / back.f).toFixed(0)} fps, game code ${(back.js / back.n).toFixed(1)} ms of ${(back.f / back.n).toFixed(1)} ms a frame, worst ${back.worst.toFixed(0)} ms`);
+      console.info(`back in the tab +${Math.round(since / 1000)} s: ${(1000 * back.n / back.f).toFixed(0)} fps, game code ${(back.js / back.n).toFixed(1)} ms${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)} ms` : ''} of ${(back.f / back.n).toFixed(1)} ms a frame, worst ${back.worst.toFixed(0)} ms`);
       Object.assign(back, { n: 0, f: 0, js: 0, worst: 0, next: back.next + 2000 });
       if (since > 30000) back = null;
     }

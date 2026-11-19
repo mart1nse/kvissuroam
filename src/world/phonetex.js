@@ -13,16 +13,19 @@
 //    needsUpdate: the card's copy is the full one. (The small picture stays so that a texture made
 //    from the same canvas later, a clone with another wrap mode say, still gets a picture, if a soft
 //    one.) A picture that is still being painted now and then (its version keeps going up) is left alone.
+//
+// Weak desktops get the same (main.js: lite). Where it is switched on in the middle of a drive the
+// pictures are already on the card, so perScan makes only a few small copies each scan, not all at once.
 const MAX_PX = 1024 * 1024;
 const SETTLE = 3000;            // ms a picture must have been on the card, unchanged, before its canvas goes
 
-export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true } = {}) {
+export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, perScan = Infinity } = {}) {
   const state = new WeakMap();         // texture -> { orig, ver, redraws, upAt, done }
   const users = new WeakMap();         // canvas -> Set of textures drawn from it
   const gone = new WeakSet();          // canvases let go (now a small stand-in)
   const seenMat = new WeakSet();
   const watch = new Set();             // textures not finished with yet
-  let saved = 0, freed = 0, nFreed = 0, dynamic = 0;
+  let saved = 0, freed = 0, nFreed = 0, dynamic = 0, copies = 0;
   const freeze = (t) => Object.defineProperty(t, 'needsUpdate', { set() {}, configurable: true });
 
   const isCanvas = (i) => typeof HTMLCanvasElement !== 'undefined' && i instanceof HTMLCanvasElement;
@@ -67,8 +70,10 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true }
       if (isCanvas(img) && gone.has(img)) return false;   // (a later texture from a canvas already let go)
       const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       if (!w || !h) return false;
+      if (w * h > maxPx && copies >= perScan) return true;   // enough for this scan: next time
       st = { orig: null, ver: t.version, redraws: 0, upAt: 0 };
       if (w * h > maxPx) {
+        copies++;
         t.image = copy(img, w, h);
         t.needsUpdate = true;
         st.ver = t.version;
@@ -119,6 +124,7 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true }
         if (Array.isArray(o.material)) o.material.forEach(material); else material(o.material);
       });
       const now = performance.now();
+      copies = 0;
       for (const t of watch) if (!step(t, now)) watch.delete(t);
     },
     // look at this material again (a texture was put on it after it was first seen)

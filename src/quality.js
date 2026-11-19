@@ -167,6 +167,17 @@ export function probeGpu() {
   return out;
 }
 
+// Why this desktop should start with the phones' lighter setup (small pictures, a still picture behind
+// the opening menu, fewer and simpler parked cars), or '' for a computer that can take the full game.
+// Only what the browser tells before anything is drawn: no graphics card in use, little memory
+// (deviceMemory: Chrome and Edge only, in steps up to 8 GB), or one or two processor cores.
+export function weakDesktop(gpu, nav = navigator) {
+  if (gpu.software) return 'graphics card not in use';
+  if (nav.deviceMemory > 0 && nav.deviceMemory <= 4) return `${nav.deviceMemory} GB of memory`;
+  if (nav.hardwareConcurrency > 0 && nav.hardwareConcurrency <= 2) return `${nav.hardwareConcurrency} processor cores`;
+  return '';
+}
+
 // How long the graphics card takes to draw a frame, where the browser allows measuring it
 // (EXT_disjoint_timer_query_webgl2: desktop Chrome and Edge; Safari and Firefox usually hide it).
 // begin() / end() around renderer.render; ms is a running average, or null when not measurable.

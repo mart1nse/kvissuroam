@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
-const FACES = 16;
+const FACES = 21;
 
 function part(geo, hex) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -59,7 +59,8 @@ function shaftPiece(sh, y0, y1) {
 }
 
 // sign faces in one strip: speed, prohibit, no entry, mandatory, warning, yield, priority, crossing, info, stop,
-// speed 40, parking, speed 30, keep right, 20 km/h zone, no parking zone
+// speed 40, parking, speed 30, keep right, 20 km/h zone, no parking zone, steep hill (%), children, no stopping,
+// no parking, bus stop
 function signAtlas() {
   const S = 96, cv = document.createElement('canvas');
   cv.width = S * FACES; cv.height = S;
@@ -88,6 +89,16 @@ function signAtlas() {
     if (k === 14) { disc(30, red); disc(22, white); c.fillStyle = '#18161c'; c.font = 'bold 25px sans-serif'; c.fillText('20', 0, 1); }
     else { disc(30, red); disc(23, blue); c.rotate(0.78); c.fillStyle = red; c.fillRect(-4, -26, 8, 52); c.setTransform(1, 0, 0, 1, 0, 0); }
   }
+  // steep climb: the wedge of a hill and the per cent sign
+  at(16); poly([[0, -44], [46, 38], [-46, 38]], red); poly([[0, -24], [28, 28], [-28, 28]], white); poly([[-20, 24], [16, 24], [16, 4]], '#18161c'); c.fillStyle = '#18161c'; c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('12%', -3, 5);
+  // children: two running figures
+  at(17); poly([[0, -44], [46, 38], [-46, 38]], red); poly([[0, -24], [28, 28], [-28, 28]], white);
+  for (const [fx, fh] of [[-7, 1], [8, 0.8]]) { c.fillStyle = '#18161c'; c.beginPath(); c.arc(fx, 2 - 9 * fh, 4 * fh, 0, 7); c.fill(); poly([[fx - 3 * fh, 6 - 4 * fh], [fx + 4 * fh, 6 - 4 * fh], [fx + 5 * fh, 16], [fx + 9 * fh, 25], [fx + 5 * fh, 25], [fx, 17], [fx - 6 * fh, 25], [fx - 9 * fh, 24], [fx - 3 * fh, 14]], '#18161c'); }
+  // no stopping (cross) and no parking (one bar)
+  at(18); disc(44, red); disc(34, blue); c.fillStyle = red; c.rotate(0.785); c.fillRect(-36, -5, 72, 10); c.rotate(-1.57); c.fillRect(-36, -5, 72, 10);
+  at(19); disc(44, red); disc(34, blue); c.fillStyle = red; c.rotate(0.785); c.fillRect(-36, -5, 72, 10);
+  // bus stop
+  at(20); c.fillStyle = blue; c.fillRect(-40, -44, 80, 88); c.fillStyle = white; c.fillRect(-27, -30, 54, 60); c.fillStyle = '#18161c'; c.fillRect(-20, -18, 40, 30); c.fillStyle = white; c.fillRect(-16, -14, 32, 12); c.fillStyle = '#18161c'; c.beginPath(); c.arc(-11, 15, 5, 0, 7); c.arc(11, 15, 5, 0, 7); c.fill();
   at(12); disc(44, red); disc(33, white); c.fillStyle = '#18161c'; c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('30', 0, 2);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -171,7 +182,7 @@ export function createProps(world, opts = {}) {
       const id = `${sector.sx}_${sector.sz}:${i / data.stride}`;
       if (kind !== ZEBRA) {
         if (cleared.has(id)) continue;
-        if (knocked[id]) { rest.push({ id, kind, x, y, z, cs, sn }); continue; }
+        if (knocked[id]) { rest.push({ id, kind, x, y, z, cs, sn, lift: kind >= SIGN0 ? (extra || 0) * 0.1 : 0 }); continue; }
       }
       const m0 = kind === ZEBRA ? null : mark();
       if (kind === ZEBRA) {
@@ -189,8 +200,8 @@ export function createProps(world, opts = {}) {
       }
       if (kind >= SIGN0) {
         for (const p of SOLID.sign) solid.add(p, x, y, z, cs, sn);
-        sign.add(PLATE, x, y, z, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
-        entries.push({ id, kind, x, y, z, cs, sn, r0: m0, r1: mark(), gone: false });
+        sign.add(PLATE, x, y + (extra || 0) * 0.1, z, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);      // extra: the plate sits that many dm higher (signs sharing a post)
+        entries.push({ id, kind, x, y, z, cs, sn, lift: (extra || 0) * 0.1, r0: m0, r1: mark(), gone: false });
         continue;
       }
       for (const p of SOLID[kind] || []) solid.add(p, x, y, z, cs, sn);
@@ -256,7 +267,7 @@ export function createProps(world, opts = {}) {
       if (y1 >= sh.h) {
         for (const p of sh.top) solid.add(p, 0, 0, 0, cs, sn);
         for (const p of sh.glow || []) glow.add(p, 0, 0, 0, cs, sn);
-        if (sh.plate) sign.add(PLATE, 0, 0, 0, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
+        if (sh.plate) sign.add(PLATE, 0, e.lift || 0, 0, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);
       }
     } else {
       for (const p of SOLID[kind] || []) solid.add(p, 0, 0, 0, cs, sn);

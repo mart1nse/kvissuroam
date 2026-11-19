@@ -29,6 +29,7 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
+import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear } from './race/kroonuaia.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -137,6 +138,7 @@ async function boot() {
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
   veskiEndWalls(world.walls);                   // the white house and the brick block at the end of Veski
   kaubamajaWalls(world.walls);                  // Kaubamaja is built by hand
+  kroonuaiaWalls(world.walls);                  // Kroonuaia and the Jakobi hill: every house in its own colours
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -149,7 +151,7 @@ async function boot() {
   const buildMarks = createRoadMarkings(world);
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...valliStreetProps(), ...kroonuaiaProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);

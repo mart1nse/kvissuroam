@@ -407,7 +407,14 @@ export function createEmajoe(world, group) {
       const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
       solids.push({ x: (a[0] + b[0]) / 2, z: (a[1] + b[1]) / 2, yaw: Math.atan2(-(b[1] - a[1]), b[0] - a[0]), hx: l / 2 + 0.05, hz: HIGH.thick / 2 });
     }
-    wallParts(GARDEN_WALL, high, stone, flat);
+    // along Kroonuaia the wall is field stone to the top, under red tiles (Street View, Aug 2024)
+    const stoneHigh = [
+      { top: HIGH.stone + HIGH.render, thick: HIGH.thick, tex: true },
+      { top: HIGH.stone + HIGH.render + 0.09, thick: HIGH.thick + 0.26, colour: 0xd98d7f, ext: 0.04 },
+      { top: HIGH.stone + HIGH.render + 0.17, thick: HIGH.thick - 0.1, colour: 0xc87868, ext: 0.04 },
+    ];
+    wallParts(GARDEN_WALL.slice(0, 4), high, stone, flat);
+    wallParts(GARDEN_WALL.slice(3), stoneHigh, stone, flat);
     wallMeshes(stone, flat);
     // brick gate posts with grey caps, and the iron gate between them
     const gyaw = Math.atan2(-gu[1], gu[0]);

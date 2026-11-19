@@ -33,15 +33,25 @@ const unit = (a, b) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]); return 
 const BIG = { shore: [-1959.0, -13290.5], end: [-2017.5, -13322.0], land: 9.5, landHw: 3.5, plat: { s: 23.8, lat0: 1.5, lat1: 8.3, hw: 3.5 } };
 const SMALL = { from: [-1930.5, -13334.4], shore: [-1950.5, -13340.5], end: [-1976.0, -13359.5], landHw: 3.0, ramp: 12 };
 
+// ---- the car park. Its bays run east-west on the map: a double row down the middle and a row nose-in to the
+// east edge (which runs with the hall, so that row is stepped); a row square to the hedge in the south and
+// one square to the Järve building's front.
+const BAY = 2.6, EAST = Math.PI / 2;
+const MID = { x: -1901, z0: -13252, count: 12, len: 5 };
+const EDGE = { e: 66.3, z0: -13266, count: 12, len: 5 };
+const edgeX = (z) => A[0] + (EDGE.e - (z - A[1]) * S) / C;         // the east edge of the paving at map z
+const HEDGE = { from: [44.5, 7.4], dir: [0.913, 0.408], t0: 2, count: 8, len: 5 };
+const JF = { from: [31.24, 66.1], dir: [0.9397, 0.3421], s0: 11.0, step: 2.8, count: 4, off0: 2.8, off1: 7.8 };      // the Järve front
+
 // cars: [x, z, yaw, model, paint, lift] (stood there by parked.js like every other parked car)
-const car = (e, n, yaw, id, paint) => [...at(e, n), yaw, id, paint, 0.03];
-// nose in to the Järve building's front (that wall runs from (31.24, 66.1) to (53.51, 74.21))
-const JU = [0.9397, 0.3421], byJarve = (s, id, paint) => car(31.24 + JU[0] * s + JU[1] * 5.4, 66.1 + JU[1] * s - JU[0] * 5.4, HEADING(-JU[1], JU[0]), id, paint);
-const EAST = Math.PI / 2;               // the bays of the car park run east-west on the map
+const LIFT = 0.03;
+const byJarve = (k, id, paint) => { const s = JF.s0 + JF.step * (k + 0.5), o = 5.3; return [...at(JF.from[0] + JF.dir[0] * s + JF.dir[1] * o, JF.from[1] + JF.dir[1] * s - JF.dir[0] * o), HEADING(-JF.dir[1], JF.dir[0]), id, paint, LIFT]; };
+const inMid = (k, side, id, paint) => [MID.x + side * 2.5, MID.z0 - BAY * (k + 0.5), side * EAST, id, paint, LIFT];
+const atEdge = (k, id, paint) => { const z = EDGE.z0 - BAY * (k + 0.5); return [edgeX(z) - 2.55, z, EAST, id, paint, LIFT]; };
 export const JAAAEG_CARS = [
-  byJarve(12.4, 'rav4', 'white'), byJarve(15.2, 'passat', 'silver'), byJarve(18.0, 'mazda6', 'grey'), byJarve(22.2, 'f31', 'black'),
-  car(45.6, 37.4, -EAST, 'mazda6', 'silver'), car(51.4, 41.6, EAST, 'rav4', 'black'),
-  car(63.6, 40.4, EAST, 'passat', 'red'), car(63.9, 43.3, EAST, 'mazda6', 'blue'), car(63.2, 48.6, EAST, 'bz4x', 'silver'),
+  byJarve(0, 'rav4', 'white'), byJarve(1, 'passat', 'silver'), byJarve(2, 'mazda6', 'grey'), byJarve(3, 'f31', 'black'),
+  inMid(7, -1, 'mazda6', 'silver'), inMid(9, 1, 'rav4', 'black'),
+  atEdge(4, 'passat', 'red'), atEdge(5, 'mazda6', 'blue'), atEdge(7, 'bz4x', 'silver'),
 ];
 
 // street lamps round the edge of the car park and on the road up to it
@@ -534,6 +544,48 @@ export function createJaaaeg(scene, world, { shadows = true } = {}) {
       for (let s = 8; s < R.len; s += 12) for (const side of [-1, 1]) post(start[0] + dx * s - dz * side * (PIER_HW + 0.1), start[1] + dz * s + dx * side * (PIER_HW + 0.1), 0.5);
     }
     world.decks.push(...decks);
+
+    // ================= the car park's lines =================
+    const paint = { white: [], yellow: [] };
+    const stripe = (kind, a, b, w = 0.14) => {       // a painted line between two map points
+      const [dx, dz, len] = unit(a, b), n = Math.max(1, Math.ceil(len / 2)), hx = (-dz * w) / 2, hz = (dx * w) / 2;
+      for (let i = 0; i < n; i++) {
+        const p0 = [a[0] + (dx * len * i) / n, a[1] + (dz * len * i) / n], p1 = [a[0] + (dx * len * (i + 1)) / n, a[1] + (dz * len * (i + 1)) / n];
+        const v = [[p0[0] + hx, p0[1] + hz], [p0[0] - hx, p0[1] - hz], [p1[0] + hx, p1[1] + hz], [p1[0] - hx, p1[1] - hz]];
+        for (const k of [0, 1, 2, 2, 1, 3]) paint[kind].push(v[k][0], world.heightAt(v[k][0], v[k][1]) + 0.05, v[k][1]);
+      }
+    };
+    const fr = (kind, a, b, w) => stripe(kind, at(...a), at(...b), w);       // the same between two points of the hall's frame
+    {
+      // the double row down the middle: a spine with bays on both sides
+      stripe('white', [MID.x, MID.z0], [MID.x, MID.z0 - BAY * MID.count]);
+      for (let k = 0; k <= MID.count; k++) stripe('white', [MID.x - MID.len, MID.z0 - BAY * k], [MID.x + MID.len, MID.z0 - BAY * k]);
+      // nose-in along the east edge
+      for (let k = 0; k <= EDGE.count; k++) { const z = EDGE.z0 - BAY * k, x = edgeX(z) - 0.3; stripe('white', [x - EDGE.len, z], [x, z]); }
+      // square to the hedge in the south
+      const H = HEDGE, hp = (t, o) => [H.from[0] + H.dir[0] * t - H.dir[1] * o, H.from[1] + H.dir[1] * t + H.dir[0] * o];
+      for (let k = 0; k <= H.count; k++) fr('white', hp(H.t0 + BAY * k, 0.4), hp(H.t0 + BAY * k, 0.4 + H.len));
+      // square to the Järve building's front
+      const jp = (s, o) => [JF.from[0] + JF.dir[0] * s + JF.dir[1] * o, JF.from[1] + JF.dir[1] * s - JF.dir[0] * o];
+      for (let k = 0; k <= JF.count; k++) fr('white', jp(JF.s0 + JF.step * k, JF.off0), jp(JF.s0 + JF.step * k, JF.off1));
+      // yellow: a crossed box kept clear in front of the Järve porch and one at the mouth of the square, and the
+      // line along the kerb in front of the long wall
+      const crossed = (q) => { for (let k = 0; k < 4; k++) fr('yellow', q[k], q[(k + 1) % 4]); fr('yellow', q[0], q[2]); fr('yellow', q[1], q[3]); };
+      crossed([jp(6.3, 3.2), jp(10.6, 3.2), jp(10.6, 7.6), jp(6.3, 7.6)]);
+      crossed([[29.6, 55.5], [34.2, 55.5], [34.2, 63.5], [29.6, 63.5]]);
+      fr('yellow', [29.4, 5], [29.4, 41]);
+      stripe('yellow', [MID.x - MID.len - 1.2, MID.z0 + 1.6], [MID.x + MID.len + 1.2, MID.z0 + 1.6]);       // across the south end of the rows
+    }
+    for (const [kind, hex] of [['white', 0xf3f1f7], ['yellow', 0xe9c53a]]) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(paint[kind], 3));
+      const nor = new Float32Array(paint[kind].length);
+      for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
+      g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.45, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));       // the ground picture is very pale here: plain white paint would read as grey on it
+      m.receiveShadow = true;
+      group.add(m);
+    }
 
     // ---- assemble
     for (const k of Object.keys(quads)) {

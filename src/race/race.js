@@ -266,15 +266,19 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
     clearTimeout(splitTimer);
     splitTimer = setTimeout(() => split.classList.add('hidden'), 3200);
   }
-  // the lap to compare with: this browser's best lap in the car that has checkpoint times for the
-  // current checkpoints, else the fastest such lap anyone drove in it (the record, once the record
-  // was driven with split times), marked rec so the HUD says whose times they are
+  // the lap to compare with. Your best lap in this car (the YOUR BEST time) when it has checkpoint
+  // times for the current checkpoints. When it has none (driven before splits were kept, or on an
+  // older checkpoint layout), or there is no lap of yours yet, the fastest lap anyone drove in the
+  // car with split times (marked rec, shown as VS NAME), but only if it is no slower than your
+  // best: a slower lap would show green while you are behind your own best. Failing both, the
+  // checkpoints show no diff and the finish compares with your best time alone.
   const bestSplits = (carId) => {
     let b = null;
-    for (const l of laps) if (l.car === carId && l.splits && l.cp === CP_KEY && (!b || l.ms < b.ms)) b = l;
-    if (b) return b;
+    for (const l of laps) if (l.car === carId && (!b || l.ms < b.ms)) b = l;
+    if (b?.splits && b.cp === CP_KEY && b.splits.length === TRACK.checkpoints.length) return b;
     const r = refFor?.(carId, CP_KEY);
-    return r && r.splits.length === TRACK.checkpoints.length ? { ...r, rec: true } : null;
+    if (r && r.splits.length === TRACK.checkpoints.length && (!b || r.ms <= b.ms)) return { ...r, rec: true };
+    return b ? { ms: b.ms } : null;
   };
   const vs = (ref) => (ref?.rec ? ` · VS ${escapeHtml(String(ref.name).toUpperCase())}` : '');
   document.querySelector('#hud').appendChild(panel);

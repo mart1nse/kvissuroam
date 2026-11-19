@@ -551,7 +551,7 @@ export function createEmajoe(world, group) {
 
     // ---- the glass shelter, its bench and advert, and the bus stop sign
     const p = new Parts(), solids = [];
-    const glass = [], sp = new Parts(), adverts = [];
+    const glass = [], sp = new Parts(), adverts = [], advertGlass = [];
     let shelter = null;
     {
       const i = SHELTER.i, [ux, uz] = track.tan[i], [rx, rz] = right(i);
@@ -584,6 +584,8 @@ export function createEmajoe(world, group) {
         ad.position.set(x, y + 1.2, z);
         ad.rotation.y = yaw + (s < 0 ? -Math.PI / 2 : Math.PI / 2);
         adverts.push(ad);
+        // the poster is behind glass that shatters too (Martin, 19 Nov)
+        advertGlass.push({ a: W(-L / 2 + s * 0.11, -D * 0.43), b: W(-L / 2 + s * 0.11, D * 0.43), y0: y + 0.28, y1: y + 2.12 });
       }
       shelter = { box: { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 }, y, H };
       solids.push(shelter.box);
@@ -657,6 +659,7 @@ export function createEmajoe(world, group) {
       const ux = Math.cos(yaw) * w / 2, uz = -Math.sin(yaw) * w / 2;
       return { a: [x - ux, z - uz], b: [x + ux, z + uz], y0: y + 0.15, y1: y + H - 0.1 };
     });
+    panes.push(...advertGlass);
     const frame = sp.mesh(solidMat);
     if (frame) { frame.castShadow = frame.receiveShadow = true; group.add(frame); }
     for (const ad of adverts) group.add(ad);

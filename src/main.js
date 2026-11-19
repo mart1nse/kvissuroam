@@ -120,7 +120,7 @@ let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
 if (!CARS[carId]) carId = 'w201';
 let mode = 'loading';            // loading | menu | drive
-let buildCarModel = null;
+let buildCarModel = null, carModels = null;
 let startPose;
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
@@ -150,7 +150,15 @@ async function boot() {
   world = await loadWorldData((p) => { bar.style.width = `${Math.round(p * 80)}%`; });
   $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA. Shops: © OpenStreetMap contributors, ODbL`;
   try {
-    ({ buildCarModel } = await import('./cars/models/index.js'));
+    carModels = await import('./cars/models/index.js');
+    ({ buildCarModel } = carModels);
+    // (a car's shaders compiled and its textures sent to the graphics card, one a frame, before it is shown)
+    carModels.setCarWarmer(async (obj) => {
+      await renderer.compileAsync(obj, camera, scene);
+      const texs = new Set();
+      obj.traverse((o) => { if (o.isMesh) for (const m of [o.material].flat()) for (const v of Object.values(m)) if (v?.isTexture) texs.add(v); });
+      for (const t of texs) { await new Promise((r) => requestAnimationFrame(r)); renderer.initTexture(t); }
+    });
   } catch (err) {
     console.warn('Detailed car models unavailable, using placeholders', err);
   }
@@ -284,7 +292,11 @@ async function boot() {
   scene.add(smoke.points);
   mp = createMultiplayer({
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
-    buildModel: (id) => { try { return buildCarModel ? buildCarModel(id) : buildPlaceholder(CARS[id]); } catch { return buildPlaceholder(CARS[id]); } },
+    // (other players' cars are copies of one built car of each kind: see instanceCarModel)
+    buildModel: (id) => { try { return carModels ? carModels.instanceCarModel(id) : buildPlaceholder(CARS[id]); } catch (e) { console.warn('remote car', id, e); return buildPlaceholder(CARS[id]); } },
+    // is the first one of this kind built yet (it is built away from the page: see requestCarModel)?
+    // now: needed at once; without a worker build it here, unless that would stutter the drive
+    modelReady: (id, now) => !carModels || carModels.requestCarModel(id, now || mode !== 'drive' || document.hidden),
     onBoard: () => { race?.refreshBest(); board?.render(); },
     onPeople: (kind, name, old) => {
       if (kind === 'join' || kind === 'leave') audio.chime?.(kind);

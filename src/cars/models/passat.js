@@ -5,7 +5,7 @@
 // with plastic covers. Its DPF is giving up: the tailgate gets a film of soot (setSoot, 0..1).
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint, tintGlass } from './kit.js';
-import { useGlbBody } from './glbbody.js';
+import { useGlbBody, glbHooks } from './glbbody.js';
 import { part, planLine, sideLine, sweep, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car: 4680 x 1740 x 1500 mm (with rails), wheelbase 2703, track 1498 / 1500, 195/65 R15.
@@ -193,6 +193,33 @@ function sootMap(pipeX, pipeY) {
   _sootMap = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
   _sootMap.magFilter = _sootMap.minFilter = THREE.LinearFilter; _sootMap.needsUpdate = true;
   return _sootMap;
+}
+// The scanned body's own soot: a shell over the back of the scan (glbHooks.passatSoot, called once it is on)
+function sootOnScan(meshes, car) {
+  const mat = new THREE.MeshStandardMaterial({ map: sootMap(-0.42, 0.27),   // the tailpipe (spec.exhaust)
+     transparent: true, vertexColors: true, depthWrite: false, roughness: 0.95, metalness: 0,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  mat.userData.uK = { value: car.soot.k };
+  // (called on the material, so a copy of it uses its own uK)
+  mat.onBeforeCompile = function (sh) {
+    sh.uniforms.uK = this.userData.uK;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uK;')
+      .replace('#include <map_fragment>', `vec4 sm = texture2D( map, clamp( vMapUv, 0.0, 1.0 ) );
+        diffuseColor = vec4( 0.022, 0.019, 0.017, sm.g * smoothstep( 0.8 * sm.r - 0.1, 0.8 * sm.r + 0.3, uK ) );`);
+  };
+  const sh = car.soot.shell = new THREE.Mesh(sootShell(meshes), mat);
+  sh.name = 'passat_soot_scan'; sh.renderOrder = 2; sh.visible = car.soot.k > 0.01;
+  car.group.add(sh);
+}
+glbHooks.passatSoot = sootOnScan;
+
+// how sooty the tailgate is: k 0 = clean .. 1 = black (on the procedural decal, or the scanned body's shell)
+export function setSoot(car, k) {
+  const s = car.soot;
+  s.k = k = Math.min(1, k);
+  s.mesh.material.opacity = k;
+  s.mesh.visible = k > 0.01 && !car.glbLoaded;
+  if (s.shell) { s.shell.material.userData.uK.value = k; s.shell.visible = k > 0.01; }
 }
 function sootShell(meshes) {
   const pos = [], nor = [], uv = [], col = [];
@@ -464,31 +491,15 @@ export function buildPassat({ scan = true } = {}) {
   sootMesh.name = 'passat_soot'; sootMesh.visible = false; sootMesh.renderOrder = 2;
   car.group.add(sootMesh);
   // k: 0 = clean .. 1 = black with soot
-  // the soot decal above is shaped to the procedural tail; the scanned body gets its own shell once it is in
-  const uK = { value: 0 };
-  let sootShellMesh = null;
-  car.setSoot = (k) => {
-    uK.value = k = Math.min(1, k); sootMat.opacity = k;
-    sootMesh.visible = k > 0.01 && !car.glbLoaded;
-    if (sootShellMesh) sootShellMesh.visible = k > 0.01;
-  };
-  const sootOnScan = (meshes) => {
-    const mat = new THREE.MeshStandardMaterial({ map: sootMap(-0.42, 0.27),   // the tailpipe (spec.exhaust)
-       transparent: true, vertexColors: true, depthWrite: false, roughness: 0.95, metalness: 0,
-      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-    mat.onBeforeCompile = (sh) => {
-      sh.uniforms.uK = uK;
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uK;')
-        .replace('#include <map_fragment>', `vec4 sm = texture2D( map, clamp( vMapUv, 0.0, 1.0 ) );
-          diffuseColor = vec4( 0.022, 0.019, 0.017, sm.g * smoothstep( 0.8 * sm.r - 0.1, 0.8 * sm.r + 0.3, uK ) );`);
-    };
-    const sh = sootShellMesh = new THREE.Mesh(sootShell(meshes), mat);
-    sh.name = 'passat_soot_scan'; sh.renderOrder = 2; sh.visible = uK.value > 0.01;
-    car.group.add(sh);
-  };
+  // the soot decal above is shaped to the procedural tail; the scanned body gets its own shell once it is in.
+  // (The state lives on the car and its materials, not in this closure, so that the copies instanceCarModel
+  // makes of this car each have their own: car.soot is remapped onto the copy, see index.js.)
+  car.soot = { k: 0, mesh: sootMesh, shell: null };
+  car.sootFor = setSoot;
+  car.setSoot = (k) => setSoot(car, k);
   tintGlass(car, 'passat', { color: 0x2c363e, metalness: 0.78, roughness: 0.05 });
   // the procedural body shows until the scanned body (public/models/passat.glb) has loaded
   tintPaint(car, 'passat', PAINT, { metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
   if (!scan) return car;
-  return useGlbBody(car, 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 }, onLoad: sootOnScan });
+  return useGlbBody(car, 'passat.glb', { wheelOut: { front: 0.06, rear: 0.06 }, onLoad: 'passatSoot' });
 }

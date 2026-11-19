@@ -24,7 +24,7 @@ const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo',
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
 
-export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, onPeople }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -91,25 +91,33 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     el.className = 'pname';
     el.textContent = p.name;
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, el, buf: [], pose: null, wheel: 0 };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, buf: [], pose: null, wheel: 0 };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
   }
+  // Which car they drive. The first car of a kind is slow to build, so it is built away from the page
+  // as soon as they pick it (see requestCarModel in cars/models/index.js), and their copy of it is made
+  // only once they drive it (see update): someone who has just come online sits in the menu for a while
+  // and may look through several cars in the garage.
   function setRemoteCar(o, id) {
     if (!CARS[id]) id = 'w201';
     if (o.car === id) return;
     o.car = id;
-    if (o.model) scene.remove(o.model.group);
-    o.model = buildModel(id);
-    o.model.group.rotation.order = 'YXZ';
-    o.model.group.traverse((c) => { if (c.isMesh) c.castShadow = true; });
-    o.model.group.visible = false;
-    scene.add(o.model.group);
     const s = CARS[id];
     o.spec = s;
     o.off = s.wheelbase * s.cgFront - s.wheelbase / 2;
     o.halfLen = s.halfLen ?? s.wheelbase / 2 + 0.85; o.halfWid = s.halfWid ?? s.track / 2 + 0.13;
+    modelReady(id, false);
+  }
+  function showModel(o) {
+    if (o.model) scene.remove(o.model.group);
+    o.modelCar = o.car;
+    o.model = buildModel(o.car);
+    o.model.group.rotation.order = 'YXZ';
+    o.model.group.traverse((c) => { if (c.isMesh) c.castShadow = true; });
+    o.model.group.visible = false;
+    scene.add(o.model.group);
   }
   function drop(id) {
     const o = others.get(id);
@@ -330,12 +338,13 @@ export function createMultiplayer({ scene, camera, buildModel, toast, onBoard, o
     fxList.length = 0;
     for (const o of others.values()) {
       o.pose = sample(o, now);
+      if (o.pose && o.live && o.modelCar !== o.car && modelReady(o.car, true)) showModel(o);
+      // (heard, and smoking, even while their car is still being built)
+      if (o.pose && o.live) fxList.push(effects(o, o.pose, Math.sin(o.pose[3]), -Math.cos(o.pose[3])));
       const g = o.model?.group;
-      if (!g) continue;
-      if (!o.pose) { g.visible = false; o.el.style.display = 'none'; continue; }
+      if (!g || !o.pose || o.model.warmed === false) { if (g) g.visible = false; o.el.style.display = 'none'; continue; }
       const p = o.pose;
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
-      if (o.live) fxList.push(effects(o, p, fx, fz));
       g.visible = true;
       g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
       g.rotation.set(p[4], -p[3], -p[5]);

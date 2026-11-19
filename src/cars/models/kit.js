@@ -559,21 +559,24 @@ export function decal(soup, o) {
   const P = soup.p, N = soup.n;
   const pa = (q) => (q[0] - origin[0]) * u[0] + (q[1] - origin[1]) * u[1] + (q[2] - origin[2]) * u[2];
   const pb = (q) => (q[0] - origin[0]) * v[0] + (q[1] - origin[1]) * v[1] + (q[2] - origin[2]) * v[2];
+  const [u0, u1, u2] = u, [v0, v1, v2] = v, [o0, o1, o2] = origin;
   for (let t = 0; t < P.length; t += 9) {
+    // (the cheap tests first, without making any vertices: most of the body is nowhere near the decal.
+    // Same sums as pa / pb, so the same result as testing the vertices.)
+    let ta0 = Infinity, tb0 = Infinity, ta1 = -Infinity, tb1 = -Infinity;
+    for (let i = t; i < t + 9; i += 3) {
+      const a = (P[i] - o0) * u0 + (P[i + 1] - o1) * u1 + (P[i + 2] - o2) * u2;
+      const b = (P[i] - o0) * v0 + (P[i + 1] - o1) * v1 + (P[i + 2] - o2) * v2;
+      if (a < ta0) ta0 = a; if (a > ta1) ta1 = a; if (b < tb0) tb0 = b; if (b > tb1) tb1 = b;
+    }
+    if (ta1 < A0 || ta0 > A1 || tb1 < B0 || tb0 > B1) continue;
     const e1x = P[t + 3] - P[t], e1y = P[t + 4] - P[t + 1], e1z = P[t + 5] - P[t + 2];
     const e2x = P[t + 6] - P[t], e2y = P[t + 7] - P[t + 1], e2z = P[t + 8] - P[t + 2];
     let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
     const nl = Math.hypot(nx, ny, nz);
     if (nl < 1e-12 || (nx * out[0] + ny * out[1] + nz * out[2]) / nl < minFacing) continue;
     const verts = [];
-    let ta0 = Infinity, tb0 = Infinity, ta1 = -Infinity, tb1 = -Infinity;
-    for (let k = 0; k < 3; k++) {
-      const i = t + k * 3, q = Float64Array.of(P[i], P[i + 1], P[i + 2], N[i], N[i + 1], N[i + 2]);
-      const a = pa(q), b = pb(q);
-      ta0 = Math.min(ta0, a); ta1 = Math.max(ta1, a); tb0 = Math.min(tb0, b); tb1 = Math.max(tb1, b);
-      verts.push(q);
-    }
-    if (ta1 < A0 || ta0 > A1 || tb1 < B0 || tb0 > B1) continue;
+    for (let k = 0; k < 3; k++) { const i = t + k * 3; verts.push(Float64Array.of(P[i], P[i + 1], P[i + 2], N[i], N[i + 1], N[i + 2])); }
     if (filter && !filter(verts[0])) continue;
     for (const pc of pieces) {
       if (ta1 < pc.a0 || ta0 > pc.a1 || tb1 < pc.b0 || tb0 > pc.b1) continue;
@@ -763,21 +766,29 @@ export function assembleCar({ id, dims, parts, tex = {}, wheel, wheelFront = nul
     wheels[name] = { steer, spin };
     triangles += (front && wheelFront ? wheelFront : wheel).soup.tris;
   }
-  const state = { brake: false, reverse: false, headlights: false };
-  const setLights = (o = {}) => {
-    Object.assign(state, o);
-    mats.tail.emissiveIntensity = state.brake ? 1.2 : state.headlights ? 0.35 : 0;
-    mats.chmsl.emissiveIntensity = state.brake ? 1.2 : 0;
-    mats.reverse.emissiveIntensity = state.reverse ? 2.2 : 0;
-    mats.head.emissiveIntensity = state.headlights ? 2.4 : 0;
-  };
-  setLights();
-  return {
+  const car = {
     group, wheels,
     wheelRadius: dims.wheelRadius, wheelbase: dims.wheelbase, track: dims.track,
     size: { length: dims.length, width: dims.width, height: dims.height },
-    setLights, triangles,
+    triangles,
+    // the lamp materials setLights drives (the scanned body adds its own as glb, see glbbody.js); copies of
+    // this car made by instanceCarModel (index.js) get their own copies of these and nothing else
+    lit: { tail: mats.tail, chmsl: mats.chmsl, reverse: mats.reverse, head: mats.head },
+    lights: { brake: false, reverse: false, headlights: false },
   };
+  car.setLights = (o = {}) => applyLights(car, o);
+  car.setLights();
+  return car;
+}
+// lamps on or off: o = { brake, reverse, headlights } (missing ones keep their state)
+export function applyLights(car, o = {}) {
+  const s = Object.assign(car.lights, o), L = car.lit;
+  L.tail.emissiveIntensity = s.brake ? 1.2 : s.headlights ? 0.35 : 0;
+  L.chmsl.emissiveIntensity = s.brake ? 1.2 : 0;
+  L.reverse.emissiveIntensity = s.reverse ? 2.2 : 0;
+  L.head.emissiveIntensity = s.headlights ? 2.4 : 0;
+  // the scanned body's own lamps (its emissive texture): { tail, brake } intensities from useGlbBody
+  if (L.glb && car.glbGlow) L.glb.emissiveIntensity = s.brake ? car.glbGlow.brake : s.headlights ? car.glbGlow.tail : 0;
 }
 
 // ---------------------------------------------------------------- small shared helpers

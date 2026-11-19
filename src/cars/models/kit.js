@@ -132,6 +132,8 @@ const PALETTE = {
   amber: ['#d07000', 0.25, 0.2],
   lens: ['#dfe3e6', 0.12, 0.6],
   darkglass: ['#07090b', 0.05, 0.9],
+  gold: ['#c9a452', 0.34, 1.0],
+  polished: ['#cfd2d6', 0.2, 1.0],
 };
 const PAL_NAMES = Object.keys(PALETTE);
 export function palUV(name) {

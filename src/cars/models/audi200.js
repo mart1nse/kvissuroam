@@ -17,6 +17,7 @@ const HW = DIMS.width / 2;
 const AY = 0.325, AR = 0.365;                // wheel arches
 // soft shoulder line through the door handles
 const WAIST = [[ZFB, 0.69], [-1.0, 0.735], [1.0, 0.765], [ZRB, 0.78]], FOLD = 0.006;
+const R17 = 0.325;                           // 225/50 R17 on the BBS wheels
 const PAINT = 0x50294e;                      // dark lilac metallic with a hint of deep cherry red
 
 // ---------------------------------------------------------------- wheel
@@ -47,6 +48,49 @@ function aeroWheel(R, width, rimR) {
   s.add(f);
   s.add(lathe([[rf * 0.2, xf - 0.012], [rf * 0.2, xf + 0.004], [rf * 0.17, xf + 0.01], [rf * 0.05, xf + 0.013], [0.001, xf + 0.013]], 'silver', 28));
   s.add(cyl(rf * 0.1, rf * 0.1, 0.003, 16, { p: [xf + 0.0135, 0, 0], r: [0, 0, -Math.PI / 2] }, 'darkalloy'));
+  return s;
+}
+
+// 17-inch BBS RS style three-piece wheel: a gold cross-spoke mesh centre (30 V-spokes each way, crossing in
+// three rows of diamonds), a wide polished step lip with a ring of small bolts, a raised gold hub with five
+// lug bolts and a silver cap with a black badge. Axis on X, outer face toward +X.
+function bbsWheel(R, width, rimR) {
+  const s = new Soup(), hw = width / 2, sh = R - rimR;
+  s.add(lathe([[rimR - 0.006, -hw * 0.8], [rimR + sh * 0.3, -hw * 0.98], [rimR + sh * 0.7, -hw], [R - 0.014, -hw * 0.92], [R - 0.004, -hw * 0.76], [R, -hw * 0.45],
+    [R, hw * 0.45], [R - 0.004, hw * 0.76], [R - 0.014, hw * 0.92], [rimR + sh * 0.7, hw], [rimR + sh * 0.3, hw * 0.98], [rimR - 0.006, hw * 0.8]], 'rubber', 56));
+  s.add(lathe([[rimR - 0.012, hw * 0.78], [rimR - 0.012, -hw * 0.7]], 'darkalloy', 40));
+  s.add(fromGeo(new THREE.CircleGeometry(rimR - 0.01, 32), { p: [-hw * 0.4, 0, 0], r: [0, Math.PI / 2, 0] }, 'well'));
+  s.add(cyl(rimR * 0.72, rimR * 0.72, 0.022, 32, { p: [-hw * 0.12, 0, 0], r: [0, 0, Math.PI / 2] }, 'darkalloy'));
+  // polished lip: rolled outer edge, wide flat face, then the step down to the mesh
+  const rL = rimR - 0.05, xl = hw * 0.86, xo = xl - 0.03;
+  s.add(lathe([[rimR - 0.004, xl - 0.012], [rimR + 0.003, xl - 0.003], [rimR + 0.001, xl + 0.002], [rimR - 0.006, xl + 0.003], [rL + 0.004, xl],
+    [rL, xl - 0.004], [rL - 0.001, xo - 0.002], [rL - 0.004, xo - 0.012]], 'polished', 72));
+  // the mesh's outer ring, sitting at the foot of the step
+  const rM = rL - 0.012;
+  s.add(lathe([[rL - 0.001, xo - 0.012], [rL - 0.001, xo], [rM, xo], [rM - 0.003, xo - 0.006]], 'gold', 60));
+  // the bolts round the lip
+  for (let i = 0; i < 30; i++) {
+    const a = i * Math.PI * 2 / 30;
+    s.add(cyl(0.0032, 0.0032, 0.004, 6, { p: [xl + 0.001, Math.sin(a) * (rL + 0.006), Math.cos(a) * (rL + 0.006)], r: [0, 0, Math.PI / 2] }, 'darkalloy'));
+  }
+  // cross spokes: straight bars from the hub to the ring, one family 1.5 mm behind the other
+  const N = 30, D = 2 * Math.PI * 2 / N, r0 = 0.07, xh = xo - 0.016, ex = new THREE.Vector3(), ey = new THREE.Vector3(), ez = new THREE.Vector3(), X = new THREE.Vector3(1, 0, 0);
+  for (const f of [1, -1]) for (let i = 0; i < N; i++) {
+    const a0 = i * Math.PI * 2 / N, a1 = a0 + f * D, back = f < 0 ? 0.0015 : 0;
+    const p0 = new THREE.Vector3(xh - back, Math.sin(a0) * r0, Math.cos(a0) * r0), p1 = new THREE.Vector3(xo - 0.003 - back, Math.sin(a1) * (rM + 0.002), Math.cos(a1) * (rM + 0.002));
+    ey.subVectors(p1, p0); const L = ey.length(); ey.normalize();
+    ex.copy(X).addScaledVector(ey, -X.dot(ey)).normalize(); ez.crossVectors(ex, ey);
+    const m = new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition(p0.clone().add(p1).multiplyScalar(0.5));
+    s.add(box(0.016, L, 0.0062, m, 'gold'));
+  }
+  // raised gold hub, lug bolts, silver cap with a black badge
+  s.add(lathe([[r0 + 0.003, xh - 0.02], [r0 + 0.003, xh + 0.006], [r0 - 0.005, xh + 0.011], [0.044, xh + 0.012], [0.041, xh + 0.012]], 'gold', 40));
+  for (let i = 0; i < 5; i++) {
+    const a = (i + 0.5) * Math.PI * 2 / 5;
+    s.add(cyl(0.0065, 0.0065, 0.012, 6, { p: [xh + 0.014, Math.sin(a) * 0.05, Math.cos(a) * 0.05], r: [0, 0, Math.PI / 2] }, 'steel'));
+  }
+  s.add(lathe([[0.041, xh + 0.006], [0.041, xh + 0.016], [0.037, xh + 0.024], [0.024, xh + 0.029], [0.001, xh + 0.03]], 'silver', 36));
+  s.add(cyl(0.014, 0.014, 0.002, 24, { p: [xh + 0.0295, 0, 0], r: [0, 0, -Math.PI / 2] }, 'darkalloy'));
   return s;
 }
 
@@ -361,10 +405,12 @@ export function buildAudi200({ scan = true } = {}) {
     pal.add(cyl(0.002, 0.0035, 0.5, 6, { p: [ax, ay + 0.24, az + 0.09], r: [0.38, 0, 0] }, 'plastic'));
   }
 
-  const wheel = { soup: aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
-  const car = assembleCar({ id: 'audi200', dims: DIMS, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
+  // the player's car runs 17-inch BBS wheels (225/50 R17) and sits 2 cm lower; parked ones keep the 15-inch Aeros
+  const dims = scan ? { ...DIMS, wheelRadius: R17 } : DIMS;
+  const wheel = { soup: scan ? bbsWheel(R17, 0.215, 0.2159 + 0.012) : aeroWheel(0.319, 0.215, 0.1905 + 0.012) };
+  const car = assembleCar({ id: 'audi200', dims, parts: { paint, glass, pal, tail, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
   tintGlass(car, 'audi200', { color: 0x34404a, metalness: 0.7, roughness: 0.05 });   // light factory tint
   tintPaint(car, 'audi200', PAINT, { metalness: 0.62, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.05 });
   if (!scan) return car;
-  return useGlbBody(car, 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 } });
+  return useGlbBody(car, 'audi200.glb', { wheelOut: { front: 0.045, rear: 0.045 }, lower: 0.02 });
 }

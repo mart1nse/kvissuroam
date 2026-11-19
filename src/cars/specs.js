@@ -338,7 +338,7 @@ export const CARS = {
     track: 1.511,               // 1514 front / 1511 rear
     cgFront: 0.41,              // the five-cylinder hangs ahead of the front axle: about 59 % front
     cgHeight: 0.55,
-    wheelRadius: 0.319,         // 215/60 ZR15
+    wheelRadius: 0.325,         // 225/50 R17 on BBS wheels (was 215/60 ZR15)
     cdA: 0.34 * 2.06,
     drive: 'awd',
     rearShare: 0.5,             // Torsen centre differential, 50/50

@@ -1,6 +1,6 @@
 // The Orident house (Jakobi 40) on the inside corner where the lap turns from Baeri into Jakobi (Martin,
 // 18 Nov, from his street views of Aug 2024), built by hand in place of the LOD2 model, in pastel colours:
-//   - four storeys; the corner towards the junction is one big curved curtain wall of tall glass panes
+//   - four storeys; the corner towards the junction is a curved curtain wall of sharp sawtooth glass bays, tall panes
 //     between dark mullions, with dark floor bands and a heavy dark cornice
 //   - red brick on both sides of the glass: a short wing along Jakobi with a glass shop front below,
 //     and the face towards Baeri with stacked balconies behind black railings
@@ -39,8 +39,15 @@ export function createOrident(scene, world, { shadows = true } = {}) {
     const p = new Parts();
     const y0 = BASE;
     const curve = new THREE.CatmullRomCurve3(CURVE.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
-    const NSEG = 18;
-    const G = curve.getSpacedPoints(NSEG).map((v) => [v.x, v.z]);
+    // the glass corner is a row of sharp bays stepping out like a sawtooth (Martin, 19 Nov): each bay has
+    // two glass faces meeting at a point TOOTH metres out from the curve
+    const NSEG = 12, TOOTH = 1.0;
+    const C = curve.getSpacedPoints(NSEG).map((v) => [v.x, v.z]);
+    const G = [C[0]];
+    for (let k = 0; k < NSEG; k++) {
+      const a = C[k], b = C[k + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+      G.push([(a[0] + b[0]) / 2 + (dz / l) * TOOTH, (a[1] + b[1]) / 2 - (dx / l) * TOOTH], b);
+    }
     const outlineMain = [...G, ...REST];
     const prism = (pts, a, b, hex) => {
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
-import { createBuildings, createTrees, updateTrees, fewerTrees, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
+import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
@@ -60,6 +60,7 @@ import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
+import { createQuality, probeGpu } from './quality.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -71,10 +72,17 @@ const quality = isTouch
   : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000, xTiles: true };
 // realistic trees; ?trees=old brings back the simple shapes
 quality.realTrees = params.get('trees') !== 'old';
-if (params.get('q') === 'low') Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
+// the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
+const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius };
+const lockedLow = params.get('q') === 'low';
+if (lockedLow) Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
+// a browser drawing without the graphics card (hardware acceleration off: often the case in Brave
+// reports) starts at the bottom of the ladder, without edge smoothing, and says how to fix it
+const gpu = probeGpu();
+if (gpu.software) console.warn('WebGL is running in software, without the graphics card:', gpu.renderer || '(renderer hidden)');
 
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software, powerPreference: 'high-performance' });
 renderer.setPixelRatio(quality.pixelRatio);
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -90,6 +98,10 @@ const sky = createSky();
 sky.scale.setScalar(quality.far * 0.9);
 scene.add(sky);
 const lights = createLights(scene, quality.shadow);
+const gfx = createQuality({ renderer, sun: lights.sun, quality, setTrees: setTreeDistance }, gfxCaps, {
+  locked: lockedLow, software: gpu.software,
+  headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
+});
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -511,6 +523,7 @@ function buildMenu() {
   });
 }
 
+let softwareTold = false;
 function startDriving() {
   if (mode === 'drive') return;
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
@@ -523,6 +536,7 @@ function startDriving() {
   } else camSwoop = 0.9;
   $('#menu').classList.add('hidden');
   $('#hud').classList.remove('hidden');
+  if (gpu.software && !softwareTold) { softwareTold = true; setTimeout(() => hud.toast(isTouch ? 'GRAPHICS CARD NOT IN USE · GAME WILL BE SLOW' : 'GRAPHICS CARD NOT IN USE · SEE OPTIONS (O)', 6000), 2500); }
   if (isTouch) {
     $('#touch').classList.remove('hidden');
     const el = document.documentElement;
@@ -690,7 +704,35 @@ optWasd.addEventListener('change', () => {
   optWasd.blur();                // (so Space and the arrows drive again instead of flipping the box)
   hud.toast(optWasd.checked ? 'WASD DRIVING ON · A / Z SHIFTS OFF' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
 });
-const toggleOptions = () => optEl.classList.toggle('hidden');
+// Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
+const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);
+let gfxShown = 0;
+function showGfx(force) {
+  const now = performance.now();
+  if (!force && now - gfxShown < 500) return;
+  gfxShown = now;
+  for (const b of $('#opt-gfx').children) b.classList.toggle('on', b.dataset.gfx === gfx.mode);
+  const l = gfx.levels[gfx.level];
+  const fps = gfx.fps ? `${Math.round(gfx.fps)} FPS` : 'measuring…';
+  $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}`;
+}
+document.getElementById('opt-gfx').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gfx]');
+  if (!b) return;
+  gfx.setMode(b.dataset.gfx);
+  b.blur();
+  showGfx(true);
+  hud.toast(`GRAPHICS ${b.dataset.gfx.toUpperCase()}`, 1600);
+});
+if (gpu.software) {
+  const el = $('#opt-gpu');
+  el.textContent = gpu.brave
+    ? 'Your browser is drawing the game without the graphics card, so it runs slowly. In Brave: Settings → System → turn on "Use graphics acceleration when available", then restart Brave.'
+    : 'Your browser is drawing the game without the graphics card, so it runs slowly. Turn on hardware (graphics) acceleration in the browser settings and restart it.';
+  el.classList.remove('hidden');
+}
+const toggleOptions = () => { optEl.classList.toggle('hidden'); showGfx(true); };
 input.on('KeyO', unlessMap(toggleOptions));
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
@@ -749,7 +791,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const flyQ = new THREE.Quaternion();
 const clock = new THREE.Timer();
 let photos = null, treesHidden = false;
-let slowFrames = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
+let tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 
@@ -776,13 +818,15 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   keepAwake();
   clock.reset?.();
-  settle = 1.5; slowFrames = 0;
+  settle = 1.5;
+  gfx.hold(2);
 });
 
 function frame(ts) {
   requestAnimationFrame(frame);
   clock.update(ts);
-  let dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();
+  let dt = Math.min(rawDt, 0.05);
   if (settle > 0) {
     settle -= dt;
     dtSmooth += (Math.min(dt, 1 / 30) - dtSmooth) * 0.15;
@@ -1025,22 +1069,18 @@ function frame(ts) {
     renderer.render(scene, camera);
   }
 
-  // ---- adaptive quality: drop resolution, then shadows, if the device struggles
-  if (settle > 0) slowFrames = 0;
-  else if (dt > 0.036) slowFrames++; else slowFrames = Math.max(0, slowFrames - 2);
-  if (slowFrames > 120) {
-    slowFrames = 0;
-    if (renderer.getPixelRatio() > 1) renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.5));
-    else if (fewerTrees()) { /* leafy trees only closer to the car */ }
-    else if (renderer.shadowMap.enabled) { renderer.shadowMap.enabled = false; lights.sun.castShadow = false; }
-  }
+  // ---- graphics quality follows the measured frame rate (src/quality.js)
+  if (settle > 0 || !world.ready(car.x, car.z)) gfx.hold(1);     // a tab coming back, the city loading after a jump
+  const ch = gfx.frame(rawDt * 1000);
+  if (ch) console.info(`graphics: rung ${ch.from} -> ${ch.to} (${ch.why}, ${gfx.fps.toFixed(0)} fps)`);
+  if (!optEl.classList.contains('hidden')) showGfx();
 }
 
 // debug / test hook
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

@@ -128,9 +128,10 @@ export function createLights(scene, shadowSize) {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffd9bd, 2.6);
   sun.position.copy(sunDirection(THREE.MathUtils.degToRad(26))).multiplyScalar(300);
-  if (shadowSize) {
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(shadowSize, shadowSize);
+  // (the shadow is set up even when it starts off: the graphics quality may turn it on later)
+  sun.castShadow = shadowSize > 0;
+  {
+    sun.shadow.mapSize.set(shadowSize || 1024, shadowSize || 1024);
     const c = sun.shadow.camera;
     c.left = -70; c.right = 70; c.top = 70; c.bottom = -70; c.near = 50; c.far = 700;
     sun.shadow.bias = -0.0006;

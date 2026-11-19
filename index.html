@@ -84,6 +84,10 @@
       <h3>OPTIONS</h3>
       <label class="opt"><input type="checkbox" id="opt-wasd"><span><b>WASD DRIVING</b><small>W A S D drive and steer. The gearbox stays automatic: A / Z gear shifts are off.</small></span></label>
       <p class="small optkeys">Off: arrow keys drive, A / Z shift up / down by hand.</p>
+      <div class="opt gfx"><span><b>GRAPHICS</b><small>AUTO lowers the detail when the frame rate drops and raises it again when there is room.</small></span></div>
+      <div id="opt-gfx" class="seg"><button data-gfx="auto">AUTO</button><button data-gfx="high">HIGH</button><button data-gfx="medium">MEDIUM</button><button data-gfx="low">LOW</button></div>
+      <p class="small optkeys" id="opt-gfxnow"></p>
+      <p class="small optwarn hidden" id="opt-gpu"></p>
       <button class="neon small" data-act="options-close">CLOSE</button>
     </div>
     <canvas id="minimap" width="420" height="420" data-act="map" title="Open the city map (M)"></canvas>

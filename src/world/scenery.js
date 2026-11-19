@@ -295,12 +295,15 @@ export function updateTrees(time, cam) {
   if (pools && cam) pools.update(cam);
 }
 // A device that struggles gets fewer leafy trees: returns false once there is nothing left to give.
-export function fewerTrees() {
-  if (!realTrees || nearTrees <= 45) return false;
-  nearTrees = Math.max(45, nearTrees * 0.65);
-  realTrees.setLod(nearTrees);
+// The distance where the flat picture gives way to the leafy tree, set by the graphics quality
+// (src/quality.js): nearer is cheaper. Before the trees are built it only sets where they start.
+let treeDistanceSet = false;
+export function setTreeDistance(m) {
+  treeDistanceSet = true;
+  if (m === nearTrees) return;
+  nearTrees = m;
+  if (realTrees) realTrees.setLod(nearTrees);
   if (pools) pools.touch();
-  return true;
 }
 
 function treePools(real, world, opts) {
@@ -358,7 +361,7 @@ function treePools(real, world, opts) {
 // Returns build(sector) -> { group, setNear(bool) } with that sector's trees.
 // build.near is the group with the leafy close trees, if any: add it to the scene.
 export function createTrees(opts, renderer, world) {
-  nearTrees = opts.treeDetail > 0 ? 150 : 70;          // phones: leafy trees only right around the car
+  if (!treeDistanceSet) nearTrees = opts.treeDetail > 0 ? 150 : 70;          // phones: leafy trees only right around the car
   realTrees = opts.realTrees ? createRealTrees(renderer, { cards: true, lod: nearTrees }) : null;
   const real = realTrees ? realTrees.species : {};
   pools = realTrees ? treePools(real, world, opts) : null;

@@ -83,8 +83,8 @@ export async function loadWorldData(onProgress = () => {}) {
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
       if (treeMoves.length) moveTrees(s);
-      if (treeAdds.length) addTreesTo(s);
       if (clearings.length) s.trees = clearTrees(s.trees);
+      if (treeAdds.length) addTreesTo(s);               // after the clearings: planted trees stay
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
       for (const b of solids) stamp(s, b);

@@ -37,6 +37,7 @@ import { createCoop, coopWalls, coopProps, coopClear, coopSignSkip } from './wor
 import { createJaaaeg, jaaaegWalls, jaaaegProps } from './world/jaaaeg.js';
 import { createDiscGolf } from './world/discgolf.js';
 import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja.js';
+import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -130,7 +131,7 @@ addEventListener('resize', () => {
 const input = createInput(document.body);
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, parked;
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
@@ -198,6 +199,7 @@ async function boot() {
   kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
+  arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line
@@ -214,6 +216,7 @@ async function boot() {
   valliStreetWalls(world.walls);                // the houses at the start of Vallikraavi in their colours
   coopWalls(world.walls);                       // and the Coop Konsum on Aruküla tee
   janeseWalls(world.walls);                     // and Jänese 1
+  arhitektiWalls(world.walls);                  // Arhitekti 24, 26 and 28 are built by hand
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -238,7 +241,7 @@ async function boot() {
   const buildWalls = createWalls(world);
   trackside = createTrackside(world, scene);       // before any sector loads: it adds a kerb to the ground
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps()] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } return out; }, extra: () => [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps()] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   const attachSigns = createSigns(world);
@@ -263,6 +266,7 @@ async function boot() {
   jaaaeg = createJaaaeg(scene, world, { shadows: !isTouch });
   discgolf = createDiscGolf(scene, world, audio, { shadows: !isTouch });
   janeseMaja = createJaneseMaja(scene, world, { shadows: !isTouch });
+  arhitekti = createArhitekti(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -977,6 +981,7 @@ function frame(ts) {
     jaaaeg.update(car);
     discgolf.update(car, dt);
     janeseMaja.update(car);
+    arhitekti.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

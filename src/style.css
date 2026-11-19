@@ -207,8 +207,10 @@ body:not(.touch) .touch-only { display: none; }
 .pad button small { font-size: 8px; letter-spacing: .1em; color: #fff; opacity: .85; text-shadow: none; }
 .pad button.gas { height: clamp(96px, 34vh, 160px); border-color: var(--hot); color: var(--hot); text-shadow: 0 0 10px var(--hot); }
 .pad button.brake { border-color: var(--sun); color: var(--sun); text-shadow: 0 0 10px var(--sun); }
-/* phones: the car's name, small, under the BRAKE and GAS buttons */
-.pad.right #carname { position: absolute; top: 100%; left: 0; right: 0; margin-top: 7px; text-align: center; white-space: nowrap;
+/* phones: the car's name, small, at the bottom edge of the screen under the BRAKE and GAS buttons
+   (the pad sits max(14px, safe area) + clamp(60px, 14vh, 110px) up from the bottom) */
+.pad.right #carname { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap;
+  bottom: calc(max(6px, env(safe-area-inset-bottom)) - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px));
   font-size: 8px; letter-spacing: .16em; color: #fff; opacity: .5; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
 /* phones: the fade from the drone shot to the car */
 #fade { position: fixed; inset: 0; z-index: 50; background: #07020f; opacity: 0; visibility: hidden; pointer-events: none; }

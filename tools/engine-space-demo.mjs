@@ -13,6 +13,10 @@
 //   plays them: blow-off and upshift chirps from src/audio-turbo.js, the whistle in the synth.
 //   --turbo=old: the turbo sounds before that (a sine whistle and a single pssh), for the "before" clip
 //   (with --worklet= the synth from before the whistle moved into it).
+//   --shift: floored to 200 km/h, braked hard to 60 (the automatic coming down), pulled up again, then Z
+//   three times in a quick row off the throttle (the last one past the redline) and coasting on the engine,
+//   with the downshift sounds as audio.js plays them (src/audio-shift.js); --shift=old without them (for
+//   the "before" clip, with the old physics.js and --worklet= in place).
 //   --drone: the camera where the drone view (C) puts it, 35-55 m up and back, and the space told how far
 //   off it is (setFar), as audio.js does.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -22,7 +26,7 @@ import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CARS } from '../src/cars/specs.js';
-import { createCar, stepCar } from '../src/cars/physics.js';
+import { createCar, stepCar, shiftGear } from '../src/cars/physics.js';
 import { ENGINE_SOUNDS } from '../src/engine-sounds.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,11 +39,13 @@ const wl = resolve(val('worklet') || resolve(root, 'public/engine-worklet.js'));
 const dry = !!flag('dry');
 // --mix=er,tail: scale the echoes and the tail (both 1 in the game), to hear them on their own
 const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').map(Number)) : {};
-const TURBO = flag('turbo') ? val('turbo') || 'new' : null;
+const TURBO = flag('turbo') ? val('turbo') || 'new' : flag('shift') ? 'new' : null;
 const DRONE = !!flag('drone');
+const SHIFT = flag('shift') ? val('shift') || 'new' : null;
+const { createShiftSound } = SHIFT === 'new' ? await import('../src/audio-shift.js') : {};
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
-const SR = 48000, BLOCK = 128, FPS = 60, T = 22;
+const SR = 48000, BLOCK = 128, FPS = 60, T = flag('shift') ? 27 : 22;
 const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
 
 function script(t) {
@@ -54,6 +60,32 @@ function script(t) {
 function turboScript(t) {
   const on = [[0.8, 6], [7.3, 10], [10.35, 12.6], [13.05, 13.4], [16, 19.5]];
   return { up: on.some(([a, b]) => t >= a && t < b) ? 1 : 0 };
+}
+
+// floored to 200 km/h (or 11 s), braked to 60, floored again into third, then off the throttle and Z, Z, Z
+// 0.15 s apart, coasting on the engine, and floored to the end (a state machine: the phases end on speed)
+function shiftDriver() {
+  let ph = 0, t0 = 0, zs = 0, g3 = 0;
+  return (t, car) => {
+    const kmh = Math.hypot(car.vx, car.vy) * 3.6;
+    if (ph === 0) { if (t >= 0.8) { ph = 1; t0 = t; } return { up: 0 }; }
+    if (ph === 1) { if (kmh >= 200 || t - t0 > 11) { ph = 2; t0 = t; } return { up: 1 }; }
+    if (ph === 2) { if (kmh <= 60) { ph = 3; t0 = t; g3 = 0; } return { down: 1 }; }
+    if (ph === 3) {
+      if (car.gear >= 3 && !g3) g3 = t;
+      if ((g3 && t - g3 > 1.2) || t - t0 > 8) { ph = 4; t0 = t; }
+      return { up: t - t0 > 0.4 ? 1 : 0 };
+    }
+    if (ph === 4) {
+      // off the throttle, then the three Zs
+      const want = t - t0 > 0.25 ? Math.min(3, 1 + Math.floor((t - t0 - 0.25) / 0.15)) : 0;
+      let z = 0;
+      if (zs < want) { zs++; z = 1; }
+      if (t - t0 > 2.2) { ph = 5; t0 = t; }
+      return { up: 0, z };
+    }
+    return { up: 1 };
+  };
 }
 
 // ---- the track and the obstacle field round it
@@ -122,12 +154,23 @@ for (const id of ids) {
   // the turbo as audio.js hears it, at the game's 60 Hz: the whistle (for the old oscillator) and events
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false;
+  // the downshift sounds as audio.js has them, at the game's 60 Hz
+  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' ? createShiftSound() : null, sEv = [], gLog = [];
+  let sh = { blip: 0, crackle: 0, over: 0, rpm: 0 }, nextSh = 0, lastG = 1;
   for (let i = 0; i < total; i += BLOCK) {
-    const t = i / SR, s = TURBO ? turboScript(t) : script(t);
-    if (!s.hold) stepCar(car, { up: s.up }, flat, BLOCK / SR);
+    const t = i / SR, s = drv ? drv(t, car) : TURBO ? turboScript(t) : script(t);
+    if (s.z) shiftGear(car, -1);
+    if (!s.hold) stepCar(car, { up: s.up, down: s.down || 0 }, flat, BLOCK / SR);
+    if (car.gear !== lastG) { gLog.push(`${lastG}>${car.gear} ${t.toFixed(2)} s ${(Math.hypot(car.vx, car.vy) * 3.6).toFixed(0)} km/h`); lastG = car.gear; }
     let rpm = car.rpm, thr = car.throttle;
     if (s.hold) { rpm = s.up ? Math.min(spec.engine.idle + (t - 2) * 7000, 4200) : Math.max(spec.engine.idle, 4200 - (t - 2.5) * 4000); thr = s.up; }
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0 });
+    if (shs && t >= nextSh) {
+      nextSh += 1 / FPS;
+      sh = shs.step(car, t);
+      if (sh.clunk) sEv.push({ t: t + 0.005 + sh.clunk.after, k: sh.clunk.k });
+    }
+    if (shs) rpm = sh.rpm;
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: car.shiftCut ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);
@@ -181,7 +224,8 @@ for (const id of ids) {
   const page = await browser.newPage();
   page.on('console', (m) => console.log('  [page]', m.text()));
   await page.goto(`http://127.0.0.1:${server.port}/`);
-  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB }) => {
+  if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
+  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV }) => {
     const { createSpace } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
@@ -231,6 +275,14 @@ for (const id of ids) {
       }
       log.push(`turbo events: ${TB.ev.map((e) => `${e.k} ${e.t.toFixed(2)} s P ${e.P.toFixed(2)}`).join(', ')}`);
     }
+    if (SEV.length) {
+      // the downshift clunks, into the car bus as in audio.js
+      const { clunk } = await import('/src/audio-shift.js');
+      const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
+      let sd = 99; for (let i = 0; i < d.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; d[i] = sd / 2147483648 - 1; }
+      for (const e of SEV) clunk(ctx, nb, space.input, e.k, e.t);
+      log.push(`clunks: ${SEV.map((e) => `${e.t.toFixed(2)} s ${e.k.toFixed(2)}`).join(', ')}`);
+    }
     const car = { x: 0, z: 0, yaw: 0, y: 0 }, cam = { position: { x: 0, y: 0, z: 0 }, matrixWorld: { elements: new Float32Array(16) } };
     const step = (k) => {
       const o = k * 8;
@@ -255,7 +307,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

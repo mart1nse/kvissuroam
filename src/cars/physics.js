@@ -125,6 +125,9 @@ export function shiftGear(car, dir) {
 // an engine can set its own with revCut and revCutDrop
 const SHIFT_TIME = 0.25;         // a quick manual change: clutch, lever, clutch (s)
 const REV_CUT_TIME = 0.03, REV_CUT_DROP = 120;
+// braking, the automatic shifts down once the lower gear lands under this share of the shift point (an
+// engine's brakeDown, for the sports cars that keep their revs up)
+const BRAKE_DOWN = 0.8;
 // a repeatable 0..1 'random' number, so every car runs the same on every screen
 const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
@@ -177,8 +180,15 @@ function engineForce(car, throttle, dt) {
     let g = car.gear;
     // (it also shifts a little early rather than run into the rev limiter when the tyres are only just slipping)
     const early = rpmAt(g) > e.shiftRpm * 0.88 && rpmAt(g) * wAbs >= e.redline * vAbs;
+    // Coming down: on the throttle it kicks down while the lower gear stays under 90 % of the shift point,
+    // coasting it waits until the lower gear lands at 55 %, and braking (into a corner) it comes down early,
+    // landing high in the revs, ready to pull out of the corner (Martin 2026-11-19: it came down late and low);
+    // first gear is still left until the car is nearly down to a crawl (taken early, the next stab of the
+    // throttle would have it bouncing between first and second on spinning tyres)
+    const braking = g > 2 ? Math.min(1, (car.brake || 0) / 0.5) : 0;
+    const downAt = throttle > 0.5 ? 0.9 : 0.55 + ((e.brakeDown ?? BRAKE_DOWN) - 0.55) * braking;
     if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
-    else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * (throttle > 0.5 ? 0.9 : 0.55)) g--;
+    else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * downAt) g--;
     if (g !== car.gear) {
       // Shifted like a quick manual: an upshift under power cuts the ignition while the clutch is
       // out (the revs drop to the next gear's), then it bites again; a downshift blips the throttle.
@@ -251,6 +261,7 @@ function engineForce(car, throttle, dt) {
   // Shifted down by hand past the redline: the engine is held on its limiter and the gearbox drags the
   // car down to the speed the redline allows in that gear, harder the further over it is.
   const overRev = !car.reversing && wheelRpm > e.redline + 30 ? (wheelRpm - e.redline) / e.redline : 0;
+  car.overRev = overRev;           // (the sound: an engine dragged past its redline howls and misfires)
   if (overRev > 0) {
     car.revCut = 0;
     return -Math.sign(v) * Math.min(0.5, 0.12 + overRev * 2) * s.mass * G;

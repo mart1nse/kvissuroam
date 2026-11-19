@@ -17,6 +17,9 @@
 // edge:    0..1, how much sharper the front of each exhaust pulse is than its tail (loud pulses steepen in
 //          the pipe); rasp: level of the buzzy upper harmonics this gives (raspF Hz and up, raspDrive).
 // whistle: turbo whistle level (turbo cars), whistleF: its pitch scale (small turbos spin faster, higher).
+// pops:    overrun pops per firing (much more for a moment after a downshift's blip, src/audio-shift.js);
+//          crackle: the pops a car without them gets after a blip (default 0.06, none for the diesels);
+//          howl, howlTeeth: level and pitch (teeth per crank turn) of the gear howl when over-revved.
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -36,6 +39,7 @@ export const ENGINE_SOUNDS = {
   // knocking diesel clatter at idle (the injectors and the combustion itself), a gruff low drone under load
   // and almost nothing above 4000; the turbo whistles and the tired silencer lets plenty through.
   passat: {
+    crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 19, order: [1, 3, 4, 2], banks: [0, 0, 0, 0],
     pipes: [{ len: 1.7, fb: -0.4, damp: 0.5 }],
     res: [[85, 1.4, 0.65], [190, 2, 0.5], [420, 2.5, 0.22], [1300, 3, 0.1]], dry: 0.45,
@@ -144,6 +148,7 @@ export const ENGINE_SOUNDS = {
   // three-way catalyst, so none of the diesel's clatter: a deep, soft, even thrum at 600-2200 rpm through a
   // long pipe and a big silencer in the rear engine bay, the turbo whistling over it as it pulls away.
   bus: {
+    crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 408, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 4,
     pipes: [{ len: 3.2, fb: -0.4, damp: 0.5 }],
     res: [[62, 1.2, 0.8], [140, 1.8, 0.55], [330, 2.4, 0.3], [780, 3, 0.08]], dry: 0.3,

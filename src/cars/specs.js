@@ -262,6 +262,7 @@ export const CARS = {
       idle: 1000,
       redline: 7750,
       shiftRpm: 7300,
+      brakeDown: 0.86,          // braking into a corner it comes down early and keeps the revs up
       pulses: 4,                // flat-plane V8: four firing pulses per revolution
       revDrop: 5500,            // light flywheel: revs fall fast when you lift
       revCut: 0.045, revCutDrop: 500,   // hard ignition cut at the limiter: the revs bounce a long way
@@ -314,6 +315,7 @@ export const CARS = {
       idle: 900,
       redline: 8400,
       shiftRpm: 8150,
+      brakeDown: 0.86,          // braking into a corner it comes down early and keeps the revs up
       pulses: 5,                // V10: five firing pulses per revolution
       revDrop: 4000,            // tiny ceramic clutch and flywheel, but kept spinning on a lift so it doesn't bog mid-donut
       revCut: 0.045, revCutDrop: 450,
@@ -352,6 +354,7 @@ export const CARS = {
       idle: 800,
       redline: 6900,
       shiftRpm: 6550,
+      brakeDown: 0.86,          // braking into a corner it comes down early and keeps the revs up
       pulses: 2.5,              // five cylinders: two and a half firing pulses per revolution
       // 3B: 309 Nm from 1950 rpm, 162 kW @ 5700
       torque: [[800, 160], [1500, 255], [1950, 309], [3000, 309], [4500, 305], [5200, 291], [5700, 271], [6300, 238], [6900, 200], [7300, 140]],
@@ -399,6 +402,7 @@ export const CARS = {
       idle: 800,
       redline: 8400,
       shiftRpm: 8250,
+      brakeDown: 0.86,          // braking into a corner it comes down early and keeps the revs up
       pulses: 4,
       revDrop: 4200,            // (falls off a lift slowly enough to pick straight back up)
       revCut: 0.04, revCutDrop: 350,

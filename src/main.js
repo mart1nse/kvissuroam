@@ -739,7 +739,8 @@ function showGfx(force) {
   gfxShown = now;
   for (const b of $('#opt-gfx').children) b.classList.toggle('on', b.dataset.gfx === gfx.mode);
   const l = gfx.levels[gfx.level];
-  const fps = gfx.fps ? `${Math.round(gfx.fps)} FPS` : 'measuring…';
+  const m = gfx.meter;
+  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} of ${m.frame.toFixed(1)} ms)`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
     : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}`;
 }
@@ -846,11 +847,16 @@ document.addEventListener('visibilitychange', () => {
   keepAwake();
   clock.reset?.();
   settle = 1.5;
-  gfx.hold(2);
+  // Chrome lets a hidden tab's memory and code go cold, so the first seconds back can be slow
+  // whatever the graphics: don't let that warm-up push the graphics down
+  gfx.hold(20);
+  back = { at: performance.now(), n: 0, f: 0, js: 0, worst: 0, next: 2000 };
 });
 
+let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
 function frame(ts) {
   requestAnimationFrame(frame);
+  const t0 = performance.now();
   clock.update(ts);
   const rawDt = clock.getDelta();
   let dt = Math.min(rawDt, 0.05);
@@ -1120,7 +1126,17 @@ function frame(ts) {
   // ---- graphics quality follows the measured frame rate (src/quality.js)
   // (not judged: a tab coming back, the city loading after a jump, the phones' menu shot drawn at half rate)
   if (settle > 0 || intro?.fixed || !world.ready(car.x, car.z)) gfx.hold(1);
-  const ch = gfx.frame(rawDt * 1000);
+  const jsMs = performance.now() - t0;
+  const ch = gfx.frame(rawDt * 1000, jsMs);
+  if (back) {
+    back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);
+    const since = performance.now() - back.at;
+    if (since >= back.next) {
+      console.info(`back in the tab +${Math.round(since / 1000)} s: ${(1000 * back.n / back.f).toFixed(0)} fps, game code ${(back.js / back.n).toFixed(1)} ms of ${(back.f / back.n).toFixed(1)} ms a frame, worst ${back.worst.toFixed(0)} ms`);
+      Object.assign(back, { n: 0, f: 0, js: 0, worst: 0, next: back.next + 2000 });
+      if (since > 30000) back = null;
+    }
+  }
   if (ch) console.info(`graphics: rung ${ch.from} -> ${ch.to} (${ch.why}, ${gfx.fps.toFixed(0)} fps)`);
   if (!optEl.classList.contains('hidden')) showGfx();
 }

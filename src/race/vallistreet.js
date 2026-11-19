@@ -76,14 +76,40 @@ export function valliStreetWalls(walls) {
   }
 }
 
-// The old lantern posts along the car park kerb, as street furniture (kind 9 in props.js), so a car that
-// runs wide knocks them flat with hardly a bump (Martin, 18 Nov)
+// Street furniture round the car park at Vallikraavi 4, as props (props.js kinds), so a car that runs wide
+// knocks them flat with hardly a bump. Per Martin's marked photo (19 Nov): at the road edge only the
+// Europark sign at the entrance, the no-stopping sign where the kerbside bays begin and one lantern post
+// by the mural wall; the other old lantern posts and a parking sign stand at the back of the car park
+// where the grass starts. The map's own signs and lamps along this kerb go (valliStreetClear).
+const PARK_PROPS = [
+  // [kind, track index, metres out from the road edge (left)]
+  [11, 106.5, 0.6],   // Europark no-parking sign at the car park entrance
+  [11, 116.6, 0.5],   // no stopping, where the kerbside bays begin
+  [9, 128.5, 0.55],   // the one lantern post left on the road side, by the mural
+  [9, 114.5, 10.2],   // lantern posts on the grass line at the back of the car park
+  [9, 124.5, 9.1],
+  [21, 119.5, 8.7],   // blue parking sign on the grass line
+];
+const PARK_CLEAR = [
+  [11, 1411.1, 3098.1], [0, 1411.4, 3098.1],   // sign + lamp at the kerb, i 120
+  [18, 1434.1, 3085.2], [14, 1443.3, 3088.6],  // info and warning signs at the entrance
+  [11, 1429.2, 3103.4], [11, 1396.5, 3085.2],
+  [0, 1413.2, 3087.4], [0, 1388.3, 3096.0],    // kerb lamps, i 119 and i 130
+];
 export function valliStreetProps() {
   const track = createTrack();
-  return [108.5, 113.5, 118.5, 123.5, 128.5].map((i) => {
-    const k = Math.floor(i), f = i - k, a = track.P[k], b = track.P[k + 1], [tx, tz] = track.tan[k], lat = -(track.HW[Math.round(i)] + 0.55);
-    return [9, a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat, 0];
+  return PARK_PROPS.map(([kind, i, out]) => {
+    const k = Math.floor(i), f = i - k, a = track.P[k], b = track.P[k + 1], [tx, tz] = track.tan[k], lat = -(track.HW[Math.round(i)] + out);
+    const deg = kind === 9 ? 0 : Math.atan2(-tx, tz) * 180 / Math.PI;   // signs face the oncoming cars
+    return [kind, a[0] + (b[0] - a[0]) * f - tz * lat, a[1] + (b[1] - a[1]) * f + tx * lat, deg];
   });
+}
+export function valliStreetClear(data, out) {
+  for (const [key, a] of Object.entries(data.sectors)) {
+    for (let k = 0; k < a.length; k += data.stride) {
+      if (PARK_CLEAR.some(([kind, x, z]) => a[k] === kind && Math.hypot(a[k + 1] - x, a[k + 2] - z) < 0.6)) out.add(`${key}:${k / data.stride}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- painting house fronts

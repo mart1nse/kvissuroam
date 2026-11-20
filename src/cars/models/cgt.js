@@ -124,7 +124,8 @@ function atlasTex() {
 }
 
 // ---------------------------------------------------------------- the car
-export function buildCGT() {
+// scan: false keeps the drawn body (parked ones on phones: no scanned body to load and hold)
+export function buildCGT({ scan = true } = {}) {
   const ZC = -0.6, ZH = 0.03, ZB = 0.64;      // cowl, windscreen header, back of the roof (roll hoops)
   const body = buildBody({
     top: [[ZF, 0.34], [ZF + 0.004, 0.405, 0.03], [ZF + 0.1, 0.5, 0.08], [ZF + 0.4, 0.58, 0.3], [-1.5, 0.67, 0.6], [ZC - 0.15, 0.79, 0.2], [ZC, 0.815, 0.05],
@@ -300,5 +301,7 @@ export function buildCGT() {
   const wheelFront = { soup: gtWheel(0.334, 0.265, 0.2413 + 0.012, 0.02) };
   const car = assembleCar({ id: 'cgt', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   // the procedural body shows until the scanned body (public/models/cgt.glb) has loaded
-  return useGlbBody(tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }), 'cgt.glb', { liner: { r: 0.44, len: 0.28, inset: 0.12 }, wheelOut: { front: 0.05, rear: 0.11 } });
+  tintPaint(car, 'cgt', PAINT, { metalness: 0.82, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
+  if (!scan) return car;
+  return useGlbBody(car, 'cgt.glb', { liner: { r: 0.44, len: 0.28, inset: 0.12 }, wheelOut: { front: 0.05, rear: 0.11 } });
 }

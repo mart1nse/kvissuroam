@@ -71,10 +71,13 @@ import { createTuru2, turu2Walls } from './world/turu2.js';
 import { createTuru3, turu3Walls } from './world/turu3.js';
 import { createTuru4, turu4Walls, turu4SignSkip } from './world/turu4.js';
 import { createTuru5, turu5Walls } from './world/turu5.js';
+import { createTuru6, turu6Walls } from './world/turu6.js';
+import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { createRiia3, riia3Walls } from './world/riia3.js';
 import { createRiia4, riia4Walls } from './world/riia4.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
+import { turuPaintVectors } from './world/turupaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -197,7 +200,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, riia2, riia3, riia4, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, riia2, riia3, riia4, kaluri, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -283,7 +286,9 @@ async function boot() {
   teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kontserdimajaVectors(world.vectors);          // the park wall stops at the foot of the concert house's steps
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
+  turuPaintVectors(world.vectors);              // Turu: the hatched island from Soola to Sadama, no centre lines on Sadama and the car park lanes
   lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
+  kaluriVectors(world.vectors);                 // Kaluri lane and the car park behind McDonald's: bay lines only
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
@@ -322,6 +327,7 @@ async function boot() {
   turu3Walls(world.walls);                      // AHHAA, the Turu 8 halls, Tigutorn, Väike-Turu 3
   turu4Walls(world.walls);                      // Aura, Zeppelin, Turu 9 and 11
   turu5Walls(world.walls);                      // Turu south to the Sõpruse bridge
+  turu6Walls(world.walls);                      // Aleksandri 8-12, Dorpat hotel
   riia2Walls(world.walls);                      // Riia tänav: Riia Kvartal, Riia 24, Pauluse church
   riia3Walls(world.walls);                      // Riia tänav: Aparaaditehas, Hektor, the railway bridge
   riia4Walls(world.walls);                      // Riia tänav: Lembitu to Väike kaar, Oskar Luts's house
@@ -352,7 +358,7 @@ async function boot() {
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
   // the hand-placed props of the hand-made places (worked out once: the clear hook keeps lights and poles round them)
   let handPlaced = null;
-  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props()]);
+  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props(), ...kaluriProps()]);
   // where crowded lights and poles are not thinned: round hand-placed props, bus stops and hand-painted ground
   const keepOutCircles = (hand) => [
     ...hand.map(([, x, z]) => ({ x, z, r: 60 })),
@@ -363,7 +369,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   turu4SignSkip(world);                         // Zeppelin's and Aura's letters are painted on their walls
@@ -419,6 +425,8 @@ async function boot() {
   turu3 = createTuru3(scene, world, { shadows: !isTouch });
   turu4 = createTuru4(scene, world, { shadows: !isTouch });
   turu5 = createTuru5(scene, world, { shadows: !isTouch });
+  turu6 = createTuru6(scene, world, { shadows: !isTouch });
+  kaluri = createKaluri(scene, world, { shadows: !isTouch });
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
   riia4 = createRiia4(scene, world, { shadows: !isTouch });
@@ -1192,6 +1200,8 @@ function frame(ts) {
     turu3.update(car);
     turu4.update(car);
     turu5.update(car);
+    turu6.update(car);
+    kaluri.update(car);
     riia2.update(car);
     riia3.update(car);
     riia4.update(car);

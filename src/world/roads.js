@@ -9,8 +9,10 @@ export function createRoadMarkings(world) {
   const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
   const bySector = new Map();           // "sx_sz" -> [x1, z1, x2, z2, ...]
   const skip = world.vectors.markSkip;   // stretches that paint their own lines (src/race/emajoe.js)
+  let keep = null;                      // a road's own filter while its lines are walked (noCentre)
   const put = (x1, z1, x2, z2) => {
     if (skip && skip((x1 + x2) / 2, (z1 + z2) / 2)) return;
+    if (keep && !keep((x1 + x2) / 2, (z1 + z2) / 2)) return;
     const k = `${Math.floor(((x1 + x2) / 2 - G0) / S)}_${Math.floor(((z1 + z2) / 2 - G0) / S)}`;
     let a = bySector.get(k);
     if (!a) bySector.set(k, (a = []));
@@ -100,13 +102,19 @@ export function createRoadMarkings(world) {
     if (r.w < (main ? 5.5 : 6.4) || r.pts.length < 2) continue;
     level = r.e || 0;
     if (r.w >= 11.5) {
+      if (r.noCentre) keep = (x, z) => !r.noCentre(x, z);  // a painted island instead (src/world/turupaint.js)
       strokes(r.pts, 0, 4.5, 0, 10);                       // solid centre
+      keep = null;
       strokes(r.pts, r.w / 4, DASH, GAP, 12);
       strokes(r.pts, -r.w / 4, DASH, GAP, 12);
     } else {
       strokes(r.pts, r.mark || 0, DASH, GAP, 9);          // mark: a lane line moved off the centre
     }
   }
+
+  // lines an area draws itself, such as hatched islands: [x1, z1, x2, z2, ...] on the ground
+  const extra = world.vectors.extraLines;
+  if (extra) { level = 0; for (let i = 0; i + 3 < extra.length; i += 4) put(extra[i], extra[i + 1], extra[i + 2], extra[i + 3]); }
 
   const mat = new THREE.MeshLambertMaterial({ color: 0xdedbe6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 

@@ -53,7 +53,6 @@ function L(s, v = 0) {
   const t = s - g.s0, c = [g.a[0] + g.u[0] * t, g.a[1] + g.u[1] * t], u = dirAt(s);
   return [c[0] - u[1] * v, c[1] + u[0] * v];
 }
-const CENTRE = L(150, 0);
 const DEBUG = typeof location !== 'undefined' && /riiadebug/.test(location.search);
 
 // ---------------------------------------------------------------- what the map's own data needs
@@ -305,43 +304,52 @@ function houses(later) {
 export function createRiia(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
-  let built = false;
-
   world.addTrees(TREES);
 
-  function build() {
-    built = true;
+  // the walls that face the road (within 45 m of the centre line) get the sharper pictures
+  const faces = (W) => {
+    let best = 1e9, bs = 0;
+    for (let s = 0; s <= 620; s += 4) { const q = L(s, 0), d = Math.hypot(q[0] - W.mid[0], q[1] - W.mid[1]); if (d < best) { best = d; bs = s; } }
+    const q = L(bs, 0), tx = q[0] - W.mid[0], tz = q[1] - W.mid[1];
+    return best < 45 && (tx * W.nx + tz * W.nz) / (Math.hypot(tx, tz) || 1) > 0.3;
+  };
+  // Two halves, each built (with its own small atlas) only when the car comes within 300 m of it, so the far
+  // half costs nothing at the start (phones: the spawn is about 140 m from the north half, 370 m from the south)
+  const parts = [
+    { centre: L(150, 0), ready: [L(0, -40), L(80, 40), L(200, -60), L(280, 50)], pick: (H) => H.at[1] <= 3390, extra: railing },
+    { centre: L(470, 0), ready: [L(300, 40), L(380, -50), L(500, 40), L(590, -40)], pick: (H) => H.at[1] > 3390 },
+  ];
+
+  function build(part) {
+    part.built = true;
     const A = areaKit(world, group, { shadows });
-    const { p, h } = A;
+    const { p } = A;
     // 3D pieces fixed to a painted wall: x along it, out from it, y above its ground line
     const later = [];
     later.box = (W, x, out, y, w, hh, d, c) => later.push(() => {
       const px = W.a[0] + W.ux * x + W.nx * out, pz = W.a[1] + W.uz * x + W.nz * out;
       p.add(BOX(w, hh, d), c, px, W.yref + y, pz, Math.atan2(W.nx, W.nz));
     });
-    // the walls that face the road (within 45 m of the centre line) get the sharper pictures
-    const faces = (W) => {
-      let best = 1e9, bs = 0;
-      for (let s = 0; s <= 620; s += 4) { const q = L(s, 0), d = Math.hypot(q[0] - W.mid[0], q[1] - W.mid[1]); if (d < best) { best = d; bs = s; } }
-      const q = L(bs, 0), tx = q[0] - W.mid[0], tz = q[1] - W.mid[1];
-      return best < 45 && (tx * W.nx + tz * W.nz) / (Math.hypot(tx, tz) || 1) > 0.3;
-    };
-    skinHouses(world, group, houses(later), { faces, shadows, ppm: 16, far: 6, debug: DEBUG });
+    skinHouses(world, group, houses(later).filter(part.pick), { faces, shadows, ppm: 16, far: 6, debug: DEBUG });
     for (let k = 0; k < later.length; k++) later[k]();
-
-    // the steel railing along the pavement on the court and park side, from Kalevi to the Riia 8 lane
-    const rail = [];
-    for (let s = 100; s <= 330; s += 2.5) rail.push(L(s, -8.6));
-    A.walk(rail, 2.5, ([x, z]) => p.add(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6), 0x9a9ea4, x, h(x, z) + 0.5, z));
-    for (let i = 0; i < rail.length - 1; i++) { A.bar(rail[i], rail[i + 1], 0.05, 0.95, 1.02, 0xa9adb3); A.bar(rail[i], rail[i + 1], 0.03, 0.45, 0.5, 0x9a9ea4); }
+    if (part.extra) part.extra(A);
     A.finish();
+  }
+  // the steel railing along the pavement on the court and park side, from Kalevi to the Riia 8 lane
+  function railing(A) {
+    const { p, h } = A, post = new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6), rail = [];
+    for (let s = 100; s <= 330; s += 2.5) rail.push(L(s, -8.6));
+    A.walk(rail, 2.5, ([x, z]) => p.add(post, 0x9a9ea4, x, h(x, z) + 0.5, z));
+    for (let i = 0; i < rail.length - 1; i++) { A.bar(rail[i], rail[i + 1], 0.05, 0.95, 1.02, 0xa9adb3); A.bar(rail[i], rail[i + 1], 0.03, 0.45, 0.5, 0x9a9ea4); }
   }
 
   return {
     update(car) {
-      if (built || !car) return;
-      if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([L(0, -40), L(80, 40), L(200, -60), L(280, 50)].every((q) => world.ready(q[0], q[1]))) build();
+      if (!car) return;
+      for (const part of parts) {
+        if (part.built || Math.hypot(car.x - part.centre[0], car.z - part.centre[1]) > 300) continue;
+        if (part.ready.every((q) => world.ready(q[0], q[1]))) build(part);
+      }
     },
   };
 }

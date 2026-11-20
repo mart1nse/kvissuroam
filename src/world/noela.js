@@ -230,7 +230,7 @@ export function createNoela(scene, world, { shadows = true } = {}) {
     A.trampoline(...R(1015, 40), 1.6);
     // Pihlaka: a silver Carrera GT on the paved yard in front of the red house's gable, the real model with
     // its scanned body (Martin, 20 Nov: in place of the estate car that stood on the lawn)
-    const cgt = { x: -7318.6, z: -7513.2, yaw: -0.25 };
+    const cgt = { x: -7318.6, z: -7513.2, yaw: 1.32 };                    // nose east, along the gable (Martin, 20 Nov)
     const fx = Math.sin(cgt.yaw), fz = -Math.cos(cgt.yaw);
     world.addSolids([{ x: cgt.x, z: cgt.z, yaw: Math.atan2(-fz, fx), hx: 2.3, hz: 0.96 }]);
     setTimeout(() => {

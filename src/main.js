@@ -149,7 +149,7 @@ else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
 stats.start({ isTouch, lite, software: gpu.software });
-canvas.addEventListener('webglcontextlost', () => stats.count('glLost'));
+canvas.addEventListener('webglcontextlost', () => stats.trouble('glLost'));
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -622,6 +622,7 @@ function openGarage() {
   if (mode !== 'drive') return;
   drivenOnce = true;
   stats.count('garage');
+  stats.phase('menu');
   board?.hide(); optEl.classList.add('hidden');
   closeMap();
   mode = 'menu';

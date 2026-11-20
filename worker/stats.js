@@ -72,7 +72,14 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
     }
   }
   if (typeof b.peak === 'number') t.peak = Math.max(t.peak || 0, num(b.peak, 150));
-  if (b.loaded === true) add(t, 'loaded', 1);
+  // trouble per kind of device (crashes, freezes, lost 3D picture, errors): kept as "phone:stall"
+  const dev = FIRST.dev(b.dev) ? b.dev : 'other';
+  const tr = b.trouble;
+  if (tr && typeof tr === 'object' && !Array.isArray(tr)) {
+    for (const k of ['glLost', 'stall', 'err']) { const v = num(tr[k], N); if (v) add((t.trouble ||= {}), `${dev}:${k}`, v); }
+  }
+  if (b.loaded === true) { add(t, 'loaded', 1); add((t.loadedBy ||= {}), dev, 1); }
+  if (b.drove === true) add((t.droveBy ||= {}), dev, 1);
   if (b.drove === true) add(t, 'drove', 1);
   if (Array.isArray(b.err)) {
     const e = (t.err ||= {});
@@ -89,7 +96,9 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
     add((t.ret ||= {}), f.ret === true ? 'back' : 'new', 1);
     if (/^[A-Z]{2}$/.test(country)) add((t.country ||= {}), country, 1);
     add((t.hour ||= {}), String(hour), 1);
-    if (f.crash === true) add(t, 'crash', 1);
+    // a crash found as the page loaded again, and where the game was then (true: from the first version)
+    const crash = f.crash === true ? 'drive' : ['load', 'menu', 'drive'].includes(f.crash) ? f.crash : '';
+    if (crash) { add(t, 'crash', 1); add((t.trouble ||= {}), `${FIRST.dev(f.dev) ? f.dev : 'other'}:crash-${crash}`, 1); }
     if (f.lite === true) add(t, 'lite', 1);
     if (f.sw === true) add(t, 'sw', 1);
   }

@@ -34,6 +34,7 @@ export const HAND_PLACES = [
   { name: 'Lõunakeskus, Hotel Sophia, Teaduspark', x: -1150, z: 5440, r: 300 },
   { name: 'Valguse and Optika strip', x: -1260, z: 5000, r: 300 },
   { name: 'Ringtee and Riia junction', x: -880, z: 5680, r: 330 },
+  { name: 'K-Rauta, Riia 140, Selver Teemandi', x: -520, z: 5650, r: 360 },
 ];
 
 // segments of the road centre lines in a coarse grid

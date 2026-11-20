@@ -149,6 +149,12 @@ export function createRaadi2(scene, world, { shadows = true } = {}) {
     // dark board fences between the plots, and along the back of them
     for (const b of BOUNDS) for (let v = 8.6; v < 50; v += 4) A.bar(MR.at(b, v), MR.at(b, Math.min(50, v + 4)), 0.06, 0, 1.6, 0x4a3a30);
     for (let s = 3; s < 134; s += 4) A.bar(MR.at(s, 50), MR.at(Math.min(134, s + 4), 50), 0.06, 0, 1.6, 0x4a3a30);
+    // the two zebras on the footway along Keskuse tee, across the mouths of the side roads by 3/1 and 1/1
+    // (half-metre stripes lying along the side road; the map has no crossings here)
+    for (const [x, z, w] of [[2353.8, -374.5, 7.0], [2387.6, -364.1, 4.6]]) {
+      const Z = frame([x, z], [-0.35, 0.94]);
+      for (let v = -w / 2; v + 0.5 <= w / 2 + 0.05; v += 1.0) A.pave(Z, -1.5, 1.5, v, v + 0.5, 'white');
+    }
     // the drives: concrete pavers from the road to the carports
     for (const [g0, g1] of GAPS) A.pave(MR, g0, g1, 5.6, 16, 'paver');
     // the pools: a white rim round blue water

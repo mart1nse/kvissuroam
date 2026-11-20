@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { BOX } from '../race/landmarks.js';
 import { groundTextures, groundLayer, fenceMesh } from './arhitekti.js';
 import { streetKit } from './streetkit.js';
+import { createAtlas, painter } from './houseskin.js';
+import { paintScale } from './paintscale.js';
 
 // A frame on the map: s metres along U from O, v metres across it (V is U turned a quarter to the left on the
 // map, so U = east gives V = south). YAW turns a BOX(s-size, h, v-size) to lie along the frame.
@@ -29,7 +31,7 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
   const SK = ['lawn', 'paver', 'red', 'dark', 'concrete', 'white', 'asphalt', 'kerb', 'verge', 'turf'];
   function pave(F, s0, s1, v0, v1, kind = 'pavers', lift = 0.08) {
     if (SK.includes(kind)) K.ribbon(F, s0, s1, v0, v1, kind, kind !== 'lawn');
-    else lay(T[kind], F, s0, s1, v0, v1, lift);
+    else lay(typeof kind === 'object' ? kind : T[kind], F, s0, s1, v0, v1, lift);
   }
   // a box in a frame: centre (s, v), size ls along s, lv across, from y0 to y1 above the ground there
   function box(F, s, v, ls, lv, y0, y1, c, gy = null) {
@@ -162,4 +164,64 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
 
   function finish() { lay.finish(); K.finish(); }
   return { K, p, h, pave, box, bar, walk, hedge, bushes, picket, mesh, gate, guardrail, bollard, island, trampoline, greenhouse, gazebo, swing, shed, lamp, finish };
+}
+
+// Painted walls built from cells: a cell is one picture (a bay of a facade: its stretch of plinth, render and
+// windows, say) painted once on a small shared atlas and shown on as many wall pieces as use it. A long
+// facade of equal bays costs one bay's pixels, so the bays can be painted finely and still stay small.
+//   cell(key, w, y0, y1, base, draw, ppm): paint the cell once (w metres wide, y0..y1 metres up); draw(P, w)
+//   put(a, b, gy, key, outline): a wall piece from map point a to b (outside on the right going a -> b), the
+//     cell's y0..y1 above gy, the cell stretched along it; outline [[s, y]] (s in the cell's metres) cuts it
+//     to any shape (gables)
+export function cellKit(group, { shadows = true, size = 1024 } = {}) {
+  const atlas = createAtlas(size), cells = new Map(), pieces = [];
+  function cell(key, w, y0, y1, base, draw, ppm = 30) {
+    if (cells.has(key)) return cells.get(key);
+    const q = Math.min(ppm * paintScale(), (size / 2 - 8) / w, (size / 2 - 8) / (y1 - y0));
+    const pw = Math.max(4, Math.round(w * q)), ph = Math.max(4, Math.round((y1 - y0) * q));
+    const rect = atlas.take(pw, ph), c = atlas.pages[rect.k].c;
+    c.save();
+    c.beginPath(); c.rect(rect.x - 2, rect.y - 2, pw + 4, ph + 4); c.clip();
+    c.fillStyle = base; c.fillRect(rect.x - 2, rect.y - 2, pw + 4, ph + 4);
+    draw(painter(c, rect.x, rect.y, w, y0, y1, pw / w), w);
+    c.restore();
+    const out = { rect, pw, ph, w, y0, y1 };
+    cells.set(key, out);
+    return out;
+  }
+  function put(a, b, gy, key, outline = null) {
+    const C = cells.get(key);
+    if (!C) throw new Error('no cell ' + key);
+    pieces.push({ a, b, gy, C, outline: outline || [[0, C.y0], [C.w, C.y0], [C.w, C.y1], [0, C.y1]] });
+  }
+  function finish() {
+    const S = atlas.size;
+    atlas.pages.forEach((pg, pk) => {
+      const pos = [], nor = [], uv = [];
+      for (const j of pieces) {
+        const C = j.C;
+        if (C.rect.k !== pk) continue;
+        const len = Math.hypot(j.b[0] - j.a[0], j.b[1] - j.a[1]), ux = (j.b[0] - j.a[0]) / len, uz = (j.b[1] - j.a[1]) / len, nx = -uz, nz = ux;
+        const P = ([s, y]) => [j.a[0] + ux * s * len / C.w + nx * 0.02, j.gy + y, j.a[1] + uz * s * len / C.w + nz * 0.02];
+        const T = ([s, y]) => [(C.rect.x + s / C.w * C.pw) / S, 1 - (C.rect.y + (C.y1 - y) / (C.y1 - C.y0) * C.ph) / S];
+        const tris = THREE.ShapeUtils.triangulateShape(j.outline.map(([x, y]) => new THREE.Vector2(x, y)), []);
+        for (let [i0, i1, i2] of tris) {
+          const p0 = j.outline[i0], p1 = j.outline[i1], p2 = j.outline[i2];
+          if ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]) < 0) [i1, i2] = [i2, i1];
+          for (const i of [i0, i1, i2]) { pos.push(...P(j.outline[i])); nor.push(nx, 0, nz); uv.push(...T(j.outline[i])); }
+        }
+      }
+      if (!pos.length) return;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      const tex = new THREE.CanvasTexture(pg.cv);
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
+      m.receiveShadow = shadows;
+      group.add(m);
+    });
+  }
+  return { cell, put, finish, atlas };
 }

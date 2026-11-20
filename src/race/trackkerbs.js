@@ -10,7 +10,7 @@
 // kerb comes down to the road over a few metres, as at a crossing.
 import * as THREE from 'three';
 import KERBS from './kerbs.json';
-import { createTrack } from './race.js';
+import { createTrack, cellKey } from './race.js';
 import { junctionCorners, cornerAt } from './junctionkerbs.js';
 
 const H = KERBS.h;            // 0.09 m (Martin, 19 Nov: first 10, then 1 cm lower with a smoother edge)
@@ -55,14 +55,14 @@ export function createTrackKerbs(world, scene) {
       const base = hwAt(t) + val(r, 'f', t), far = val(r, 'w', t) + val(r, 'b', t);
       for (let d = -0.5; d <= far + 0.5; d += 2) {
         const [x, z] = at(t, r.s * (base + d));
-        for (const ox of [-3, 3]) for (const oz of [-3, 3]) cells.add(`${Math.floor((x + ox) / CELL)},${Math.floor((z + oz) / CELL)}`);
+        for (const ox of [-3, 3]) for (const oz of [-3, 3]) cells.add(cellKey(Math.floor((x + ox) / CELL), Math.floor((z + oz) / CELL)));
         x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z);
       }
     }
   }
   for (const c of corners) {
     const [bx0, bz0, bx1, bz1] = c.box;
-    for (let x = bx0; x <= bx1 + CELL; x += CELL) for (let z = bz0; z <= bz1 + CELL; z += CELL) cells.add(`${Math.floor(Math.min(x, bx1) / CELL)},${Math.floor(Math.min(z, bz1) / CELL)}`);
+    for (let x = bx0; x <= bx1 + CELL; x += CELL) for (let z = bz0; z <= bz1 + CELL; z += CELL) cells.add(cellKey(Math.floor(Math.min(x, bx1) / CELL), Math.floor(Math.min(z, bz1) / CELL)));
     x0 = Math.min(x0, bx0); z0 = Math.min(z0, bz0); x1 = Math.max(x1, bx1); z1 = Math.max(z1, bz1);
   }
   // a run's kerb at (x, z)
@@ -81,7 +81,7 @@ export function createTrackKerbs(world, scene) {
   world.addBump({
     x0: x0 - 5, z0: z0 - 5, x1: x1 + 5, z1: z1 + 5,
     at(x, z) {
-      if (!cells.has(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`)) return 0;
+      if (!cells.has(cellKey(Math.floor(x / CELL), Math.floor(z / CELL)))) return 0;
       let v = runAt(x, z);
       for (const c of corners) v = Math.max(v, cornerAt(c, x, z));     // where a corner and a run meet, the higher
       return v;

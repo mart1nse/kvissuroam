@@ -582,6 +582,7 @@ function startDriving() {
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
+  parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
     still = false;
@@ -710,6 +711,7 @@ async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
   stats.count('mapjump');
+  parked.hold(8);
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
   const ok = (p) => {
     if (!p) return null;

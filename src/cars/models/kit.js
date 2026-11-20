@@ -451,14 +451,21 @@ function triVerts(s, t) {
   return v;
 }
 // Keep the part of the soup where fn(vertex) >= 0 (fn gets [x,y,z,...]).
+// (The three corners are tested in scratch arrays: only a triangle that is cut gets vertices of its
+// own. Making them for every triangle threw away about 150 MB per car model, which a phone building the
+// parked cars at DRIVE could not afford.)
+const _tv = [new Float64Array(6), new Float64Array(6), new Float64Array(6)];
 export function clipSoup(soup, fn) {
-  const out = new Soup();
+  const out = new Soup(), P = soup.p, N = soup.n;
   for (let t = 0; t < soup.tris; t++) {
-    const v = triVerts(soup, t);
-    const f0 = fn(v[0]) >= 0, f1 = fn(v[1]) >= 0, f2 = fn(v[2]) >= 0;
-    let poly = v;
+    for (let k = 0; k < 3; k++) {
+      const i = t * 9 + k * 3, q = _tv[k];
+      q[0] = P[i]; q[1] = P[i + 1]; q[2] = P[i + 2]; q[3] = N[i]; q[4] = N[i + 1]; q[5] = N[i + 2];
+    }
+    const f0 = fn(_tv[0]) >= 0, f1 = fn(_tv[1]) >= 0, f2 = fn(_tv[2]) >= 0;
+    let poly = _tv;
     if (!f0 && !f1 && !f2) continue;
-    if (!(f0 && f1 && f2)) poly = clipPolygon(v, fn, true);
+    if (!(f0 && f1 && f2)) poly = clipPolygon(triVerts(soup, t), fn, true);
     for (let k = 1; k < poly.length - 1; k++) for (const q of [poly[0], poly[k], poly[k + 1]]) {
       out.p.push(q[0], q[1], q[2]);
       const l = Math.hypot(q[3], q[4], q[5]) || 1; out.n.push(q[3] / l, q[4] / l, q[5] / l);
@@ -575,14 +582,32 @@ export function decal(soup, o) {
     let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
     const nl = Math.hypot(nx, ny, nz);
     if (nl < 1e-12 || (nx * out[0] + ny * out[1] + nz * out[2]) / nl < minFacing) continue;
-    const verts = [];
-    for (let k = 0; k < 3; k++) { const i = t + k * 3; verts.push(Float64Array.of(P[i], P[i + 1], P[i + 2], N[i], N[i + 1], N[i + 2])); }
-    if (filter && !filter(verts[0])) continue;
+    // (the corners as vertices only once a piece needs them)
+    let verts = null;
+    const mk = () => {
+      verts = [];
+      for (let k = 0; k < 3; k++) { const i = t + k * 3; verts.push(Float64Array.of(P[i], P[i + 1], P[i + 2], N[i], N[i + 1], N[i + 2])); }
+      return verts;
+    };
+    if (filter && !filter(mk()[0])) continue;
+    const a0 = (P[t] - o0) * u0 + (P[t + 1] - o1) * u1 + (P[t + 2] - o2) * u2, b0 = (P[t] - o0) * v0 + (P[t + 1] - o1) * v1 + (P[t + 2] - o2) * v2;
+    const a1 = (P[t + 3] - o0) * u0 + (P[t + 4] - o1) * u1 + (P[t + 5] - o2) * u2, b1 = (P[t + 3] - o0) * v0 + (P[t + 4] - o1) * v1 + (P[t + 5] - o2) * v2;
+    const a2 = (P[t + 6] - o0) * u0 + (P[t + 7] - o1) * u1 + (P[t + 8] - o2) * u2, b2 = (P[t + 6] - o0) * v0 + (P[t + 7] - o1) * v1 + (P[t + 8] - o2) * v2;
     for (const pc of pieces) {
       if (ta1 < pc.a0 || ta0 > pc.a1 || tb1 < pc.b0 || tb0 > pc.b1) continue;
-      let poly = verts;
       const c = pc.c;
-      for (let e = 0; e < c.length && poly.length >= 3; e++) {
+      // a triangle wholly inside or wholly outside one edge of the piece needs no clipping by it
+      // (the same sums as the clipping's test; this saves most of the garbage a car's decals made)
+      let inside = true, outside = false;
+      for (let e = 0; e < c.length; e++) {
+        const p0 = c[e], p1 = c[(e + 1) % c.length], ex = p1[0] - p0[0], ey = p1[1] - p0[1];
+        const s0 = ex * (b0 - p0[1]) - ey * (a0 - p0[0]) >= 0, s1 = ex * (b1 - p0[1]) - ey * (a1 - p0[0]) >= 0, s2 = ex * (b2 - p0[1]) - ey * (a2 - p0[0]) >= 0;
+        if (!s0 && !s1 && !s2) { outside = true; break; }
+        if (!(s0 && s1 && s2)) inside = false;
+      }
+      if (outside) continue;
+      let poly = verts || mk();
+      for (let e = 0; !inside && e < c.length && poly.length >= 3; e++) {
         const p0 = c[e], p1 = c[(e + 1) % c.length], ex = p1[0] - p0[0], ey = p1[1] - p0[1];
         poly = clipPolygon(poly, (q) => ex * (pb(q) - p0[1]) - ey * (pa(q) - p0[0]), false);
       }

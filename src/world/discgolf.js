@@ -1,8 +1,9 @@
 // Disc golf putting practice on the lawn of Sireli 7a: a basket, and a dad (40) with his two sons (8 and 6)
 // taking turns to putt, two discs each. The boys stand 8 m out and always hit the chains; the dad stands at
-// 12 m and misses now and then (wide, low into the cage, or off the top band). After six putts they walk in,
-// pick their discs out of the basket or off the grass, and walk back for the next round.
-// Everything is a pure function of the clock, so every player sees the same putt at the same moment.
+// 12 m and misses nine putts in ten (wide, low into the cage, or off the top band). After six putts they walk in,
+// pick their discs out of the basket or off the grass, walk back and start the next round straight away.
+// Everything is a pure function of the clock, so every player sees the same putt at the same moment: rounds are
+// chained back to back from midnight UTC (see `roundAt`).
 // Figures use the squatter's frame: facing -z, y up, metres, feet on y = 0.
 import * as THREE from 'three';
 import { span, bend } from './squatter.js';
@@ -15,13 +16,13 @@ const SKIN = 0xe9c2a8;
 
 const BASKET = at(-15.4, -1.9);
 const MUM = at(-9.05, 2.75);                      // her armchair on the terrace, turned to the basket
-const ROUND = 46, TURN = 2.8, THROW = 1.7, RELEASE = 0.6;       // s: a round, one putting turn, the putting move, release point (share of the move)
+const TURN = 2.8, THROW = 1.7, RELEASE = 0.6;       // s: one putting turn, the putting move, release point (share of the move)
 const CHAIN_Y = 1.02, TRAY_Y = 0.7;
 // who: where they putt from (house frame), height scale, speed of the disc and of the walk, clothes
 const PEOPLE = [
   { name: 'boy8', from: at(-23.2, -0.3), scale: 0.725, head: 1.2, disc: 7.6, walk: 1.3, shirt: 0xd8413a, shorts: 0x27304a, hair: 0xb98a45, discs: [0xff7a1a, 0xff4fa3] },
   { name: 'boy6', from: at(-22.9, -4.9), scale: 0.645, head: 1.27, disc: 7.2, walk: 1.15, shirt: 0xf2c81e, shorts: 0x5a5f6b, hair: 0x7a5a36, discs: [0x2f8fe6, 0xa6e22e] },
-  { name: 'dad', from: at(-27.2, -4.0), scale: 0.99, head: 1, disc: 9.2, walk: 1.55, shirt: 0x6d7f4e, shorts: 0x2b2e38, hair: 0x4a3a2c, cap: 0x2a2c33, discs: [0xf4f4f0, 0xe23a3a], misses: 0.4 },
+  { name: 'dad', from: at(-27.2, -4.0), scale: 0.99, head: 1, disc: 9.2, walk: 1.55, shirt: 0x6d7f4e, shorts: 0x2b2e38, hair: 0x4a3a2c, cap: 0x2a2c33, discs: [0xf4f4f0, 0xe23a3a], misses: 0.9 },
 ];
 const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 const ease = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
@@ -161,7 +162,7 @@ function buildDisc(color) {
 
 // ---------------------------------------------------------------- the round: who does what, when
 // Built once per round number (the dad's misses come from it); everything else reads it by time.
-function planRound(n, ground) {
+export function planRound(n, ground) {
   const B = BASKET, plan = { n, people: [], events: [] };
   const throwsOf = PEOPLE.map(() => []);
   for (let i = 0; i < 6; i++) {
@@ -215,9 +216,29 @@ function planRound(n, ground) {
     t += d / P.walk;
     segs.push({ t0: t, t1: t + 0.9, from: P.from, to: P.from, yaw0: yb, yaw1: home, turn: 1 });
     plan.people.push({ throws: throwsOf[pi], segs, home, dist: 0 });
+    plan.end = Math.max(plan.end || 0, t + 0.9);
   });
   plan.events.sort((a, b) => a.t - b.t);
+  // the next round starts as the last one back finishes turning round: the first putter's stance begins 0.3 s in
+  plan.len = plan.end - 0.3;
   return plan;
+}
+
+// Rounds follow each other with no wait, and a round's length depends on where the dad's misses land, so the
+// round at a moment is found by chaining rounds from midnight UTC. A round that would run past midnight is not
+// started: they stand ready until the new day's first round (once a day, under a minute).
+const DAY = 86400, flat = () => 0;
+const chain = { day: -1, j: 0, start: 0, len: 0 };
+function roundId(day, j) { return day * 4096 + j; }
+export function roundAt(now) {
+  const day = Math.floor(now / DAY), d0 = day * DAY;
+  if (chain.day !== day || now < chain.start) { chain.day = day; chain.j = 0; chain.start = d0; chain.len = planRound(roundId(day, 0), flat).len; }
+  while (now >= chain.start + chain.len) {
+    const next = chain.start + chain.len, len = planRound(roundId(day, chain.j + 1), flat).len;
+    if (next + len > d0 + DAY) break;
+    chain.j++; chain.start = next; chain.len = len;
+  }
+  return { n: roundId(day, chain.j), t: now - chain.start };
 }
 
 export function createDiscGolf(scene, world, audio, opts = {}) {
@@ -323,7 +344,7 @@ export function createDiscGolf(scene, world, audio, opts = {}) {
     if (!basket) build();
     group.visible = true;
     const now = window.__puttT ?? Date.now() / 1000;                // __puttT: test hook (seconds)
-    const n = Math.floor(now / ROUND), t = now - n * ROUND;
+    const { n, t } = roundAt(now);
     if (!plan || plan.n !== n) plan = planRound(n, ground);
     for (let pi = 0; pi < PEOPLE.length; pi++) person(pi, t);
     mum.update(now);

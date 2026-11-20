@@ -9,7 +9,7 @@ import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { setHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
-import { breakableShelter } from '../world/shelter.js';
+import { breakableShelter, shelterSolids } from '../world/shelter.js';
 
 const STOP = { i: 786, zig0: 779, zig1: 795, zigW: 1.7, wall0: 776, wall1: 800, wallOff: 3.7, shelterOff: 1.9 };
 const CENTRE = [1205, 2495];
@@ -175,7 +175,7 @@ export function createJakobiLai(world, group) {
       if (frame) { frame.castShadow = frame.receiveShadow = true; group.add(frame); }
       const box = { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 };
       breakableShelter(world, group, { box, y, H: Hs, frame, panes, glass: COL.glass, opacity: 0.32 });
-      solids.push(box);
+      solids.push(...shelterSolids(box));
       // (the bus stop sign before it is a prop that snaps off when hit: jakobiLaiProps)
     }
 

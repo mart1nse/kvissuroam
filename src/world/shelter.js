@@ -3,7 +3,7 @@
 // panel) bends away from the car, more the harder the hit (Martin, 20 Nov: much more at high speed, and a
 // frame already bent gives way more easily to the next hit), up to a limit where it is nearly flattened. Each hand-built shelter (Emajõe,
 // Lai, Kroonuaia) hands its frame and its panes to breakableShelter(); updateShelters() runs every frame
-// after the car has moved. The shelter stays a solid box for the car (the posts hold); the damage lasts
+// after the car has moved. The back and the ends stay solid for the car (the posts hold; shelterSolids); the damage lasts
 // until the page is loaded again.
 import * as THREE from 'three';
 import { stats } from '../stats.js';
@@ -25,10 +25,29 @@ const SHARDS = 150;         // pieces per pane
 // frame: a Mesh (vertex-coloured, world coordinates), bent as one piece
 // bendAlso: other meshes to bend with it (e.g. the advert); their transforms are baked into their vertices
 // panes: [{ a: [x, z], b: [x, z], y0, y1 }] vertical glass between two ground points
+// The solid parts of a shelter for the cars (Martin, 20 Nov: a car may nose a little way in from the open
+// side that faces the road): the back with the bench in front of it, and the two ends. In the box's own
+// axes (s along, n across, +n the back): [s0, s1, n0, n1]. The open front is at -n.
+const BACK = 0.6, END = 0.2;
+const pieces = (box) => [
+  [-box.hx, box.hx, box.hz - BACK, box.hz],
+  [-box.hx, -box.hx + END, -box.hz, box.hz],
+  [box.hx - END, box.hx, -box.hz, box.hz],
+];
+// ... as boxes for world.addSolids
+export function shelterSolids(box) {
+  const ux = Math.cos(box.yaw), uz = -Math.sin(box.yaw), nx = Math.sin(box.yaw), nz = Math.cos(box.yaw);
+  return pieces(box).map(([s0, s1, n0, n1]) => {
+    const s = (s0 + s1) / 2, n = (n0 + n1) / 2;
+    return { x: box.x + ux * s + nx * n, z: box.z + uz * s + nz * n, yaw: box.yaw, hx: (s1 - s0) / 2, hz: (n1 - n0) / 2 };
+  });
+}
+
 export function breakableShelter(world, group, { box, y, H, frame, bendAlso = [], panes, glass = 0xcfe6f2, opacity = 0.32 }) {
   const ux = Math.cos(box.yaw), uz = -Math.sin(box.yaw);          // along the shelter
   const nx = Math.sin(box.yaw), nz = Math.cos(box.yaw);           // across it
   const local = (x, z) => [(x - box.x) * ux + (z - box.z) * uz, (x - box.x) * nx + (z - box.z) * nz];
+  const solid = pieces(box);
 
   // ---- the frame and anything bent with it: remember where every vertex started
   const bent = [];
@@ -183,9 +202,11 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
       for (const [l, t] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1], [0.5, 1], [0.5, -1], [-0.5, 1], [-0.5, -1]]) {
         const px = car.x + fx * l * car.halfLen + rx * t * car.halfWid, pz = car.z + fz * l * car.halfLen + rz * t * car.halfWid;
         const [ls, ln] = local(px, pz);
-        const qs = Math.max(-box.hx, Math.min(box.hx, ls)), qn = Math.max(-box.hz, Math.min(box.hz, ln));
-        const d = Math.hypot(ls - qs, ln - qn);
-        if (d < best) { best = d; bx = box.x + ux * qs + nx * qn; bz = box.z + uz * qs + nz * qn; cx = px; cz = pz; }
+        for (const [s0, s1, n0, n1] of solid) {            // (the open front lets a car in: only the solid parts count)
+          const qs = Math.max(s0, Math.min(s1, ls)), qn = Math.max(n0, Math.min(n1, ln));
+          const d = Math.hypot(ls - qs, ln - qn);
+          if (d < best) { best = d; bx = box.x + ux * qs + nx * qn; bz = box.z + uz * qs + nz * qn; cx = px; cz = pz; }
+        }
       }
       if (best < 0.35) {
         // how fast it was closing on the box, and how much of that it lost against it

@@ -17,13 +17,16 @@ import { buildBus } from './bus.js';
 import { buildPassat, setSoot as setPassatSoot } from './passat.js';
 import { buildF31 } from './f31.js';
 import { buildModel3, buildAccord } from './saloons.js';
+import { buildCeedSW } from './ceed.js';
 
 export const CAR_IDS = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'f40', 'cgt', 'bus'];
 const BUILDERS = { w201: buildW201, crv: buildCRV, enyaq: buildEnyaq, rav4: buildRAV4, mazda6: buildMazda6, bz4x: buildBZ4X, f40: buildF40, audi200: buildAudi200, m3: buildM3, cgt: buildCGT, bus: buildBus, passat: buildPassat,
   // not drivable: the parked BMW on Jänese tänav (src/world/janese.js)
   f31: buildF31,
   // not drivable: parked saloons (src/world/parked.js)
-  model3: buildModel3, accord: buildAccord };
+  model3: buildModel3, accord: buildAccord,
+  // not drivable: parked Kia Ceed Sportswagon in Experience Green
+  ceedsw: buildCeedSW };
 
 // Returns a fresh model each call:
 // { group, wheels: { fl, fr, rl, rr: { steer, spin } }, wheelRadius, wheelbase, track,

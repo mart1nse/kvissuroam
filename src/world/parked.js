@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MeshoptSimplifier } from 'meshoptimizer';
 import { buildCarModel } from '../cars/models/index.js';
+import { CEED_GREEN } from '../cars/models/ceed.js';
 import { palAt } from '../cars/models/kit.js';
 import { CARS } from '../cars/specs.js';
 import { createTrack } from '../race/race.js';
@@ -29,6 +30,7 @@ import { ELVA_CARS } from './elva.js';
 const PAINT = {
   white: [0xe8e9e8, true], black: [0x0b0b0d], silver: [0xb3b7bc], grey: [0x3a3d42], bronze: [0x86704f],
   blue: [0x1d3c6e], red: [0x5a0f15], cyan: [0x1fa9cf], lilac: [0x50294e],
+  sage: [CEED_GREEN],                          // Kia's Experience Green, a muted grey-green
 };
 // the mix Martin asked for: mostly Passat, Mazda and RAV4, a few bZ4X and BMW, and (19 Nov) Tesla Model 3 and
 // 2010 Honda Accord saloons
@@ -39,8 +41,12 @@ const COLOURS = [['white', 20], ['black', 16], ['silver', 20], ['grey', 18], ['b
 const ONLY = { f31: ['cyan', 'white', 'black'], model3: ['white', 'black', 'blue'], accord: ['white', 'silver', 'black', 'blue'] };
 // the two or three Audis: which car of the list (in order) becomes one, and its colour
 const AUDIS = [[9, 'lilac'], [37, 'silver'], [61, 'black']];
+// Kia Ceed Sportswagons in Experience Green (Martin, 20 Nov), one in each of several car parks: by the columns
+// at Kaubamaja, the cross street north of the spawn, two in the river car park, Vallikraavi. (More stand
+// outside Elva 35b and at the Coop in Kvissentali, see elva.js and coop.js.)
+const KIAS = [14, 46, 70, 104, 117];
 const OPTS = { passat: { scan: false }, audi200: { scan: false }, enyaq: { rack: false } };
-const MASS = { f31: 1580, model3: 1850, accord: 1530 };
+const MASS = { f31: 1580, model3: 1850, accord: 1530, ceedsw: 1390 };
 // buses at stops (bus stop places from OpenStreetMap, moved to the kerb seen in the orthophoto):
 // x, z, heading. Ten in the centre and one at Klaose in Kvissentali.
 const BUS_STOPS = [
@@ -84,6 +90,7 @@ function allSpots() {
     s.paint = only ? only[(turn[s.id] = (turn[s.id] ?? -1) + 1) % only.length] : paints[i];
   });
   for (const [k, paint] of AUDIS) if (out[k]) Object.assign(out[k], { id: 'audi200', paint });
+  for (const k of KIAS) if (out[k]) Object.assign(out[k], { id: 'ceedsw', paint: 'sage' });
   uueturuParked().forEach((c, i) => out.push({ key: `u${i}`, ...c }));
   AKSI_CARS.forEach(([x, z, yaw, id, paint], i) => out.push({ key: `a${i}`, x, z, yaw, id, paint }));
   SIRELI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `s${i}`, x, z, yaw, id, paint, lift }));

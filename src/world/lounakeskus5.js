@@ -42,7 +42,7 @@ export function lounakeskus5Walls(walls) {
     { base: 4039, x: -123.6, z: 4876.8, wall: 0xbeaa8c, roof: 0x7a4a3a, reach: 11.8 },   // vapra4a
   ]);
   setHouseColours(walls, S08, -800, 4320, [
-    { base: 4088, x: -179.6, z: 4893.6, wall: 0xeeece6, roof: 0x6a3b32, reach: 11.8 },   // riia114
+    { base: 4088, x: -179.6, z: 4893.6, wall: 0x802628, roof: 0x3d3a3a, reach: 11.8 },   // riia114: dark red boards (Street View "114")
     { base: 4093, x: -173.4, z: 4827.7, wall: 0xf0eee8, roof: 0xb03a2e, reach: 15.4 },   // riia125
     { base: 4106, x: -189, z: 4841.5, wall: 0xdeceb4, roof: 0x8e3a33, reach: 9.1 },   // riia127
     { base: 4112, x: -197.9, z: 4914.4, wall: 0xdcd2be, roof: 0x6b6d70, reach: 15.6 },   // riia116
@@ -59,7 +59,7 @@ export function lounakeskus5Walls(walls) {
   ]);
   setHouseColours(walls, S09, -800, 4960, [
     { base: 3935, x: -291.9, z: 4973.8, wall: 0x404248, roof: 0x2f3034, reach: 14.0 },   // riia120a
-    { base: 4202, x: -323.1, z: 5004.3, wall: 0xeeece6, roof: 0xa83a32, reach: 10.8 },   // riia122
+    { base: 4202, x: -323.1, z: 5004.3, wall: 0xdcd0aa, roof: 0x7a4a3c, reach: 10.8 },   // riia122: cream boards (Street View "122 Riia")
     { base: 4228, x: -350.4, z: 5039.9, wall: 0xe6e6e2, roof: 0x55585c, reach: 13.5 },   // riia124
     { base: 4248, x: -368.9, z: 5061.1, wall: 0xecece8, roof: 0xa3a7ab, reach: 12.5 },   // riia126
     { base: 4369, x: -425.8, z: 5101.3, wall: 0xece4d2, roof: 0xa8443a, reach: 21.7 },   // riia128
@@ -107,7 +107,7 @@ function houses() {
     house('vapra6', S18, 4064, [-152.2, 4810.9], 13.8, plaster([236, 236, 232], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-146.2, 4819.1], within: 2, doors: [{ x: 2.8, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia112', S18, 4097, [-137.9, 4888.3], 12.5, plaster([224, 222, 214], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-143.1, 4880.9], within: 2, doors: [{ x: 2.4, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('vapra4a', S18, 4039, [-123.6, 4876.8], 11.8, boards([190, 170, 140], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), []),
-    house('riia114', S08, 4088, [-179.6, 4893.6], 11.8, plaster([238, 236, 230], { storey: 2.8, maxFloors: 2, win: old(), attic: null }), [{ near: [-180.0, 4888.3], within: 2, doors: [{ x: 3.5, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
+    house('riia114', S08, 4088, [-179.6, 4893.6], 11.8, boards([128, 38, 40], { trim: '#f4f2ec', storey: 2.8, maxFloors: 2, win: old(), attic: null }), [{ near: [-180.0, 4888.3], within: 2, doors: [{ x: 3.5, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia125', S08, 4093, [-173.4, 4827.7], 15.4, plaster([240, 238, 232], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-170.8, 4836.9], within: 2, doors: [{ x: 3.6, w: 1.0, h: 2.1, col: '#6b4c3a', steps: 2 }] }]),
     house('riia127', S08, 4106, [-189, 4841.5], 9.1, plaster([222, 206, 180], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), []),
     house('riia116', S08, 4112, [-197.9, 4914.4], 15.6, plaster([220, 210, 190], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-206.5, 4906.1], within: 2, doors: [{ x: 3.1, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
@@ -122,7 +122,7 @@ function houses() {
     house('riia163', S08, 4151, [-319, 4934.7], 11.2, plaster([222, 210, 186], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-317.7, 4939.6], within: 2, doors: [{ x: 3.0, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia165', S08, 4161, [-339.4, 4945.4], 14.5, plaster([228, 222, 210], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-337.5, 4953.5], within: 2, doors: [{ x: 3.8, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia120a', S09, 3935, [-291.9, 4973.8], 14.0, plaster([64, 66, 72], { storey: 2.8, maxFloors: 2, win: dark(), attic: null }), [{ near: [-297.1, 4970.3], within: 2, doors: [{ x: 3.5, w: 1.0, h: 2.1, col: '#2b2c30', steps: 2 }] }]),
-    house('riia122', S09, 4202, [-323.1, 5004.3], 10.8, plaster([238, 236, 230], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-329.9, 5001.7], within: 2, doors: [{ x: 2.7, w: 1.0, h: 2.1, col: '#6b4c3a', steps: 2 }] }]),
+    house('riia122', S09, 4202, [-323.1, 5004.3], 10.8, boards([222, 208, 170], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-329.9, 5001.7], within: 2, doors: [{ x: 2.7, w: 1.0, h: 2.1, col: '#6b4c3a', steps: 2 }] }]),
     house('riia124', S09, 4228, [-350.4, 5039.9], 13.5, plaster([230, 230, 226], { storey: 2.8, maxFloors: 2, win: dark(), attic: null }), [{ near: [-356.9, 5040.6], within: 2, doors: [{ x: 3.3, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia126', S09, 4248, [-368.9, 5061.1], 12.5, plaster([236, 236, 232], { storey: 2.8, maxFloors: 1, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [-374.5, 5057.4], within: 2, doors: [{ x: 3.6, w: 1.0, h: 2.1, col: '#5b5f66', steps: 2 }] }]),
     house('riia128', S09, 4369, [-425.8, 5101.3], 21.7, plaster([236, 228, 210], { storey: 2.8, maxFloors: 2, win: old(), attic: null }), [{ near: [-429.9, 5096.2], within: 3, draw: shopFront }]),

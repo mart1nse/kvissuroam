@@ -132,7 +132,8 @@ function atlasTex() {
 }
 
 // ---------------------------------------------------------------- the car
-export function buildM3() {
+// scan: false keeps the drawn body (parked ones on phones: no scanned body to load and hold)
+export function buildM3({ scan = true } = {}) {
   const ZC = -0.76, ZH = 0.0;                 // cowl and windscreen header
   // rear glass: roof edge and bottom edge. Measured off a true side view: the roof crowns about 0.45 m behind
   // the B-pillar and runs in one long, nearly straight fall to a short boot deck just over a metre up
@@ -302,5 +303,7 @@ export function buildM3() {
   const wheelFront = { soup: mWheel(0.327, 0.245, 0.2413 + 0.012, 0.014) };
   const car = assembleCar({ id: 'm3', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   // the procedural body shows until the scanned body (public/models/m3.glb) has loaded
-  return useGlbBody(tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 }), 'm3.glb', { liner: { r: 0.5, len: 0.42, inset: 0.12, gap: 0.004 }, wheelOut: { front: 0.02, rear: 0.035 } });
+  tintPaint(car, 'm3', PAINT, { metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
+  if (!scan) return car;
+  return useGlbBody(car, 'm3.glb', { liner: { r: 0.5, len: 0.42, inset: 0.12, gap: 0.004 }, wheelOut: { front: 0.02, rear: 0.035 } });
 }

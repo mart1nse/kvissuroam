@@ -514,6 +514,24 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
 #options { position: fixed; z-index: 9; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(10px, env(safe-area-inset-right)); width: min(330px, 90vw); padding: 14px 16px 12px;
   background: rgba(18, 6, 43, .9); border: 1.5px solid rgba(47, 243, 255, .7); border-radius: 6px; box-shadow: 0 0 18px rgba(47, 243, 255, .3); pointer-events: auto; }
 #options.hidden { display: none; }
+/* never taller than the window: what does not fit scrolls (one finger drag, see the touchmove guard in main.js) */
+#options { max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - 70px - max(8px, env(safe-area-inset-bottom)));
+  overflow-y: auto; overscroll-behavior: contain; }
+#options, #options * { touch-action: pan-y; }
+/* phones (landscape, often only 300-390 px tall): no keyboard or controller rows (so no section headings either), tighter spacing, right under the
+   top buttons (clamp(44px, 6vw, 60px) tall), and the pedals step aside while the panel is open so taps reach it */
+body.touch #options { top: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px) + 6px); width: min(300px, 60vw); padding: 8px 12px;
+  max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - clamp(44px, 6vw, 60px) - 6px - max(6px, env(safe-area-inset-bottom))); }
+body.touch #options .optctl { display: none; }
+body.touch #options .optctl + h4 { display: none; }
+body.touch #options h3 { margin-bottom: 6px; font-size: 12px; }
+body.touch #options h4 { margin-bottom: 4px; }
+body.touch #options .opt small { margin-top: 2px; font-size: 10px; line-height: 1.3; }
+body.touch #options .seg { margin-top: 6px; }
+body.touch #options .seg button { padding: 7px 0; }
+body.touch #options #opt-gfxnow { margin: 5px 0 6px; font-size: 10px; }
+body.touch #options .optwarn { margin-bottom: 6px; font-size: 10px; }
+body.touch:has(#options:not(.hidden)) #touch { visibility: hidden; }
 #options h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .24em; font-style: italic; color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
 #options .opt { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 #options .opt input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--hot); flex-shrink: 0; }
@@ -523,7 +541,7 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
 #options button { padding: 6px 16px; font-size: 11px; letter-spacing: .2em; }
 #options .gfx { margin-top: 4px; cursor: default; }
 #options h4 { margin: 14px 0 8px; padding-top: 10px; border-top: 1px solid rgba(255, 95, 162, .3); font-size: 10px; letter-spacing: .26em; color: var(--pink); }
-#options h3 + h4 { margin-top: 0; padding-top: 0; border-top: 0; }
+#options h3 + h4, #options h3 + .optctl > h4:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 #options .opt { cursor: default; }
 #options #opt-keys { margin-bottom: 4px; }
 #options .seg { display: flex; gap: 4px; margin: 8px 0 0; }

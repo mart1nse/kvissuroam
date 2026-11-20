@@ -911,7 +911,7 @@ function showGfx(force) {
   const m = gfx.meter;
   const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)}${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms)`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -1110,6 +1110,9 @@ document.addEventListener('visibilitychange', () => {
 
 // what is driving the car: keyboard, gamepad, steering wheel or touch screen
 const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
+let capTold = false;             // the "held at 30 FPS" message has been shown
+// (the charger going in or out changes what a battery saver allows: auto graphics judges afresh)
+navigator.getBattery?.().then((bat) => bat.addEventListener('chargingchange', () => gfx.recheck())).catch(() => {});
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
 // Screens faster than 90 Hz (120, 144, 165 Hz laptops): only every 2nd (or 3rd) refresh is drawn, except
 // on HIGH. Otherwise the graphics chip of such a laptop runs flat out even on LOW (Martin, 20 Nov: built-in
@@ -1448,6 +1451,14 @@ function frame(ts) {
     }
   }
   if (ch) console.info(`graphics: rung ${ch.from} -> ${ch.to} (${ch.why}, ${gfx.fps.toFixed(0)} fps)`);
+  // Less detail did not make it faster: something outside the game holds the frame rate, most often a
+  // battery saver (Chrome's Energy Saver and the phones' low power modes give 30). Say so once: a player
+  // sees only that the game is not smooth (Martin's MacBook on a low battery, 20 Nov).
+  if (ch?.why === 'no gain' && gfx.capped && gfx.capped < 50 && !capTold) {
+    capTold = true;
+    stats.trouble('cap');
+    if (mode === 'drive') hud.toast(isTouch ? `YOUR PHONE HOLDS THE GAME AT ${Math.round(gfx.capped)} FPS · LOW POWER MODE?` : `YOUR BROWSER HOLDS THE GAME AT ${Math.round(gfx.capped)} FPS · BATTERY SAVER? PLUG IN THE CHARGER`, 7000);
+  }
   if (!optEl.classList.contains('hidden')) showGfx();
 }
 

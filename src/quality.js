@@ -58,6 +58,7 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
   let lastUp = -1e9, clock = 0, before = 0, beforeGpu = 0, judgeAfter = false, preFlat = level, stepFrom = level;
   const fails = new Array(levels).fill(0), barredUntil = new Array(levels).fill(0);
   let fps = 0;
+  let capFps = 0;                  // the rate the browser or the system holds the game at, once found (see 'no gain')
 
   function move(to, why) {
     const from = level;
@@ -74,6 +75,8 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
   // card close to its limit counts as slow too, and a rung is only climbed when the card has room for it.
   function verdict(median, spread, gpu) {
     fps = 1000 / median;
+    // the cap has gone (the charger was plugged in, the battery saver switched off): judge freely again
+    if (capFps && fps > capFps * 1.25) { capFps = 0; floor = 0; }
     if (fps > bestFps) bestFps = Math.min(240, fps);
     const downAt = Math.min(42, bestFps * 0.72), upAt = Math.min(57, bestFps * 0.93);
     const budget = 1000 / bestFps, load = gpu == null ? null : gpu / budget;
@@ -92,6 +95,7 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
           flat = 0;
           floor = preFlat;
           bestFps = fps;
+          capFps = fps;
           return move(preFlat, 'no gain');
         }
       } else { flat = 0; preFlat = level; }
@@ -127,6 +131,11 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
 
   return {
     get level() { return level; }, get fps() { return fps; }, get ceiling() { return ceiling; }, get floor() { return floor; },
+    // the frame rate something outside the game holds it at (a browser's or phone's battery saver gives
+    // 30), found when three steps down in detail did not speed it up; 0 when there is no such cap
+    get capped() { return capFps; },
+    // what holds the frame rate may have changed (the charger went in or out): forget the cap and judge afresh
+    recheck() { if (!capFps) return; capFps = 0; floor = 0; bestFps = 60; flat = 0; lowRun = highRun = 0; },
     hold(s) { holdMs = Math.max(holdMs, s * 1000); buf = []; sum = 0; gbuf = []; },
     // ms: the frame's length; gpuMs: the graphics card's time for it if known.
     // Returns { from, to, why } when the level changes.
@@ -318,9 +327,11 @@ export function createQuality(hooks, caps, opts = {}) {
   return {
     levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
     get auto() { return mode === 'auto' && auto; }, get cap() { return cap < top ? cap : null; }, crashed,
+    get capped() { return mode === 'auto' && auto ? gov.capped : 0; },
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
     hold(s) { gov.hold(s); },
+    recheck() { gov.recheck(); },
     // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
     // browser and the graphics card), kept as a running average for the readout
     frame(ms, jsMs = 0, gpuMs = null) {

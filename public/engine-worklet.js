@@ -169,8 +169,10 @@ export class EngineCore {
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
       // (per car: yank, the size of the swing, and yankHz, how fast it swings; a slower one dies slower.
-      // yankTight (1st to 2nd): the gear snaps in, the swing 60 % faster and over in half the time)
-      const c = this.cfg, ti = this.yTi || 0, hz0 = c.yankHz ?? 8.2, hz = hz0 * (1 + 0.6 * ti), a = this.yA * (c.yank ?? 0.55);
+      // yankTight (1st to 2nd): the gear snaps in, the swing 60 % faster and over in half the time, and
+      // per car yankFirst times the size)
+      const c = this.cfg, ti = this.yTi || 0, hz0 = c.yankHz ?? 8.2, hz = hz0 * (1 + 0.6 * ti);
+      const a = this.yA * (c.yank ?? 0.55) * (ti ? c.yankFirst ?? 1 : 1);
       const env = Math.exp(-this.yT / (0.08 * 8.2 / hz0 / (1 + ti))), sw = Math.cos(6.2832 * hz * this.yT);
       yOff = a * env * sw;
       this.yk = Math.min(1, a / I.redline * 5) * env * sw;

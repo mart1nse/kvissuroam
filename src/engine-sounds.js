@@ -22,7 +22,7 @@
 //          howl, howlTeeth: level and pitch (teeth per crank turn) of the gear howl when over-revved.
 // yank, yankHz: size (x the revs still to come down) and rate of the swing as an upshift's gear wrenches
 //          the revs down (defaults 0.55 and 8.2 Hz; Martin 2026-11-19 found 1 too much beside the
-//          softer hit).
+//          softer hit); yankFirst: the size of 1st to 2nd's, x (default 1).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
@@ -32,11 +32,13 @@ export const ENGINE_SOUNDS = {
     seed: 201, order: [1, 5, 3, 6, 2, 4], banks: [0, 0, 0, 1, 1, 1],
     pipes: [{ len: 1.6, fb: -0.42, damp: 0.45 }, { len: 1.66, fb: -0.42, damp: 0.45 }],
     res: [[95, 1.4, 0.7], [205, 2.2, 0.45], [480, 3, 0.18], [1150, 3, 0.06]], dry: 0.35,
-    lp0: 260, lpRpm: 120, lpLoad: 520, hp: 26,
+    lp0: 260, lpRpm: 130, lpLoad: 680, hp: 26,
     base: 0.4, overrun: 0.8, pulseDeg: 40, noise: 0.08, rough: 0.035, bias: 0.025,
-    intake: 0.22, intakeF: 420, intakeQ: 1.4, tick: 0.012, tickF: 3800,
-    jitter: 0.8, lope: 6, drive: 1.3, gain: 0.85, idleVol: 0.3,
-    edge: 0.25, rasp: 0.12,
+    intake: 0.26, intakeF: 420, intakeQ: 1.4, tick: 0.012, tickF: 3800,
+    jitter: 0.8, lope: 6, drive: 1.6, gain: 0.9, idleVol: 0.3,
+    // (more growl under load, so it breaks through, Martin 2026-11-20: the edge and rasp up, driven harder,
+    // and a little more of the top let out when it pulls)
+    edge: 0.36, rasp: 0.22,
   },
   // VW AFN: 1.9 litre 8-valve TDI four, 1-3-4-2, direct injection with a variable-vane turbo. A hard,
   // knocking diesel clatter at idle (the injectors and the combustion itself), a gruff low drone under load
@@ -109,6 +111,7 @@ export const ENGINE_SOUNDS = {
   // almost no silencing: a clean, hard, very high wail with a loud induction howl right behind the seats.
   cgt: {
     yankHz: 6.6,                  // (a slower struggle than the others', Martin 2026-11-19)
+    yankFirst: 0.75,              // (and 1st to 2nd still wobbled: a touch smaller, Martin 2026-11-20)
     seed: 980, order: [1, 6, 5, 10, 2, 7, 3, 8, 4, 9], banks: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
     fireAt: [0, 68, 144, 212, 288, 356, 432, 500, 576, 644],
     pipes: [{ len: 0.74, fb: -0.52, damp: 0.66 }, { len: 0.78, fb: -0.52, damp: 0.66 }],
@@ -124,15 +127,17 @@ export const ENGINE_SOUNDS = {
   // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
   // quattro rally cars, rounded off by the turbo.
   audi200: {
-    seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 7,
+    seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 9,
     pipes: [{ len: 1.5, fb: -0.44, damp: 0.46 }],
     res: [[105, 1.4, 0.62], [235, 2.2, 0.5], [560, 2.6, 0.32], [1250, 3, 0.1]], dry: 0.4,
-    lp0: 300, lpRpm: 150, lpLoad: 820, hp: 30,
-    base: 0.4, overrun: 0.8, pulseDeg: 34, noise: 0.1, rough: 0.05, bias: 0.16,
-    intake: 0.3, intakeF: 600, intakeQ: 1.3, tick: 0.02, tickF: 4200,
-    jitter: 1.2, lope: 9, drive: 1.7, gain: 0.8, idleVol: 0.3,
-    edge: 0.4, rasp: 0.3,
-    turbo: true, turboMuffle: 220, hiss: 0.02, whistle: 0.5, whistleF: 1.1,
+    lp0: 300, lpRpm: 165, lpLoad: 1000, hp: 30,
+    base: 0.4, overrun: 0.8, pulseDeg: 34, noise: 0.1, rough: 0.05, bias: 0.25,
+    intake: 0.34, intakeF: 600, intakeQ: 1.3, tick: 0.02, tickF: 4200,
+    jitter: 1.2, lope: 9, drive: 2.0, gain: 0.95, idleVol: 0.3,
+    // (the five-cylinder warble more to the fore, Martin 2026-11-20: the cylinders a little more unlike
+    // each other and further off the even beat, more edge and rasp, driven harder and a touch brighter)
+    edge: 0.55, rasp: 0.5,
+    turbo: true, turboMuffle: 170, hiss: 0.02, whistle: 0.5, whistleF: 1.1,
   },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy

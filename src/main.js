@@ -357,6 +357,8 @@ async function boot() {
       if (kind === 'join' || kind === 'leave') audio.chime?.(kind);
       people?.event(kind, name, old);
     },
+    // our lap timer is running: the others see it and their cars pass through ours
+    hotlap: () => !!race?.running && mode === 'drive',
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({

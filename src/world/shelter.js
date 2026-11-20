@@ -1,6 +1,7 @@
 // Bus shelters that a car can damage (Martin, 19 Nov): hit one and the glass panes near the impact burst
 // into small pieces that rain onto the pavement and stay there, and the frame (posts, roof, bench, advert
-// panel) bends away from the car, more the harder the hit, up to a limit. Each hand-built shelter (Emajõe,
+// panel) bends away from the car, more the harder the hit (Martin, 20 Nov: much more at high speed, and a
+// frame already bent gives way more easily to the next hit), up to a limit where it is nearly flattened. Each hand-built shelter (Emajõe,
 // Lai, Kroonuaia) hands its frame and its panes to breakableShelter(); updateShelters() runs every frame
 // after the car has moved. The shelter stays a solid box for the car (the posts hold); the damage lasts
 // until the page is loaded again.
@@ -10,8 +11,13 @@ import { stats } from '../stats.js';
 const shelters = [];
 const SHATTER = 2.2;        // m/s into the shelter: below this the frame only shakes and bends a touch
 const ALL = 7.5;            // m/s: every pane goes
-const BEND_MAX = 0.42;      // m, how far the top of the frame can be pushed over in all
-const REACH = 2.3;          // m along the shelter: how far the bend spreads either side of the impact
+const BEND_MAX = 2.2;       // m, how far the top of the frame can be pushed over in all (2.45 m high: nearly flat)
+const BEND_HIT = 1.4;       // m, the most one hit can push it
+const REACH = 2.3;          // m along the shelter: how far the bend spreads either side of a slow impact
+// how far one hit at speed v (m/s into the shelter) pushes the top over: grows with the energy, so
+// 5 m/s about 0.17 m, 10 m/s about 0.6 m, 15 m/s about 1.4 m; a frame bent already gives way more
+// (bent half a metre, the next hit bends it 1.6 times as far)
+const bendFor = (v, bent) => Math.min(BEND_HIT, (0.02 + 0.006 * v * v) * (1 + 1.2 * Math.min(bent, 1.5)));
 const SHARDS = 150;         // pieces per pane
 
 // box: { x, z, yaw, hx, hz } the shelter's footprint as given to world.addSolids (local x = cos yaw, -sin yaw)
@@ -92,8 +98,9 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
 
   function hit(px, pz, dirX, dirZ, speed, sound) {
     const sHit = local(px, pz)[0];
-    const amount = Math.min(BEND_MAX - total, 0.012 + 0.03 * Math.max(0, speed - 1.5));
-    if (amount > 0.002) { total += amount; hits.push({ dx: dirX * amount, dz: dirZ * amount, s: sHit, t: 0 }); }
+    const amount = Math.min(BEND_MAX - total, bendFor(Math.max(0, speed - 0.5), total));
+    // a harder hit bends a longer stretch of the frame
+    if (amount > 0.002) { total += amount; hits.push({ dx: dirX * amount, dz: dirZ * amount, s: sHit, r: REACH * Math.min(2.2, 0.85 + speed / 12), t: 0 }); }
     let broke = 0;
     for (const q of P) {
       if (q.broken) continue;
@@ -104,28 +111,37 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     stats.smash('glass', broke);
   }
 
+  // (a hit that has settled is folded into each mesh's settled offsets and dropped, so many hits in a row
+  // cost no more per frame than one)
   function bendFrames(dt) {
     let busy = false;
-    for (const h of hits) if (h.t < 0.9) { h.t += dt; busy = true; }
+    for (const h of hits) { h.t += dt; busy = true; }
     if (!busy) return;
     for (const B of bent) {
       const pos = B.m.geometry.attributes.position, a = pos.array, base = B.base;
+      const set = (B.set ||= new Float32Array(pos.count * 3));
       for (let k = 0; k < pos.count; k++) {
         const up = Math.max(0, Math.min(1, (base[k * 3 + 1] - y) / H)) ** 1.4;
         if (up === 0) { a[k * 3] = base[k * 3]; a[k * 3 + 1] = base[k * 3 + 1]; a[k * 3 + 2] = base[k * 3 + 2]; continue; }
-        let ox = 0, oy = 0, oz = 0;
+        let ox = set[k * 3], oy = set[k * 3 + 1], oz = set[k * 3 + 2];
         for (const h of hits) {
-          const e = Math.min(1, 1 - Math.exp(-h.t * 22) * Math.cos(h.t * 34));            // eases in, wobbles once
-          const f = Math.exp(-(((B.s[k] - h.s) / REACH) ** 2)) * up * e;
-          ox += h.dx * f; oz += h.dz * f;
-          oy -= Math.hypot(h.dx, h.dz) * 0.35 * f * up;                                     // the roof sags where it is pushed
+          const done = h.t >= 0.9;
+          const e = done ? 1 : Math.min(1, 1 - Math.exp(-h.t * 22) * Math.cos(h.t * 34));   // eases in, wobbles once
+          const f = Math.exp(-(((B.s[k] - h.s) / h.r) ** 2)) * up * e;
+          const sag = Math.hypot(h.dx, h.dz) * 0.2 * f * up;                                 // the roof sags where it is pushed
+          ox += h.dx * f; oz += h.dz * f; oy -= sag;
+          if (done) { set[k * 3] += h.dx * f; set[k * 3 + 1] -= sag; set[k * 3 + 2] += h.dz * f; }
         }
+        // the posts lean over rather than stretch: what is pushed sideways comes down as well
+        const rise = base[k * 3 + 1] - y, side = Math.hypot(ox, oz);
+        if (rise > 0 && side > 0) oy -= rise - Math.sqrt(Math.max(rise * rise * 0.04, rise * rise - side * side));
         a[k * 3] = base[k * 3] + ox; a[k * 3 + 1] = base[k * 3 + 1] + oy; a[k * 3 + 2] = base[k * 3 + 2] + oz;
       }
       pos.needsUpdate = true;
       B.m.geometry.computeVertexNormals();
       B.m.geometry.computeBoundingSphere();
     }
+    for (let i = hits.length - 1; i >= 0; i--) if (hits[i].t >= 0.9) hits.splice(i, 1);
   }
 
   function moveShards(dt) {
@@ -192,7 +208,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     if (!settled) {
       bendFrames(dt);
       const moving = moveShards(dt);
-      if (!moving && hits.every((h) => h.t >= 0.9)) settled = true;
+      if (!moving && hits.length === 0) settled = true;
     }
   }
 

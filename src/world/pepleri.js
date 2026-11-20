@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { createTrack } from '../race/race.js';
 import { setHouseColours, leafyPlants, streetKit } from './streetkit.js';
+import { paintScale } from './paintscale.js';
 
 const CENTRE = [1150, 3340];
 const COL = {
@@ -92,7 +93,7 @@ export const PEPLERI_CARS = [
 // ---------------------------------------------------------------- painted walls
 // A picture of a wall drawn in metres (x along it, y up from its foot).
 function painting(wm, hm, draw) {
-  const ppm = Math.min(44, 2048 / wm, 2048 / hm);
+  const ppm = Math.min(44 * paintScale(), 2048 / wm, 2048 / hm);
   const cv = document.createElement('canvas');
   cv.width = Math.max(4, Math.round(wm * ppm)); cv.height = Math.max(4, Math.round(hm * ppm));
   const c = cv.getContext('2d');

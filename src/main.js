@@ -47,6 +47,7 @@ import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
 import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
 import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
+import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createSigns } from './world/signs.js';
@@ -77,6 +78,7 @@ import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
+import { setPaintScale } from './world/paintscale.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -141,10 +143,14 @@ const lowRung = () => { const l = gfx.levels[gfx.level]; return !!l && l.dpr < M
 let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 'asked for with ?lite'
   : navigator.webdriver ? '' : weakDesktop(gpu) || (lowRung() ? (gfx.mode === 'auto' ? 'slow last time' : 'graphics set low') : '');
 const lite = isTouch || !!liteWhy;
+// light mode paints the hand-built house fronts, shop signs and walls with fewer pixels per metre
+// (0.6 each way: a third of the memory). ?paint=1 keeps them full; ?paint=0.5 tries another scale.
+if (params.has('paint')) setPaintScale(+params.get('paint') || 1);
+else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
 stats.start({ isTouch, lite, software: gpu.software });
-canvas.addEventListener('webglcontextlost', () => stats.count('glLost'));
+canvas.addEventListener('webglcontextlost', () => stats.trouble('glLost'));
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -163,7 +169,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, riia, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -244,6 +250,7 @@ async function boot() {
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line
   keskusTeeVectors(world.vectors);              // Küüni by Kaubamaja is a pedestrian street: no lane lines
+  riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
@@ -261,6 +268,7 @@ async function boot() {
   vanemuiseWalls(world.walls);                  // and Vanemuise from Akadeemia to the theatre
   korveWalls(world.walls);                      // and Kõrveküla's south approach (Rähni, road 210, the centre)
   korve2Walls(world.walls);                     // and Kõrveküla's school, Kooli tn and the Hariduse tn corner
+  riiaWalls(world.walls);                       // and Riia tänav from Küüni towards Pepleri
   korve3Walls(world.walls);                     // and the Kubjaringi green and Hariduse tn by the pond
   korve4Walls(world.walls);                     // and the old Hariduse tn row east of the pond, Pärna 33
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
@@ -331,6 +339,7 @@ async function boot() {
   vanemuise = createVanemuise(scene, world, { shadows: !isTouch });
   korve = createKorvekula(scene, world, { shadows: !isTouch });
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
+  riia = createRiia(scene, world, { shadows: !isTouch });
   korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
@@ -495,6 +504,20 @@ function playerArrow(ctx, k, colour = '#2ff3ff') {
   ctx.stroke(); ctx.fill();
 }
 
+// The car being swapped out is freed from the graphics card (its geometry, materials and pictures).
+// Each car change used to keep the old car's model there: a few cars tried in the garage on a phone
+// added up. Anything it shared with another car is simply uploaded again when that car is drawn.
+function freeModel(group) {
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m) continue;
+      for (const k in m) if (m[k]?.isTexture) m[k].dispose();
+      m.dispose();
+    }
+  });
+}
 function setCar(id, now = false) {
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
@@ -511,7 +534,7 @@ function setCar(id, now = false) {
   const spec = CARS[id];
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
-  if (model) scene.remove(model.group);
+  if (model) { scene.remove(model.group); freeModel(model.group); }
   try {
     model = buildCarModel ? buildCarModel(id) : buildPlaceholder(spec);
   } catch (err) {
@@ -603,6 +626,7 @@ function openGarage() {
   if (mode !== 'drive') return;
   drivenOnce = true;
   stats.count('garage');
+  stats.phase('menu');
   board?.hide(); optEl.classList.add('hidden');
   closeMap();
   mode = 'menu';
@@ -1051,6 +1075,7 @@ function frame(ts) {
     vanemuise.update(car);
     korve.update(car);
     korve2.update(car);
+    riia.update(car);
     korve3.update(car);
     korve4.update(car);
     skids.update(car);

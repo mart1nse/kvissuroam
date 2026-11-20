@@ -40,6 +40,7 @@ export const HAND_PLACES = [
   { name: 'Turu tänav, AHHAA and Tigutorn', x: 2150, z: 3220, r: 110 },
   { name: 'Riia tänav, Riia Kvartal to Pauluse church', x: 1201.6, z: 3745.6, r: 230 },
   { name: 'Riia tänav, Kastani to the railway bridge', x: 948.8, z: 3957.5, r: 175 },
+  { name: 'Riia tänav, Lembitu to Väike kaar', x: 726.7, z: 4143.7, r: 160 },
 ];
 
 // segments of the road centre lines in a coarse grid

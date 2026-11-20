@@ -17,8 +17,8 @@ export function frame(O, U) {
 }
 
 // The kit for one area's build. Everything is collected and merged in finish().
-export function areaKit(world, group, { shadows = true } = {}) {
-  const K = streetKit(world, group, { shadows, fenceColour: 0x6b6d72 });
+export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 } = {}) {
+  const K = streetKit(world, group, { shadows, fenceColour });
   const { p } = K;
   const h = (x, z) => world.heightAt(x, z);
   const T = groundTextures();

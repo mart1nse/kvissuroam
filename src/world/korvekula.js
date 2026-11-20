@@ -131,8 +131,10 @@ export function createKorvekula(scene, world, { shadows = true } = {}) {
 
   // the young spruces planted in rows between road 210 and the cycle path, north of the highway
   const plant = [];
+  // (they start 1.8 m behind the east edge of the painted road: centre line from the fork to (3626.1, -1505.4), 11.4 m wide)
+  const edge210 = (z) => 3626.1 + (z + 1505.4) * 0.2975 + 5.95;
   for (let z = -1503; z < -1462; z += 2.9) {
-    const xa = 3633.5 + (z + 1505) * 0.17, xb = 3649.5 + (z + 1505) * 0.37;
+    const xa = edge210(z) + 1.8, xb = 3649.5 + (z + 1505) * 0.37;
     for (let x = xa + ((z * 7) % 1.4 + 1.4) % 1.4; x < xb; x += 2.8) plant.push([x, z, 1.9 + ((x * 13 + z * 7) % 1.3 + 1.3) % 1.3, 1.1, 1]);
   }
   world.addTrees(plant);
@@ -193,7 +195,7 @@ export function createKorvekula(scene, world, { shadows = true } = {}) {
       };
       teeth([3636.8, -1425.4], [3642.4, -1426.2]);                     // the left branch, at the highway
     }
-    A.guardrail([[3638.6, -1480.0], [3640.0, -1470.0], [3642.0, -1462.0], [3645.6, -1457.0], [3650.4, -1452.0], [3654.8, -1446.0], [3659.4, -1440.4], [3664.8, -1436.8], [3670.8, -1435.4], [3676.5, -1435.2], [3684.0, -1436.6], [3700.0, -1441.6], [3740.0, -1455.0]]);
+    A.guardrail([[3640.2, -1480.0], [3643.1, -1470.0], [3645.6, -1463.0], [3648.2, -1457.5], [3651.4, -1452.2], [3654.8, -1446.0], [3659.4, -1440.4], [3664.8, -1436.8], [3670.8, -1435.4], [3676.5, -1435.2], [3684.0, -1436.6], [3700.0, -1441.6], [3740.0, -1455.0]]);
     A.guardrail([[3655.0, -1412.6], [3680.0, -1420.6], [3700.0, -1425.8], [3740.0, -1439.2]]);
 
     // ================= the village centre =================

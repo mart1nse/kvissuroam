@@ -77,6 +77,7 @@ import { createRiia2, riia2Walls } from './world/riia2.js';
 import { createRiia3, riia3Walls } from './world/riia3.js';
 import { createRiia4, riia4Walls } from './world/riia4.js';
 import { createRiia5, riia5Walls } from './world/riia5.js';
+import { createRiia6, riia6Walls } from './world/riia6.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
 import { turuPaintVectors } from './world/turupaint.js';
 import { createSigns } from './world/signs.js';
@@ -201,7 +202,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, riia2, riia3, riia4, riia5, kaluri, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, riia2, riia3, riia4, riia5, riia6, kaluri, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -333,6 +334,7 @@ async function boot() {
   riia3Walls(world.walls);                      // Riia tänav: Aparaaditehas, Hektor, the railway bridge
   riia4Walls(world.walls);                      // Riia tänav: Lembitu to Väike kaar, Oskar Luts's house
   riia5Walls(world.walls);                      // Riia tänav: Väike kaar to Suur kaar, Selver ABC
+  riia6Walls(world.walls);                      // Riia tänav: Suur kaar to the Ravila lights
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -433,6 +435,7 @@ async function boot() {
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
   riia4 = createRiia4(scene, world, { shadows: !isTouch });
   riia5 = createRiia5(scene, world, { shadows: !isTouch });
+  riia6 = createRiia6(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   levelKontserdimaja(world);                       // and the pavements up Vanemuise to its stone wall and the concert house
@@ -911,7 +914,7 @@ function showGfx(force) {
   const m = gfx.meter;
   const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)}${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms)`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -1110,6 +1113,9 @@ document.addEventListener('visibilitychange', () => {
 
 // what is driving the car: keyboard, gamepad, steering wheel or touch screen
 const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
+let capTold = false;             // the "held at 30 FPS" message has been shown
+// (the charger going in or out changes what a battery saver allows: auto graphics judges afresh)
+navigator.getBattery?.().then((bat) => bat.addEventListener('chargingchange', () => gfx.recheck())).catch(() => {});
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
 // Screens faster than 90 Hz (120, 144, 165 Hz laptops): only every 2nd (or 3rd) refresh is drawn, except
 // on HIGH. Otherwise the graphics chip of such a laptop runs flat out even on LOW (Martin, 20 Nov: built-in
@@ -1209,6 +1215,7 @@ function frame(ts) {
     riia3.update(car);
     riia4.update(car);
     riia5.update(car);
+    riia6.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());
@@ -1448,6 +1455,14 @@ function frame(ts) {
     }
   }
   if (ch) console.info(`graphics: rung ${ch.from} -> ${ch.to} (${ch.why}, ${gfx.fps.toFixed(0)} fps)`);
+  // Less detail did not make it faster: something outside the game holds the frame rate, most often a
+  // battery saver (Chrome's Energy Saver and the phones' low power modes give 30). Say so once: a player
+  // sees only that the game is not smooth (Martin's MacBook on a low battery, 20 Nov).
+  if (ch?.why === 'no gain' && gfx.capped && gfx.capped < 50 && !capTold) {
+    capTold = true;
+    stats.trouble('cap');
+    if (mode === 'drive') hud.toast(isTouch ? `YOUR PHONE HOLDS THE GAME AT ${Math.round(gfx.capped)} FPS · LOW POWER MODE?` : `YOUR BROWSER HOLDS THE GAME AT ${Math.round(gfx.capped)} FPS · BATTERY SAVER? PLUG IN THE CHARGER`, 7000);
+  }
   if (!optEl.classList.contains('hidden')) showGfx();
 }
 

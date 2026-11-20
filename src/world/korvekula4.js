@@ -1,7 +1,7 @@
 // Kõrveküla, the north outline, part three (Martin, 20 Nov): the old village row along Hariduse tn east of the
 // pond (Hariduse 10 to 20) and Pärna 33 at the far end, dressed from the Land Board's oblique air photos (2023,
 // 2024). The map's own blocks keep their shapes; their walls are painted and their roofs coloured:
-//  - Hariduse 10: the house with the black roof and the solar panels by the pond lane;
+//  - (Hariduse 10, the house with the solar panels by the pond lane, is built by hand in hariduse10.js);
 //  - Hariduse 12: the cream house, the grey board house beside it, the small red-roofed house and the
 //    red-roofed barn behind;
 //  - Hariduse 14: the white house with the dark roof and the grey board house and shed behind;
@@ -20,7 +20,6 @@ const CENTRE = [4010, -2120];
 // ---------------------------------------------------------------- what the map's own data needs
 export function korve4Walls(walls) {
   setHouseColours(walls, '7_-3', 3680, -2720, [
-    { base: 2504, x: 3922.2, z: -2139.9, wall: 0xdcdcd8, roof: 0x2e3034, reach: 12 },   // Hariduse 10
     { base: 2591, x: 3949.3, z: -2130.8, wall: 0xe8dccb, roof: 0x4a4c50, reach: 10 },   // Hariduse 12
     { base: 2556, x: 3943.8, z: -2147.7, wall: 0xbfb8a8, roof: 0x5c5e62, reach: 10 },   // its board house
     { base: 2623, x: 3966.5, z: -2141.6, wall: 0xdccfb6, roof: 0x8c3b33, reach: 10 },   // the small red-roofed house
@@ -58,7 +57,6 @@ const shed = (wall) => boards(wall, { upright: true, plinth: { h: 0.3, col: '#77
 function houses() {
   const S = '7_-3';
   return [
-    house('hariduse10', S, 2504, [3922.2, -2139.9], 12, plaster([220, 220, 216], { storey: 2.9, maxFloors: 2, plinth: { h: 0.5, col: '#7d7b78' }, win: dark(), attic: null }), [{ near: [3924.3, -2132.1], within: 2, doors: [{ x: 6.5, w: 1.0, h: 2.1, col: '#3b3d42', steps: 2 }] }]),
     house('hariduse12', S, 2591, [3949.3, -2130.8], 9, plaster([232, 220, 203], { storey: 2.8, maxFloors: 1, plinth: { h: 0.6, col: '#8f8b85' }, win: old(), attic: { w: 0.9, h: 1.0 } }), [{ near: [3948.5, -2127.7], within: 2, doors: [{ x: 3.6, w: 1.0, h: 2.1, col: '#6b4c3a', steps: 2, canopy: '#4a4c50' }] }]),
     house('hariduse12b', S, 2556, [3943.8, -2147.7], 9, boards([191, 184, 168], { plinth: { h: 0.55, type: 'rubble' }, win: old({ pitch: 2.4 }), attic: { w: 0.8, h: 0.9 } })),
     house('hariduse12c', S, 2623, [3966.5, -2141.6], 9, boards([220, 207, 182], { plinth: { h: 0.5, col: '#7f7a73' }, win: old(), attic: { w: 0.8, h: 0.9 } })),
@@ -96,7 +94,7 @@ export function createKorvekula4(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 520) return;
-      if ([[3922, -2140], [3982, -2128], [4039, -2117], [4069, -2110], [4171, -2090]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[3949, -2131], [3982, -2128], [4039, -2117], [4069, -2110], [4171, -2090]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

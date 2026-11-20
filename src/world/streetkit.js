@@ -308,7 +308,7 @@ export function addHouseColours(walls, sectorKey, x0, z0, list) {
   const a = (walls.sectors[sectorKey] ||= []);
   const extra = ((walls.extra ||= {})[sectorKey] ||= {});
   for (const e of list) {
-    extra[a.length / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide, shelter: e.shelter, plain: e.plain };       // hide: the house is modelled by hand instead; shelter: claims a carport; plain: walls without the generated windows
+    extra[a.length / 4] = { roof: e.roof, reach: e.reach || 16, hide: e.hide, shelter: e.shelter, plain: e.plain, cut: e.cut };       // hide: the house is modelled by hand instead; shelter: claims a carport; plain: walls without the generated windows; cut(x, z, top): only the triangles it picks are hidden
     a.push(e.base, Math.round((e.x - x0) * 10), Math.round((e.z - z0) * 10), e.wall);
   }
 }

@@ -87,6 +87,7 @@ export async function loadWorldData(onProgress = () => {}) {
       if (treeAdds.length) addTreesTo(s);               // after the clearings: planted trees stay
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
+      for (const o of openings) carve(s, o);
       for (const b of solids) stamp(s, b);
       s.state = 'ready';
       loading--;
@@ -170,6 +171,50 @@ export async function loadWorldData(onProgress = () => {}) {
         if (v < D[i]) D[i] = v;
       }
     }
+  }
+
+  // Open ground cut into the obstacle field where the map's building blocks reach further than the walls do
+  // (a colonnade under an overhang, a terrace): inside each box { x, z, yaw, hx, hz } the field reads at least
+  // the distance to the box's edge, so the boxes must reach past the blocks on their open sides. Applied as a
+  // sector loads, before the solids, which still close what they cover.
+  const openings = [];
+  function carve(s, b) {
+    const reach = Math.hypot(b.hx, b.hz);
+    if (b.x + reach < s.x0 || b.x - reach > s.x1 || b.z + reach < s.z0 || b.z - reach > s.z1) return;
+    const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), D = s.D;
+    const c0 = Math.max(0, Math.floor((b.x - reach - s.x0) / dres)), c1 = Math.min(dn - 1, Math.ceil((b.x + reach - s.x0) / dres));
+    const r0 = Math.max(0, Math.floor((b.z - reach - s.z0) / dres)), r1 = Math.min(dn - 1, Math.ceil((b.z + reach - s.z0) / dres));
+    for (let r = r0; r <= r1; r++) {
+      for (let col = c0; col <= c1; col++) {
+        const px = s.x0 + col * dres - b.x, pz = s.z0 + r * dres - b.z;
+        const d = Math.min(b.hx - Math.abs(px * c - pz * sn), b.hz - Math.abs(px * sn + pz * c));
+        if (d <= 0) continue;
+        const v = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
+        const i = r * dn + col;
+        if (v > D[i]) D[i] = v;
+      }
+    }
+  }
+
+  // Walls that only stop what is below their top (a terrace's retaining wall: a car on the pavement runs into
+  // it, a car on the terrace drives off over it): boxes { x, z, yaw, hx, hz, top } facing the street on their
+  // local -z side. A car meets one while its body is more than 30 cm below the top and its middle is not past the
+  // wall's back, and is put back out on the street side; one only just below the top (dropping off the terrace
+  // over the wall) is eased out rather than thrown.
+  const ledges = [];
+  function ledgePush(x, z, y, r, out) {
+    for (let k = 0; k < ledges.length; k++) {
+      const b = ledges[k];
+      if (y > b.top + 0.1 || Math.abs(x - b.x) > b.reach + r || Math.abs(z - b.z) > b.reach + r) continue;
+      const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), dx = x - b.x, dz = z - b.z;
+      const al = dx * c - dz * sn, ac = dx * sn + dz * c;              // along the box's x, along its z
+      if (Math.abs(al) > b.hx + r * 0.7 || ac > b.hz) continue;
+      const pen = ac + b.hz + r;
+      if (pen <= 0) continue;
+      out[0] = -sn; out[1] = -c; out[2] = y > b.top - 0.6 ? Math.min(pen, 0.06) : pen;
+      return true;
+    }
+    return false;
   }
 
   function unload(s) {
@@ -290,6 +335,20 @@ export async function loadWorldData(onProgress = () => {}) {
       solids.push(...list);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
     },
+    // Open up boxes of the obstacle field (see carve), in sectors loaded now and later.
+    addOpenings(list) {
+      openings.push(...list);
+      for (const s of sectors.values()) {
+        if (s.state !== 'ready') continue;
+        for (const o of list) carve(s, o);
+        for (const b of solids) stamp(s, b);
+      }
+    },
+    // Walls that only stop cars below their top (see ledgePush).
+    addLedges(list) { for (const b of list) ledges.push({ ...b, reach: Math.hypot(b.hx, b.hz) }); },
+    // A circle of radius r round (x, z), at height y, against those walls: writes the push direction and depth to
+    // out[0..2] and returns true.
+    ledgePush(x, z, y, r, out) { return ledges.length !== 0 && ledgePush(x, z, y, r, out); },
     // Take away boxes added with removable: true: the field under each is put back as it was, and
     // the solids still there that reach into it are written in again.
     removeSolids(list) {

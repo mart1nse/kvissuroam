@@ -50,6 +50,7 @@ import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
 import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
+import { createKontserdimaja, kontserdimajaWalls, kontserdimajaVectors, levelKontserdimaja } from './world/kontserdimaja.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
@@ -191,7 +192,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -275,6 +276,7 @@ async function boot() {
   keskusTeeVectors(world.vectors);              // Küüni by Kaubamaja is a pedestrian street: no lane lines
   riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
   teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
+  kontserdimajaVectors(world.vectors);          // the park wall stops at the foot of the concert house's steps
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
   lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
@@ -291,6 +293,7 @@ async function boot() {
   arhitektiWalls(world.walls);                  // Arhitekti 24, 26 and 28 are built by hand
   elvaWalls(world.walls);                       // and Elva 35b, 35c and 37
   vanemuiseWalls(world.walls);                  // and Vanemuise from Akadeemia to the theatre
+  kontserdimajaWalls(world.walls);              // the concert house's front block over the terrace is built by hand
   korveWalls(world.walls);                      // and Kõrveküla's south approach (Rähni, road 210, the centre)
   korve2Walls(world.walls);                     // and Kõrveküla's school, Kooli tn and the Hariduse tn corner
   riiaWalls(world.walls);                       // and Riia tänav from Küüni towards Pepleri
@@ -384,6 +387,7 @@ async function boot() {
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
   riia = createRiia(scene, world, { shadows: !isTouch });
   teatri = createTeatripark(scene, world, { shadows: !isTouch });
+  kontserdimaja = createKontserdimaja(scene, world, { shadows: !isTouch });
   korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
@@ -404,6 +408,7 @@ async function boot() {
   turu3 = createTuru3(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
+  levelKontserdimaja(world);                       // and the pavements up Vanemuise to its stone wall and the concert house
   world.onSectorLoad((s) => {
     terrain.addSector(s);
     s.bMesh = buildBuildings(s);
@@ -1150,6 +1155,7 @@ function frame(ts) {
     korve2.update(car);
     riia.update(car);
     teatri.update(car);
+    kontserdimaja.update(car);
     korve3.update(car);
     korve4.update(car);
     haridus10.update(car);

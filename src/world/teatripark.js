@@ -24,8 +24,10 @@ const MEMO = { s0: 44, s1: 65, v0: 37.3, v1: 48.7 };                         // 
 // parking and bus stop strip from 8.9 to the kerb at 13.4, blue angled bays (30 degrees, nose to the kerb) from
 // the Vanemuise corner to the benches
 const ULI = { centre: -0.7, lane: 5.3, edge: 8.9, kerb: 13.4 }, BAYS = [10, 15, 20, 25, 30, 35, 40, 45];
-// Vanemuise tn along the park: taxi bays between a granite kerb strip and the pavement (s -8.1 .. -4.6)
-const TAXI = { s0: -8.1, s1: -4.6, bays: [20, 23.3, 26.6, 29.9, 33.2, 36.5, 39.8] };
+// Vanemuise tn along the park: taxi bays between a granite kerb strip and the pavement (s -8.1 .. -4.6), and up the
+// street from them two long parking bays as far as the lawn wall by the Vanemuine steps, where the pavement comes
+// out to the road (Martin's Street View, 4 Vanemuise, 20 Nov)
+const TAXI = { s0: -8.1, s1: -4.6, bays: [20, 23.3, 26.6, 29.9, 33.2, 36.5, 39.8], long: [56.1, 69.1], end: 70.5, taper: 76.5 };
 const at = (s, v) => F.at(s, v);
 const carYaw = (ds, dv) => { const x = F.U[0] * ds + F.V[0] * dv, z = F.U[1] * ds + F.V[1] * dv; return Math.atan2(x, -z); };
 const C30 = Math.cos(Math.PI / 6), S30 = 0.5;
@@ -164,18 +166,25 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     for (const b of [...BAYS, BAYS[BAYS.length - 1] + 5]) blue.push([b - run, ULI.edge + 0.1, b, ULI.kerb - 0.15]);
     // ---- Vanemuise tn: the taxi bays, the granite strip between them and the lane, black bollards and the
     // white bowl planters on the pavement
-    A.pave(F, TAXI.s0, TAXI.s1, 17, 46, 'asphalt');
-    for (let q = 17; q < 46; q += 2) A.box(F, TAXI.s0 - 0.2, q + 1, 0.4, 2.02, -0.2, 0.12, 0xb9b7bc);
+    A.pave(F, TAXI.s0, TAXI.s1, 17, TAXI.end, 'asphalt');
+    for (let q = 17; q < TAXI.end - 0.5; q += 2) A.box(F, TAXI.s0 - 0.2, q + 1, 0.4, 2.02, -0.2, 0.12, 0xb9b7bc);
     for (const b of [...TAXI.bays, TAXI.bays[TAXI.bays.length - 1] + 3.3]) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b + (TAXI.s1 - TAXI.s0 - 0.3) / Math.tan(50 * Math.PI / 180)]);
-    // one row of black bollards along the pavement side of the bays (Street View, Aug 2024). Up the road it meets
-    // the roadside row of trackside.js with one bollard on the bays' end kerb; past the last bay it bends left
-    // round the pavement corner and a few come back to the roadside by the zebra.
+    for (const b of TAXI.long) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b]);
+    // at the top the pavement's kerb comes out to the road's edge on a slant, by the lawn wall at the foot of the steps
+    {
+      const a = F.at(TAXI.s1, TAXI.end - 0.6), b = F.at(TAXI.s0 + 0.1, TAXI.taper);
+      A.bar(a, b, 0.25, -0.2, 0.12, 0xb9b7bc);
+      lines.push([TAXI.s0 + 0.15, TAXI.end - 0.4, TAXI.s1 - 0.3, TAXI.end - 0.4]);
+    }
+    // one row of black bollards along the pavement side of the bays (Street View, Aug 2024), all the way up; at the
+    // top it bends right along the slanting kerb to the roadside, by two white bowl planters. Past the last taxi bay
+    // at the bottom it bends round the pavement corner and a few come back to the roadside by the zebra.
     const BOL = [];
-    for (let v = 17.5; v <= 47; v += 3.2) BOL.push([TAXI.s1 + 0.25, v]);
-    BOL.push([-6.2, 47.4], [-5.3, 15.4], [-6.3, 13.8], [-7.1, 12.4]);
+    for (let v = 17.5; v <= TAXI.end + 0.2; v += 3.2) BOL.push([TAXI.s1 + 0.25, v]);
+    BOL.push([-5.2, 72.6], [-6.1, 74.3], [-7.0, 75.9], [-5.3, 15.4], [-6.3, 13.8], [-7.1, 12.4]);
     for (const [s, v] of BOL) { const [x, z] = F.at(s, v); A.bollard(x, z, 0x1c1d20, 0.95); }
     const bowl = new THREE.CylinderGeometry(0.6, 0.36, 0.45, 14);
-    for (const v of [28.6, 31.2]) { const [x, z] = F.at(-2.6, v); p.add(bowl, 0xeeeeea, x, h(x, z) + 0.22, z); }
+    for (const [s, v] of [[-2.6, 28.6], [-2.6, 31.2], [-2.3, 74.2], [-2.0, 76.6]]) { const [x, z] = F.at(s, v); p.add(bowl, 0xeeeeea, x, h(x, z) + 0.22, z); }
     stripes(lines, 0xe4e2ea);
     stripes(blue, 0x2f6fd8);
 

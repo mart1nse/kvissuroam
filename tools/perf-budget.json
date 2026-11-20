@@ -1,5 +1,5 @@
 {
   "_note": "MB unless named ms. Set 20 Nov 2026 from the build after PR #294, with room for some more streets; the 19 Nov evening build (last known to run on an iPhone 13, at its limit) had about 280 MB canvases, 260 MB on the card and 320 MB heap at DRIVE. Raise a figure only with a reason in the commit.",
-  "phone": { "driveCanvasMB": 230, "driveGlMB": 250, "driveHeapMB": 420, "driveTotalMB": 820, "jumpGlPeakMB": 280, "carChangeGrowthMB": 20 },
-  "desktop": { "jsMedianMs": 18 }
+  "phone": {"driveCanvasMB": 230, "driveGlMB": 250, "driveHeapMB": 420, "driveTotalMB": 820, "driveSpikeMB": 740, "jumpGlPeakMB": 280, "carChangeGrowthMB": 20},
+  "desktop": {"jsMedianMs": 18}
 }

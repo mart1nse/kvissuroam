@@ -362,9 +362,12 @@ export function createParked(scene, world, opts = {}) {
 
   // models are built one at a time, with a pause between, so that no frame waits long (on a phone a
   // longer pause, so the memory each build churns through is given back before the next one)
+  // On a phone no model is built before DRIVE nor in the seconds after it or after a map jump (hold): a
+  // build throws away 100-250 MB, and builds running into DRIVE and its first frames behind the car are
+  // what made an iPhone 13 reload the page 1-2 s after DRIVE (20 Nov). The cars stand there from then on.
   const queue = [];
-  let building = false;
-  const gap = touch ? 600 : 150;
+  let building = false, holdUntil = touch ? Infinity : 0;
+  const gap = touch ? 1200 : 150;
   function want(id) {
     if (templates.has(id)) return templates.get(id);
     templates.set(id, null);
@@ -376,6 +379,8 @@ export function createParked(scene, world, opts = {}) {
     if (building || !queue.length) return;
     building = true;
     const run = () => {
+      const wait = holdUntil - performance.now();
+      if (wait > 0) { setTimeout(run, Math.min(wait, 500)); return; }
       const id = queue.shift();
       const fail = (e) => { console.warn('parked', id, e); templates.set(id, false); building = false; pump(); };
       let T;
@@ -581,5 +586,10 @@ export function createParked(scene, world, opts = {}) {
       order.forEach((b, i) => showNear(b, i < tune.nearMax));
     }
   }
-  return { update, bodies, spots, group, templates, tune };
+  // no new models for s seconds from now (phones only; the first call, at DRIVE, lets them start)
+  const hold = (s) => {
+    const t = performance.now() + s * 1000;
+    if (touch) holdUntil = holdUntil === Infinity ? t : Math.max(holdUntil, t);
+  };
+  return { update, bodies, spots, group, templates, tune, hold };
 }

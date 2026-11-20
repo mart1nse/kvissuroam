@@ -24,6 +24,9 @@ export function fmtTime(sec) {
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
 }
 
+// a grid cell (column c, row r) as one number
+export const cellKey = (c, r) => (c + 8192) * 16384 + r + 8192;     // (a small integer for cells within 80 km)
+
 export function createTrack() {
   const P = TRACK.pts, HW = TRACK.hw, N = P.length;
   const tan = [], s = new Float64Array(N);
@@ -34,10 +37,12 @@ export function createTrack() {
     if (i) s[i] = s[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
   }
   // spatial hash of the segments
+  // (cells keyed by a number: nearest() runs for every ground height looked up near the kerbs, and a
+  // text key per cell threw away about 100 MB in the two seconds after DRIVE)
   const CELL = 40, grid = new Map();
   for (let i = 0; i < N; i++) {
     const a = P[i], b = P[(i + 1) % N];
-    const keys = new Set([`${Math.floor(a[0] / CELL)},${Math.floor(a[1] / CELL)}`, `${Math.floor(b[0] / CELL)},${Math.floor(b[1] / CELL)}`]);
+    const keys = new Set([cellKey(Math.floor(a[0] / CELL), Math.floor(a[1] / CELL)), cellKey(Math.floor(b[0] / CELL), Math.floor(b[1] / CELL))]);
     for (const k of keys) { let l = grid.get(k); if (!l) grid.set(k, (l = [])); l.push(i); }
   }
   const segDist = (i, x, z, out) => {
@@ -58,7 +63,7 @@ export function createTrack() {
     }
     const c = Math.floor(x / CELL), r = Math.floor(z / CELL);
     for (let dc = -2; dc <= 2; dc++) for (let dr = -2; dr <= 2; dr++) {
-      const l = grid.get(`${c + dc},${r + dr}`);
+      const l = grid.get(cellKey(c + dc, r + dr));
       if (l) for (const i of l) segDist(i, x, z, out);
     }
     return out;

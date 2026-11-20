@@ -12,13 +12,14 @@
 //  - Antoni: the red-roofed two-storey house, the red cross-gabled house and the long barn;
 //  - Lombi (east): the pale green house, the grey board barn and the shed;
 //  - Pihlaka (west): the red board house with the blue-grey roof, the lime green houses and the barns, inside a
-//    dark board fence.
+//    dark board fence, and a silver Porsche Carrera GT on the paved yard in front of the red house.
 // The village had no trees at all in the game: the trees are planted where the orthophoto shows crowns (dark ones
 // as spruces). Window counts, doors and the backs are guessed. No street name is painted on the road.
 import * as THREE from 'three';
 import { setHouseColours } from './streetkit.js';
 import { skinHouses, wallPlanes } from './houseskin.js';
 import { areaKit, frame } from './handbuilt.js';
+import { buildCarModel } from '../cars/models/index.js';
 
 // ---------------------------------------------------------------- the road frame
 // s metres along Nõela tee from route 41, v metres across it, + to the west (left going north)
@@ -101,7 +102,6 @@ export const NOELA_CARS = [
   [-6957.5, -6900.0, 1.12, 'passat', 'grey', 0.03],
   [-7001.7, -6977.1, 1.11, 'mazda6', 'grey', 0.03],
   [-7139.5, -7154.2, 0.85, 'rav4', 'black', 0.03],
-  [-7310.2, -7531.4, 1.37, 'passat', 'silver', 0.03],
 ];
 
 // ---------------------------------------------------------------- the painted walls
@@ -228,6 +228,19 @@ export function createNoela(scene, world, { shadows = true } = {}) {
     A.picket([R(955, 18), R(1001, 18)], 1.6, dark);                                         // Pihlaka: the dark board fence
     A.picket([R(1007, 18), R(1035, 18), R(1035, 80), R(955, 80), R(955, 18)], 1.6, dark);
     A.trampoline(...R(1015, 40), 1.6);
+    // Pihlaka: a silver Carrera GT on the paved yard in front of the red house's gable, the real model with
+    // its scanned body (Martin, 20 Nov: in place of the estate car that stood on the lawn)
+    const cgt = { x: -7318.6, z: -7513.2, yaw: -0.25 };
+    const fx = Math.sin(cgt.yaw), fz = -Math.cos(cgt.yaw);
+    world.addSolids([{ x: cgt.x, z: cgt.z, yaw: Math.atan2(-fz, fx), hx: 2.3, hz: 0.96 }]);
+    setTimeout(() => {
+      const model = buildCarModel('cgt');
+      model.setLights?.({ headlights: false });
+      model.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -cgt.yaw);
+      model.group.position.set(cgt.x, world.heightAt(cgt.x, cgt.z) + 0.02, cgt.z);
+      model.group.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
+      group.add(model.group);
+    }, 300);
   }
 
   return {

@@ -53,6 +53,8 @@ import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
 import { createNoela, noelaWalls } from './world/noela.js';
+import { createRaadi, raadiWalls } from './world/raadi.js';
+import { createRaadi2, raadi2Walls } from './world/raadi2.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -172,7 +174,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, riia, teatri, noela, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, riia, teatri, noela, raadi, raadi2, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -277,6 +279,8 @@ async function boot() {
   korve4Walls(world.walls);                     // and the old Hariduse tn row east of the pond, Pärna 33
   haridus10Walls(world.walls);                  // and Hariduse 10 by the pond, built by hand
   noelaWalls(world.walls);                      // and the farms along the village road in Nõela
+  raadiWalls(world.walls);                      // and Foxway and the terraces at the west end of Keskuse tee, Raadi
+  raadi2Walls(world.walls);                     // and the east end of Keskuse tee with the Mõisapiiri houses
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -351,6 +355,8 @@ async function boot() {
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
   noela = createNoela(scene, world, { shadows: !isTouch });
+  raadi = createRaadi(scene, world, { shadows: !isTouch });
+  raadi2 = createRaadi2(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -1092,6 +1098,8 @@ function frame(ts) {
     korve4.update(car);
     haridus10.update(car);
     noela.update(car);
+    raadi.update(car);
+    raadi2.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

@@ -66,6 +66,7 @@ import { createLounakeskus4, lounakeskus4Walls } from './world/lounakeskus4.js';
 import { createLounakeskus5, lounakeskus5Walls } from './world/lounakeskus5.js';
 import { createTuru, turuWalls } from './world/turu.js';
 import { createTuru2, turu2Walls } from './world/turu2.js';
+import { createTuru3, turu3Walls } from './world/turu3.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
@@ -189,7 +190,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -309,6 +310,7 @@ async function boot() {
   lounakeskus5Walls(world.walls);               // the Riia road houses, Riia 128 to Sõinaste
   turuWalls(world.walls);                       // Turu tänav: Swedbank, Circle K, McDonald's, Turu 3 to 7
   turu2Walls(world.walls);                      // Soola and Kaluri: Kaluri 2, Hotell Tartu, the glass office
+  turu3Walls(world.walls);                      // AHHAA, the Turu 8 halls, Tigutorn, Väike-Turu 3
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -397,6 +399,7 @@ async function boot() {
   louna5 = createLounakeskus5(scene, world, { shadows: !isTouch });
   turu = createTuru(scene, world, { shadows: !isTouch });
   turu2 = createTuru2(scene, world, { shadows: !isTouch });
+  turu3 = createTuru3(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -1161,6 +1164,7 @@ function frame(ts) {
     louna5.update(car);
     turu.update(car);
     turu2.update(car);
+    turu3.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

@@ -9,7 +9,7 @@
 //    stands, the car park gate with its orange posts and the disabled bay.
 // Cars can drive up the ramp or the steps onto the terrace and off its street edge onto the road: the terrace and
 // the steps are a deck (world.decks), its wall stops only cars below it (world.addLedges), and the map's building
-// block is opened up where the terrace runs under it (world.addOpenings, and `cut` on its triangles).
+// block is freed where the terrace runs under it (world.addFree, and `cut` on its triangles).
 // The brick box above it with the name is painted in vanemuise.js.
 import * as THREE from 'three';
 import { areaKit, frame } from './handbuilt.js';
@@ -186,7 +186,7 @@ export function createKontserdimaja(scene, world, { shadows = true } = {}) {
   const ledges = [box(9, S1, FV, 0, { top: TY + 0.05 })];
   for (let s = S1; s < FOOT + 0.4; s += 0.5) ledges.push(box(s, s + 0.5, FV, SV0, { top: deckY(s + 0.5) + 0.25 }));
   world.addLedges(ledges);
-  world.addOpenings([box(-2, 41, -2, GV), box(40.5, FOOT + 0.6, -1.2, SV1)]);
+  world.addFree([box(-0.6, 40.9, -1, GV - 0.15), box(40.5, FOOT + 0.6, -1.2, SV1)]);
   const COLS = [];
   for (let k = 0; k < 9; k++) COLS.push(3.3 + 4.5 * k);
   world.addSolids([

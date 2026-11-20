@@ -129,6 +129,7 @@ const REV_CUT_TIME = 0.03, REV_CUT_DROP = 120;
 // engine's brakeDown, for the sports cars that keep their revs up)
 const BRAKE_DOWN = 0.8;
 const BRAKE_LIFT = 500;         // rpm (on a 7000 rpm engine, in proportion on others) more on top of that (Martin 2026-11-19)
+const UP_HOLD = 1;              // s an automatic upshift on the throttle is kept before it may kick back down
 // a repeatable 0..1 'random' number, so every car runs the same on every screen
 const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
@@ -191,13 +192,21 @@ function engineForce(car, throttle, dt) {
     // under braking, so a long stop doesn't land on the same revs every time, Martin 2026-11-19/20)
     const brakeAt = Math.min(0.95, (e.brakeDown ?? BRAKE_DOWN) + BRAKE_LIFT * (e.redline / 7000) / e.shiftRpm);
     const downAt = throttle > 0.5 ? 0.9 : Math.min(0.97, 0.55 + (brakeAt - 0.55) * braking + (car.downJit || 0) * (0.5 + 0.5 * braking));
+    // On the throttle the gearbox does not kick down while the driven wheels spin with the engine well up
+    // in its revs (a lower gear would only spin them harder), nor for UP_HOLD after an upshift: on spinning
+    // tyres, loose ground most of all, the early 1>2 above landed under the kick-down point, so it went
+    // straight back to first and up again, heard as two upshifts in a row (Martin 2026-11-20). (The road
+    // speed it shifts on is the forward one, which in a slide reads low, so it also kicked down mid slide.)
+    const spinRevs = (wAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
+    const held = throttle > 0.5 && (car.upHold > 0 || (wAbs > vAbs * 1.1 + 0.3 && spinRevs > e.shiftRpm * 0.6));
     if ((rpmAt(g) > e.shiftRpm || early) && g < s.gears.length) g++;
-    else if (g > 1 && rpmAt(g - 1) < e.shiftRpm * downAt) g--;
+    else if (g > 1 && !held && rpmAt(g - 1) < e.shiftRpm * downAt) g--;
     if (g !== car.gear) {
       // Shifted like a quick manual: an upshift under power cuts the ignition while the clutch is
       // out (the revs drop to the next gear's), then it bites again; a downshift blips the throttle.
       car.shiftUp = g > car.gear && throttle > 0.3;
       if (g > car.gear) { car.locked = true; car.carry = 0; }
+      car.upHold = car.shiftUp ? UP_HOLD : 0;
       car.gear = g; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
       // Where the next downshift comes, drawn afresh at each change (from the time, so a test drives the
       // same way every run): anywhere within 5 % of the shift point either way, and one time in three it
@@ -207,6 +216,7 @@ function engineForce(car, throttle, dt) {
       car.downJit = 0.05 * (2 * u - 1) - (w < 0.33 ? BRAKE_LIFT * (e.redline / 7000) / e.shiftRpm : 0);
     }
   }
+  if (car.upHold > 0) car.upHold -= dt;
   if (car.shiftTimer > 0) {
     car.shiftTimer -= dt;
     // an upshift under power biting: the drive comes back all at once (the sound's bark and the body's
@@ -749,8 +759,17 @@ function substep(car, input, world, dt) {
         err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck);
       }
       else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
+      // The wander belongs to a donut, so it fades out above donut pace (27..36 km/h). And the hold never
+      // pushes against the rotation until the tail is well out (17..34 deg): floored at full lock on
+      // spinning rear wheels, picking up speed out of a donut or a slide, the car must come round into the
+      // lock, not run wide (Martin 2026-11-20: a few seconds of strong understeer at about 30 km/h, when
+      // the tucking wander or a fast-swinging tail had the hold straightening the car).
+      let k = err + DONUT_SWAY * sway * (angP > lo - 0.5 ? 1 : 0) * Math.min(1, Math.max(0, (10 - speed) / 2.5));
+      // (and holding it back only ever slows the rotation: it never swings the car back against the lock,
+      // which had it skating sideways in a straight line for a second)
+      if (k < 0) k *= Math.min(1, Math.max(0, (ang - 0.3) / 0.3)) * Math.min(1, Math.max(0, car.yawRate * turn / 0.3));
       // (rotating against the wheel already: leave the driver to sort it out)
-      if (car.yawRate * turn > -0.2) MZ += turn * (err + DONUT_SWAY * sway * (angP > lo - 0.5 ? 1 : 0)) * w * DONUT * m * G * L * load;
+      if (car.yawRate * turn > -0.2) MZ += turn * k * w * DONUT * m * G * L * load;
     }
   }
   // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and

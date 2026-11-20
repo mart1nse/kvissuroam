@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { BOX, Parts } from './landmarks.js';
-import { breakableShelter } from '../world/shelter.js';
+import { breakableShelter, shelterSolids } from '../world/shelter.js';
 import { skinHouses, rgbHex, paintTexture, tone } from '../world/houseskin.js';
 import { streetKit, setHouseColours } from '../world/streetkit.js';
 
@@ -437,7 +437,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       if (frame) { frame.castShadow = shadows; frame.receiveShadow = true; group.add(frame); }
       const box = { x, z, yaw: Math.atan2(-tz, tx), hx: 2.1, hz: 0.8 };
       breakableShelter(world, group, { box, y, H: 2.47, frame, panes, glass: 0xbfe0e2, opacity: 0.38 });
-      solids.push(box);
+      solids.push(...shelterSolids(box));
       const [bx, bz] = at(-3.1, 0.3); p.add(new THREE.CylinderGeometry(0.2, 0.17, 0.75, 10), 0x2f8a78, bx, y + 0.5, bz, 0);       // the green bin
     }
 

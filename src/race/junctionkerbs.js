@@ -26,6 +26,12 @@ const CORNERS = [
     h: 0.09, edge: 0.1, w: 3, b: 0.8, skip: [[-1, 632, 633]], taperA: true },
   { name: 'baeri', r: 3.5, lineA: [[-1, 620], [-1, 623]], lineB: [[-1, 1332], [-1, 1336]], lenA: [-1, 622], drawA: 623, lenB: [-1, 1336], drawB: 1335,
     h: 0.09, edge: 0.1, w: 5.5, b: 0.8, skip: [[-1, 623, 625], [-1, 1332, 1334]] },
+  // Vanemuise / Ülikooli by the theatre park (Martin, 20 Nov, Street View and air photos): the pavement corner runs
+  // down the lane edge of the Vanemuise parking bays past the zebra, then round into Ülikooli's edge, where it ends in a
+  // point at the start of the parking strip (the lap's own kerb line down Vanemuise, v 6.8 along Ülikooli in the teatripark.js frame); it
+  // replaces the square raised pavement that ran over the lower bays
+  { name: 'vanemuine park', r: 6, lineA: [[1, 2300], [1, 2304]], lineB: [[1583.25, 3155.46], [1586.54, 3159.23]],
+    lenA: 4.7, lenB: 3.2, h: 0.09, edge: 0.1, w: 4, b: 0.8, skip: [[1, 2297, 2307]], taperA: true },
 ];
 const OFF = 0.1;           // the generated kerbs' face past the lap's half width
 

@@ -22,7 +22,7 @@
 import * as THREE from 'three';
 import { setHouseColours } from './streetkit.js';
 import { skinHouses } from './houseskin.js';
-import { areaKit } from './handbuilt.js';
+import { areaKit, frame } from './handbuilt.js';
 import { BOX } from '../race/landmarks.js';
 
 // ---------------------------------------------------------------- the road frame
@@ -78,6 +78,23 @@ function sAlong(x, z) {
   }
   return [bs, best];
 }
+// ---- the grass median between Kalevi and Küüni (Martin, 20 Nov: "here should be a row of trees in the middle"):
+// 2.6 m of lawn between granite kerbs with eight young limes (black guards round their trunks) where the map's
+// tree survey and the 2024 orthophoto have them, and two double-armed lamp posts, as on his Street View shots.
+// The map draws the two carriageways as one sheet of asphalt.
+const MED = frame([1668.8, 3219.7], [1711.8 - 1668.8, 3176.5 - 3219.7]), MED_LEN = 61, MED_HW = 1.3;
+const MED_TREES = [[1671.4, 3216.7], [1676.1, 3212.6], [1681.1, 3207.8], [1686.3, 3201.8], [1695.1, 3193.5],
+  [1698.5, 3189.5], [1704.2, 3184.4], [1709.6, 3178.5]].map(([x, z], i) => { const hh = 7 + ((i * 5) % 3) * 0.6; return [x, z, hh, hh * 0.5, 0]; });
+// verge trees in the city's tree survey (on the map) that the lidar trees missed: one by the court house, two
+// at the Tähe corner, and the row in front of Riia 15 and 17 just past Pepleri (2024 air photos)
+const SURVEY_TREES = [[1618.9, 3276, 12, 6, 0], [1601, 3304.3, 13.6, 6.8, 0], [1461.8, 3504.3, 13.6, 6.8, 0], [1465.9, 3500.6, 15.2, 7.6, 0],
+  [1318.9, 3632.6, 12, 6, 0], [1314.3, 3636.3, 13.6, 6.8, 0], [1310.9, 3639.5, 15.2, 7.6, 0], [1307, 3642.3, 12.8, 6.4, 0],
+  [1301.9, 3646.4, 14.4, 7.2, 0], [1298.7, 3649.1, 12, 6, 0], [1294.4, 3653.1, 13.6, 6.8, 0], [1289.8, 3656.8, 15.2, 7.6, 0],
+  [1286.5, 3659.6, 12.8, 6.4, 0], [1277.4, 3667.5, 12, 6, 0], [1272.2, 3671.8, 13.6, 6.8, 0], [1265.5, 3677.6, 15.2, 7.6, 0],
+  [1262, 3680.3, 12.8, 6.4, 0], [1257.9, 3683.6, 14.4, 7.2, 0], [1255.2, 3686.2, 12, 6, 0], [1249.1, 3691, 15.2, 7.6, 0],
+  [1243.4, 3695.5, 12.8, 6.4, 0], [1235.4, 3703.1, 14.4, 7.2, 0]];
+const onMedian = (x, z) => { const [s, v] = MED.sv(x, z); return s > -0.5 && s < MED_LEN + 0.5 && Math.abs(v) < MED_HW + 0.25; };
+
 export function riiaVectors(vectors) {
   paintPieces = vectors.roads.filter((r) => (r.name === 'Riia tänav' || r.name === 'Jõhvi-Tartu-Valga tee') && r.w >= 11.5 && r.pts.length > 1 &&
     r.pts.every(([x, z]) => { const [s, d] = sAlong(x, z); return d < 2 && s >= PAINT_S[0] - 15 && s <= PAINT_S[1] + 15; })).map((r) => r.pts);
@@ -85,6 +102,7 @@ export function riiaVectors(vectors) {
   vectors.markSkip = (x, z) => {
     const [s, d] = sAlong(x, z);
     if (d < 1 && s > PAINT_S[0] && s < PAINT_S[1] && paintPieces.some((pts) => onPiece(x, z, pts))) return true;
+    if (onMedian(x, z)) return true;
     return prev ? prev(x, z) : false;
   };
 }
@@ -372,7 +390,7 @@ function houses(later) {
 export function createRiia(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
-  world.addTrees(TREES);
+  world.addTrees([...TREES, ...MED_TREES, ...SURVEY_TREES]);
 
   // the walls that face the road (within 45 m of the centre line) get the sharper pictures
   const faces = (W) => {
@@ -384,7 +402,7 @@ export function createRiia(scene, world, { shadows = true } = {}) {
   // Two halves, each built (with its own small atlas) only when the car comes within 300 m of it, so the far
   // half costs nothing at the start (phones: the spawn is about 140 m from the north half, 370 m from the south)
   const parts = [
-    { centre: L(150, 0), ready: [L(0, -40), L(80, 40), L(200, -60), L(280, 50)], pick: (H) => H.at[1] <= 3390, extra: railing, paint: [0, 330] },
+    { centre: L(150, 0), ready: [L(0, -40), L(80, 40), L(200, -60), L(280, 50)], pick: (H) => H.at[1] <= 3390, extra: (A) => { railing(A); median(A); }, paint: [0, 330] },
     { centre: L(470, 0), ready: [L(300, 40), L(380, -50), L(500, 40), L(590, -40)], pick: (H) => H.at[1] > 3390, paint: [330, 700] },
   ];
 
@@ -410,6 +428,24 @@ export function createRiia(scene, world, { shadows = true } = {}) {
     for (let s = 100; s <= 330; s += 2.5) rail.push(L(s, -8.6));
     A.walk(rail, 2.5, ([x, z]) => p.add(post, 0x9a9ea4, x, h(x, z) + 0.5, z));
     for (let i = 0; i < rail.length - 1; i++) { A.bar(rail[i], rail[i + 1], 0.05, 0.95, 1.02, 0xa9adb3); A.bar(rail[i], rail[i + 1], 0.03, 0.45, 0.5, 0x9a9ea4); }
+  }
+
+  // the median's lawn and its kerbs (granite grey, 13 cm, low enough to drive over) with round stone noses at
+  // both ends, the guards round the young limes' trunks, and the lamp posts lighting both carriageways
+  function median(A) {
+    const KERB = 0xc4c2c8, { p, h } = A;
+    A.pave(MED, 0, MED_LEN, -MED_HW, MED_HW, 'lawn');
+    for (const v of [-MED_HW, MED_HW]) A.box(MED, MED_LEN / 2, v, MED_LEN, 0.22, -0.15, 0.13, KERB);
+    for (const s of [0, MED_LEN]) {
+      const [x, z] = MED.at(s, 0);
+      p.add(new THREE.CylinderGeometry(MED_HW + 0.11, MED_HW + 0.11, 0.28, 14), KERB, x, h(x, z) - 0.01, z);
+    }
+    const guard = new THREE.CylinderGeometry(0.17, 0.26, 0.85, 7);
+    for (const [x, z] of MED_TREES) p.add(guard, 0x1d1e21, x, h(x, z) + 0.42, z);
+    for (const s of [13.6, 46.2]) {
+      const [x, z] = MED.at(s, 0);
+      for (const k of [-1, 1]) A.lamp(x, z, [MED.V[0] * k, MED.V[1] * k], 10, 2.2);
+    }
   }
 
   return {

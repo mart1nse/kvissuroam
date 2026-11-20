@@ -176,6 +176,23 @@ export function createKorvekula(scene, world, { shadows = true } = {}) {
 
     // ================= where road 210 meets the highway =================
     A.island([[3643.1, -1445.8], [3645.6, -1436.4], [3648.1, -1427.2]], 1.0, 'red');
+    // the paint at the fork (the map's own lines are kept off it): the hatched wedge before the island, its two
+    // edge lines meeting at the fork, and the give-way teeth across both branches at the highway
+    {
+      const tip = [3640.8, -1456.0], top = [3643.1, -1445.8];
+      const ax = [top[0] - tip[0], top[1] - tip[1]], L = Math.hypot(ax[0], ax[1]), U = [ax[0] / L, ax[1] / L];
+      const W = frame(tip, U);
+      for (const side of [-1, 1]) {                                     // the two edge lines of the wedge
+        const end = W.at(L, side * 1.05), d = [end[0] - tip[0], end[1] - tip[1]], l = Math.hypot(d[0], d[1]);
+        A.pave(frame(tip, [d[0] / l, d[1] / l]), 0, l, -0.07, 0.07, 'white');
+      }
+      for (const s of [2.6, 4.9, 7.2, 9.4]) A.pave(W, s, s + 0.5, -1.0 * s / L, 1.0 * s / L, 'white');   // the bars
+      const teeth = (a, b) => {                                       // a row of white triangles' bases, 0.5 m every 0.9 m
+        const d = [b[0] - a[0], b[1] - a[1]], l = Math.hypot(d[0], d[1]), F = frame(a, [d[0] / l, d[1] / l]);
+        for (let s = 0.2; s + 0.5 <= l; s += 0.9) A.pave(F, s, s + 0.5, -0.3, 0.3, 'white');
+      };
+      teeth([3636.8, -1425.4], [3642.4, -1426.2]);                     // the left branch, at the highway
+    }
     A.guardrail([[3638.6, -1480.0], [3640.0, -1470.0], [3642.0, -1462.0], [3645.6, -1457.0], [3650.4, -1452.0], [3654.8, -1446.0], [3659.4, -1440.4], [3664.8, -1436.8], [3670.8, -1435.4], [3676.5, -1435.2], [3684.0, -1436.6], [3700.0, -1441.6], [3740.0, -1455.0]]);
     A.guardrail([[3655.0, -1412.6], [3680.0, -1420.6], [3700.0, -1425.8], [3740.0, -1439.2]]);
 

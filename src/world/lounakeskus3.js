@@ -231,7 +231,7 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), [side, side, side, side, t, t]);
       m.position.set(x, h(x, z) + hh / 2, z); m.rotation.y = yaw; m.castShadow = shadows; group.add(m);
     };
-    // Alexela: the band round the pump canopy, the pumps, the blue price sign
+    // Alexela: the band round the pump canopy, the pumps, the blue price sign (on the verge between the forecourt and the road)
     const ax = paintTexture(18, 0, 1.0, 24, (P) => { P.r(0, 0, 18, 1.0, '#ffffff'); P.r(0, 0, 18, 0.22, '#005eb8'); P.text('alexela', 9, 0.6, 0.62, '#005eb8', BOLD); });
     fascia(group, [[-940.3, 5465.4], [-923.9, 5459.2], [-920.9, 5467.1], [-937.3, 5473.3]], 49.1, 1.0, ax, shadows);
     for (const [x, z] of [[-935.0, 5466.8], [-929.6, 5464.8], [-924.2, 5462.8]]) {
@@ -239,7 +239,7 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
       p.add(BOX(0.6, 1.9, 0.9), 0xeeeeec, x, h(x, z) + 1.2, z + 2.0, -0.36);
       p.add(BOX(0.62, 0.35, 0.92), 0x005eb8, x, h(x, z) + 2.0, z + 2.0, -0.36);
     }
-    tall(-905, 5466, 1.8, 8.5, 0.5, paintTexture(1.8, 0, 8.5, 24, (P) => {
+    tall(-919, 5462, 1.8, 8.5, 0.5, paintTexture(1.8, 0, 8.5, 24, (P) => {
       P.r(0, 0, 1.8, 8.5, '#005eb8'); P.r(0, 0, 1.8, 1.6, '#2b2c30'); P.r(0.1, 6.6, 1.7, 8.2, '#ffffff'); P.text('alexela', 0.9, 7.4, 0.36, '#005eb8', BOLD);
       [['95', '1.769'], ['98', '1.819'], ['D', '1.619']].forEach(([a, b], k) => { P.r(0.1, 5.1 - k * 1.1, 1.7, 5.9 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.9, 5.5 - k * 1.1, 0.42, '#ffffff', SANS); });
     }), 1.1, new THREE.MeshLambertMaterial({ color: 0x005eb8 }));
@@ -256,9 +256,9 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
       P.r(0, 0, 1.7, 8, '#ffd100'); P.r(0, 0, 1.7, 1.4, '#1d1e21'); P.text('OLEREX', 0.85, 7.1, 0.36, '#1d1e21', BOLD);
       [['95', '1.749'], ['98', '1.799'], ['D', '1.599']].forEach(([a, b], k) => { P.r(0.1, 5.0 - k * 1.1, 1.6, 5.8 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.85, 5.4 - k * 1.1, 0.4, '#ffd100', SANS); });
     }), Math.PI / 2, new THREE.MeshLambertMaterial({ color: 0xffd100 }));
-    // Stokker's red sign at the north end, Decora's by the road
+    // Stokker's red sign at the north end, Decora's on the grass inside the cycle path
     tall(-796, 5606, 1.8, 8, 0.6, paintTexture(1.8, 0, 8, 24, (P) => { P.r(0, 0, 1.8, 8, '#d2232a'); P.r(0.1, 5.6, 1.7, 7.8, '#ffffff'); P.text('STOKKER', 0.9, 6.7, 0.34, '#0d6fb8', BOLD); }), 0.57, new THREE.MeshLambertMaterial({ color: 0xd2232a }));
-    tall(-1062, 5806, 2.4, 9, 0.6, paintTexture(2.4, 0, 9, 22, (P) => {
+    tall(-1069, 5793, 2.4, 9, 0.6, paintTexture(2.4, 0, 9, 22, (P) => {
       P.r(0, 0, 2.4, 9, '#d8562c'); P.r(0, 0, 2.4, 1.0, '#2b2c30');
       P.r(0.15, 6.2, 2.25, 8.6, '#232427'); P.text('DECORA', 1.2, 7.4, 0.44, '#ffffff', BOLD);
       P.text('ehitus', 1.2, 5.2, 0.36, '#ffffff', SANS); P.text('sisustus', 1.2, 4.5, 0.36, '#ffffff', SANS); P.text('aed', 1.2, 3.8, 0.36, '#ffffff', SANS);

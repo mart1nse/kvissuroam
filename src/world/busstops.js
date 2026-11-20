@@ -11,7 +11,7 @@
 // with the stop's name on the fascia; undamaged copies go back into the merged mesh when the car is gone.
 import * as THREE from 'three';
 import DATA from './busstops.json';
-import { breakableShelter } from './shelter.js';
+import { breakableShelter, shelterSolids } from './shelter.js';
 import { adAtlas, adCell, AD_COUNT, TIMETABLE } from './adverts.js';
 
 const D = 1.55, H = 2.45;               // depth and height of a shelter
@@ -246,7 +246,7 @@ export function createBusStops(scene, world, opts = {}) {
     bySector.get(k).push(st);
   }
   // solid for the cars, and no map tree growing through a shelter
-  world.addSolids(STOPS.map((st) => st.box));
+  world.addSolids(STOPS.flatMap((st) => shelterSolids(st.box)));
   world.addClearing({ test: (x, z) => !!stopAt(x, z, 0.7) });
 
   const frameMat = new THREE.MeshLambertMaterial({ vertexColors: true });

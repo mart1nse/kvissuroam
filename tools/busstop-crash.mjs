@@ -36,9 +36,11 @@ for (const plan of plans) {
     }
     const near = shelterInfo().map((s) => ({ ...s, d: Math.hypot(s.box.x - g.car.x, s.box.z - g.car.z) })).sort((a, b) => a.d - b.d)[0];
     g.renderer.render(g.scene, g.camera);
-    return { before, near, car: { x: g.car.x, z: g.car.z, vx: g.car.vx, minV } };
+    return { before, near, car: { x: g.car.x, z: g.car.z, vx: g.car.vx, minV, halfLen: g.car.halfLen } };
   }, [v, n, cx, cz, Math.atan2(nx, -nz)]);
-  console.log(plan, JSON.stringify(res));
+  // how far the car's nose got past the shelter's open front (m; the back wall is 1.55 m in)
+  const nose = (res.car.x - x) * nx + (res.car.z - z) * nz + res.car.halfLen + 1.55 / 2;
+  console.log(plan, 'm/s: panes broken', res.near?.broken, 'of', res.near?.panes, '| bend', res.near?.bend.toFixed(2), 'm | nose past the open front', nose.toFixed(2), 'm | slowest', res.car.minV.toFixed(1), 'm/s');
   const [ex, ez] = W(-7, -(1.55 / 2 + gap) - 6);
   await p.evaluate(([ex, ez, tx, tz]) => {
     const g = __game, y = g.world.heightAt(tx, tz);

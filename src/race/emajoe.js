@@ -14,7 +14,7 @@ import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
 import { drapeGeometry } from '../world/drape.js';
 import { paverTex, GRASS } from '../world/streetkit.js';
-import { breakableShelter } from '../world/shelter.js';
+import { breakableShelter, shelterSolids } from '../world/shelter.js';
 import { adAtlas, adCell } from '../world/adverts.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
@@ -580,7 +580,7 @@ export function createEmajoe(world, group) {
         advertGlass.push({ a: W(-L / 2 + s * 0.11, -D * 0.43), b: W(-L / 2 + s * 0.11, D * 0.43), y0: y + 0.28, y1: y + 2.12 });
       }
       shelter = { box: { x: cx, z: cz, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 }, y, H };
-      solids.push(shelter.box);
+      solids.push(...shelterSolids(shelter.box));
     }
     // (the bus stop sign is a prop that snaps off when hit: emajoeProps)
 

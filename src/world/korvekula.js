@@ -26,6 +26,35 @@ const LOT = [0.935, -0.355];
 const lot = (O) => frame(O, LOT);
 const CENTRE = [3560, -1450];
 
+// ---------------------------------------------------------------- road 210's mouth at the highway
+// The map draws road 210 (Kõrveküla-Lähte tee) as one straight 11.6 m road right down to the highway, with
+// four-lane lines. In the photos it is a two-lane road that forks about 35 m before the highway: the left
+// branch runs straight on to the highway, the right one sweeps round to the east inside the guard rail, and a
+// red island lies between them (the white hatching before it is paint). Here the map's line is cut at the
+// fork and the two branches are added, the auto lane lines are kept off the fork, and road 210 north of it
+// gets one dashed centre line where the photos have it.
+const FORK = [3640.2, -1458.0];
+export function korveRoads(vectors) {
+  const roads = vectors.roads;
+  const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1.5;
+  const i = roads.findIndex((r) => r.name === 'Kõrveküla-Lähte tee' && r.pts.length === 2 &&
+    ((near(r.pts[0], [3651.5, -1417.6]) && near(r.pts[1], [3626.1, -1505.4])) || (near(r.pts[1], [3651.5, -1417.6]) && near(r.pts[0], [3626.1, -1505.4]))));
+  if (i < 0) return;
+  const r = roads[i];
+  roads[i] = { ...r, w: 11.4, mark: -1.4, pts: [FORK, [3626.1, -1505.4]] };
+  roads.push({ ...r, w: 6.0, mark: 0, pts: [FORK, [3639.4, -1448.0], [3639.4, -1438.0], [3640.6, -1424.0]] });                 // the left branch
+  roads.push({ ...r, w: 6.5, mark: 0, pts: [[3641.0, -1458.0], [3644.6, -1451.5], [3648.0, -1446.0], [3651.5, -1441.0], [3656.0, -1437.2],
+    [3662.0, -1434.0], [3669.0, -1431.6], [3676.0, -1430.0]] });                                                              // the sweep to the east
+  // the rest of road 210 up to the village is a two-lane road too: one dashed centre line
+  for (const q of roads) if (q !== roads[i] && q.name === 'Kõrveküla-Lähte tee' && q.w >= 11.5 && q.pts.every((p) => p[0] > 3560 && p[0] < 3660 && p[1] > -1700 && p[1] < -1400)) q.w = 11.4;
+  // the left branch flares out to the west for the turn onto the highway
+  vectors.overPaint = [...(vectors.overPaint || []), { cover: '#ff0', outer: [[3636.6, -1440], [3635.5, -1433], [3632.5, -1427.5], [3628, -1423.5], [3622, -1419.5], [3622, -1416], [3640, -1416], [3640, -1440]] },
+    // and between the island and the sweep it is all tarmac down to the highway
+    { cover: '#ff0', outer: [[3645.3, -1441], [3650, -1439.5], [3656, -1435.5], [3664, -1432], [3672, -1430], [3672, -1426], [3648.6, -1426]] }];
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => (x > 3630 && x < 3685 && z > -1462 && z < -1426) || (prev ? prev(x, z) : false);
+}
+
 // ---------------------------------------------------------------- what the map's own data needs
 export function korveWalls(walls) {
   setHouseColours(walls, '6_-1', 3040, -1440, [
@@ -146,8 +175,8 @@ export function createKorvekula(scene, world, { shadows = true } = {}) {
       [3482, -1304.2, 0.8, 1.4, [0.5, 0.74, 0.56]], [3517, -1312, 1.6, 1.0], [3520, -1309, 1.2, 1.5, [0.5, 0.74, 0.56]], [3523.5, -1313, 1.4, 0.9]]);
 
     // ================= where road 210 meets the highway =================
-    A.island([[3641.6, -1458.2], [3645.0, -1444.0], [3648.4, -1430.4]], 0.95, 'red');
-    A.guardrail([[3637.0, -1480.0], [3640.0, -1464.0], [3644.0, -1456.0], [3647.0, -1450.0], [3651.6, -1444.6], [3657.0, -1440.0], [3663.0, -1437.2], [3668.6, -1435.7], [3680.0, -1437.4], [3700.0, -1441.6], [3740.0, -1455.0]]);
+    A.island([[3643.1, -1445.8], [3645.6, -1436.4], [3648.1, -1427.2]], 1.0, 'red');
+    A.guardrail([[3638.6, -1480.0], [3640.0, -1470.0], [3642.0, -1462.0], [3645.6, -1457.0], [3650.4, -1452.0], [3654.8, -1446.0], [3659.4, -1440.4], [3664.8, -1436.8], [3670.8, -1435.4], [3676.5, -1435.2], [3684.0, -1436.6], [3700.0, -1441.6], [3740.0, -1455.0]]);
     A.guardrail([[3655.0, -1412.6], [3680.0, -1420.6], [3700.0, -1425.8], [3740.0, -1439.2]]);
 
     // ================= the village centre =================

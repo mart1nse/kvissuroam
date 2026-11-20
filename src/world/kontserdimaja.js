@@ -123,10 +123,23 @@ export function levelKontserdimaja(world) {
         }
         // the house's side
         const [fs, fv] = F.sv(x, z);
-        if (fs < -2.5 || fs > 56.5 || fv > GV + 0.5) continue;
         const e = roadV(fs) + 3.8;                                           // the road's edge
         if (fv < e + 0.1) continue;
         const ref = raw(...F.at(fs, e - 1));
+        // in front of the steps a level apron at their foot, easing into the pavement's fall further on; beside the
+        // lower flight the park kept under the top of its cheek, so the slope behind does not spill over the steps
+        if (fs > FOOT + 0.3 && fs < FOOT + 7 && fv < 10.5) {
+          const flat = toRaw(Y0 - 0.02), apron = flat + (Math.min(ref, flat) - flat) * smooth((fs - FOOT - 2.5) / 3.5);
+          const w = fv <= 7.5 ? 1 : 1 - smooth((fv - 7.5) / 3);
+          edits.push([k, H[k] + (apron - H[k]) * w]);
+          continue;
+        }
+        if (fs > S1 - 1 && fs <= FOOT + 0.3 && fv > 5.9 && fv < 10.5) {
+          const lim = toRaw(deckY(Math.min(fs, FOOT)) + 0.3 + Math.max(0, fv - 7) * 0.7);
+          if (H[k] > lim) edits.push([k, lim]);
+          continue;
+        }
+        if (fs < -2.5 || fs > 56.5 || fv > GV + 0.5) continue;
         let y = fv <= FV + 1.2 || (fs <= 4 && fv <= GV) ? ref : H[k];
         if (fs >= 3.5 && fs <= FOOT + 0.5 && fv > FV - 0.6) y = Math.min(y, toRaw(deckY(fs) - 0.3));
         edits.push([k, y]);

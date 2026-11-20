@@ -76,6 +76,7 @@ import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/k
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { createRiia3, riia3Walls } from './world/riia3.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
+import { turuPaintVectors } from './world/turupaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -284,6 +285,7 @@ async function boot() {
   teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kontserdimajaVectors(world.vectors);          // the park wall stops at the foot of the concert house's steps
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
+  turuPaintVectors(world.vectors);              // Turu: the hatched island from Soola to Sadama, no centre lines on Sadama and the car park lanes
   lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
   kaluriVectors(world.vectors);                 // Kaluri lane and the car park behind McDonald's: bay lines only
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey

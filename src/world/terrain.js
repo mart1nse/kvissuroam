@@ -37,6 +37,77 @@ function makeDetailTexture() {
   return t;
 }
 
+// One small tile of gravel shared by every gravel and dirt road (Martin, 20 Nov: "a bit beige'ish, small rocks
+// and stones, very little"), 2.4 m a side, built once as data: no canvas, about 350 KB on the graphics card
+// with its mipmaps, on phones too. R fine grain, G a few stones lying everywhere, B more stones, for the loose
+// strips (the middle and edges of a one-car road, away from the wheel tracks). 128 is neither lighter nor darker.
+export const GRAVEL_TILE = 2.4;
+let gravelTex = null;
+function gravelTexture() {
+  if (gravelTex) return gravelTex;
+  const n = 256;
+  const px = new Uint8Array(n * n * 4);
+  let seed = 7654321;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  // fine grain: white noise over two softer octaves, all wrapping
+  const oct = (c) => {
+    const m = n / c, v = new Float32Array(c * c);
+    for (let i = 0; i < c * c; i++) v[i] = rnd();
+    return (x, y) => {
+      const fx = x / m, fy = y / m, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+      const g = (i, j) => v[((j + c) % c) * c + ((i + c) % c)];
+      const a = g(x0, y0) + (g(x0 + 1, y0) - g(x0, y0)) * tx, b = g(x0, y0 + 1) + (g(x0 + 1, y0 + 1) - g(x0, y0 + 1)) * tx;
+      return a + (b - a) * ty;
+    };
+  };
+  const o1 = oct(64), o2 = oct(16);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const i = (y * n + x) * 4;
+      px[i] = Math.max(0, Math.min(255, Math.round(255 * (0.5 + 0.28 * (rnd() - 0.5) + 0.3 * (o1(x, y) - 0.5) + 0.25 * (o2(x, y) - 0.5)))));
+      px[i + 1] = px[i + 2] = 128;
+      px[i + 3] = 255;
+    }
+  }
+  // stones, 1 to 3.5 cm across: mostly pale limestone, some darker; lit from the top left with a shadow below right
+  const stones = (ch, count) => {
+    for (let k = 0; k < count; k++) {
+      const cx = rnd() * n, cy = rnd() * n, r = 0.9 + Math.pow(rnd(), 2.2) * 2.6, ang = rnd() * Math.PI;
+      const el = 0.65 + rnd() * 0.35, ca = Math.cos(ang), sa = Math.sin(ang);
+      const tone = rnd() < 0.75 ? 175 + rnd() * 70 : 70 + rnd() * 40;
+      const R = Math.ceil(r + 2);
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          const x = (Math.floor(cx) + dx + n) % n, y = (Math.floor(cy) + dy + n) % n;
+          const ux = Math.floor(cx) + dx + 0.5 - cx, uy = Math.floor(cy) + dy + 0.5 - cy;
+          const p = (ux * ca + uy * sa) / r, q = (-ux * sa + uy * ca) / (r * el);
+          const d = Math.hypot(p, q);
+          const i = (y * n + x) * 4 + ch;
+          if (d < 1) {
+            const lit = 1 + 0.25 * (-ux - uy) / (r * 1.4);          // rounded: lighter towards the light
+            px[i] = Math.max(0, Math.min(255, Math.round(tone * lit * (1 - 0.15 * d * d))));
+          } else {
+            // shadow, offset down and right
+            const sx = ux - 0.9, sy = uy - 0.9;
+            const ds = Math.hypot((sx * ca + sy * sa) / r, (-sx * sa + sy * ca) / (r * el));
+            if (ds < 1.05 && px[i] === 128) px[i] = 92;
+          }
+        }
+      }
+    }
+  };
+  stones(1, 140);
+  stones(2, 420);
+  const t = new THREE.DataTexture(px, n, n, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  return (gravelTex = t);
+}
+
 // mask: per-sector textures with their sector origin: tex (R paved yards and drives found in the aerial photo,
 // G openness near walls), and the painted roads of roadtex.js (cover, tone)
 function groundMaterial(map, detail, overview, mask) {
@@ -50,6 +121,7 @@ function groundMaterial(map, detail, overview, mask) {
     shader.uniforms.uKerb = { value: mask ? mask.kerb : 0.2 };
     shader.uniforms.uSec = { value: mask ? new THREE.Vector3(mask.x0, mask.z0, mask.size) : new THREE.Vector3() };
     shader.uniforms.uSunDir = { value: SUN };
+    shader.uniforms.uGravel = { value: mask ? gravelTexture() : null };
     if (mask) shader.defines = { ...(shader.defines || {}), USE_MASK: '' };
     shader.uniforms.uRect = { value: overview || new THREE.Vector4() };
     shader.vertexShader = shader.vertexShader
@@ -61,7 +133,7 @@ function groundMaterial(map, detail, overview, mask) {
       ? `diffuseColor *= texture2D(map, vec2((vWxz.x - uRect.x) / uRect.z, 1.0 - (vWxz.y - uRect.y) / uRect.w));`
       : '#include <map_fragment>';
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform sampler2D uRoad;\nuniform sampler2D uTone;\nuniform float uKerb;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying vec2 vSuv;\nvarying float vWy;\nfloat gWet = 0.0;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uMask;\nuniform sampler2D uRoad;\nuniform sampler2D uTone;\nuniform sampler2D uGravel;\nuniform float uKerb;\nuniform vec3 uSec;\nuniform vec3 uSunDir;\nuniform vec4 uRect;\nvarying vec2 vWxz;\nvarying vec2 vSuv;\nvarying float vWy;\nfloat gWet = 0.0;')
       .replace('#include <map_fragment>', `${sample}
         float dA = texture2D(uDetail, vWxz * 0.9).r;
         float dB = texture2D(uDetail, vWxz * 0.11).r;
@@ -81,7 +153,9 @@ function groundMaterial(map, detail, overview, mask) {
             + texture2D(uRoad, suv + vec2(tx.x, -tx.y)) + texture2D(uRoad, suv - tx));
           float road = smoothstep(0.4, 0.6, rdS.r);
           float paved = max(road, smoothstep(0.45, 0.65, mk.r));
-          float loose = smoothstep(0.4, 0.6, rd.b) * (1.0 - road);
+          // (further away the texture's smaller copies blur a narrow road into the grass: a lower threshold keeps it whole)
+          float lfar = smoothstep(40.0, 160.0, length(vViewPosition));
+          float loose = smoothstep(0.44 - 0.2 * lfar, 0.56 - 0.18 * lfar, rd.b) * (1.0 - road);
           float stone = smoothstep(0.4, 0.6, tn.b) * road;
           // tarmac: the shade and warmth come from what this road looks like in the aerial photo,
           // the grain is generated, and painted lines and light patches of the photo stay readable
@@ -109,12 +183,27 @@ function groundMaterial(map, detail, overview, mask) {
           // kerb stone along streets
           float kerb = smoothstep(0.42 - uKerb * 0.8, 0.42, rdS.g) * (1.0 - smoothstep(0.42, 0.42 + uKerb * 0.8, rdS.g)) * (1.0 - smoothstep(60.0, 160.0, dist));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.49) * (0.8 + 0.3 * grain), kerb * 0.85);
-          // gravel and dirt roads: crushed stone, lighter where the wheels run dry
-          float pebble = texture2D(uDetail, vWxz * 5.1 + 0.31).r;
-          vec3 gravel = mix(vec3(0.42, 0.375, 0.315), vec3(0.3, 0.27, 0.235), dB) * (0.5 + 0.5 * grain + 0.45 * pebble * nearK);
-          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.8 * loose);
+          // gravel and dirt roads: beige crushed stone with a few small stones lying on it, and wheel tracks
+          // (the road's width is in the tone, roadtex.js): darker, packed smooth, hardly a stone on them; looser
+          // stone between them and along the edges. One pair on a road one car wide, a fainter pair in each
+          // lane of a wider one.
+          float gb = tn.b * 255.0, gw = gb / 2.0;
+          float rutted = smoothstep(2.5, 4.0, gb) * (1.0 - smoothstep(19.0, 21.0, gb));
+          float lanes = smoothstep(5.0, 5.4, gw);
+          float fromMid = (1.0 - rd.b) * gw + 0.06 * (dB - 0.5);
+          float fromRut = mix(abs(fromMid - 0.8), abs(abs(fromMid - gw * 0.25) - 0.8), lanes);
+          float rut = rutted * mix(1.0, 0.6, lanes) * (1.0 - smoothstep(0.17, 0.36, fromRut)) * (1.0 - smoothstep(60.0, 140.0, dist));
+          vec4 gA = texture2D(uGravel, vWxz / ${GRAVEL_TILE.toFixed(2)});
+          vec4 gB = texture2D(uGravel, mat2(0.8, 0.6, -0.6, 0.8) * vWxz / 3.13 + 0.37);
+          float gGrain = mix(gA.r, gB.r, 0.45);
+          float gStone = (1.0 - rut) * nearK;
+          float gLit = mix(1.0, gA.g / 0.5, gStone * 0.9) * mix(1.0, gB.b / 0.5, gStone * (1.0 - rut) * 0.75);
+          vec3 gravel = vec3(0.37, 0.32, 0.155) * mix(0.86, 1.1, dB) * (0.72 + 0.56 * mix(gGrain, 0.5, rut * 0.6));
+          gravel *= mix(1.0, gLit, k);
+          gravel = mix(gravel, vec3(0.27, 0.235, 0.13) * (0.9 + 0.2 * gGrain), rut * 0.7);
+          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.88 * loose);
           // grass: blades and clumps on whatever is left
-          float soft = (1.0 - smoothstep(0.3, 0.5, max(rd.r, mk.r))) * (1.0 - smoothstep(0.3, 0.5, rd.b));
+          float soft = (1.0 - smoothstep(0.3, 0.5, max(rd.r, mk.r))) * (1.0 - smoothstep(0.38, 0.5, rd.b));
           float blades = texture2D(uDetail, vWxz * vec2(4.3, 1.1)).r * texture2D(uDetail, vWxz.yx * vec2(3.7, 0.9) + 0.37).r;
           float green = smoothstep(0.0, 0.06, diffuseColor.g - max(diffuseColor.r, diffuseColor.b) + 0.03);
           diffuseColor.rgb *= mix(1.0, 0.72 + 1.3 * blades, soft * green * k);

@@ -134,14 +134,17 @@ export function levelKontserdimaja(world) {
           edits.push([k, H[k] + (apron - H[k]) * w]);
           continue;
         }
+        // (phones and the low graphics level draw the ground on every second node, 4 m apart: a node's slope reaches
+        // 4 m, so the ground by the steps is held under the step 3 m further down)
+        const below = (q) => deckY(q > 30 ? Math.min(q + 3, FOOT + 0.4) : q);
         if (fs > S1 - 1 && fs <= FOOT + 0.3 && fv > 5.9 && fv < 10.5) {
-          const lim = toRaw(deckY(Math.min(fs, FOOT)) + 0.3 + Math.max(0, fv - 7) * 0.7);
+          const lim = toRaw(below(fs) - 0.1 + Math.max(0, fv - 8) * 0.7);
           if (H[k] > lim) edits.push([k, lim]);
           continue;
         }
         if (fs < -2.5 || fs > 56.5 || fv > GV + 0.5) continue;
         let y = fv <= FV + 1.2 || (fs <= 4 && fv <= GV) ? ref : H[k];
-        if (fs >= 3.5 && fs <= FOOT + 0.5 && fv > FV - 0.6) y = Math.min(y, toRaw(deckY(fs) - 0.3));
+        if (fs >= 3.5 && fs <= FOOT + 0.5 && fv > FV - 0.6) y = Math.min(y, toRaw(below(fs) - 0.3));
         edits.push([k, y]);
       }
     }

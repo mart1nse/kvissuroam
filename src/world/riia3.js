@@ -177,6 +177,18 @@ function mast(p, base, y0, H = 52) {
   p.add(new THREE.CylinderGeometry(0.45, 0.45, 1.6, 10), 0xe8e6e0, base[0] - 0.4, y0 + H - 6, base[1] + 0.3);
 }
 
+// road paint (Street View "42 Riia" and "43 Riia"): the map puts zebra crossings just before the railway bridge and
+// under it; there are none, the paths cross on the cycle bridge and through the tunnels
+export function riia3Clear(data) {
+  const out = [], a = data.sectors['2_7'] || [];
+  for (let k = 0; k < a.length; k += data.stride) {
+    if (a[k] !== 7) continue;
+    const [s, v] = RIIA2.sv(a[k + 1], a[k + 2]);
+    if (s > 560 && s < 600 && Math.abs(v) < 12) out.push(`2_7:${k / data.stride}`);
+  }
+  return out;
+}
+
 export function createRiia3(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);

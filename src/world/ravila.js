@@ -73,6 +73,19 @@ const FRONTS = [
   [221, NOORUSE[0] - 1, 'hedge', -1],     // Ravila 14
 ];
 
+// road paint (Street View "24 Nooruse", "14 Ravila"): past Nooruse the map paints three more zebras across Ravila
+// before the bus stop and a second one just past the Ostwaldi turn; the shots show one at Nooruse and one before
+// Ostwaldi only
+export function ravilaClear(data) {
+  const out = [], a = data.sectors['1_8'] || [];
+  for (let k = 0; k < a.length; k += data.stride) {
+    if (a[k] !== 7) continue;
+    const [s, v] = sv(a[k + 1], a[k + 2]);
+    if (Math.abs(v) < 8 && ((s > 270 && s < 330) || (s > 384 && s < 395))) out.push(`1_8:${k / data.stride}`);
+  }
+  return out;
+}
+
 export function createRavila(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);

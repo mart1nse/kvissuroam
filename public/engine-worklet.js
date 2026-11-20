@@ -15,6 +15,15 @@
 // layout, pipe lengths and the silencer tune come from the car's config (src/engine-sounds.js).
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+// an upshift's swing as its gear goes in (below): how far the revs sit off the new gear's at each half swing,
+// as a share of where they start, so that the swing dips 35 % below, comes back 12 % above, 5 % below, then
+// dies away (Martin 2026-11-20; it was 47, 22 and 10)
+const SWING = [1, 0.329, 0.113, 0.048], SWING_ON = 0.4;
+function swingEnv(x) {
+  const at = (i) => (i < SWING.length ? SWING[i] : SWING[SWING.length - 1] * SWING_ON ** (i - SWING.length + 1));
+  const i = Math.floor(x), a = at(i);
+  return a * (at(i + 1) / a) ** (x - i);
+}
 
 class Biquad {
   constructor() { this.b0 = 1; this.b1 = 0; this.b2 = 0; this.a1 = 0; this.a2 = 0; this.z1 = 0; this.z2 = 0; }
@@ -168,12 +177,12 @@ export class EngineCore {
     this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
-      // (per car: yank, the size of the swing, and yankHz, how fast it swings; a slower one dies slower.
-      // yankTight (1st to 2nd): the gear snaps in, the swing 60 % faster and over in half the time, and
-      // per car yankFirst times the size)
+      // (per car: yank, the size of the swing, and yankHz, how fast it swings; it dies away over the same
+      // half swings (SWING), so a slower one dies slower. yankTight (1st to 2nd): the gear snaps in, the
+      // swing 60 % faster and so over sooner, and per car yankFirst times the size)
       const c = this.cfg, ti = this.yTi || 0, hz0 = c.yankHz ?? 8.2, hz = hz0 * (1 + 0.6 * ti);
       const a = this.yA * (c.yank ?? 0.55) * (ti ? c.yankFirst ?? 1 : 1);
-      const env = Math.exp(-this.yT / (0.08 * 8.2 / hz0 / (1 + ti))), sw = Math.cos(6.2832 * hz * this.yT);
+      const env = swingEnv(2 * hz * this.yT), sw = Math.cos(6.2832 * hz * this.yT);
       yOff = a * env * sw;
       this.yk = Math.min(1, a / I.redline * 5) * env * sw;
       this.yT += len / sr;

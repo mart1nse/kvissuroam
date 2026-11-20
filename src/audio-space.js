@@ -30,7 +30,9 @@ const FAR = { dir: 0.4, thin: 5, er: 0.8, rev: 1.5, remote: 1, tail: 0.6, gain: 
 // the chase camera dropped right back at top speed (setBack(1)): the echoes up by 1 + er and our reverb by
 // 1 + rev, the car itself as it was (more room round it, Martin 2026-11-20; the growl that goes with it is
 // in the synthesiser, its growl input). Fades out towards the drone view, which has its own.
-const BACK = { er: 0.45, rev: 0.7 };
+// (halfway back, in dB, from #265's 0.45/0.7 to none: +1.6 dB echoes, +2.3 dB reverb at top speed, Martin
+// 2026-11-20 after the revs got their own room)
+const BACK = { er: 0.2, rev: 0.3 };
 // the engine screaming towards its limiter (setRev(1)): the echoes up by 1 + er and our reverb by 1 + rev,
 // growing from half the limiter revs (revRoom); not for the gear changes, which keep their size, and half
 // as much (REV_DOWN) once shifted down, until back on the throttle (Martin 2026-11-20: "V2", and "V1" for
@@ -143,7 +145,8 @@ export function createSpace(ctx, out, mix = {}) {
   // v: the echoes, reverb and compression on our own car (off: its plain, close-up sound, as before any of
   // this; the electric cars, and the lite sound); remote: other players' cars into the reverb
   let on = true, remoteOn = true, far = 0, back = 0;
-  const erGain = () => erMix * (1 + FAR.er * far + BACK.er * back * (1 - far));
+  const bk = mix.back || BACK;
+  const erGain = () => erMix * (1 + FAR.er * far + bk.er * back * (1 - far));
   function setOn(v, remote = v) {
     on = v; remoteOn = remote;
     const t = ctx.currentTime;
@@ -266,7 +269,7 @@ export function createSpace(ctx, out, mix = {}) {
     flutter[0].gain.setTargetAtTime(fl, t, 0.1); flutter[1].gain.setTargetAtTime(fl, t, 0.1);
     // the tail: a little everywhere (trees, the ground, far houses), much more between buildings
     const built = walls / taps.length;
-    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix * (1 + FAR.rev * far + BACK.rev * back * (1 - far)), t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
+    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix * (1 + FAR.rev * far + bk.rev * back * (1 - far)), t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
     if (near) pre.delayTime.setTargetAtTime(Math.min(0.08, 0.012 + 2 * (wsum / near) / C), t, 0.3);
     return built;
   }

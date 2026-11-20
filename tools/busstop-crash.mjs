@@ -18,9 +18,13 @@ for (const plan of plans) {
   const [x, z, yaw, L, gap] = D.stops[+idx];
   const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
   const W = (s, n) => [x + ux * s + nx * n, z + uz * s + nz * n];
-  const [cx, cz] = W(0.6, -(1.55 / 2 + gap) - 4.5);
-  const [v, n = 1] = plan.split('x').map(Number);
-  await p.evaluate(async ([cx, cz, cy]) => { await __game.world.loadAround(cx, cz, 300); __game.place({ x: cx, z: cz, yaw: cy }); }, [cx, cz, Math.atan2(nx, -nz)]);
+  // plan: speed, then f (into the open front, the default), b (into the back from behind) or e (into the
+  // end the buses come from), then x and the number of hits
+  const m = /^([\d.]+)([fbe]?)(?:x(\d+))?$/.exec(plan);
+  const v = +m[1], side = m[2] || 'f', n = +(m[3] || 1);
+  const [cx, cz] = side === 'b' ? W(0.6, 1.55 / 2 + 4.5) : side === 'e' ? W(-L / 2 - 4.5, 0) : W(0.6, -(1.55 / 2 + gap) - 4.5);
+  const heading = side === 'b' ? Math.atan2(-nx, nz) : side === 'e' ? Math.atan2(ux, -uz) : Math.atan2(nx, -nz);
+  await p.evaluate(async ([cx, cz, cy]) => { await __game.world.loadAround(cx, cz, 300); __game.place({ x: cx, z: cz, yaw: cy }); }, [cx, cz, heading]);
   await p.waitForTimeout(12000);
   const res = await p.evaluate(async ([v, n, cx, cz, cy]) => {
     const g = __game, { updateShelters, shelterInfo } = await import('/src/world/shelter.js');
@@ -31,16 +35,17 @@ for (const plan of plans) {
     for (let r = 0; r < n; r++) {
       // back to the start of the run-up each time, and in again
       g.place({ x: cx, z: cz, yaw: cy }); g.car.vx = v;
-      for (let k = 0; k < 120; k++) { g.sim(1 / 60, { up: 0 }); updateShelters(g.car, 1 / 60, g.audio); minV = Math.min(minV, g.car.vx); }
+      for (let k = 0; k < 120; k++) { g.sim(1 / 60, { up: 0 }); updateShelters(g.car, 1 / 60, g.audio); minV = Math.min(minV, g.car.vx); if (k === 59) window.__v1s = g.car.vx; }
       for (let k = 0; k < 90; k++) updateShelters(g.car, 1 / 60, g.audio);
     }
     const near = shelterInfo().map((s) => ({ ...s, d: Math.hypot(s.box.x - g.car.x, s.box.z - g.car.z) })).sort((a, b) => a.d - b.d)[0];
     g.renderer.render(g.scene, g.camera);
-    return { before, near, car: { x: g.car.x, z: g.car.z, vx: g.car.vx, minV, halfLen: g.car.halfLen } };
-  }, [v, n, cx, cz, Math.atan2(nx, -nz)]);
+    return { before, near, car: { x: g.car.x, z: g.car.z, vx: g.car.vx, minV, v1s: window.__v1s, halfLen: g.car.halfLen } };
+  }, [v, n, cx, cz, heading]);
   // how far the car's nose got past the shelter's open front (m; the back wall is 1.55 m in)
   const nose = (res.car.x - x) * nx + (res.car.z - z) * nz + res.car.halfLen + 1.55 / 2;
-  console.log(plan, 'm/s: panes broken', res.near?.broken, 'of', res.near?.panes, '| bend', res.near?.bend.toFixed(2), 'm | nose past the open front', nose.toFixed(2), 'm | slowest', res.car.minV.toFixed(1), 'm/s');
+  const at = [(res.car.x - x) * ux + (res.car.z - z) * uz, (res.car.x - x) * nx + (res.car.z - z) * nz];
+  console.log(plan, 'm/s: panes broken', res.near?.broken, 'of', res.near?.panes, '| bend', res.near?.bend.toFixed(2), 'm | through', res.near?.through, '| nose past the open front', nose.toFixed(2), 'm | car at (along, across)', at.map((q) => q.toFixed(1)).join(', '), '| speed after 1 s', res.car.v1s.toFixed(1), 'm/s, slowest', res.car.minV.toFixed(1), 'm/s');
   const [ex, ez] = W(-7, -(1.55 / 2 + gap) - 6);
   await p.evaluate(([ex, ez, tx, tz]) => {
     const g = __game, y = g.world.heightAt(tx, tz);

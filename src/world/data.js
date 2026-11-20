@@ -153,6 +153,13 @@ export async function loadWorldData(onProgress = () => {}) {
     const c0 = Math.max(0, Math.floor((b.x - reach - s.x0) / dres)), c1 = Math.min(dn - 1, Math.ceil((b.x + reach - s.x0) / dres));
     const r0 = Math.max(0, Math.floor((b.z - reach - s.z0) / dres)), r1 = Math.min(dn - 1, Math.ceil((b.z + reach - s.z0) / dres));
     const D = s.D;
+    // a box that may be taken away again (the back of a bus shelter a car crashes through) keeps the
+    // field as it was under it, per sector
+    if (b.removable) {
+      const w = c1 - c0 + 1, keep = new Uint8Array(w * (r1 - r0 + 1));
+      for (let r = r0; r <= r1; r++) keep.set(D.subarray(r * dn + c0, r * dn + c1 + 1), (r - r0) * w);
+      (s.kept ||= new Map()).set(b, { r0, r1, c0, c1, keep });
+    }
     for (let r = r0; r <= r1; r++) {
       for (let col = c0; col <= c1; col++) {
         const px = s.x0 + col * dres - b.x, pz = s.z0 + r * dres - b.z;
@@ -168,7 +175,7 @@ export async function loadWorldData(onProgress = () => {}) {
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
-    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = null;
+    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = s.kept = null;
     s.state = 'idle';
   }
 
@@ -282,6 +289,28 @@ export async function loadWorldData(onProgress = () => {}) {
     addSolids(list) {
       solids.push(...list);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
+    },
+    // Take away boxes added with removable: true: the field under each is put back as it was, and
+    // the solids still there that reach into it are written in again.
+    removeSolids(list) {
+      for (const b of list) { const k = solids.indexOf(b); if (k >= 0) solids.splice(k, 1); }
+      for (const s of sectors.values()) {
+        if (s.state !== 'ready' || !s.kept) continue;
+        let touched = false;
+        for (const b of [...list].reverse()) {
+          const k = s.kept.get(b);
+          if (!k) continue;
+          const w = k.c1 - k.c0 + 1;
+          for (let r = k.r0; r <= k.r1; r++) s.D.set(k.keep.subarray((r - k.r0) * w, (r - k.r0 + 1) * w), r * dn + k.c0);
+          s.kept.delete(b);
+          touched = true;
+        }
+        if (!touched) continue;
+        for (const b of solids) {
+          const near = list.some((o) => Math.hypot(b.x - o.x, b.z - o.z) < Math.hypot(b.hx, b.hz) + Math.hypot(o.hx, o.hz) + 2 * (dspan + dmin));
+          if (near) stamp(s, b);
+        }
+      }
     },
 
     // Start loading sectors within rLoad of the point, drop those beyond rKeep

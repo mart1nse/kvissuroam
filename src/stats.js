@@ -11,9 +11,9 @@ const params = new URLSearchParams(location.search);
 const on = params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0');
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', shownAt = 0;
 const once = new Set();
 const errSeen = new Set();
 
@@ -49,6 +49,7 @@ function send(leaving = false, closing = false) {
   if (loaded && !once.has('loaded')) out.loaded = true;
   if (drove && !once.has('drove')) out.drove = true;
   if (peak) out.peak = peak;
+  out.dev = dev;
   out.km = Math.round(out.km * 100) / 100;
   for (const k of ['menu', 'drive']) out[k] = Math.round(out[k] * 10) / 10;
   for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat']) for (const [kk, v] of Object.entries(out[k])) out[k][kk] = Math.round(v * 10) / 10;
@@ -70,7 +71,7 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
 }
 
@@ -80,15 +81,19 @@ export const stats = {
   // once, at the start: what kind of device this is
   start({ isTouch, lite, software }) {
     if (!on) return;
-    let ret = false, crash = false;
+    let ret = false, crash = '';
     try {
       ret = !!(localStorage.getItem('kvissuroam.name') || localStorage.getItem('kvissuroam.car'));
-      // the page was driving in this tab and never closed properly: a phone running out of memory
-      // reloads the page like this
-      crash = sessionStorage.getItem('kvissuroam.alive') === '1';
-      sessionStorage.removeItem('kvissuroam.alive');
+      // The page was open in this tab and never closed properly: it crashed, and this is the page
+      // loading again (a phone out of memory reloads it by itself; after a desktop's "Aw, Snap" the
+      // player reloads it). The flag says where the game was then: loading, garage or driving.
+      const was = sessionStorage.getItem('kvissuroam.alive');
+      crash = was === '1' ? 'drive' : ['load', 'menu', 'drive'].includes(was) ? was : '';
     } catch { /* storage blocked */ }
     first = { ...device(isTouch), ret, crash, lite: !!lite, sw: !!software };
+    dev = first.dev;
+    this.phase('load');
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) shownAt = performance.now(); });
     addEventListener('error', (e) => this.error(`${e.message || 'error'}${e.filename ? ` @ ${e.filename}:${e.lineno}` : ''}`));
     addEventListener('unhandledrejection', (e) => this.error(`promise: ${e.reason?.message || e.reason}`));
     addEventListener('pagehide', () => { try { sessionStorage.removeItem('kvissuroam.alive'); } catch {} send(true, true); });
@@ -96,13 +101,17 @@ export const stats = {
     setTimeout(() => send(), 20000);
     setInterval(() => { if (!document.hidden && performance.now() - sent > EVERY - 1000) send(); }, 30000);
   },
-  ready() { if (on && !loaded) { loaded = true; loadMs = Math.round(performance.now()); } },
+  // where the game is, kept in the tab for the crash check above (cleared when the page closes properly)
+  phase(p) { if (on) try { sessionStorage.setItem('kvissuroam.alive', p); } catch {} },
+  ready() { if (on && !loaded) { loaded = true; loadMs = Math.round(performance.now()); this.phase('menu'); } },
   drive() {
     if (!on) return;
     inc(b.misc, 'drives');
     drove = true;
-    try { sessionStorage.setItem('kvissuroam.alive', '1'); } catch {}
+    this.phase('drive');
   },
+  // something went wrong: glLost (the browser took the 3D picture away), stall (the game froze 3 s or more)
+  trouble(k) { if (on) inc(b.trouble, k); },
   count(k, n = 1) { if (on) inc(b.misc, k, n); },
   smash(k, n = 1) { if (on && n > 0) inc(b.smash, k, n); },
   lap(k, extra) {
@@ -115,6 +124,7 @@ export const stats = {
     if (!on || errSeen.size >= 10) return;
     const m = String(msg).slice(0, 200);
     if (errSeen.has(m)) return;
+    if (!errSeen.size) inc(b.trouble, 'err');     // (visits with an error)
     errSeen.add(m);
     b.err.push(m);
   },
@@ -125,6 +135,8 @@ export const stats = {
     lapCp = s.lapCp ?? -1;
     // (the frame's real length: the game's own step is capped, which would undercount slow devices)
     const dt = Math.min(s.raw, 1);
+    // a frame of 3 s or more while the page was in view (not the first after coming back to it)
+    if (s.raw >= 3 && s.mode !== 'loading' && performance.now() - shownAt > s.raw * 1000 + 500) inc(b.trouble, 'stall');
     if (s.mode === 'menu') { b.menu += dt; return; }
     if (s.mode !== 'drive') return;
     b.drive += dt;

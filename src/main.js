@@ -64,6 +64,7 @@ import { createLounakeskus2, lounakeskus2Walls } from './world/lounakeskus2.js';
 import { createLounakeskus3, lounakeskus3Walls } from './world/lounakeskus3.js';
 import { createLounakeskus4, lounakeskus4Walls } from './world/lounakeskus4.js';
 import { createLounakeskus5, lounakeskus5Walls } from './world/lounakeskus5.js';
+import { lounaPaintVectors } from './world/lounapaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -271,6 +272,7 @@ async function boot() {
   riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
   teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
+  lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours

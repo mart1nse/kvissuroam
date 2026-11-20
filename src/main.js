@@ -136,7 +136,10 @@ function applyFx() {
   const k = l.dpr >= Math.min(1, top) ? 1 : l.dpr >= 0.9 ? 0.6 : 0.35;
   smoke?.setDetail(k);
   audio.setLite(k < 0.5);
+  terrain?.setCoarse(coarseStep());
 }
+// the far ground's grid: every second line only below full sharpness (see setCoarse in terrain.js)
+function coarseStep() { const l = gfx.levels[gfx.level]; return l && l.dpr < 1 ? 2 : 1; }
 gfx.onChange(applyFx);
 // Weak desktops get the phones' lighter setup as well: pictures kept small and held once, a still picture
 // behind the opening menu and fewer, simpler parked cars. A desktop counts as weak when the browser says
@@ -293,6 +296,7 @@ async function boot() {
   deltaWalls(world.walls);                      // the Delta centre across the river from Lai is built by hand
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
+  quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -1034,8 +1038,18 @@ document.addEventListener('visibilitychange', () => {
 // what is driving the car: keyboard, gamepad, steering wheel or touch screen
 const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
+// Screens faster than 90 Hz (120, 144, 165 Hz laptops): only every 2nd (or 3rd) refresh is drawn, except
+// on HIGH. Otherwise the graphics chip of such a laptop runs flat out even on LOW (Martin, 20 Nov: built-in
+// Intel graphics near 100% on LOW). 120 Hz gives 60 frames a second, 144 Hz 72, 165 Hz 82, 240 Hz 80.
+// (A computer that cannot keep up misses refreshes, the measured interval grows and nothing is skipped.)
+let rafLast = 0, rafMs = 1000 / 60, rafTick = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
+  const gap = ts - rafLast;
+  rafLast = ts;
+  if (gap > 2 && gap < 50) rafMs += (gap - rafMs) * 0.05;
+  const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
+  if (++rafTick % every) return;
   const t0 = performance.now();
   clock.update(ts);
   const rawDt = clock.getDelta();

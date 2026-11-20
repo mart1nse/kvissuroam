@@ -45,9 +45,11 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
 import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
 import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
-import { createKorvekula, korveWalls } from './world/korvekula.js';
+import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls } from './world/riia.js';
+import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
+import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -75,6 +77,7 @@ import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
+import { stats } from './stats.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -140,6 +143,9 @@ let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 
   : navigator.webdriver ? '' : weakDesktop(gpu) || (lowRung() ? (gfx.mode === 'auto' ? 'slow last time' : 'graphics set low') : '');
 const lite = isTouch || !!liteWhy;
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
+// anonymous game stats (src/stats.js): only on www.linnaring.com
+stats.start({ isTouch, lite, software: gpu.software });
+canvas.addEventListener('webglcontextlost', () => stats.trouble('glLost'));
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -158,7 +164,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, riia, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, riia, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -230,6 +236,7 @@ async function boot() {
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
   kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
+  korveRoads(world.vectors);                    // road 210's fork and sweep where it meets the highway at Kõrveküla
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
@@ -256,6 +263,8 @@ async function boot() {
   korveWalls(world.walls);                      // and Kõrveküla's south approach (Rähni, road 210, the centre)
   korve2Walls(world.walls);                     // and Kõrveküla's school, Kooli tn and the Hariduse tn corner
   riiaWalls(world.walls);                       // and Riia tänav from Küüni towards Pepleri
+  korve3Walls(world.walls);                     // and the Kubjaringi green and Hariduse tn by the pond
+  korve4Walls(world.walls);                     // and the old Hariduse tn row east of the pond, Pärna 33
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -325,6 +334,8 @@ async function boot() {
   korve = createKorvekula(scene, world, { shadows: !isTouch });
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
   riia = createRiia(scene, world, { shadows: !isTouch });
+  korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
+  korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -398,7 +409,8 @@ async function boot() {
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap) => mp.submitLap(lap),
+    onLap: (lap) => { mp.submitLap(lap); stats.lap('finish', lap.car); },
+    onEvent: (k, cps) => stats.lap(k, cps),
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
@@ -475,6 +487,7 @@ async function boot() {
   $('#loading').classList.add('hidden');
   $('#menu').classList.remove('hidden');
   mode = 'menu';
+  stats.ready();
   if (params.has('drive')) startDriving();
 }
 
@@ -548,6 +561,7 @@ function startDriving() {
   if (mode === 'drive') return;
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
+  stats.drive();
   if (still) {
     // phones: from the still picture straight to behind the car
     still = false;
@@ -591,6 +605,8 @@ addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'menu' 
 function openGarage() {
   if (mode !== 'drive') return;
   drivenOnce = true;
+  stats.count('garage');
+  stats.phase('menu');
   board?.hide(); optEl.classList.add('hidden');
   closeMap();
   mode = 'menu';
@@ -673,6 +689,7 @@ function insideBoundary(x, z) {
 async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
+  stats.count('mapjump');
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
   const ok = (p) => {
     if (!p) return null;
@@ -977,6 +994,8 @@ document.addEventListener('visibilitychange', () => {
   back = { at: performance.now(), n: 0, f: 0, js: 0, worst: 0, next: 2000 };
 });
 
+// what is driving the car: keyboard, gamepad, steering wheel or touch screen
+const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -1037,6 +1056,8 @@ function frame(ts) {
     korve.update(car);
     korve2.update(car);
     riia.update(car);
+    korve3.update(car);
+    korve4.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());
@@ -1048,7 +1069,7 @@ function frame(ts) {
   if (mode === 'drive') {
     // remember safe ground
     histTimer -= dt;
-    if (car.inWater && !wetAt) wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime };
+    if (car.inWater && !wetAt) { wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime }; stats.count('water'); }
     else if (!car.inWater) wetAt = null;
     if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
@@ -1072,8 +1093,9 @@ function frame(ts) {
       }
     }
     if (launch?.done && kmh < 1) launch = null;
-    race.update(car, carId, s0Short(), isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
+    race.update(car, carId, s0Short(), inpNow());
   }
+  stats.frame({ mode, dt, raw: rawDt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
 
   // ---- car visuals
   const s = car.spec;

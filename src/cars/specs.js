@@ -417,8 +417,8 @@ export const CARS = {
     finalDrive: 3.154,
     efficiency: 0.89,
     shiftTime: 0.12,
-    limiter: 250,               // electronically limited
-    ref: { zeroTo100: 4.6, top: 250, powerKw: 309 },
+    limiter: null,              // de-limited: the factory 250 km/h cap is off, drag and gearing set the top speed
+    ref: { zeroTo100: 4.6, top: 300, powerKw: 309 },   // de-limited E92 M3: about 295-305 km/h true speed, set by drag in 7th
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks
@@ -468,8 +468,8 @@ export const CARS = {
     finalDrive: 5.74,
     efficiency: 0.8,            // (the retarder and the gearbox's oil pumps take their share)
     shiftTime: 0.45,
-    limiter: 80,                // city buses are limited
-    ref: { zeroTo50: 10.5, top: 80, powerKw: 206 },   // (no factory 0-50: a typical figure for a lightly loaded 12 m bus)
+    limiter: null,              // no 80 km/h governor: the gearing and the redline set the top speed
+    ref: { zeroTo50: 10.5, top: 112, powerKw: 206 },  // (no factory 0-50: a typical figure for a lightly loaded 12 m bus; top: 2200 rpm in sixth with no governor)
   },
 };
 

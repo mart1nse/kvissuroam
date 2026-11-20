@@ -5,6 +5,7 @@
 // after the car has moved. The shelter stays a solid box for the car (the posts hold); the damage lasts
 // until the page is loaded again.
 import * as THREE from 'three';
+import { stats } from '../stats.js';
 
 const shelters = [];
 const SHATTER = 2.2;        // m/s into the shelter: below this the frame only shakes and bends a touch
@@ -100,6 +101,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
       if (speed >= ALL || (speed >= SHATTER && gap < 1.2 + 0.25 * speed)) { shatter(q, dirX, dirZ, speed); broke++; }
     }
     sound?.smash?.(broke, Math.min(1.5, speed / 8));
+    stats.smash('glass', broke);
   }
 
   function bendFrames(dt) {

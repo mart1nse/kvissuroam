@@ -328,6 +328,9 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       solids.push({ x: S.at((s0 + s1) / 2, OUT - 1.1)[0], z: S.at((s0 + s1) / 2, OUT - 1.1)[1], yaw: S.yaw, hx: (s1 - s0) / 2, hz: 0.12 });
       const r = rnd(17);
       for (let s = 9; s < LB - 6; s += 6.7) list.push([...S.at(s + r() * 0.8, OUT + 0.3), 6.2 + r() * 1.8, 0.55 + r() * 0.16, r()]);
+      // black plastic guards round the young trunks (Street View 2023/2024)
+      const guard = new THREE.CylinderGeometry(0.17, 0.26, 0.85, 7);
+      for (const [x, z] of list) p.add(guard, 0x1d1e21, x, h(x, z) + 0.42, z);
       const kit = realTreeKit(), sp = kit && kit.species && kit.species[0];
       if (sp && sp.near) {
         const im = new THREE.InstancedMesh(sp.near, sp.soloMat, list.length);

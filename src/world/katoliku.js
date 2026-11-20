@@ -135,6 +135,30 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     return (s > -1 && s < SE + 1 && v > -1 && v < 11) || (s > CS0 && s < CS1 && v > CV0 - 1 && v < 23.5) || (s > 52 && s < 77 && v > 11 && v < 50);
   };
   world.addClearing({ test: (x, z) => inHouse(x, z) });
+
+  // The map's footprint of the house stuck out past the walls drawn here (about a metre into the lane at
+  // the far end, under the yard front of the far wing, behind the middle): free that ground and make the
+  // walls as built the solid ones
+  const sbox = (s0, s1, v0, v1) => { const [x, z] = S.at((s0 + s1) / 2, (v0 + v1) / 2); return { x, z, yaw: S.YAW, hx: (s1 - s0) / 2, hz: (v1 - v0) / 2 }; };
+  world.addFree([
+    sbox(CS1 + 0.05, SE + 2.1, -1.8, 9.0),         // the far wing's front and its end at the lane
+    sbox(SE + 0.05, SE + 2.1, 9.0, 11.9),           // the lane on past the wing, up to the bridge
+    sbox(CS0 + 0.05, CS1 - 0.05, D + 0.05, 25),     // behind the middle, the terrace with it
+  ]);
+  world.addSolids([
+    sbox(CS1, SE, 0, 9.05),                         // the far wing
+    sbox(23.4, 41.6, D - 0.2, 12.7),                // the back of the middle
+    sbox(28.8, 36.2, 12.7, 22.6),                   // the terrace block
+    sbox(0.1, 10.6, -2.35, 0),                      // the stairwell down to the cellar at the Oru end, and its low wall
+  ]);
+
+  // The red rubber mound of the playground: a smooth hill the cars drive over
+  const MOUND = { c: S.at(33.3, -32.4), r: 3.4, top: 0.6 };      // on a low hump the map's ground already has
+  const moundAt = (x, z) => {
+    const d = Math.hypot(x - MOUND.c[0], z - MOUND.c[1]);
+    return d >= MOUND.r ? 0 : MOUND.top * 0.5 * (1 + Math.cos(Math.PI * d / MOUND.r));
+  };
+  world.addBump({ x0: MOUND.c[0] - MOUND.r, z0: MOUND.c[1] - MOUND.r, x1: MOUND.c[0] + MOUND.r, z1: MOUND.c[1] + MOUND.r, at: moundAt });
   const trees = [];
   const atS = (s, v) => S.at(s, v);
   trees.push([...atS(29, -14), 6.5, 1.7, 1]);                                       // the spruce in its round bed
@@ -479,9 +503,32 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     const rubberT = rubberTex();
     A.pave(S, 35, 54, -27.5, -18.5, rubberT, 0.08);
     {
-      const [x, z] = at(33.3, -32.4), y = h(x, z);
-      p.add(new THREE.SphereGeometry(1, 28, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(3.3, 1.25, 3.3), 0xb34a3e, x, y - 0.05, z);
-      p.add(new THREE.TorusGeometry(3.4, 0.16, 4, 32).rotateX(Math.PI / 2), 0x9c3f35, x, y + 0.04, z);
+      // the rubber skin laid on the hill (the ground under it carries the bump), a low rim round its foot
+      const [x, z] = MOUND.c, y = h(x, z), RINGS = 9, SEG = 32, pos = [], idx = [];
+      for (let i = 0; i <= RINGS; i++) {
+        const d = MOUND.r * 1.04 * i / RINGS;
+        for (let k = 0; k < (i ? SEG : 1); k++) {
+          const a = k / SEG * Math.PI * 2, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+          pos.push(px - x, h(px, pz) - y + 0.16 + 0.08 * (i / RINGS) ** 2, pz - z);     // above the grass laid over the hill
+        }
+      }
+      for (let k = 0; k < SEG; k++) idx.push(0, 1 + (k + 1) % SEG, 1 + k);
+      for (let i = 1; i < RINGS; i++) {
+        const a0 = 1 + (i - 1) * SEG, b0 = 1 + i * SEG;
+        for (let k = 0; k < SEG; k++) {
+          const k1 = (k + 1) % SEG;
+          idx.push(a0 + k, a0 + k1, b0 + k, b0 + k, a0 + k1, b0 + k1);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      p.add(g, 0xb34a3e, x, y, z);
+      for (let k = 0; k < SEG; k++) {
+        const a = (k + 0.5) / SEG * Math.PI * 2, rx = x + Math.cos(a) * MOUND.r * 1.04, rz = z + Math.sin(a) * MOUND.r * 1.04;
+        p.add(BOX(0.22, 0.32, MOUND.r * 1.04 * Math.PI * 2 / SEG + 0.04), 0x9c3f35, rx, h(rx, rz) + 0.12, rz, -a);
+      }
     }
     const tube = (a, b, r = 0.05, c = COL.redTube) => {
       const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();

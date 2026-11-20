@@ -681,7 +681,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
 }
 
 // ---------------------------------------------------------------- small pieces
-function canvasTex(w, h, draw, repeat = true) {
+export function canvasTex(w, h, draw, repeat = true) {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   draw(cv.getContext('2d'), w, h);
@@ -692,7 +692,7 @@ function canvasTex(w, h, draw, repeat = true) {
   return t;
 }
 // red clay roof tiles: one tile 0.3 m wide, a course 0.36 m up the slope (the picture holds 2 x 2)
-function tileTex() {
+export function tileTex() {
   return canvasTex(64, 64, (c, w, hh) => {
     const r = rnd(7);
     c.fillStyle = '#8e3a2b'; c.fillRect(0, 0, w, hh);

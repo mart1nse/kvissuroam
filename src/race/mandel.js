@@ -270,32 +270,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
     const free = (x, z, r = 0.5) => world.sdfAt(x, z) > r;
     const seg = (a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); return { l, ux: dx / l, uz: dz / l, yaw: Math.atan2(-dz, dx), mx: (a[0] + b[0]) / 2, mz: (a[1] + b[1]) / 2 }; };
 
-    // the low brick wall on the right before the crossing, pillars every third panel, a gate near the end
-    {
-      const pts = edgeLine(1455, 1471.2, 1, 2.35, 2.2);
-      pts.forEach((q, k) => {
-        if (k < pts.length - 1) {
-          const S = seg(q, pts[k + 1]);
-          if (!free(S.mx, S.mz)) return;
-          const y = h(S.mx, S.mz);
-          if (k === pts.length - 3) {             // the gate: dark iron between two pillars
-            p.add(BOX(S.l - 0.5, 1.05, 0.05), COL.iron, S.mx, y + 0.6, S.mz, S.yaw);
-            for (let d = -S.l / 2 + 0.4; d < S.l / 2 - 0.3; d += 0.13) p.add(BOX(0.02, 1.25, 0.02), COL.iron, S.mx + S.ux * d, y + 0.72, S.mz + S.uz * d, S.yaw);
-          } else {
-            p.add(BOX(S.l + 0.02, 0.95, 0.36), COL.brick, S.mx, y + 0.47, S.mz, S.yaw);
-            p.add(BOX(S.l + 0.02, 0.08, 0.36), COL.brickDark, S.mx, y + 0.12, S.mz, S.yaw);
-            p.add(BOX(S.l + 0.04, 0.07, 0.46), COL.coping, S.mx, y + 0.98, S.mz, S.yaw);
-          }
-          solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2, hz: 0.25 });
-        }
-        if (k % 3 === 0 || k >= pts.length - 3) {
-          if (!free(q[0], q[1])) return;
-          const y = h(q[0], q[1]), yaw = k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : seg(pts[k - 1], q).yaw;
-          p.add(BOX(0.55, 1.5, 0.55), COL.brick, q[0], y + 0.75, q[1], yaw);
-          p.add(new THREE.ConeGeometry(0.46, 0.22, 4).rotateY(Math.PI / 4), COL.coping, q[0], y + 1.61, q[1], yaw);
-        }
-      });
-    }
+    // the church's brick wall on the right before the crossing is built with the church in world/katoliku2.js
     // picket fences on concrete posts: slats every 15 cm, two rails
     const picket = (pts, colour, height = 1.1) => {
       for (let k = 0; k < pts.length - 1; k++) {

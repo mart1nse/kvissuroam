@@ -230,6 +230,27 @@ export async function loadWorldData(onProgress = () => {}) {
     }
   }
 
+  // Walls that only stop what is below their top (a terrace's retaining wall: a car on the pavement runs into
+  // it, a car on the terrace drives off over it): boxes { x, z, yaw, hx, hz, top } facing the street on their
+  // local -z side. A car meets one while its body is more than 30 cm below the top and its middle is not past the
+  // wall's back, and is put back out on the street side; one only just below the top (dropping off the terrace
+  // over the wall) is eased out rather than thrown.
+  const ledges = [];
+  function ledgePush(x, z, y, r, out) {
+    for (let k = 0; k < ledges.length; k++) {
+      const b = ledges[k];
+      if (y > b.top + 0.1 || Math.abs(x - b.x) > b.reach + r || Math.abs(z - b.z) > b.reach + r) continue;
+      const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), dx = x - b.x, dz = z - b.z;
+      const al = dx * c - dz * sn, ac = dx * sn + dz * c;              // along the box's x, along its z
+      if (Math.abs(al) > b.hx + r * 0.7 || ac > b.hz) continue;
+      const pen = ac + b.hz + r;
+      if (pen <= 0) continue;
+      out[0] = -sn; out[1] = -c; out[2] = y > b.top - 0.6 ? Math.min(pen, 0.06) : pen;
+      return true;
+    }
+    return false;
+  }
+
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
@@ -348,6 +369,11 @@ export async function loadWorldData(onProgress = () => {}) {
       solids.push(...list);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
     },
+    // Walls that only stop cars below their top (see ledgePush).
+    addLedges(list) { for (const b of list) ledges.push({ ...b, reach: Math.hypot(b.hx, b.hz) }); },
+    // A circle of radius r round (x, z), at height y, against those walls: writes the push direction and depth to
+    // out[0..2] and returns true.
+    ledgePush(x, z, y, r, out) { return ledges.length !== 0 && ledgePush(x, z, y, r, out); },
     // Free ground of the map's baked obstacles in these boxes ({ x, z, yaw, hx, hz }), now and whenever a
     // sector loads again; the solids are written in again after. For hand-built houses whose walls stand
     // inside the map's footprint: free the strip between, and add the house's walls with addSolids.

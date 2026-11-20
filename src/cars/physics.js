@@ -962,6 +962,24 @@ function substep(car, input, world, dt) {
     }
   }
 
+  // ---- walls that only stop a car below their top (the Vanemuine terrace's retaining wall): felt at the nose,
+  // the middle and the tail
+  if (world.ledgePush) {
+    let depth = 0, lnx = 0, lnz = 0;
+    for (const k of [0.6, 0, -0.6]) {
+      if (world.ledgePush(car.x + fx * hl * k, car.z + fz * hl * k, car.y + 0.4, hwid + 0.25, tmpR) && tmpR[2] > depth) { depth = tmpR[2]; lnx = tmpR[0]; lnz = tmpR[1]; }
+    }
+    if (depth > 0) {
+      car.x += lnx * depth; car.z += lnz * depth;
+      const vn = wvx * lnx + wvz * lnz;
+      if (vn < 0) {
+        wvx -= 1.1 * vn * lnx; wvz -= 1.1 * vn * lnz;
+        car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
+        car.hit = Math.max(car.hit, -vn);
+      }
+    }
+  }
+
   // ---- body attitude
   car.y = Math.max(car.hy, groundY - 0.06);     // the drawn wheels may sink a little, not through the road
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);

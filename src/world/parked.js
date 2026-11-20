@@ -39,6 +39,7 @@ import { LOUNA_CARS } from './lounakeskus.js';
 import { TURU_CARS } from './turu.js';
 import { TURU2_CARS } from './turu2.js';
 import { TURU4_CARS } from './turu4.js';
+import { RIIA2_CARS } from './riia2.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -129,6 +130,7 @@ function allSpots() {
   TURU_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tu${i}`, x, z, yaw, id, paint, lift }));
   TURU2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tv${i}`, x, z, yaw, id, paint, lift }));
   TURU4_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tz${i}`, x, z, yaw, id, paint, lift }));
+  RIIA2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `r2${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

@@ -28,6 +28,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar, shiftGear } from '../src/cars/physics.js';
 import { ENGINE_SOUNDS } from '../src/engine-sounds.js';
+const { chaseBack } = await import('../src/audio-space.js');
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -173,7 +174,8 @@ for (const id of ids) {
     }
     let cutS = car.shiftCut ? 1 : 0;
     if (shs) { rpm = sh.rpm; if (sh.throttle !== undefined) { thr = sh.throttle; cutS = sh.shift ? 1 : 0; } }
-    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: cutS, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank || 0, yankId: sh.yankId || 0, yankTight: sh.yankTight || 0 });
+    core.set({ rpm, throttle: thr, boost: car.boost || 0, shaft: car.shaft || 0, on: 1, redline: spec.engine.redline, idle: spec.engine.idle, cut: car.revCut > 0 ? 1 : 0, shift: cutS, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank || 0, yankId: sh.yankId || 0, yankTight: sh.yankTight || 0,
+      growl: DRONE || !chaseBack ? 0 : chaseBack(Math.hypot(camDist, 2.35)) });
     core.process(buf);
     mono.set(buf.subarray(0, Math.min(BLOCK, total - i)), i);
     const v = Math.hypot(car.vx, car.vy);
@@ -229,7 +231,7 @@ for (const id of ids) {
   await page.goto(`http://127.0.0.1:${server.port}/`);
   if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
   const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP }) => {
-    const { createSpace } = await import('/src/audio-space.js');
+    const { createSpace, chaseBack } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
     const at = (x, z) => {
@@ -302,6 +304,8 @@ for (const id of ids) {
       cam.matrixWorld.elements[0] = poses[o + 6]; cam.matrixWorld.elements[1] = 0; cam.matrixWorld.elements[2] = poses[o + 7];
       const cd = Math.hypot(cam.position.x - car.x, cam.position.y - car.y, cam.position.z - car.z);
       space.setFar?.(Math.min(1, Math.max(0, (cd - 16) / 16)));
+      // (and the chase camera dropping back with speed, as audio.js does)
+      if (chaseBack) space.setBack?.(chaseBack(cd));
       const built = space.update(world, car, cam, 1 / FPS);
       if (k % 60 === 0) log.push(`${(k / FPS).toFixed(0)} s built ${built.toFixed(2)} tail ${space.tail.toFixed(2)} walls ${space.taps.map((t) => (t.d > 0 ? t.d.toFixed(0) : '-')).join(' ')}`);
     };

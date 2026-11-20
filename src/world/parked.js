@@ -40,12 +40,14 @@ import { TURU_CARS } from './turu.js';
 import { TURU2_CARS } from './turu2.js';
 import { TURU4_CARS } from './turu4.js';
 import { RIIA2_CARS } from './riia2.js';
+import { KALURI_CARS } from './kaluri.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
 const PAINT = {
   white: [0xe8e9e8, true], black: [0x0b0b0d], silver: [0xb3b7bc], grey: [0x3a3d42], bronze: [0x86704f],
   blue: [0x1d3c6e], red: [0x5a0f15], cyan: [0x1fa9cf], lilac: [0x50294e],
+  bmwred: [0xa60f18], beige: [0xcbb88f, true],  // the bright BMW red and the old Mercedes taxi beige (the Kaluri car park)
   sage: [CEED_GREEN],                          // Kia's Experience Green, a muted grey-green
 };
 // the mix Martin asked for: mostly Passat, Mazda and RAV4, a few bZ4X and BMW, and (19 Nov) Tesla Model 3 and
@@ -62,6 +64,9 @@ const AUDIS = [[9, 'lilac'], [37, 'silver'], [61, 'black']];
 // outside Elva 35b and at the Coop in Kvissentali, see elva.js and coop.js.)
 const KIAS = [14, 46, 70, 104, 117];
 const OPTS = { passat: { scan: false }, audi200: { scan: false }, enyaq: { rack: false } };
+// models with a scanned body (a GLB): a parked one wears it on a desktop and the lighter drawn body on a phone;
+// TINT: the scan's paint is plain white in its picture, so it can be given any colour
+const SCANNED = { m3: true, cgt: true }, TINT = { m3: true };
 const MASS = { f31: 1580, model3: 1850, accord: 1530, ceedsw: 1390 };
 // buses at stops (bus stop places from OpenStreetMap, moved to the kerb seen in the orthophoto):
 // x, z, heading. Ten in the centre and one at Klaose in Kvissentali.
@@ -131,6 +136,7 @@ function allSpots() {
   TURU2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tv${i}`, x, z, yaw, id, paint, lift }));
   TURU4_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tz${i}`, x, z, yaw, id, paint, lift }));
   RIIA2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `r2${i}`, x, z, yaw, id, paint, lift }));
+  KALURI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ka${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }
@@ -142,10 +148,12 @@ function sampler(tex) {
   let p = pixels.get(tex);
   if (!p) {
     const im = tex.image;
+    // (a scanned body's 2048 picture is read at 512: one colour per triangle does not need more)
+    const k = Math.min(1, 512 / Math.max(im.width, im.height));
     const c = document.createElement('canvas');
-    c.width = im.width; c.height = im.height;
+    c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
     const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(im, 0, 0);
+    g.drawImage(im, 0, 0, c.width, c.height);
     p = { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, flip: tex.flipY !== false };
     pixels.set(tex, p);
   }
@@ -167,13 +175,13 @@ export function bakeLod(parts, id, tris) {
   const pos = new Float64Array(cap * 3), nrm = new Float64Array(cap * 3), col = new Float64Array(cap * 3), mat = new Float64Array(cap * 3);
   let n = 0;                                   // vertices written
   const c = new THREE.Color(), px = [0, 0, 0, 0];
-  for (const { geo, mat: m, paint } of parts) {
+  for (const { geo, mat: m, paint, scan, tint } of parts) {
     if (m.transparent && m.opacity < 0.5) continue;
     const P = geo.attributes.position.array, N = geo.attributes.normal.array, U = geo.attributes.uv?.array;
     const isPal = !!(m.map && m.metalnessMap && m.map.magFilter === THREE.NearestFilter);
     const tex = !paint && !isPal && U ? sampler(m.map) : null;
     // decals lie a few millimetres off the body: lift them clear of the simplified shell
-    const puff = paint ? 0 : isPal ? 0.006 : 0.014;
+    const puff = paint || scan ? 0 : isPal ? 0.006 : 0.014;
     for (let t = 0; t < P.length; t += 9) {
       let r = m.roughness ?? 0.5, mt = m.metalness ?? 0, isPaint = 0;
       if (paint) { c.setRGB(1, 1, 1); isPaint = 1; }
@@ -181,7 +189,9 @@ export function bakeLod(parts, id, tris) {
       else if (tex) {
         tex((U[t / 9 * 6] + U[t / 9 * 6 + 2] + U[t / 9 * 6 + 4]) / 3, (U[t / 9 * 6 + 1] + U[t / 9 * 6 + 3] + U[t / 9 * 6 + 5]) / 3, px);
         if (m.alphaTest > 0 && px[3] < m.alphaTest * 255) continue;
-        c.setRGB(px[0] / 255, px[1] / 255, px[2] / 255, THREE.SRGBColorSpace).multiply(m.color);
+        // a scanned body that takes paint: its white parts are the paint
+        if (tint && Math.min(px[0], px[1], px[2]) > 150) { c.setRGB(1, 1, 1); isPaint = 1; }
+        else c.setRGB(px[0] / 255, px[1] / 255, px[2] / 255, THREE.SRGBColorSpace).multiply(m.color);
       } else c.copy(m.color);
       for (let k = 0; k < 9; k += 3) {
         const a = n * 3;
@@ -251,6 +261,19 @@ export function bakeLod(parts, id, tris) {
   return g;
 }
 
+// The very far version (the Kaluri car park, 20 Nov: fifty cars side by side): the far version's own vertices
+// with a much shorter triangle list, so it costs no memory to speak of. A car 100 m off is a few pixels high.
+export function lowLod(lod, tris) {
+  if (!MeshoptSimplifier.supported || !lod.index || lod.index.count <= tris * 3) return lod;
+  const idx = MeshoptSimplifier.simplifySloppy(new Uint32Array(lod.index.array), lod.attributes.position.array, 3, null, tris * 3, 0.08)[0];
+  if (!idx.length) return lod;
+  const g = new THREE.BufferGeometry();
+  for (const k of Object.keys(lod.attributes)) g.setAttribute(k, lod.attributes[k]);
+  g.setIndex(new THREE.BufferAttribute(lod.attributes.position.count > 65535 ? idx : new Uint16Array(idx), 1));
+  g.boundingSphere = lod.boundingSphere; g.boundingBox = lod.boundingBox;
+  return g;
+}
+
 // far material: vertex colours, with the paint colour and its finish as uniforms
 const lodMats = new Map();
 function lodMaterial(name, own = null) {
@@ -274,22 +297,36 @@ function lodMaterial(name, own = null) {
 }
 
 const templates = new Map();
-function buildTemplate(id) {
-  const model = buildCarModel(id, OPTS[id]);
+// scan: wear the scanned body where the model has one (then the answer is a promise: the body has to load)
+function buildTemplate(id, scan = false) {
+  const scanned = !!SCANNED[id] && scan;
+  const model = buildCarModel(id, SCANNED[id] ? { ...OPTS[id], scan: scanned } : OPTS[id]);
   model.setLights?.({ headlights: false });
   model.setSoot?.(0);
+  return scanned && model.ready ? model.ready.then(() => takeTemplate(id, model)) : takeTemplate(id, model);
+}
+function takeTemplate(id, model) {
+  model.setLights?.({ headlights: false });
   model.group.updateMatrixWorld(true);
   const parts = [];
-  model.group.traverse((o) => {
-    if (!o.isMesh || !o.visible) return;
+  const take = (o) => {
     const geo = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrixWorld);
-    parts.push({ geo, mat: o.material, paint: o.name === `${id}_paint` });
-  });
+    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    const scan = !!model.glbLoaded && o.name.endsWith('_glb') && !o.material.name.startsWith('ov_');
+    parts.push({ geo, mat: o.material, paint: o.name === `${id}_paint`, scan, tint: scan && !!TINT[id] });
+  };
+  if (model.glbLoaded) {
+    // the drawn body is hidden under the scan (whole branches of it): leave out what is not shown
+    const walk = (o) => { if (!o.visible) return; if (o.isMesh) take(o); for (const c of o.children) walk(c); };
+    walk(model.group);
+  } else model.group.traverse((o) => { if (o.isMesh && o.visible) take(o); });
+  const paintPart = parts.find((p) => p.paint || p.tint);
   const T = {
     id, lod: null, parts, near: null, nearMats: null, paints: new Map(),
     hl: model.size.length / 2, hw: model.size.width / 2, wb: model.wheelbase, tr: model.track,
     mass: MASS[id] || CARS[id]?.mass || 1500,
     ownPaint: parts.find((p) => p.paint)?.mat || { color: new THREE.Color(0xffffff), roughness: 0.4, metalness: 0.3 },
+    paintMat: paintPart?.mat, tinted: !!paintPart?.tint,
   };
   // the near version is put together the first time a car of this model is close enough to need it
   T.needNear = () => {
@@ -304,7 +341,7 @@ function buildTemplate(id) {
     T.near = mergeGeometries(geos, true);
     T.near.computeBoundingSphere();
     T.nearMats = mats;
-    T.paintAt = mats.indexOf(T.parts.find((p) => p.paint)?.mat);
+    T.paintAt = mats.indexOf(T.paintMat);
     for (const p of T.parts) p.geo.dispose();
     T.parts = null;
   };
@@ -314,9 +351,23 @@ function buildTemplate(id) {
     let l = T.paints.get(name);
     if (!l) {
       const [hex, solid] = PAINT[name];
-      const m = T.nearMats[T.paintAt].clone();
-      m.color.set(hex);
-      if (solid) Object.assign(m, { metalness: 0.05, roughness: 0.38 });
+      let m = T.nearMats[T.paintAt];
+      if (!T.tinted) {
+        m = m.clone();
+        m.color.set(hex);
+        if (solid) Object.assign(m, { metalness: 0.05, roughness: 0.38 });
+      } else if (name !== 'white') {
+        // a scanned body: its picture holds the paint as white, which is multiplied by the colour (the
+        // glass, lamps, grilles and trim in the same picture are dark or coloured and stay as they are)
+        m = m.clone();
+        const uPaint = { value: new THREE.Color(hex) };
+        m.onBeforeCompile = (s) => {
+          s.uniforms.uPaint = uPaint;
+          s.fragmentShader = `uniform vec3 uPaint;\n${s.fragmentShader}`.replace('#include <map_fragment>',
+            '#include <map_fragment>\n{ float pm = smoothstep( 0.22, 0.5, min( diffuseColor.r, min( diffuseColor.g, diffuseColor.b ) ) );\ndiffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * uPaint, pm ); }');
+        };
+        m.customProgramCacheKey = () => 'parked-scan-tint';
+      }
       l = T.nearMats.slice(); l[T.paintAt] = m;
       T.paints.set(name, l);
     }
@@ -369,6 +420,7 @@ export function createParked(scene, world, opts = {}) {
   const VIEW = touch ? 240 : 520;                      // drawn within this distance of the camera
   const tris = touch ? 3200 : 6000;                    // triangles of the far version
   const tune = { near: touch ? 26 : 45, nearMax: touch ? 3 : 10 };   // full models: how close, and how many at once
+  const LOW = touch ? 55 : 110, lowTris = touch ? 450 : 700;        // beyond this the very far version, of so many triangles
   const spots = allSpots(), bodies = [];
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { /* none */ }
@@ -399,14 +451,16 @@ export function createParked(scene, world, opts = {}) {
       if (wait > 0) { setTimeout(run, Math.min(wait, 500)); return; }
       const id = queue.shift();
       const fail = (e) => { console.warn('parked', id, e); templates.set(id, false); building = false; pump(); };
-      let T;
-      try { T = buildTemplate(id); } catch (e) { fail(e); return; }
-      // the far version in a frame of its own
-      setTimeout(() => {
-        try { T.lod = bakeLod(T.parts, id, tris); templates.set(id, T); } catch (e) { fail(e); return; }
+      // the far versions in a frame of their own
+      const bake = (T) => setTimeout(() => {
+        try { T.lod = bakeLod(T.parts, id, tris); T.low = lowLod(T.lod, lowTris); templates.set(id, T); } catch (e) { fail(e); return; }
         building = false;
         pump();
       }, touch ? 300 : 120);
+      try {
+        const T = buildTemplate(id, !touch);
+        if (T.then) T.then(bake, fail); else bake(T);
+      } catch (e) { fail(e); }
     };
     MeshoptSimplifier.ready.then(() => setTimeout(run, gap), () => setTimeout(run, gap));
   }
@@ -439,7 +493,7 @@ export function createParked(scene, world, opts = {}) {
       s, T, x: s.x, z: s.z, yaw: s.yaw, hl: T.hl, hw: T.hw, wb: T.wb, tr: T.tr, mass: T.mass,
       inertia: T.mass * ((2 * T.hl) ** 2 + (2 * T.hw) ** 2) / 12,
       vx: 0, vz: 0, w: 0, moving: false, y: 0, lift: s.lift || 0, moved: false,
-      g: new THREE.Group(), far: null, near: null, isNear: false,
+      g: new THREE.Group(), far: null, near: null, isNear: false, isLow: false,
     };
     const at = saved[s.key];
     if (at && Number.isFinite(at[0])) { b.x = at[0]; b.z = at[1]; b.yaw = at[2]; b.moved = true; }
@@ -596,6 +650,8 @@ export function createParked(scene, world, opts = {}) {
         const d = Math.hypot(b.x - ex, b.z - ez);
         b.g.visible = d < VIEW;
         b.d = d;
+        const low = d > LOW * (b.isLow ? 0.9 : 1);
+        if (low !== b.isLow) { b.isLow = low; b.far.geometry = low ? b.T.low : b.T.lod; }
         if (d < tune.near * (b.isNear ? 1.15 : 1) * (b.s.bus ? 1.6 : 1)) order.push(b); else showNear(b, false);
       }
       order.sort((a, b) => a.d - b.d);

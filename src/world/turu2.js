@@ -144,13 +144,8 @@ function park(P, W) {
 
 const PAINT = { kaluri2, hotel, park };
 
+// (the cars that stood along Kaluri here are now in the bays and on the cobbles of kaluri.js)
 export const TURU2_CARS = [];
-{
-  const K = frame([2036.9, 3157.8], [-35.6, -35.5]);                     // Kaluri tänav toward Soola; v - = the Circle K side
-  const yaw = Math.atan2(K.U[0], -K.U[1]);
-  for (const [s, id, paint] of [[9, 'passat', 'grey'], [14.5, 'mazda6', 'red'], [20, 'rav4', 'black']]) TURU2_CARS.push([...K.at(s, -4.6), yaw, id, paint, 0.03]);
-  for (const [s, id, paint] of [[30, 'bz4x', 'silver'], [35.5, 'model3', 'white']]) TURU2_CARS.push([...K.at(s, 4.4), yaw + Math.PI, id, paint, 0.03]);
-}
 
 export function createTuru2(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();

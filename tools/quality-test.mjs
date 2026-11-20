@@ -50,6 +50,19 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   const { g, moves } = run(N, N - 1, () => vsync(30, 5), 600, 0.2);
   check(g.level >= N - 2, `30 Hz cap ends near the top (rung ${g.level}, ${moves.length} moves: ${moves.map((m) => `${m.t}s ${m.from}->${m.to} ${m.why}`).join(', ')})`);
 }
+// 4b. the battery saver is told to the player; when the charger goes in (recheck) a machine too slow for the
+// top rung is free to step down again
+{
+  const work = (l) => 14 * 1.3 ** (l - 6);         // rung 6 and below hold 60 Hz
+  const g = createGovernor({ levels: N, start: N - 1 });
+  const moves = [];
+  let t = 0;
+  for (; t < 60000; t += 1000 / 30) g.feed(1000 / 30);
+  check(g.capped > 28 && g.capped < 32 && g.level === N - 1, `30 Hz cap is reported, back on the top rung (${g.capped.toFixed(1)} fps, rung ${g.level})`);
+  g.recheck();
+  while (t < 300000) { const ms = vsync(60, work(g.level)); t += ms; const ch = g.feed(ms); if (ch) moves.push(`${Math.round(t / 1000)}s ${ch.from}->${ch.to} ${ch.why}`); }
+  check(g.capped === 0 && g.level <= 6 && g.level >= 5, `cap gone with the charger in: settles on rung ${g.level} (${moves.join(', ')})`);
+}
 
 // 5. borderline: one rung up is just too slow; must not keep flickering
 {

@@ -196,6 +196,16 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
 
   const info = () => ({ box, y, broken: P.filter((q) => q.broken).length, panes: P.length, bend: total, shards: S.length });
   const rec = { update, hit, box, info };
+  // has it been hit at all (a damaged shelter is kept as it is while its piece of the map is loaded)
+  rec.damaged = () => total > 0 || S.length > 0;
+  // take it out of the list and free what it made (the bus stops build one when a car comes near)
+  rec.remove = () => {
+    const k = shelters.indexOf(rec);
+    if (k >= 0) shelters.splice(k, 1);
+    group.remove(shards);
+    shardGeo.dispose(); shardMat.dispose(); glassMat.dispose();
+    for (const q of P) { group.remove(q.mesh); q.mesh.geometry.dispose(); }
+  };
   shelters.push(rec);
   return rec;
 }

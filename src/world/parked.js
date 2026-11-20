@@ -28,6 +28,7 @@ import { VANEMUISE_CARS } from './vanemuise.js';
 import { KORVE_CARS } from './korvekula.js';
 import { KORVE2_CARS } from './korvekula2.js';
 import { RIIA_CARS } from './riia.js';
+import { TEATRI_CARS } from './teatripark.js';
 import { KORVE3_CARS } from './korvekula3.js';
 import { KORVE4_CARS } from './korvekula4.js';
 import { HARIDUSE10_CARS } from './hariduse10.js';
@@ -113,6 +114,7 @@ function allSpots() {
   KORVE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kv${i}`, x, z, yaw, id, paint, lift }));
   KORVE2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kw${i}`, x, z, yaw, id, paint, lift }));
   RIIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ri${i}`, x, z, yaw, id, paint, lift }));
+  TEATRI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `tp${i}`, x, z, yaw, id, paint, lift }));
   KORVE3_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kx${i}`, x, z, yaw, id, paint, lift }));
   KORVE4_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ky${i}`, x, z, yaw, id, paint, lift }));
   HARIDUSE10_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kz${i}`, x, z, yaw, id, paint, lift }));

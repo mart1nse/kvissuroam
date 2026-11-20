@@ -20,13 +20,34 @@ const P0 = [16, 16], P1 = [39, 44];
 const pathV = (s) => P0[1] + (s - P0[0]) * (P1[1] - P0[1]) / (P1[0] - P0[0]);
 const PATH_HV = 1.5 / Math.cos(Math.atan2(P1[1] - P0[1], P1[0] - P0[0]));      // half its width, measured along v
 const MEMO = { s0: 44, s1: 65, v0: 37.3, v1: 48.7 };                         // the Tubin memorial platform
+// Ülikooli by the park (orthophoto, Street View Aug 2024): centre line at v -0.7, a lane line at 5.3, the
+// parking and bus stop strip from 8.9 to the kerb at 13.4, blue angled bays (30 degrees, nose to the kerb) from
+// the Vanemuise corner to the benches
+const ULI = { centre: -0.7, lane: 5.3, edge: 8.9, kerb: 13.4 }, BAYS = [10, 15, 20, 25, 30, 35, 40, 45];
+// Vanemuise tn along the park: taxi bays between a granite kerb strip and the pavement (s -8.1 .. -4.6)
+const TAXI = { s0: -8.1, s1: -4.6, bays: [20, 23.3, 26.6, 29.9, 33.2, 36.5, 39.8] };
+const at = (s, v) => F.at(s, v);
+const carYaw = (ds, dv) => { const x = F.U[0] * ds + F.V[0] * dv, z = F.U[1] * ds + F.V[1] * dv; return Math.atan2(x, -z); };
+const C30 = Math.cos(Math.PI / 6), S30 = 0.5, C50 = Math.cos(50 * Math.PI / 180), S50 = Math.sin(50 * Math.PI / 180);
+// parked cars, backed into the bays as in the Aug 2024 shots: five on Ülikooli and two taxis on Vanemuise
+export const TEATRI_CARS = [
+  [...at(10, 11.95), carYaw(-C30, -S30), 'passat', 'white', 0.03],
+  [...at(15, 11.95), carYaw(-C30, -S30), 'mazda6', 'grey', 0.03],
+  [...at(25, 11.95), carYaw(-C30, -S30), 'rav4', 'black', 0.03],
+  [...at(30, 11.95), carYaw(-C30, -S30), 'model3', 'white', 0.03],
+  [...at(40, 11.95), carYaw(-C30, -S30), 'accord', 'silver', 0.03],
+  [...at(-6.56, 23.3 + 2.92), carYaw(-S50, -C50), 'passat', 'grey', 0.03],
+  [...at(-6.56, 33.2 + 2.92), carYaw(-S50, -C50), 'mazda6', 'black', 0.03],
+];
 
-// before the road markings are made: the theatre forecourt and its car park get no lane lines
+// before the road markings are made: the theatre forecourt and its car park get no lane lines, and along the
+// park Ülikooli's generated lines make way for the real ones (drawn in build: double solid centre, one lane
+// line, the dashed edge of the parking and bus stop strip, the blue bays)
 export function teatriparkVectors(vectors) {
   const prev = vectors.markSkip;
   vectors.markSkip = (x, z) => {
     const [s, v] = F.sv(x, z);
-    return (s > -16 && s < 92 && v > 43 && v < 63) || (prev ? prev(x, z) : false);
+    return (s > -16 && s < 92 && v > 43 && v < 63) || (s > 3 && s < 76 && v > -6 && v < 14) || (prev ? prev(x, z) : false);
   };
 }
 
@@ -40,6 +61,21 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;
+    const IRON0 = 0x34363a;
+    // painted lines: segments [s0, v0, s1, v1] of the frame, 0.13 m wide, a few cm over the road or the strip
+    function stripes(list, hex) {
+      const pos = [], HW = 0.065;
+      for (const [s0, v0, s1, v1] of list) {
+        const l = Math.hypot(s1 - s0, v1 - v0), ns = -(v1 - v0) / l * HW, nv = (s1 - s0) / l * HW;
+        const q = [[s0 + ns, v0 + nv], [s0 - ns, v0 - nv], [s1 + ns, v1 + nv], [s1 - ns, v1 - nv]].map(([a, b]) => { const [x, z] = F.at(a, b); return [x, h(x, z) + 0.11, z]; });
+        for (const k of [0, 1, 2, 2, 1, 3]) pos.push(...q[k]);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.computeVertexNormals();
+      const m = new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = shadows; group.add(mesh);
+    }
 
     // ---- ground: the two lawns either side of the path, the path, the forecourt
     A.pave(F, 0, 37, (s) => Math.max(19, pathV(s) + PATH_HV), 44, 'lawn');
@@ -56,27 +92,90 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     for (let v = 21; v <= 43; v += 4.5) { const [x, z] = F.at(0.4, v); A.bollard(x, z, WHITE, 0.5); }
     for (let t = 2; t < len - 1; t += 4.5) for (const side of [-1.7, 1.7]) { const [x, z] = FP.at(t, side); A.bollard(x, z, WHITE, 0.5); }
 
-    // ---- the Tubin memorial: four stone terraces stepping up the slope towards the theatre (about 1.7 m in all),
-    // a row of short dark posts on each, a dark retaining wall with a low parapet to the forecourt above, and
-    // steps beside it from the path up to the forecourt
-    const STONE = 0xd8d2c6, DARK = 0x2b2a2e, WALL = 0x3b3937, ROWS = 4, DEP = (MEMO.v1 - MEMO.v0) / ROWS;
+    // ---- the Tubin memorial (Street View Aug 2024): white terraces stepping up the slope towards the theatre,
+    // the lawn-side face a white wall with a row of black round openings, short dark round seats on each
+    // terrace, a dark retaining wall with a low parapet to the forecourt above, steps beside it from the path,
+    // and the bronze figure of Eduard Tubin standing on the lowest terrace
+    const STONE = 0xeeece6, DARK = 0x2b2a2e, WALL = 0x3b3937, ROWS = 4, DEP = (MEMO.v1 - MEMO.v0) / ROWS;
     const ms = (MEMO.s0 + MEMO.s1) / 2, W = MEMO.s1 - MEMO.s0;
     const level = (v) => Math.max(...[MEMO.s0 + 1, ms, MEMO.s1 - 1].map((s) => h(...F.at(s, v))));
     const post = new THREE.CylinderGeometry(0.3, 0.3, 0.45, 9);
+    const disc = new THREE.CylinderGeometry(1, 1, 0.05, 14).rotateX(Math.PI / 2);
+    const g0 = level(MEMO.v0 - 0.3), STATUE = [62.6, MEMO.v0 + 1.1];
+    let below = g0;
     for (let j = 0; j < ROWS; j++) {
-      const v = MEMO.v0 + (j + 0.5) * DEP, top = level(v) + 0.12;
+      const v = MEMO.v0 + (j + 0.5) * DEP, top = Math.max(level(v) + 0.12, g0 + 0.95 + j * 0.3), rise = top - below;
       A.box(F, ms, v, W, DEP + 0.02, -1.8, 0, STONE, top);
-      for (let i = 0; i < 11; i++) { const [x, z] = F.at(MEMO.s0 + 2.2 + i * 1.66, v); p.add(post, DARK, x, top + 0.22, z); }
+      for (let i = 0; i < 11; i++) {
+        const sp = MEMO.s0 + 2.2 + i * 1.66;
+        if (j === 0 && Math.abs(sp - STATUE[0]) < 1) continue;
+        const [x, z] = F.at(sp, v); p.add(post, DARK, x, top + 0.22, z);
+        if (rise > 0.45) {
+          const r = Math.min(0.34, rise * 0.36), g = disc.clone().scale(r, r, 1), [dx, dz] = F.at(sp, MEMO.v0 + j * DEP - 0.03);
+          p.add(g, 0x1c1c1f, dx, top - rise / 2, dz, F.YAW);
+        }
+      }
+      below = top;
     }
     const court = level(MEMO.v1 + 1);
-    A.box(F, ms, MEMO.v1 - 0.2, W + 0.4, 0.4, -2.2, 0.4, WALL, court);       // retaining wall and parapet
+    A.box(F, ms, MEMO.v1 - 0.2, W + 0.4, 0.4, -2.2, Math.max(0.4, below + 0.3 - court), WALL, court);   // retaining wall and parapet
     for (let k = 0; k < 4; k++) {                                            // steps from the path up to the forecourt
       const v = MEMO.v1 - 7 + k * 2, [x, z] = F.at(MEMO.s0 - 1.3, v + 1);
       A.box(F, MEMO.s0 - 1.3, v + 1, 2.4, 2.02, -1.8, 0, STONE, h(x, z) + 0.1);
     }
+    {                                                                        // the bronze Tubin, life size
+      const [x, z] = F.at(...STATUE), y = g0 + 0.95, BR = 0x3d4239;
+      p.add(new THREE.CylinderGeometry(0.17, 0.2, 0.9, 8), BR, x, y + 0.45, z);
+      p.add(BOX(0.5, 0.72, 0.3), BR, x, y + 1.25, z, F.YAW);
+      p.add(new THREE.SphereGeometry(0.13, 10, 8), BR, x, y + 1.76, z);
+      const [ax, az] = F.at(STATUE[0] + 0.3, STATUE[1] - 0.25);
+      p.add(BOX(0.12, 0.55, 0.12), BR, ax, y + 1.45, az, F.YAW);           // the raised conducting arm
+    }
+
+    // ---- the big grey display board at the top of the lawn, a dark screen on its face to Ülikooli
+    {
+      const [x, z] = F.at(22, 47.5), y = h(x, z);
+      p.add(BOX(4.6, 3.3, 0.4), 0x9b9fa4, x, y + 1.65, z, F.YAW);
+      const [sx, sz] = F.at(22, 47.28);
+      p.add(BOX(4.1, 2.2, 0.02), 0x23262b, sx, y + 2.05, sz, F.YAW);
+    }
+    // ---- poster stands (dark green, by the pavement) and the corner's signpost with brown finger signs
+    for (const [ps, pv, w, hh, c] of [[63.5, 20.3, 0.62, 1.9, 0x2d3b32], [2.6, 21.5, 1.2, 1.7, 0x222326]]) {
+      const [x, z] = F.at(ps, pv), y = h(x, z);
+      p.add(BOX(0.08, 0.6, 0.08), IRON0, x, y + 0.3, z);
+      p.add(BOX(w, hh, 0.22), c, x, y + 0.6 + hh / 2, z, F.YAW);
+    }
+    {
+      const [x, z] = F.at(4.2, 19.6), y = h(x, z);
+      p.add(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 6), 0x5a3a2c, x, y + 1.6, z);
+      for (let k = 0; k < 8; k++) {
+        const yaw = F.YAW + [0.4, 0.4, -1.2, 0.4, -1.2, 2.0, 0.4, -1.2][k], [ox, oz] = [Math.cos(yaw) * 0.5, -Math.sin(yaw) * 0.5];
+        p.add(BOX(1.0, 0.17, 0.03), 0x7a3b2a, x + ox, y + 1.9 + k * 0.2, z + oz, yaw);
+      }
+    }
+
+    // ---- Ülikooli: the parking and bus stop strip, its granite kerb, and the lines as in the street photos
+    A.pave(F, 2, 80, ULI.edge, ULI.kerb, 'asphalt');
+    for (let q = 2; q < 80; q += 3) A.box(F, q + 1.5, ULI.kerb + 0.1, 3.02, 0.2, -0.2, 0.12, 0xb9b7bc);
+    const lines = [], blue = [];
+    for (let q = 3; q < 76; q += 4.5) for (const o of [-0.12, 0.12]) lines.push([q, ULI.centre + o, q + 4.5, ULI.centre + o]);
+    for (let q = 4; q < 75; q += 9) lines.push([q, ULI.lane, q + 3, ULI.lane]);
+    for (let q = 3; q < 80; q += 2.5) lines.push([q, ULI.edge, q + 1, ULI.edge]);
+    const run = (ULI.kerb - 0.15 - ULI.edge) / Math.tan(Math.PI / 6);
+    for (const b of [...BAYS, BAYS[BAYS.length - 1] + 5]) blue.push([b - run, ULI.edge + 0.1, b, ULI.kerb - 0.15]);
+    // ---- Vanemuise tn: the taxi bays, the granite strip between them and the lane, black bollards and the
+    // white bowl planters on the pavement
+    A.pave(F, TAXI.s0, TAXI.s1, 17, 46, 'asphalt');
+    for (let q = 17; q < 46; q += 2) A.box(F, TAXI.s0 - 0.2, q + 1, 0.4, 2.02, -0.2, 0.12, 0xb9b7bc);
+    for (const b of [...TAXI.bays, TAXI.bays[TAXI.bays.length - 1] + 3.3]) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b + (TAXI.s1 - TAXI.s0 - 0.3) / Math.tan(50 * Math.PI / 180)]);
+    for (let v = 17.5; v <= 47; v += 3.2) { const [x, z] = F.at(TAXI.s1 + 0.25, v); A.bollard(x, z, 0x1c1d20, 0.95); }
+    const bowl = new THREE.CylinderGeometry(0.6, 0.36, 0.45, 14);
+    for (const v of [28.6, 31.2]) { const [x, z] = F.at(-2.6, v); p.add(bowl, 0xeeeeea, x, h(x, z) + 0.22, z); }
+    stripes(lines, 0xe4e2ea);
+    stripes(blue, 0x2f6fd8);
 
     // ---- benches and bins on the Ülikooli pavement (map survey), backs to the lawn
-    const WOOD = 0x8a6a4c, IRON = 0x34363a;
+    const WOOD = 0x8a6a4c, IRON = IRON0;
     for (const s of [52.2, 54.6, 57, 59.4]) {
       const [x, z] = F.at(s, 17.6), y = h(x, z);
       p.add(BOX(1.8, 0.07, 0.46), WOOD, x, y + 0.45, z, F.YAW);

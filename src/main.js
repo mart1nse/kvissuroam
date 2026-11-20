@@ -74,12 +74,12 @@ import { createTuru5, turu5Walls } from './world/turu5.js';
 import { createTuru6, turu6Walls } from './world/turu6.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
-import { createRiia3, riia3Walls } from './world/riia3.js';
+import { createRiia3, riia3Walls, riia3Clear } from './world/riia3.js';
 import { createRiia4, riia4Walls } from './world/riia4.js';
 import { createRiia5, riia5Walls } from './world/riia5.js';
 import { createRiia6, riia6Walls } from './world/riia6.js';
 import { createRiia7 } from './world/riia7.js';
-import { createRavila, ravilaWalls } from './world/ravila.js';
+import { createRavila, ravilaWalls, ravilaClear } from './world/ravila.js';
 import { createRavila2, ravila2Walls } from './world/ravila2.js';
 import { createRavila3, ravila3Walls } from './world/ravila3.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
@@ -380,7 +380,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   turu4SignSkip(world);                         // Zeppelin's and Aura's letters are painted on their walls

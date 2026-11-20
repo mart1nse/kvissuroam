@@ -30,6 +30,7 @@ export const HAND_PLACES = [
   { name: 'Elva 35b', x: 238, z: 4755, r: 200 },
   { name: 'Äksi, Ice Age Centre, Angerja', x: -1830, z: -13230, r: 350 },
   { name: 'Nõela village road', x: -7040, z: -7130, r: 620 },
+  { name: 'Raadi, Keskuse tee and the route 95 roundabout', x: 2450, z: -360, r: 520 },
 ];
 
 // segments of the road centre lines in a coarse grid

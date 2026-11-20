@@ -340,6 +340,11 @@ export function createHariduse10(scene, world, { shadows = true } = {}) {
       });
     }
 
+    // the zebra across the mouth of Kubjaringi tänav, on the footway line along Hariduse (half-metre stripes
+    // lying along the street they cross)
+    const Z = frame([3897.67, -2125.6], [0.294, -0.956]);
+    for (let v = -3.25; v + 0.5 <= 3.3; v += 1.0) A.pave(Z, -1.25, 1.25, v, v + 0.5, 'white');
+
     FK.finish();
     A.finish();
   }

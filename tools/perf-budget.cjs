@@ -8,7 +8,7 @@
 //
 // Starts the game (vite) and measures it in headless Chromium the way a phone sees it (iPhone 13
 // emulation: light mode, small pictures) and the way a desktop does:
-//   phone:   at the menu, 15 s after DRIVE, after three car changes, and the peak during a map jump to
+//   phone:   at the menu, the peak in the first 5 s after DRIVE (garbage not yet collected included), 15 s after DRIVE, after three car changes, and the peak during a map jump to
 //            Kvissentali: live canvases, textures and buffers on the graphics card, JS heap.
 //   desktop: the game code's milliseconds per frame while driving (full settings).
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then
@@ -123,8 +123,20 @@ async function waitForServer(url, ms) {
     await p.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
     await p.waitForTimeout(8000);
     out.phone.menu = await take();
-    await p.evaluate(() => __game.startDriving());
-    await p.waitForTimeout(15000);
+    // the first 5 s after DRIVE, sampled every 50 ms without collecting garbage: the iPhone 13 reloaded
+    // the page 1-2 s after DRIVE while the figures 15 s later were fine (parked car models being built)
+    await p.evaluate(() => {
+      __perfPeak(); window.__spike = 0;
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        const f = __perf(); __spike = Math.max(__spike, f.canvas + f.glPeak + f.heap);
+        if (performance.now() - t0 > 5000) clearInterval(id);
+      }, 50);
+      __game.startDriving();
+    });
+    await p.waitForTimeout(5500);
+    out.phone.driveSpike = await p.evaluate(() => __spike);
+    await p.waitForTimeout(9500);
     out.phone.drive = await take();
     out.phone.canvases = await p.evaluate(() => __perfCanvases());
     for (const id of ['f40', 'enyaq', 'audi200']) { await p.evaluate((i) => __game.setCar(i, true), id); await p.waitForTimeout(2500); }
@@ -164,6 +176,7 @@ async function waitForServer(url, ms) {
     ['phone graphics card at DRIVE', out.phone.drive?.gl, budget.phone.driveGlMB],
     ['phone JS heap at DRIVE', out.phone.drive?.heap, budget.phone.driveHeapMB],
     ['phone total at DRIVE', out.phone.drive && out.phone.drive.canvas + out.phone.drive.gl + out.phone.drive.heap, budget.phone.driveTotalMB],
+    ['phone peak in the 5 s after DRIVE, garbage included', out.phone.driveSpike, budget.phone.driveSpikeMB],
     ['phone graphics card peak in a map jump', out.phone.jump?.glPeak, budget.phone.jumpGlPeakMB],
     ['phone graphics card growth over 3 car changes', out.phone.cars && out.phone.cars.gl - out.phone.drive.gl, budget.phone.carChangeGrowthMB],
     ['desktop game code per frame (ms)', out.desktop.jsMedian, budget.desktop.jsMedianMs],
@@ -175,7 +188,7 @@ async function waitForServer(url, ms) {
     console.log(`${bad ? 'OVER' : 'ok  '} ${name}: ${v ?? 'not measured'} (budget ${max})`);
   }
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
-  console.log('phone', JSON.stringify({ menu: out.phone.menu, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
+  console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
   if (out.over.length) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });

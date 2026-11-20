@@ -55,6 +55,74 @@ function L(s, v = 0) {
 }
 const DEBUG = typeof location !== 'undefined' && /riiadebug/.test(location.search);
 
+// ---------------------------------------------------------------- road paint
+// The street photos (2021 to 2024) show two lanes each way with a DOUBLE solid centre line from the Kalevi corner
+// to Pepleri; the map paints a single one. The generated centre strokes on those pieces are skipped here and the
+// double line is drawn by the build below on the same centre lines (lane dashes stay as generated).
+const PAINT_S = [95, 605];
+let paintPieces = null;           // [[pts...]] the road pieces whose centre line is doubled
+const onPiece = (x, z, pts) => {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+    if (Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z) < 0.4) return true;
+  }
+  return false;
+};
+function sAlong(x, z) {
+  let best = 1e9, bs = 0;
+  for (const g of SEG) {
+    const t = Math.max(0, Math.min(g.len, (x - g.a[0]) * g.u[0] + (z - g.a[1]) * g.u[1]));
+    const d = Math.hypot(g.a[0] + g.u[0] * t - x, g.a[1] + g.u[1] * t - z);
+    if (d < best) { best = d; bs = g.s0 + t; }
+  }
+  return [bs, best];
+}
+export function riiaVectors(vectors) {
+  paintPieces = vectors.roads.filter((r) => (r.name === 'Riia tänav' || r.name === 'Jõhvi-Tartu-Valga tee') && r.w >= 11.5 && r.pts.length > 1 &&
+    r.pts.every(([x, z]) => { const [s, d] = sAlong(x, z); return d < 2 && s >= PAINT_S[0] - 15 && s <= PAINT_S[1] + 15; })).map((r) => r.pts);
+  const prev = vectors.markSkip;
+  vectors.markSkip = (x, z) => {
+    const [s, d] = sAlong(x, z);
+    if (d < 1 && s > PAINT_S[0] && s < PAINT_S[1] && paintPieces.some((pts) => onPiece(x, z, pts))) return true;
+    return prev ? prev(x, z) : false;
+  };
+}
+// the double centre line between s0 and s1: solid strokes 4.5 m long, 0.13 m wide, 0.12 m either side
+function centreLines(world, group, s0, s1) {
+  if (!paintPieces) return;
+  const pos = [], W = 0.065, OFF = 0.12;
+  for (const pts of paintPieces) {
+    const len = [];
+    let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) { len.push(Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])); total += len[i]; }
+    const at = (d, side) => {
+      let i = 0;
+      while (i < len.length - 1 && d > len[i]) d -= len[i++];
+      const a = pts[i], b = pts[i + 1], dx = (b[0] - a[0]) / len[i], dz = (b[1] - a[1]) / len[i];
+      return [a[0] + dx * d - dz * side, a[1] + dz * d + dx * side, dx, dz];
+    };
+    for (let d = 10; d + 4.5 <= total - 10; d += 4.5) {
+      const m = at(d + 2.25, 0), [s] = sAlong(m[0], m[1]);
+      if (s < Math.max(s0, PAINT_S[0]) || s >= Math.min(s1, PAINT_S[1])) continue;
+      for (const side of [-OFF, OFF]) {
+        const p = at(d, side), q = at(d + 4.5, side), nx = -p[3] * W, nz = p[2] * W;
+        const y1 = world.heightAt(p[0], p[1]) + 0.06, y2 = world.heightAt(q[0], q[1]) + 0.06;
+        pos.push(p[0] - nx, y1, p[1] - nz, p[0] + nx, y1, p[1] + nz, q[0] - nx, y2, q[1] - nz,
+          q[0] - nx, y2, q[1] - nz, p[0] + nx, y1, p[1] + nz, q[0] + nx, y2, q[1] + nz);
+      }
+    }
+  }
+  if (!pos.length) return;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xdedbe6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  m.receiveShadow = true;
+  m.matrixAutoUpdate = false;
+  group.add(m);
+}
+
 // ---------------------------------------------------------------- what the map's own data needs
 // Wall and roof colours of the map's blocks (LOD2 bases in cm, sector 3_6); the walls are painted over below.
 export function riiaWalls(walls) {
@@ -316,8 +384,8 @@ export function createRiia(scene, world, { shadows = true } = {}) {
   // Two halves, each built (with its own small atlas) only when the car comes within 300 m of it, so the far
   // half costs nothing at the start (phones: the spawn is about 140 m from the north half, 370 m from the south)
   const parts = [
-    { centre: L(150, 0), ready: [L(0, -40), L(80, 40), L(200, -60), L(280, 50)], pick: (H) => H.at[1] <= 3390, extra: railing },
-    { centre: L(470, 0), ready: [L(300, 40), L(380, -50), L(500, 40), L(590, -40)], pick: (H) => H.at[1] > 3390 },
+    { centre: L(150, 0), ready: [L(0, -40), L(80, 40), L(200, -60), L(280, 50)], pick: (H) => H.at[1] <= 3390, extra: railing, paint: [0, 330] },
+    { centre: L(470, 0), ready: [L(300, 40), L(380, -50), L(500, 40), L(590, -40)], pick: (H) => H.at[1] > 3390, paint: [330, 700] },
   ];
 
   function build(part) {
@@ -333,6 +401,7 @@ export function createRiia(scene, world, { shadows = true } = {}) {
     skinHouses(world, group, houses(later).filter(part.pick), { faces, shadows, ppm: 16, far: 6, debug: DEBUG });
     for (let k = 0; k < later.length; k++) later[k]();
     if (part.extra) part.extra(A);
+    centreLines(world, group, ...part.paint);
     A.finish();
   }
   // the steel railing along the pavement on the court and park side, from Kalevi to the Riia 8 lane

@@ -40,14 +40,12 @@ export function elvaWalls(walls) {
   ]);
 }
 // Parked cars for src/world/parked.js: [x, z, yaw, id, paint, lift] (forward = (sin yaw, -cos yaw)).
-// The dark saloon outside 35b's car gate in the lane, facing up it; a white estate at the kerb before 37
+// The green Kia Ceed Sportswagon outside 35b's car gate in the lane, facing up it; a white estate at the kerb before 37
 // (in the photo it is a small white van), facing south-west.
 const UP_LANE = Math.atan2(N[0], -N[1]), SOUTH_WEST = Math.atan2(D[0], -D[1]);
 export const ELVA_CARS = [
-  [...L(12.75, 17.2), UP_LANE, 'mazda6', 'grey', 0.03],
+  [...L(12.75, 17.2), UP_LANE, 'ceedsw', 'sage', 0.03],      // (Martin, 20 Nov: the Kia, not the Mazda)
   [...L(35.5, 3.15), SOUTH_WEST, 'passat', 'white', 0.03],
-  // (Martin, 20 Nov) a Kia Ceed Sportswagon in Experience Green on the gravel edge before 35b's front wall
-  [...L(5.0, 3.0), SOUTH_WEST, 'ceedsw', 'sage', 0.03],
 ];
 
 // The street has no painted lines along the dressed stretch (the air photos show bare asphalt): the map's

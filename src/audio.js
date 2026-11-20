@@ -6,7 +6,7 @@
 // Combustion engines run through the engine synthesiser worklet (public/engine-worklet.js, tuned per car
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
-import { createSpace } from './audio-space.js';
+import { createSpace, chaseBack } from './audio-space.js';
 import { blowOff, shiftChirp } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
 
@@ -26,7 +26,7 @@ export function createAudio() {
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
-  let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null;
+  let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0;
   let noiseSrc = null, workletReady = false;
   const voices = [];
   const shiftSound = createShiftSound();
@@ -236,7 +236,7 @@ export function createAudio() {
       if (sh.chirp && !dead) chirp(ctx, noiseBuf, bus, sh.chirp, t + 0.005);
       if (punch) punch.gain.setTargetAtTime(dead ? 0 : sh.punch, t, 0.01);
       if (synth && synthCfg) {
-        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: sh.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: sh.shift ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank, yankId: sh.yankId, yankTight: sh.yankTight } });
+        synth.port.postMessage({ state: { rpm: sh.rpm, throttle: sh.throttle, boost: b, shaft: car.shaft || 0, on: dead ? 0 : 1, redline: e.redline, idle: e.idle, cut: car.revCut > 0 ? 1 : 0, shift: sh.shift ? 1 : 0, blip: sh.blip, crackle: sh.crackle, over: sh.over, bark: sh.bark, yank: sh.yank, yankId: sh.yankId, yankTight: sh.yankTight, growl } });
         engGain.gain.setTargetAtTime(0, t, 0.03);
       } else {
       const cyl = e.pulses ?? (car.spec.id === 'w201' ? 3 : 2);   // firing pulses per rev
@@ -443,12 +443,18 @@ export function createAudio() {
   function applySpace() { space?.setOn(!lite && !ev, !lite); }
   // the space round our own car: called every frame after the camera has moved (world: its obstacle field)
   function updateSpace(world, car, cam, dt, active) {
-    if (!space || ctx.state !== 'running' || !active || lite) return;
+    if (!space || ctx.state !== 'running') return;
     // how far off the camera is: the chase camera (6-14 m) hears the car close up, the drone view (C, 35 m
     // and more) from a distance, with much more of the street ringing round it (Martin 2026-11-19); an
     // electric car of ours stays dry either way, other cars' reverb follows the view
     const p = cam.position, dist = Math.hypot(p.x - car.x, p.y - (car.y ?? p.y), p.z - car.z);
-    space.setFar(Math.min(1, Math.max(0, (dist - 16) / 16)));
+    const far = Math.min(1, Math.max(0, (dist - 16) / 16)), back = ev || !active ? 0 : chaseBack(dist, car.spec?.cam);
+    // and as the chase camera drops back with speed, a grittier engine (the synthesiser's growl, sent with
+    // the next update) and a little more room round it (Martin 2026-11-20; the drone view has its own)
+    growl = back * (1 - far);
+    if (!active || lite) return;
+    space.setFar(far);
+    space.setBack(back);
     if (!ev) space.update(world, car, cam, dt);
   }
 

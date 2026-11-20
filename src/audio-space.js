@@ -27,6 +27,18 @@ const SLEW = 0.03;         // s/s: how fast an echo delay may glide (a 3% pitch 
 // compressor's make-up up by 1 + gain (it presses the denser sound down harder), so the drone view is
 // about as loud as the chase camera
 const FAR = { dir: 0.4, thin: 5, er: 0.8, rev: 1.5, remote: 1, tail: 0.6, gain: 0.25 };
+// the chase camera dropped right back at top speed (setBack(1)): the echoes up by 1 + er and our reverb by
+// 1 + rev, the car itself as it was (more room round it, Martin 2026-11-20; the growl that goes with it is
+// in the synthesiser, its growl input). Fades out towards the drone view, which has its own.
+const BACK = { er: 0.45, rev: 0.7 };
+
+// how far the chase camera (src/main.js) has dropped back from where it sits with the car at a standstill
+// (6.4 m behind, 2.35 m up, and a car's own cam offsets), as 0..1 over the 7 m it backs off by top speed.
+// dist: the camera's distance from the car (m); cam: the car's spec.cam
+export function chaseBack(dist, cam = {}) {
+  const rest = Math.hypot(6.4 + (cam.dist ?? 0), 2.35 + (cam.up ?? 0));
+  return Math.min(1, Math.max(0, (dist - rest) / 7));
+}
 
 // Impulse response of an open, built-up place: decorrelated noise in both ears dying away over `len`
 // seconds, its top end dying faster than its body (air and soft surfaces take the highs first).
@@ -116,13 +128,14 @@ export function createSpace(ctx, out, mix = {}) {
 
   // v: the echoes, reverb and compression on our own car (off: its plain, close-up sound, as before any of
   // this; the electric cars, and the lite sound); remote: other players' cars into the reverb
-  let on = true, remoteOn = true, far = 0;
+  let on = true, remoteOn = true, far = 0, back = 0;
+  const erGain = () => erMix * (1 + FAR.er * far + BACK.er * back * (1 - far));
   function setOn(v, remote = v) {
     on = v; remoteOn = remote;
     const t = ctx.currentTime;
     viaComp.gain.setTargetAtTime(on ? 1 : 0, t, 0.03);
     bypass.gain.setTargetAtTime(on ? 0 : 1, t, 0.03);
-    erSend.gain.setTargetAtTime(on ? erMix * (1 + FAR.er * far) : 0, t, 0.03);
+    erSend.gain.setTargetAtTime(on ? erGain() : 0, t, 0.03);
     remoteSend.gain.setTargetAtTime(remote ? tailMix * (1 + FAR.remote * far) : 0, t, 0.05);
     if (!on) revSend.gain.setTargetAtTime(0, t, 0.05);
     setFar(far, true);
@@ -139,7 +152,7 @@ export function createSpace(ctx, out, mix = {}) {
     makeup.gain.setTargetAtTime(0.6 * (1 + FAR.gain * far), t, 0.1);
     burstDir.gain.setTargetAtTime(1 - FAR.dir * far, t, 0.1);
     dirShelf.gain.setTargetAtTime(-FAR.thin * far, t, 0.1);
-    if (on) erSend.gain.setTargetAtTime(erMix * (1 + FAR.er * far), t, 0.1);
+    if (on) erSend.gain.setTargetAtTime(erGain(), t, 0.1);
     if (remoteOn) remoteSend.gain.setTargetAtTime(tailMix * (1 + FAR.remote * far), t, 0.1);
     // (exactly 0 once faded, so the long tail's convolver goes idle)
     farSend.gain.cancelScheduledValues(t);
@@ -147,6 +160,15 @@ export function createSpace(ctx, out, mix = {}) {
     if (far === 0 || !remoteOn) farSend.gain.setValueAtTime(0, t + 1);
   }
   setOn(true);
+
+  // k: 0 with the chase camera where it sits at a standstill, 1 dropped right back at top speed (chaseBack)
+  function setBack(k) {
+    k = Math.max(0, Math.min(1, k));
+    if (Math.abs(k - back) < 0.02 && k !== 0 && k !== 1) return;
+    if (k === back) return;
+    back = k;
+    if (on) erSend.gain.setTargetAtTime(erGain(), ctx.currentTime, 0.15);
+  }
 
   // ---- probing the surroundings
   const grad = [0, 0];
@@ -215,15 +237,16 @@ export function createSpace(ctx, out, mix = {}) {
     flutter[0].gain.setTargetAtTime(fl, t, 0.1); flutter[1].gain.setTargetAtTime(fl, t, 0.1);
     // the tail: a little everywhere (trees, the ground, far houses), much more between buildings
     const built = walls / taps.length;
-    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix * (1 + FAR.rev * far), t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
+    if (on) revSend.gain.setTargetAtTime((0.126 + 0.294 * built) * tailMix * (1 + FAR.rev * far + BACK.rev * back * (1 - far)), t, 0.3);   // (3 dB under the first cut, Martin 2026-11-19)
     if (near) pre.delayTime.setTargetAtTime(Math.min(0.08, 0.012 + 2 * (wsum / near) / C), t, 0.3);
     return built;
   }
 
   return {
-    input, remoteIn, burst, update, setOn, setFar,
+    input, remoteIn, burst, update, setOn, setFar, setBack,
     get on() { return on; },
     get far() { return far; },
+    get back() { return back; },
     // (for tests)
     get taps() { return taps.map((x) => ({ deg: x.deg, d: x.d, g: x.g, delay: x.cur })); },
     get tail() { return revSend.gain.value; },

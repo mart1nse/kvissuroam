@@ -23,7 +23,7 @@ const REACH = 2.3;          // m along the shelter: how far the bend spreads eit
 // (bent half a metre, the next hit bends it 1.6 times as far)
 const bendFor = (v, bent) => Math.min(BEND_HIT, (0.02 + 0.006 * v * v) * (1 + 1.2 * Math.min(bent, 1.5)));
 const SHARDS = 150;         // pieces per pane
-const THROUGH = 20 / 3.6;   // m/s across a long side: the car crashes through
+const THROUGH = 30 / 3.6;   // m/s across a long side: the car crashes through
 const SNAP = 1.5;           // m the snapped top of the frame is thrown over
 const KEEP = 0.72;          // of its speed the car keeps when it crashes through
 

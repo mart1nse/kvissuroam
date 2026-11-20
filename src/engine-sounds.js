@@ -23,12 +23,15 @@
 // yank, yankHz: size (x the revs still to come down) and rate of the swing as an upshift's gear wrenches
 //          the revs down (defaults 0.55 and 8.2 Hz; Martin 2026-11-19 found 1 too much beside the
 //          softer hit); yankFirst: the size of 1st to 2nd's, x (default 1).
+// blipRise: seconds a downshift takes to rev up to the lower gear's revs (default 0.035, the sports cars;
+//          longer on the milder engines, which are not as eager to rev, Martin 2026-11-20).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
   // Two cast 3-into-1 manifolds (cylinders 1-3 and 4-6) that join into one pipe and big silencers:
   // a smooth, hushed and even hum with a silky rise to a turbine-like note near the redline.
   w201: {
+    blipRise: 0.11,
     seed: 201, order: [1, 5, 3, 6, 2, 4], banks: [0, 0, 0, 1, 1, 1],
     pipes: [{ len: 1.6, fb: -0.42, damp: 0.45 }, { len: 1.66, fb: -0.42, damp: 0.45 }],
     res: [[95, 1.4, 0.7], [205, 2.2, 0.45], [480, 3, 0.18], [1150, 3, 0.06]], dry: 0.35,
@@ -44,6 +47,7 @@ export const ENGINE_SOUNDS = {
   // knocking diesel clatter at idle (the injectors and the combustion itself), a gruff low drone under load
   // and almost nothing above 4000; the turbo whistles and the tired silencer lets plenty through.
   passat: {
+    blipRise: 0.15,
     crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 19, order: [1, 3, 4, 2], banks: [0, 0, 0, 0],
     pipes: [{ len: 1.7, fb: -0.4, damp: 0.5 }],
@@ -57,6 +61,7 @@ export const ENGINE_SOUNDS = {
   },
   // Honda R20A2: 2.0 SOHC 16-valve i-VTEC four, 1-3-4-2, 4-2-1 manifold (1+4, 2+3), quiet SUV silencing.
   crv: {
+    blipRise: 0.11,
     seed: 7, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.25, fb: -0.38, damp: 0.5 }, { len: 1.25, fb: -0.38, damp: 0.5 }],
     res: [[120, 1.5, 0.55], [260, 2.4, 0.35], [640, 3, 0.16]], dry: 0.4,
@@ -69,6 +74,7 @@ export const ENGINE_SOUNDS = {
   // Toyota M20A-FKS Dynamic Force: 2.0 DOHC four, 1-3-4-2, D-4S port + direct injection (the dry
   // injector tick), long-stroke and quiet, with a flat drone under load.
   rav4: {
+    blipRise: 0.11,
     seed: 4, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.35, fb: -0.36, damp: 0.5 }, { len: 1.35, fb: -0.36, damp: 0.5 }],
     res: [[110, 1.6, 0.6], [240, 2.6, 0.38], [700, 3, 0.12]], dry: 0.38,
@@ -81,6 +87,7 @@ export const ENGINE_SOUNDS = {
   // Mazda PE-VPS Skyactiv-G 2.0: DOHC direct-injection four, 1-3-4-2, 4-2-1 header; a slightly
   // eager, raspy four with a light injector tick.
   mazda6: {
+    blipRise: 0.11,
     seed: 6, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.45, fb: -0.45, damp: 0.42 }, { len: 1.45, fb: -0.45, damp: 0.42 }],
     res: [[125, 1.5, 0.55], [300, 2.2, 0.4], [820, 3, 0.16]], dry: 0.4,
@@ -127,6 +134,7 @@ export const ENGINE_SOUNDS = {
   // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
   // quattro rally cars, rounded off by the turbo.
   audi200: {
+    blipRise: 0.08,
     seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 8,
     pipes: [{ len: 1.5, fb: -0.44, damp: 0.46 }],
     res: [[105, 1.4, 0.62], [235, 2.2, 0.5], [560, 2.6, 0.32], [1250, 3, 0.1]], dry: 0.4,
@@ -158,6 +166,7 @@ export const ENGINE_SOUNDS = {
   // three-way catalyst, so none of the diesel's clatter: a deep, soft, even thrum at 600-2200 rpm through a
   // long pipe and a big silencer in the rear engine bay, the turbo whistling over it as it pulls away.
   bus: {
+    blipRise: 0.2,
     crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 408, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 4,
     pipes: [{ len: 3.2, fb: -0.4, damp: 0.5 }],

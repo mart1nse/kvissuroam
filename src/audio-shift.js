@@ -21,6 +21,8 @@
 // The blip, crackle, bark, yank and over-rev are played by the engine synthesiser (public/engine-worklet.js:
 // its blip, crackle, bark, yank and over inputs); the clunks and the chirp are short sounds of their own.
 
+import { ENGINE_SOUNDS } from './engine-sounds.js';
+
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const CUT_HEARD = 0.1;     // s: how long an upshift's ignition cut is heard
 const BITE_HEARD = 0.12;   // s: when an upshift's gear is heard going in, however long the change takes
@@ -34,6 +36,7 @@ const FIRST_KICK = 1.35, FIRST_YANK = 0.6;
 export function createShiftSound() {
   let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0, flare = 0.16;
   let lastT = 0, lastRpm = 0, wasCut = false, hold = 0, yankId = 0, yank = 0, tight = 0, cutAt = -9;
+  let dAt = -9, from = 0, rise = 0, lastBase = 0;
   // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
   // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
   // (strength) when the tyres chirp on an upshift
@@ -47,6 +50,12 @@ export function createShiftSound() {
     if (cut && bAt < cutAt) hold = Math.max(car.rpm, hold - drop * dt);
     wasCut = cut;
     lastRpm = car.rpm;
+    // A downshift: on the milder engines, with their heavier flywheels and not as eager to rev, the revs
+    // climb to the lower gear's over the engine's blipRise (src/engine-sounds.js; Martin 2026-11-20), from
+    // wherever the sound's revs were; the sports cars (no blipRise) are there at once
+    if (lastGear && car.gear < lastGear && !car.reversing && v > 3) {
+      dAt = t; from = Math.min(lastBase || car.rpm, car.rpm); rise = ENGINE_SOUNDS[s.id]?.blipRise ?? 0;
+    }
     if (lastGear && car.gear < lastGear && !car.reversing && v > 3 && car.throttle < 0.5) {
       const byHand = car.manual < 0;
       run = t - at < 0.6 ? run + 1 : 0;           // another one straight after the last: Z Z Z
@@ -82,15 +91,17 @@ export function createShiftSound() {
     hold = cut ? hold : 0;
     lastBite = bite;
     lastGear = car.reversing ? 1 : car.gear;
-    // the blip: wide open in 35 ms, held for 125, then shut over about 130
-    const since = t - at;
-    const shape = since < 0.035 ? since / 0.035 : since < 0.16 ? 1 : Math.exp(-(since - 0.16) / 0.09);
+    // the blip: wide open in 35 ms (or the engine's blipRise), held for 125 ms, then shut over about 130
+    const since = t - at, open = Math.max(rise, 0.035);
+    const shape = since < open ? since / open : since < open + 0.125 ? 1 : Math.exp(-(since - open - 0.125) / 0.09);
     const blip = since < 0.6 ? k * shape : 0;
-    const crackle = since < 1.8 ? k * clamp((since - 0.08) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
+    const crackle = since < 1.8 ? k * clamp((since - 0.045 - open) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
     const sb = t - bAt, bark = sb < 0.8 ? bk * Math.exp(-sb / 0.16) : 0;
     const over = clamp((car.overRev || 0) * 6, 0, 1);
     // (the revs flare past the lower gear's, about 16 %, short of the redline)
-    let rpm = Math.min(car.rpm * (1 + flare * blip), Math.max(car.rpm, e.redline * 0.985));
+    const sd = rise ? (t - dAt) / rise : 1, base = sd < 1 && from < car.rpm ? from + (car.rpm - from) * sd * sd * (3 - 2 * sd) : car.rpm;
+    lastBase = base;
+    let rpm = Math.min(base * (1 + flare * blip), Math.max(base, e.redline * 0.985));
     if (over > 0) rpm = Math.max(rpm, e.redline * (1 + 0.035 * over));
     if (changing) rpm = Math.max(rpm, hold);
     rpm = Math.min(rpm, e.redline * 1.04);
@@ -105,7 +116,7 @@ export function createShiftSound() {
   }
   return {
     step,
-    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; },
+    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; dAt = -9; lastBase = 0; },
   };
 }
 

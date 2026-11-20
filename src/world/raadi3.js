@@ -1,5 +1,6 @@
-// Raadi, batch 3 of Martin's outline (20 Nov): the west end of Mõisapiiri tänav (2, 4, 6, 8, 9) and the
-// Mõisahärra loop (1, 2, 3, 4), dressed from the Land Board's oblique air photos (2024) and the orthophoto.
+// Raadi, batch 3 of Martin's outline (20 Nov): the west end of Mõisapiiri tänav (2, 4, 6, 8, 9), the
+// Mõisahärra loop (1, 2, 3, 4, 6, 7, 8, 10) and the tongue down Aadliku tänav (1, 2, 3, 4, 5, 7),
+// dressed from the Land Board's oblique air photos (2024) and the orthophoto.
 // The map's own blocks keep their shapes; their walls are painted and their roofs coloured. The door goes on
 // the wall that looks most at the nearest street. Window counts and the backs are guessed from the air.
 // No street name is painted on the road.
@@ -23,6 +24,16 @@ const HOUSES = [
   ['mh2', 1762, [2061.0, -267.0], 14, 0xf0eee8, 0x3c3e42, [240, 238, 232]],
   ['mh3', 1757, [2142.5, -280.5], 14, 0xf0eee8, 0x34363a, [240, 238, 232]],
   ['mh4', 1712, [2094.5, -256.5], 16, 0xece2c6, 0x3c3e42, [236, 226, 198]],
+  ['mh6', 1751, [2125.0, -242.5], 15, 0xf0eee8, 0x34363a, [240, 238, 232]],
+  ['mh7', 1837, [2217.0, -253.0], 14, 0xf0eee8, 0x3c3e42, [240, 238, 232]],
+  ['mh8', 1785, [2160.5, -232.0], 14, 0xe4d8c0, 0x34363a, [228, 216, 192]],
+  ['mh10', 1825, [2199.4, -221.3], 13, 0xf0eee8, 0x3c3e42, [240, 238, 232]],
+  ['ad1', 1720, [2036.0, -215.5], 15, 0xf2f0ea, 0x2e3034, [242, 240, 234]],
+  ['ad2', 1689, [2000.5, -185.0], 15, 0xe8dcb8, 0x55585c, [232, 220, 184]],
+  ['ad3', 1732, [2072.5, -201.0], 14, 0xf0eee8, 0x3a3c40, [240, 238, 232]],
+  ['ad4', 1674, [2034.0, -178.0], 14, 0xf0eee8, 0x44464a, [240, 238, 232]],
+  ['ad5', 1752, [2108.5, -187.5], 14, 0xf0eee8, 0x5a5e64, [240, 238, 232]],
+  ['ad7', 1784, [2143.0, -178.0], 14, 0xf0eee8, 0x3c3e42, [240, 238, 232]],
 ];
 export function raadi3Walls(walls) {
   setHouseColours(walls, SEC, ...ORIGIN, HOUSES.map(([, base, at, r, wall, roof]) => ({ base, x: at[0], z: at[1], wall, roof, reach: r })));
@@ -33,7 +44,7 @@ const HEDGES = [
   [[2137.5, -341.0], [2128.5, -308.0], [2121.0, -281.0]],      // between Mõisapiiri 2 and 4, on to Mõisahärra 1
   [[2176.0, -333.0], [2168.5, -305.0], [2165.0, -297.0]],      // between Mõisapiiri 4 and 6
 ];
-const TRAMPOLINES = [[2144.8, -298.2], [2081.0, -308.0], [2084.0, -247.0]];
+const TRAMPOLINES = [[2144.8, -298.2], [2081.0, -308.0], [2084.0, -247.0], [2152.0, -215.0]];
 
 const modern = (o = {}) => ({ T: false, bars: 1, rails: 0, surround: 0, frame: '#2f3136', glass: '#3f4b58', sill: 0.05, w: 1.5, pitch: 3.2, ...o });
 const facing = (W, p) => { const tx = p[0] - W.mid[0], tz = p[1] - W.mid[1]; return (tx * W.nx + tz * W.nz) / (Math.hypot(tx, tz) || 1); };
@@ -94,7 +105,7 @@ export function createRaadi3(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 300) return;
-      if ([[2048, -325], [2232, -312], [2094, -256]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[2048, -325], [2232, -312], [2094, -256], [2000, -185], [2143, -178]].every((q) => world.ready(q[0], q[1]))) build();
     },
   };
 }

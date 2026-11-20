@@ -16,7 +16,7 @@ const ISLANDS = [
 const ISLAND = { height: 0.12, edge: 0.1, top: 0xaea7b2, kerb: 0xd0ccd6 };
 // street furniture to take away: [kind, x, z]
 const REMOVE = [[BENCH, 1338.3, 2185.9]];          // the bench on the right before Kroonuaia
-const BARRIER = { off: 0.5, height: 0.38, width: 1.4, ramp: 0.35, rail: 0.6 };       // wide enough that one side of the car rides up on it (Martin, 17 Nov: more tilt)
+const BARRIER = { off: 0.5, height: 0.32, width: 1.4, ramp: 0.35, rail: 0.52 };      // wide enough that one side of the car rides up on it (Martin, 17 Nov: more tilt; 20 Nov: a tad lower)
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -236,20 +236,27 @@ export function createCorners(world, group, merged) {
       m.receiveShadow = true;
       group.add(m);
     }
-    // kerb stones between the kerb line (the curve) and the barrier, on the ground as the cars feel it
+    // kerb stones over the whole hump the cars feel, from its foot on the road side over the top and down
+    // behind the barrier, so it is closed from every side (Martin, 20 Nov: it was see-through from the side)
     {
       const pos = [], up = (a, b, c) => (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) >= 0;
       const P3 = (p) => [p[0], world.heightAt(p[0], p[1]) + 0.015, p[1]];
-      const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const w = BARRIER.width / 2 + 0.03, D = [];
+      for (let k = 0; k <= 12; k++) D.push(-w + (2 * w * k) / 12);
+      const at = (j, d) => {
+        const q = f.curve[j], b = bline[j], l = Math.hypot(b[0] - q[0], b[1] - q[1]) || 1;
+        return [b[0] + ((b[0] - q[0]) / l) * d, b[1] + ((b[1] - q[1]) / l) * d];
+      };
       for (let j = 0; j < f.curve.length - 1; j++) {
-        const A = lerp(f.curve[j], bline[j], 0.04), B = lerp(f.curve[j + 1], bline[j + 1], 0.04);
-        const C = lerp(f.curve[j], bline[j], 0.9), D = lerp(f.curve[j + 1], bline[j + 1], 0.9);
-        for (const [a, b, c] of [[A, B, C], [C, B, D]]) for (const q of up(a, b, c) ? [a, b, c] : [a, c, b]) pos.push(...P3(q));
+        for (let k = 0; k < D.length - 1; k++) {
+          const A = at(j, D[k]), B = at(j + 1, D[k]), C = at(j, D[k + 1]), D2 = at(j + 1, D[k + 1]);
+          for (const [a, b, c] of [[A, B, C], [C, B, D2]]) for (const q of up(a, b, c) ? [a, b, c] : [a, c, b]) pos.push(...P3(q));
+        }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: ISLAND.kerb, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: ISLAND.kerb, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
       m.receiveShadow = true;
       group.add(m);
     }

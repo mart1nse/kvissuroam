@@ -6,10 +6,66 @@
   <meta name="theme-color" content="#1a0b3b" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="description" content="LINNARING: free driving and lap racing in Tartu." />
-  <title>LinnaRing</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a0b3b'/%3E%3Ccircle cx='16' cy='17' r='9' fill='%23ff5fa2'/%3E%3Crect y='18' width='32' height='2' fill='%231a0b3b'/%3E%3Crect y='22' width='32' height='3' fill='%231a0b3b'/%3E%3C/svg%3E" />
+  <title>LINNARING – free 3D driving and racing game in Tartu, Estonia</title>
+  <meta name="description" content="Free 3D driving and racing game in your browser, set in a Tartu built from real map and lidar data. Time-attack the Toomemägi circuit or roam the city." />
   <link rel="canonical" href="https://www.linnaring.com/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <!-- share cards (Facebook, Messenger, WhatsApp, Slack, Discord, X ...) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="LINNARING" />
+  <meta property="og:url" content="https://www.linnaring.com/" />
+  <meta property="og:title" content="LINNARING – drive the streets of Tartu" />
+  <meta property="og:description" content="Free 3D driving game in the browser: a real-data Tartu, a street circuit lap timer and online racing. Sõida Tartu tänavatel otse brauseris." />
+  <meta property="og:image" content="https://www.linnaring.com/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="LINNARING: the game's city of Tartu seen from the air at sunset, with the Emajõgi river" />
+  <meta property="og:locale" content="en_GB" />
+  <meta property="og:locale:alternate" content="et_EE" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="LINNARING – drive the streets of Tartu" />
+  <meta name="twitter:description" content="Free 3D driving game in the browser: a real-data Tartu, a street circuit lap timer and online racing." />
+  <meta name="twitter:image" content="https://www.linnaring.com/og-image.jpg" />
+  <meta name="application-name" content="LINNARING" />
+  <meta name="apple-mobile-web-app-title" content="LINNARING" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://www.linnaring.com/#website",
+        "name": "LINNARING",
+        "alternateName": "LinnaRing",
+        "url": "https://www.linnaring.com/",
+        "inLanguage": ["en", "et"]
+      },
+      {
+        "@type": ["VideoGame", "WebApplication"],
+        "@id": "https://www.linnaring.com/#game",
+        "name": "LINNARING",
+        "url": "https://www.linnaring.com/",
+        "description": "A free 3D driving and racing game in the browser, set in Tartu, Estonia, built from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit, roam the city freely and race other players online.",
+        "image": "https://www.linnaring.com/og-image.jpg",
+        "genre": ["Racing", "Driving", "Open world"],
+        "gamePlatform": ["Web browser", "PC", "Mobile phone"],
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (runs in a web browser with WebGL)",
+        "playMode": ["SinglePlayer", "MultiPlayer"],
+        "inLanguage": "en",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "contentLocation": { "@type": "City", "name": "Tartu", "containedInPlace": { "@type": "Country", "name": "Estonia" } },
+        "keywords": "Tartu, Estonia, driving game, racing game, browser game, WebGL, open world, time attack, autosõidumäng, autode mäng, Tartu mäng",
+        "isPartOf": { "@id": "https://www.linnaring.com/#website" }
+      }
+    ]
+  }
+  </script>
   <script>
     // Arriving from the old address (worker/moved.js): it hands over the driver name, car, queued
     // laps and best laps in the URL fragment, once. Only taken from our own old addresses.
@@ -58,6 +114,11 @@
       .then(function (j) { return j && typeof j.key === 'string' ? j.key : null; })
       .catch(function () { return null; });
   </script>
+  <script>
+    // the manifest makes the game installable; keep Chrome's install pop-up from covering the
+    // road (installing is still offered in the browser menu)
+    addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
@@ -68,6 +129,11 @@
     <p class="tag">TARTU · ESTONIA</p>
     <div class="bar"><i id="loadbar"></i></div>
     <p id="loadmsg" class="small">Loading the neighbourhood…</p>
+    <div class="about">
+      <h2>Free 3D driving game in Tartu, Estonia</h2>
+      <p lang="en">Drive and race through Tartu, rebuilt in 3D from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit, roam the city freely and race other players online. Free in the browser on a computer or phone, nothing to install.</p>
+      <p lang="et">Sõida ja võistle Tartu tänavatel: linn on 3D-s üles ehitatud päris kaardi-, lidari- ja aerofotoandmetest. Sõida Toomemäe tänavaringil ringiaega, avasta linna vabalt ja võistle teistega võrgus. Tasuta otse brauseris arvutis või telefonis, midagi pole vaja paigaldada.</p>
+    </div>
   </div>
 
   <div id="menu" class="screen hidden">

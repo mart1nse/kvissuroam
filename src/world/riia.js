@@ -9,6 +9,14 @@
 //  - Riia 3: the taupe six-storey block with its stacks of glazed balconies and the red brick end by the door.
 //  - Riia 5: the dark brown-grey 1950s block with its tall pilasters and the shop windows on the ground floor,
 //    Riia 5a in the yard behind, and the white back of W. Struve 8.
+// Batch 2, W. Struve down to Pepleri:
+//  - Riia 7 (the cream corner block with the pilasters and the second-hand bookshop), Riia 9 (grey-beige 1950s
+//    with its row of shops), Riia 11 (light grey, shops), Riia 13 (white, the orange canopy over its shops),
+//    Pepleri 34 on the corner (pale yellow).
+//  - Across the road: Riia 8 (the orange brick block), Riia 10 (salmon render and shops, its dark wing down
+//    Tähe), the old red-roofed houses on Võru 2 and 4, and Riia 14 (the low grey shop with the yellow band).
+//  - The row of limes along both verges, which the map's tree survey had mostly missed, and the stray roof plate
+//    that floated over the Riia 12 lot (that building is not in the map's 3D data, so the lot stays open).
 // Cars parked at the kerb in front of Riia 3 and 5. What the photos do not show sharply (window counts, shop
 // signs, the boards' names) is guessed. No street name is painted on the road.
 import * as THREE from 'three';
@@ -58,6 +66,21 @@ export function riiaWalls(walls) {
     { base: 1439, x: 1562.0, z: 3365.4, wall: 0x6e645c, roof: 0x8d9198 },             // Riia 5
     { base: 1492, x: 1548.6, z: 3359.8, wall: 0x9a8f86, roof: 0x5d5f64 },             // Riia 5a
     { base: 2005, x: 1519.0, z: 3379.9, wall: 0xe9e8e3, roof: 0x5d5f64 },             // W. Struve 8
+    { base: 1563, x: 1540.3, z: 3396.3, wall: 0xe6dcc2, roof: 0x9aa0a8 },             // Riia 7
+    { base: 1931, x: 1485.1, z: 3443.7, wall: 0xbdb7ad, roof: 0x8e949c, reach: 40 },  // Riia 9
+    { base: 2273, x: 1431.2, z: 3494.8, wall: 0xd8d8d4, roof: 0x5f6e80, reach: 40 },  // Riia 11
+    { base: 2454, x: 1382.0, z: 3557.2, wall: 0xedebe5, roof: 0x5f6e80, reach: 40 },  // Riia 13
+    { base: 2532, x: 1332.7, z: 3597.7, wall: 0xeadcb0, roof: 0x8e949c },             // Pepleri 34
+    { base: 1971, x: 1576.5, z: 3480.2, wall: 0xc4744a, roof: 0x5d5f64 },             // Riia 8
+    { base: 1961, x: 1548.4, z: 3470.2, wall: 0xdea88a, roof: 0x5d5f64 },             // Riia 10, the Riia wing
+    { base: 1961, x: 1540.6, z: 3509.6, wall: 0x7a6e68, roof: 0x5d5f64 },             // its wing down Tähe
+    { base: 2290, x: 1506.2, z: 3536.4, wall: 0xd9c4ae, roof: 0x8a4a3a },             // Võru 2
+    { base: 2352, x: 1495.6, z: 3563.2, wall: 0xd9c4ae, roof: 0x8a4a3a },             // Võru 4
+    { base: 2466, x: 1380.0, z: 3648.5, wall: 0xcfd0d0, roof: 0x5d5f64 },             // Riia 14
+    { base: 3699, x: 1430.5, z: 3588.1, hide: true },                                 // a roof plate floating over the Riia 12 lot
+    { base: 3699, x: 1430.5, z: 3588.1, hide: true, shelter: true },                  // (its triangles may be marked as a carport)
+    { base: 3580, x: 1540.1, z: 3466.9, hide: true },                                 // and a dark plate over Riia 10's roof edge
+    { base: 3580, x: 1540.1, z: 3466.9, hide: true, shelter: true },
   ]);
 }
 
@@ -70,6 +93,10 @@ export const RIIA_CARS = [
   [...L(255, 7.0), yawAlong(255), 'rav4', 'white', 0.03],
   [...L(267, 7.0), yawAlong(267), 'model3', 'white', 0.03],
 ];
+
+// The limes along the verges from the Riia 8 lane to Pepleri: [x, z, height, crown, type 0 = broadleaf]. The
+// map's tree survey has only a handful here; the street photos show full rows on both sides.
+const TREES = [[1563.7, 3424.0, 13, 6.5, 0], [1559.2, 3431.7, 16, 8.0, 0], [1537.7, 3452.1, 15, 7.5, 0], [1531.9, 3459.0, 13, 6.5, 0], [1526.1, 3465.9, 16, 8.0, 0], [1520.3, 3472.8, 14, 7.0, 0], [1514.5, 3479.7, 17, 8.5, 0], [1508.7, 3486.6, 15, 7.5, 0], [1502.9, 3493.4, 13, 6.5, 0], [1463.9, 3532.7, 16, 8.0, 0], [1457.1, 3538.6, 14, 7.0, 0], [1450.4, 3544.6, 17, 8.5, 0], [1443.7, 3550.6, 15, 7.5, 0], [1437.0, 3556.6, 13, 6.5, 0], [1376.4, 3610.3, 15, 7.5, 0], [1369.6, 3616.3, 13, 6.5, 0], [1362.9, 3622.3, 16, 8.0, 0], [1356.2, 3628.2, 14, 7.0, 0], [1349.4, 3634.2, 17, 8.5, 0], [1453.5, 3514.9, 13, 6.5, 0], [1446.7, 3520.9, 16, 8.0, 0], [1440.0, 3526.8, 14, 7.0, 0], [1433.3, 3532.8, 17, 8.5, 0], [1426.5, 3538.8, 15, 7.5, 0], [1406.3, 3556.7, 14, 7.0, 0], [1399.6, 3562.7, 17, 8.5, 0], [1392.9, 3568.7, 15, 7.5, 0], [1386.1, 3574.6, 13, 6.5, 0], [1379.4, 3580.6, 16, 8.0, 0], [1372.7, 3586.6, 14, 7.0, 0], [1366.0, 3592.6, 17, 8.5, 0], [1359.2, 3598.5, 15, 7.5, 0], [1352.5, 3604.5, 13, 6.5, 0], [1345.8, 3610.5, 16, 8.0, 0]];
 
 // ---------------------------------------------------------------- the painted walls
 const C = { glassBlue: '#4c6f9c', glass: '#4a5866', trim: '#f2f1ec', sage: '#7d8a83' };
@@ -176,6 +203,41 @@ function houses(later) {
           } },
       ] },
     { name: 'riia5a', sec: '3_6', base: 1492, at: [1548.6, 3359.8], r: 22, spec: plaster([154, 143, 134], { storey: 3.0, maxFloors: 3, win: sq({ w: 1.2, pitch: 2.6 }) }) },
+    // ---- batch 2, the west side
+    { name: 'riia7', sec: '3_6', base: 1563, at: [1541, 3396], r: 24,
+      spec: plaster([230, 220, 194], { storey: 3.3, maxFloors: 5, win: sq({ w: 1.15, pitch: 2.5, frame: '#f4f1e8' }), plinth: { h: 0.7, col: '#8f877c' }, belts: [3.9] }),
+      walls: [{ near: [1549.6, 3399.2], within: 3, floors: [4.6, 7.9, 11.2, 14.5].map((sill) => ({ sill, h: 1.6 })),
+        draw: (P, W) => { pilasters(P, W, 3.9, '#efe7d2'); shops(P, W, [[2, 7], [9, 14], [24, 29], [31, 35.5]], '#2f3338', '#e9e2cf'); P.door(18.4, 19.8, 2.7, '#4a3b30', { light: 0.6, panels: 1 }); P.r(26, 3.0, 28.6, 3.5, '#3c3027'); P.text('ANTIKVARIAAT', 27.3, 3.25, 0.32, '#e8d9a8'); } }] },
+    { name: 'riia9', sec: '3_6', base: 1931, at: [1490, 3448], r: 40,
+      spec: plaster([190, 184, 174], { storey: 3.2, maxFloors: 5, win: sq({ w: 1.2, pitch: 2.6, frame: '#ece9e2' }), plinth: { h: 0.6, col: '#6f6a64' }, belts: [4.0], weather: 0.5 }),
+      walls: [{ near: [1506.8, 3452.2], within: 3, floors: [4.7, 7.9, 11.1, 14.3].map((sill) => ({ sill, h: 1.65 })),
+        draw: (P, W) => { pilasters(P, W, 4.0, '#c9c3b8'); shops(P, W, [[1.5, 7.5], [9.5, 15.5], [17.5, 22], [26, 32], [34, 40], [42, 46.5]], '#2c3136', '#d8d2c6'); P.door(23.4, 24.9, 2.7, '#3c3631', { light: 0.6, panels: 1 }); } }] },
+    { name: 'riia11', sec: '3_6', base: 2273, at: [1432, 3497], r: 40,
+      spec: plaster([216, 216, 212], { storey: 3.2, maxFloors: 5, win: sq({ w: 1.3, pitch: 2.7, frame: '#f2f2ef' }), plinth: { h: 0.6, col: '#7c7b78' }, belts: [3.9] }),
+      walls: [{ near: [1438.4, 3512.0], within: 3, floors: [4.6, 7.8, 11.0, 14.2].map((sill) => ({ sill, h: 1.6 })),
+        draw: (P, W) => { shops(P, W, Array.from({ length: 9 }, (_, k) => [1.5 + k * 6.8, 6.3 + k * 6.8]), '#2a3036', '#f1f0ec'); } }] },
+    { name: 'riia13', sec: '3_6', base: 2454, at: [1382.4, 3557.7], r: 40,
+      spec: plaster([236, 234, 228], { storey: 3.3, maxFloors: 4, win: sq({ w: 1.2, pitch: 2.6 }), plinth: { h: 0.6, col: '#8a8783' }, belts: [4.0] }),
+      walls: [{ near: [1382.4, 3558.7], within: 3, floors: [4.8, 8.1, 11.4].map((sill) => ({ sill, h: 1.65 })),
+        draw: (P, W) => { shops(P, W, Array.from({ length: 10 }, (_, k) => [1.5 + k * 6.6, 6.0 + k * 6.6]), '#2b4a66', '#efece6'); later.push(() => canopy(W, 1.0, W.len - 1.0, 3.75, 1.3, 0xc8643a)); } }] },
+    { name: 'pepleri34', sec: '3_6', base: 2532, at: [1331.9, 3597.1], r: 24,
+      spec: plaster([234, 220, 176], { storey: 3.4, maxFloors: 5, win: sq({ w: 1.2, pitch: 2.6, frame: '#f6f2e6' }), plinth: { h: 0.8, col: '#958c7c' }, belts: [4.0] }),
+      walls: [{ near: [1340.5, 3603.6], within: 3, doors: [{ x: 11.3, w: 1.5, h: 2.7, col: '#4f3e33', steps: 2 }], draw: (P, W) => pilasters(P, W, 4.0, '#f2e8cc') }] },
+    // ---- batch 2, the east side
+    { name: 'riia8', sec: '3_6', base: 1971, at: [1576.5, 3480.2], r: 30,
+      spec: { kind: 'brick', wall: [190, 106, 70], trim: '#efe9df', weather: 0.3, storey: 3.0, maxFloors: 7, win: sq({ w: 1.3, pitch: 2.7, frame: '#f2efe8' }), plinth: { h: 0.6, col: '#6f6560' } } },
+    { name: 'riia10', sec: '3_6', base: 1961, at: [1545, 3478], r: 30, pick: (x, z) => z < 3497,
+      spec: plaster([222, 168, 138], { storey: 3.1, maxFloors: 6, win: sq({ w: 1.25, pitch: 2.6 }), plinth: { h: 0.6, col: '#7d6a60' }, belts: [3.9] }),
+      walls: [{ near: [1538.2, 3471.3], within: 3, floors: [4.5, 7.6, 10.7, 13.8].map((sill) => ({ sill, h: 1.6 })),
+        draw: (P, W) => { shops(P, W, Array.from({ length: 7 }, (_, k) => [1.5 + k * 6.6, 6.0 + k * 6.6]), '#3a2a24', '#f2d9c4', '#d5733a'); } }] },
+    { name: 'riia10t', sec: '3_6', base: 1961, at: [1548, 3512], r: 34, pick: (x, z) => z >= 3497,
+      spec: plaster([122, 112, 106], { storey: 3.2, maxFloors: 6, win: sq({ w: 1.2, pitch: 2.5, frame: '#e4e0d8', glass: '#3c4450' }), plinth: { h: 0.6, col: '#4f4945' }, belts: [3.9], weather: 0.5 }) },
+    { name: 'voru2', sec: '3_6', base: 2290, at: [1504.6, 3537.7], r: 20, spec: plaster([217, 196, 174], { storey: 3.0, maxFloors: 2, win: { w: 1.0, pitch: 2.3, T: true, surround: 0.1, sc: '#f4efe6' }, plinth: { h: 0.6, col: '#8d8378' } }) },
+    { name: 'voru4', sec: '3_6', base: 2352, at: [1495.6, 3563.2], r: 18, spec: plaster([217, 196, 174], { storey: 3.0, maxFloors: 1, win: sq({ w: 1.6, pitch: 3.0 }) }) },
+    { name: 'riia14', sec: '3_6', base: 2466, at: [1379.6, 3649.3], r: 24,
+      spec: plaster([206, 207, 207], { storey: 3.4, maxFloors: 3, win: sq({ w: 2.2, pitch: 3.0, bars: 2 }), plinth: { h: 0.4, col: '#6d6f72' } }),
+      walls: [{ near: [1371.1, 3643.0], within: 3, draw: (P, W) => { P.r(0, 3.4, W.len, 4.1, '#e9b92c'); shops(P, W, [[1, 7], [8.5, 14.5]], '#2a3a4a', '#d9dadb'); } },
+        { near: [1382.1, 3635.0], within: 3, draw: (P, W) => { P.r(0, 3.4, W.len, 4.1, '#e9b92c'); shops(P, W, [[1.5, 9.5], [11, 20]], '#2a3a4a', '#d9dadb'); } }] },
     { name: 'struve8', sec: '3_6', base: 2005, at: [1519.0, 3379.9], r: 20, spec: plaster([234, 233, 228], { storey: 3.1, maxFloors: 6, win: sq({ w: 1.3, pitch: 2.7 }), plinth: { h: 0.7, col: '#8d8a86' } }) },
   ];
 
@@ -195,6 +257,21 @@ function houses(later) {
     // the red PALLAS box at the top
     P.r(len - 6.5, top - 4.2, len - 1.0, top - 1.4, '#c8323a');
     P.text('PALLAS', len - 3.75, top - 2.8, 1.4, '#ffffff', '700 %px Georgia, serif');
+  }
+  // pilaster strips from the shop band up to the eaves, one between each pair of windows
+  function pilasters(P, W, from, col) {
+    for (let x = 0; x <= W.len + 0.1; x += 2.5) P.r(x - 0.22, from, x + 0.22, W.eaves - 0.5, col);
+    P.r(0, W.eaves - 0.7, W.len, W.eaves - 0.2, col);
+  }
+  // a ground floor of shop windows [x0, x1] with a band over them (and an optional coloured fascia)
+  function shops(P, W, list, glass, band, fascia = null) {
+    for (const [x0, x1] of list) {
+      if (x1 > W.len - 0.5) continue;
+      P.r(x0 - 0.1, 0.35, x1 + 0.1, 3.35, band);
+      P.grad(x0, 0.45, x1, 3.2, glass, '#1d2126');
+      P.r((x0 + x1) / 2 - 0.04, 0.45, (x0 + x1) / 2 + 0.04, 3.2, band);
+      if (fascia) P.r(x0, 3.0, x1, 3.35, fascia);
+    }
   }
   // the court's entrance block: black panels, the name in white letters
   function blackBlock(P, W, name = true) {
@@ -230,6 +307,8 @@ export function createRiia(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
+  world.addTrees(TREES);
+
   function build() {
     built = true;
     const A = areaKit(world, group, { shadows });
@@ -247,7 +326,7 @@ export function createRiia(scene, world, { shadows = true } = {}) {
       const q = L(bs, 0), tx = q[0] - W.mid[0], tz = q[1] - W.mid[1];
       return best < 45 && (tx * W.nx + tz * W.nz) / (Math.hypot(tx, tz) || 1) > 0.3;
     };
-    skinHouses(world, group, houses(later), { faces, shadows, ppm: 22, far: 9, debug: DEBUG });
+    skinHouses(world, group, houses(later), { faces, shadows, ppm: 16, far: 6, debug: DEBUG });
     for (let k = 0; k < later.length; k++) later[k]();
 
     // the steel railing along the pavement on the court and park side, from Kalevi to the Riia 8 lane

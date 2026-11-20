@@ -7,7 +7,8 @@
 //    lucarnes. The nave with stepped buttresses (grey metal weatherings) and big pointed windows of two
 //    lancets under a rose, a grey standing-seam roof with small gabled vents, the transept and the
 //    five-sided apse, a little spire over the crossing.
-//  - Round it: the low brick wall with brick pillars and black iron mesh along Veski and up the west side,
+//  - Round it: the low brick wall with brick pillars and black iron mesh up the west side (along Veski the
+//    race keeps its own wall from race/mandel.js),
 //    the iron gate between tall pillars in front of the tower, the path to the door.
 //  - The villa: cream render on a grey plinth, a steep red tiled roof that sweeps down low on the Oru side
 //    with two dormers there, an eyebrow window in the front hip, the five-sided bay with diamond-paned
@@ -357,7 +358,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
           }
         }
       };
-      brickWallLine([[679.63, 2625.84], [714.79, 2585.53]]);                     // along Veski
+      // along Veski the race's own low brick wall stays (race/mandel.js): it is the edge of the racing line (Martin, 20 Nov)
       brickWallLine([[675.73, 2624.72], [664.55, 2577.14]]);                     // up the west side
       // the gate: two tall pillars, a pair of iron leaves standing open
       const ga = [675.73, 2624.72], gb = [679.63, 2625.84], len = Math.hypot(gb[0] - ga[0], gb[1] - ga[1]);

@@ -593,19 +593,6 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       p.add(BOX(0.42, 0.55, 0.03), 0x22252c, pl[0], ya + 0.95, pl[1], Math.atan2(-uz, ux));
       p.add(BOX(0.2, 0.26, 0.035), 0xb79a52, pl[0], ya + 1.0, pl[1], Math.atan2(-uz, ux));
     }
-    // the corner of Veski and Oru: concrete walls round the raised grass and the steps up
-    {
-      const C0 = [683.4, 2641.4], C1 = [689.9, 2633.9];
-      A.bar([678.2, 2647.2], C0, 0.3, -0.4, 0.55, 0xb9b8b4);
-      A.bar([694.2, 2629.0], C1, 0.3, -0.4, 0.55, 0xb9b8b4);
-      for (const [a, b] of [[[684.6, 2640.1], [683.2, 2641.8]], [[688.9, 2632.9], [687.3, 2631.6]]]) {
-        const ux = (b[0] - a[0]), uz = (b[1] - a[1]);
-        for (let k = 0; k < 4; k++) {
-          const t = k / 4, q = [a[0] + ux * t, a[1] + uz * t];
-          A.bar([q[0] - uz * 0.7, q[1] + ux * 0.7], [q[0] + uz * 0.7, q[1] - ux * 0.7], 0.42, -0.3, 0.6 - k * 0.15, 0xc6c5c0);
-        }
-      }
-    }
     // the pavement and verge along Oru on the school's side, the globe lamps
     {
       const a = [680.3, 2644.4], b = [715.4, 2671.9], F = frame(a, [b[0] - a[0], b[1] - a[1]]), len = Math.hypot(b[0] - a[0], b[1] - a[1]);

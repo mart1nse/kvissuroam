@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { streetKit, setHouseColours } from './streetkit.js';
 import { skinHouses } from './houseskin.js';
 import { BOX } from '../race/landmarks.js';
+import { frontCut } from './kontserdimaja.js';
 
 // the street frame: s metres along Vanemuise from the Akadeemia junction towards Ülikooli (north-east), v metres
 // across it towards the theatre side (south-east)
@@ -88,15 +89,29 @@ function fins(P, W) {
   for (let k = 0; k < 4; k++) { const x = len * (0.2 + k * 0.2); P.r(x - 0.9, 0.3, x + 0.9, 2.9, '#2a2f36'); P.r(x - 0.03, 0.3, x + 0.03, 2.9, '#c9c9c5'); }
   P.weather(0, P.y0, len, top, 0.4, 7);
 }
-// red brick with a row of round windows and a few tall ones
-function brickPorthole(P, W) {
-  const len = W.len;
-  P.brick(0, P.y0, len, P.y1, C.brick, 11);
-  const yr = Math.min(P.y1 - 2.2, W.eaves - 2.0);
-  for (let x = 2.5; x < len - 2; x += 3.6) { P.arc(x, yr, 0.62, '#d9d6cf'); P.arc(x, yr, 0.5, '#46505d'); }
-  for (let x = 4.2; x < len - 3; x += 7.2) P.win(x - 0.7, 1.0, x + 0.7, 3.4, sq({ frame: '#d9d6cf' }));
-  P.r(0, P.y0, len, 0.5, '#8d8a85');
+// the concert house's brick box over the street (Street View, 4 Vanemuise): the logo by the south-east end, the name
+// in two lines of spaced metal letters, two round windows one over the other by the north-west end (x runs north-west)
+function concertFront(P, W) {
+  const len = W.len, y0 = P.y0, hh = P.y1 - P.y0, Y = (f) => y0 + hh * f;
+  P.brick(0, y0, len, P.y1, C.brick, 17);
+  P.r(0, P.y1 - 0.18, len, P.y1, '#6f3a2f');
+  const spaced = (word, cx, y, size, pitch) => {
+    const x0 = cx - (word.length - 1) * pitch / 2;
+    for (let i = 0; i < word.length; i++) P.text(word[i], x0 + i * pitch, y, size, '#d2c3ad', '600 %px Arial, sans-serif');
+  };
+  spaced('VANEMUISE', len * 0.55, Y(0.5), 0.66, 0.68);
+  spaced('KONTSERDIMAJA', len * 0.55, Y(0.33), 0.6, 0.66);
+  // the logo: a pale metal shield with the U-shaped mark in it
+  const lx = len * 0.3, ly = Y(0.44);
+  P.r(lx - 0.55, ly - 0.85, lx + 0.55, ly + 0.95, '#c6c8cb');
+  P.arc(lx, ly - 0.85, 0.55, '#c6c8cb');
+  P.r(lx - 0.36, ly - 0.45, lx - 0.18, ly + 0.75, '#6f7378');
+  P.r(lx + 0.18, ly - 0.45, lx + 0.36, ly + 0.75, '#6f7378');
+  P.arc(lx, ly - 0.45, 0.36, '#6f7378'); P.arc(lx, ly - 0.45, 0.18, '#c6c8cb');
+  P.r(lx - 0.05, ly - 0.6, lx + 0.05, ly + 0.75, '#6f7378');
+  for (const f of [0.72, 0.38]) { P.arc(len * 0.82, Y(f), 0.72, '#d9d6cf'); P.arc(len * 0.82, Y(f), 0.58, '#3f4955'); }
 }
+const brickPlain = (P, W) => P.brick(0, P.y0, W.len, P.y1, C.brick, 13);
 function brickGrid(P, W) {
   const len = W.len;
   P.brick(0, P.y0, len, P.y1, C.brick, 13);
@@ -131,12 +146,14 @@ function houses(later) {
       walls: [{ near: [1457, 3261.2], n: 12, doors: [{ x: 16.15, w: 1.6, h: 2.6, col: '#594a3f', steps: 3 }],
         draw: (P, W) => { later.push(() => canopy(W, 14.9, 17.4, 3.0, 1.1)); } }] },
     // ---- the theatre
-    { name: 'vanemuine', sec: '3_6', base: 1627, at: [1534.5, 3263], r: 70,
+    // (its front block on columns over the terrace is built in kontserdimaja.js: its walls are left out here)
+    { name: 'vanemuine', sec: '3_6', base: 1627, at: [1534.5, 3263], r: 70, pick: (x, z, top) => !frontCut(x, z, top),
       spec: plaster(C.grey, { storey: 3.6, maxFloors: 4, plinth: { h: 0.6, col: '#8f8d89' }, win: sq({ w: 1.6, pitch: 2.5, frame: '#d9d9d6', glass: '#3f4a58' }), weather: 0.6, attic: null }),
       walls: [
         { near: [1548.9, 3241.7], within: 3, only: fins },                                          // the front block's fins
-        { near: [1507.1, 3232.2], within: 3, only: brickPorthole },                                 // the side to Vanemuise
-        { near: [1490.8, 3245], within: 3, only: brickPorthole },
+        { near: [1504.1, 3228.2], within: 0.6, only: concertFront },                                // the brick box over the street
+        { near: [1504.7, 3229], within: 0.5, only: brickPlain },
+        ...[[1498.3, 3237.9], [1502.5, 3243.1]].map((near) => ({ near, within: 1, only: brickPlain })),   // its north-west end
         { near: [1525.7, 3236.8], within: 3, only: brickGrid },                                     // over the forecourt
         ...[[1521.9, 3266], [1545.8, 3263.8], [1547.3, 3279.6], [1531.1, 3261.7]].map((near) => ({ near, within: 3, only: brickGrid })),   // the stage tower
         { near: [1576.5, 3239.6], within: 3, only: (P, W) => { P.r(0, P.y0, W.len, P.y1, '#8e8c8a'); for (let x = 0; x < W.len; x += 1.2) P.r(x, P.y0, x + 0.02, P.y1, '#6f6d6b'); P.r(0, P.y1 - 0.35, W.len, P.y1, '#a7a5a1'); } },   // the granite terrace wall

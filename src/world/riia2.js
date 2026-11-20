@@ -227,10 +227,10 @@ function towerOutline() {
 }
 
 // steel railing bars on a shared see-through texture; returns add(a, b, y0, height) and finish()
-function railings(group) {
+export function railings(group, col = '#1d1e21') {
   const tex = paintTexture(1, 0, 1, 64, (P) => {
-    P.r(0, 0.92, 1, 1, '#1d1e21'); P.r(0, 0, 1, 0.06, '#1d1e21');
-    for (let x = 0.02; x < 1; x += 0.125) P.r(x, 0, x + 0.025, 1, '#1d1e21');
+    P.r(0, 0.92, 1, 1, col); P.r(0, 0, 1, 0.06, col);
+    for (let x = 0.02; x < 1; x += 0.125) P.r(x, 0, x + 0.025, 1, col);
   }, { repeat: true, alpha: true });
   tex.wrapT = THREE.ClampToEdgeWrapping;
   const pos = [], uv = [];

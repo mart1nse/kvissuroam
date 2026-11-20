@@ -60,9 +60,9 @@ const KERBS = [
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
 const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };    // bollards: i0, i1, off; pad: i0, i1, off0, off1
-// (the bollards stop where the theatre park's taxi bays begin: along the bays the one real row stands on the
-// pavement side, teatripark.js; Martin, 20 Nov)
-const VANEMUISE = { bollards: [2276, 2287, 0.45], sign: [2262, 1.1] };
+// (no bollards at the roadside here: the parking bays run from the taxi bays up to the foot of the Vanemuine steps,
+// and their one real row of bollards stands on the pavement side, teatripark.js; Martin, 20 Nov)
+const VANEMUISE = { sign: [2262, 1.1] };
 const PLAYGROUND = [[1602, 3019, 5.2], [1616, 3031, 4.2]];     // landmarks.js, the Barclay park play area
 const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11, treeFrom: 2354 };
 // treeFrom: no trees before this index, the corner by Kaubamaja is open paving (Martin, 19 Nov: none behind the START LINE board)
@@ -246,8 +246,6 @@ export function extraProps() {
   const [b0, b1, bo] = PEPLERI.bollards;
   for (const [x, z] of walk(sideLine(track, b0, b1, -1, bo), 1.8)) out.push([BOLLARD, x, z, 0]);
   // 6. Vanemuise: bollards where the kerb curves out, and the parking sign
-  const [v0, v1, vo] = VANEMUISE.bollards;
-  for (const [x, z] of walk(sideLine(track, v0, v1, 1, vo), 1.8)) out.push([BOLLARD, x, z, 0]);
   const [si, so] = VANEMUISE.sign;
   const ps = edgePoint(track, si, 1, so);
   out.push([PARKING, ps[0], ps[1], back(si)]);

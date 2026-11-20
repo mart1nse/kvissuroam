@@ -52,9 +52,12 @@ function buildingGeometry(sector, walls) {
     const key = e ? e.key : base[t] * 64;
     let g = groups.get(key);
     if (!g) groups.set(key, (g = { b: base[t], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, top: -1e9, eaves: 1e9, real: e ? 1 : 0, plain: !!(e && e.plain) }));
+    // cut: part of a house is modelled by hand (the triangles whose middle the test picks, given their top)
+    const cut = !!(e && e.cut && e.cut(sector.x0 + (pq[t * 3] + pq[t * 3 + 3] + pq[t * 3 + 6]) * 0.05 / 3, sector.z0 + (pq[t * 3 + 2] + pq[t * 3 + 5] + pq[t * 3 + 8]) * 0.05 / 3,
+      Math.max(pq[t * 3 + 1], pq[t * 3 + 4], pq[t * 3 + 7]) * 0.01));
     for (let i = t; i < t + 3; i++) {
       const x = pq[i * 3] * 0.05, y = pq[i * 3 + 1] * 0.01, z = pq[i * 3 + 2] * 0.05;
-      if (!(e && e.hide)) { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }       // a hidden house keeps no triangles
+      if (!(e && e.hide) && !cut) { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }       // a hidden house keeps no triangles
       nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
       if (e && kind[i] === 1 && e.roof !== undefined) c.setHex(e.roof, THREE.SRGBColorSpace);
       else if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);

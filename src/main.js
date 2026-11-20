@@ -77,6 +77,7 @@ import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
+import { setPaintScale } from './world/paintscale.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -141,6 +142,10 @@ const lowRung = () => { const l = gfx.levels[gfx.level]; return !!l && l.dpr < M
 let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 'asked for with ?lite'
   : navigator.webdriver ? '' : weakDesktop(gpu) || (lowRung() ? (gfx.mode === 'auto' ? 'slow last time' : 'graphics set low') : '');
 const lite = isTouch || !!liteWhy;
+// light mode paints the hand-built house fronts, shop signs and walls with fewer pixels per metre
+// (0.6 each way: a third of the memory). ?paint=1 keeps them full; ?paint=0.5 tries another scale.
+if (params.has('paint')) setPaintScale(+params.get('paint') || 1);
+else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
 stats.start({ isTouch, lite, software: gpu.software });
@@ -495,6 +500,20 @@ function playerArrow(ctx, k, colour = '#2ff3ff') {
   ctx.stroke(); ctx.fill();
 }
 
+// The car being swapped out is freed from the graphics card (its geometry, materials and pictures).
+// Each car change used to keep the old car's model there: a few cars tried in the garage on a phone
+// added up. Anything it shared with another car is simply uploaded again when that car is drawn.
+function freeModel(group) {
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m) continue;
+      for (const k in m) if (m[k]?.isTexture) m[k].dispose();
+      m.dispose();
+    }
+  });
+}
 function setCar(id, now = false) {
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
@@ -511,7 +530,7 @@ function setCar(id, now = false) {
   const spec = CARS[id];
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
-  if (model) scene.remove(model.group);
+  if (model) { scene.remove(model.group); freeModel(model.group); }
   try {
     model = buildCarModel ? buildCarModel(id) : buildPlaceholder(spec);
   } catch (err) {

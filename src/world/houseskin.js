@@ -4,6 +4,7 @@
 // All pictures of a street share a few big textures (an atlas), so a street costs a handful of draw calls.
 import * as THREE from 'three';
 import { rnd } from '../race/landmarks.js';
+import { paintScale } from './paintscale.js';
 
 export const tone = (rgb, k) => `rgb(${Math.min(255, rgb[0] * k) | 0},${Math.min(255, rgb[1] * k) | 0},${Math.min(255, rgb[2] * k) | 0})`;
 const hexRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -112,7 +113,7 @@ export function painter(c, px, py, wm, y0, y1, ppm) {
 }
 
 // ---------------------------------------------------------------- the atlas
-export function createAtlas(size = 2048) {
+export function createAtlas(size = paintScale() < 1 ? 1024 : 2048) {
   const pages = [];
   const page = () => {
     const cv = document.createElement('canvas');
@@ -214,8 +215,9 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       const ylo = Math.max(W.ylo, gmin - 0.6), yhi = W.yhi;
       if (yhi - ylo < 0.6) continue;
       const front = faces(W);
-      let q = front ? (over.ppm || spec.ppm || ppm) : far;
-      q = Math.min(q, 1800 / W.len, 1800 / (yhi - ylo));
+      let q = (front ? (over.ppm || spec.ppm || ppm) : far) * paintScale();
+      const most = atlas.size * 0.88;
+      q = Math.min(q, most / W.len, most / (yhi - ylo));
       const pw = Math.max(4, Math.round(W.len * q)), ph = Math.max(4, Math.round((yhi - ylo) * q));
       const rect = atlas.take(pw, ph);
       const pg = atlas.pages[rect.k], c = pg.c;
@@ -358,6 +360,7 @@ export function paintWall(P, W, spec, over = {}, H = {}) {
 
 // A picture of its own (not in an atlas), drawn in metres: for fences, walls and signs
 export function paintTexture(wm, y0, y1, ppm, draw, { repeat = false, alpha = false } = {}) {
+  ppm *= paintScale();
   const cv = document.createElement('canvas');
   cv.width = Math.max(4, Math.round(wm * ppm)); cv.height = Math.max(4, Math.round((y1 - y0) * ppm));
   const c = cv.getContext('2d');

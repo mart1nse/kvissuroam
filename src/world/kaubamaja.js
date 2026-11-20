@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
+import { paintScale } from './paintscale.js';
 
 const O = [1659.6, 3088.7];                              // west corner of the roof (game x, z)
 const UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];     // along Küüni (to the south corner), along the park face (to the north corner)
@@ -52,7 +53,8 @@ function rnd(seed) {
 // a canvas painted in metres: s along the wall, y up from y0
 export function painter(len, y0, y1, ppm) {
   const c = document.createElement('canvas');
-  c.width = Math.min(4096, Math.round(len * ppm)); c.height = Math.round((y1 - y0) * ppm);
+  ppm *= paintScale();
+  c.width = Math.min(4096, Math.max(4, Math.round(len * ppm))); c.height = Math.max(4, Math.round((y1 - y0) * ppm));
   const g = c.getContext('2d'), kx = c.width / len, ky = c.height / (y1 - y0);
   const X = (s) => s * kx, Y = (y) => (y1 - y) * ky;
   const P = {

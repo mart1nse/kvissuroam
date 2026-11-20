@@ -3,6 +3,7 @@
 // Signs are drawn per sector: one texture with all the sector's sign faces, one mesh for the faces and one
 // for the boxes and poles. They are scenery only.
 import * as THREE from 'three';
+import { paintScale } from './paintscale.js';
 
 // [background, text, glow]: rough brand colours, a neon look for everything else
 const STYLES = [
@@ -27,7 +28,8 @@ const STYLES = [
   ['#ffffff', '#d4001a'],              // 18 hardware stores
   ['#ffffff', '#e50010'],              // 19 H&M
 ];
-const ROW = 80, ATLAS_W = 1024, MAX_ROWS = 50;
+const MAX_ROWS = 50;
+let ROW = 80, ATLAS_W = 1024;           // (smaller on phones: see paintscale.js)
 
 // draws one sign face into the rectangle (x, y, w, h) of the canvas
 function drawFace(c, x, y, w, h, text, style) {
@@ -50,6 +52,7 @@ function drawFace(c, x, y, w, h, text, style) {
 }
 
 export function createSigns(world) {
+  ROW = Math.round(80 * paintScale()); ATLAS_W = Math.round(1024 * paintScale());
   let data = null;
   const waiting = [];
   const boxMat = new THREE.MeshLambertMaterial({ color: 0x2a2730 });

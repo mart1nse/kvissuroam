@@ -16,6 +16,7 @@ import { createTrack } from './race.js';
 import { BOX, rnd, PARKING } from './landmarks.js';
 import { streetKit, wallOf, addHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
+import { paintScale } from '../world/paintscale.js';
 
 // wall lines from the LOD2 model (game x, z), the street on the right-hand side going a -> b;
 // y: ground at the wall, top: the wall's top (world y)
@@ -118,7 +119,7 @@ export function valliStreetClear(data, out) {
 // A picture of a wall, drawn in metres: x along the wall, y up from the house's ground line.
 export function facade(wm, y0, y1, ppm, draw) {
   const hm = y1 - y0;
-  ppm = Math.min(ppm, 2048 / wm, 2048 / hm);
+  ppm = Math.min(ppm * paintScale(), 2048 / wm, 2048 / hm);
   const cv = document.createElement('canvas');
   cv.width = Math.max(4, Math.round(wm * ppm)); cv.height = Math.max(4, Math.round(hm * ppm));
   const c = cv.getContext('2d');

@@ -127,15 +127,16 @@ export const ENGINE_SOUNDS = {
   // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
   // quattro rally cars, rounded off by the turbo.
   audi200: {
-    seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 9,
+    seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 8,
     pipes: [{ len: 1.5, fb: -0.44, damp: 0.46 }],
     res: [[105, 1.4, 0.62], [235, 2.2, 0.5], [560, 2.6, 0.32], [1250, 3, 0.1]], dry: 0.4,
     lp0: 300, lpRpm: 165, lpLoad: 1000, hp: 30,
-    base: 0.4, overrun: 0.8, pulseDeg: 34, noise: 0.1, rough: 0.05, bias: 0.25,
+    base: 0.4, overrun: 0.8, pulseDeg: 34, noise: 0.1, rough: 0.05, bias: 0.205,
     intake: 0.34, intakeF: 600, intakeQ: 1.3, tick: 0.02, tickF: 4200,
     jitter: 1.2, lope: 9, drive: 2.0, gain: 0.95, idleVol: 0.3,
     // (the five-cylinder warble more to the fore, Martin 2026-11-20: the cylinders a little more unlike
-    // each other and further off the even beat, more edge and rasp, driven harder and a touch brighter)
+    // each other and further off the even beat, halfway between the first values (0.16, 7) and the next
+    // (0.25, 9, a tad too uneven); more edge and rasp, driven harder and a touch brighter)
     edge: 0.55, rasp: 0.5,
     turbo: true, turboMuffle: 170, hiss: 0.02, whistle: 0.5, whistleF: 1.1,
   },

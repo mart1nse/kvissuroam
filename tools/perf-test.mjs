@@ -26,7 +26,7 @@ for (const spec of Object.values(CARS)) {
     if (d400 === null && dist >= 402.3) d400 = t;
     top = Math.max(top, v);
   }
-  // (a bus is limited to 80 km/h, so it is checked on 0-50 instead)
+  // (a bus takes a long time to reach 100 km/h, so it is checked on 0-50 instead)
   const r50 = spec.ref.zeroTo50;
   const e100 = r50 ? Math.abs(t50 - r50) / r50 : Math.abs(t100 - spec.ref.zeroTo100) / spec.ref.zeroTo100;
   const eTop = Math.abs(top - spec.ref.top) / spec.ref.top;

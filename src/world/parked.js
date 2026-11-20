@@ -30,6 +30,7 @@ import { KORVE2_CARS } from './korvekula2.js';
 import { RIIA_CARS } from './riia.js';
 import { KORVE3_CARS } from './korvekula3.js';
 import { KORVE4_CARS } from './korvekula4.js';
+import { HARIDUSE10_CARS } from './hariduse10.js';
 import { NOELA_CARS } from './noela.js';
 
 // ---------------------------------------------------------------- what stands where
@@ -112,6 +113,7 @@ function allSpots() {
   RIIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ri${i}`, x, z, yaw, id, paint, lift }));
   KORVE3_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kx${i}`, x, z, yaw, id, paint, lift }));
   KORVE4_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ky${i}`, x, z, yaw, id, paint, lift }));
+  HARIDUSE10_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kz${i}`, x, z, yaw, id, paint, lift }));
   NOELA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `no${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;

@@ -161,7 +161,7 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     const lines = [], blue = [];
     for (let q = 3; q < 76; q += 4.5) for (const o of [-0.12, 0.12]) lines.push([q, ULI.centre + o, q + 4.5, ULI.centre + o]);
     for (let q = 4; q < 75; q += 9) lines.push([q, ULI.lane, q + 3, ULI.lane]);
-    for (let q = 3; q < 80; q += 2.5) lines.push([q, ULI.edge, q + 1, ULI.edge]);
+    for (let q = 7.5; q < 80; q += 2.5) lines.push([q, ULI.edge, q + 1, ULI.edge]);
     const run = (ULI.kerb - 0.15 - ULI.edge) / Math.tan(Math.PI / 6);
     for (const b of [...BAYS, BAYS[BAYS.length - 1] + 5]) blue.push([b - run, ULI.edge + 0.1, b, ULI.kerb - 0.15]);
     // ---- Vanemuise tn: the taxi bays, the granite strip between them and the lane, black bollards and the
@@ -190,6 +190,18 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     for (const [s, v] of BOL) { const [x, z] = F.at(s, v); A.bollard(x, z, 0x1c1d20, 0.95); }
     const bowl = new THREE.CylinderGeometry(0.6, 0.36, 0.45, 14);
     for (const [s, v] of [[-2.6, 28.6], [-2.6, 31.2], [-2.3, 74.2], [-2.0, 76.6]]) { const [x, z] = F.at(s, v); p.add(bowl, 0xeeeeea, x, h(x, z) + 0.22, z); }
+    // the round pavement corner (src/race/junctionkerbs.js) ends in a point at Ülikooli's edge (v 6.8, s 1): a kerb
+    // runs back up from there to the one behind the parking strip, and the strip's white edge line comes out of the
+    // point on a smooth curve to its own line (Martin, 20 Nov: "the white line should then be round")
+    {
+      const a = F.at(1.0, 6.95), b = F.at(2.3, ULI.kerb);
+      for (let k = 0; k < 4; k++) {
+        const P = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        A.bar(P(k / 4), P((k + 1) / 4), 0.25, -0.2, 0.09, 0xb9b7bc);
+      }
+      const c = (t) => [1.1 + 5.9 * t, 6.95 + (ULI.edge - 6.95) * t * t * (3 - 2 * t)];
+      for (let k = 0; k < 8; k++) { const p0 = c(k / 8), p1 = c((k + 1) / 8); lines.push([p0[0], p0[1], p1[0], p1[1]]); }
+    }
     stripes(lines, 0xe4e2ea);
     stripes(blue, 0x2f6fd8);
 

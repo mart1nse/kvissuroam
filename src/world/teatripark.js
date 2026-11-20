@@ -166,14 +166,19 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     for (const b of [...BAYS, BAYS[BAYS.length - 1] + 5]) blue.push([b - run, ULI.edge + 0.1, b, ULI.kerb - 0.15]);
     // ---- Vanemuise tn: the taxi bays, the granite strip between them and the lane, black bollards and the
     // white bowl planters on the pavement
-    A.pave(F, TAXI.s0, TAXI.s1, 17, TAXI.end, 'asphalt');
-    for (let q = 17; q < TAXI.end - 0.5; q += 2) A.box(F, TAXI.s0 - 0.2, q + 1, 0.4, 2.02, -0.2, 0.12, 0xb9b7bc);
+    // (the bays are the street's own tarmac, no lighter cover; the granite line between them and the lane is flush
+    // with the road and follows its fall: Martin, 20 Nov)
+    A.pave(F, TAXI.s0 - 0.4, TAXI.s0, 17, TAXI.end, 'kerb');
     for (const b of [...TAXI.bays, TAXI.bays[TAXI.bays.length - 1] + 3.3]) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b + (TAXI.s1 - TAXI.s0 - 0.3) / Math.tan(50 * Math.PI / 180)]);
     for (const b of TAXI.long) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b]);
     // at the top the pavement's kerb comes out to the road's edge on a slant, by the lawn wall at the foot of the steps
     {
       const a = F.at(TAXI.s1, TAXI.end - 0.6), b = F.at(TAXI.s0 + 0.1, TAXI.taper);
-      A.bar(a, b, 0.25, -0.2, 0.12, 0xb9b7bc);
+      const n = 8;
+      for (let k = 0; k < n; k++) {
+        const u0 = k / n, u1 = (k + 1) / n, P = (u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+        A.bar(P(u0), P(u1), 0.25, -0.2, 0.06, 0xb9b7bc);
+      }
       lines.push([TAXI.s0 + 0.15, TAXI.end - 0.4, TAXI.s1 - 0.3, TAXI.end - 0.4]);
     }
     // one row of black bollards along the pavement side of the bays (Street View, Aug 2024), all the way up; at the

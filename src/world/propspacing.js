@@ -32,6 +32,7 @@ export const HAND_PLACES = [
   { name: 'Nõela village road', x: -7040, z: -7130, r: 620 },
   { name: 'Raadi, Keskuse tee and the route 95 roundabout', x: 2450, z: -360, r: 520 },
   { name: 'Lõunakeskus, Hotel Sophia, Teaduspark', x: -1150, z: 5440, r: 300 },
+  { name: 'Valguse and Optika strip', x: -1260, z: 5000, r: 300 },
 ];
 
 // segments of the road centre lines in a coarse grid

@@ -24,7 +24,10 @@ const COL = {
 
 export function deltaWalls(walls) {
   setHouseColours(walls, '3_4', 1120, 1760, [
-    { base: -189, x: 1573.5, z: 2261.7, wall: COL.body, hide: true, reach: 95 },
+    // the survey lists the chevron six times over; each entry claims the triangles nearest to it, so all six are
+    // hidden (with only one, the map's block showed through and flickered against the hand-built one: Martin, 20 Nov)
+    ...[[1572.1, 2262.8], [1543.5, 2250.9], [1557.5, 2270.7], [1578.4, 2225.2], [1567.2, 2276.6], [1605.1, 2202.6]]
+      .map(([x, z]) => ({ base: -189, x, z, wall: COL.body, hide: true, reach: 95 })),
     { base: 34, x: 1600.1, z: 2255.4, wall: COL.body, hide: true, reach: 40 },
   ]);
 }

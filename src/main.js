@@ -75,6 +75,7 @@ import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
+import { stats } from './stats.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -140,6 +141,9 @@ let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 
   : navigator.webdriver ? '' : weakDesktop(gpu) || (lowRung() ? (gfx.mode === 'auto' ? 'slow last time' : 'graphics set low') : '');
 const lite = isTouch || !!liteWhy;
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
+// anonymous game stats (src/stats.js): only on www.linnaring.com
+stats.start({ isTouch, lite, software: gpu.software });
+canvas.addEventListener('webglcontextlost', () => stats.count('glLost'));
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -399,7 +403,8 @@ async function boot() {
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap) => mp.submitLap(lap),
+    onLap: (lap) => { mp.submitLap(lap); stats.lap('finish', lap.car); },
+    onEvent: (k, cps) => stats.lap(k, cps),
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
@@ -476,6 +481,7 @@ async function boot() {
   $('#loading').classList.add('hidden');
   $('#menu').classList.remove('hidden');
   mode = 'menu';
+  stats.ready();
   if (params.has('drive')) startDriving();
 }
 
@@ -549,6 +555,7 @@ function startDriving() {
   if (mode === 'drive') return;
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
+  stats.drive();
   if (still) {
     // phones: from the still picture straight to behind the car
     still = false;
@@ -592,6 +599,7 @@ addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'menu' 
 function openGarage() {
   if (mode !== 'drive') return;
   drivenOnce = true;
+  stats.count('garage');
   board?.hide(); optEl.classList.add('hidden');
   closeMap();
   mode = 'menu';
@@ -674,6 +682,7 @@ function insideBoundary(x, z) {
 async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
+  stats.count('mapjump');
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
   const ok = (p) => {
     if (!p) return null;
@@ -978,6 +987,8 @@ document.addEventListener('visibilitychange', () => {
   back = { at: performance.now(), n: 0, f: 0, js: 0, worst: 0, next: 2000 };
 });
 
+// what is driving the car: keyboard, gamepad, steering wheel or touch screen
+const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -1049,7 +1060,7 @@ function frame(ts) {
   if (mode === 'drive') {
     // remember safe ground
     histTimer -= dt;
-    if (car.inWater && !wetAt) wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime };
+    if (car.inWater && !wetAt) { wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime }; stats.count('water'); }
     else if (!car.inWater) wetAt = null;
     if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
@@ -1073,8 +1084,9 @@ function frame(ts) {
       }
     }
     if (launch?.done && kmh < 1) launch = null;
-    race.update(car, carId, s0Short(), isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
+    race.update(car, carId, s0Short(), inpNow());
   }
+  stats.frame({ mode, dt, raw: rawDt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
 
   // ---- car visuals
   const s = car.spec;

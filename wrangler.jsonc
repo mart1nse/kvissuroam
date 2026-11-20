@@ -16,8 +16,15 @@
     "run_worker_first": ["/", "/index.html"]
   },
   "durable_objects": {
-    "bindings": [{ "name": "LOBBY", "class_name": "Lobby" }]
+    "bindings": [
+      { "name": "LOBBY", "class_name": "Lobby" },
+      // anonymous game stats, one row of totals per day (worker/stats.js)
+      { "name": "STATS", "class_name": "Stats" }
+    ]
   },
   // SQLite-backed Durable Objects are what the Workers free plan offers
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Lobby"] },
+    { "tag": "v2", "new_sqlite_classes": ["Stats"] }
+  ]
 }

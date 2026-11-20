@@ -235,7 +235,7 @@ function loadLocal() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; }
 }
 
-export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
+export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor }) {
   const track = createTrack();
   const edges = createEdges(track, world);
   scene.add(edges.group);
@@ -330,8 +330,10 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
   }
   back.addEventListener('click', () => setTimeout(hideBack, 0));
 
-  function cancel(why, offer) {
+  // kind (for the game stats): 'off' the track, 'jump' (a reset, a map drop or the garage), 'reset' (another car)
+  function cancel(why, offer, kind = 'reset') {
     if (!st.running) return;
+    onEvent?.(kind, st.cps.size);
     st.running = false;
     elMsg.textContent = why;
     toast(why, offer ? 4500 : 2600);
@@ -361,9 +363,10 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
   return {
     track,
     get running() { return st.running; },
+    get passed() { return st.running ? st.cps.size : -1; },
     get laps() { return laps; },
     cancel,
-    teleported() { st.prev = null; cancel('LAP CANCELLED'); },
+    teleported() { st.prev = null; cancel('LAP CANCELLED', false, 'jump'); },
     // back to the last spot (R): a short hop, the lap keeps running
     hopped(x, z) { if (st.prev) st.prev = { x, z }; },
     refreshBest() { lastBestKey = ''; },
@@ -382,7 +385,7 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
 
       if (st.prev) {
         const moved = Math.hypot(x - st.prev.x, z - st.prev.z);
-        if (moved > 40) { st.prev = null; cancel('LAP CANCELLED'); }   // reset, map drop or garage
+        if (moved > 40) { st.prev = null; cancel('LAP CANCELLED', false, 'jump'); }   // reset, map drop or garage
         else {
           // the start/finish line
           const a = (st.prev.x - start.x) * start.tx + (st.prev.z - start.z) * start.tz;
@@ -409,8 +412,9 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
                   const pb = !b || lap.ms < b.ms;
                   toast(`${pb ? 'NEW RECORD · ' : 'LAP · '}${fmtTime(lapT)}`, 4000);
                   onLap?.(lap);
-                } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
+                } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
+              onEvent?.('start');
               st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
@@ -427,7 +431,7 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
             });
             if (!onTrack) {
               st.off += moved;
-              if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED', true);
+              if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED', true, 'off');
             }
           }
         }

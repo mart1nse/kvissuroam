@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LINNARING game stats</title>
+<meta name="description" content="How LINNARING is played: anonymous daily totals of visits, cars, laps and where people drive." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  /* LINNARING game stats: anonymous daily totals from worker/stats.js, sent by src/stats.js */
+  @font-face { font-family: Montserrat; src: url(/fonts/montserrat-latin.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
+  :root {
+    --bg: #12062b; --panel: #1d0b44; --line: #34186e; --ink: #f6eaff; --ink2: #c7b3ec; --muted: #9581c2;
+    --cyan: #2ff3ff; --pink: #ff5fa2; --hot: #ff2bd6; --sun: #ffd45e;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 16px 60px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 18px; }
+  h1 { margin: 0; font: 900 italic clamp(26px, 4.4vw, 40px)/1 Montserrat, system-ui, sans-serif; letter-spacing: .02em;
+       background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 a { color: inherit; text-decoration: none; }
+  .sub { color: var(--ink2); margin: 6px 0 0; font-size: 14px; }
+  .range { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .range button { font: 600 13px system-ui, sans-serif; color: var(--ink2); background: none; border: 0; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+  .range button[aria-pressed="true"] { background: var(--line); color: var(--ink); }
+  .range button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile b { display: block; font: 800 26px/1.15 Montserrat, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--ink2); font-size: 13px; }
+  .tile small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { margin: 0 0 2px; font: 800 15px/1.3 Montserrat, system-ui, sans-serif; letter-spacing: .03em; text-transform: uppercase; }
+  .card .note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+  .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+  .bars li { display: grid; grid-template-columns: minmax(70px, 38%) 1fr auto; align-items: center; gap: 8px; font-size: 13.5px; }
+  .bars .lab { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bars .track { height: 10px; position: relative; }
+  .bars .fill { position: absolute; inset: 0 auto 0 0; border-radius: 0 4px 4px 0; background: var(--c, var(--cyan)); min-width: 2px; }
+  .bars .val { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; min-width: 3.5em; }
+  .bars .val small { color: var(--muted); margin-left: 4px; }
+  .empty { color: var(--muted); font-size: 13px; margin: 6px 0; }
+  .chart { position: relative; height: 190px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--line); padding-top: 8px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+  .chart .seg { border-radius: 4px 4px 0 0; }
+  .chart .seg + .seg { border-radius: 0; margin-top: 0; border-top: 2px solid var(--panel); }
+  .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2); margin: 0 0 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .hours { height: 110px; }
+  .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px 14px; }
+  .nums div b { display: block; font: 700 20px/1.2 Montserrat, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .nums div span { color: var(--ink2); font-size: 12.5px; }
+  #map { width: 100%; aspect-ratio: 4 / 3; max-height: 720px; display: block; border-radius: 8px; background: #160735; touch-action: pan-y; }
+  .scale { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .scale button { margin-left: auto; font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: var(--line); border: 0; border-radius: 7px; padding: 6px 10px; cursor: pointer; }
+  .scale i { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(255,43,214,.15), rgba(255,43,214,1)); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; width: 4em; }
+  td code { color: var(--ink2); word-break: break-word; font-size: 12.5px; }
+  #tip { position: fixed; pointer-events: none; z-index: 9; background: #0b0320; border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; padding: 6px 9px; border-radius: 8px; white-space: nowrap; display: none; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
+  footer a, .sub a { color: var(--cyan); }
+  .status { color: var(--ink2); padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><a href="/">LINNARING</a> · STATS</h1>
+      <p class="sub">How the game is played. Anonymous daily totals: no names, addresses or cookies. Days are Tartu time.</p>
+    </div>
+    <div class="range" role="group" aria-label="Period">
+      <button data-days="1">Today</button><button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button>
+    </div>
+  </header>
+  <main id="out"><p class="status">Loading…</p></main>
+  <footer>Counted since 20 November 2026. Visitor counts from Cloudflare Web Analytics are separate. <a href="/">Play LINNARING</a></footer>
+</div>
+<div id="tip"></div>
+<script>
+(function () {
+  'use strict';
+  var out = document.getElementById('out'), tip = document.getElementById('tip');
+  var C = { cyan: '#2ff3ff', pink: '#ff5fa2', hot: '#ff2bd6', sun: '#ffd45e', violet: '#8a3ffc' };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+  var fmt = function (n, dp) { return (n || 0).toLocaleString('en-GB', { maximumFractionDigits: dp || 0, minimumFractionDigits: dp || 0 }); };
+  var dur = function (s) { s = s || 0; return s >= 3600 ? fmt(s / 3600, 1) + ' h' : s >= 60 ? fmt(s / 60) + ' min' : fmt(s) + ' s'; };
+  var pct = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '–'; };
+  var sum = function (o) { var t = 0; for (var k in o) t += o[k]; return t; };
+  var countries = null;
+  try { countries = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) {}
+
+  // tooltips: anything with data-tip
+  document.addEventListener('pointermove', function (e) {
+    var el = e.target.closest && e.target.closest('[data-tip]');
+    if (!el) { if (!tip.dataset.map) tip.style.display = 'none'; return; }
+    delete tip.dataset.map;
+    showTip(el.getAttribute('data-tip'), e.clientX, e.clientY);
+  });
+  function showTip(html, x, y) {
+    tip.innerHTML = html; tip.style.display = 'block';
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(6, Math.min(innerWidth - w - 6, x + 12)) + 'px';
+    tip.style.top = Math.max(6, y - h - 10) + 'px';
+  }
+
+  // a list of horizontal bars. rows: [[label, value, tipValue?]], unit: how to show values
+  function bars(rows, opt) {
+    opt = opt || {};
+    rows = rows.filter(function (r) { return r[1] > 0; }).sort(function (a, b) { return opt.keep ? 0 : b[1] - a[1]; });
+    if (opt.top && rows.length > opt.top) {
+      var rest = rows.slice(opt.top).reduce(function (t, r) { return t + r[1]; }, 0);
+      rows = rows.slice(0, opt.top).concat([['Other', rest]]);
+    }
+    if (!rows.length) return '<p class="empty">Nothing yet.</p>';
+    var max = Math.max.apply(null, rows.map(function (r) { return r[1]; })), total = rows.reduce(function (t, r) { return t + r[1]; }, 0);
+    var show = opt.show || function (v) { return fmt(v); };
+    return '<ul class="bars">' + rows.map(function (r) {
+      var share = opt.share === false ? '' : '<small>' + pct(r[1], total) + '</small>';
+      return '<li data-tip="' + esc(r[0] + ': ' + show(r[1]) + (opt.share === false ? '' : ' · ' + pct(r[1], total))) + '"><span class="lab">' + esc(r[0]) + '</span>' +
+        '<span class="track"><span class="fill" style="width:' + (r[1] / max * 100).toFixed(1) + '%;--c:' + (opt.colour || C.cyan) + '"></span></span>' +
+        '<span class="val">' + show(r[1]) + share + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  var rowsOf = function (o, name) { return Object.keys(o || {}).map(function (k) { return [name ? name(k) : k, o[k]]; }); };
+  function card(title, note, body, wide) {
+    return '<section class="card' + (wide ? ' wide' : '') + '"><h2>' + esc(title) + '</h2>' + (note ? '<p class="note">' + note + '</p>' : '') + body + '</section>';
+  }
+
+  function render(d) {
+    var t = d.total || {}, misc = t.misc || {}, laps = t.laps || {};
+    var sessions = t.sessions || 0, drove = t.drove || 0;
+    var cancelled = (laps.off || 0) + (laps.jump || 0) + (laps.reset || 0);
+    var h = '';
+    h += '<div class="tiles">' + [
+      [fmt(sessions), 'game visits', fmt(t.loaded || 0) + ' got past loading'],
+      [fmt(drove), 'pressed DRIVE', pct(drove, sessions) + ' of visits'],
+      [dur(t.drive), 'driven', sessions ? dur((t.drive || 0) / Math.max(1, drove)) + ' per driver' : ''],
+      [fmt(t.km, (t.km || 0) < 100 ? 1 : 0) + ' km', 'distance', fmt(misc.drives || 0) + ' DRIVE presses'],
+      [fmt(laps.finish), 'laps finished', fmt(laps.start) + ' started'],
+      [fmt(t.peak), 'most online at once', fmt(misc.mp || 0) + ' visits met another car'],
+    ].map(function (x) { return '<div class="tile"><b>' + x[0] + '</b><span>' + x[1] + '</span><small>' + x[2] + '</small></div>'; }).join('') + '</div>';
+
+    h += '<div class="grid">';
+    // visits per day
+    if (d.days > 1) {
+      var days = [], byDay = {};
+      (d.daily || []).forEach(function (r) { byDay[r.day] = r; });
+      var end = new Date(d.to + 'T12:00:00Z');
+      for (var i = d.days - 1; i >= 0; i--) { var dd = new Date(end - i * 864e5).toISOString().slice(0, 10); days.push(byDay[dd] || { day: dd, sessions: 0, drove: 0 }); }
+      var mx = Math.max(1, Math.max.apply(null, days.map(function (r) { return r.sessions; })));
+      var cols = days.map(function (r) {
+        var only = Math.max(0, r.sessions - r.drove);
+        var tipT = esc(r.day) + '<br>' + fmt(r.sessions) + ' visits · ' + fmt(r.drove) + ' drove' + (r.drive ? ' · ' + dur(r.drive) : '') + (r.laps ? ' · ' + fmt(r.laps) + ' laps' : '');
+        return '<div class="col" data-tip="' + tipT + '">' +
+          (only ? '<div class="seg" style="height:' + (only / mx * 100) + '%;background:' + C.violet + '"></div>' : '') +
+          (r.drove ? '<div class="seg" style="height:' + (r.drove / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
+      }).join('');
+      h += card('Visits per day', null, '<div class="legend"><span><i style="background:' + C.cyan + '"></i>pressed DRIVE</span><span><i style="background:' + C.violet + '"></i>stayed in the menu</span></div>' +
+        '<div class="chart">' + cols + '</div><div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
+    }
+    // where people drive
+    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button></div>', true);
+
+    var name = function (k) { return d.names[k] || k; };
+    h += card('Cars', 'Time driven in each car.', bars(rowsOf(t.car, name), { show: dur, top: 12 }));
+    h += card('Laps finished per car', null, bars(rowsOf(t.lapCar, name), { colour: C.pink, top: 12 }));
+    h += card('Laps', fmt(laps.start) + ' laps started on the Toomemägi circuit.', bars([
+      ['finished', laps.finish || 0], ['checkpoint missed', laps.missed || 0], ['off the track', laps.off || 0],
+      ['reset or map jump', laps.jump || 0], ['changed car', laps.reset || 0], ['left mid-lap', laps.quit || 0]], { keep: true, colour: C.pink }));
+    h += card('Where laps are given up', 'Checkpoints passed when a lap was cancelled or left.', bars(rowsOf(t.quit, function (k) { return k + ' of 4'; }).sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }), { keep: true, colour: C.pink }));
+
+    h += card('Devices', null, bars(rowsOf(t.dev)));
+    h += card('Systems', null, bars(rowsOf(t.os)));
+    h += card('Browsers', null, bars(rowsOf(t.br)));
+    h += card('Countries', null, bars(rowsOf(t.country, function (k) { try { return countries ? countries.of(k) : k; } catch (e) { return k; } }), { top: 10 }));
+    h += card('Browser language', null, bars(rowsOf(t.lang, function (k) { return ({ et: 'Estonian', en: 'English', ru: 'Russian', fi: 'Finnish', lv: 'Latvian', de: 'German' })[k] || 'Other'; })));
+    h += card('New or returning', 'Returning: the browser has played before (it has a driver name or car saved).', bars([['new', (t.ret || {}).new || 0], ['returning', (t.ret || {}).back || 0]], { keep: true }));
+    h += card('Steering with', 'Share of driving time.', bars(rowsOf(t.inp, function (k) { return ({ kb: 'keyboard', pad: 'gamepad', wheel: 'steering wheel', touch: 'touch screen' })[k] || k; }), { show: dur }));
+    h += card('Camera', 'Share of driving time.', bars(rowsOf(t.view, function (k) { return k === 'drone' ? 'drone view' : 'chase camera'; }), { show: dur }));
+
+    // hour of day
+    var hours = t.hour || {}, hm = 1;
+    for (var hh = 0; hh < 24; hh++) hm = Math.max(hm, hours[hh] || 0);
+    var hc = '';
+    for (hh = 0; hh < 24; hh++) {
+      var v = hours[hh] || 0;
+      hc += '<div class="col" data-tip="' + hh + ':00–' + hh + ':59 · ' + fmt(v) + ' visits"><div class="seg" style="height:' + (v / hm * 100) + '%;background:' + C.cyan + '"></div></div>';
+    }
+    h += card('Time of day', 'Visits by the hour they started, Tartu time.', '<div class="chart hours">' + hc + '</div><div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
+
+    // speed and stability
+    h += card('Loading time', 'Until the garage is ready.', bars(['<5', '5-10', '10-20', '20-40', '40+'].map(function (k) { return [k.replace('<', 'under ').replace('40+', 'over 40') + ' s', (t.load || {})[k] || 0]; }), { keep: true, colour: C.sun }));
+    h += card('Frame rate', 'Share of driving time at each frame rate.', bars(['60+', '45-60', '30-45', '20-30', '<20'].map(function (k) { return [k.replace('<', 'under ') + ' fps', (t.fps || {})[k] || 0]; }), { keep: true, show: dur, colour: C.sun }));
+    h += card('Graphics level', 'Where auto graphics settled. Share of driving time; the top level is the sharpest the device allows.', bars(rowsOf(t.gfx, function (k) { return 'level ' + k; }).sort(function (a, b) { return b[0].localeCompare(a[0], 'en', { numeric: true }); }), { keep: true, show: dur, colour: C.sun }));
+    h += card('Trouble', null, '<div class="nums">' + [
+      [t.crash, 'reloads after a crash', 'The page died while driving, as when a phone runs out of memory.'],
+      [misc.glLost, 'graphics card resets', 'The browser took the 3D picture away (WebGL context lost).'],
+      [t.sw, 'without graphics card', 'Visits where the browser drew in software.'],
+      [t.lite, 'light mode', 'Phones and weak computers with the lighter setup.'],
+    ].map(function (x) { return '<div data-tip="' + esc(x[2]) + '"><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');
+
+    h += card('Mayhem', null, '<div class="nums">' + [
+      [(t.smash || {}).prop, 'props knocked over'], [(t.smash || {}).glass, 'shelter panes smashed'], [misc.water, 'trips into the water'],
+      [misc.mapjump, 'jumps from the map'], [misc.garage, 'garage visits'], [misc.speed100, 'visits past 100 km/h'],
+      [misc.speed150, 'past 150 km/h'], [misc.speed200, 'past 200 km/h'], [misc.speed250, 'past 250 km/h'],
+    ].map(function (x) { return '<div><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');
+
+    var errs = rowsOf(t.err).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 20);
+    h += card('Errors', 'The most common script errors, counted once per visit.', errs.length
+      ? '<table><thead><tr><th>Error</th><th style="text-align:right">Visits</th></tr></thead><tbody>' + errs.map(function (r) { return '<tr><td><code>' + esc(r[0]) + '</code></td><td class="n">' + fmt(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>'
+      : '<p class="empty">No errors. Nice.</p>', true);
+    h += '</div>';
+    out.innerHTML = h;
+    drawMap(t.heat || {}, d.heat);
+  }
+
+  // ---- the heat map, over a light outline of the game's map (public/stats-map.json)
+  var mapData = null, mapReq = null, wholeMap = false;
+  function drawMap(heat, cell) {
+    var cv = document.getElementById('map');
+    if (!cv) return;
+    if (!mapData) { (mapReq = mapReq || fetch('/stats-map.json').then(function (r) { return r.json(); })).then(function (m) { mapData = m; drawMap(heat, cell); }, function () {}); }
+    var dpr = Math.min(devicePixelRatio || 1, 2), W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    var b = mapData ? mapData.boundary : [[-6000, -6000], [6000, 6000]];
+    var cellKeys = Object.keys(heat);
+    if (!wholeMap && cellKeys.length) {
+      // zoomed to where people drove (at least 3 km across), the whole map one click away
+      cellKeys.forEach(function (c) { var p = c.split(','); x0 = Math.min(x0, p[0] * cell); x1 = Math.max(x1, (+p[0] + 1) * cell); z0 = Math.min(z0, p[1] * cell); z1 = Math.max(z1, (+p[1] + 1) * cell); });
+      var mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, half = Math.max(1500, (x1 - x0) * 0.6, (z1 - z0) * 0.6);
+      x0 = mx - half; x1 = mx + half; z0 = mz - half; z1 = mz + half;
+    } else b.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); });
+    var k = Math.min(W / (x1 - x0), H / (z1 - z0)) * 0.96, ox = W / 2 - (x0 + x1) / 2 * k, oz = H / 2 - (z0 + z1) / 2 * k;
+    var X = function (x) { return ox + x * k; }, Z = function (z) { return oz + z * k; };
+    ctx.clearRect(0, 0, W, H);
+    var line = function (flat, from) { ctx.moveTo(X(flat[from]), Z(flat[from + 1])); for (var i = from + 2; i < flat.length; i += 2) ctx.lineTo(X(flat[i]), Z(flat[i + 1])); };
+    if (mapData) {
+      ctx.beginPath(); b.forEach(function (p, i) { i ? ctx.lineTo(X(p[0]), Z(p[1])) : ctx.moveTo(X(p[0]), Z(p[1])); }); ctx.closePath();
+      ctx.fillStyle = '#22104f'; ctx.fill(); ctx.strokeStyle = 'rgba(47,243,255,.5)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = 'rgba(47,160,255,.45)';
+      mapData.water.forEach(function (p) { ctx.beginPath(); line(p, 0); ctx.closePath(); ctx.fill(); });
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      [0, 1].forEach(function (major) {
+        ctx.beginPath();
+        mapData.roads.forEach(function (r) { if (r[0] === major) line(r, 1); });
+        ctx.strokeStyle = major ? 'rgba(255,225,245,.55)' : 'rgba(255,225,245,.2)'; ctx.lineWidth = major ? 1.3 : 0.6; ctx.stroke();
+      });
+    }
+    // heat: one hue, stronger with more time (log scale, so a busy square does not hide the rest)
+    var cells = Object.keys(heat), max = 1;
+    cells.forEach(function (c) { max = Math.max(max, heat[c]); });
+    var lmax = Math.log(1 + max), s = cell * k;
+    cells.forEach(function (c) {
+      var p = c.split(','), a = Math.log(1 + heat[c]) / lmax;
+      ctx.fillStyle = 'rgba(255,43,214,' + (0.15 + 0.8 * a).toFixed(3) + ')';
+      ctx.fillRect(X(p[0] * cell) + 0.5, Z(p[1] * cell) + 0.5, Math.max(1, s - 1), Math.max(1, s - 1));
+    });
+    if (mapData) {
+      ctx.beginPath(); line(mapData.track, 0); ctx.closePath();
+      ctx.strokeStyle = '#ff5fa2'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(X(mapData.start[0]), Z(mapData.start[1]), 4, 0, 7);
+      ctx.fillStyle = C.sun; ctx.fill(); ctx.strokeStyle = '#12062b'; ctx.lineWidth = 2; ctx.stroke();
+    }
+    cv.onpointermove = function (e) {
+      var r = cv.getBoundingClientRect(), wx = (e.clientX - r.left - ox) / k, wz = (e.clientY - r.top - oz) / k;
+      var key = Math.floor(wx / cell) + ',' + Math.floor(wz / cell);
+      if (heat[key]) { tip.dataset.map = 1; showTip(dur(heat[key]) + ' driven here', e.clientX, e.clientY); }
+      else { delete tip.dataset.map; tip.style.display = 'none'; }
+    };
+    cv.onpointerleave = function () { delete tip.dataset.map; tip.style.display = 'none'; };
+    var wb = document.getElementById('whole');
+    if (wb) wb.onclick = function () { wholeMap = !wholeMap; wb.textContent = wholeMap ? 'Zoom to the driving' : 'Whole map'; drawMap(heat, cell); };
+    lastHeat = [heat, cell];
+  }
+  var lastHeat = null, rz = 0;
+  addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { if (lastHeat) drawMap(lastHeat[0], lastHeat[1]); }, 150); });
+
+  // ---- period
+  var days = 30;
+  try { var m = /days=(\d+)/.exec(location.hash); if (m) days = +m[1]; } catch (e) {}
+  function load(n) {
+    days = n;
+    document.querySelectorAll('.range button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.days === n)); });
+    try { history.replaceState(null, '', n === 30 ? location.pathname : '#days=' + n); } catch (e) {}
+    fetch('/api/stats?days=' + n, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(render, function () { out.innerHTML = '<p class="status">Could not load the stats just now. Try again in a minute.</p>'; });
+  }
+  document.querySelectorAll('.range button').forEach(function (b) { b.addEventListener('click', function () { load(+b.dataset.days); }); });
+  load([1, 7, 30, 90].indexOf(days) >= 0 ? days : 30);
+})();
+</script>
+</body>
+</html>

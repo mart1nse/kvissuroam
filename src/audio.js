@@ -6,7 +6,7 @@
 // Combustion engines run through the engine synthesiser worklet (public/engine-worklet.js, tuned per car
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
-import { createSpace, chaseBack } from './audio-space.js';
+import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftChirp } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
 
@@ -26,7 +26,7 @@ export function createAudio() {
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
-  let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0;
+  let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
   let noiseSrc = null, workletReady = false;
   const voices = [];
   const shiftSound = createShiftSound();
@@ -232,6 +232,8 @@ export function createAudio() {
       // a downshift blips, crackles and clunks, an upshift barks as it bites; too far down by hand, the
       // engine is dragged over its limit
       const sh = shiftSound.step(car, t);
+      // (the room the revs add round the engine near its limiter, but not round a gear change: updateSpace)
+      room = dead ? 0 : revRoom(sh.rpm, e.redline); roomGear = sh.gear; roomDown = sh.down;
       if (sh.clunk && !dead) clunk(ctx, noiseBuf, sh.clunk.up ? space.burst : bus, sh.clunk.k, t + 0.005 + sh.clunk.after, sh.clunk.up);
       if (sh.chirp && !dead) chirp(ctx, noiseBuf, bus, sh.chirp, t + 0.005);
       if (punch) punch.gain.setTargetAtTime(dead ? 0 : sh.punch, t, 0.01);
@@ -455,6 +457,8 @@ export function createAudio() {
     if (!active || lite) return;
     space.setFar(far);
     space.setBack(back);
+    // and the engine screaming towards its limiter rings round the street more (Martin 2026-11-20)
+    space.setRev(ev ? 0 : room, roomGear, roomDown);
     if (!ev) space.update(world, car, cam, dt);
   }
 

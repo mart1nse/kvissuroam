@@ -46,6 +46,7 @@ export function createShiftSound() {
   // the clutch has caught them yet
   let upGear = 0;          // the gear the last upshift kicked into (at bAt)
   let bOn = false, w = 0, th = 0, m = 0, roar = 0, open = 0, shutAt = -9, topped = false, caught = false, dAt = -9, lastOut = 0, dClunk = 0;
+  let pressed = -9;   // (when the throttle was last pressed)
   // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
   // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
   // (strength) when the tyres chirp on an upshift
@@ -164,11 +165,17 @@ export function createShiftSound() {
     // 2026-11-19). Then the engine runs on part throttle, revs hanging, until the gear is heard biting.
     const cutSound = changing && t - cutAt < CUT_HEARD;
     const throttle = changing && !cutSound ? car.throttle * 0.4 : car.throttle;
-    return { rpm, throttle, shift: cutSound, blip, crackle, bark, over, clunk, chirp, yank, yankId, yankTight: tight, punch: Math.max(1.2 * bark, 0.65 * blip) };
+    // (a gear change being heard: an upshift from its lift until 0.35 s after it bites, a downshift for
+    // 0.55 s, its blip and the clutch catching; the room the revs add, src/audio-space.js, leaves these be)
+    const gear = changing || t - bAt < 0.35 || t - dAt < 0.55 ? 1 : 0;
+    // (and shifted down, not back on the throttle since: the smaller room)
+    if (car.throttle > 0.3) pressed = t;
+    const softRoom = dAt > pressed ? 1 : 0;
+    return { rpm, gear, down: softRoom, throttle, shift: cutSound, blip, crackle, bark, over, clunk, chirp, yank, yankId, yankTight: tight, punch: Math.max(1.2 * bark, 0.65 * blip) };
   }
   return {
     step,
-    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; bOn = false; dAt = -9; lastOut = 0; open = 0; dClunk = 0; },
+    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; bOn = false; dAt = -9; pressed = -9; lastOut = 0; open = 0; dClunk = 0; },
   };
 }
 

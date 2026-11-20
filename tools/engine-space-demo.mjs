@@ -19,6 +19,9 @@
 //   the "before" clip, with the old physics.js and --worklet= in place).
 //   --drone: the camera where the drone view (C) puts it, 35-55 m up and back, and the space told how far
 //   off it is (setFar), as audio.js does.
+//   --donut: full lock and full throttle, the engine bouncing off its limiter, a lift, and again.
+//   The room the revs add near the limiter (setRev) follows the shift sounds as audio.js does; --room=<er>,<rev>
+//   sets how much, after downshifts too (--room=0,0: none, the "before" clip).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -40,15 +43,26 @@ const wl = resolve(val('worklet') || resolve(root, 'public/engine-worklet.js'));
 const dry = !!flag('dry');
 // --mix=er,tail: scale the echoes and the tail (both 1 in the game), to hear them on their own
 const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').map(Number)) : {};
+if (val('room')) MIX.room = MIX.roomDown = (([er, rev]) => ({ er, rev }))(val('room').split(',').map(Number));
+const DONUT = !!flag('donut');
 const TURBO = flag('turbo') ? val('turbo') || 'new' : flag('shift') ? 'new' : null;
 const DRONE = !!flag('drone');
 const SHIFT = flag('shift') ? val('shift') || 'new' : null;
-const { createShiftSound } = SHIFT === 'new' ? await import('../src/audio-shift.js') : {};
+const { createShiftSound } = SHIFT === 'new' || DONUT ? await import('../src/audio-shift.js') : {};
+const { revRoom } = await import('../src/audio-space.js');
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
 const SR = 48000, BLOCK = 128, FPS = 60, T = flag('shift') ? 27 : 22;
 const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
 
+// full lock and full throttle from a standstill: round and round on the limiter, a lift, and again
+function donutScript(t) {
+  if (t < 0.8) return { up: 0 };
+  if (t < 9) return { up: 1, steer: 1 };
+  if (t < 10.5) return { up: 0, steer: 1 };
+  if (t < 16) return { up: 1, steer: 1 };
+  return { up: 0, steer: 1 };
+}
 function script(t) {
   if (t < 2) return { up: 0 };
   if (t < 2.5) return { up: 1, hold: true };
@@ -156,12 +170,12 @@ for (const id of ids) {
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false;
   // the downshift sounds as audio.js has them, at the game's 60 Hz
-  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [];
+  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' || DONUT ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [], RM = [];
   let sh = { blip: 0, crackle: 0, over: 0, bark: 0, rpm: 0 }, nextSh = 0, lastG = 1;
   for (let i = 0; i < total; i += BLOCK) {
-    const t = i / SR, s = drv ? drv(t, car) : TURBO ? turboScript(t) : script(t);
+    const t = i / SR, s = drv ? drv(t, car) : DONUT ? donutScript(t) : TURBO ? turboScript(t) : script(t);
     if (s.z) shiftGear(car, -1);
-    if (!s.hold) stepCar(car, { up: s.up, down: s.down || 0 }, flat, BLOCK / SR);
+    if (!s.hold) stepCar(car, { up: s.up, down: s.down || 0, steer: s.steer || 0 }, flat, BLOCK / SR);
     if (car.gear !== lastG) { gLog.push(`${lastG}>${car.gear} ${t.toFixed(2)} s ${(Math.hypot(car.vx, car.vy) * 3.6).toFixed(0)} km/h`); lastG = car.gear; }
     let rpm = car.rpm, thr = car.throttle;
     if (s.hold) { rpm = s.up ? Math.min(spec.engine.idle + (t - 2) * 7000, 4200) : Math.max(spec.engine.idle, 4200 - (t - 2.5) * 4000); thr = s.up; }
@@ -171,6 +185,7 @@ for (const id of ids) {
       if (sh.clunk) sEv.push({ t: t + 0.005 + sh.clunk.after, k: sh.clunk.k, up: !!sh.clunk.up });
       if (sh.chirp) sEv.push({ t: t + 0.005, k: sh.chirp, chirp: true });
       if (sh.punch !== undefined) sPunch.push(t, sh.punch);
+      RM.push(revRoom(sh.rpm, spec.engine.redline), sh.gear || 0, sh.down || 0);
     }
     let cutS = car.shiftCut ? 1 : 0;
     if (shs) { rpm = sh.rpm; if (sh.throttle !== undefined) { thr = sh.throttle; cutS = sh.shift ? 1 : 0; } }
@@ -230,7 +245,7 @@ for (const id of ids) {
   page.on('console', (m) => console.log('  [page]', m.text()));
   await page.goto(`http://127.0.0.1:${server.port}/`);
   if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
-  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP }) => {
+  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP, RM }) => {
     const { createSpace, chaseBack } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
@@ -306,6 +321,8 @@ for (const id of ids) {
       space.setFar?.(Math.min(1, Math.max(0, (cd - 16) / 16)));
       // (and the chase camera dropping back with speed, as audio.js does)
       if (chaseBack) space.setBack?.(chaseBack(cd));
+      // (and the room the revs add near the limiter, as audio.js does)
+      if (RM.length > 3 * k + 2) space.setRev?.(RM[3 * k], RM[3 * k + 1], RM[3 * k + 2]);
       const built = space.update(world, car, cam, 1 / FPS);
       if (k % 60 === 0) log.push(`${(k / FPS).toFixed(0)} s built ${built.toFixed(2)} tail ${space.tail.toFixed(2)} walls ${space.taps.map((t) => (t.d > 0 ? t.d.toFixed(0) : '-')).join(' ')}`);
     };
@@ -322,7 +339,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

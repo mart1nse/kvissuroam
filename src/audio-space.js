@@ -31,6 +31,18 @@ const FAR = { dir: 0.4, thin: 5, er: 0.8, rev: 1.5, remote: 1, tail: 0.6, gain: 
 // 1 + rev, the car itself as it was (more room round it, Martin 2026-11-20; the growl that goes with it is
 // in the synthesiser, its growl input). Fades out towards the drone view, which has its own.
 const BACK = { er: 0.45, rev: 0.7 };
+// the engine screaming towards its limiter (setRev(1)): the echoes up by 1 + er and our reverb by 1 + rev,
+// growing from half the limiter revs (revRoom); not for the gear changes, which keep their size, and half
+// as much (REV_DOWN) once shifted down, until back on the throttle (Martin 2026-11-20: "V2", and "V1" for
+// the downshifts)
+const REV = { er: 0.5, rev: 1.2 }, REV_DOWN = { er: 0.25, rev: 0.6 };
+
+// how far the engine's revs are into the top half of their range, 0 at half the redline to 1 on it
+// (eased in, so most of the room comes over the last third)
+export function revRoom(rpm, redline) {
+  const s = Math.min(1, Math.max(0, (rpm / redline - 0.5) / 0.5));
+  return Math.pow(s, 1.3);
+}
 
 // how far the chase camera (src/main.js) has dropped back from where it sits with the car at a standstill
 // (6.4 m behind, 2.35 m up, and a car's own cam offsets), as 0..1 over the 7 m it backs off by top speed.
@@ -84,9 +96,11 @@ export function createSpace(ctx, out, mix = {}) {
   // echoes: one shared band filter (walls send back little deep bass towards a listener this close, and
   // the brick and glass soften the very top), then a delay, level and pan per ray
   const erSend = ctx.createGain();
+  // (and the room the revs add, setRev: a gain of its own, so it can let go at once for a gear change)
+  const roomEr = ctx.createGain(), roomRev = ctx.createGain();
   const erHp = ctx.createBiquadFilter(); erHp.type = 'highpass'; erHp.frequency.value = 120; erHp.Q.value = 0.6;
   const erLp = ctx.createBiquadFilter(); erLp.type = 'lowpass'; erLp.frequency.value = 6500; erLp.Q.value = 0.5;
-  input.connect(erSend).connect(erHp).connect(erLp);
+  input.connect(erSend).connect(roomEr).connect(erHp).connect(erLp);
   const taps = RAYS.map((deg) => {
     const delay = ctx.createDelay(0.4), gain = ctx.createGain();
     gain.gain.value = 0; delay.delayTime.value = 0.02;
@@ -109,7 +123,7 @@ export function createSpace(ctx, out, mix = {}) {
   const pre = ctx.createDelay(0.2); pre.delayTime.value = 0.03;
   const conv = ctx.createConvolver(); conv.normalize = false; conv.buffer = makeIR(ctx);
   const revOut = ctx.createGain(); revOut.gain.value = 0.6;
-  input.connect(revSend).connect(revHp);
+  input.connect(revSend).connect(roomRev).connect(revHp);
   // short loud bursts (the turbo blow-off) go round the compressor, so they punch through the engine
   // instead of pressing it down, but into the echoes and the reverb all the same
   const burst = ctx.createGain(), burstDir = ctx.createGain();
@@ -160,6 +174,21 @@ export function createSpace(ctx, out, mix = {}) {
     if (far === 0 || !remoteOn) farSend.gain.setValueAtTime(0, t + 1);
   }
   setOn(true);
+
+  // k: revRoom (0..1) of our engine's revs; gear: a gear change is being heard (src/audio-shift.js), which
+  // keeps the size it always had: the room lets go of it in 30 ms and comes back over a quarter second;
+  // down: shifted down and not yet back on the throttle (the smaller room)
+  const room = mix.room || REV, roomDown = mix.roomDown || REV_DOWN;
+  let rev = 0, soft = 0;
+  function setRev(k, gear, down = 0) {
+    const want = gear || !on ? 0 : Math.max(0, Math.min(1, k)), sd = down ? 1 : 0;
+    if (Math.abs(want - rev) < 0.01 && want !== 0 && sd === soft) return;
+    if (want === rev && sd === soft) return;
+    const t = ctx.currentTime, tc = want < rev ? 0.03 : 0.25, r = sd ? roomDown : room;
+    rev = want; soft = sd;
+    roomEr.gain.setTargetAtTime(1 + r.er * rev, t, tc);
+    roomRev.gain.setTargetAtTime(1 + r.rev * rev, t, tc);
+  }
 
   // k: 0 with the chase camera where it sits at a standstill, 1 dropped right back at top speed (chaseBack)
   function setBack(k) {
@@ -243,10 +272,11 @@ export function createSpace(ctx, out, mix = {}) {
   }
 
   return {
-    input, remoteIn, burst, update, setOn, setFar, setBack,
+    input, remoteIn, burst, update, setOn, setFar, setBack, setRev,
     get on() { return on; },
     get far() { return far; },
     get back() { return back; },
+    get rev() { return rev; },
     // (for tests)
     get taps() { return taps.map((x) => ({ deg: x.deg, d: x.d, g: x.g, delay: x.cur })); },
     get tail() { return revSend.gain.value; },

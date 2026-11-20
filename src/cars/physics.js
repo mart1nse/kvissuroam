@@ -311,7 +311,8 @@ function nearTrunk(t, x, z) {
   return false;
 }
 
-// input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1)
+// input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
+// steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
   const n = Math.max(1, Math.ceil(dtFrame / (1 / 240)));
   const dt = dtFrame / n;
@@ -455,7 +456,10 @@ function substep(car, input, world, dt) {
   // Steering against the slide gets the full angle, so opposite lock reaches
   // far enough to catch it. Holding the wheel into the turn is the driver
   // asking for the slide, so the wheels mostly stay where they are put.
-  const follow = steerIn === 0 ? CASTER : steerIn * align < 0 ? HOLD_FOLLOW : 1;
+  // (a controller's stick or wheel moves off centre gradually, so the caster fades out over the first
+  // quarter of its travel instead of switching off; keys are 0 or 1 and see no change)
+  const held = Math.min(1, Math.abs(steerIn) / 0.25);
+  const follow = CASTER + ((steerIn * align < 0 ? HOLD_FOLLOW : 1) - CASTER) * held;
   // Catching a slide: held opposite lock points the wheels past the direction
   // of travel, and once the tail swings back that extra lock keeps rotating
   // the car, flinging it into a slide the other way (a tank-slapper). A driver
@@ -479,9 +483,17 @@ function substep(car, input, world, dt) {
   const back = sR * dsR < 0 && Math.abs(sR) > 0.04 ? Math.min(1, (-dsR * Math.sign(sR) - 0.1) / 0.5) : 0;
   car.recov = back > (car.recov || 0) ? car.recov + (back - car.recov) * Math.min(1, dt * 25) : Math.max(0, (car.recov || 0) - dt * 2.5);
   const auto = 1 - RECOVER * car.recov;
-  const target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow * auto) * ease));
+  let target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow * auto) * ease));
   // (unwinding is quick: in a slide the wheel spins back through your hands)
-  const rate = ((steerIn === 0 ? 2.6 : 1.7) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * car.csHold);
+  let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * car.csHold);
+  if (input.steerDirect) {
+    // A steering wheel: the front wheels follow its angle (about 13:1 over a wheel calibrated stop to
+    // stop), with a little of the slide's caster since the wheel cannot push back, and kept within a
+    // little past the grip limit around the slide so a quick turn at speed cannot tip the car over.
+    const want = steerIn * maxLock + align * CASTER * 0.5 * (1 - held);
+    target = Math.max(-maxLock, Math.min(maxLock, Math.max(align - lock * 1.15, Math.min(align + lock * 1.15, want))));
+    rate = 7;
+  }
   const ds = target - car.steer;
   car.steer += Math.sign(ds) * Math.min(Math.abs(ds), rate * dt);
   const sd = Math.sin(car.steer), cd = Math.cos(car.steer);
@@ -556,7 +568,7 @@ function substep(car, input, world, dt) {
   const ts = drivenR ? (drivenF ? (sf.tail < sr.tail ? sf : sr) : sr) : sf;
   let spinMax = 0, drive_cut = false;
   const absOn = [0, 0];
-  const tcWant = s.tc && steerIn === 0 && !hb ? s.tc : 0;
+  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb ? s.tc : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';

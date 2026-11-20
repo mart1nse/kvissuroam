@@ -8,6 +8,8 @@ import { createGarage } from './garage.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
+import { createPads, buttonName } from './controls/pads.js';
+import { createSetup } from './controls/setup.js';
 import { createAudio } from './audio.js';
 import { createTrackKerbs } from './race/trackkerbs.js';
 import { updateShelters } from './world/shelter.js';
@@ -142,6 +144,12 @@ addEventListener('resize', () => {
 });
 
 const input = createInput(document.body);
+// Game controllers (desktop only): gradual throttle, brake and steering from a pad or a wheel. The one
+// touched last drives unless the options say KEYBOARD or CONTROLLER (src/controls/pads.js).
+const pads = createPads({ enabled: !isTouch, toast: (t, ms) => hud?.toast(t, ms) });
+const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyS', 'KeyD']);
+addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === 'KeyA' && input.wasd)) pads.keyUsed(); }, true);
+let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, parked;
@@ -684,15 +692,16 @@ function toggleSound() {
 // Their keys work from any of them: M / L / O jump straight to that screen (the same key again closes it),
 // Esc goes back to the car, and from the car Esc opens the garage. R, H and G close whatever is open first.
 // The driving keys (C, A / Z) wait until the car is back on screen.
-const overlayOpen = () => (bigmap?.isOpen ? 'map' : board?.open ? 'laps' : !optEl.classList.contains('hidden') ? 'options' : null);
-function closeOverlays() { closeMap(); board?.hide(); optEl.classList.add('hidden'); }
+const overlayOpen = () => (bigmap?.isOpen ? 'map' : board?.open ? 'laps' : !optEl.classList.contains('hidden') ? 'options' : setup.isOpen ? 'controls' : null);
+function closeOverlays() { closeMap(); board?.hide(); optEl.classList.add('hidden'); setup.close(); }
 function showOverlay(name) {
   const was = overlayOpen();
   closeOverlays();
   if (was === name || mode !== 'drive') return;
   if (name === 'map') openMap();
   else if (name === 'laps') board.show();
-  else if (name === 'options') { optEl.classList.remove('hidden'); showGfx(true); }
+  else if (name === 'options') { optEl.classList.remove('hidden'); showGfx(true); showInput(); }
+  else if (name === 'controls') setup.open();
 }
 const unlessMap = (fn) => () => { if (!overlayOpen()) fn(); };
 const closingFirst = (fn) => () => { closeOverlays(); fn(); };
@@ -759,6 +768,88 @@ const toggleOptions = () => showOverlay('options');
 input.on('KeyO', toggleOptions);
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
+
+// ---- controllers: the buttons do what the keys do (gears work in WASD mode too: a pad has no A key
+// to clash with), the garage can be driven with the d-pad or the stick, and the options pick the input
+const padDrive = (fn) => () => { if (mode === 'drive' && !setup.isOpen) fn(); };
+pads.on('gearUp', padDrive(unlessMap(() => { if (!board.open) shiftGear(car, 1); })));
+pads.on('gearDown', padDrive(unlessMap(() => { if (!board.open) shiftGear(car, -1); })));
+pads.on('view', padDrive(() => input.press('KeyC')));
+pads.on('reset', padDrive(() => input.press('KeyR')));
+pads.on('home', padDrive(() => input.press('KeyH')));
+pads.on('map', padDrive(() => input.press('KeyM')));
+pads.on('laps', padDrive(() => input.press('KeyL')));
+pads.on('options', padDrive(() => input.press('KeyO')));
+pads.on('garage', padDrive(() => input.press('KeyG')));
+// in the garage: d-pad left / right picks the car, up / down the group, A (or Menu) drives; B or View
+// opens the lap times. With the lap times open, B closes them.
+pads.on('button', (gp, i) => {
+  if (setup.isOpen || gp.mapping !== 'standard') return;
+  if (mode === 'drive' && board?.open && i === 1) { board.hide(); return; }
+  if (mode !== 'menu') return;
+  if (board?.open) { if (i === 1 || i === 0) board.hide(); return; }
+  if (i === 15) garage.step(1);
+  else if (i === 14) garage.step(-1);
+  else if (i === 13) garage.slide(1);
+  else if (i === 12) garage.slide(-1);
+  else if (i === 0 || i === 9) startDriving();
+  else if (i === 8) board.show();
+});
+let stickNav = 0;                // the stick's last direction in the garage (one step per push)
+function padMenu() {
+  const a = pads.active;
+  if (!a || mode !== 'menu' || board?.open || setup.isOpen) { stickNav = 0; return; }
+  const x = a.gp.axes[0] || 0, y = a.gp.axes[1] || 0;
+  const d = Math.abs(x) > 0.6 ? (x > 0 ? 1 : 2) : a.gp.mapping === 'standard' && Math.abs(y) > 0.6 ? (y > 0 ? 3 : 4) : 0;
+  if (d && d !== stickNav) { if (d < 3) garage.step(d === 1 ? 1 : -1); else garage.slide(d === 3 ? 1 : -1); }
+  stickNav = d;
+}
+const setup = createSetup({ pads, toast: (t, ms) => hud?.toast(t, ms), onClose: () => { showInput(); showHints(); } });
+const optInput = $('#opt-input');
+function showInput() {
+  if (!optInput) return;
+  for (const b of optInput.children) b.classList.toggle('on', b.dataset.input === pads.mode);
+  const n = pads.connected;
+  $('#opt-inputnow').textContent = n ? `${n} controller${n > 1 ? 's' : ''} connected${pads.active ? ' · driving with it now' : ''}` : 'No controller connected. Plug one in and press a button on it.';
+}
+optInput?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-input]');
+  if (!b) return;
+  b.blur();
+  pads.setMode(b.dataset.input);
+  showInput();
+  hud.toast(pads.mode === 'kb' ? 'KEYBOARD DRIVES' : pads.mode === 'pad' ? 'CONTROLLER DRIVES' : 'AUTO · WHATEVER YOU TOUCHED LAST DRIVES', 2000);
+});
+$('#opt-setup')?.addEventListener('click', (e) => { e.currentTarget.blur(); showOverlay('controls'); });
+// the hint line in the garage names the controller's buttons while a controller is in use
+const keysHint = $('#menu .keys');
+const keysText = keysHint?.textContent || '';
+function showHints() {
+  if (!keysHint) return;
+  const a = pads.active;
+  if (!a) { keysHint.textContent = keysText; return; }
+  const { gp, prof } = a, n = (k) => buttonName(gp, prof.btn[k]);
+  const src = (p) => (!p ? 'not set' : p.src.t === 'b' ? buttonName(gp, p.src.i) : `axis ${p.src.i + 1}`);
+  keysHint.textContent = `${prof.kind === 'wheel' ? 'Wheel steers' : 'Left stick steers'} · ${src(prof.thr)} throttle · ${src(prof.brk)} brake · ${n('handbrake')} handbrake · ${n('gearUp')} / ${n('gearDown')} gear up / down · ${n('look')} look back · ${n('view')} drone view · ${n('reset')} last spot · ${n('map')} map · ${n('options')} options${gp.mapping === 'standard' ? ' · d-pad picks the car' : ''}`;
+}
+pads.onChange(() => { showHints(); showInput(); });
+// pedal bars by the rev counter (a controller whose profile has them on: wheels by default)
+let pedalsEl = null;
+function showPedals() {
+  const a = ctl === pads.state && mode === 'drive' ? pads.active : null;
+  const on = !!a?.prof.bars;
+  if (!pedalsEl) {
+    if (!on) return;
+    pedalsEl = document.createElement('div');
+    pedalsEl.id = 'pedals';
+    pedalsEl.innerHTML = '<div class="brk"><i></i></div><div class="thr"><i></i></div>';
+    $('#tach').appendChild(pedalsEl);
+  }
+  pedalsEl.classList.toggle('hidden', !on);
+  if (!on) return;
+  pedalsEl.children[0].firstChild.style.height = `${pads.state.down * 100}%`;
+  pedalsEl.children[1].firstChild.style.height = `${pads.state.up * 100}%`;
+}
 // C: the chase camera or a drone following the car from above
 let droneYaw = 0;
 const droneDir = new THREE.Vector2(0, -1);   // the car's travel direction, averaged (x, z)
@@ -782,6 +873,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'sound') toggleSound();
   else if (act === 'options') toggleOptions();
   else if (act === 'options-close') optEl.classList.add('hidden');
+  else if (act === 'controls') { if (mode === 'drive') showOverlay('controls'); else setup.open(); }
 });
 
 // ---------------------------------------------------------------- no page zoom
@@ -865,12 +957,16 @@ function frame(ts) {
     dt = dtSmooth;
   } else dtSmooth = dt;
   elapsed += dt;
+  // controllers: read every frame; one that was touched last (or chosen in the options) drives
+  ctl = pads.poll(mode === 'drive' && !setup.isOpen) ? pads.state : input.state;
+  setup.update();
+  padMenu();
   if (!car) return;
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
-    if (mode === 'drive') stepCar(car, board?.open ? idle : input.state, world, dt);
+    if (mode === 'drive') stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
       const x = car.x, z = car.z, yaw = car.yaw;
@@ -938,7 +1034,7 @@ function frame(ts) {
       }
     }
     if (launch?.done && kmh < 1) launch = null;
-    race.update(car, carId, s0Short());
+    race.update(car, carId, s0Short(), isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
   }
 
   // ---- car visuals
@@ -998,7 +1094,7 @@ function frame(ts) {
     let warp = fast * fast * (3 - 2 * fast);
     let wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw);
-    if (input.state.look && !board?.open) {
+    if (ctl.look && !board?.open) {
       // B held: look back from just in front of the car's nose, over the roof down the road behind. The rig
       // swings on the chase camera's eased heading (camYaw), so in a turn it drags behind the car a little
       // instead of being bolted to it.
@@ -1010,7 +1106,7 @@ function frame(ts) {
     } else {
       droneMix = Math.max(0, Math.min(1, droneMix + (camView === 'drone' ? dt : -dt) / VIEW_BLEND));
     }
-    const dw = input.state.look && !board?.open ? 0 : smooth(droneMix);
+    const dw = ctl.look && !board?.open ? 0 : smooth(droneMix);
     if (dw > 0) {
       // A drone following the car from above, set back so the road coming up shows. It turns with the
       // direction the car is travelling, averaged over a few seconds: a donut or a quick swerve averages
@@ -1105,6 +1201,7 @@ function frame(ts) {
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);
+  showPedals();
   audio.update(car, mode === 'drive' && !bigmap.isOpen);
   audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
   audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen);
@@ -1148,7 +1245,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, tex: () => shrinker?.stats, get lite() { return liteWhy; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix };
+  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

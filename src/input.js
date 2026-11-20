@@ -59,6 +59,8 @@ export function createInput(root) {
   return {
     state,
     on(code, fn) { actions.set(code, fn); },
+    // a controller button standing in for a key (src/controls/pads.js)
+    press(code) { if (enabled) actions.get(code)?.(); },
     get wasd() { return wasd; },
     setWasd(v) {
       wasd = !!v;

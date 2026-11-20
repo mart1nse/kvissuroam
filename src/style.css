@@ -326,7 +326,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #drive b { line-height: 1; letter-spacing: .3em; margin-right: -.3em; }
 #drive small { font-size: .36em; line-height: 1; font-style: normal; font-weight: 700; letter-spacing: .26em; margin-right: -.26em; text-transform: uppercase; opacity: .92; }
 #drive small:empty { display: none; }
-#driver, #boardbtn {
+#driver, #boardbtn, #ctlbtn {
   height: var(--bh); display: flex; align-items: center; gap: .7em; border-radius: 6px; max-width: 100%; min-width: 0;
   font-size: clamp(12px, 1.4vw, 18px); background: rgba(18, 6, 43, .72);
 }
@@ -350,12 +350,21 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
   transition: transform .12s, background .15s;
 }
 #boardbtn svg { flex: none; width: 1.4em; height: 1.4em; fill: none; stroke: var(--cyan); stroke-width: 1.7; stroke-linecap: round; }
-#drive:active, #boardbtn:active { transform: scale(.97); }
+#drive:active, #boardbtn:active, #ctlbtn:active { transform: scale(.97); }
+#menuside { justify-self: start; display: flex; gap: clamp(8px, 1vw, 14px); min-width: 0; }
+#ctlbtn {
+  padding: 0 1em 0 .85em; font-size: clamp(11px, 1.25vw, 16px); font-style: italic; font-weight: 800; letter-spacing: .2em; white-space: nowrap;
+  border: 1.5px solid rgba(190, 150, 255, .75); color: #e6d9ff; text-shadow: 0 0 10px rgba(190, 150, 255, .9);
+  transition: transform .12s, background .15s;
+}
+#ctlbtn svg { flex: none; width: 1.5em; height: 1.25em; fill: none; stroke: #cdb4ff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 1100px) { #ctlbtn span { display: none; } #ctlbtn { padding: 0 .75em; } }
 @media (max-height: 430px) { #menurow { --bh: 36px; } }
 @media (max-height: 340px) { #menurow { --bh: 32px; } }
 @media (hover: hover) and (pointer: fine) {
   #drive:hover { box-shadow: 0 0 40px rgba(255, 43, 214, .95), inset 0 0 18px rgba(255, 255, 255, .4); }
   #boardbtn:hover { background: rgba(47, 243, 255, .24); }
+  #ctlbtn:hover { background: rgba(138, 63, 252, .3); }
 }
 #board { background: radial-gradient(circle at 50% 30%, rgba(58, 20, 112, .92), rgba(12, 4, 30, .97)); z-index: 12; justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
 #board h2 { margin: 6px 0 0; font-size: clamp(18px, 3.6vw, 34px); font-style: italic; font-weight: 900; color: var(--cyan); text-shadow: 2px 2px 0 var(--hot); letter-spacing: .06em; }
@@ -380,7 +389,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 /* (every element has touch-action: none, which stopped a finger from scrolling the board on phones) */
 #board, #board * { touch-action: pan-y; }
 #board > * { flex-shrink: 0; }
-#board .bclose { position: fixed; z-index: 13; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+#board .bclose, #ctlsetup .bclose { position: fixed; z-index: 13; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
   width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-style: normal; letter-spacing: 0;
   color: var(--cyan); background: rgba(18, 6, 43, .9); border: 2px solid var(--cyan); border-radius: 4px; box-shadow: 0 0 12px rgba(47, 243, 255, .45); }
 body.touch #board { padding-top: max(16px, env(safe-area-inset-top)); }
@@ -509,3 +518,65 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
 #options #opt-gfxnow { margin: 6px 0 8px; }
 #options .optwarn { margin: 0 0 10px; font-size: 11px; line-height: 1.4; color: #ffd36b; }
 #options .optwarn.hidden { display: none; }
+
+/* ---- CONTROLS: gamepad and wheel setup (src/controls/setup.js), desktop only */
+#ctlsetup { background: radial-gradient(circle at 50% 30%, rgba(58, 20, 112, .94), rgba(12, 4, 30, .97)); z-index: 12; justify-content: flex-start; overflow-y: auto; gap: 12px; padding-top: 28px; }
+#ctlsetup h2 { margin: 0; font-size: clamp(18px, 2.6vw, 30px); font-style: italic; font-weight: 900; color: var(--cyan); text-shadow: 2px 2px 0 var(--hot); letter-spacing: .06em; }
+#ctlsetup .steps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+#ctlsetup .steps li { padding: 6px 14px; font-size: 11px; font-weight: 800; letter-spacing: .18em; border: 1px solid rgba(47, 243, 255, .35); border-radius: 4px; opacity: .6; cursor: pointer; }
+#ctlsetup .steps li b { margin-right: 8px; color: var(--sun); }
+#ctlsetup .steps li.on { opacity: 1; background: rgba(255, 43, 214, .25); border-color: var(--hot); }
+#ctlsetup .steps li.done { opacity: .85; }
+#ctlsetup .sbody { width: min(760px, 94vw); display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: left; }
+#ctlsetup .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#ctlsetup .row .neon { padding: 8px 20px; font-size: 13px; }
+#ctlsetup .neon.hot { background: linear-gradient(100deg, var(--hot), var(--violet)); }
+#ctlsetup .none, #ctlsetup .small { margin: 0; font-size: 12px; line-height: 1.45; opacity: .8; }
+#ctlsetup .none { font-size: 14px; opacity: .95; text-align: center; padding: 18px; border: 1px dashed rgba(47, 243, 255, .4); border-radius: 6px; }
+#ctlsetup .devs { display: flex; flex-direction: column; gap: 6px; }
+#ctlsetup .dev { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; text-align: left; background: rgba(18, 6, 43, .7); border: 1.5px solid rgba(47, 243, 255, .35); border-radius: 6px; }
+#ctlsetup .dev.on { border-color: var(--cyan); box-shadow: 0 0 14px rgba(47, 243, 255, .4); }
+#ctlsetup .dev b { font-size: 14px; } #ctlsetup .dev small { font-size: 10px; letter-spacing: .16em; color: var(--sun); white-space: nowrap; }
+#ctlsetup .srow { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+#ctlsetup .srow b, #ctlsetup .slide b { display: block; font-size: 12px; letter-spacing: .14em; }
+#ctlsetup .srow small, #ctlsetup .slide small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.35; opacity: .7; }
+#ctlsetup .seg { display: flex; gap: 4px; flex: none; }
+#ctlsetup .seg button { padding: 6px 12px; font-size: 10px; letter-spacing: .12em; color: #fff; background: rgba(47, 243, 255, .08); border: 1px solid rgba(47, 243, 255, .45); border-radius: 4px; }
+#ctlsetup .seg button.on { background: var(--hot); border-color: var(--hot); box-shadow: 0 0 10px var(--hot); }
+#ctlsetup .big { margin: 8px 0 0; font-size: clamp(18px, 2.4vw, 26px); font-weight: 800; font-style: italic; text-align: center; }
+#ctlsetup .big.ok { color: var(--cyan); text-shadow: 0 0 12px var(--cyan); }
+#ctlsetup .big + .small, #ctlsetup #calsrc { text-align: center; }
+#ctlsetup .meter { height: 14px; border: 1px solid rgba(47, 243, 255, .5); border-radius: 7px; overflow: hidden; }
+#ctlsetup .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--hot)); }
+#ctlsetup .calsteps { display: flex; justify-content: center; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 10px; letter-spacing: .18em; }
+#ctlsetup .calsteps li { padding: 4px 10px; border-radius: 3px; opacity: .45; border: 1px solid rgba(255, 255, 255, .3); }
+#ctlsetup .calsteps li.on { opacity: 1; border-color: var(--sun); color: var(--sun); }
+#ctlsetup .calsteps li.done { opacity: .9; border-color: var(--cyan); color: var(--cyan); }
+#ctlsetup .tune { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: start; }
+#ctlsetup .live { display: flex; flex-direction: column; gap: 10px; }
+#ctlsetup .lbar { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 10px; font-size: 10px; letter-spacing: .18em; }
+#ctlsetup .lbar div { position: relative; height: 12px; border: 1px solid rgba(47, 243, 255, .5); border-radius: 3px; overflow: hidden; }
+#ctlsetup .lbar i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+#ctlsetup .lbar.steer div::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .6); }
+#ctlsetup .lbar.steer i { background: var(--hot); box-shadow: 0 0 8px var(--hot); }
+#ctlsetup .slide { display: grid; grid-template-columns: 1fr 120px 44px; align-items: center; gap: 10px; }
+#ctlsetup .slide input { width: 100%; accent-color: var(--hot); }
+#ctlsetup .slide output { font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+#ctlsetup .btns { display: flex; flex-direction: column; gap: 4px; }
+#ctlsetup .btns .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-bottom: 4px; }
+#ctlsetup .map { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 11px; letter-spacing: .12em; background: rgba(18, 6, 43, .6); border: 1px solid rgba(255, 95, 162, .3); border-radius: 4px; }
+#ctlsetup .map b { color: var(--sun); }
+#ctlsetup .map.wait { border-color: var(--sun); box-shadow: 0 0 10px rgba(255, 212, 94, .5); }
+#ctlsetup .btns em { color: var(--sun); font-style: normal; }
+@media (max-width: 760px) { #ctlsetup .tune { grid-template-columns: 1fr; } }
+@media (hover: hover) and (pointer: fine) { #ctlsetup .dev:hover, #ctlsetup .map:hover { background: rgba(47, 243, 255, .14); } }
+#options .optsetup { display: block; width: 100%; margin: 8px 0 2px; }
+/* pedal bars by the rev counter while a controller with them on drives */
+#pedals { position: absolute; left: -16px; bottom: 12%; height: 42%; display: flex; gap: 4px; pointer-events: none; }
+#pedals div { position: relative; width: 8px; height: 100%; border: 1px solid rgba(255, 255, 255, .55); border-radius: 2px; background: rgba(18, 6, 43, .45); overflow: hidden; }
+#pedals i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; }
+#pedals .thr i { background: #6dff9e; box-shadow: 0 0 6px #6dff9e; }
+#pedals .brk i { background: #ff4060; box-shadow: 0 0 6px #ff4060; }
+/* lap times: which controller drove the lap, once laps have been driven with more than one kind */
+.inp { display: inline-block; width: 1.15em; height: 1em; margin: 0 .4em 0 0; vertical-align: -.12em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
+body.touch #ctlbtn { display: none; }

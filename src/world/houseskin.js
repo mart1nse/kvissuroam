@@ -154,7 +154,7 @@ export function wallPlanes(world, secKey, base, pick) {
     if (Math.abs(ny) > 0.3) continue;
     const v = [];
     for (let i = t; i < t + 3; i++) v.push([s.x0 + pq[i * 3] * 0.05, pq[i * 3 + 1] * 0.01, s.z0 + pq[i * 3 + 2] * 0.05]);
-    if (!pick((v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3)) continue;
+    if (!pick((v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3, Math.max(v[0][1], v[1][1], v[2][1]))) continue;
     let nx = nq[t * 3] / 127, nz = nq[t * 3 + 2] / 127;
     const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
     const d = v[0][0] * nx + v[0][2] * nz;
@@ -202,7 +202,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
   const h = (x, z) => world.heightAt(x, z);
   for (const H of houses) {
     const r2 = (H.r || 16) ** 2;
-    const planes = wallPlanes(world, H.sec, H.base, (x, z) => (x - H.at[0]) ** 2 + (z - H.at[1]) ** 2 < r2 && (!H.pick || H.pick(x, z)));
+    const planes = wallPlanes(world, H.sec, H.base, (x, z, top) => (x - H.at[0]) ** 2 + (z - H.at[1]) ** 2 < r2 && (!H.pick || H.pick(x, z, top)));
     if (debug) console.log('house', H.name || H.base, planes.map((w) => `${w.mid[0].toFixed(1)},${w.mid[1].toFixed(1)} L${w.len.toFixed(1)} n${w.nx.toFixed(2)},${w.nz.toFixed(2)}`).join(' | '));
     for (const W of planes) {
       const over = (H.walls || []).find((o) => Math.hypot(o.near[0] - W.mid[0], o.near[1] - W.mid[1]) < (o.within || 2.5)) || {};

@@ -16,7 +16,10 @@ const ISLANDS = [
 const ISLAND = { height: 0.12, edge: 0.1, top: 0xaea7b2, kerb: 0xd0ccd6 };
 // street furniture to take away: [kind, x, z]
 const REMOVE = [[BENCH, 1338.3, 2185.9]];          // the bench on the right before Kroonuaia
-const BARRIER = { off: 0.5, height: 0.32, width: 1.4, ramp: 0.35, rail: 0.52 };      // wide enough that one side of the car rides up on it (Martin, 17 Nov: more tilt; 20 Nov: a tad lower)
+const BARRIER = { off: 0.5, rail: 0.52 };      // the low barrier on the pavement, half a metre behind the kerb (Martin, 20 Nov: a tad lower)
+// the kerb round the corner: an ordinary kerb, 20 cm, its face along the rounded line and a flat pavement top
+// behind it to past the barrier (Martin, 20 Nov: "make the kerb look like any other kerb ... like 20cm")
+const KERB = { h: 0.2, edge: 0.18, w: 1.6, b: 0.6, face: 0xa9a5b5, stone: 0xc9c5d3, top: 0xaea7b2 };
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const bearing = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
@@ -162,23 +165,31 @@ export function createCorners(world, group, merged) {
     if (nx * (q[0] - f.c[0]) + nz * (q[1] - f.c[1]) < 0) { nx = -nx; nz = -nz; }     // away from the road
     bline.push([q[0] + nx * BARRIER.off, q[1] + nz * BARRIER.off]);
   }
-  const bTotal = bline.reduce((s, p, i) => s + (i ? Math.hypot(p[0] - bline[i - 1][0], p[1] - bline[i - 1][1]) : 0), 0);
+  // outward (pavement side) unit normal at each curve point, and the kerb's height at d metres past its face
+  const out = f.curve.map((q, j) => { const p = bline[j], l = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1; return [(p[0] - q[0]) / l, (p[1] - q[1]) / l]; });
+  const cLen = [0];
+  for (let j = 1; j < f.curve.length; j++) cLen.push(cLen[j - 1] + Math.hypot(f.curve[j][0] - f.curve[j - 1][0], f.curve[j][1] - f.curve[j - 1][1]));
+  const cTotal = cLen[cLen.length - 1];
+  const kerbProfile = (d, s) => (d <= 0 || d >= KERB.w + KERB.b ? 0
+    : KERB.h * smooth(d / KERB.edge) * (d > KERB.w ? smooth((KERB.w + KERB.b - d) / KERB.b) : 1) * smooth(s / 1.2) * smooth((cTotal - s) / 1.2));
   {
-    const xs = bline.map((p) => p[0]), zs = bline.map((p) => p[1]);
+    const xs = [...f.curve, ...bline].map((p) => p[0]), zs = [...f.curve, ...bline].map((p) => p[1]);
     world.addBump({
-      x0: Math.min(...xs) - 1, z0: Math.min(...zs) - 1, x1: Math.max(...xs) + 1, z1: Math.max(...zs) + 1,
+      x0: Math.min(...xs) - 3, z0: Math.min(...zs) - 3, x1: Math.max(...xs) + 3, z1: Math.max(...zs) + 3,
       at(x, z) {
-        let best = Infinity, s = 0, acc = 0;
-        for (let i = 0; i < bline.length - 1; i++) {
-          const a = bline[i], b = bline[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
-          const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (l * l)));
+        let best = Infinity, bj = -1, bt = 0, braw = 0;
+        for (let i = 0; i < f.curve.length - 1; i++) {
+          const a = f.curve[i], b = f.curve[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1e-9;
+          const tr = ((x - a[0]) * dx + (z - a[1]) * dz) / l2, t = Math.max(0, Math.min(1, tr));
           const d = Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
-          if (d < best) { best = d; s = acc + t * l; }
-          acc += l;
+          if (d < best) { best = d; bj = i; bt = t; braw = tr; }
         }
-        const w = BARRIER.width / 2;
-        if (best >= w) return 0;
-        return BARRIER.height * smooth((w - best) / BARRIER.ramp) * smooth(s / 0.8) * smooth((bTotal - s) / 0.8);
+        if ((bj === 0 && braw < 0) || (bj === f.curve.length - 2 && braw > 1)) return 0;
+        const a = f.curve[bj], n0 = out[bj], n1 = out[bj + 1];
+        const nx = n0[0] + (n1[0] - n0[0]) * bt, nz = n0[1] + (n1[1] - n0[1]) * bt;
+        const ax = a[0] + (f.curve[bj + 1][0] - a[0]) * bt, az = a[1] + (f.curve[bj + 1][1] - a[1]) * bt;
+        const d = (x - ax) * nx + (z - az) * nz;
+        return kerbProfile(d, cLen[bj] + (cLen[bj + 1] - cLen[bj]) * bt);
       },
     });
   }
@@ -236,27 +247,33 @@ export function createCorners(world, group, merged) {
       m.receiveShadow = true;
       group.add(m);
     }
-    // kerb stones over the whole hump the cars feel, from its foot on the road side over the top and down
-    // behind the barrier, so it is closed from every side (Martin, 20 Nov: it was see-through from the side)
+    // the kerb: its face up the rounded edge in darker stone, a lighter kerb stone along the top, and the
+    // pavement behind it out past the barrier and down again, draped on the ground as the cars feel it
     {
-      const pos = [], up = (a, b, c) => (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) >= 0;
-      const P3 = (p) => [p[0], world.heightAt(p[0], p[1]) + 0.015, p[1]];
-      const w = BARRIER.width / 2 + 0.03, D = [];
-      for (let k = 0; k <= 12; k++) D.push(-w + (2 * w * k) / 12);
-      const at = (j, d) => {
-        const q = f.curve[j], b = bline[j], l = Math.hypot(b[0] - q[0], b[1] - q[1]) || 1;
-        return [b[0] + ((b[0] - q[0]) / l) * d, b[1] + ((b[1] - q[1]) / l) * d];
-      };
+      const pos = [], col = [];
+      const at = (j, d, lift) => { const q = f.curve[j], n = out[j], x = q[0] + n[0] * d, z = q[1] + n[1] * d; return [x, world.heightAt(x, z) + lift, z]; };
+      const cF = new THREE.Color(KERB.face), cS = new THREE.Color(KERB.stone), cT = new THREE.Color(KERB.top);
+      const E = KERB.edge, ST = E + 0.14;
+      const bands = [[-0.03, -0.03, 0, 0.012, cF]];
+      const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((t) => t * E);
+      for (let q = 0; q < R.length - 1; q++) bands.push([R[q], 0.012, R[q + 1], 0.012, q < 3 ? cF : cS]);
+      bands.push([E, 0.012, ST, 0.016, cS]);
+      const D = [ST];
+      for (let d = ST + 0.4; d < KERB.w; d += 0.4) D.push(d);
+      D.push(KERB.w, KERB.w + KERB.b * 0.5, KERB.w + KERB.b);
+      for (let q = 0; q < D.length - 1; q++) bands.push([D[q], 0.012, D[q + 1], 0.012, cT]);
       for (let j = 0; j < f.curve.length - 1; j++) {
-        for (let k = 0; k < D.length - 1; k++) {
-          const A = at(j, D[k]), B = at(j + 1, D[k]), C = at(j, D[k + 1]), D2 = at(j + 1, D[k + 1]);
-          for (const [a, b, c] of [[A, B, C], [C, B, D2]]) for (const q of up(a, b, c) ? [a, b, c] : [a, c, b]) pos.push(...P3(q));
+        for (const [d0, l0, d1, l1, c] of bands) {
+          const A = at(j, d0, l0), B = at(j + 1, d0, l0), C = at(j, d1, l1), D2 = at(j + 1, d1, l1);
+          pos.push(...A, ...B, ...C, ...C, ...B, ...D2);
+          for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
         }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
       g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: ISLAND.kerb, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
       m.receiveShadow = true;
       group.add(m);
     }

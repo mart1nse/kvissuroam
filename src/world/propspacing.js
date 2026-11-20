@@ -37,6 +37,7 @@ export const HAND_PLACES = [
   { name: 'K-Rauta, Riia 140, Selver Teemandi', x: -520, z: 5650, r: 360 },
   { name: 'Riia road houses, Riia 128 to Sõinaste', x: -180, z: 4890, r: 330 },
   { name: 'Turu tänav, the Soola corner', x: 1960, z: 3200, r: 200 },
+  { name: 'Turu tänav, AHHAA and Tigutorn', x: 2150, z: 3220, r: 110 },
 ];
 
 // segments of the road centre lines in a coarse grid

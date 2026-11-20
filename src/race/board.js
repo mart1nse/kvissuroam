@@ -3,6 +3,15 @@
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
 
+// small marks for what drove a lap; laps from before this was kept count as keyboard
+const INP = {
+  kb: ['KEYBOARD', '<rect x="1.5" y="5" width="21" height="11" rx="1.5"/><path d="M5 8.5h1M8.5 8.5h1M12 8.5h1M15.5 8.5h1M19 8.5h0M7 12.5h10"/>'],
+  pad: ['GAMEPAD', '<path d="M7 5h10c3 0 5 3 5.5 7s-1 6-3 6-3-3-5-3h-5c-2 0-3 3-5 3s-3.5-2-3-6S4 5 7 5z"/><path d="M7 9v4M5 11h4M16 10h0M18 12h0"/>'],
+  wheel: ['WHEEL', '<circle cx="12" cy="10.5" r="8.5"/><circle cx="12" cy="10.5" r="2"/><path d="M3.6 9.5l6.4 1M20.4 9.5l-6.4 1M12 12.5V19"/>'],
+  touch: ['TOUCH SCREEN', '<rect x="6.5" y="1.5" width="11" height="17" rx="2"/><path d="M10.5 15.5h3"/>'],
+};
+const inpIcon = (k) => { const [name, d] = INP[k] || INP.kb; return `<svg class="inp" viewBox="0 0 24 20" role="img" aria-label="${name}"><title>${name}</title>${d}</svg>`; };
+
 export function createBoard({ mp, race, cars, order }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
@@ -17,7 +26,18 @@ export function createBoard({ mp, race, cars, order }) {
   const btn = document.createElement('button');
   btn.id = 'boardbtn';
   btn.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="11.5" r="6.5"/><path d="M10 11.5V8M8 2.5h4M10 2.5V5M15.5 6l1.2-1.2"/></svg><span>LAP TIMES</span>';
-  row.appendChild(btn);
+  // (on desktop CONTROLS sits beside it: gamepad and wheel setup, src/controls/setup.js)
+  const side = document.createElement('div');
+  side.id = 'menuside';
+  side.appendChild(btn);
+  const ctlBtn = document.createElement('button');
+  ctlBtn.id = 'ctlbtn';
+  ctlBtn.className = 'desktop-only';
+  ctlBtn.dataset.act = 'controls';
+  ctlBtn.title = 'Set up a gamepad or a steering wheel';
+  ctlBtn.innerHTML = '<svg viewBox="0 0 24 20" aria-hidden="true"><path d="M7 5h10c3 0 5 3 5.5 7s-1 6-3 6-3-3-5-3h-5c-2 0-3 3-5 3s-3.5-2-3-6S4 5 7 5z"/><path d="M7 9v4M5 11h4"/><circle cx="16" cy="10" r=".6"/><circle cx="18" cy="12" r=".6"/></svg><span>CONTROLS</span>';
+  side.appendChild(ctlBtn);
+  row.appendChild(side);
 
   const input = row.querySelector('#drivername');
   const caret = row.querySelector('.caret');
@@ -75,20 +95,23 @@ export function createBoard({ mp, race, cars, order }) {
     const b = mp.board;
     const pick = (list, id) => list?.find((r) => r.car === id);
     const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
+    // which controller drove each lap shows only once laps exist with more than one kind
+    const kinds = new Set([...(b?.inputs || []), ...race.laps.map((l) => l.inp || 'kb')]);
+    const ic = (r) => (kinds.size > 1 ? inpIcon(r?.inp || 'kb') : '');
     // (the best ever also says the day the record was set)
-    const cell = (r, dated) => (r ? `<b>${fmtTime(r.ms / 1000)}</b><small>${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
+    const cell = (r, dated) => (r ? `${ic(r)}<b>${fmtTime(r.ms / 1000)}</b><small>${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
     const rows = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');
     const todayBest = (b?.today || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const when = (at) => new Date(at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const mine = race.laps.slice(-5).reverse()
-      .map((l) => `<li><b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
+      .map((l) => `<li>${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
     // latest laps by anyone (desktop only: hidden on small screens in style.css)
     const recent = (b?.recent || []).slice(0, 20)
-      .map((l) => `<li><b>${fmtTime(l.ms / 1000)}</b> <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
+      .map((l) => `<li>${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
-      ${todayBest ? `<p class="today">FASTEST TODAY <b>${fmtTime(todayBest.ms / 1000)}</b> ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
+      ${todayBest ? `<p class="today">FASTEST TODAY ${ic(todayBest)}<b>${fmtTime(todayBest.ms / 1000)}</b> ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
       <table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;

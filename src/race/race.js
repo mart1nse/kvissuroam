@@ -287,7 +287,7 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
 
   const st = {
     running: false, t0: 0, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
-    prev: null, prevTime: 0, splits: [], ref: null,
+    prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null,
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -367,9 +367,13 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
     // back to the last spot (R): a short hop, the lap keeps running
     hopped(x, z) { if (st.prev) st.prev = { x, z }; },
     refreshBest() { lastBestKey = ''; },
-    // car: physics state; carId / carShort: which car is driving
-    update(car, carId, carShort) {
+    // car: physics state; carId / carShort: which car is driving; inp: what is driving it
+    // ('kb' keyboard, 'pad' gamepad, 'wheel', 'touch' phone or tablet)
+    update(car, carId, carShort, inp = 'kb') {
       const x = car.x, z = car.z, time = car.time;
+      // seconds of the lap driven with each kind of control (moving only); the lap is put down to the most used
+      if (st.running && st.inpAt != null && Math.abs(car.vx) > 2) st.inpT[inp] = (st.inpT[inp] || 0) + Math.max(0, Math.min(0.1, time - st.inpAt));
+      st.inpAt = time;
       const near = track.nearest(x, z, st.hint);
       st.hint = near.d < 30 ? near.i : -1;
       const hw = track.HW[near.i] ?? 6;
@@ -394,7 +398,8 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
                 const missed = track.checkpoints.length - st.cps.size;
                 if (missed === 0 && lapT > MIN_LAP) {
                   const ref = st.ref;
-                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY };
+                  const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
+                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
                   showSplit(`FINISH${vs(ref)}`, lapT, ref ? ref.ms / 1000 : null);
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);
@@ -406,7 +411,7 @@ export function createRace({ world, scene, toast, onLap, bestFor, refFor }) {
                   onLap?.(lap);
                 } else if (missed) toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600);
               } else toast('GO!', 1200);
-              st.running = true; hideBack(); st.t0 = tc; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }

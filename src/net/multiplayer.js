@@ -236,7 +236,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const queue = [];
   function enqueue(l) {
     if (!l?.car || !(l.ms > 0) || sent.has(lapKey(l)) || queue.some((q) => lapKey(q) === lapKey(l))) return;
-    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp, k: l.k });
+    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp, k: l.k, inp: l.inp });
   }
   function saveQueue() { lsSet(PENDING_KEY, JSON.stringify(queue.slice(-200))); }
   function markSent(list) {
@@ -455,7 +455,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     submitLap(lap) {
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined });
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp });
       saveQueue();
       flushLaps();
     },

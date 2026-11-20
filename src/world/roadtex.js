@@ -2,10 +2,15 @@
 // the 1 m surface grid, so that road edges are as straight as the roads are.
 //   cover: R hard paving (asphalt, stone), G streets that have a kerb, B gravel and dirt roads
 //   tone:  R brightness and G warmth of the road in the aerial photo, B stone paving (setts)
+// A gravel road up to RUTTED wide is painted in B as a slope across it, 1 on the centre line, 0.5 at the
+// edge, falling on for a little way outside it: the shader reads from it how far from the middle a point is
+// and lays wheel tracks there (one pair on a road one car wide, a fainter pair in each lane on a wider one).
+// Its width is written in the tone's B (2 x metres, below the values that mean setts).
 import * as THREE from 'three';
 
 const KERBED = new Set(['Tänav', 'Põhimaantee', 'Tugimaantee', 'Kõrvalmaantee', 'Ramp või ühenduste']);
 const TONE0 = [183, 136];                    // typical Tartu street in the photo: brightness, 128 + (red - blue)
+const RUTTED = 8.6;                          // gravel roads up to this wide (ETAK) get wheel tracks (one car wide: up to 4.6)
 
 export function createRoadPainter(world, size) {
   const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
@@ -89,11 +94,27 @@ export function createRoadPainter(world, size) {
     ctx.fillStyle = '#f00';
     for (const a of e.areas) { ring(ctx, a); ctx.fill('evenodd'); }
     for (const r of e.roads) {
-      const soft = r.s === 2 || r.s === 3;
-      ctx.strokeStyle = soft ? '#00f' : KERBED.has(r.type) && r.w >= 4.5 ? '#ff0' : '#f00';
+      if (r.s === 2 || r.s === 3) continue;
+      ctx.strokeStyle = KERBED.has(r.type) && r.w >= 4.5 ? '#ff0' : '#f00';
       ctx.lineWidth = r.w;
       line(ctx, r.pts);
       ctx.stroke();
+    }
+    // gravel and dirt: the larger value where two meet ('lighten' keeps R and G as they are)
+    ctx.globalCompositeOperation = 'lighten';
+    for (const r of e.roads) {
+      if (r.s !== 2 && r.s !== 3) continue;
+      line(ctx, r.pts);
+      if (r.w > RUTTED) { ctx.strokeStyle = '#00f'; ctx.lineWidth = r.w; ctx.stroke(); continue; }
+      // the slope, in bands about 0.35 m apart (narrowest last), each the value at its middle: across the
+      // road, and two bands outside it so that the edge (0.5) falls in the right place
+      const h = r.w / 2, n = Math.max(2, Math.round(h / 0.35)), step = h / n;
+      for (let i = -2; i < n; i++) {
+        const d = h - i * step;
+        ctx.strokeStyle = `rgb(0,0,${Math.round(255 * Math.max(0, 1 - (d - step / 2) / r.w))})`;
+        ctx.lineWidth = 2 * d;
+        ctx.stroke();
+      }
     }
     ctx.globalCompositeOperation = 'source-over';
     for (const a of e.over) { ctx.fillStyle = a.cover; ring(ctx, a); ctx.fill('evenodd'); }
@@ -101,6 +122,13 @@ export function createRoadPainter(world, size) {
     const [tv, tctx] = canvas(n2, s);
     tctx.fillStyle = toneOf(null, false);
     tctx.fillRect(s.x0, s.z0, S, S);
+    for (const r of e.roads) {
+      if ((r.s !== 2 && r.s !== 3) || r.w > RUTTED) continue;
+      tctx.strokeStyle = `rgb(${TONE0[0]},${TONE0[1]},${Math.round(r.w * 2)})`;
+      tctx.lineWidth = r.w + 6;
+      line(tctx, r.pts);
+      tctx.stroke();
+    }
     for (const a of e.areas) { tctx.fillStyle = toneOf(a.c, a.t === 2); ring(tctx, a); tctx.fill('evenodd'); }
     for (const r of e.roads) {
       if (r.s === 2 || r.s === 3) continue;

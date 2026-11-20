@@ -35,6 +35,8 @@ const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chir
 const FIRST_KICK = 1.35, FIRST_YANK = 0.42;
 const STAB = 0.03;         // s: the shortest a downshift's blip holds the throttle open
 const ROAR_RING = 0.15;    // s: how long the blip's roar rings on as the throttle shuts
+const KICK_AGAIN = 1;      // s: an automatic upshift into the gear just kicked into is not kicked again this
+                           // soon (Martin 2026-11-20: 1>2 sometimes sounded like two upshifts)
 
 export function createShiftSound() {
   let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0, flare = 0.16;
@@ -42,6 +44,7 @@ export function createShiftSound() {
   // the revs as heard through a downshift (the engine on its own with the clutch out): w, with the throttle
   // th, the manifold filling behind it m, the blip's own throttle opening open, when it shut and whether
   // the clutch has caught them yet
+  let upGear = 0;          // the gear the last upshift kicked into (at bAt)
   let bOn = false, w = 0, th = 0, m = 0, roar = 0, open = 0, shutAt = -9, topped = false, caught = false, dAt = -9, lastOut = 0, dClunk = 0;
   // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
   // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
@@ -81,9 +84,10 @@ export function createShiftSound() {
     // Martin 2026-11-19), so the drive itself comes back (car.bite) a moment after the sound of it.
     const bite = car.bite || 0;
     const soon = cut && bAt < cutAt && t - cutAt >= BITE_HEARD && car.throttle > 0.3;
-    if (!clunk && t - bAt > 0.2 && (soon || bite > lastBite + 0.05)) {
+    const again = car.gear === upGear && t - bAt < KICK_AGAIN && !(car.manual > 0);
+    if (!clunk && !again && t - bAt > 0.2 && (soon || bite > lastBite + 0.05)) {
       const first = car.gear === 2;
-      bAt = t; bk = KICK * (first ? FIRST_KICK : 1) * Math.min(1, (soon ? car.throttle : bite) * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
+      bAt = t; upGear = car.gear; bk = KICK * (first ? FIRST_KICK : 1) * Math.min(1, (soon ? car.throttle : bite) * (car.manual > 0 ? 1 : 0.85) * (0.6 + 0.4 * Math.min(1, car.rpm / e.shiftRpm)));
       clunk = { k: bk, after: 0, up: true };
       // how far above the new gear's speed the revs still are when it bites (as far as they would have
       // sunk by the end of the change, so the swing is as big as it is with the bite heard at the end):

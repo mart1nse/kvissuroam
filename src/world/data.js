@@ -87,6 +87,7 @@ export async function loadWorldData(onProgress = () => {}) {
       if (treeAdds.length) addTreesTo(s);               // after the clearings: planted trees stay
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
+      if (frees.length) carve(s, frees);                // before the solids: hand-made walls are written in after
       for (const b of solids) stamp(s, b);
       s.state = 'ready';
       loading--;
@@ -155,7 +156,7 @@ export async function loadWorldData(onProgress = () => {}) {
     const D = s.D;
     // a box that may be taken away again (the back of a bus shelter a car crashes through) keeps the
     // field as it was under it, per sector
-    if (b.removable) {
+    if (b.removable && !(s.kept && s.kept.has(b))) {
       const w = c1 - c0 + 1, keep = new Uint8Array(w * (r1 - r0 + 1));
       for (let r = r0; r <= r1; r++) keep.set(D.subarray(r * dn + c0, r * dn + c1 + 1), (r - r0) * w);
       (s.kept ||= new Map()).set(b, { r0, r1, c0, c1, keep });
@@ -168,6 +169,63 @@ export async function loadWorldData(onProgress = () => {}) {
         const v = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
         const i = r * dn + col;
         if (v < D[i]) D[i] = v;
+      }
+    }
+  }
+
+  // Ground freed of the map's baked obstacles: a hand-built house whose walls stand inside the map's
+  // footprint (the footprint stuck out past them as an invisible wall). Obstacle cells inside a free box
+  // are dropped and the field around it is worked out again from the obstacles that stay; the house's
+  // own walls then come back as solids. b: { x, z, yaw, hx, hz } like a solid.
+  const frees = [];
+  const FREE_R = 6;                                  // m: how far round a freed box the field is redone
+  const inBox = (b, x, z) => {
+    const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), px = x - b.x, pz = z - b.z;
+    return Math.abs(px * c - pz * sn) <= b.hx && Math.abs(px * sn + pz * c) <= b.hz;
+  };
+  function carve(s, list) {
+    const D = s.D, solid = Math.floor(((0 - dmin) / dspan) * 255);   // D at or below this: inside an obstacle
+    const rc = Math.ceil(FREE_R / dres) + 2;
+    for (const b of list) {
+      const reach = Math.hypot(b.hx, b.hz) + FREE_R;
+      if (b.x + reach < s.x0 || b.x - reach > s.x1 || b.z + reach < s.z0 || b.z - reach > s.z1) continue;
+      const c0 = Math.max(0, Math.floor((b.x - reach - s.x0) / dres)), c1 = Math.min(dn - 1, Math.ceil((b.x + reach - s.x0) / dres));
+      const r0 = Math.max(0, Math.floor((b.z - reach - s.z0) / dres)), r1 = Math.min(dn - 1, Math.ceil((b.z + reach - s.z0) / dres));
+      // the obstacle cells that stay (outside every free box), in and round the window
+      const R0 = Math.max(0, r0 - rc), R1 = Math.min(dn - 1, r1 + rc), C0 = Math.max(0, c0 - rc), C1 = Math.min(dn - 1, c1 + rc);
+      const w = C1 - C0 + 1, keep = new Uint8Array(w * (R1 - R0 + 1));
+      for (let r = R0; r <= R1; r++) for (let c = C0; c <= C1; c++) {
+        if (D[r * dn + c] > solid) continue;
+        const x = s.x0 + c * dres, z = s.z0 + r * dres;
+        if (!frees.some((f) => inBox(f, x, z))) keep[(r - R0) * w + c - C0] = 1;
+      }
+      // distance to the nearest of them: two sweeps that pass on the nearest cell found so far (dead reckoning)
+      const n = keep.length, px = new Int16Array(n).fill(-1), pz = new Int16Array(n), d2 = new Float32Array(n).fill(Infinity);
+      for (let k = 0; k < n; k++) if (keep[k]) { px[k] = k % w; pz[k] = (k / w) | 0; d2[k] = 0; }
+      const H = R1 - R0 + 1;
+      const look = (k, c, r, kk) => {
+        if (px[kk] < 0) return;
+        const dx = c - px[kk], dz = r - pz[kk], e = dx * dx + dz * dz;
+        if (e < d2[k]) { d2[k] = e; px[k] = px[kk]; pz[k] = pz[kk]; }
+      };
+      for (let r = 0; r < H; r++) for (let c = 0; c < w; c++) {
+        const k = r * w + c;
+        if (c > 0) look(k, c, r, k - 1);
+        if (r > 0) { look(k, c, r, k - w); if (c > 0) look(k, c, r, k - w - 1); if (c < w - 1) look(k, c, r, k - w + 1); }
+      }
+      for (let r = H - 1; r >= 0; r--) for (let c = w - 1; c >= 0; c--) {
+        const k = r * w + c;
+        if (c < w - 1) look(k, c, r, k + 1);
+        if (r < H - 1) { look(k, c, r, k + w); if (c < w - 1) look(k, c, r, k + w + 1); if (c > 0) look(k, c, r, k + w - 1); }
+      }
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        const k = (r - R0) * w + c - C0, i = r * dn + c;
+        if (keep[k]) continue;                                            // an obstacle that stays: as it was
+        // the face of an obstacle cell is taken half a cell out from its centre; past FREE_R the old value stands
+        // unless it was nearer (it saw what was taken away)
+        const e = Math.sqrt(d2[k]) * dres - dres / 2;
+        const d = e >= FREE_R ? Math.max(FREE_R, dmin + (D[i] / 255) * dspan) : Math.max(dres / 2, e);
+        D[i] = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
       }
     }
   }
@@ -289,6 +347,17 @@ export async function loadWorldData(onProgress = () => {}) {
     addSolids(list) {
       solids.push(...list);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
+    },
+    // Free ground of the map's baked obstacles in these boxes ({ x, z, yaw, hx, hz }), now and whenever a
+    // sector loads again; the solids are written in again after. For hand-built houses whose walls stand
+    // inside the map's footprint: free the strip between, and add the house's walls with addSolids.
+    addFree(list) {
+      frees.push(...list);
+      for (const s of sectors.values()) {
+        if (s.state !== 'ready') continue;
+        carve(s, list);
+        for (const b of solids) stamp(s, b);
+      }
     },
     // Take away boxes added with removable: true: the field under each is put back as it was, and
     // the solids still there that reach into it are written in again.

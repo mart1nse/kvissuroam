@@ -3,7 +3,8 @@
 // It takes about two minutes, so it does not run after every merge: when any thread (or the nightly
 // run) ran it less than 2 hours ago, it prints that result and stops (Martin, 20 Nov 2026). --force
 // runs it anyway: when Martin asks, or for a change that is likely to weigh (new painted streets, car
-// models, many objects). The last run is kept in the project's shared folder (perf/last-run.json).
+// models, many objects). The last run is kept in the project's shared folder (perf/last-run.json);
+// a skipped run with --json writes that last run's figures there.
 //
 // Starts the game (vite) and measures it in headless Chromium the way a phone sees it (iPhone 13
 // emulation: light mode, small pictures) and the way a desktop does:
@@ -36,6 +37,7 @@ if (!FORCE) {
     const last = JSON.parse(fs.readFileSync(STAMP, 'utf8'));
     const ago = Date.now() - Date.parse(last.when);
     if (ago >= 0 && ago < EVERY_MS) {
+      if (opt('--json') && last.full) fs.writeFileSync(opt('--json'), JSON.stringify(last.full, null, 1));
       console.log(`perf check skipped: last run ${Math.round(ago / 60000)} min ago at commit ${last.commit}, ${last.over?.length ? 'OVER: ' + last.over.join(', ') : 'all within budget'}${last.total ? ` (phone total at DRIVE ${last.total} MB)` : ''}. Runs again after 2 h; --force runs it now.`);
       process.exit(last.over?.length ? 1 : 0);
     }
@@ -178,7 +180,7 @@ async function waitForServer(url, ms) {
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });
     const d = out.phone.drive;
-    fs.writeFileSync(STAMP, JSON.stringify({ when: out.when, commit: out.commit, over: out.over, total: d ? d.canvas + d.gl + d.heap : null }, null, 1));
+    fs.writeFileSync(STAMP, JSON.stringify({ when: out.when, commit: out.commit, over: out.over, total: d ? d.canvas + d.gl + d.heap : null, full: out }, null, 1));
   } catch (e) { console.warn('could not save the last-run note:', e.message); }
   const json = opt('--json');
   if (json) fs.writeFileSync(json, JSON.stringify(out, null, 1));

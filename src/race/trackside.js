@@ -60,7 +60,9 @@ const KERBS = [
 ];
 const JAKOBI_APEX = 687, BUSH_OFF = 3.6, SIGN40_OFF = 1.3;
 const PEPLERI = { bollards: [2054, 2102, 1.9], pad: [2080, 2101, 2.6, 7.6] };    // bollards: i0, i1, off; pad: i0, i1, off0, off1
-const VANEMUISE = { bollards: [2276, 2299, 0.45], sign: [2262, 1.1] };
+// (the bollards stop where the theatre park's taxi bays begin: along the bays the one real row stands on the
+// pavement side, teatripark.js; Martin, 20 Nov)
+const VANEMUISE = { bollards: [2276, 2287, 0.45], sign: [2262, 1.1] };
 const PLAYGROUND = [[1602, 3019, 5.2], [1616, 3031, 4.2]];     // landmarks.js, the Barclay park play area
 const STRAIGHT = { i0: 2338, i1: 2389 + 34, side: 1, lampOff: 2.2, treeOff: 3.6, lampEvery: 26, treeEvery: 11, treeFrom: 2354 };
 // treeFrom: no trees before this index, the corner by Kaubamaja is open paving (Martin, 19 Nov: none behind the START LINE board)

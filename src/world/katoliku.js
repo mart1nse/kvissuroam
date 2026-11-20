@@ -43,6 +43,16 @@ export function katolikuWalls(walls) {
   ]);
 }
 
+// Veski has no painted centre line from the Oru corner up past the school (the Street View shots show
+// bare asphalt, only the zebra by the church): the map's centre dashes go from there
+export function katolikuVectors(vectors) {
+  const prev = vectors.markSkip, V = frame([675.9, 2638.2], [736.1 - 675.9, 2569.4 - 2638.2]), len = Math.hypot(60.2, 68.8);
+  vectors.markSkip = (x, z) => {
+    const [s, v] = V.sv(x, z);
+    return (s > -12 && s < len + 8 && Math.abs(v) < 5) || (prev ? prev(x, z) : false);
+  };
+}
+
 // ---------------------------------------------------------------- colours
 const COL = {
   render: [236, 214, 150], white: '#f3f0e6', frame: '#7a2f2b', sash: '#f6f4ee', glass: '#4a5866', stone: [196, 194, 184],

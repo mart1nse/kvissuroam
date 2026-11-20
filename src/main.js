@@ -52,7 +52,7 @@ import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
-import { createKatoliku, katolikuWalls } from './world/katoliku.js';
+import { createKatoliku, katolikuWalls, katolikuVectors } from './world/katoliku.js';
 import { createNoela, noelaWalls } from './world/noela.js';
 import { createRaadi, raadiWalls } from './world/raadi.js';
 import { createRaadi2, raadi2Walls } from './world/raadi2.js';
@@ -254,6 +254,7 @@ async function boot() {
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   elvaVectors(world.vectors);                  // nor has Elva by 33 to 37, nor the lane by 35b
+  katolikuVectors(world.vectors);              // nor has Veski from the Oru corner past the Catholic school
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line

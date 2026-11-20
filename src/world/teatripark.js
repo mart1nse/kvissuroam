@@ -167,7 +167,13 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     A.pave(F, TAXI.s0, TAXI.s1, 17, 46, 'asphalt');
     for (let q = 17; q < 46; q += 2) A.box(F, TAXI.s0 - 0.2, q + 1, 0.4, 2.02, -0.2, 0.12, 0xb9b7bc);
     for (const b of [...TAXI.bays, TAXI.bays[TAXI.bays.length - 1] + 3.3]) lines.push([TAXI.s0 + 0.15, b, TAXI.s1 - 0.15, b + (TAXI.s1 - TAXI.s0 - 0.3) / Math.tan(50 * Math.PI / 180)]);
-    for (let v = 17.5; v <= 47; v += 3.2) { const [x, z] = F.at(TAXI.s1 + 0.25, v); A.bollard(x, z, 0x1c1d20, 0.95); }
+    // one row of black bollards along the pavement side of the bays (Street View, Aug 2024). Up the road it meets
+    // the roadside row of trackside.js with one bollard on the bays' end kerb; past the last bay it bends left
+    // round the pavement corner and a few come back to the roadside by the zebra.
+    const BOL = [];
+    for (let v = 17.5; v <= 47; v += 3.2) BOL.push([TAXI.s1 + 0.25, v]);
+    BOL.push([-6.2, 47.4], [-5.3, 15.4], [-6.3, 13.8], [-7.1, 12.4]);
+    for (const [s, v] of BOL) { const [x, z] = F.at(s, v); A.bollard(x, z, 0x1c1d20, 0.95); }
     const bowl = new THREE.CylinderGeometry(0.6, 0.36, 0.45, 14);
     for (const v of [28.6, 31.2]) { const [x, z] = F.at(-2.6, v); p.add(bowl, 0xeeeeea, x, h(x, z) + 0.22, z); }
     stripes(lines, 0xe4e2ea);

@@ -13,6 +13,7 @@
 // games or using up the free plan's daily allowance.
 import { DurableObject } from 'cloudflare:workers';
 import { moved } from './moved.js';
+export { Stats } from './stats.js';
 import { CARS } from '../src/cars/specs.js';
 
 const TRACK = 'toomemagi';
@@ -79,6 +80,13 @@ export default {
       let host = '';
       try { host = new URL(origin).host; } catch { /* not a URL */ }
       if (host !== url.host) return json({ error: 'forbidden' }, 403);
+    }
+    if (url.pathname === '/api/stats') {
+      // anonymous game stats (worker/stats.js): their own object, so they never slow the lobby down.
+      // The country Cloudflare sees the visitor in goes along; the address does not.
+      const fwd = new Request(req);
+      fwd.headers.set('x-country', String(req.cf?.country || ''));
+      return env.STATS.get(env.STATS.idFromName('stats')).fetch(fwd);
     }
     const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'));
     return stub.fetch(req);

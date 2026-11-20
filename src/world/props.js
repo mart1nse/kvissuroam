@@ -6,6 +6,7 @@
 // Poles and signs lying on the road are driven over with a small thump rather than pushed along, and
 // sometimes snap into two or three pieces, on the first impact or when a wheel rolls over them later.
 import * as THREE from 'three';
+import { stats } from '../stats.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 21;
@@ -549,6 +550,7 @@ export function createProps(world, opts = {}) {
           hide(rec, e);
           const b = makeBody(e, rec);
           knocked[e.id] = 1;
+          stats.smash('prop');
           const j = hit(b, cvx, cvz, M, sideOf(e.x, e.z));
           took += j;
           // sometimes it snaps straight away, more often the faster the car; else maybe later, under a wheel

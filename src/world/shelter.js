@@ -11,6 +11,7 @@
 // bench first). The short ends stay as before: they bend and the car bounces off.
 import * as THREE from 'three';
 import { stats } from '../stats.js';
+import { glassShards } from './shards.js';
 
 const shelters = [];
 const SHATTER = 2.2;        // m/s into the shelter: below this the frame only shakes and bends a touch
@@ -103,17 +104,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
   });
 
   // ---- shards: little triangles, flying, then lying on the ground
-  const shardGeo = new THREE.BufferGeometry();
-  shardGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.025, 0, -0.018, 0.028, 0, -0.012, 0.002, 0, 0.03], 3));
-  shardGeo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-  const shardMat = new THREE.MeshLambertMaterial({ color: 0xe4f6fb, emissive: 0x3a5866, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
-  const nMax = SHARDS * panes.length;
-  const shards = new THREE.InstancedMesh(shardGeo, shardMat, nMax);
-  shards.count = 0;
-  shards.frustumCulled = false;
-  group.add(shards);
-  const S = [];            // { p, v, axis, ang, spin, rest }
-  const mtx = new THREE.Matrix4(), quat = new THREE.Quaternion(), scl = new THREE.Vector3(), vp = new THREE.Vector3();
+  const shards = glassShards(world, group, SHARDS * panes.length);
 
   // ---- damage state: the bend's top displacement (world x, z), where along the shelter it centres,
   // and the hits still settling (each eases in with a little wobble)
@@ -123,18 +114,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
   function shatter(q, dirX, dirZ, speed) {
     q.broken = true;
     q.mesh.visible = false;
-    for (let k = 0; k < SHARDS && S.length < nMax; k++) {
-      const u = Math.random(), v = Math.random();
-      const x = q.a[0] + (q.b[0] - q.a[0]) * u, z = q.a[1] + (q.b[1] - q.a[1]) * u, yy = q.y0 + (q.y1 - q.y0) * v;
-      const push = (0.25 + 0.5 * Math.random()) * Math.min(speed, 12) * 0.35;
-      S.push({
-        p: [x, yy, z],
-        v: [dirX * push + (Math.random() - 0.5) * 2.2, 0.4 + Math.random() * 1.8, dirZ * push + (Math.random() - 0.5) * 2.2],
-        axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-        ang: Math.random() * 6, spin: (Math.random() - 0.5) * 30, rest: false, size: 0.6 + Math.random() * 0.9,
-      });
-    }
-    shards.count = S.length;
+    shards.burst(q.a, q.b, q.y0, q.y1, dirX, dirZ, speed, SHARDS);
   }
 
   // a slower knock across a long side: the glass breaks, the frame holds
@@ -194,7 +174,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     stats.smash('glass', broke);
   }
 
-  const tmpQ = new THREE.Quaternion();
+  const tmpQ = new THREE.Quaternion(), vp = new THREE.Vector3();
   function moveFlyers(dt) {
     let moving = false;
     for (const f of flyers) {
@@ -249,31 +229,6 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     for (let i = hits.length - 1; i >= 0; i--) if (hits[i].t >= 0.9) hits.splice(i, 1);
   }
 
-  function moveShards(dt) {
-    let moving = false;
-    for (let k = 0; k < S.length; k++) {
-      const s = S[k];
-      if (!s.rest) {
-        moving = true;
-        s.v[1] -= 9.81 * dt;
-        s.p[0] += s.v[0] * dt; s.p[1] += s.v[1] * dt; s.p[2] += s.v[2] * dt;
-        s.ang += s.spin * dt;
-        const g = world.heightAt(s.p[0], s.p[2]) + 0.012;
-        if (s.p[1] < g) {
-          s.p[1] = g;
-          s.v[1] *= -0.25; s.v[0] *= 0.45; s.v[2] *= 0.45; s.spin *= 0.4;
-          if (Math.abs(s.v[1]) < 0.35 && Math.hypot(s.v[0], s.v[2]) < 0.15) { s.rest = true; s.ang = Math.round(s.ang / Math.PI) * Math.PI; s.axis.set(1, 0, 0); }
-        }
-      }
-      quat.setFromAxisAngle(s.axis, s.ang);
-      scl.setScalar(s.size);
-      mtx.compose(vp.set(s.p[0], s.p[1], s.p[2]), quat, scl);
-      shards.setMatrixAt(k, mtx);
-    }
-    if (moving || S.length) shards.instanceMatrix.needsUpdate = true;
-    return moving;
-  }
-
   // ---- the car against the shelter: the closest point of its outline to the box; a hit is when it is up
   // against it and was coming in at speed the frame before
   let prev = null, settled = true;
@@ -319,23 +274,22 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     prev = near ? [vx, vz] : null;
     if (!settled) {
       bendFrames(dt);
-      const moving = moveShards(dt);
+      const moving = shards.update(dt);
       const flying = flyers.length ? moveFlyers(dt) : false;
       if (!moving && !flying && hits.length === 0) settled = true;
     }
   }
 
-  const info = () => ({ box, y, broken: P.filter((q) => q.broken).length, panes: P.length, bend: total, shards: S.length, through });
+  const info = () => ({ box, y, broken: P.filter((q) => q.broken).length, panes: P.length, bend: total, shards: shards.count, through });
   const rec = { update, hit, box, info };
   // has it been hit at all (a damaged shelter is kept as it is while its piece of the map is loaded)
-  rec.damaged = () => total > 0 || S.length > 0;
+  rec.damaged = () => total > 0 || shards.count > 0;
   rec.through = () => through;
   // take it out of the list and free what it made (the bus stops build one when a car comes near)
   rec.remove = () => {
     const k = shelters.indexOf(rec);
     if (k >= 0) shelters.splice(k, 1);
-    group.remove(shards);
-    shardGeo.dispose(); shardMat.dispose(); glassMat.dispose();
+    shards.dispose(); glassMat.dispose();
     for (const q of P) { group.remove(q.mesh); q.mesh.geometry.dispose(); }
   };
   shelters.push(rec);

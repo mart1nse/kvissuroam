@@ -21,6 +21,7 @@
 // Everything is in map coordinates: the street runs almost exactly south (+z); its frame R gives t = z and
 // lat = metres east of the centre line (the house side). Heights are map heights.
 import * as THREE from 'three';
+import { greyBack } from './signback.js';
 import { roadFrame, streetKit, setHouseColours, lawnTex } from './streetkit.js';
 import { createAtlas, painter, tone } from './houseskin.js';
 import { BOX, rnd } from '../race/landmarks.js';
@@ -661,10 +662,10 @@ export function fenceMesh(group, a, b, y0, top, rgb, seed, { gap = 0.035, width 
   m.castShadow = shadows; m.receiveShadow = true;
   group.add(m);
 }
-// a small sign or plate facing yaw (0: +z), w x h metres, its picture drawn on a canvas
+// a small sign or plate facing yaw (0: +z), w x h metres, its picture drawn on a canvas; plain grey behind
 export function signPlate(group, x, y, z, yaw, w, hh, draw) {
   const tex = canvasTex(Math.round(w * 400), Math.round(hh * 400), draw, false);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), greyBack(new THREE.MeshLambertMaterial({ map: tex })));
   m.position.set(x, y, z); m.rotation.y = yaw;
   group.add(m);
 }

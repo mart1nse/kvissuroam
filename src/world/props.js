@@ -7,6 +7,7 @@
 // sometimes snap into two or three pieces, on the first impact or when a wheel rolls over them later.
 import * as THREE from 'three';
 import { stats } from '../stats.js';
+import { greyBack } from './signback.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 21;
@@ -162,7 +163,9 @@ export function createProps(world, opts = {}) {
   const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-  const signMat = new THREE.MeshLambertMaterial({ map: signAtlas(), alphaTest: 0.5, side: THREE.DoubleSide });
+  // sign plates face one way: from behind they are grey metal, but for the bus stop sign (the last atlas
+  // column), which stands across the pavement with its face on both sides
+  const signMat = greyBack(new THREE.MeshLambertMaterial({ map: signAtlas(), alphaTest: 0.5 }), { twoSidedFromU: (FACES - 1) / FACES });
   const paintMat = new THREE.MeshLambertMaterial({ color: 0xdedbe6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const red = [1, 0.16, 0.2], green = [0.2, 1, 0.55], amber = [1, 0.7, 0.2];
   const lamp = box(0.2, 0.2, 0.06, 0, 0, 0, 0xffffff);

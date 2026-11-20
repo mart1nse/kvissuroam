@@ -15,6 +15,7 @@ import { Parts, BOX } from './landmarks.js';
 import { drapeGeometry } from '../world/drape.js';
 import { paverTex, GRASS } from '../world/streetkit.js';
 import { breakableShelter } from '../world/shelter.js';
+import { adAtlas, adCell } from '../world/adverts.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
 const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
@@ -94,21 +95,11 @@ function stoneTex() {
   return t;
 }
 
-// the advert in the shelter: a soft gradient poster with a few shapes, lit from inside
-function advertTex() {
-  return canvasTex(128, 256, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, '#f6d7e6'); gr.addColorStop(0.55, '#c9d8f5'); gr.addColorStop(1, '#f7efd9');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#8a6fc4';
-    g.font = 'bold 22px Arial, sans-serif';
-    g.fillText('TARTU', 12, 40);
-    g.fillText('2026', 12, 64);
-    g.fillStyle = '#e58fb0';
-    g.beginPath(); g.arc(80, 140, 34, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#7fc3c0';
-    g.fillRect(14, 196, 100, 10); g.fillRect(14, 214, 70, 10);
-  });
+// a poster-sized plane showing advert k of the shared atlas
+function adPlane(w, h, k) {
+  const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv, [u0, v0, u1, v1] = adCell(k);
+  for (let n = 0; n < uv.count; n++) uv.setXY(n, u0 + uv.getX(n) * (u1 - u0), v0 + uv.getY(n) * (v1 - v0));
+  return g;
 }
 
 // the two lamp posts by the bay (Martin, 18 Nov): moved off the bay and its kerb to behind the shelter
@@ -579,7 +570,8 @@ export function createEmajoe(world, group) {
       glass.push([W(L / 2, 0), D, yaw + Math.PI / 2, y, H]);
       add(BOX(0.16, H - 0.25, D * 0.92), COL.frame, -L / 2, (H - 0.25) / 2 + 0.1, 0);
       for (const s of [-1, 1]) {
-        const ad = new THREE.Mesh(new THREE.PlaneGeometry(D * 0.8, 1.75), new THREE.MeshBasicMaterial({ map: advertTex(), fog: true }));
+        // one of the made-up adverts of all the bus shelters on each face (src/world/adverts.js)
+        const ad = new THREE.Mesh(adPlane(D * 0.8, 1.75, s < 0 ? 3 : 0), new THREE.MeshBasicMaterial({ map: adAtlas(), fog: true }));
         const [x, z] = W(-L / 2 + s * 0.085, 0);
         ad.position.set(x, y + 1.2, z);
         ad.rotation.y = yaw + (s < 0 ? -Math.PI / 2 : Math.PI / 2);

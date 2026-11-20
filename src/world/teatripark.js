@@ -28,16 +28,15 @@ const ULI = { centre: -0.7, lane: 5.3, edge: 8.9, kerb: 13.4 }, BAYS = [10, 15, 
 const TAXI = { s0: -8.1, s1: -4.6, bays: [20, 23.3, 26.6, 29.9, 33.2, 36.5, 39.8] };
 const at = (s, v) => F.at(s, v);
 const carYaw = (ds, dv) => { const x = F.U[0] * ds + F.V[0] * dv, z = F.U[1] * ds + F.V[1] * dv; return Math.atan2(x, -z); };
-const C30 = Math.cos(Math.PI / 6), S30 = 0.5, C50 = Math.cos(50 * Math.PI / 180), S50 = Math.sin(50 * Math.PI / 180);
-// parked cars, backed into the bays as in the Aug 2024 shots: five on Ülikooli and two taxis on Vanemuise
+const C30 = Math.cos(Math.PI / 6), S30 = 0.5;
+// parked cars, backed into the bays as in the Aug 2024 shots: five on Ülikooli. The two taxis that stood in the
+// Vanemuise tn bays are left out (Martin, 20 Nov): they sat right beside the lap road there and could spoil a lap.
 export const TEATRI_CARS = [
   [...at(10, 11.95), carYaw(-C30, -S30), 'passat', 'white', 0.03],
   [...at(15, 11.95), carYaw(-C30, -S30), 'mazda6', 'grey', 0.03],
   [...at(25, 11.95), carYaw(-C30, -S30), 'rav4', 'black', 0.03],
   [...at(30, 11.95), carYaw(-C30, -S30), 'model3', 'white', 0.03],
   [...at(40, 11.95), carYaw(-C30, -S30), 'accord', 'silver', 0.03],
-  [...at(-6.56, 23.3 + 2.92), carYaw(-S50, -C50), 'passat', 'grey', 0.03],
-  [...at(-6.56, 33.2 + 2.92), carYaw(-S50, -C50), 'mazda6', 'black', 0.03],
 ];
 
 // before the road markings are made: the theatre forecourt and its car park get no lane lines, and along the

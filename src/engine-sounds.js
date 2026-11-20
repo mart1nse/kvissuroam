@@ -23,15 +23,17 @@
 // yank, yankHz: size (x the revs still to come down) and rate of the swing as an upshift's gear wrenches
 //          the revs down (defaults 0.55 and 8.2 Hz; Martin 2026-11-19 found 1 too much beside the
 //          softer hit); yankFirst: the size of 1st to 2nd's, x (default 1).
-// blipRise: seconds a downshift takes to rev up to the lower gear's revs (default 0.035, the sports cars;
-//          longer on the milder engines, which are not as eager to rev, Martin 2026-11-20).
+// revUp, blipLag: how fast the engine revs up on a downshift's blip with the clutch out (rpm a second, wide
+//          open; default 30000) and how long its manifold takes to fill behind the throttle
+//          (s, default 0.03): the milder engines with their heavier flywheels are not as eager to rev
+//          (Martin 2026-11-20), the turbo and diesel ones slower to answer (src/audio-shift.js).
 
 export const ENGINE_SOUNDS = {
   // Mercedes M103.942: 2.6 litre SOHC 12-valve straight six, firing order 1-5-3-6-2-4, Bosch KE-Jetronic.
   // Two cast 3-into-1 manifolds (cylinders 1-3 and 4-6) that join into one pipe and big silencers:
   // a smooth, hushed and even hum with a silky rise to a turbine-like note near the redline.
   w201: {
-    blipRise: 0.11,
+    revUp: 22000, blipLag: 0.035,
     seed: 201, order: [1, 5, 3, 6, 2, 4], banks: [0, 0, 0, 1, 1, 1],
     pipes: [{ len: 1.6, fb: -0.42, damp: 0.45 }, { len: 1.66, fb: -0.42, damp: 0.45 }],
     res: [[95, 1.4, 0.7], [205, 2.2, 0.45], [480, 3, 0.18], [1150, 3, 0.06]], dry: 0.35,
@@ -47,7 +49,7 @@ export const ENGINE_SOUNDS = {
   // knocking diesel clatter at idle (the injectors and the combustion itself), a gruff low drone under load
   // and almost nothing above 4000; the turbo whistles and the tired silencer lets plenty through.
   passat: {
-    blipRise: 0.15,
+    revUp: 13000, blipLag: 0.05,
     crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 19, order: [1, 3, 4, 2], banks: [0, 0, 0, 0],
     pipes: [{ len: 1.7, fb: -0.4, damp: 0.5 }],
@@ -61,7 +63,7 @@ export const ENGINE_SOUNDS = {
   },
   // Honda R20A2: 2.0 SOHC 16-valve i-VTEC four, 1-3-4-2, 4-2-1 manifold (1+4, 2+3), quiet SUV silencing.
   crv: {
-    blipRise: 0.11,
+    revUp: 20000, blipLag: 0.035,
     seed: 7, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.25, fb: -0.38, damp: 0.5 }, { len: 1.25, fb: -0.38, damp: 0.5 }],
     res: [[120, 1.5, 0.55], [260, 2.4, 0.35], [640, 3, 0.16]], dry: 0.4,
@@ -74,7 +76,7 @@ export const ENGINE_SOUNDS = {
   // Toyota M20A-FKS Dynamic Force: 2.0 DOHC four, 1-3-4-2, D-4S port + direct injection (the dry
   // injector tick), long-stroke and quiet, with a flat drone under load.
   rav4: {
-    blipRise: 0.11,
+    revUp: 20000, blipLag: 0.035,
     seed: 4, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.35, fb: -0.36, damp: 0.5 }, { len: 1.35, fb: -0.36, damp: 0.5 }],
     res: [[110, 1.6, 0.6], [240, 2.6, 0.38], [700, 3, 0.12]], dry: 0.38,
@@ -87,7 +89,7 @@ export const ENGINE_SOUNDS = {
   // Mazda PE-VPS Skyactiv-G 2.0: DOHC direct-injection four, 1-3-4-2, 4-2-1 header; a slightly
   // eager, raspy four with a light injector tick.
   mazda6: {
-    blipRise: 0.11,
+    revUp: 22000, blipLag: 0.035,
     seed: 6, order: [1, 3, 4, 2], banks: [0, 1, 1, 0],
     pipes: [{ len: 1.45, fb: -0.45, damp: 0.42 }, { len: 1.45, fb: -0.45, damp: 0.42 }],
     res: [[125, 1.5, 0.55], [300, 2.2, 0.4], [820, 3, 0.16]], dry: 0.4,
@@ -102,6 +104,7 @@ export const ENGINE_SOUNDS = {
   // a hard, raw, metallic rasp. The turbines soften the exhaust note, the engine itself is loud and
   // clattery (no sound deadening at all), and it cracks and pops on the overrun.
   f40: {
+    revUp: 40000, blipLag: 0.025,
     seed: 40, order: [1, 5, 3, 7, 4, 8, 2, 6], banks: [0, 0, 0, 0, 1, 1, 1, 1],
     pipes: [{ len: 0.94, fb: -0.55, damp: 0.6 }, { len: 0.99, fb: -0.55, damp: 0.6 }],
     res: [[150, 1.2, 0.5], [340, 1.6, 0.45], [760, 2, 0.32], [1600, 2.5, 0.14]], dry: 0.55,
@@ -117,6 +120,7 @@ export const ENGINE_SOUNDS = {
   // 68 and 76 degrees; each bank is an even-firing five with its own exhaust. Dry sump, tiny flywheel and
   // almost no silencing: a clean, hard, very high wail with a loud induction howl right behind the seats.
   cgt: {
+    revUp: 48000, blipLag: 0.015,
     yankHz: 6.6,                  // (a slower struggle than the others', Martin 2026-11-19)
     yankFirst: 0.75,              // (and 1st to 2nd still wobbled: a touch smaller, Martin 2026-11-20)
     seed: 980, order: [1, 6, 5, 10, 2, 7, 3, 8, 4, 9], banks: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
@@ -134,7 +138,7 @@ export const ENGINE_SOUNDS = {
   // every two turns through one manifold and one turbine: the off-beat, warbling five-cylinder howl of the
   // quattro rally cars, rounded off by the turbo.
   audi200: {
-    blipRise: 0.08,
+    revUp: 26000, blipLag: 0.04,
     seed: 44, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 8,
     pipes: [{ len: 1.5, fb: -0.44, damp: 0.46 }],
     res: [[105, 1.4, 0.62], [235, 2.2, 0.5], [560, 2.6, 0.32], [1250, 3, 0.1]], dry: 0.4,
@@ -152,6 +156,7 @@ export const ENGINE_SOUNDS = {
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy
   // howl, with a sharp induction bark from the airbox.
   m3: {
+    revUp: 46000, blipLag: 0.02,
     seed: 92, order: [1, 5, 4, 8, 7, 2, 6, 3], banks: [0, 0, 0, 0, 1, 1, 1, 1],
     pipes: [{ len: 0.86, fb: -0.5, damp: 0.56 }, { len: 0.91, fb: -0.5, damp: 0.56 }],
     res: [[125, 1.3, 0.56], [300, 1.8, 0.46], [700, 2.2, 0.32], [1500, 2.5, 0.15]], dry: 0.5,
@@ -166,7 +171,7 @@ export const ENGINE_SOUNDS = {
   // three-way catalyst, so none of the diesel's clatter: a deep, soft, even thrum at 600-2200 rpm through a
   // long pipe and a big silencer in the rear engine bay, the turbo whistling over it as it pulls away.
   bus: {
-    blipRise: 0.2,
+    revUp: 5000, blipLag: 0.07,
     crackle: 0,               // (a diesel: nothing to light in the exhaust)
     seed: 408, order: [1, 2, 4, 5, 3], banks: [0, 0, 0, 0, 0], stagger: 4,
     pipes: [{ len: 3.2, fb: -0.4, damp: 0.5 }],

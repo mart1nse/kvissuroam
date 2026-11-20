@@ -1,10 +1,10 @@
 // What a gear change sounds like (combustion cars only; the electric cars have one gear):
 //
 // - a blip on a downshift: the throttle snaps wide open for a moment while the clutch is out, the engine
-//   roars with a heavy growl and the revs flare up past the lower gear's before the clutch drags them back
-//   ("BWAAAP", about a third of a second, Martin 2026-11-19: a roar, a growl, then a tad longer and
-//   heavier); a quick downshift by hand (Z) blips harder than the automatic, and each one straight after
-//   another harder still
+//   roars with a heavy growl and the revs climb, as fast as that engine can rev, past the lower gear's,
+//   round over and sink until the clutch catches them ("BWAAAP", Martin 2026-11-19: a roar, a growl;
+//   2026-11-20: built like an engine revving rather than a jump to a flat top); a quick downshift by hand
+//   (Z) blips harder than the automatic, and each one straight after another harder still
 // - crackle: after the blip the throttle shuts on high revs, and the fuel left in the hot exhaust goes off
 //   in pops and crackles for a moment (much more on the cars that already pop, the F40, Carrera GT, M3)
 // - a clunk: the driveline taking up its slack as the clutch bites, harder the bigger the jump in revs
@@ -32,11 +32,16 @@ const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chir
 // its long, wide swing sounded wobbly (Martin 2026-11-19): it hits harder, and the swing is smaller,
 // faster and over sooner (yankTight in public/engine-worklet.js), so the gear snaps in
 const FIRST_KICK = 1.35, FIRST_YANK = 0.6;
+const STAB = 0.03;         // s: the shortest a downshift's blip holds the throttle open
+const ROAR_RING = 0.15;    // s: how long the blip's roar rings on as the throttle shuts
 
 export function createShiftSound() {
   let lastGear = 0, at = -9, k = 0, run = 0, lastBite = 0, bAt = -9, bk = 0, flare = 0.16;
   let lastT = 0, lastRpm = 0, wasCut = false, hold = 0, yankId = 0, yank = 0, tight = 0, cutAt = -9;
-  let dAt = -9, from = 0, rise = 0, lastBase = 0;
+  // the revs as heard through a downshift (the engine on its own with the clutch out): w, with the throttle
+  // th, the manifold filling behind it m, the blip's own throttle opening open, when it shut and whether
+  // the clutch has caught them yet
+  let bOn = false, w = 0, th = 0, m = 0, roar = 0, open = 0, shutAt = -9, topped = false, caught = false, dAt = -9, lastOut = 0, dClunk = 0;
   // car: the car (physics.js); t: the time (s); returns what to send to the synthesiser, `clunk` (strength
   // 0..1, how long after now it comes, and `up` for an upshift's) on the frame it starts, and `chirp`
   // (strength) when the tyres chirp on an upshift
@@ -50,11 +55,13 @@ export function createShiftSound() {
     if (cut && bAt < cutAt) hold = Math.max(car.rpm, hold - drop * dt);
     wasCut = cut;
     lastRpm = car.rpm;
-    // A downshift: on the milder engines, with their heavier flywheels and not as eager to rev, the revs
-    // climb to the lower gear's over the engine's blipRise (src/engine-sounds.js; Martin 2026-11-20), from
-    // wherever the sound's revs were; the sports cars (no blipRise) are there at once
-    if (lastGear && car.gear < lastGear && !car.reversing && v > 3) {
-      dAt = t; from = Math.min(lastBase || car.rpm, car.rpm); rise = ENGINE_SOUNDS[s.id]?.blipRise ?? 0;
+    // A downshift: the revs are heard climbing from wherever they were (on with the blip already under way)
+    const down = lastGear && car.gear < lastGear && !car.reversing && v > 3;
+    if (down) {
+      if (!bOn) { w = Math.min(lastOut || car.rpm, car.rpm); th = m = Math.min(1, car.throttle); }
+      // (shifted down again before the clutch had caught the last one: it bites in passing)
+      if (dClunk && bOn && !caught) clunk = { k: dClunk * 0.7, after: 0 };
+      dClunk = 0; bOn = true; dAt = t; caught = topped = false; shutAt = -9; open = 0;
     }
     if (lastGear && car.gear < lastGear && !car.reversing && v > 3 && car.throttle < 0.5) {
       const byHand = car.manual < 0;
@@ -62,10 +69,11 @@ export function createShiftSound() {
       k = Math.min(1, (byHand ? 1 : 0.75) + 0.1 * run);
       at = t;
       flare = 0.16 * (0.85 + 0.3 * Math.random());   // (no two blips quite alike)
+      open = k;
       // the jump in revs the clutch has to take up
       const was = (Math.abs(car.vx) / s.wheelRadius) * s.gears[lastGear - 1] * s.finalDrive * (60 / (2 * Math.PI));
       const jump = (was * (s.gears[car.gear - 1] / s.gears[lastGear - 1] - 1)) / e.redline;
-      clunk = { k: k * clamp(jump * 3.5, 0.2, 1), after: (car.shiftLen || 0.2) * 0.75 };
+      dClunk = k * clamp(jump * 3.5, 0.2, 1);   // (heard as the clutch catches the revs, below)
     }
     // an upshift biting (by hand a touch harder). It is heard BITE_HEARD into the change, however long the
     // change takes (a quarter of a second on most cars, which sounded like a pause between the gears,
@@ -91,20 +99,59 @@ export function createShiftSound() {
     hold = cut ? hold : 0;
     lastBite = bite;
     lastGear = car.reversing ? 1 : car.gear;
-    // the blip: wide open in 35 ms (or the engine's blipRise), held for 125 ms, then shut over about 130
-    const since = t - at, open = Math.max(rise, 0.035);
-    const shape = since < open ? since / open : since < open + 0.125 ? 1 : Math.exp(-(since - open - 0.125) / 0.09);
-    const blip = since < 0.6 ? k * shape : 0;
-    const crackle = since < 1.8 ? k * clamp((since - 0.045 - open) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
+    // The blip as the engine makes it. The throttle snaps open (the roar comes at once), the manifold fills
+    // behind it and the engine, free of the wheels, revs up as fast as it can (revUp, src/engine-sounds.js:
+    // the sports cars in a flash, the milder engines with their heavier flywheels more slowly), from where
+    // the revs were, so a bigger drop takes longer; the throttle shuts as they will carry on to about 16 %
+    // past the lower gear's, they top out, round over and sink at the flywheel's rate (revDrop) on a shut
+    // throttle (the crackle), and the clutch catches them, dragging them onto the gear's revs, once they
+    // are down or the foot comes off it, 0.12 s after the blip. Under power (no blip) the clutch slips and
+    // the revs climb up to it.
+    const cfg = ENGINE_SOUNDS[s.id] || {}, A = cfg.revUp ?? 30000, lag = cfg.blipLag ?? 0.03, D = e.revDrop ?? 3200;
+    const tgt = car.rpm, peak = Math.max(tgt, Math.min(tgt * (1 + flare * k), e.redline * 0.985));
+    // (how fast the free engine's revs change with the manifold at m: pulling, or dragged by its friction)
+    const pull = (w, m) => A * m - D * (1 - m) * (0.35 + 0.65 * w / e.redline);
+    // (where the revs would top out if the throttle shut now, the throttle closing and the manifold emptying)
+    const top = (w, th, m) => {
+      for (let i = 0; i < 60; i++) {
+        th *= 0.85; m += (th - m) * (1 - Math.exp(-0.004 / lag));
+        const d = pull(w, m) * 0.004; if (d <= 0) break; w += d;
+      }
+      return w;
+    };
+    if (bOn) {
+      const n = 4, h = dt / n;
+      for (let i = 0; i < n; i++) {
+        const want = open && shutAt < 0 ? Math.max(open, car.throttle) : car.throttle;
+        th += (want - th) * (1 - Math.exp(-h / (want > th ? 0.012 : 0.025)));
+        m += (th - m) * (1 - Math.exp(-h / lag));
+        // the roar: as hard as the engine is pulling, ringing on in the exhaust as the revs round over
+        roar = Math.max(m, roar * Math.exp(-h / ROAR_RING));
+        // (no foot is quicker than STAB)
+        if (open && shutAt < 0 && t - dAt >= STAB && top(w, th, m) >= peak) shutAt = t;
+        if (!caught) {
+          const dw = pull(w, m) * h;
+          w = Math.max(w + dw, e.idle);
+          if (shutAt >= 0 && dw < 0) topped = true;
+          if ((open ? topped && (w <= tgt * 1.01 || t - shutAt > 0.12) : w >= tgt) || t - dAt > 0.45) {
+            caught = true;
+            if (dClunk && !clunk) { clunk = { k: dClunk, after: 0 }; dClunk = 0; }
+          }
+        } else w += (tgt - w) * (1 - Math.exp(-h / 0.04));
+      }
+      w = Math.min(w, e.redline * 1.02);
+      if (caught && Math.abs(w - tgt) < tgt * 0.004) bOn = false;
+    } else roar *= Math.exp(-dt / ROAR_RING);
+    const since = t - at, sinceShut = shutAt >= 0 ? t - shutAt : -1;
+    const blip = open && roar > 0.004 ? Math.min(k, roar * 1.3) : 0;
+    const crackle = since < 1.8 && sinceShut >= 0 ? k * clamp((sinceShut - 0.02) / 0.1, 0, 1) * Math.exp(-since / 0.55) : 0;
     const sb = t - bAt, bark = sb < 0.8 ? bk * Math.exp(-sb / 0.16) : 0;
     const over = clamp((car.overRev || 0) * 6, 0, 1);
-    // (the revs flare past the lower gear's, about 16 %, short of the redline)
-    const sd = rise ? (t - dAt) / rise : 1, base = sd < 1 && from < car.rpm ? from + (car.rpm - from) * sd * sd * (3 - 2 * sd) : car.rpm;
-    lastBase = base;
-    let rpm = Math.min(base * (1 + flare * blip), Math.max(base, e.redline * 0.985));
+    let rpm = bOn ? w : car.rpm;
     if (over > 0) rpm = Math.max(rpm, e.redline * (1 + 0.035 * over));
     if (changing) rpm = Math.max(rpm, hold);
     rpm = Math.min(rpm, e.redline * 1.04);
+    lastOut = rpm;
     // punch: how much of the engine to send round the compressor as well, so the blip and the bark hit
     // instead of being pressed down with the rest
     // The ignition is only heard cut for the first 0.1 s of an upshift, however long the change takes: the
@@ -116,7 +163,7 @@ export function createShiftSound() {
   }
   return {
     step,
-    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; dAt = -9; lastBase = 0; },
+    reset() { lastGear = 0; at = -9; k = 0; run = 0; lastBite = 0; bAt = -9; bk = 0; wasCut = false; hold = 0; bOn = false; dAt = -9; lastOut = 0; open = 0; dClunk = 0; },
   };
 }
 

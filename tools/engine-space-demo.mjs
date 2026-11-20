@@ -22,6 +22,7 @@
 //   --donut: full lock and full throttle, the engine bouncing off its limiter, a lift, and again.
 //   The room the revs add near the limiter (setRev) follows the shift sounds as audio.js does; --room=<er>,<rev>
 //   sets how much, after downshifts too (--room=0,0: none, the "before" clip).
+//   --back=<er>,<rev>: the room the chase camera dropping back at speed adds (setBack; 0,0: none).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -44,6 +45,7 @@ const dry = !!flag('dry');
 // --mix=er,tail: scale the echoes and the tail (both 1 in the game), to hear them on their own
 const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').map(Number)) : {};
 if (val('room')) MIX.room = MIX.roomDown = (([er, rev]) => ({ er, rev }))(val('room').split(',').map(Number));
+if (val('back')) MIX.back = (([er, rev]) => ({ er, rev }))(val('back').split(',').map(Number));
 const DONUT = !!flag('donut');
 const TURBO = flag('turbo') ? val('turbo') || 'new' : flag('shift') ? 'new' : null;
 const DRONE = !!flag('drone');

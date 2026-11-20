@@ -68,6 +68,8 @@ import { createLounakeskus5, lounakeskus5Walls } from './world/lounakeskus5.js';
 import { createTuru, turuWalls } from './world/turu.js';
 import { createTuru2, turu2Walls } from './world/turu2.js';
 import { createTuru3, turu3Walls } from './world/turu3.js';
+import { createTuru4, turu4Walls, turu4SignSkip } from './world/turu4.js';
+import { createTuru5, turu5Walls } from './world/turu5.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { createRiia3, riia3Walls } from './world/riia3.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
@@ -193,7 +195,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, riia2, riia3, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, riia2, riia3, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -314,6 +316,8 @@ async function boot() {
   turuWalls(world.walls);                       // Turu tänav: Swedbank, Circle K, McDonald's, Turu 3 to 7
   turu2Walls(world.walls);                      // Soola and Kaluri: Kaluri 2, Hotell Tartu, the glass office
   turu3Walls(world.walls);                      // AHHAA, the Turu 8 halls, Tigutorn, Väike-Turu 3
+  turu4Walls(world.walls);                      // Aura, Zeppelin, Turu 9 and 11
+  turu5Walls(world.walls);                      // Turu south to the Sõpruse bridge
   riia2Walls(world.walls);                      // Riia tänav: Riia Kvartal, Riia 24, Pauluse church
   riia3Walls(world.walls);                      // Riia tänav: Aparaaditehas, Hektor, the railway bridge
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
@@ -357,6 +361,7 @@ async function boot() {
   const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
+  turu4SignSkip(world);                         // Zeppelin's and Aura's letters are painted on their walls
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });
@@ -406,6 +411,8 @@ async function boot() {
   turu = createTuru(scene, world, { shadows: !isTouch });
   turu2 = createTuru2(scene, world, { shadows: !isTouch });
   turu3 = createTuru3(scene, world, { shadows: !isTouch });
+  turu4 = createTuru4(scene, world, { shadows: !isTouch });
+  turu5 = createTuru5(scene, world, { shadows: !isTouch });
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
@@ -1174,6 +1181,8 @@ function frame(ts) {
     turu.update(car);
     turu2.update(car);
     turu3.update(car);
+    turu4.update(car);
+    turu5.update(car);
     riia2.update(car);
     riia3.update(car);
     skids.update(car);

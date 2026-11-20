@@ -237,7 +237,8 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
       g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: P.texture(), side: THREE.DoubleSide }));
+      // pulled a little toward the camera in depth as well, so a map wall standing just behind never shows through
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: P.texture(), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
       m.receiveShadow = true;
       group.add(m);
       return { len, where, gy };
@@ -261,7 +262,10 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
     };
     let seed = 11;
     for (const W of [...KV_RIIA, ...KV_TURU]) {
-      skin(W.pts, 0, W.top, (P, len, gy) => kvartal(P, len, gy, { seed: seed++, names: names[W.kind], penthouse: W.kind === 'corner' || W.kind === 'turu', banners: W.kind !== 'middle' }));
+      // 0.3 m out: the map's walls of the end and far blocks stand 7 to 11 cm in front of these lines, which with
+      // the old 9 cm made the painted face and the grey block fight for the same depth (Martin, 20 Nov: "kvartal
+      // has a flickering wall")
+      skin(W.pts, 0, W.top, (P, len, gy) => kvartal(P, len, gy, { seed: seed++, names: names[W.kind], penthouse: W.kind === 'corner' || W.kind === 'turu', banners: W.kind !== 'middle' }), 0.3);
     }
     {
       // the canopy along Riia: from the junction corner to the block that steps forward, on steel posts

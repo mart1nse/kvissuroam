@@ -40,7 +40,7 @@ const car = (e, n, fe, id, paint) => [...at(e, n), HEADING(fe, 0), id, paint, 0.
 export const COOP_CARS = [
   car(3.2, bay(ROW_A, 0), -1, 'passat', 'grey'), car(3.2, bay(ROW_A, 3), 1, 'rav4', 'black'),
   car(14.7, bay(ROW_1, 0), -1, 'rav4', 'white'), car(19.75, bay(ROW_1, 1), 1, 'passat', 'black'), car(14.7, bay(ROW_1, 2), 1, 'mazda6', 'white'),
-  car(14.7, bay(ROW_1, 6), -1, 'mazda6', 'blue'),
+  car(14.7, bay(ROW_1, 6), -1, 'ceedsw', 'sage'),
   car(32.3, bay(ROW_2, 0), 1, 'rav4', 'black'), car(32.3, bay(ROW_2, 2), -1, 'bz4x', 'white'), car(37.0, bay(ROW_2, 1), -1, 'passat', 'silver'),
   car(37.0, bay(ROW_2, 4), 1, 'mazda6', 'red'), car(48.5, bay(ROW_D, 7), 1, 'f31', 'black'),
   car(48.5, -21.6, 1, 'bz4x', 'silver'),         // on charge in the first green bay

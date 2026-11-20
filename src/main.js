@@ -48,6 +48,7 @@ import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
 import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
+import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createSigns } from './world/signs.js';
@@ -169,7 +170,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, riia, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, riia, teatri, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -251,6 +252,7 @@ async function boot() {
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line
   keskusTeeVectors(world.vectors);              // Küüni by Kaubamaja is a pedestrian street: no lane lines
   riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
+  teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
@@ -340,6 +342,7 @@ async function boot() {
   korve = createKorvekula(scene, world, { shadows: !isTouch });
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
   riia = createRiia(scene, world, { shadows: !isTouch });
+  teatri = createTeatripark(scene, world, { shadows: !isTouch });
   korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
@@ -1076,6 +1079,7 @@ function frame(ts) {
     korve.update(car);
     korve2.update(car);
     riia.update(car);
+    teatri.update(car);
     korve3.update(car);
     korve4.update(car);
     skids.update(car);

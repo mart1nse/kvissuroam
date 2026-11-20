@@ -1,4 +1,9 @@
-// Memory and frame-cost budget check: node tools/perf-budget.cjs [--json out.json] [--port 5197]
+// Memory and frame-cost budget check: node tools/perf-budget.cjs [--force] [--json out.json] [--port 5197]
+//
+// It takes about two minutes, so it does not run after every merge: when any thread (or the nightly
+// run) ran it less than 2 hours ago, it prints that result and stops (Martin, 20 Nov 2026). --force
+// runs it anyway: when Martin asks, or for a change that is likely to weigh (new painted streets, car
+// models, many objects). The last run is kept in the project's shared folder (perf/last-run.json).
 //
 // Starts the game (vite) and measures it in headless Chromium the way a phone sees it (iPhone 13
 // emulation: light mode, small pictures) and the way a desktop does:
@@ -22,6 +27,20 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const PORT = +opt('--port', 5197);
 const ROOT = path.resolve(__dirname, '..');
+const FORCE = args.includes('--force');
+const SHARED = '/mnt/project-files';
+const STAMP = fs.existsSync(SHARED) ? path.join(SHARED, 'perf', 'last-run.json') : path.join(ROOT, '.perf-last-run.json');
+const EVERY_MS = 2 * 3600e3;
+if (!FORCE) {
+  try {
+    const last = JSON.parse(fs.readFileSync(STAMP, 'utf8'));
+    const ago = Date.now() - Date.parse(last.when);
+    if (ago >= 0 && ago < EVERY_MS) {
+      console.log(`perf check skipped: last run ${Math.round(ago / 60000)} min ago at commit ${last.commit}, ${last.over?.length ? 'OVER: ' + last.over.join(', ') : 'all within budget'}${last.total ? ` (phone total at DRIVE ${last.total} MB)` : ''}. Runs again after 2 h; --force runs it now.`);
+      process.exit(last.over?.length ? 1 : 0);
+    }
+  } catch { /* never run, or unreadable: run */ }
+}
 const budget = JSON.parse(fs.readFileSync(path.join(__dirname, 'perf-budget.json'), 'utf8'));
 
 // counts what the page holds: canvases (CPU pictures), texture and buffer bytes on the graphics card
@@ -156,6 +175,11 @@ async function waitForServer(url, ms) {
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('phone', JSON.stringify({ menu: out.phone.menu, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
   if (out.over.length) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
+  try {
+    fs.mkdirSync(path.dirname(STAMP), { recursive: true });
+    const d = out.phone.drive;
+    fs.writeFileSync(STAMP, JSON.stringify({ when: out.when, commit: out.commit, over: out.over, total: d ? d.canvas + d.gl + d.heap : null }, null, 1));
+  } catch (e) { console.warn('could not save the last-run note:', e.message); }
   const json = opt('--json');
   if (json) fs.writeFileSync(json, JSON.stringify(out, null, 1));
   process.exit(out.over.length ? 1 : 0);

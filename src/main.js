@@ -48,8 +48,10 @@ import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
 import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
+import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
+import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
 import { createNoela, noelaWalls } from './world/noela.js';
 import { createRaadi, raadiWalls } from './world/raadi.js';
 import { createSigns } from './world/signs.js';
@@ -171,7 +173,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, riia, noela, raadi, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, riia, teatri, noela, raadi, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -253,6 +255,7 @@ async function boot() {
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line
   keskusTeeVectors(world.vectors);              // Küüni by Kaubamaja is a pedestrian street: no lane lines
   riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
+  teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
@@ -273,6 +276,7 @@ async function boot() {
   riiaWalls(world.walls);                       // and Riia tänav from Küüni towards Pepleri
   korve3Walls(world.walls);                     // and the Kubjaringi green and Hariduse tn by the pond
   korve4Walls(world.walls);                     // and the old Hariduse tn row east of the pond, Pärna 33
+  haridus10Walls(world.walls);                  // and Hariduse 10 by the pond, built by hand
   noelaWalls(world.walls);                      // and the farms along the village road in Nõela
   raadiWalls(world.walls);                      // and Foxway and the terraces at the west end of Keskuse tee, Raadi
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
@@ -301,7 +305,7 @@ async function boot() {
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
   // the hand-placed props of the hand-made places (worked out once: the clear hook keeps lights and poles round them)
   let handPlaced = null;
-  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps()]);
+  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props()]);
   // where crowded lights and poles are not thinned: round hand-placed props, bus stops and hand-painted ground
   const keepOutCircles = (hand) => [
     ...hand.map(([, x, z]) => ({ x, z, r: 60 })),
@@ -344,8 +348,10 @@ async function boot() {
   korve = createKorvekula(scene, world, { shadows: !isTouch });
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
   riia = createRiia(scene, world, { shadows: !isTouch });
+  teatri = createTeatripark(scene, world, { shadows: !isTouch });
   korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
+  haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
   noela = createNoela(scene, world, { shadows: !isTouch });
   raadi = createRaadi(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
@@ -588,6 +594,7 @@ function startDriving() {
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
+  parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
     still = false;
@@ -716,6 +723,7 @@ async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
   stats.count('mapjump');
+  parked.hold(8);
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
   const ok = (p) => {
     if (!p) return null;
@@ -1082,8 +1090,10 @@ function frame(ts) {
     korve.update(car);
     korve2.update(car);
     riia.update(car);
+    teatri.update(car);
     korve3.update(car);
     korve4.update(car);
+    haridus10.update(car);
     noela.update(car);
     raadi.update(car);
     skids.update(car);

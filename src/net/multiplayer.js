@@ -5,7 +5,9 @@
 // one WebSocket to the lobby on the server (worker/index.js), about ten times a second and only
 // while somebody else is online. Other cars are drawn a little in the past and interpolated, with
 // their name floating above them, and bump into ours: each browser pushes its own car out of
-// the other one, so both sides see the same knock.
+// the other one, so both sides see the same knock. Except on a hotlap: a car whose lap timer is
+// running tells the others so (flag 8), wears a glow and a HOTLAP tag on their screens, and no car
+// bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress.
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml } from '../race/race.js';
@@ -16,7 +18,8 @@ const SENT_KEY = 'kvissuroam.sentLaps';      // laps the server has confirmed, a
 const SEND_HZ = 10;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 const RESTITUTION = 0.35;
-const MAX_OTHERS = 150;          // more players than the server lets in are not ours to draw
+const MAX_OTHERS = 150;
+const HOT = 8;                   // flag: this car's lap timer is running          // more players than the server lets in are not ours to draw
 // what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
 const cleanName = (s) => String(s || '').normalize('NFC')
   .replace(/[\u0000-\u001f\u007f-\u009f<>\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g, '')
@@ -31,7 +34,37 @@ const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo',
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
 
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople }) {
+// The glow under a car on a hotlap: one soft rounded outline, drawn once and shared by every such car.
+let haloParts = null;
+function haloMesh() {
+  if (!haloParts) {
+    const W = 128, H = 256, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const box = (inset, r) => { g.beginPath(); g.roundRect(inset, inset, W - inset * 2, H - inset * 2, r); };
+    g.shadowColor = '#ff2bd6'; g.shadowBlur = 22;
+    g.strokeStyle = 'rgba(255, 43, 214, .9)'; g.lineWidth = 10; box(26, 34); g.stroke();
+    g.shadowBlur = 6; g.shadowColor = '#ffffff';
+    g.strokeStyle = 'rgba(255, 214, 248, .95)'; g.lineWidth = 3; box(26, 34); g.stroke();
+    g.shadowBlur = 0;
+    const fill = g.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, H / 2);
+    fill.addColorStop(0, 'rgba(138, 63, 252, .30)'); fill.addColorStop(1, 'rgba(255, 43, 214, .12)');
+    g.fillStyle = fill; box(30, 30); g.fill();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const geo = new THREE.PlaneGeometry(1, 1);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    haloParts = { geo, mat };
+  }
+  const m = new THREE.Mesh(haloParts.geo, haloParts.mat);
+  m.renderOrder = 2;
+  m.frustumCulled = false;
+  return m;
+}
+
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, hotlap = () => false }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -125,6 +158,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function showModel(o) {
     if (o.model) scene.remove(o.model.group);
     o.modelCar = o.car;
+    o.halo = null;
     o.model = buildModel(o.car);
     o.model.group.rotation.order = 'YXZ';
     o.model.group.traverse((c) => { if (c.isMesh) c.castShadow = true; });
@@ -270,10 +304,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
 
   // push our car out of anyone it overlaps; boxes as oriented rectangles (separating axis test)
   function collide(car) {
+    if (hotlap()) return;                                        // on a lap of our own: nobody can touch us
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     for (const o of others.values()) {
       const p = o.pose;
-      if (!p) continue;
+      if (!p || (p[20] & HOT)) continue;                         // they are on a lap: we pass through them
       const dx = car.x - p[0], dz = car.z - p[1];
       if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) continue;
       const gx = Math.sin(p[3]), gz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
@@ -347,12 +382,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0),
         // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
         // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
-        // 4 on paving)
+        // 4 on paving, 8 on a hotlap: the lap timer is running)
         Math.round(car.rpm || 0), r1(car.slipV), r1(car.skidF), r1(car.skidR), r1(car.rubF), r1(car.rubR),
-        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0)] });
+        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0)] });
     }
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
+    haloParts && (haloParts.mat.opacity = 0.7 + 0.3 * Math.sin(now * 4.5));
     for (const o of others.values()) {
       o.pose = sample(o, now);
       if (o.pose && o.live && o.modelCar !== o.car && modelReady(o.car, true)) showModel(o);
@@ -361,6 +397,17 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const g = o.model?.group;
       if (!g || !o.pose || o.model.warmed === false) { if (g) g.visible = false; o.el.style.display = 'none'; continue; }
       const p = o.pose;
+      // on a hotlap: the glow under their car and the tag over their name
+      const hot = o.live && !!(p[20] & HOT);
+      if (hot && !o.halo) {
+        o.halo = haloMesh();
+        const sz = o.model.size;
+        o.halo.scale.set((sz?.width ?? o.halfWid * 2) + 1.5, 1, (sz?.length ?? o.halfLen * 2) + 1.7);
+        o.halo.position.y = 0.06;
+        g.add(o.halo);
+      }
+      if (o.halo) o.halo.visible = hot;
+      if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
       g.visible = true;
       g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
@@ -398,7 +445,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     roster() { return [...others.values()].map((o) => ({ name: o.name, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
-    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3] })); },
+    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
       if (!n || n === name) return name;

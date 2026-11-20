@@ -1,0 +1,57 @@
+# Nightly backup of every lap time, kept outside Cloudflare.
+#
+# The laps live in one database at Cloudflare (the Lobby Durable Object, worker/index.js). Each night
+# this job downloads the complete record and commits it to the branch `lap-backups` of this
+# repository, so every night's state stays in the git history: a lap that is deleted, forged over or
+# lost at Cloudflare can be found in an earlier commit. Nothing in the game can write here.
+#
+# The branch is separate from main on purpose: a commit to main would redeploy the game every night.
+# If the number of laps drops by more than a fifth from one night to the next the copy is still
+# saved, and the job then fails so that GitHub sends a mail.
+name: Back up lap times
+
+on:
+  schedule:
+    - cron: '17 1 * * *'        # 03:17 in Tartu (04:17 in summer)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: lap-backups
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SITE: https://www.linnaring.com
+    steps:
+      - name: Fetch the backup branch
+        run: |
+          git init -q backup && cd backup
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth 1 origin lap-backups; then git checkout -q -b lap-backups FETCH_HEAD; else git checkout -q --orphan lap-backups; fi
+      - name: Download the laps
+        run: |
+          curl -fsS --retry 4 --retry-delay 20 --retry-all-errors -A 'linnaring-lap-backup' -o laps.json "$SITE/api/laps.json"
+          sleep 3
+          curl -fsS --retry 4 --retry-delay 20 --retry-all-errors -A 'linnaring-lap-backup' -o laps.csv "$SITE/api/laps.csv"
+          # a real answer: a JSON list and a CSV with the expected heading
+          jq -e 'type == "array"' laps.json > /dev/null
+          head -1 laps.csv | grep -q '^track,driver,car,'
+      - name: Commit
+        run: |
+          cd backup
+          before=0; [ -f laps.json ] && before=$(jq length laps.json)
+          now=$(jq length ../laps.json)
+          # one lap per line, so the history shows which laps came and went
+          jq -c '.[]' ../laps.json > laps.ndjson
+          cp ../laps.json ../laps.csv .
+          git add -A
+          if git diff --cached --quiet; then echo "No change: $now laps"; else
+            git -c user.name='lap-backup' -c user.email='lap-backup@users.noreply.github.com' commit -q -m "Laps $(date -u +%F): $now (was $before)"
+            git push -q origin lap-backups
+            echo "Saved $now laps (was $before)"
+          fi
+          if [ "$now" -lt $(( before * 4 / 5 )) ]; then echo "::error::Laps dropped from $before to $now. The earlier state is in the history of the lap-backups branch."; exit 1; fi

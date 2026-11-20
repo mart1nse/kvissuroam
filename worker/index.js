@@ -338,8 +338,9 @@ export class Lobby extends DurableObject {
 
     if (path === '/api/laps.csv' || path === '/api/laps.json') {
       if (this.over(`d|${ip}`, 6, 60000)) return busy();
+      // the .json is the complete record (the nightly backup saves it, see .github/workflows/backup-laps.yml)
+      if (path.endsWith('.json')) return json(this.sql.exec('SELECT id, track, name, car, ms, at, day, splits, cp, inp FROM laps ORDER BY id').toArray());
       const rows = this.sql.exec("SELECT id, track, name, car, ms, at, COALESCE(inp, 'kb') AS input FROM laps ORDER BY id").toArray();
-      if (path.endsWith('.json')) return json(rows);
       // (a name that starts like a formula gets an apostrophe, so a spreadsheet shows it as text
       // instead of running it)
       const q = (v) => `"${String(v).replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`;

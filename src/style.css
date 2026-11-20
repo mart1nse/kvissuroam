@@ -307,6 +307,14 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
   font-size: 14px; font-weight: 800; letter-spacing: .06em; color: #fff; background: rgba(18, 6, 43, .55); border: 1px solid rgba(47, 243, 255, .7);
   text-shadow: 0 0 6px var(--cyan);
 }
+/* someone on a hotlap: a small tag over their name (and a glow under their car: haloMesh in multiplayer.js) */
+.pname.hot { border-color: rgba(255, 43, 214, .9); text-shadow: 0 0 6px var(--hot); box-shadow: 0 0 10px rgba(255, 43, 214, .45); }
+.pname.hot::before {
+  content: 'HOTLAP'; display: block; width: max-content; margin: -1px auto 2px; padding: 1px 6px; border-radius: 2px;
+  font-size: 10px; letter-spacing: .24em; line-height: 1.3; color: #fff; background: linear-gradient(100deg, var(--hot), var(--violet));
+  text-shadow: none; animation: hotpulse 1.4s ease-in-out infinite;
+}
+@keyframes hotpulse { 50% { opacity: .6; } }
 #menu.hidden ~ #names { display: block; }
 
 /* The row under the cars. DRIVE is the one thing to press, so it is the big filled button in the

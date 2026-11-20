@@ -45,6 +45,7 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
 import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
 import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
+import { createKorvekula, korveWalls } from './world/korvekula.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -155,7 +156,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -250,6 +251,7 @@ async function boot() {
   arhitektiWalls(world.walls);                  // Arhitekti 24, 26 and 28 are built by hand
   elvaWalls(world.walls);                       // and Elva 35b, 35c and 37
   vanemuiseWalls(world.walls);                  // and Vanemuise from Akadeemia to the theatre
+  korveWalls(world.walls);                      // and Kõrveküla's south approach (Rähni, road 210, the centre)
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -316,6 +318,7 @@ async function boot() {
   arhitekti = createArhitekti(scene, world, { shadows: !isTouch });
   elva = createElva(scene, world, { shadows: !isTouch });
   vanemuise = createVanemuise(scene, world, { shadows: !isTouch });
+  korve = createKorvekula(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -1025,6 +1028,7 @@ function frame(ts) {
     arhitekti.update(car);
     elva.update(car);
     vanemuise.update(car);
+    korve.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

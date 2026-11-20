@@ -25,6 +25,7 @@ import { JAAAEG_CARS } from './jaaaeg.js';
 import { ARHITEKTI_CARS } from './arhitekti.js';
 import { ELVA_CARS } from './elva.js';
 import { VANEMUISE_CARS } from './vanemuise.js';
+import { KORVE_CARS } from './korvekula.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -101,6 +102,7 @@ function allSpots() {
   ARHITEKTI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ar${i}`, x, z, yaw, id, paint, lift }));
   ELVA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `el${i}`, x, z, yaw, id, paint, lift }));
   VANEMUISE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `vm${i}`, x, z, yaw, id, paint, lift }));
+  KORVE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `kv${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

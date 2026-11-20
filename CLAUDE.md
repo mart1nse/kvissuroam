@@ -6,8 +6,11 @@ an iPhone 13 reloads the page when it runs out of memory, and one morning of new
 enough to make that happen at DRIVE.
 
 - Before merging anything that adds pictures, models or many objects, run `node tools/perf-budget.cjs`
-  and keep it inside `tools/perf-budget.json`. Say the before/after figures in the PR. Raise a budget
-  figure only with a reason in the commit.
+  and keep it inside `tools/perf-budget.json`. Raise a budget figure only with a reason in the commit.
+  It takes about 2 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
+  it only prints that result (the last run is noted in the project's shared folder). Use `--force` when
+  Martin asks, or when the change is likely to weigh a lot (a new painted street, a car model, hundreds
+  of objects). Put the figures in the PR when you ran it.
 - Painted canvases (house fronts, signs, walls, adverts): size them with `paintScale()` from
   `src/world/paintscale.js` (0.6 on phones and weak desktops), and share atlases instead of one canvas
   per wall. A 2048x2048 canvas is 16 MB in the browser and again on the graphics card.

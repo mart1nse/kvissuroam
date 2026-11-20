@@ -119,6 +119,24 @@
     // road (installing is still offered in the browser menu)
     addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
   </script>
+  <script>
+    // Cloudflare Web Analytics (Martin's ask, 2026-11-20): cookieless visitor counts, countries,
+    // devices and load speed, seen in the Cloudflare dashboard under Web Analytics. Only on the
+    // real site (not local builds or the headless check tools), and not a second time if
+    // Cloudflare's automatic setup has already put its own beacon on the page.
+    (function () {
+      var TOKEN = '';
+      if (!TOKEN || location.hostname !== 'www.linnaring.com' || navigator.webdriver) return;
+      addEventListener('DOMContentLoaded', function () {
+        if (document.querySelector('script[src*="cloudflareinsights.com/beacon"]')) return;
+        var s = document.createElement('script');
+        s.defer = true;
+        s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+        s.setAttribute('data-cf-beacon', JSON.stringify({ token: TOKEN }));
+        document.head.appendChild(s);
+      });
+    })();
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>

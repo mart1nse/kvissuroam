@@ -38,7 +38,7 @@ const BLOCK = { s0: 20.0, top: 24.2 };                    // and so is the end o
 const PODIUM = { s0: 2.6, s1: 9.1, n1: 6.4, h: 0.6, stair0: 5.4, tread: 0.32, steps: 3 };   // in the frame of wall PC
 const STAIR = { s0: 3.6, s1: 7.9 };                       // the glazed stair column on wall PC
 const POSTER = [1589.6, 3130.6];                          // the poster stand on the plaza
-const STONE = { a: [1547.4, 3168.3], b: [1452.7, 3246.9], len: 96 };          // the retaining wall up Vanemuise
+export const STONE = { a: [1547.4, 3168.3], b: [1452.7, 3246.9], len: 96 };          // the retaining wall up Vanemuise
 const CENTRE = [1575, 3138];
 const COL = {
   tile: [104, 104, 126], joint: '#4c4c60', frame: '#262731', plinth: '#d6d3dc', pale: '#d9d7e2',
@@ -370,7 +370,7 @@ export function createPlaytech(world, group, { shadows = true } = {}) {
         const s1 = Math.min(S.len, s + STEP), m = (s + s1) / 2;
         const at = (d, n) => [S.a[0] + ux * d + nx * n, S.a[1] + uz * d + nz * n];
         const A = at(s, 0.36), B = at(s1, 0.36), ya = h(...at(s, 1.2)), yb = h(...at(s1, 1.2));
-        const behind = Math.max(h(...at(s, -3)), h(...at(s1, -3)), h(...at(m, -3)));
+        const behind = Math.max(h(...at(s, -5.5)), h(...at(s1, -5.5)), h(...at(m, -5.5)));     // past the strip kontserdimaja.js levels behind it
         const top = Math.max(Math.max(ya, yb) + 1.75, Math.min(behind + 0.5, Math.max(ya, yb) + 4.2));
         quad(A, B, ya - 0.5, yb - 0.5, top, s, s1);
         if (prevTop !== null && Math.abs(prevTop - top) > 0.02) {                 // the end of a step
@@ -380,6 +380,15 @@ export function createPlaytech(world, group, { shadows = true } = {}) {
         const [cx, cz] = at(m, 0);
         p.add(BOX(s1 - s + 0.06, 0.12, 0.84), 0x9a9288, cx, top + 0.05, cz, Math.atan2(-uz, ux));
         p.add(BOX(s1 - s, 1.0, 0.7), 0x7d766f, cx, top - 0.5, cz, Math.atan2(-uz, ux));
+        // the hillside from the back of the wall's top down to the ground 5.5 m behind it (the strip just behind
+        // the wall is levelled with the street so that the pavement meets the wall square)
+        {
+          const P0 = at(s, -0.36), P1 = at(s1, -0.36), Q0 = at(s, -5.5), Q1 = at(s1, -5.5), g0 = h(...Q0), g1 = h(...Q1);
+          const cap = new THREE.BufferGeometry();
+          cap.setAttribute('position', new THREE.Float32BufferAttribute([P0[0], top, P0[1], Q0[0], g0, Q0[1], Q1[0], g1, Q1[1], P0[0], top, P0[1], Q1[0], g1, Q1[1], P1[0], top, P1[1]], 3));
+          cap.computeVertexNormals();
+          p.add(cap, 0x5b6447, 0, 0, 0);
+        }
         prevTop = top;
       }
       const g = new THREE.BufferGeometry();

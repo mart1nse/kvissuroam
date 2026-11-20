@@ -35,6 +35,7 @@ import { HARIDUSE10_CARS } from './hariduse10.js';
 import { NOELA_CARS } from './noela.js';
 import { RAADI_CARS } from './raadi.js';
 import { RAADI2_CARS } from './raadi2.js';
+import { LOUNA_CARS } from './lounakeskus.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -121,6 +122,7 @@ function allSpots() {
   NOELA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `no${i}`, x, z, yaw, id, paint, lift }));
   RAADI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `rd${i}`, x, z, yaw, id, paint, lift }));
   RAADI2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `re${i}`, x, z, yaw, id, paint, lift }));
+  LOUNA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `lk${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

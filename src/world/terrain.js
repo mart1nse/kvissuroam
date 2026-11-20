@@ -154,39 +154,82 @@ export function createTerrain(world, renderer, opts) {
   const rect = new THREE.Vector4(co.x0, co.z0, co.x1 - co.x0, co.z1 - co.z0);
   const matLow = groundMaterial(overview, detail, rect);
 
-  // ---- far scenery: one coarse mesh under everything. It does not write depth, so the
+  // ---- far scenery: a coarse mesh under everything. It does not write depth, so the
   // detailed sectors (drawn afterwards) always win where they exist.
-  {
+  // (In tiles of 2 km, so that what is behind the camera is not drawn; at the lower graphics levels every
+  // second grid line only: as one mesh it was over a million triangles in every frame, most of the
+  // graphics chip's work on a laptop with built-in graphics, Martin 20 Nov. setCoarse picks the grid.)
+  const coarseMat = groundMaterial(overview, detail, rect);
+  coarseMat.depthWrite = false;
+  const coarseSets = new Map();                  // grid step (1 or 2) -> its tiles
+  let coarseNrm = null;
+  function coarseTiles(step) {
     const nx = co.nx, nz = co.nz, C = world.coarse;
-    const pos = new Float32Array(nx * nz * 3);
-    for (let r = 0; r < nz; r++) {
-      for (let c = 0; c < nx; c++) {
+    if (!coarseNrm) {
+      // the normals of the whole grid, worked out the way the single mesh had them, so tiles meet without seams
+      const pos = new Float32Array(nx * nz * 3);
+      for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) {
         const k = r * nx + c;
-        pos[k * 3] = co.x0 + c * co.res;
-        pos[k * 3 + 1] = C[k] * hs + hoff;
-        pos[k * 3 + 2] = co.z0 + r * co.res;
+        pos[k * 3] = co.x0 + c * co.res; pos[k * 3 + 1] = C[k] * hs + hoff; pos[k * 3 + 2] = co.z0 + r * co.res;
       }
-    }
-    const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
-    let q = 0;
-    for (let r = 0; r < nz - 1; r++) {
-      for (let c = 0; c < nx - 1; c++) {
+      const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
+      let q = 0;
+      for (let r = 0; r < nz - 1; r++) for (let c = 0; c < nx - 1; c++) {
         const a = r * nx + c, b = a + 1, c2 = a + nx, d = c2 + 1;
         idx[q++] = a; idx[q++] = c2; idx[q++] = b;
         idx[q++] = b; idx[q++] = c2; idx[q++] = d;
       }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.computeVertexNormals();
+      coarseNrm = g.attributes.normal.array;
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    geo.computeVertexNormals();
-    const mat = groundMaterial(overview, detail, rect);
-    mat.depthWrite = false;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.matrixAutoUpdate = false;
-    mesh.frustumCulled = false;
-    mesh.renderOrder = -8;
-    group.add(mesh);
+    const T = 64, tiles = [];                    // grid cells per tile side (64 x 32 m = 2 km)
+    for (let r0 = 0; r0 < nz - 1; r0 += T) for (let c0 = 0; c0 < nx - 1; c0 += T) {
+      const cs = [], rs = [];
+      const c1 = Math.min(nx - 1, c0 + T), r1 = Math.min(nz - 1, r0 + T);
+      for (let c = c0; c < c1; c += step) cs.push(c);
+      cs.push(c1);
+      for (let r = r0; r < r1; r += step) rs.push(r);
+      rs.push(r1);
+      const w = cs.length, h = rs.length;
+      const pos = new Float32Array(w * h * 3), nrm = new Float32Array(w * h * 3);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const k = rs[j] * nx + cs[i], o = (j * w + i) * 3;
+        pos[o] = co.x0 + cs[i] * co.res; pos[o + 1] = C[k] * hs + hoff; pos[o + 2] = co.z0 + rs[j] * co.res;
+        nrm[o] = coarseNrm[k * 3]; nrm[o + 1] = coarseNrm[k * 3 + 1]; nrm[o + 2] = coarseNrm[k * 3 + 2];
+      }
+      const idx = new Uint16Array((w - 1) * (h - 1) * 6);
+      let q = 0;
+      for (let j = 0; j < h - 1; j++) for (let i = 0; i < w - 1; i++) {
+        const a = j * w + i, b = a + 1, c2 = a + w, d = c2 + 1;
+        idx[q++] = a; idx[q++] = c2; idx[q++] = b;
+        idx[q++] = b; idx[q++] = c2; idx[q++] = d;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, coarseMat);
+      mesh.matrixAutoUpdate = false;
+      mesh.renderOrder = -8;
+      mesh.visible = false;
+      group.add(mesh);
+      tiles.push(mesh);
+    }
+    return tiles;
+  }
+  let coarseStep = 0;
+  function setCoarse(step) {
+    if (step === coarseStep) return;
+    if (!coarseSets.has(step)) coarseSets.set(step, coarseTiles(step));
+    for (const [k, tiles] of coarseSets) for (const m of tiles) m.visible = k === step;
+    coarseStep = step;
+  }
+  setCoarse(opts.coarseStep || 1);
+  {
     // a wide apron so the horizon is never empty
     const apron = new THREE.Mesh(
       new THREE.CircleGeometry(40000, 48),
@@ -427,5 +470,5 @@ export function createTerrain(world, renderer, opts) {
     want.sort((p, q) => p.d - q.d);
     for (const ch of want) { if (loading >= 4) break; load(ch); }
   }
-  return { group, update, addSector, removeSector, pending: () => loading };
+  return { group, update, addSector, removeSector, setCoarse, pending: () => loading };
 }

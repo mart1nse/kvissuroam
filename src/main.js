@@ -52,9 +52,19 @@ import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
 import { createKorvekula3, korve3Walls } from './world/korvekula3.js';
 import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
+import { createKatoliku, katolikuWalls, katolikuVectors } from './world/katoliku.js';
+import { createKatoliku2, katoliku2Walls } from './world/katoliku2.js';
 import { createNoela, noelaWalls } from './world/noela.js';
 import { createRaadi, raadiWalls } from './world/raadi.js';
 import { createRaadi2, raadi2Walls } from './world/raadi2.js';
+import { createRaadi3, raadi3Walls } from './world/raadi3.js';
+import { createRaadi4, raadi4Walls } from './world/raadi4.js';
+import { createLounakeskus, lounakeskusWalls } from './world/lounakeskus.js';
+import { createLounakeskus2, lounakeskus2Walls } from './world/lounakeskus2.js';
+import { createLounakeskus3, lounakeskus3Walls } from './world/lounakeskus3.js';
+import { createLounakeskus4, lounakeskus4Walls } from './world/lounakeskus4.js';
+import { createLounakeskus5, lounakeskus5Walls } from './world/lounakeskus5.js';
+import { lounaPaintVectors } from './world/lounapaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -136,7 +146,10 @@ function applyFx() {
   const k = l.dpr >= Math.min(1, top) ? 1 : l.dpr >= 0.9 ? 0.6 : 0.35;
   smoke?.setDetail(k);
   audio.setLite(k < 0.5);
+  terrain?.setCoarse(coarseStep());
 }
+// the far ground's grid: every second line only below full sharpness (see setCoarse in terrain.js)
+function coarseStep() { const l = gfx.levels[gfx.level]; return l && l.dpr < 1 ? 2 : 1; }
 gfx.onChange(applyFx);
 // Weak desktops get the phones' lighter setup as well: pictures kept small and held once, a still picture
 // behind the opening menu and fewer, simpler parked cars. A desktop counts as weak when the browser says
@@ -174,7 +187,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni;
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, riia, teatri, noela, raadi, raadi2, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -251,6 +264,7 @@ async function boot() {
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   elvaVectors(world.vectors);                  // nor has Elva by 33 to 37, nor the lane by 35b
+  katolikuVectors(world.vectors);              // nor has Veski from the Oru corner past the Catholic school
   uueturuVectors(world.vectors);                // no generated centre line through the Uueturu junction
   laiVectors(world.vectors);                    // the rebuilt Lai / Vabaduse junction paints its own ground
   pepleriVectors(world.vectors);                // Vanemuise after the Pepleri turn: cycle lane lines, no centre line
@@ -258,6 +272,7 @@ async function boot() {
   riiaVectors(world.vectors);                   // Riia from Kalevi to Pepleri: a double centre line
   teatriparkVectors(world.vectors);             // the Vanemuine forecourt is paving, not a street
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
+  lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
   uueturuWalls(world.walls);                    // the office building on Uueturu in its real slate grey
   playtechWalls(world.walls);                   // SEB in dark brick, its neighbour white
   pootsmaniWalls(world.walls);                  // houses on Pootsmani in their own colours
@@ -278,9 +293,18 @@ async function boot() {
   korve3Walls(world.walls);                     // and the Kubjaringi green and Hariduse tn by the pond
   korve4Walls(world.walls);                     // and the old Hariduse tn row east of the pond, Pärna 33
   haridus10Walls(world.walls);                  // and Hariduse 10 by the pond, built by hand
+  katolikuWalls(world.walls);                   // and the Catholic school on Oru, with its yard
+  katoliku2Walls(world.walls);                  // and the Catholic church opposite it and the villa at Veski 5
   noelaWalls(world.walls);                      // and the farms along the village road in Nõela
   raadiWalls(world.walls);                      // and Foxway and the terraces at the west end of Keskuse tee, Raadi
   raadi2Walls(world.walls);                     // and the east end of Keskuse tee with the Mõisapiiri houses
+  raadi3Walls(world.walls);                     // and the west end of Mõisapiiri and the Mõisahärra loop
+  raadi4Walls(world.walls);                     // and the shops round the route 95 roundabout at Raadi
+  lounakeskusWalls(world.walls);                // Lõunakeskus, Hotel Sophia and Teaduspark
+  lounakeskus2Walls(world.walls);               // Bauhof, Circle K, McDonald's, KFC, Lidl and Optika
+  lounakeskus3Walls(world.walls);               // Alexela, Decora, Stokker, Spektri, Aardla, Olerex
+  lounakeskus4Walls(world.walls);               // K-Rauta, the Riia 140 yard, Selver Teemandi, Tammetõru
+  lounakeskus5Walls(world.walls);               // the Riia road houses, Riia 128 to Sõinaste
   angerjaWalls(world.walls);                    // Äksi, Angerja tänav: the houses round the jogger's loop in their colours
   jaaaegWalls(world.walls);                     // the Ice Age Centre in Äksi is built by hand, its neighbours get their colours
   mandelWalls(world.walls);                     // Mandel kohvik at Veski 7: white render
@@ -293,6 +317,7 @@ async function boot() {
   deltaWalls(world.walls);                      // the Delta centre across the river from Lai is built by hand
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
+  quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
   bar.style.width = '88%';
@@ -354,9 +379,18 @@ async function boot() {
   korve3 = createKorvekula3(scene, world, { shadows: !isTouch });
   korve4 = createKorvekula4(scene, world, { shadows: !isTouch });
   haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
+  katoliku = createKatoliku(scene, world, { shadows: !isTouch });
+  katoliku2 = createKatoliku2(scene, world, { shadows: !isTouch });
   noela = createNoela(scene, world, { shadows: !isTouch });
   raadi = createRaadi(scene, world, { shadows: !isTouch });
   raadi2 = createRaadi2(scene, world, { shadows: !isTouch });
+  raadi3 = createRaadi3(scene, world, { shadows: !isTouch });
+  raadi4 = createRaadi4(scene, world, { shadows: !isTouch });
+  louna = createLounakeskus(scene, world, { shadows: !isTouch });
+  louna2 = createLounakeskus2(scene, world, { shadows: !isTouch });
+  louna3 = createLounakeskus3(scene, world, { shadows: !isTouch });
+  louna4 = createLounakeskus4(scene, world, { shadows: !isTouch });
+  louna5 = createLounakeskus5(scene, world, { shadows: !isTouch });
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   world.onSectorLoad((s) => {
@@ -970,9 +1004,9 @@ document.addEventListener('click', (e) => {
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
 }
-// (one finger dragging the row of cars or the lap times board is a scroll, and must be left alone)
+// (one finger dragging the row of cars, the lap times board or the options panel is a scroll, and must be left alone)
 document.addEventListener('touchmove', (e) => {
-  if (e.touches.length === 1 && e.target.closest?.('#cards, #board')) return;
+  if (e.touches.length === 1 && e.target.closest?.('#cards, #board, #options')) return;
   if (e.cancelable) e.preventDefault();
 }, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -1034,8 +1068,18 @@ document.addEventListener('visibilitychange', () => {
 // what is driving the car: keyboard, gamepad, steering wheel or touch screen
 const inpNow = () => (isTouch ? 'touch' : ctl === pads.state ? (pads.active?.prof.kind === 'wheel' ? 'wheel' : 'pad') : 'kb');
 let back = null;                 // the half minute after coming back to the tab: frame times logged, to see where a slow start goes
+// Screens faster than 90 Hz (120, 144, 165 Hz laptops): only every 2nd (or 3rd) refresh is drawn, except
+// on HIGH. Otherwise the graphics chip of such a laptop runs flat out even on LOW (Martin, 20 Nov: built-in
+// Intel graphics near 100% on LOW). 120 Hz gives 60 frames a second, 144 Hz 72, 165 Hz 82, 240 Hz 80.
+// (A computer that cannot keep up misses refreshes, the measured interval grows and nothing is skipped.)
+let rafLast = 0, rafMs = 1000 / 60, rafTick = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
+  const gap = ts - rafLast;
+  rafLast = ts;
+  if (gap > 2 && gap < 50) rafMs += (gap - rafMs) * 0.05;
+  const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
+  if (++rafTick % every) return;
   const t0 = performance.now();
   clock.update(ts);
   const rawDt = clock.getDelta();
@@ -1097,9 +1141,18 @@ function frame(ts) {
     korve3.update(car);
     korve4.update(car);
     haridus10.update(car);
+    katoliku.update(car);
+    katoliku2.update(car);
     noela.update(car);
     raadi.update(car);
     raadi2.update(car);
+    raadi3.update(car);
+    raadi4.update(car);
+    louna.update(car);
+    louna2.update(car);
+    louna3.update(car);
+    louna4.update(car);
+    louna5.update(car);
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());

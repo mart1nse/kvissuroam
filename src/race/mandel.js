@@ -314,8 +314,8 @@ export function createMandel(world, group, { shadows = true } = {}) {
       const q = pts[pts.length - 1];
       if (free(q[0], q[1], 0.4)) p.add(BOX(0.2, height + 0.25, 0.2), COL.concrete, q[0], h(q[0], q[1]) + (height + 0.25) / 2, q[1], 0);
     };
-    picket(edgeLine(1452, 1471, -1, 4.2, 2.4), COL.picket);                   // left, behind the grass, before the crossing
-    picket(edgeLine(1477.5, 1488.5, 1, 2.3, 2.4), COL.villaPicket, 1.15);     // the villa garden, right, after it
+    // the school's fence on the left, before the crossing, is built with its yard in world/katoliku.js
+    picket(edgeLine(1484, 1488.5, 1, 2.3, 2.4), COL.villaPicket, 1.15);       // the villa garden, right, after it (from past the mouth of Oru, which stays open)
     // the cafe's own cream fence beyond the gate
     {
       const pts = [];

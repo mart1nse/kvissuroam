@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
 import { paintScale } from './paintscale.js';
+import { medianShift } from './keskustee.js';
 
 const O = [1659.6, 3088.7];                              // west corner of the roof (game x, z)
 const UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];     // along Küüni (to the south corner), along the park face (to the north corner)
@@ -314,20 +315,25 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
 
     // ---- the Riia median: a steel railing along its Kaubamaja edge and a row of young limes
     {
-      const S = SIDES.riia, OUT = 18.9, list = [];
-      const s0 = 6, s1 = LB - 5, n = Math.round((s1 - s0) / 2.5);
+      // the median's line bends 1.65 m out at the Küüni end to meet the median past the crossing (medianShift)
+      const S = SIDES.riia, OUT = 18.9, list = [], M = (s, o) => S.at(s, o + medianShift(s));
+      const s0 = 6, s1 = LB - 5, n = Math.round((s1 - s0) / 2.5), posts = [];
       for (let k = 0; k <= n; k++) {
-        const s = s0 + (s1 - s0) * k / n, [x, z] = S.at(s, OUT - 1.1), y = h(x, z);
+        const s = s0 + (s1 - s0) * k / n, [x, z] = M(s, OUT - 1.1), y = h(x, z);
         p.add(BOX(0.07, 1.05, 0.07), COL.steel, x, y + 0.52, z, S.yaw);
+        posts.push([x, y, z]);
       }
-      for (const yy of [0.55, 1.02]) {
-        const [x, z] = S.at((s0 + s1) / 2, OUT - 1.1), ya = h(...S.at(s0, OUT - 1.1)), yb = h(...S.at(s1, OUT - 1.1));
-        const rail = BOX(Math.hypot(s1 - s0, yb - ya), 0.06, 0.06); rail.rotateZ(Math.atan2(yb - ya, s1 - s0));
-        p.add(rail, COL.steel, x, (ya + yb) / 2 + yy, z, S.yaw);
+      // the rails from post to post, so they follow the ground and the bend
+      for (let k = 0; k < n; k++) {
+        const [xa, ya, za] = posts[k], [xb, yb, zb] = posts[k + 1], l = Math.hypot(xb - xa, zb - za);
+        for (const yy of [0.55, 1.02]) {
+          const rail = BOX(Math.hypot(l, yb - ya), 0.06, 0.06); rail.rotateZ(Math.atan2(yb - ya, l));
+          p.add(rail, COL.steel, (xa + xb) / 2, (ya + yb) / 2 + yy, (za + zb) / 2, Math.atan2(-(zb - za), xb - xa));
+        }
+        if (k % 4 === 0) { const e = posts[Math.min(n, k + 4)], m = posts[k]; solids.push({ x: (m[0] + e[0]) / 2, z: (m[2] + e[2]) / 2, yaw: S.yaw, hx: Math.hypot(e[0] - m[0], e[2] - m[2]) / 2 + 0.05, hz: 0.12 }); }
       }
-      solids.push({ x: S.at((s0 + s1) / 2, OUT - 1.1)[0], z: S.at((s0 + s1) / 2, OUT - 1.1)[1], yaw: S.yaw, hx: (s1 - s0) / 2, hz: 0.12 });
       const r = rnd(17);
-      for (let s = 9; s < LB - 6; s += 6.7) list.push([...S.at(s + r() * 0.8, OUT + 0.3), 6.2 + r() * 1.8, 0.55 + r() * 0.16, r()]);
+      for (let s = 9; s < LB - 6; s += 6.7) { const t = s + r() * 0.8; list.push([...M(t, OUT + 0.3), 6.2 + r() * 1.8, 0.55 + r() * 0.16, r()]); }
       // black plastic guards round the young trunks (Street View 2023/2024)
       const guard = new THREE.CylinderGeometry(0.17, 0.26, 0.85, 7);
       for (const [x, z] of list) p.add(guard, 0x1d1e21, x, h(x, z) + 0.42, z);

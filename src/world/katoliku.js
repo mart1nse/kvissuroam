@@ -805,14 +805,16 @@ function globeLamp(A, [x, z]) {
   p.add(new THREE.TorusGeometry(0.27, 0.025, 4, 16).rotateX(Math.PI / 2), 0x6a5444, x, y + 3.62, z);
   p.add(new THREE.CylinderGeometry(0.1, 0.13, 0.08, 10), 0x6a5444, x, y + 3.9, z);
 }
-// a sign post with one round plate facing yaw
+// a sign post with one round plate facing yaw (0: +z); behind, the plate is plain grey metal
 function signPost(A, [x, z], yaw, kind) {
   const y = A.h(x, z), p = A.p;
   p.add(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6), 0x9ea2a6, x, y + 1.3, z);
   if (kind === 'stop') {
-    p.add(new THREE.CylinderGeometry(0.3, 0.3, 0.03, 18).rotateX(Math.PI / 2), 0xc8202b, x, y + 2.3, z, yaw);
-    p.add(new THREE.CylinderGeometry(0.22, 0.22, 0.035, 18).rotateX(Math.PI / 2), 0x2a5aa8, x, y + 2.3, z, yaw);
-    p.add(BOX(0.42, 0.06, 0.04).rotateZ(0.785), 0xc8202b, x, y + 2.3, z, yaw);
-    p.add(BOX(0.42, 0.06, 0.04).rotateZ(-0.785), 0xc8202b, x, y + 2.3, z, yaw);
+    const disc = (r, d, at) => new THREE.CylinderGeometry(r, r, d, 18).rotateX(Math.PI / 2).translate(0, 0, at);
+    p.add(disc(0.3, 0.012, 0.036), 0x9a9ca4, x, y + 2.3, z, yaw);                   // the grey back
+    p.add(disc(0.3, 0.012, 0.048), 0xc8202b, x, y + 2.3, z, yaw);
+    p.add(disc(0.22, 0.012, 0.052), 0x2a5aa8, x, y + 2.3, z, yaw);
+    p.add(BOX(0.42, 0.06, 0.012).rotateZ(0.785).translate(0, 0, 0.058), 0xc8202b, x, y + 2.3, z, yaw);
+    p.add(BOX(0.42, 0.06, 0.012).rotateZ(-0.785).translate(0, 0, 0.058), 0xc8202b, x, y + 2.3, z, yaw);
   }
 }

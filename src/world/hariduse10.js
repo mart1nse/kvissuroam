@@ -330,9 +330,10 @@ export function createHariduse10(scene, world, { shadows = true } = {}) {
     box(R, rv([3894.2, -2130.0])[0], rv([3894.2, -2130.0])[1], 1.15, 1.15, 0, 2.2, 0x2c5e43);
     box(R, rv([3894.2, -2130.0])[0], rv([3894.2, -2130.0])[1], 1.25, 1.25, 2.2, 2.32, 0xd5d5ce);
     A.bushes([[3872.0, -2150.5, 3.4, 2.4], [3866.5, -2153.0, 3.0, 2.2], [3876.5, -2148.0, 2.6, 1.9]]);
-    // the plates under the no-parking signs: the arrows up and down (the sign applies both ways)
+    // the plates under the no-parking signs: the arrows up and down (the sign applies both ways); they face
+    // north with their signs (bearing 0), on the same side of the post
     for (const [x, z] of [[3896.6, -2136.5], [3915.0, -2176.0]]) {
-      signPlate(group, x, h(x, z) + 1.93, z + 0.05, 0, 0.3, 0.22, (c, w, hh) => {
+      signPlate(group, x, h(x, z) + 1.93, z - 0.05, Math.PI, 0.3, 0.22, (c, w, hh) => {
         c.fillStyle = '#f4f2f0'; c.fillRect(0, 0, w, hh); c.strokeStyle = '#18161c'; c.lineWidth = w * 0.04; c.strokeRect(w * 0.04, w * 0.04, w * 0.92, hh - w * 0.08);
         c.fillStyle = '#18161c'; c.fillRect(w * 0.47, hh * 0.25, w * 0.06, hh * 0.5);
         c.beginPath(); c.moveTo(w * 0.5, hh * 0.12); c.lineTo(w * 0.62, hh * 0.32); c.lineTo(w * 0.38, hh * 0.32); c.fill();

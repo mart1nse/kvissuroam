@@ -7,6 +7,20 @@ import { roadFrame, streetKit } from './streetkit.js';
 const S = [1713.8, 3144.9], UB = [0.7189, -0.6951];      // Kaubamaja's south corner, along its Riia face towards the junction
 const CENTRE = [1750, 3120];
 
+// The median's line (Martin, 20 Nov: "move more to the centre of the road, to track with the next part of the
+// trees going up Riia"): at the Küüni crossing it moves 1.65 m out towards Kvartal, onto the line of the median
+// past the crossing (riia.js), easing back to where it was at the junction. The lanes either side move with it:
+// each offset between the Kaubamaja kerb (12.4) and the median, and between the median and the Kvartal kerb
+// (33.6), keeps its share of the width. s is metres along Kaubamaja's Riia face, offsets from its roof edge.
+export const medianShift = (s) => 1.65 * Math.max(0, Math.min(1, 1 - (s - 3) / 100));
+export function riiaOffset(s, o) {
+  const d = medianShift(s);
+  if (o <= 12.4 || o >= 33.6) return o;
+  if (o <= 17.45) return 12.4 + (o - 12.4) * (17.45 + d - 12.4) / (17.45 - 12.4);
+  if (o <= 20.95) return o + d;
+  return 33.6 - (33.6 - o) * (33.6 - 20.95 - d) / (33.6 - 20.95);
+}
+
 // before the road markings are built: Küüni round Kaubamaja's west corner is a pedestrian street, the
 // generated lane lines are left off where the red cross lies (Martin, 19 Nov)
 const KUUNI_END = -216;      // the red brick ends a few metres before Poe (roof-frame a, see redCross)
@@ -29,7 +43,13 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     // Riia: t is the map x along the face, `out` metres from the roof edge towards Kvartal
     const F = roadFrame([[S[0] - UB[0] * 20, S[1] - UB[1] * 20], [S[0] + UB[0] * 130, S[1] + UB[1] * 130]], 0);
     const x = (s) => S[0] + UB[0] * s;
-    const strip = (s0, s1, o0, o1, kind) => K.ribbon(F, x(s0), x(s1), -o0, -o1, kind, true);
+    // offsets follow the median's line (riiaOffset); long strips go in 5 m pieces so they can bend with it
+    const strip = (s0, s1, o0, o1, kind) => {
+      for (let a = s0; a < s1 - 1e-6; a += 5) {
+        const b = Math.min(s1, a + 5), m = (a + b) / 2;
+        K.ribbon(F, x(a), x(b), -riiaOffset(m, o0), -riiaOffset(m, o1), kind, true);
+      }
+    };
     strip(3, 103, 17.7, 20.7, 'lawn');                                       // the median
     strip(3, 103, 17.45, 17.7, 'concrete'); strip(3, 103, 20.7, 20.95, 'concrete');
     const dashes = (s0, s1, o) => { for (let s = s0; s < s1; s += 6) strip(s, s + 2, o - 0.06, o + 0.06, 'white'); };

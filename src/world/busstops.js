@@ -138,15 +138,24 @@ function frameGeo(style, L) {
   part(p, L, 0.06, 0.06, 0, 0.12, D / 2, style.frame);                                       // bottom rail
   part(p, L, 0.05, 0.05, 0, H - 0.08, D / 2, style.frame);                                   // top rail
   part(p, 0.05, 0.05, D, L / 2, H - 0.08, 0, style.frame);
-  // the bench along the back, on two legs
-  part(p, L * 0.55, 0.05, 0.38, L * 0.08, 0.46, D / 2 - 0.3, style.bench);
-  part(p, L * 0.55, 0.3, 0.04, L * 0.08, 0.7, D / 2 - 0.1, style.bench);
-  for (const s of [-L * 0.17, L * 0.33]) part(p, 0.05, 0.46, 0.34, s, 0.23, D / 2 - 0.3, style.frame);
   // the advert box at the end the buses come from, and the timetable's frame inside the far end
   part(p, 0.16, H - 0.25, D * 0.92, -L / 2, (H - 0.25) / 2 + 0.1, 0, style.frame);
   part(p, 0.5, 0.68, 0.03, L / 2 - 0.55, 1.45, D / 2 - 0.035, 0xd8dce2);
   const g = merge(p);
   frames.set(key, g);
+  return g;
+}
+// the bench along the back, on two legs (its own piece: it flies off when a car crashes through)
+const benches = new Map();
+function benchGeo(style, L) {
+  const key = `${STYLES.indexOf(style)}:${L}`;
+  if (benches.has(key)) return benches.get(key);
+  const p = [];
+  part(p, L * 0.55, 0.05, 0.38, L * 0.08, 0.46, D / 2 - 0.3, style.bench);
+  part(p, L * 0.55, 0.3, 0.04, L * 0.08, 0.7, D / 2 - 0.1, style.bench);
+  for (const s of [-L * 0.17, L * 0.33]) part(p, 0.05, 0.46, 0.34, s, 0.23, D / 2 - 0.3, style.frame);
+  const g = merge(p);
+  benches.set(key, g);
   return g;
 }
 function slabGeo(L) {
@@ -275,7 +284,8 @@ export function createBusStops(scene, world, opts = {}) {
       for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) y = Math.max(y, world.heightAt(...st.W(a * st.L / 2, b * D / 2)));
       st.y = y + 0.02;
       slab.add(slabGeo(st.L), st.x, st.y, st.z, st.yaw);
-      st.r = { frame: frame.add(frameGeo(st.style, st.L), st.x, st.y, st.z, st.yaw), ads: null, glass: null };
+      const f0 = frame.add(frameGeo(st.style, st.L), st.x, st.y, st.z, st.yaw)[0];
+      st.r = { frame: [f0, frame.add(benchGeo(st.style, st.L), st.x, st.y, st.z, st.yaw)[1]], ads: null, glass: null };
       const ag = adGeo(st);
       st.r.ads = ads.add(ag, st.x, st.y, st.z, st.yaw);
       ag.dispose();
@@ -339,17 +349,18 @@ export function createBusStops(scene, world, opts = {}) {
   function activate(st) {
     const group = new THREE.Group();
     const frame = new THREE.Mesh(frameGeo(st.style, st.L).clone(), frameMat);
-    frame.castShadow = !!opts.shadows; frame.receiveShadow = true;
+    const bench = new THREE.Mesh(benchGeo(st.style, st.L).clone(), frameMat);
+    for (const m of [frame, bench]) { m.castShadow = !!opts.shadows; m.receiveShadow = true; }
     const ad = new THREE.Mesh(adGeo(st), adMat);
-    for (const m of [frame, ad]) { m.position.set(st.x, st.y, st.z); m.rotation.y = st.yaw; }
+    for (const m of [frame, bench, ad]) { m.position.set(st.x, st.y, st.z); m.rotation.y = st.yaw; }
     const bend = [ad];
     let name = null;
     if (st.name) { name = nameMesh(st, st.y); bend.push(name); }
-    group.add(frame, ad);
+    group.add(frame, bench, ad);
     if (name) group.add(name);
     const P = panes(st.L).map(([s0, n0, s1, n1, y0, y1]) => ({ a: st.W(s0, n0), b: st.W(s1, n1), y0: st.y + y0, y1: st.y + y1 }));
-    st.br = breakableShelter(world, group, { box: st.box, y: st.y, H, frame, bendAlso: bend, panes: P, glass: 0xcfe6f2, opacity: 0.3 });
-    st.on = { group, frame, ad, name };
+    st.br = breakableShelter(world, group, { box: st.box, y: st.y, H, frame, bendAlso: bend, loose: [bench], panes: P, glass: 0xcfe6f2, opacity: 0.3 });
+    st.on = { group, frame, bench, ad, name };
     scene.add(group);
     show(st, false);
     active.add(st);
@@ -357,9 +368,11 @@ export function createBusStops(scene, world, opts = {}) {
 
   function deactivate(st, keepHidden = false) {
     st.br.remove();
-    const { group, frame, ad, name } = st.on;
+    const { group, frame, bench, ad, name } = st.on;
     scene.remove(group);
-    frame.geometry.dispose(); ad.geometry.dispose();
+    frame.geometry.dispose(); bench.geometry.dispose(); ad.geometry.dispose();
+    // crashed through: when this piece of the map comes back the shelter stands again, its back solid
+    if (st.br.through()) world.addSolids([shelterSolids(st.box)[0]]);
     if (name) { name.geometry.dispose(); name.material.map.dispose(); name.material.dispose(); }
     st.br = st.on = null;
     if (!keepHidden) show(st, true);

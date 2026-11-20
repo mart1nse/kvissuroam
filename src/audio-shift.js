@@ -30,8 +30,9 @@ const KICK = 0.7;          // how hard an upshift hits: its bark, thunk and chir
                            // less, in balance with the rev struggle)
 // 1st to 2nd has the biggest jump in revs by far (about a third of the redline, twice 2nd to 3rd's), and
 // its long, wide swing sounded wobbly (Martin 2026-11-19): it hits harder, and the swing is smaller,
-// faster and over sooner (yankTight in public/engine-worklet.js), so the gear snaps in
-const FIRST_KICK = 1.35, FIRST_YANK = 0.6;
+// faster and over sooner (yankTight in public/engine-worklet.js), so the gear snaps in (Martin 2026-11-20:
+// the swing 30 % smaller again, 0.6 -> 0.42)
+const FIRST_KICK = 1.35, FIRST_YANK = 0.42;
 const STAB = 0.03;         // s: the shortest a downshift's blip holds the throttle open
 const ROAR_RING = 0.15;    // s: how long the blip's roar rings on as the throttle shuts
 

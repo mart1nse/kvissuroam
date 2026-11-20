@@ -8,6 +8,7 @@ const mat = (color, extra) => new THREE.MeshLambertMaterial({ color, side: THREE
 const MATS = {
   concrete: mat(0x6f6a78), rail: mat(0x8d8799), white: mat(0xd9d4dc), steel: mat(0xb9c2d6), dark: mat(0x3a3846),
   lamp: mat(0xfff2c4, { emissive: 0xffd9a0, emissiveIntensity: 1.6 }),
+  arch: mat(0x9c97a6),          // Vabadussild's arch, a touch darker than white so its coloured LEDs stand out (Martin, 20 Nov)
 };
 
 // left and right edge of station i: [xl, zl, xr, zr]
@@ -140,6 +141,8 @@ function block(out, x, y0, z, dx, dz, along, across, y1) {
 // that springs from beside the deck on the Lai side, crosses over the road at a slant and comes down on the
 // far side by the Delta building, with dark hangers fanning down to both edges of the deck.
 const VABADUS = { a: [1458.0, 2303.0], b: [1507.0, 2266.0], rise: 19, w: 1.3, h: 0.95 };
+// the arch's centre line once built, for the LED lights along its sides (vabaduslights.js)
+export const VABADUS_ARCH = { pts: null, w: VABADUS.w, h: VABADUS.h };
 function vabadusArch(d, out) {
   const { a, b, rise, w, h } = VABADUS;
   const P = d.pts, dir = [P[P.length - 1][0] - P[0][0], P[P.length - 1][1] - P[0][1]], dl = Math.hypot(dir[0], dir[1]);
@@ -156,7 +159,8 @@ function vabadusArch(d, out) {
     const s = Math.sin(Math.PI * u), y = ya + (yb - ya) * u + (rise + 0.6) * Math.pow(s, 0.8);
     pts.push([x, y, z]);
   }
-  for (let k = 0; k < n; k++) bar(out.white, pts[k], pts[k + 1], w, h);
+  for (let k = 0; k < n; k++) bar(out.arch, pts[k], pts[k + 1], w, h);
+  VABADUS_ARCH.pts = pts;
   // concrete feet
   for (const [x, z, y] of [[a[0], a[1], ya], [b[0], b[1], yb]]) block(out.concrete, x, y - 3, z, ux, uz, 1.4, 1.4, y + 0.6);
   // hangers: from the arch down to the edge of the deck at the same station on both sides
@@ -249,7 +253,7 @@ function structure(world, d, out) {
 // Slab, portal beams, railings and structure of the decks inside one sector: a group, or null.
 export function buildDeckBodies(world, s) {
   const S = world.meta.sector.size;
-  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [] };
+  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [], arch: [] };
   const body = out.concrete, e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
     if (d.own) continue;

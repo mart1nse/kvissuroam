@@ -10,6 +10,7 @@ const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (
 const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
+const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinning rear wheels under throttle (a figure eight)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
@@ -626,7 +627,13 @@ function substep(car, input, world, dt) {
   }
   if (steerIn === 0 || Math.sign(steerIn) !== car.csDir) car.csHold = 0;
   else car.csHold = Math.max(over, car.csHold - dt * 1.5);
-  const ease = 1 - CATCH * car.csHold;
+  // (but not while the driver is flicking the car from one side to the other on spinning rear wheels at
+  // low speed: in a figure eight the swing through the middle is wanted, and unwinding the wheel there cut
+  // the slide for a moment before it carried on, Martin 2026-11-21. Above about 45 km/h, or off the
+  // throttle, the help is as before.)
+  const flick = (throttle > 0.5 ? Math.min(1, Math.max(0, (car.slipVR - 2) / 3)) : 0) * Math.min(1, Math.max(0, (CATCH_FLICK_KMH + 5 - speed * 3.6) / 10));
+  const catchK = car.csHold * (1 - flick);
+  const ease = 1 - CATCH * catchK;
   // As soon as the slide shows signs of coming back (the rear slip angle shrinking), the steering's
   // own share of the opposite lock backs off, so a recovering car is not flung the other way: the
   // driver catches the exit by winding the wheel back and adding throttle.
@@ -635,7 +642,7 @@ function substep(car, input, world, dt) {
   const auto = 1 - RECOVER * car.recov;
   let target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow * auto) * ease));
   // (unwinding is quick: in a slide the wheel spins back through your hands)
-  let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * car.csHold);
+  let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * catchK);
   if (input.steerDirect) {
     // A steering wheel: the front wheels follow its angle (about 13:1 over a wheel calibrated stop to
     // stop), with a little of the slide's caster since the wheel cannot push back, and kept within a

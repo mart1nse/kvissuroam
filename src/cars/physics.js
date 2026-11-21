@@ -366,8 +366,13 @@ function substep(car, input, world, dt) {
   // again reins it back in. Above 30 km/h both pedals are just braking with the throttle open.
   // (a bus has a sixth of a car's power per tonne: it just strains against its brakes)
   const kmh = Math.abs(car.vx) * 3.6;
-  const burn = s.drive === 'rwd' && up > 0 && down > 0 && car.vx > -0.6 && kmh < 30;
+  // (a car swung round in a slide can be moving backwards for a moment, and that is still the same burnout:
+  // only a car already in reverse, backing up, treats both pedals as reverse and brake; Martin 2026-11-21)
+  const burn = s.drive === 'rwd' && up > 0 && down > 0 && (car.vx > -0.6 || !car.reversing) && kmh < 30;
   if (burn && car.reversing) car.reversing = false;
+  // (after a burnout the brake held on its own keeps holding until it is let go: reverse goes in only on a
+  // fresh press, so lifting off the throttle, or a key that drops out for a moment, never selects R)
+  if (burn) car.burnHold = true; else if (!(down > 0)) car.burnHold = false;
   car.burn = burn && (s.ref?.powerKw ?? 100) / s.mass >= 0.03 ? Math.min(1, (30 - kmh) / 10) : 0;
   car.burnT = burn ? (car.burnT || 0) + dt : 0;
   // (from a standstill the brake pedal alone holds the car for REV_WAIT before reverse goes in, as an
@@ -377,7 +382,7 @@ function substep(car, input, world, dt) {
     throttle = up;
     if (down > 0) {
       if (car.vx > 0.6 || burn) brake = down;
-      else if (up === 0) { if (car.revWait > REV_WAIT || s.drive !== 'rwd') car.reversing = true; else brake = down; }
+      else if (up === 0) { if (!car.burnHold && (car.revWait > REV_WAIT || s.drive !== 'rwd')) car.reversing = true; else brake = down; }
     }
   }
   if (car.reversing) {
@@ -1093,7 +1098,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

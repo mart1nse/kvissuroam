@@ -220,7 +220,7 @@ export function createDecor(track, world) {
   }
 
   // start/finish: chequered band across the road and a glowing gantry over it
-  const st = { x: P[0][0], z: P[0][1], t: tan[0], hw: HW[0], built: false };
+  const st = { x: P[0][0], z: P[0][1], t: tan[0], hw: HW[0], built: false, halo: null, haloOn: false };
   function buildStart() {
     st.built = true;
     const yaw = Math.atan2(st.t[0], st.t[1]);               // local +z along the direction of travel
@@ -245,6 +245,23 @@ export function createDecor(track, world) {
       post.position.set(px, world.topAt(px, pz, 0) + H / 2, pz);
       fixed.add(post);
     }
+    // the finish halo (online race, Martin 2026-11-21): a glowing frame from the road up to the
+    // banner, shown while a race is on its way to the finish; one small texture, one plane
+    const ht = canvasTex(128, 64, (g, w, h) => {
+      const f = g.createLinearGradient(0, h, 0, 0);
+      f.addColorStop(0, 'rgba(47,243,255,0.55)'); f.addColorStop(0.55, 'rgba(47,243,255,0.22)'); f.addColorStop(1, 'rgba(255,43,214,0.18)');
+      g.fillStyle = f; g.fillRect(0, 0, w, h);
+      g.shadowColor = '#2ff3ff'; g.shadowBlur = 8; g.strokeStyle = '#2ff3ff'; g.lineWidth = 6;
+      g.strokeRect(4, 4, w - 8, h - 8);
+    });
+    st.halo = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.6, H), new THREE.MeshBasicMaterial({
+      map: ht, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
+    }));
+    st.halo.rotation.y = yaw;
+    st.halo.position.set(st.x, y0 + H / 2, st.z);
+    st.halo.renderOrder = 4;
+    st.halo.visible = st.haloOn;
+    fixed.add(st.halo);
     const bt = bannerTex();
     for (const back of [0, 1]) {
       const b = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.6, (width + 0.6) / 8), new THREE.MeshBasicMaterial({ map: bt, transparent: true, depthWrite: false, fog: true }));
@@ -268,6 +285,8 @@ export function createDecor(track, world) {
       }
       const pulse = 0.75 + 0.25 * Math.sin(time * 3);
       matR.opacity = matL.opacity = pulse;
+      if (st.halo) { st.halo.visible = st.haloOn; if (st.haloOn) st.halo.material.opacity = 0.75 + 0.25 * Math.sin(time * 5); }
     },
+    finishHalo(on) { st.haloOn = !!on; },
   };
 }

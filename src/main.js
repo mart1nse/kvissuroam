@@ -638,6 +638,7 @@ async function boot() {
   raceMode = createRaceMode({
     mp, track: race.track, cars: CARS, isTouch, toast: (t, ms) => hud.toast(t, ms), chime: (k) => audio.chime?.(k),
     place: (pose) => place(pose), isDriving: () => mode === 'drive',
+    halo: (on) => race.finishHalo(on),
   });
   const trackPath = (ctx) => {
     ctx.beginPath();

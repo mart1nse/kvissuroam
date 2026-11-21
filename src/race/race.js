@@ -389,6 +389,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     // back to the last spot (R): a short hop, the lap keeps running
     hopped(x, z) { if (st.prev) st.prev = { x, z }; },
     refreshBest() { lastBestKey = ''; },
+    // the glowing frame at the finish during an online race (racemode.js)
+    finishHalo(on) { decor.finishHalo(on); },
     // car: physics state; carId / carShort: which car is driving; inp: what is driving it
     // ('kb' keyboard, 'pad' gamepad, 'wheel', 'touch' phone or tablet)
     update(car, carId, carShort, inp = 'kb') {

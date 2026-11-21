@@ -691,7 +691,7 @@ body.touch #ctlbtn { display: none; }
 #rlist.live .pos .dot { font-size: .45em; vertical-align: .35em; color: #ff2a2a; text-shadow: 0 0 8px #ff2a2a; }
 #rlist.live .rt { font-weight: 800; color: var(--cyan); }
 #rlist.live td.n { max-width: 8.5em; }
-#rlist .hd button.ask { width: auto; padding: 0 .9em; border-radius: 99px; background: #e0182d; font: 400 .95em 'Russo One', var(--font); letter-spacing: .06em; white-space: nowrap; }
+#rlist .hd button.ask { width: auto; padding: 0 .9em; border-radius: 99px; background: rgba(255, 255, 255, .14); color: rgba(255, 255, 255, .9); font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; white-space: nowrap; }
 #rcount { left: 0; right: 0; top: 20%; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 #rcount .big { display: flex; align-items: baseline; gap: .4em; }
 #rcount .t1 { font: 400 clamp(16px, 1.6vw, 26px) 'Russo One', var(--font); letter-spacing: .25em; color: var(--sun); text-shadow: 2px 2px 0 var(--hot); }
@@ -715,6 +715,18 @@ body.touch #ctlbtn { display: none; }
 #rlights .lamps i.on { background: radial-gradient(circle at 40% 35%, #ffd0d0, #ff2a2a 45%, #8a0000); box-shadow: 0 0 18px #ff2a2a, 0 0 40px rgba(255, 42, 42, .55); }
 #rlights .cap { font: 400 1.1em 'Russo One', var(--font); letter-spacing: .2em; color: var(--sun); }
 #rlights.go .cap { color: #7dff5a; font-size: 2em; }
+/* the finish splash */
+#rsplash { left: 0; right: 0; top: 24%; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: .1em; text-align: center; pointer-events: none;
+  font-family: 'Russo One', var(--font); font-size: clamp(14px, 1.5vw, 26px); }
+#rsplash > * { padding: 0 .6em; }
+#rsplash .k { letter-spacing: .28em; color: var(--sun); text-shadow: 2px 2px 0 var(--hot); }
+#rsplash .p { font-size: 6.5em; line-height: .95; color: #fff; text-shadow: .05em .05em 0 var(--hot), 0 0 .25em rgba(255, 43, 214, .8); }
+#rsplash .t { font-size: 1.6em; color: var(--cyan); text-shadow: 2px 2px 0 var(--ink), 0 0 10px rgba(47, 243, 255, .6); }
+#rsplash .t em { font-style: normal; color: #7dff5a; margin-left: .4em; }
+#rsplash.go { animation: rsplash 4.8s ease-out both; }
+@keyframes rsplash { 0% { opacity: 0; transform: scale(1.6); } 8% { opacity: 1; transform: scale(.96); } 13% { transform: scale(1); } 82% { opacity: 1; } 100% { opacity: 0; } }
+body.touch #rsplash { top: 22%; font-size: 12px; }
+body.racesplash #lapsplit { visibility: hidden; }
 #rlights .sub { font-size: max(9.5px, .45em); font-weight: 700; letter-spacing: .1em; opacity: .85; }
 body.touch #racebox { left: auto; right: calc(50% + clamp(52px, 15.5vh, 75px) + 8px); top: max(5px, env(safe-area-inset-top)); gap: 4px; align-items: center; }
 body.touch #rbtn { width: clamp(77px, 10.4vw, 104px); height: clamp(35px, 9.6vh, 45px); white-space: normal; font-size: clamp(13px, 1.9vw, 19px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }

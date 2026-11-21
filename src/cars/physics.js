@@ -33,6 +33,8 @@ const BURN_HEAT_T = 0.6, BURN_COOL_T = 0.4;   // ...how fast it heats and cools 
 const BURN_SLIDE_V = 0.05;       // locked front tyres stick below this speed (m/s)
 const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 9;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
 const BURN_STRAIGHT_KMH = 2, BURN_STRAIGHT_T = 0.4;   // ...the slow squeeze ending this soon after the car slides sideways slower than 1 + this km/h
+const BURN_SETTLE_V = 1.2, BURN_SETTLE_T = 3;   // ...and the last of the slide fading out below this sideways speed (m/s), for this long after (s)
+const BURN_SETTLE_DRAG = 0.9;    // ...where the walking-pace sideways damping is eased by this share
 const BURN_SLIDE_HOLD = 1.0;     // the donut keeper lets go of a slide only as the brake reaches this (Martin 2026-11-21: slide on twice as long)
 const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
 const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
@@ -412,6 +414,15 @@ function substep(car, input, world, dt) {
     car.pedalB = Math.min(1, car.pedalB + (1 - car.pedalB0) * dt / (BURN_BITE_T + BURN_SLIDE_T * car.pedalV));
   }
   if (car.burn > 0 && down > 0) brake *= car.pedalB;
+  // (the last of a slide dies away gradually: while a burnout that began sliding still slides, and for
+  // BURN_SETTLE_T after, the tyres hold the car sideways ever more softly the slower it slides sideways, so
+  // the sideways drift and the turning fade out over a second or two instead of stopping dead, and on a
+  // leaning road the tail can carry on drifting downhill for a long while; the walking-pace damping of
+  // sideways motion, which made the end snap straight in a quarter second, is mostly off then too;
+  // Martin 2026-11-21)
+  if (!(down > 0) || !(car.burn > 0)) car.slideMem = 0;
+  else if (car.pedalT === dt) car.slideMem = side;
+  else if (!(car.pedalV > 0) || car.pedalB >= 1) car.slideMem = Math.max(0, car.slideMem - dt / BURN_SETTLE_T);
   car.throttle = throttle; car.brake = brake;
 
   // ---- ground under the wheels
@@ -756,7 +767,8 @@ function substep(car, input, world, dt) {
     car.rubF = rub(car.skidF, car.slipVF, vLatF, false); car.rubR = rub(car.skidR, car.slipVR, vLatR, hb);
   } else car.skidF = car.skidR = car.rubF = car.rubR = 0;
   let fyF = fySpinF !== null ? fySpinF : -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
-  const fyR = fySpinR !== null ? fySpinR : -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
+  const settle = car.slideMem > 0 ? (v) => 1 - car.slideMem * (1 - Math.min(1, Math.abs(v) / BURN_SETTLE_V)) : null;
+  const fyR = fySpinR !== null ? fySpinR * (settle ? settle(vLatR) : 1) : -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
   // A burnout's front wheels, braked past their grip, are locked: they no longer steer, they just slide,
   // pushing back against whichever way the nose is moving. So the brake going on mid donut stops the nose
   // while the car carries on sliding and swinging round it, and the spin dies away over a second or two
@@ -767,7 +779,7 @@ function substep(car, input, world, dt) {
     const ux = car.vx, uy = car.vy + car.a * car.yawRate, un = Math.max(Math.hypot(ux, uy), BURN_SLIDE_V);
     const bx = -capF * ux / un, by = -capF * uy / un;
     fxF += (bx * cd + by * sd - fxF) * lockF;
-    fyF += (by * cd - bx * sd - fyF) * lockF;
+    fyF += ((by * cd - bx * sd) * (settle ? settle(uy * cd - ux * sd) : 1) - fyF) * lockF;
   }
 
   // ---- resistances and slope
@@ -894,7 +906,7 @@ function substep(car, input, world, dt) {
     car.vx *= Math.exp(-dt * 8); car.vy *= Math.exp(-dt * 12); car.yawRate *= Math.exp(-dt * 12);
     if (Math.abs(car.vx) < 0.02) { car.vx = 0; car.vy = 0; car.yawRate = 0; }
   }
-  if (speed < 1.5 && load > 0.2) { car.vy *= Math.exp(-dt * 6); }
+  if (speed < 1.5 && load > 0.2) { car.vy *= Math.exp(-dt * 6 * (1 - (car.slideMem || 0) * BURN_SETTLE_DRAG)); }
 
   // ---- integrate pose
   let wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;

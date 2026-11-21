@@ -41,6 +41,7 @@ import { TURU2_CARS } from './turu2.js';
 import { TURU4_CARS } from './turu4.js';
 import { RIIA2_CARS } from './riia2.js';
 import { KALURI_CARS } from './kaluri.js';
+import { still, stir } from '../still.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -324,6 +325,7 @@ export function createParked(scene, world, opts = {}) {
   try { saved = JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { /* none */ }
   const group = new THREE.Group();
   group.name = 'parked';
+  still(group);                     // a parked car stands until it is hit: setPose says when one has moved (src/still.js)
   scene.add(group);
 
   // models are built one at a time, with a pause between, so that no frame waits long (on a phone a
@@ -405,6 +407,7 @@ export function createParked(scene, world, opts = {}) {
     b.g.quaternion.copy(qTilt).multiply(qYaw);
     b.y = (fl + fr + rl + rr) / 4;
     b.g.position.set(b.x, b.y + b.lift, b.z);
+    stir(b.g);
   }
 
   function spawn(s, T) {

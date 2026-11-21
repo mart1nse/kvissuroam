@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { stats } from '../stats.js';
 import { greyBack } from './signback.js';
+import { jobs } from '../jobs.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 21;
@@ -170,15 +171,19 @@ export function createProps(world, opts = {}) {
   const red = [1, 0.16, 0.2], green = [0.2, 1, 0.55], amber = [1, 0.7, 0.2];
   const lamp = box(0.2, 0.2, 0.06, 0, 0, 0, 0xffffff);
 
-  function build(sector) {
+  // (in steps: a square of the centre has a few hundred posts, lamps and signs, 20 ms of this on a fast
+  // processor and 100 on an old one. Null when the square was unloaded meanwhile.)
+  function* buildSteps(sector) {
     const a = data.sectors[`${sector.sx}_${sector.sz}`];
     if (!a) return null;
+    const H = sector.H;
     const solid = new Batch(), glow = new Batch(), pool = new Batch(), sign = new Batch(), paint = new Batch();
     const entries = [], rest = [];
     const mark = () => [solid.pos.length / 3, glow.pos.length / 3, pool.pos.length / 3, sign.pos.length / 3];
     const S = world.meta.sector.size;
     const hAt = (x, z) => world.topAt(Math.min(Math.max(x, sector.x0 + 0.01), sector.x0 + S - 0.01), Math.min(Math.max(z, sector.z0 + 0.01), sector.z0 + S - 0.01));
     for (let i = 0; i < a.length; i += data.stride) {
+      if (i % (data.stride * 16) === 0 && i && jobs.late()) { yield; if (sector.state !== 'ready' || sector.H !== H) return null; }
       const kind = a[i], x = a[i + 1], z = a[i + 2], yaw = a[i + 3] * Math.PI / 180, extra = a[i + 4];
       // local +z points along the compass bearing "yaw" (0 = north = -z in the world)
       const cs = -Math.cos(yaw), sn = Math.sin(yaw);
@@ -225,6 +230,7 @@ export function createProps(world, opts = {}) {
       }
       entries.push({ id, kind, x, y, z, cs, sn, r0: m0, r1: mark(), gone: false });
     }
+    if (jobs.late(3)) { yield; if (sector.state !== 'ready' || sector.H !== H) return null; }
     const group = new THREE.Group();
     const meshes = [solid.mesh(solidMat), glow.mesh(glowMat), pool.mesh(poolMat, true), sign.mesh(signMat, true), paint.mesh(paintMat)];
     meshes.forEach((m, k) => {
@@ -611,7 +617,7 @@ export function createProps(world, opts = {}) {
 
   // attach(sector, add) calls add(group) once the sector's props exist (now, or when the data arrives)
   const attach = (sector, add) => {
-    const run = () => { if (sector.state === 'ready') { const g = build(sector); if (g) add(g); } };
+    const run = () => { if (sector.state === 'ready') jobs.add(function* () { const g = yield* buildSteps(sector); if (g) add(g); }, 'props'); };
     if (data) run(); else waiting.push(run);
   };
   attach.update = update;

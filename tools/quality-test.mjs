@@ -1,6 +1,6 @@
 // Drives the graphics governor (src/quality.js) with made-up frame times and checks it settles
 // without flicker: node tools/quality-test.mjs
-import { createGovernor, deviceLadder, LADDER } from '../src/quality.js';
+import { createGovernor, createQuality, deviceLadder, LADDER } from '../src/quality.js';
 
 let failed = 0;
 const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
@@ -100,6 +100,31 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
 {
   const { g, moves } = run(N, N - 1, () => 16.67, 900, 0.3, (l) => 18 * 1.25 ** (l - (N - 1)));
   check(g.level === N - 2 && moves.length <= 3, `card too slow for the top settles one down (rung ${g.level}, ${moves.length} moves)`);
+}
+
+// 12. the saved levels of a visit are there on every later visit, also the ones kept under the keys of
+// before the extra low rung. (They were read from the old key once and never written under the new one:
+// from the second visit on a phone had forgotten the level it must stay under after running out of
+// memory, and an iPhone 13 reloaded itself drive after drive, 21 Nov 2026.)
+{
+  const mem = new Map();
+  globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+  const caps = { dpr: 1.5, shadow: 1024, trees: 70, load: 520 }, id = `${caps.dpr}/${caps.shadow}/${caps.trees}/${caps.load}`;
+  const hooks = () => ({ renderer: { getPixelRatio: () => 1, setPixelRatio() {}, shadowMap: {} }, sun: { shadow: { mapSize: { x: 0, set() {} }, map: null } }, quality: {}, setTrees() {} });
+  const visit = () => { const q = createQuality(hooks(), caps, {}); mem.delete('kvissuroam.alive2'); return q; };     // (closed in the ordinary way: the mark of being on screen goes)
+  mem.set('kvissuroam.gfxCap', JSON.stringify({ ladder: id, level: 2 }));
+  mem.set('kvissuroam.gfxAuto2', JSON.stringify({ ladder: id, level: 1 }));
+  const caps3 = [visit().cap, visit().cap, visit().cap];
+  check(caps3.every((c) => c === 3), `a cap saved before the extra low rung holds on every later visit, one level up (${caps3.join(', ')})`);
+  check(JSON.parse(mem.get('kvissuroam.gfxAuto3') || '{}').level === 2, `and so does the level the device held steady (${mem.get('kvissuroam.gfxAuto3')})`);
+  // a page that died on screen: one level under where it died; again within half an hour: two under
+  mem.clear();
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6 }));
+  const a = visit().cap;
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 5 }));
+  const b = visit().cap;
+  check(a === 5 && b === 3, `a crash caps one level lower, a second one soon after two (${a}, ${b})`);
+  delete globalThis.localStorage;
 }
 
 process.exit(failed ? 1 : 0);

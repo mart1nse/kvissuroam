@@ -2,8 +2,13 @@
 // split down to `maxEdge` metres so they follow the terrain, draped `lift` metres above it, wound to face
 // up, with world-space UVs of `tile` metres.
 import * as THREE from 'three';
+import { jobs } from '../jobs.js';
 
-export function drapeGeometry(world, shapes, lift, tile = 1, maxEdge = 1.5) {
+// drapeSteps: the same as a job's steps (`yield*` it inside a queued build): it stops between the shape's first
+// triangles when the step has grown long (jobs.late). Lai's island and the Emajõe bank were 25 to 35 ms in
+// one go on a fast processor, 120 to 170 on an old one.
+export function drapeGeometry(world, shapes, lift, tile = 1, maxEdge = 1.5) { return jobs.run(drapeSteps(world, shapes, lift, tile, maxEdge)); }
+export function* drapeSteps(world, shapes, lift, tile = 1, maxEdge = 1.5) {
   const pos = [], uv = [];
   // (a corner belongs to six triangles or so: its ground height is looked up once. Near the track's kerbs a
   // height costs a search along the track, and Lai's island and the Emajõe bank took 0.1 s each to lay)
@@ -36,7 +41,7 @@ export function drapeGeometry(world, shapes, lift, tile = 1, maxEdge = 1.5) {
     const V2 = (r) => r.map(([x, z]) => new THREE.Vector2(x, z));
     const outer = V2(rings[0]), holes = rings.slice(1).map(V2);
     const all = [rings[0], ...rings.slice(1)].flat();
-    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(outer, holes)) tri(all[a], all[b], all[c]);
+    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(outer, holes)) { tri(all[a], all[b], all[c]); if (jobs.late()) yield; }
   }
   if (!pos.length) return null;
   const g = new THREE.BufferGeometry();

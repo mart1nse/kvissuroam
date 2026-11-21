@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createRealTrees } from './realtrees.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { jobs } from '../jobs.js';
 
 // ---------------------------------------------------------------- buildings
 // The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
@@ -16,7 +17,9 @@ const BRICK = [
 
 // what three.js makes of each of the 256 steps of a colour channel
 const LIN = Float64Array.from({ length: 256 }, (_, v) => new THREE.Color().setRGB(v / 255, 0, 0, THREE.SRGBColorSpace).r);
-function buildingGeometry(sector, walls) {
+// (in steps: a square of the centre is 60 to 100 thousand corners, 20 ms on a fast processor and 100 on an
+// old one. The loops are plain functions over a range: inside a generator the browser runs them at half speed.)
+function* buildingGeometrySteps(sector, walls) {
   const { nv, buf, offset } = sector.buildings;
   let o = offset;
   const pq = new Int16Array(buf.slice(o, o + nv * 6)); o += nv * 6;
@@ -41,7 +44,7 @@ function buildingGeometry(sector, walls) {
   const gkey = new Float64Array(nv);
   const c = new THREE.Color();
   const groups = new Map();
-  for (let t = 0; t < nv; t += 3) {
+  const corners = (t0, t1) => { for (let t = t0; t < t1; t += 3) {
     // one building per triangle: the known building with this base whose centre is nearest
     let e = null;
     const a = known.get(base[t]);
@@ -71,7 +74,9 @@ function buildingGeometry(sector, walls) {
       if (y > g.top) g.top = y;
       if (kind[i] === 1 && y < g.eaves) g.eaves = y;       // lowest roof point
     }
-  }
+  } };
+  const PART = 6000;
+  for (let t = 0; t < nv; t += PART) { corners(t, Math.min(nv, t + PART)); if (jobs.late()) yield; }
   for (const g of groups.values()) {
     const b = g.b;
     g.brick = BRICK.some(([x, z]) => x - sector.x0 > g.x0 && x - sector.x0 < g.x1 && z - sector.z0 > g.z0 && z - sector.z0 < g.z1);     // vertices are sector-relative
@@ -83,11 +88,13 @@ function buildingGeometry(sector, walls) {
     g.seed = g.plain ? 0 : Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
   const brick = new THREE.Color().setRGB(0.55, 0.25, 0.18, THREE.SRGBColorSpace);
-  for (let i = 0; i < nv; i++) {
+  const styles = (i0, i1) => { for (let i = i0; i < i1; i++) {
     const g = groups.get(gkey[i]);
     if (g.brick && kind[i] !== 1) { col[i * 3] = brick.r; col[i * 3 + 1] = brick.g; col[i * 3 + 2] = brick.b; }
     aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
-  }
+  } };
+  if (jobs.late()) yield;
+  for (let i = 0; i < nv; i += PART * 2) { styles(i, Math.min(nv, i + PART * 2)); if (jobs.late()) yield; }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
@@ -231,16 +238,20 @@ export function createBuildings(walls) {
         totalEmissiveRadiance += kWin * kLit * vLitTint * 1.5;`);
     sh.fragmentShader = sh.fragmentShader.replace('float bHash(vec2 p)', 'vec3 vLitTint = vec3(1.0, 0.62, 0.38);\n        float bHash(vec2 p)');
   };
-  return (sector) => {
+  // build.steps(sector): the same as a job's steps (`yield*` it); the sector's own data is only read
+  function* steps(sector) {
     if (!sector.buildings.nv) return null;
-    const mesh = new THREE.Mesh(buildingGeometry(sector, walls), mat);
+    const mesh = new THREE.Mesh(yield* buildingGeometrySteps(sector, walls), mat);
     mesh.position.set(sector.x0, 0, sector.z0);      // vertices are sector-relative
     mesh.updateMatrix();
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     return mesh;
-  };
+  }
+  const build = (sector) => jobs.run(steps(sector));
+  build.steps = steps;
+  return build;
 }
 
 // ---------------------------------------------------------------- trees

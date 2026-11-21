@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import TRACK from './track.json';
 import { createDecor } from './decor.js';
 import { createLandmarks } from './landmarks.js';
+import { jobs } from '../jobs.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
@@ -239,10 +240,11 @@ function createEdges(track, world) {
     group,
     update(x, z) {
       for (const ch of chunks) {
-        if (ch.mesh || Math.hypot(ch.cx - x, ch.cz - z) > 700) continue;
+        if (ch.mesh || ch.queued || Math.hypot(ch.cx - x, ch.cz - z) > 700) continue;
         let ok = true;
         for (let i = ch.i0; i <= ch.i1 && ok; i += 4) ok = world.ready(P[i % N][0], P[i % N][1]) && world.ready(...kerbs[0][i % N]) && world.ready(...kerbs[1][i % N]);
-        if (ok) build(ch);
+        // (queued: a stretch is 4 to 7 ms on a fast processor, 20 to 36 on an old one, and came on top of whatever else that frame built)
+        if (ok) { ch.queued = true; jobs.add(() => build(ch), 'track edge'); }
       }
     },
   };

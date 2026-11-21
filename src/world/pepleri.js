@@ -591,7 +591,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 520) return;
-      if ([[1050, 3250], [1140, 3260], [1180, 3340], [1240, 3440]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'pepleri');
+      if ([[1050, 3250], [1140, 3260], [1180, 3340], [1240, 3440]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'pepleri'); }      // (the flag first: the queue may start the job some frames later, and every frame until then queued the whole place again)
     },
   };
 }

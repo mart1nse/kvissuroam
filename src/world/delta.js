@@ -146,7 +146,7 @@ export function createDelta(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 700) return;
-      if ([NORTH.pts[0], NORTH.pts[3], SOUTH.pts[4], EAST.pts[2]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'delta');
+      if ([NORTH.pts[0], NORTH.pts[3], SOUTH.pts[4], EAST.pts[2]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'delta'); }      // (the flag first: the queue may start the job some frames later, and every frame until then queued the whole place again)
     },
   };
 }

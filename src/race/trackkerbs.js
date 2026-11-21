@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import KERBS from './kerbs.json';
 import { createTrack, cellKey } from './race.js';
 import { junctionCorners, cornerAt } from './junctionkerbs.js';
+import { jobs } from '../jobs.js';
+import { still } from '../still.js';
 
 const H = KERBS.h;            // 0.09 m (Martin, 19 Nov: first 10, then 1 cm lower with a smoother edge)
 const EDGE = 0.1;             // the rounded edge of the kerb stone
@@ -51,12 +53,14 @@ export function createTrackKerbs(world, scene) {
   const CELL = 10, cells = new Set();
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (const r of runs) {
+    r.box = [Infinity, Infinity, -Infinity, -Infinity];       // where this run is, for `top` below
     for (let t = r.i0; t <= r.i1; t += 0.5) {
       const base = hwAt(t) + val(r, 'f', t), far = val(r, 'w', t) + val(r, 'b', t);
       for (let d = -0.5; d <= far + 0.5; d += 2) {
         const [x, z] = at(t, r.s * (base + d));
         for (const ox of [-3, 3]) for (const oz of [-3, 3]) cells.add(cellKey(Math.floor((x + ox) / CELL), Math.floor((z + oz) / CELL)));
         x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z);
+        r.box[0] = Math.min(r.box[0], x); r.box[1] = Math.min(r.box[1], z); r.box[2] = Math.max(r.box[2], x); r.box[3] = Math.max(r.box[3], z);
       }
     }
   }
@@ -101,10 +105,19 @@ export function createTrackKerbs(world, scene) {
         return v;
       };
       for (const r of runs) {
+        // (only the runs near this tile: every tile of every map square within the lap's outline walked the
+        // whole lap's kerbs before, half a metre at a time: 20 ms a tile on a fast processor, 100 on an old
+        // one, also for a tile with no kerb in it. And a run's middles are worked out once.)
+        if (r.box[2] < tx0 - 12 || r.box[0] > tx0 + size + 12 || r.box[3] < tz0 - 12 || r.box[1] > tz0 + size + 12) continue;
+        if (!r.mids) {
+          r.mids = [];
+          for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) r.mids.push(skip(r, t) ? null : at((t + Math.min(r.i1, t + 0.5)) / 2, r.s * (hwAt(t) + val(r, 'f', t) + 1)));
+        }
+        let n = -1;
         for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
-          if (skip(r, t)) continue;
+          const mid = r.mids[++n];
+          if (!mid) continue;
           const u = Math.min(r.i1, t + 0.5);
-          const mid = at((t + u) / 2, r.s * (hwAt(t) + val(r, 'f', t) + 1));
           if (mid[0] < tx0 - 12 || mid[0] > tx0 + size + 12 || mid[1] < tz0 - 12 || mid[1] > tz0 + size + 12) continue;
           const w = val(r, 'w', t), b = val(r, 'b', t);
           const ds = [EDGE];
@@ -144,12 +157,12 @@ export function createTrackKerbs(world, scene) {
   });
 
   // ---- the kerb stones, drawn per run once the ground there has loaded and the car is near
-  const group = new THREE.Group();
+  const group = still(new THREE.Group());       // nothing here moves once built (src/still.js)
   scene.add(group);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const cF = new THREE.Color(COL.face), cS = new THREE.Color(COL.stone);
-  function build(r) {
-    r.built = true;
+  // (queued, in steps: a run of kerb was up to 24 ms in one frame on a fast processor, 120 on an old one)
+  function* build(r) {
     const pos = [], col = [];
     const quad = (A, B, C, D, c) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(c.r, c.g, c.b); };
     const P3 = (t, d, lift) => { const [x, z] = at(t, r.s * (hwAt(t) + val(r, 'f', t) + d)); return [x, world.heightAt(x, z) + lift, z]; };
@@ -159,8 +172,9 @@ export function createTrackKerbs(world, scene) {
     // quad made this 30 ms a run, 160 ms on a slow computer.)
     const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * EDGE);
     const across = (t) => [P3(t, -0.03, -0.03), ...R.map((d) => P3(t, d, 0.012)), P3(t, STONE, 0.016)];
-    let at0 = NaN, row0 = null;
+    let at0 = NaN, row0 = null, n = 0;
     for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
+      if ((++n & 7) === 0 && jobs.late()) yield;
       if (skip(r, t)) continue;
       const u = Math.min(r.i1, t + 0.5);
       const A = at0 === t ? row0 : across(t), B = across(u);
@@ -177,8 +191,7 @@ export function createTrackKerbs(world, scene) {
   }
 
   // a corner's kerb stones, the same profile along its own line
-  function buildCorner(c) {
-    c.built = true;
+  function* buildCorner(c) {
     const pos = [], col = [];
     const quad = (A, B, C, D, k) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(k.r, k.g, k.b); };
     const P3 = (j, d, lift) => { const q = c.pts[j], n = c.vN[j], x = q[0] + n[0] * d, z = q[1] + n[1] * d; return [x, world.heightAt(x, z) + lift, z]; };
@@ -187,6 +200,7 @@ export function createTrackKerbs(world, scene) {
     const across = (j) => [P3(j, -0.03, -0.03), ...R.map((d) => P3(j, d, 0.012)), P3(j, ST, 0.016)];
     let at0 = -1, row0 = null;
     for (let j = 0; j < c.pts.length - 1; j++) {
+      if ((j & 7) === 7 && jobs.late()) yield;
       if (!c.draw[j] || !c.draw[j + 1]) continue;
       const A = at0 === j ? row0 : across(j), B = across(j + 1);
       for (let q = 0; q < 8; q++) quad(A[q], B[q], A[q + 1], B[q + 1], q < 4 ? cF : cS);
@@ -206,7 +220,7 @@ export function createTrackKerbs(world, scene) {
       for (const c of corners) {
         if (c.built) continue;
         const q = c.pts[c.nC0];
-        if (Math.hypot(q[0] - x, q[1] - z) < 300 && world.ready(...c.pts[0]) && world.ready(...c.pts[c.pts.length - 1])) buildCorner(c);
+        if (Math.hypot(q[0] - x, q[1] - z) < 300 && world.ready(...c.pts[0]) && world.ready(...c.pts[c.pts.length - 1])) { c.built = true; jobs.add(function* () { yield* buildCorner(c); }, 'track kerbs'); }
       }
       for (const r of runs) {
         if (r.built) continue;
@@ -216,7 +230,7 @@ export function createTrackKerbs(world, scene) {
           if (Math.hypot(p[0] - x, p[1] - z) < 300) near = true;
           if (!world.ready(...p)) ready = false;
         }
-        if (near && ready && world.ready(...P[r.i1])) build(r);
+        if (near && ready && world.ready(...P[r.i1])) { r.built = true; jobs.add(function* () { yield* build(r); }, 'track kerbs'); }
       }
     },
   };

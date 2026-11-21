@@ -278,7 +278,9 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
     // (pages of 1024 pixels, also where the fronts are painted at full size: a 2048 page was one picture of
     // 16 MB sent to the graphics card in one step, 50 to 480 ms of standstill in the test drives. The fronts
     // themselves are as sharp as before: a wall too big for a page gets a page of its own.)
-    const atlas = createAtlas(1024);
+    // (and of 512 on the extra low setup: a page goes to the graphics card in one step, and an old computer
+    // took 50 to 80 ms over one of 1024)
+    const atlas = createAtlas(paintScale() < 0.5 ? 512 : 1024);
     const done = [];
     let inked = 0;                      // pixels painted since the canvas was last made to paint
     const h = (x, z) => world.heightAt(x, z);

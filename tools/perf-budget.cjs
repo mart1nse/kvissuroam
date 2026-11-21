@@ -15,6 +15,10 @@
 //            Why: an iPhone 13 reloads the page when it runs out of memory (Martin's son's phone, 20 Nov
 //            2026, after one morning of new hand-painted streets; again 1-2 s after DRIVE while parked car
 //            models were being built).
+//            Then 2 km through the centre in hops, and what the phone holds at the end: a phone that
+//            starts fine and reloads some minutes into a drive (21 Nov 2026). That day's cause was the
+//            saved graphics cap of the crash guard, dropped by an update: tools/quality-test.mjs is run
+//            here too, and a failing test in it is over budget.
 //   test drive (tools/freeze-profile.cjs, once as a desktop and once as a phone): 4.5 km through the
 //            centre at 48 m/s. Judged: the stretches in which the page itself was busy without a break
 //            (how many over 0.1 s, the longest, the time in those over 50 ms), the gaps between frames
@@ -175,6 +179,26 @@ async function waitForServer(url, ms) {
     await p.evaluate(() => __game.dropAt(70, 0));                 // Kvissentali, across the city
     await p.waitForTimeout(15000);
     out.phone.jump = await take();
+    // through the centre, the part of the map with the most painted houses: 2 km of the test drive's route
+    // in hops of about 120 m, 4 s at each for the places there to build themselves and for what was left
+    // behind to be let go. What the page holds at the end is what a phone holds some minutes into a drive
+    // ("can drive for a bit, then crash", Martin's son's iPhone 13, 21 Nov 2026: the figures at DRIVE were
+    // fine that day, and nothing here looked further than the start).
+    try {
+      const R = require('./freeze-routes.cjs').centre, hops = [];
+      for (let i = 1, far = 0; i < R.length && far < 2000; i++) {
+        const [x0, z0] = R[i - 1], [x1, z1] = R[i], d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 120);
+        for (let k = 1; k <= n; k++) hops.push([x0 + (x1 - x0) * k / n, z0 + (z1 - z0) * k / n, Math.atan2(x1 - x0, -(z1 - z0))]);
+        far += d;
+      }
+      await p.evaluate(() => __perfPeak());
+      for (const [x, z, yaw] of hops) {
+        await p.evaluate(async ([x, z, yaw]) => { await __game.world.loadAround(x, z, 260); __game.place({ x, z, yaw }); }, [x, z, yaw]);
+        await p.waitForTimeout(4000);
+      }
+      out.phone.centre = await take();
+      out.phone.centreCanvases = await p.evaluate(() => __perfCanvases());
+    } catch (e) { out.phone.centre = null; console.warn('the phone pass through the centre failed:', e.message); }
     out.phone.errors = errors;
     await ctx.close();
 
@@ -214,7 +238,7 @@ async function waitForServer(url, ms) {
         // if that one is the same, the frames' game code time stands in, which the printout says)
         let r = await drive({ port: PORT, route: 'centre', touch });
         if (summarise(r).busyFrom !== 'profile') r = await drive({ port: PORT, route: 'centre', touch });
-        out.drive[who] = { ...summarise(r), errors: r.errs.slice(0, 5), slow: r.slow };
+        out.drive[who] = { ...summarise(r), errors: r.errs.slice(0, 5), slow: r.slow, doubles: r.doubles || 0 };
         out.driveReport[who] = report(r, 12).slice(3);
       } catch (e) { out.drive[who] = null; out.driveReport[who] = [`the ${who} drive failed: ${e.message}`]; }
     }
@@ -234,6 +258,18 @@ async function waitForServer(url, ms) {
     ['phone graphics card growth after 3 car changes and back to the first car', out.phone.cars && out.phone.cars.gl - out.phone.drive.gl, budget.phone.carChangeGrowthMB],
     ['phone graphics card peak during the car changes', out.phone.cars?.glPeak, budget.phone.carChangeGlPeakMB],
   ];
+  // (tools/quality-test.mjs: the level a device held and the crash guard's cap must still be there on the
+  // next visit. The iPhone 13 of 21 Nov crashed again and again because an update had dropped the saved cap.)
+  let lost = null;
+  try {
+    const t = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'quality-test.mjs')], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+    if (/^ok /m.test(t.stdout || '')) { lost = (t.stdout.match(/^FAIL.*$/gm) || []); out.levelTests = lost; lost = lost.length + (t.status && !lost.length ? 1 : 0); }
+  } catch { /* stays not measured */ }
+  checks.push(
+    ['phone total after 2 km through the centre', out.phone.centre && out.phone.centre.canvas + out.phone.centre.gl + out.phone.centre.heap, budget.phone.centreTotalMB],
+    ['phone graphics card peak through the centre', out.phone.centre?.glPeak, budget.phone.centreGlPeakMB],
+    ['graphics level tests failing (saved level, crash guard)', lost, 0],
+  );
   checks.push(
     ['lowest graphics level at the Riia and Turu junction: pieces drawn in a frame', out.lowest?.calls, budget.lowest.calls],
     ['lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands)', out.lowest?.ktris, budget.lowest.kTriangles],
@@ -247,6 +283,9 @@ async function waitForServer(url, ms) {
       [`${who} drive: gaps between frames over 0.1 s`, D?.pauses100, B.gapsOver100ms],
       [`${who} drive: game code per frame, 95th percentile (ms)`, D?.jsP95, B.jsP95Ms],
       [`${who} drive: page errors`, D ? D.errors.length : null, 0],
+      // (a place queued again while its build still waited: its `built` flag is set too late, and where the
+      // queue is slow to reach it the place is built several times over. Katoliku, Delta and Pepleri, 21 Nov 2026)
+      [`${who} drive: building work queued twice`, D ? D.doubles : null, 0],
       // shown, not judged (budget null): see the note on the software drawing process at the top
       [`${who} drive: longest gap between frames (ms), not judged`, D?.longest, null],
     );
@@ -269,6 +308,8 @@ async function waitForServer(url, ms) {
   console.log('lowest level', JSON.stringify(out.lowest));
   console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
   if (out.over.some((n) => n.startsWith('phone ') && !n.startsWith('phone drive'))) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
+  if (out.over.some((n) => n.includes('through the centre'))) console.log('biggest canvas makers after the centre:\n' + (out.phone.centreCanvases || []).join('\n'));
+  if (out.levelTests?.length) console.log(out.levelTests.join('\n'));
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });
     const d = out.phone.drive;

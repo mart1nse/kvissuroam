@@ -25,8 +25,18 @@ enough to make that happen at DRIVE.
   standing still for 0.1 to 1 s as a place built itself). A `build()` that takes more than a few
   milliseconds goes through the work queue as a generator, `jobs.add(function* () { ...; yield; ... },
   'name')` from `src/jobs.js`, with a `yield` between its parts and the `built` flag set before the
-  call (see `baeristreet.js`, `kaluri.js`). Whole car models are built in the car worker
+  call (see `baeristreet.js`, `kaluri.js`). Set the flag before `jobs.add` in every case: a place that
+  sets it inside its build is queued again each frame until the job starts and then builds itself
+  several times over (the test drives count this as "building work queued twice", limit 0). In a long
+  loop, `if (jobs.late()) yield;` stops only when the step has taken its 5 ms, so a fast device does
+  not wait a frame for nothing. Whole car models are built in the car worker
   (`buildCarInWorker`, `buildParkedInWorker`), not on the page.
+- Less work before a frame is drawn (`src/still.js`, 21 Nov: on an old laptop the page's own part of
+  drawing was 15 to 27 ms a frame). A group whose things never move is made with
+  `still(new THREE.Group())`, so their places are worked out once; to move one later set its position
+  and call `stir(it)`. See-through surfaces that show both sides are drawn in one go (flat sheets look
+  the same): a closed see-through shape that needs its far side first gets
+  `material.userData.twoPass = true`.
 - New things are let into the picture gradually by `src/warm.js` (shaders compiled and pictures sent
   ahead, unseen) when they are added inside a place's `update`, the work queue or `warm.scope(...)`.
   What must show at once (smoke, broken glass) is added outside those. Do not add big things to the

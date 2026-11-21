@@ -311,6 +311,25 @@ function showReady() {
   b.dataset.was ||= b.textContent;
   b.textContent = `GETTING READY ${Math.round(100 * Math.min(warm, WARM_FRAMES - 1) / WARM_FRAMES)}%`;
 }
+// GETTING READY while driving: the spot the car was just put on is still coming. Shown at once on a click
+// on the city map (reading that part of the map can take a second or more, and with nothing on the screen
+// a player clicks again and again: Martin's son, 21 Nov 2026), and after H, R or a map jump for as long as
+// the map under the car is not there yet or pictures of the place are on their way back to the graphics
+// card (phones: world/phonetex.js). The car can be driven meanwhile.
+const readyEl = $('#getready');
+let readyOn = 0, readyMost = 0;   // when it came up (0: not shown), and the most pictures that were waiting
+function getReady() {
+  if (!readyOn) { readyMost = 0; readyEl.textContent = 'GETTING READY'; readyEl.classList.add('show'); }
+  readyOn = performance.now();
+}
+function getReadyStep(now) {
+  const left = shrinker?.pending || 0;
+  readyMost = Math.max(readyMost, left);
+  const busy = dropping || respawning || left > 0 || !world.ready(car.x, car.z);
+  if ((!busy && now - readyOn > 600) || now - readyOn > 20000) { readyOn = 0; readyEl.classList.remove('show'); return; }
+  const text = readyMost > 3 && !dropping ? `GETTING READY ${Math.round(100 * (1 - left / readyMost))}%` : 'GETTING READY';
+  if (readyEl.textContent !== text) readyEl.textContent = text;
+}
 // (on phones the car's name sits small under the GAS and BRAKE buttons, not under the rev counter)
 if (isTouch) $('#touch .pad.right').appendChild($('#carname'));
 document.body.classList.toggle('still', still);
@@ -836,6 +855,8 @@ function openGarage() {
 
 function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
+  shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
+  if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
   wetAt = null;
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
@@ -861,6 +882,7 @@ async function goLastSpot() {
     let pick = pickFromHistory(world, history, opts);
     for (let k = 0; pick?.wait && k < 20; k++) {
       // (a spot far back along the route may be in a part of the map that is not loaded any more)
+      getReady();
       await world.loadAround(pick.wait.x, pick.wait.z, 80);
       if (!world.ready(pick.wait.x, pick.wait.z)) history.pop();
       pick = pickFromHistory(world, history, opts);
@@ -905,6 +927,7 @@ async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
   stats.count('mapjump');
+  getReady();                                      // (at once: the click is answered before the map is read)
   parked.hold(8);
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
   const ok = (p) => {
@@ -1231,6 +1254,7 @@ function frame(ts) {
   const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
   if (++rafTick % every) return;
   const t0 = performance.now();
+  if (readyOn) getReadyStep(t0);
   lag.poll();
   clock.update(ts);
   const rawDt = clock.getDelta();
@@ -1471,7 +1495,7 @@ function frame(ts) {
     tileTimer = 0.25;
     if (++shrinkTick % 4 === 0) {
       // (once a second: what the city streamed in since)
-      if (shrinker) shrinker.scan(scene, jobs.live ? 3 : Infinity);
+      if (shrinker) shrinker.scan(scene, jobs.live ? 3 : Infinity, car.x, car.z);
       else if (liteLate && mode === 'drive' && gfx.auto && lowRung()) {
         // a desktop that auto graphics has kept below full sharpness for 20 s: small pictures from now on
         lowSince ||= performance.now();
@@ -1538,6 +1562,7 @@ function frame(ts) {
     if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
     const d0 = performance.now();
+    shrinker?.wake();                              // a picture of a place the car is coming back to (phonetex.js)
     onePass(scene);                                // see-through sheets in one go (src/still.js)
     gpuTimer.begin();
     renderer.render(scene, camera);
@@ -1578,7 +1603,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

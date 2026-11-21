@@ -19,6 +19,12 @@ enough to make that happen at DRIVE.
 - Painted canvases (house fronts, signs, walls, adverts): size them with `paintScale()` from
   `src/world/paintscale.js` (0.6 on phones and weak desktops), and share atlases instead of one canvas
   per wall. A 2048x2048 canvas is 16 MB in the browser and again on the graphics card.
+- On phones the painted pictures of places the car has left behind rest (`src/world/phonetex.js`, 21 Nov:
+  a phone held 553 MB at DRIVE and over 1000 MB after 2 km through the centre). Over 650 m away the
+  card keeps only a small stand-in, and the full picture comes back from a packed copy within 420 m.
+  Nothing to do for it in new code, but do not repaint a canvas after it has been shown, and mark a
+  texture `userData.keepImage` only when its own code frees and sends it again. After the car is put
+  somewhere (`place` in main.js) GETTING READY shows while that spot's pictures and map come back.
 - Build far-away hand-made areas only when the car comes near, not at start (look at how
   `vanemuise.js` and the other `build()` functions wait to be needed).
 - Nothing heavy in one frame while somebody is driving (the freeze frames of 20 Nov: smooth, then

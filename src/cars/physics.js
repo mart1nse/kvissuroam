@@ -337,6 +337,80 @@ function nearTrunk(t, x, z) {
   return false;
 }
 
+const tmpB = [];
+// signed distance from (x, z) to a solid box { x, z, yaw, hx, hz } (local x = (cos yaw, -sin yaw))
+function boxDist(b, x, z) {
+  const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), px = x - b.x, pz = z - b.z;
+  const qx = Math.abs(px * c - pz * sn) - b.hx, qz = Math.abs(px * sn + pz * c) - b.hz;
+  return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
+}
+// is (x, z) close enough to a thin box that the distance field there is the box's?
+function nearBox(list, x, z) {
+  for (let i = 0; i < list.length; i++) if (boxDist(list[i], x, z) < 0.5) return true;
+  return false;
+}
+// does another box of the list carry on from the end of b at (ex, ez)?
+function joined(list, b, ex, ez) {
+  for (let i = 0; i < list.length; i++) if (list[i] !== b && boxDist(list[i], ex, ez) < 0.05) return true;
+  return false;
+}
+// one thin box against the car's body rectangle (half sizes hl, hw; forward f, right r): pushes the car out
+// of it with contact() when they overlap
+function boxContact(car, b, list, fx, fz, rx, rz, hl, hw, contact) {
+  const bc = Math.cos(b.yaw), bs = Math.sin(b.yaw);
+  const ux = bc, uz = -bs, vx = bs, vz = bc;                     // the box's own x and z axes
+  const dx = car.x - b.x, dz = car.z - b.z;
+  if (Math.abs(dx) > hl + hw + b.hx + b.hz || Math.abs(dz) > hl + hw + b.hx + b.hz) return;
+  // the four axes: the box's thin side, its ends, the car's sides, the car's bumpers
+  let best = Infinity, nx = 0, nz = 0, kind = 0;
+  for (let a = 0; a < 4; a++) {
+    const ax = a === 0 ? vx : a === 1 ? ux : a === 2 ? rx : fx, az = a === 0 ? vz : a === 1 ? uz : a === 2 ? rz : fz;
+    const rc = hl * Math.abs(fx * ax + fz * az) + hw * Math.abs(rx * ax + rz * az);
+    const rb = b.hx * Math.abs(ux * ax + uz * az) + b.hz * Math.abs(vx * ax + vz * az);
+    const d = dx * ax + dz * az, pen = rc + rb - Math.abs(d);
+    if (pen <= 0) return;                                          // apart along this axis: no contact
+    // (a box's end only when nothing carries on from it; the car's own axes a little less readily than the
+    // box's, so a car flat against a long barrier is pushed straight off it)
+    const sg = d >= 0 ? 1 : -1;
+    if (a === 1 && joined(list, b, b.x + ux * b.hx * sg, b.z + uz * b.hx * sg)) continue;
+    const score = a >= 2 ? pen * 1.05 + 0.005 : pen;
+    if (score < best) { best = score; nx = ax * sg; nz = az * sg; kind = a; }
+  }
+  if (best === Infinity) return;
+  // how far along n to push, and where the contact is (the middle of the deepest points)
+  let pen, px = 0, pz = 0;
+  if (kind < 2) {
+    // a box face: the car corners furthest into it
+    const bf = b.hx * Math.abs(ux * nx + uz * nz) + b.hz * Math.abs(vx * nx + vz * nz);
+    let lo = Infinity, cnt = 0;
+    for (let q = 0; q < 4; q++) {
+      const ox = fx * (q < 2 ? hl : -hl) + rx * (q % 2 ? hw : -hw), oz = fz * (q < 2 ? hl : -hl) + rz * (q % 2 ? hw : -hw);
+      const s = (dx + ox) * nx + (dz + oz) * nz;
+      if (s < lo - 0.02) { lo = s; px = ox; pz = oz; cnt = 1; }
+      else if (s < lo + 0.02) { px += ox; pz += oz; cnt++; if (s < lo) lo = s; }
+    }
+    px /= cnt; pz /= cnt;
+    pen = bf - lo;
+  } else {
+    // a car face: the box corners furthest into the car
+    const cf = hl * Math.abs(fx * nx + fz * nz) + hw * Math.abs(rx * nx + rz * nz);
+    let hi = -Infinity, cnt = 0;
+    for (let q = 0; q < 4; q++) {
+      const ox = ux * (q < 2 ? b.hx : -b.hx) + vx * (q % 2 ? b.hz : -b.hz), oz = uz * (q < 2 ? b.hx : -b.hx) + vz * (q % 2 ? b.hz : -b.hz);
+      // (along n from the car's middle; the box is on the -n side, the car's face there at -cf)
+      const s = (b.x + ox - car.x) * nx + (b.z + oz - car.z) * nz;
+      if (s > hi + 0.02) { hi = s; px = b.x + ox - car.x; pz = b.z + oz - car.z; cnt = 1; }
+      else if (s > hi - 0.02) { px += b.x + ox - car.x; pz += b.z + oz - car.z; cnt++; if (s > hi) hi = s; }
+    }
+    px /= cnt; pz /= cnt;
+    pen = hi + cf;
+    // (the contact on the car's face, not inside the car)
+    const along = px * nx + pz * nz;
+    px -= nx * (along + cf); pz -= nz * (along + cf);
+  }
+  if (pen > 0) contact(nx, nz, px, pz, pen);
+}
+
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
 // steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
@@ -1036,8 +1110,20 @@ function substep(car, input, world, dt) {
     }
   }
 
+  // thin solid boxes (guard rails, lane dividers, the walls between carriageways, the map's walls): exact
+  // boxes against the body rectangle, by separating axes. The way out is along the axis it overlaps least
+  // on, towards the side the car's middle is on, so a car part way into a thin barrier always goes back
+  // out the way it came in; the end of a box that another box carries on from (a wall in pieces) is no way
+  // out, so a car scraping along one does not catch on the joins.
+  const boxes = world.solidsNear ? world.solidsNear(car.x, car.z, Math.hypot(hl, hwid) + 0.5, tmpB) : null;
+  if (boxes && boxes.length) {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < boxes.length; k++) boxContact(car, boxes[k], boxes, fx, fz, rx, rz, hl, hwid, contact);
+    }
+  }
+
   // everything else: the obstacle distance field (buildings, walls, the map edge). Samples next
-  // to a trunk are left out, the trunk was handled above.
+  // to a trunk or a thin box are left out, those were handled above.
   let worst = 0.12, wpx = 0, wpz = 0, found = false;
   for (let k = 0; k < 10; k++) {
     // corners, side midpoints, bumper centres, quarter points
@@ -1045,6 +1131,7 @@ function substep(car, input, world, dt) {
     const ly = k < 4 ? (k % 2 ? hwid : -hwid) : k < 6 ? (k === 4 ? hwid : -hwid) : k < 8 ? 0 : (k === 8 ? hwid : -hwid);
     const ox = fx * lx + rx * ly, oz = fz * lx + rz * ly;
     if (trunks && nearTrunk(trunks, car.x + ox, car.z + oz)) continue;
+    if (boxes && boxes.length && nearBox(boxes, car.x + ox, car.z + oz)) continue;
     const d = world.sdfAt(car.x + ox, car.z + oz);
     if (d < worst) { worst = d; wpx = ox; wpz = oz; found = true; }
   }

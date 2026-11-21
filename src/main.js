@@ -1,3 +1,5 @@
+// (first: it watches every canvas the game paints, for the graphics being lost in the background)
+import { gfxLoss } from './gfxloss.js';
 import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
@@ -220,7 +222,15 @@ else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
 stats.start({ isTouch, lite, software: gpu.software });
-canvas.addEventListener('webglcontextlost', () => stats.trouble('glLost'));
+// Graphics lost in the background (Android, another app and back): the page loads again, the car where it
+// was (src/gfxloss.js). Nothing of it runs in a frame.
+gfxLoss.watch(canvas, {
+  lost: (k) => stats.trouble(k === 'webgl' ? 'glLost' : 'canvasLost'),
+  state: () => (mode === 'loading' || !car ? null
+    : { drive: mode === 'drive', pose: car.inWater || wetAt ? null : { x: car.x, z: car.z, yaw: car.yaw, y: car.y } }),
+});
+const resume = gfxLoss.resume;   // { drive, pose } when this page was loaded again for that
+if (resume) $('#loadmsg').textContent = 'The graphics were reset while you were away: back in a moment…';
 scene.environment = createEnvironment(renderer);
 scene.environmentIntensity = 0.9;
 
@@ -545,7 +555,8 @@ async function boot() {
   world.meta.start = { x: sp.x + Math.cos(sp.yaw) * 1.5, z: sp.z + Math.sin(sp.yaw) * 1.5, heading: sp.yaw };
   const s0 = world.meta.start;
   const loads = [world.loadAround(s0.x, s0.z, 200)];
-  if (!params.has('drive') && !params.has('nointro') && !still) {
+  if (resume?.pose) loads.push(world.loadAround(resume.pose.x, resume.pose.z, 200));
+  if (!params.has('drive') && !params.has('nointro') && !still && !resume) {
     intro = createIntro(world, { fixed: fixedIntro, shot: params.has('shot') ? +params.get('shot') : null });
     introFocus = intro.start();
     loads.push(world.loadAround(introFocus.x, introFocus.z, 450));
@@ -653,6 +664,7 @@ async function boot() {
     scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
   }
   setCar(carId);
+  if (resume?.pose) place(resume.pose);       // (back where the car was before the graphics were lost)
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   buildMenu();
   bar.style.width = '100%';
@@ -776,6 +788,7 @@ function startDriving() {
   }
   audio.start();
   input.enable(true);
+  if (resume?.pose && !resume.told) { resume.told = true; setTimeout(() => hud.toast('BACK WHERE YOU WERE', 2500), 700); }
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
 }
 

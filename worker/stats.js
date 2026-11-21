@@ -38,7 +38,7 @@ const MAPS = {
   gfx: [(k) => /^(1[0-5]|[0-9])$/.test(k), SEC],
   fps: [LIST('<20', '20-30', '30-45', '45-60', '60+'), SEC],
   heat: [(k) => /^-?\d{1,3},-?\d{1,3}$/.test(k), SEC],
-  laps: [LIST('start', 'finish', 'missed', 'off', 'jump', 'reset', 'quit'), N],
+  laps: [LIST('start', 'finish', 'missed', 'off', 'cut', 'jump', 'reset', 'quit'), N],
   quit: [LIST('0', '1', '2', '3', '4', '5', '6'), N],         // checkpoints passed when a lap was given up
   lapCar: [(k) => Object.hasOwn(CARS, k), N],                  // finished laps per car
   smash: [LIST('prop', 'glass'), 200],

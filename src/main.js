@@ -626,7 +626,7 @@ async function boot() {
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
-    onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'jump') raceMode?.out(k); },
+    onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k); },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);

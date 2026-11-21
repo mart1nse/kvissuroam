@@ -481,6 +481,8 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #lapsplit i { font-style: normal; font-size: clamp(15px, 2vw, 22px); font-weight: 900; }
 #lapsplit.ahead i { color: #5dff9b; text-shadow: 0 0 10px rgba(93, 255, 155, .7); }
 #lapsplit.behind i { color: #ff5a6e; text-shadow: 0 0 10px rgba(255, 90, 110, .7); }
+#lapsplit.cut span { color: #ff5a6e; }
+#lapsplit.cut b { color: #ff5a6e; font-style: normal; text-shadow: 1px 1px 0 var(--ink), 0 0 12px rgba(255, 90, 110, .8); }
 body.touch #lapsplit { top: 22%; }
 @keyframes splitin { from { opacity: 0; transform: translateX(-50%) scale(.9); } }
 

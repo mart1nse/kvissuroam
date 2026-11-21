@@ -18,7 +18,7 @@ const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (r
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
-const OUT = ['off', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
+const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
 
 // votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one
 export const needStart = (n) => (n <= 1 ? 1 : Math.max(2, Math.ceil(n / 2)));

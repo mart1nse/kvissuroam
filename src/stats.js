@@ -119,7 +119,7 @@ export const stats = {
     if (!on) return;
     inc(b.laps, k);
     if (k === 'finish' && extra) inc(b.lapCar, extra);
-    if ((k === 'off' || k === 'jump' || k === 'reset' || k === 'quit') && extra != null) inc(b.quit, String(Math.min(6, extra)));
+    if ((k === 'off' || k === 'cut' || k === 'jump' || k === 'reset' || k === 'quit') && extra != null) inc(b.quit, String(Math.min(6, extra)));
   },
   error(msg) {
     if (!on || errSeen.size >= 10) return;

@@ -17,7 +17,7 @@ const hash = (seed, id) => {
   return h;
 };
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-const OUT_TEXT = { off: 'off track', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
+const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
 
 export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo }) {
   const { P, N, s: S, length: LEN } = track;
@@ -310,7 +310,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       showSplash(`<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>${
         rec ? `<div class="k rk">NEW LAP RECORD</div><div class="p tm rtm">${fmtTime(lap.ms / 1000)}</div>` : ''}`, rec ? 5600 : 4800, rec ? 'rec' : '');
     },
-    // out of the race: kind 'off' (off the track), 'jump' (a reset), 'car', 'start', 'map'
+    // out of the race: kind 'off' (off the track), 'cut' (a short cut), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {
       const ph = phaseOf(), m = me();
       if (!m) return;

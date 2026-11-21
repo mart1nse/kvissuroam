@@ -1,12 +1,14 @@
 // Who is online, next to the minimap: "3 ONLINE" plus small notes as people join and leave.
 // Only players whose car is on the map count (Martin, 2026-11-17: the count showed people who sat in
 // the menu or had the game in a background tab). On desktop every driver is listed above the count,
-// growing upwards, so a glance tells 2 from 20.
+// growing upwards, so a glance tells 2 from 20. On phones (Martin, 2026-11-21) a short list sits under
+// the count, in the gap between the minimap and the rev counter: four names, then "+N MORE".
 // On the big map a list of everyone online; tapping a name centres the map on that car.
 import { escapeHtml } from '../race/race.js';
 
 const NOTE_MS = 6000;
 const LIST_MAX = 24;              // names listed on desktop before "+N MORE"
+const LIST_MAX_PHONE = 5;         // rows on a phone, "+N MORE" included
 
 export function createPeople({ mp, onFocus }) {
   const box = document.createElement('div');
@@ -27,6 +29,7 @@ export function createPeople({ mp, onFocus }) {
     if (p && p.x !== undefined) onFocus(p.x, p.z);
   });
   let shown = [], myCar = null;
+  const listMax = document.body.classList.contains('touch') ? LIST_MAX_PHONE : LIST_MAX;
 
   const elMe = box.querySelector('.me');
   let last = '';
@@ -41,11 +44,11 @@ export function createPeople({ mp, onFocus }) {
     elCount.classList.toggle('hidden', n === 0);
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
-    // the list of drivers (desktop only, see style.css), shown once somebody else is driving
+    // the list of drivers, shown once somebody else is driving
     if (n < 2) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
     const names = drivers.map((p) => p.name).sort((a, b) => a.localeCompare(b));
-    const more = names.length > LIST_MAX ? names.length - LIST_MAX + 1 : 0;
-    const rows = names.slice(0, more ? LIST_MAX - 1 : LIST_MAX).map((s) => `<li>${escapeHtml(s)}</li>`);
+    const more = names.length > listMax ? names.length - listMax + 1 : 0;
+    const rows = names.slice(0, more ? listMax - 1 : listMax).map((s) => `<li>${escapeHtml(s)}</li>`);
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');

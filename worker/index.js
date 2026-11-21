@@ -171,7 +171,7 @@ export class Lobby extends DurableObject {
     const out = [];
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id) out.push({ id: a.id, name: a.name, car: a.car });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car });
     }
     return out;
   }
@@ -187,7 +187,7 @@ export class Lobby extends DurableObject {
       const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
       if (Math.max(ping, a?.at || 0) > now - 80000) continue;
       try { ws.close(1001, 'stale'); } catch { /* already closed */ }
-      if (a?.id) this.broadcast({ t: 'leave', id: a.id }, ws);
+      if (a?.id && !a.ghost) this.broadcast({ t: 'leave', id: a.id }, ws);
     }
   }
 
@@ -391,7 +391,7 @@ export class Lobby extends DurableObject {
       if (r.n === MSG_MAX + 1) {
         const a = ws.deserializeAttachment();
         try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
-        if (a?.id) { this.broadcast({ t: 'leave', id: a.id }, ws); ws.serializeAttachment({ at: a.at, ip: a.ip }); }
+        if (a?.id) { if (!a.ghost) this.broadcast({ t: 'leave', id: a.id }, ws); ws.serializeAttachment({ at: a.at, ip: a.ip }); }
       }
       return;
     }
@@ -400,7 +400,10 @@ export class Lobby extends DurableObject {
     if (!m || typeof m !== 'object') return;
     let me = ws.deserializeAttachment();
 
+    // A ghost (the game's stealth mode, ?off=100) hears everything but is never heard: it is left out
+    // of the player list, its join and leave are not announced and nothing it sends is passed on.
     if (m.t === 's' && me?.id) {
+      if (me.ghost) return;
       // position: checked, then passed on
       const p = cleanPose(m.p);
       if (p) this.broadcast(`{"t":"s","id":"${me.id}","p":${JSON.stringify(p)}}`, ws);
@@ -415,10 +418,12 @@ export class Lobby extends DurableObject {
       me = ws.deserializeAttachment();
       const id = me?.id || crypto.randomUUID().slice(0, 8);
       const name = cleanName(m.name) || this.freshName();
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip };
+      // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
+      const ghost = !!m.ghost || !!me?.ghost;
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), board: this.board() }));
-      if (!me?.id) this.broadcast({ t: 'join', id, name, car: a.car }, ws);
+      if (!me?.id && !ghost) this.broadcast({ t: 'join', id, name, car: a.car }, ws);
       return;
     }
     if (!me?.id) return;
@@ -426,19 +431,19 @@ export class Lobby extends DurableObject {
       const name = cleanName(m.name);
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)
       me.name = name; me.nt = now; ws.serializeAttachment(me);
-      this.broadcast({ t: 'name', id: me.id, name }, ws);
+      if (!me.ghost) this.broadcast({ t: 'name', id: me.id, name }, ws);
     } else if (m.t === 'car') {
       const car = cleanCar(m.car);
       if (!car || car === me.car) return;
       me.car = car; ws.serializeAttachment(me);
-      this.broadcast({ t: 'car', id: me.id, car }, ws);
+      if (!me.ghost) this.broadcast({ t: 'car', id: me.id, car }, ws);
     }
   }
 
   async webSocketClose(ws) {
     const me = ws.deserializeAttachment();
     try { ws.close(); } catch { /* already closed */ }
-    if (me?.id) this.broadcast({ t: 'leave', id: me.id }, ws);
+    if (me?.id && !me.ghost) this.broadcast({ t: 'leave', id: me.id }, ws);
   }
 
   async webSocketError(ws) {

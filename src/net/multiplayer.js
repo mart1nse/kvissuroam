@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml } from '../race/race.js';
+import { STEALTH } from './stealth.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -97,7 +98,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let ping = 0;
     sock.onopen = () => {
       retry = 1; online = true;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined });
+      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined });
       ping = setInterval(() => send('ping'), 25000);
       flushLaps();
     };
@@ -246,7 +247,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   readJson(PENDING_KEY).forEach(enqueue);
   let flushing = false, retryTimer = 0;
   async function flushLaps() {
-    if (flushing) return;
+    // (in stealth not even laps from earlier sessions: a record would show the others a toast now)
+    if (flushing || STEALTH) return;
     await nameReady;
     if (!queue.length) return;
     flushing = true;
@@ -305,6 +307,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // push our car out of anyone it overlaps; boxes as oriented rectangles (separating axis test)
   function collide(car) {
     if (hotlap()) return;                                        // on a lap of our own: nobody can touch us
+    if (STEALTH) return;                                         // they cannot see us, so nobody bumps
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     for (const o of others.values()) {
       const p = o.pose;
@@ -368,7 +371,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     sendTimer -= dt;
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
-    if (active && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
+    if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       sendTimer = 1 / SEND_HZ;
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
       const r2 = (v) => Math.round(v * 100) / 100;
@@ -439,6 +442,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     collide,
     get name() { return name; },
     get online() { return online; },
+    stealth: STEALTH,
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
@@ -455,6 +459,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     submitLap(lap) {
+      if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp });
       saveQueue();
       flushLaps();

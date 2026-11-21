@@ -230,6 +230,7 @@ function takeTemplate(id, model, parts = takeParts(id, model, !!TINT[id])) {
   };
   return withMaterials(T);
 }
+function letArrayGo() { this.array = null; }
 // A model that came from the worker (src/world/parkedbake.js): everything is made already
 function workerTemplate(id, d) {
   const u = unpackParked(d);
@@ -241,6 +242,8 @@ function workerTemplate(id, d) {
     paintMat: u.paintAt >= 0 ? u.nearMats[u.paintAt] : undefined, tinted: u.tinted,
   };
   T.needNear = () => {};
+  // (the models' arrays are let go once the graphics card has them: nothing reads them after that)
+  for (const g of new Set([u.near, u.lod, u.low])) for (const a of [...Object.values(g.attributes), g.index]) a?.onUpload(letArrayGo);
   keepPacked(T);
   return withMaterials(T);
 }

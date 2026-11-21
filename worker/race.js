@@ -109,7 +109,8 @@ export class RaceDesk {
     if (s.phase !== 'on') return;
     for (const r of s.racers) if (r.ms == null && !r.out) r.out = why === 'restart' ? 'quit' : 'time';
     const results = s.racers.filter((r) => s.tGreen && now >= s.tGreen);
-    s.last = results.length ? { id: s.id, at: now, racers: results.map((r) => ({ id: r.id, name: r.name, car: r.car, ms: r.ms ?? null, out: r.out || null })) } : s.last;
+    // (a race nobody finished, e.g. cancelled by its only driver, leaves the last results as they were)
+    s.last = results.some((r) => r.ms != null) ? { id: s.id, at: now, racers: results.map((r) => ({ id: r.id, name: r.name, car: r.car, ms: r.ms ?? null, out: r.out || null })) } : s.last;
     s.phase = 'idle';
     s.racers = [];
     s.votes = {};

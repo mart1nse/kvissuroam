@@ -25,6 +25,9 @@ const DONUT_SPIN = 2.4;          // ...and pushes only while the car turns slowe
 const DONUT_PUSH_KMH = 6, DONUT_PUSH_RAMP = 12;   // ...and starts the tail round only above this speed, fully this much faster (km/h)...
 const DONUT_TURNING = 0.6;       // ...unless the car already turns faster than this (rad/s): a donut that has slowed is kept going
 const DONUT_START = 0.5, DONUT_RISE = 1;   // ...until a donut is under way, its push is this much gentler and rises at most this much a second
+const DONUT_BOG_KMH = 5, DONUT_BOG_PUSH = 0.5, DONUT_BOG_RISE = 0.8, DONUT_BOG_T = 1.4;   // ...one that bogs below this pace restarts this gently, for this long after (s)...
+const DONUT_BOG_YAW = 0.8;        // ...or turning slower than this (rad/s)
+const DONUT_BOG_FROM = 18;       // ...when the donut was begun from a run at more than this (km/h)
 const DONUT_SETTLE = 0.15;       // ...a donut being under way once the tail has been out in its band this long, the same way round (s)
 const KICK_A = 2.2, KICK_BAND = 1.0, KICK_TAU = 0.04;   // ...and it eases off while the car already swings its way faster than KICK_A, gone at KICK_A + KICK_BAND (rad/s2)
 const DONUT_EASE = 4;            // ...its moment changing at most this much a second (share of DONUT)
@@ -40,6 +43,7 @@ const BURN_SLIDE_V = 0.05;       // locked front tyres stick below this speed (m
 const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 9;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
 const BURN_STRAIGHT_KMH = 2, BURN_STRAIGHT_T = 0.4;   // ...the slow squeeze ending this soon after the car slides sideways slower than 1 + this km/h
 const BURN_SETTLE_V = 1.2, BURN_SETTLE_T = 3;   // ...and the last of the slide fading out below this sideways speed (m/s), for this long after (s)
+const SPIN_CARRY = 0.9;          // share of the walking-pace sideways damper taken off while the rear wheels spin under throttle
 const BURN_SETTLE_DRAG = 0.9;    // ...where the walking-pace sideways damping is eased by this share
 const BURN_SLIDE_HOLD = 1.0;     // the donut keeper lets go of a slide only as the brake reaches this (Martin 2026-11-21: slide on twice as long)
 const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
@@ -859,8 +863,10 @@ function substep(car, input, world, dt) {
   // pushing back against whichever way the nose is moving. So the brake going on mid donut stops the nose
   // while the car carries on sliding and swinging round it, and the spin dies away over a second or two
   // instead of the locked wheels, still pointing into the turn, snapping it straight (Martin 2026-11-21).
-  // (locked once the brake and the cornering together ask more than the tyres have)
-  const lockF = !drivenF && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) : 0;
+  // (locked once the brake and the cornering together ask more than the tyres have, and only as far as the
+  // brake itself has squeezed on: braked at a donut's quickest moment, the wheels' cornering load alone locked
+  // them at the first touch, the nose stopped dead and the slide died in a second instead of fading)
+  const lockF = !drivenF && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) * Math.min(1, Math.abs(brakeF) / capF) : 0;
   if (lockF > 0) {
     const ux = car.vx, uy = car.vy + car.a * car.yawRate, un = Math.max(Math.hypot(ux, uy), BURN_SLIDE_V);
     const bx = -capF * ux / un, by = -capF * uy / un;
@@ -900,7 +906,7 @@ function substep(car, input, world, dt) {
   const weakCar = (s.ref?.powerKw ?? 100) / s.mass < 0.03;
   const pushGate = weakCar || (car.slideMem > 0 && brake > 0) ? 1 : Math.min(1, Math.max(0, (speed * 3.6 - DONUT_PUSH_KMH) / DONUT_PUSH_RAMP));
   let want = 0, rise = DONUT_EASE;
-  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.inDonut = false; car.bandT = 0; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.inDonut = false; car.bandT = 0; car.donutVmax = 0; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
   else {
     car.donutT = (car.donutT || 0) + dt;
     const turn = Math.sign(steerIn);
@@ -947,6 +953,13 @@ function substep(car, input, world, dt) {
     if (ang > lo && (car.bandT = (car.bandT || 0) + dt) > DONUT_SETTLE) car.inDonut = true;
     if (car.burn > 0 && brake > 0 && speed < 1) car.inDonut = false;
     if (!car.inDonut && !weakCar) rise = DONUT_RISE;
+    // (a donut begun from a run that has bogged down to a crawl or all but stopped turning, as the first flick's sideways
+    // run has just died away, gets going again softly: its push is gentler and builds up slowly, and stays
+    // so for a moment after the car picks up, so it is not flicked round again. Martin 2026-11-21: a brief
+    // stop after the first flick, then a quicker flick)
+    car.donutVmax = Math.max(car.donutVmax || 0, speed * 3.6);
+    const bog = car.bog = car.inDonut && !weakCar && car.donutVmax > DONUT_BOG_FROM ? Math.max(Math.min(1, Math.max(0, (DONUT_BOG_KMH - speed * 3.6) / 3, (DONUT_BOG_YAW - car.yawRate * turn) / 0.3)), (car.bog || 0) - dt / DONUT_BOG_T) : 0;
+    if (bog > 0) rise = DONUT_EASE + (DONUT_BOG_RISE - DONUT_EASE) * bog;
     if (w > 0) {
       let err = 0;
       // (only a true donut, near full lock at low speed, is pushed round; a
@@ -957,7 +970,7 @@ function substep(car, input, world, dt) {
         // (loose ground lets go more easily, so there it waits a touch longer)
         const wait = DONUT_WAIT + (surfR === 1 ? 0 : 0.2);
         const build = Math.min(1, Math.max(0, (car.donutT - wait) / 1.0));
-        err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck) * (car.inDonut || weakCar ? 1 : DONUT_START);
+        err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck) * (car.inDonut || weakCar ? 1 - (1 - DONUT_BOG_PUSH) * bog : DONUT_START);
       }
       else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
       // The wander belongs to a donut, so it fades out above donut pace (27..36 km/h). And the hold never
@@ -1018,7 +1031,13 @@ function substep(car, input, world, dt) {
     car.vx *= Math.exp(-dt * 8); car.vy *= Math.exp(-dt * 12); car.yawRate *= Math.exp(-dt * 12);
     if (Math.abs(car.vx) < 0.02) { car.vx = 0; car.vy = 0; car.yawRate = 0; }
   }
-  if (speed < 1.5 && load > 0.2) { car.vy *= Math.exp(-dt * 6 * (1 - (car.slideMem || 0) * BURN_SETTLE_DRAG)); }
+  if (speed < 1.5 && load > 0.2) {
+    // (not while the rear wheels spin under throttle: a slide that has swung the car round carries on
+    // sideways at a crawl with a little momentum and runs into the drive, rather than stopping dead for a
+    // moment first, Martin 2026-11-21)
+    const carry = throttle > 0.5 && !(brake > 0) ? Math.min(1, Math.max(0, (car.slipVR - 2) / 3)) * SPIN_CARRY : 0;
+    car.vy *= Math.exp(-dt * 6 * (1 - Math.max((car.slideMem || 0) * BURN_SETTLE_DRAG, carry)));
+  }
 
   // ---- integrate pose
   let wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
@@ -1242,7 +1261,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

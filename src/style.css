@@ -224,7 +224,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 body:not(.touch) .touch-only { display: none; }
 
 /* ---- touch pedals */
-#touch { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 6; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+#touch * { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
 .pad { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: clamp(10px, 2vw, 20px); pointer-events: auto; }
 .pad.left { left: max(18px, env(safe-area-inset-left)); }
 .pad.right { right: max(18px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px)); align-items: flex-end; }

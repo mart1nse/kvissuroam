@@ -130,6 +130,8 @@ function bridgeCells(CK) {
     P.r(0, 0, ww, RB.clear, '#93958f'); P.weather(0, 0, ww, RB.clear, 0.6, 7);
     for (let x = 0; x < ww; x += 3.9) P.r(x, 0, x + 0.05, RB.clear, '#7d7f7b');
     P.r(0, 0, ww, 0.35, '#6f716d'); P.r(0, RB.clear - 0.2, ww, RB.clear, '#7a7c78');
+    // small square vents high up in the wall ("43 Riia")
+    for (let x = 4.6; x < ww - 2; x += 7.8) { P.r(x, 2.7, x + 0.7, 3.4, '#b2b4b0'); P.r(x + 0.08, 2.78, x + 0.62, 3.32, '#3a3c3e'); }
   }, 14);
   // the pilasters at the corners: a deep square panel
   CK.cell('rbP', 3.8, 0, RB.top, '#9d9f9b', (P, ww) => {
@@ -175,6 +177,18 @@ function mast(p, base, y0, H = 52) {
   p.add(new THREE.CylinderGeometry(0.45, 0.45, 1.6, 10), 0xe8e6e0, base[0] - 0.4, y0 + H - 6, base[1] + 0.3);
 }
 
+// road paint (Street View "42 Riia" and "43 Riia"): the map puts zebra crossings just before the railway bridge and
+// under it; there are none, the paths cross on the cycle bridge and through the tunnels
+export function riia3Clear(data) {
+  const out = [], a = data.sectors['2_7'] || [];
+  for (let k = 0; k < a.length; k += data.stride) {
+    if (a[k] !== 7) continue;
+    const [s, v] = RIIA2.sv(a[k + 1], a[k + 2]);
+    if (s > 560 && s < 600 && Math.abs(v) < 12) out.push(`2_7:${k / data.stride}`);
+  }
+  return out;
+}
+
 export function createRiia3(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
@@ -214,6 +228,9 @@ export function createRiia3(scene, world, { shadows = true } = {}) {
       const sm = (RB.s0 + RB.s1) / 2, ls = RB.s1 - RB.s0;
       A.box(RIIA2, sm, 0, ls - 0.1, RB.v * 2 - 0.1, RB.clear, RB.top - 0.02, grey, gy);           // the deck
       A.box(RIIA2, sm, 0, ls, RB.v * 2, RB.top - 0.02, RB.top + 0.25, 0x6c6863, gy);              // ballast on it
+      // the ribbed soffit ("43 Riia"): cross beams every 1.65 m between the abutments, a deeper beam over each wall
+      for (let s = RB.s0 + 0.9; s < RB.s1 - 0.5; s += 1.65) A.box(RIIA2, s, 0, 0.32, RB.wall * 2, RB.clear - 0.34, RB.clear + 0.01, 0x8c8e8a, gy);
+      for (const v of [-RB.wall + 0.35, 0, RB.wall - 0.35]) A.box(RIIA2, sm, v, ls - 0.2, 0.7, RB.clear - 0.5, RB.clear + 0.01, 0x969894, gy);
       for (const sg of [-1, 1]) {
         A.box(RIIA2, sm, sg * (RB.wall + RB.v) / 2, ls - 0.1, RB.v - RB.wall - 0.1, -0.6, RB.clear, 0x8f918d, gy);   // abutment
         for (const s of [RB.s0 - 0.25, RB.s1 + 0.25]) A.box(RIIA2, s, sg * (RB.wall + 1.9), 0.5, 3.8, -0.6, RB.top + 0.25, grey, gy);   // pilasters

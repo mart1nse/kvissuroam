@@ -339,6 +339,20 @@ export async function loadWorldData(onProgress = () => {}) {
     return false;
   }
 
+  // Places where every obstacle reads a little nearer than baked (see addGrow): { x0, z0, x1, z1, by, edge }
+  const grows = [];
+  function growAt(x, z) {
+    let g = 0;
+    for (let k = 0; k < grows.length; k++) {
+      const b = grows[k];
+      if (x <= b.x0 || x >= b.x1 || z <= b.z0 || z >= b.z1) continue;
+      // full inside, easing to nothing over the last metre to the rectangle's sides (no step for the gradient)
+      const t = Math.min(x - b.x0, b.x1 - x, z - b.z0, b.z1 - z) / b.edge;
+      g += t >= 1 ? b.by : b.by * t * t * (3 - 2 * t);
+    }
+    return g;
+  }
+
   const bumps = [];
   function bumpAt(x, z) {
     let h = 0;
@@ -370,6 +384,9 @@ export async function loadWorldData(onProgress = () => {}) {
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
     },
     // Walls that only stop cars below their top (see ledgePush).
+    // Make obstacles in a rectangle reach out by metres further (a house that cars should keep a little
+    // further from than its baked footprint): { x0, z0, x1, z1, by, edge = 1 }.
+    addGrow(r) { grows.push({ edge: 1, ...r }); },
     addLedges(list) { for (const b of list) ledges.push({ ...b, reach: Math.hypot(b.hx, b.hz) }); },
     // A circle of radius r round (x, z), at height y, against those walls: writes the push direction and depth to
     // out[0..2] and returns true.
@@ -574,7 +591,7 @@ export async function loadWorldData(onProgress = () => {}) {
       fx -= c; fz -= r;
       const D = s.D, i = r * dn + c;
       const v = (D[i] * (1 - fx) + D[i + 1] * fx) * (1 - fz) + (D[i + dn] * (1 - fx) + D[i + dn + 1] * fx) * fz;
-      return dmin + (v / 255) * dspan;
+      return dmin + (v / 255) * dspan - (grows.length ? growAt(x, z) : 0);
     },
 
     // Outward direction from the nearest obstacle (unit vector written to out[0..1]).

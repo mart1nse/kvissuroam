@@ -499,9 +499,8 @@ body.touch #people .who { order: 1; }
 body.touch #people .feed { order: 2; }
 body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 0; font-size: .9em; line-height: 1.25; }
 #people .who li { color: #fff; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .08em; }
-#people .who li::before { content: '● '; color: var(--cyan); font-size: .8em; }
+#people .who li > i { display: inline-block; width: max(7px, .7em); height: max(7px, .7em); margin: 0 .45em .06em .05em; border-radius: 50%; vertical-align: middle; background: var(--c, var(--cyan)); box-shadow: 0 0 5px var(--c, var(--cyan)); }
 #people .who li.more { opacity: .6; }
-#people .who li.more::before { content: ''; }
 #roster li small { font-size: 9px; letter-spacing: .15em; margin-left: 4px; }
 #people .me { margin-top: 2px; font-size: .9em; color: #fff; opacity: .75; letter-spacing: .12em; }
 

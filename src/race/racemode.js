@@ -19,7 +19,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -52,6 +52,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   lights.id = 'rlights'; lights.className = 'hidden';
   lights.innerHTML = `<div class="lamps">${'<i></i>'.repeat(5)}</div><div class="cap"></div>`;
   hud.appendChild(lights);
+  // the finish splash: big, in the middle, for a few seconds after crossing the line
+  const splash = document.createElement('div');
+  splash.id = 'rsplash'; splash.className = 'hidden';
+  hud.appendChild(splash);
+  let splashTimer = 0;
   const lamps = [...lights.querySelectorAll('.lamps i')], lCap = lights.querySelector('.cap');
 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
@@ -160,6 +165,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   function render() {
     const t = now(), ph = phaseOf(t), mine = me();
     show(btn, !!r && mp.online);
+    // the finish glows for everyone once the racers are away from the start (not at their first pass)
+    halo?.(!!r && mp.online && r.on && ph === 'race' && t - r.tGreen > 25000);
     if (!r || !mp.online) { show(list, false); show(count, false); show(lights, false); show(chip, false); setText(sub, ''); return; }
     const v = r.vote, voted = v.ids.includes(mp.id), n = v.ids.length;
     const pips = (k, of) => `<span class="pips">${Array.from({ length: Math.min(of, 8) }, (_, i) => `<i class="${i < k ? 'on' : ''}"></i>`).join('')}</span>`;
@@ -271,7 +278,15 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       finishedMs = Math.round(now() - r.tGreen);
       mp.raceSend({ t: 'rf', ms: finishedMs });
       listOpen = true; showLast = false; listUntil = now() + LIST_MS;
-      toast(`FINISHED · ${fmtTime(finishedMs / 1000)}`, 3500);
+      // place: those already through with a better time, plus one (nobody still out there can beat it)
+      const ahead = r.racers.filter((x) => x.id !== mp.id && x.ms != null && x.ms < finishedMs).length;
+      const pos = ahead + 1, n = r.racers.length;
+      const word = pos === 1 ? (n > 1 ? 'WINNER!' : 'RACE COMPLETE') : `${pos}${['ST', 'ND', 'RD'][pos - 1] || 'TH'} OF ${n}`;
+      splash.innerHTML = `<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>`;
+      splash.classList.remove('hidden', 'go'); void splash.offsetWidth; splash.classList.add('go');
+      document.body.classList.add('racesplash');
+      clearTimeout(splashTimer); splashTimer = setTimeout(() => { splash.classList.add('hidden'); document.body.classList.remove('racesplash'); }, 4800);
+      chime?.('join');
     },
     // out of the race: kind 'off' (off the track), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {

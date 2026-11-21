@@ -4,9 +4,15 @@
 //          about spinning with the revs struggling, the bus not at all)
 //  first   brake first, then the throttle (at a standstill the brake alone selects reverse)
 //  roll    rolling at 20 km/h, both pedals go down: seconds to a halt, rear wheelspin on the way
-//  donut   a held donut, then the brake as well
+//  donut   a held donut, then the brake as well: slides on and straightens over 3.5 to 6.5 s
+//  settle  a wide donut (wheel at 0.7), then the brake and the wheel straight: once the car has straightened it
+//          rolls on only a little before it stops (Martin 2026-11-21: it drove on for seconds, fronts dragging)
 //  tilt    a burnout on a road leaning 4 deg to the right: how far the tail steps out
 //  ease    the brake eased off slowly mid burnout until the car goes, then pressed again slowly (reined back)
+//  swing   both pedals on in a slide that swings the car round until it moves backwards for a moment:
+//          the brake stays on and reverse never goes in while the throttle is held
+//  lift    a standing burnout, then off the throttle with the brake held: it holds, no reverse, until the
+//          brake is let go; pressed again from a standstill it reverses as usual
 //  fast    both pedals at 60 km/h: plain braking, as before
 // Run: node tools/burnout-test.mjs [carId] [verbose]
 import { CARS } from '../src/cars/specs.js';
@@ -56,9 +62,22 @@ for (const spec of Object.values(CARS)) {
   {
     const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
     let tStop = null, v0 = 0;
-    run(car, flat, 9, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
+    run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
     out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
-    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop > 3)) ok = false;
+    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5)) ok = false;
+  }
+  // settle
+  {
+    const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+    let tS = null, tStop = null, px = 0, pz = 0, dist = 0;
+    run(car, flat, 14, (t) => ({ up: 1, steer: t > 5 ? 0 : 0.7, down: t > 5 ? 1 : 0 }), (t, c) => {
+      if (t < 5) return;
+      const ang = Math.abs(deg(Math.atan2(c.vy, Math.abs(c.vx) + 0.01)));
+      if (tS === null && ang < 10 && Math.abs(deg(c.yawRate)) < 15) { tS = t; px = c.x; pz = c.z; }
+      if (tS !== null && tStop === null && speedKmh(c) < 1) { tStop = t; dist = Math.hypot(c.x - px, c.z - pz); }
+    });
+    out.push(`settle: straight ${tS === null ? 'never' : (tS - 5).toFixed(1) + ' s'} after the brake, then ${tStop === null ? 'never stops' : `${(tStop - tS).toFixed(1)} s and ${dist.toFixed(1)} m to a stop`}`);
+    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || (dist > 2 && spec.ref.powerKw / spec.mass > 0.15))) ok = false;
   }
   // tilt
   {
@@ -81,6 +100,29 @@ for (const spec of Object.values(CARS)) {
       if (goAt !== null && t > tGo + 1) { vMax = Math.max(vMax, v); if (tStop === null && v < 1) tStop = t - tGo - 1; }
     });
     out.push(goAt === null ? 'ease: never got going' : `ease: gets going with the brake at ${(goAt * 100).toFixed(0)} %, pressed again it peaks at ${vMax.toFixed(0)} km/h and halts in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}`);
+  }
+  // swing: rolling, a flick of the wheel the other way, then full lock and both pedals
+  {
+    let off = 0, rev = 0, minVx = 9;
+    for (const surf of [1, 2]) for (const v0 of [10, 18, 25]) for (const tb of [0.8, 1.5, 2.5]) {
+      const car = createCar(spec, { x: 0, z: 0, yaw: 0 }); car.vx = v0 / 3.6;
+      run(car, world(surf), 6, (t) => ({ up: 1, steer: t > 0.2 && t < 0.8 ? -1 : 1, down: t > tb ? 1 : 0 }), (t, c) => {
+        if (t > tb + 0.05) { if (c.brake === 0) off += dt; if (c.reversing) rev += dt; minVx = Math.min(minVx, c.vx); }
+      });
+    }
+    out.push(`swing: brake off ${off.toFixed(2)} s, reverse ${rev.toFixed(2)} s (slowest backwards ${minVx.toFixed(1)} m/s)`);
+    if (off > 0.05 || rev > 0) ok = false;
+  }
+  // lift: burnout 2 s, throttle off 3 s with the brake held, brake off 0.5 s, then brake alone 2 s
+  {
+    const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+    let held = true, revLater = false;
+    run(car, flat, 7.5, (t) => ({ up: t < 2 ? 1 : 0, down: t < 5 || t > 5.5 ? 1 : 0 }), (t, c) => {
+      if (t > 2 && t < 5 && (c.reversing || c.brake === 0)) held = false;
+      if (t > 7 && c.reversing) revLater = true;
+    });
+    out.push(`lift: brake ${held ? 'holds' : 'LET GO or reverse'} with the throttle off, ${revLater ? 'reverses' : 'NO reverse'} on a fresh press`);
+    if (!held || !revLater) ok = false;
   }
   // fast
   {

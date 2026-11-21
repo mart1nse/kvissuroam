@@ -31,7 +31,9 @@ const BURN_MELT = 0.45;          // how much grip the hot, smoking rear tread lo
 const BURN_PRESS = 0.6;          // ...brake pedal from which it heats fully
 const BURN_HEAT_T = 0.6, BURN_COOL_T = 0.4;   // ...how fast it heats and cools (s)
 const BURN_SLIDE_V = 0.05;       // locked front tyres stick below this speed (m/s)
-const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 3;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
+const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 9;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
+const BURN_STRAIGHT_KMH = 2, BURN_STRAIGHT_T = 0.4;   // ...the slow squeeze ending this soon after the car slides sideways slower than 1 + this km/h
+const BURN_SLIDE_HOLD = 1.0;     // the donut keeper lets go of a slide only as the brake reaches this (Martin 2026-11-21: slide on twice as long)
 const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
 const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
 const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
@@ -365,8 +367,13 @@ function substep(car, input, world, dt) {
   // again reins it back in. Above 30 km/h both pedals are just braking with the throttle open.
   // (a bus has a sixth of a car's power per tonne: it just strains against its brakes)
   const kmh = Math.abs(car.vx) * 3.6;
-  const burn = s.drive === 'rwd' && up > 0 && down > 0 && car.vx > -0.6 && kmh < 30;
+  // (a car swung round in a slide can be moving backwards for a moment, and that is still the same burnout:
+  // only a car already in reverse, backing up, treats both pedals as reverse and brake; Martin 2026-11-21)
+  const burn = s.drive === 'rwd' && up > 0 && down > 0 && (car.vx > -0.6 || !car.reversing) && kmh < 30;
   if (burn && car.reversing) car.reversing = false;
+  // (after a burnout the brake held on its own keeps holding until it is let go: reverse goes in only on a
+  // fresh press, so lifting off the throttle, or a key that drops out for a moment, never selects R)
+  if (burn) car.burnHold = true; else if (!(down > 0)) car.burnHold = false;
   car.burn = burn && (s.ref?.powerKw ?? 100) / s.mass >= 0.03 ? Math.min(1, (30 - kmh) / 10) : 0;
   car.burnT = burn ? (car.burnT || 0) + dt : 0;
   // (from a standstill the brake pedal alone holds the car for REV_WAIT before reverse goes in, as an
@@ -376,7 +383,7 @@ function substep(car, input, world, dt) {
     throttle = up;
     if (down > 0) {
       if (car.vx > 0.6 || burn) brake = down;
-      else if (up === 0) { if (car.revWait > REV_WAIT || s.drive !== 'rwd') car.reversing = true; else brake = down; }
+      else if (up === 0) { if (!car.burnHold && (car.revWait > REV_WAIT || s.drive !== 'rwd')) car.reversing = true; else brake = down; }
     }
   }
   if (car.reversing) {
@@ -391,13 +398,20 @@ function substep(car, input, world, dt) {
   // forward a little before the fronts take hold, and on the move it comes to a halt gradually, rears
   // smoking; a brake already held when the throttle goes down holds at once)
   // Sliding sideways (out of a donut, say) the squeeze is gentler and slower still, so the car first slides
-  // on with the momentum it has, then straightens and comes to a stop (Martin 2026-11-21).
+  // on with the momentum it has, then straightens and comes to a stop (Martin 2026-11-21; at his ask the slide
+  // now lasts twice as long, about 4 to 5 s from donut to standstill, a little more or less on a leaning road).
+  // (the slow squeeze lasts only while the car still slides: once it has straightened, the rest of the
+  // brake comes on at the ordinary pace, so it rolls on a little and stops rather than driving off with
+  // the fronts dragging; Martin 2026-11-21)
+  const side = Math.min(1, Math.abs(car.vy) * 3.6 / BURN_SLIDE_KMH);
   if (!(down > 0)) car.pedalT = 0;
-  else { if (!car.pedalT) car.pedalV = Math.min(1, Math.abs(car.vy) * 3.6 / BURN_SLIDE_KMH); car.pedalT = (car.pedalT || 0) + dt; }
-  if (car.burn > 0) {
-    const mv = car.pedalV || 0, b0 = BURN_BITE * (1 - 0.6 * mv), bt = BURN_BITE_T + BURN_SLIDE_T * mv;
-    brake *= Math.min(1, b0 + (1 - b0) * car.pedalT / bt);
+  else if (!car.pedalT) { car.pedalT = dt; car.pedalV = side; car.pedalB0 = BURN_BITE * (1 - 0.6 * side); car.pedalB = car.pedalB0; }
+  else {
+    car.pedalT += dt;
+    car.pedalV = Math.max(Math.min(1, Math.max(0, Math.abs(car.vy) * 3.6 - 1) / BURN_STRAIGHT_KMH), car.pedalV - dt / BURN_STRAIGHT_T);
+    car.pedalB = Math.min(1, car.pedalB + (1 - car.pedalB0) * dt / (BURN_BITE_T + BURN_SLIDE_T * car.pedalV));
   }
+  if (car.burn > 0 && down > 0) brake *= car.pedalB;
   car.throttle = throttle; car.brake = brake;
 
   // ---- ground under the wheels
@@ -844,7 +858,7 @@ function substep(car, input, world, dt) {
       else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6));
       // (rotating against the wheel already: leave the driver to sort it out)
       // (with the brake on as well the donut is over: no holding it in its band, the car slides on as it will)
-      if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / 0.3));
+      if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / BURN_SLIDE_HOLD));
     }
   }
   // (the hold's moment moves at most DONUT_EASE per second, so it never jumps from a full push to a hold)
@@ -1091,7 +1105,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

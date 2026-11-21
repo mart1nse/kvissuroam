@@ -224,7 +224,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 body:not(.touch) .touch-only { display: none; }
 
 /* ---- touch pedals */
-#touch { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 6; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+#touch * { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
 .pad { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: clamp(10px, 2vw, 20px); pointer-events: auto; }
 .pad.left { left: max(18px, env(safe-area-inset-left)); }
 .pad.right { right: max(18px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px)); align-items: flex-end; }
@@ -396,8 +397,18 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #board .mine ol { margin: 4px 0 0; padding-left: 1.4em; text-align: left; }
 #board .mine small { opacity: .6; margin-left: 6px; }
 #board .lastlaps { display: flex; gap: 48px; align-items: flex-start; justify-content: center; }
+#board .tablelaps { display: contents; }
 #board .recent i { font-style: normal; color: var(--cyan); margin: 0 4px; }
-@media (max-width: 760px), (max-height: 430px) { #board .recent { display: none; } }
+/* phones: your last laps on the left and the five latest laps by everyone beside them */
+@media (max-width: 760px), (max-height: 430px) {
+  /* (as wide as the table above, so the two lists line up with its edges) */
+  #board .tablelaps { display: grid; gap: clamp(6px, 1.6vh, 16px); }
+  #board .lastlaps { gap: 10px 28px; flex-wrap: wrap; justify-content: space-between; }
+  #board .mine { font-size: 11px; }
+  #board .mine li { white-space: nowrap; }
+  #board .mine small { margin-left: 4px; }
+  #board .recent li:nth-child(n+6) { display: none; }
+}
 #board .row { align-items: center; }
 #board .dl { color: var(--cyan); }
 /* (every element has touch-action: none, which stopped a finger from scrolling the board on phones) */
@@ -468,6 +479,14 @@ body.touch #lapsplit { top: 22%; }
 #lap ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
 body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 5px; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
+/* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
+   rev counter (which is centred, half of its width clamp(104px, 31vh, 150px) to the left) */
+body.touch #people { display: flex; flex-direction: column; align-items: flex-start;
+  max-width: calc(50vw - clamp(52px, 15.5vh, 75px) - max(10px, env(safe-area-inset-left)) - clamp(96px, 15vw, 170px) - 18px); }
+body.touch #people > * { max-width: 100%; }
+body.touch #people .who { order: 1; }
+body.touch #people .feed { order: 2; }
+body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 0; font-size: .9em; line-height: 1.25; }
 #people .who li { color: #fff; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .08em; }
 #people .who li::before { content: '● '; color: var(--cyan); font-size: .8em; }
 #people .who li.more { opacity: .6; }

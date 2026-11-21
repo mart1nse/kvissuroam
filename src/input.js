@@ -55,6 +55,14 @@ export function createInput(root) {
   window.addEventListener('pointerup', release);
   window.addEventListener('pointercancel', release);
   root.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Holding a pedal is a long press to a phone's browser: Chrome on Android (and the Xiaomi browser)
+  // buzzes the phone for it, and may try to select text or drag the button. Cancelling the touch where
+  // it starts on a pedal stops the browser from treating it as a press at all; the pointer events above
+  // still come. Only the pedals: taps elsewhere (the HUD buttons, the hologram on the 3D view) need
+  // their clicks. The game itself never vibrates.
+  const onPedal = (e) => e.target.closest?.('[data-ctl], .pad');
+  root.addEventListener('touchstart', (e) => { if (e.cancelable && onPedal(e)) e.preventDefault(); }, { passive: false });
+  for (const ev of ['selectstart', 'dragstart']) root.addEventListener(ev, (e) => { if (onPedal(e)) e.preventDefault(); });
 
   return {
     state,

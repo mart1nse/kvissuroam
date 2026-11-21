@@ -1,83 +1,90 @@
-{"id":1,"track":"toomemagi","name":"SunsetWave","car":"enyaq","ms":208646,"at":"2026-11-16T07:15:45.788Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":2,"track":"toomemagi","name":"SunsetWave","car":"enyaq","ms":191271,"at":"2026-11-16T07:18:57.087Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":3,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":212026,"at":"2026-11-16T08:20:39.952Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":4,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":204539,"at":"2026-11-16T08:41:55.885Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":5,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":215641,"at":"2026-11-16T11:54:46.349Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":6,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":214878,"at":"2026-11-16T11:58:48.728Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":7,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":223986,"at":"2026-11-16T12:02:44.024Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":8,"track":"toomemagi","name":"SunsetWave","car":"rav4","ms":205086,"at":"2026-11-16T12:52:54.662Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":9,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":196813,"at":"2026-11-16T14:25:53.659Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":10,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":207881,"at":"2026-11-16T14:29:21.498Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":11,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":199792,"at":"2026-11-16T14:34:07.292Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":12,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":192683,"at":"2026-11-16T14:37:19.909Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":13,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":192620,"at":"2026-11-16T14:40:32.533Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":14,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":229003,"at":"2026-11-16T15:55:18.598Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":15,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":207876,"at":"2026-11-16T15:58:46.634Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":16,"track":"toomemagi","name":"VaporDolphin","car":"f40","ms":239710,"at":"2026-11-16T17:14:05.492Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":17,"track":"toomemagi","name":"VaporDolphin","car":"f40","ms":191467,"at":"2026-11-16T17:17:17.054Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":18,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":195619,"at":"2026-11-16T17:37:49.531Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":19,"track":"toomemagi","name":"Martin","car":"enyaq","ms":234377,"at":"2026-11-16T18:15:29.967Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":20,"track":"toomemagi","name":"Martin","car":"enyaq","ms":202876,"at":"2026-11-16T18:18:53.092Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":21,"track":"toomemagi","name":"Martin","car":"enyaq","ms":196644,"at":"2026-11-16T18:22:09.704Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":22,"track":"toomemagi","name":"Martin","car":"enyaq","ms":181182,"at":"2026-11-16T18:25:10.862Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":23,"track":"toomemagi","name":"VaporDolphin","car":"crv","ms":215956,"at":"2026-11-16T19:40:51.897Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":24,"track":"toomemagi","name":"Martin","car":"bz4x","ms":180704,"at":"2026-11-16T21:33:21.564Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":25,"track":"toomemagi","name":"Martin","car":"rav4","ms":192760,"at":"2026-11-16T21:50:05.978Z","day":"2026-11-16","splits":null,"cp":null}
-{"id":26,"track":"toomemagi","name":"VaporDolphin","car":"cgt","ms":246424,"at":"2026-11-17T06:19:40.394Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":27,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":192846,"at":"2026-11-17T07:18:24.804Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":28,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":202834,"at":"2026-11-17T07:21:47.617Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":29,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":178392,"at":"2026-11-17T07:24:46.001Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":30,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":213463,"at":"2026-11-17T07:30:18.737Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":31,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":201408,"at":"2026-11-17T07:33:40.216Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":32,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":196861,"at":"2026-11-17T07:36:57.098Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":33,"track":"toomemagi","name":"Vapormidagi","car":"audi200","ms":248570,"at":"2026-11-17T10:36:34.619Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":34,"track":"toomemagi","name":"Vapormidagi","car":"audi200","ms":181382,"at":"2026-11-17T12:27:47.387Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":35,"track":"toomemagi","name":"Vapormidagi","car":"bz4x","ms":173804,"at":"2026-11-17T14:19:14.369Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":36,"track":"toomemagi","name":"NeonDawn","car":"enyaq","ms":179154,"at":"2026-11-17T15:10:41.935Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":37,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":187463,"at":"2026-11-17T16:55:05.807Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":38,"track":"toomemagi","name":"NeonDawn","car":"bus","ms":313226,"at":"2026-11-17T18:48:11.376Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":39,"track":"toomemagi","name":"NeonDawn","car":"bus","ms":295981,"at":"2026-11-17T18:53:07.479Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":40,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":180358,"at":"2026-11-17T21:17:57.884Z","day":"2026-11-17","splits":null,"cp":null}
-{"id":41,"track":"toomemagi","name":"MagentaDolphin","car":"cgt","ms":198195,"at":"2026-11-18T07:42:13.680Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":42,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":194805,"at":"2026-11-18T12:23:00.037Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":43,"track":"toomemagi","name":"NeonVapor","car":"cgt","ms":404884,"at":"2026-11-18T18:14:52.929Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":44,"track":"toomemagi","name":"NeonVapor","car":"w201","ms":191032,"at":"2026-11-18T18:43:43.083Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":45,"track":"toomemagi","name":"NeonComet","car":"passat","ms":226845,"at":"2026-11-18T19:17:29.798Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":46,"track":"toomemagi","name":"SynthHeron","car":"m3","ms":224469,"at":"2026-11-18T20:18:03.267Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":47,"track":"toomemagi","name":"SynthHeron","car":"m3","ms":182240,"at":"2026-11-18T20:23:39.475Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":48,"track":"toomemagi","name":"siuru","car":"m3","ms":219494,"at":"2026-11-18T20:53:02.115Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":49,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":208367,"at":"2026-11-18T20:58:18.390Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":50,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":202827,"at":"2026-11-18T21:01:41.219Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":51,"track":"toomemagi","name":"siuru","car":"m3","ms":176104,"at":"2026-11-18T21:01:37.853Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":52,"track":"toomemagi","name":"NeonVapor","car":"crv","ms":198171,"at":"2026-11-18T21:07:04.611Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":53,"track":"toomemagi","name":"siuru","car":"bus","ms":300812,"at":"2026-11-18T21:08:45.335Z","day":"2026-11-18","splits":null,"cp":null}
-{"id":54,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":196889,"at":"2026-11-18T22:01:06.430Z","day":"2026-11-19","splits":null,"cp":null}
-{"id":55,"track":"toomemagi","name":"ChromeWave","car":"audi200","ms":191626,"at":"2026-11-19T11:41:24.636Z","day":"2026-11-19","splits":"[30305,85683,135408,167100]","cp":"342,1036,1612,2071"}
-{"id":56,"track":"toomemagi","name":"wombats","car":"audi200","ms":218891,"at":"2026-11-19T12:08:53.015Z","day":"2026-11-19","splits":"[32891,94732,146253,181414]","cp":"342,1036,1612,2071"}
-{"id":57,"track":"toomemagi","name":"ChromeWave","car":"audi200","ms":181322,"at":"2026-11-19T13:05:59.958Z","day":"2026-11-19","splits":"[28818,82880,127383,158675]","cp":"342,1036,1612,2071"}
-{"id":58,"track":"toomemagi","name":"ChromeWave","car":"m3","ms":196005,"at":"2026-11-19T13:10:10.645Z","day":"2026-11-19","splits":"[33064,95532,143871,173863]","cp":"342,1036,1612,2071"}
-{"id":59,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":273133,"at":"2026-11-19T13:15:40.772Z","day":"2026-11-19","splits":"[42189,121613,181919,223881]","cp":"342,1036,1612,2071"}
-{"id":60,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":287115,"at":"2026-11-19T13:20:27.905Z","day":"2026-11-19","splits":"[69696,138477,209977,252056]","cp":"342,1036,1612,2071"}
-{"id":61,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":250836,"at":"2026-11-19T13:24:38.859Z","day":"2026-11-19","splits":"[35209,111626,172772,215789]","cp":"342,1036,1612,2071"}
-{"id":62,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":218377,"at":"2026-11-19T13:31:06.988Z","day":"2026-11-19","splits":"[33974,103331,152915,187919]","cp":"342,1036,1612,2071"}
-{"id":63,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":187579,"at":"2026-11-19T13:54:20.538Z","day":"2026-11-19","splits":"[28357,89506,135111,165236]","cp":"342,1036,1612,2071"}
-{"id":64,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":244284,"at":"2026-11-19T14:00:58.446Z","day":"2026-11-19","splits":"[36263,119669,169743,213041]","cp":"342,1036,1612,2071"}
-{"id":65,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":225382,"at":"2026-11-19T14:09:23.799Z","day":"2026-11-19","splits":"[34116,96577,163637,199924]","cp":"342,1036,1612,2071"}
-{"id":66,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":220531,"at":"2026-11-19T14:13:23.648Z","day":"2026-11-19","splits":"[31664,90634,151223,185736]","cp":"342,1036,1612,2071"}
-{"id":67,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":209767,"at":"2026-11-19T14:25:05.890Z","day":"2026-11-19","splits":"[32430,94543,147309,181462]","cp":"342,1036,1612,2071"}
-{"id":68,"track":"toomemagi","name":"Sirje poeg","car":"f40","ms":195751,"at":"2026-11-19T14:39:15.736Z","day":"2026-11-19","splits":"[29604,87623,131149,168279]","cp":"342,1036,1612,2071"}
-{"id":69,"track":"toomemagi","name":"CosmicHedgehog","car":"cgt","ms":180002,"at":"2026-11-19T15:05:15.713Z","day":"2026-11-19","splits":"[29993,83185,128723,157914]","cp":"342,1036,1612,2071"}
-{"id":70,"track":"toomemagi","name":"CosmicHedgehog","car":"cgt","ms":173847,"at":"2026-11-19T15:08:09.557Z","day":"2026-11-19","splits":"[27636,78945,120979,152355]","cp":"342,1036,1612,2071"}
-{"id":71,"track":"toomemagi","name":"CosmicHedgehog","car":"mazda6","ms":191138,"at":"2026-11-19T15:12:47.521Z","day":"2026-11-19","splits":"[31385,87198,132635,166613]","cp":"342,1036,1612,2071"}
-{"id":72,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":196936,"at":"2026-11-19T15:22:32.876Z","day":"2026-11-19","splits":"[29929,82439,129277,160786]","cp":"342,1036,1612,2071"}
-{"id":73,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":201921,"at":"2026-11-19T15:25:54.793Z","day":"2026-11-19","splits":"[26902,93457,134574,163281]","cp":"342,1036,1612,2071"}
-{"id":74,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":174837,"at":"2026-11-19T15:37:37.975Z","day":"2026-11-19","splits":"[27983,83295,123794,153302]","cp":"342,1036,1612,2071"}
-{"id":75,"track":"toomemagi","name":"CosmicHedgehog","car":"f40","ms":201436,"at":"2026-11-19T15:47:50.230Z","day":"2026-11-19","splits":"[28165,81292,130283,160807]","cp":"342,1036,1612,2071"}
-{"id":76,"track":"toomemagi","name":"CosmicHedgehog","car":"audi200","ms":178856,"at":"2026-11-19T16:10:14.730Z","day":"2026-11-19","splits":"[28030,81240,125143,156535]","cp":"342,1036,1612,2071"}
-{"id":77,"track":"toomemagi","name":"CosmicHedgehog","car":"passat","ms":204109,"at":"2026-11-19T17:27:36.758Z","day":"2026-11-19","splits":"[32666,95267,145075,179003]","cp":"342,1036,1612,2071"}
-{"id":78,"track":"toomemagi","name":"CosmicHedgehog","car":"passat","ms":193695,"at":"2026-11-19T17:34:23.109Z","day":"2026-11-19","splits":"[31128,87992,134980,168558]","cp":"342,1036,1612,2071"}
-{"id":79,"track":"toomemagi","name":"CosmicHedgehog","car":"bus","ms":293062,"at":"2026-11-19T18:04:49.419Z","day":"2026-11-19","splits":"[44472,131509,206471,256246]","cp":"342,1036,1612,2071"}
-{"id":80,"track":"toomemagi","name":"CosmicHedgehog","car":"enyaq","ms":183694,"at":"2026-11-19T18:33:26.096Z","day":"2026-11-19","splits":"[28209,81553,129726,160601]","cp":"342,1036,1612,2071"}
-{"id":81,"track":"toomemagi","name":"CosmicHedgehog","car":"enyaq","ms":179603,"at":"2026-11-19T18:36:25.696Z","day":"2026-11-19","splits":"[27483,80776,125363,156237]","cp":"342,1036,1612,2071"}
-{"id":82,"track":"toomemagi","name":"VaporBadger","car":"f40","ms":188926,"at":"2026-11-19T19:38:40.692Z","day":"2026-11-19","splits":"[28431,82722,135439,166030]","cp":"342,1036,1612,2071"}
-{"id":83,"track":"toomemagi","name":"VaporBadger","car":"w201","ms":190004,"at":"2026-11-20T07:13:54.397Z","day":"2026-11-20","splits":"[33314,89528,133180,165290]","cp":"342,1036,1612,2071"}
+{"id":1,"track":"toomemagi","name":"SunsetWave","car":"enyaq","ms":208646,"at":"2026-11-16T07:15:45.788Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":2,"track":"toomemagi","name":"SunsetWave","car":"enyaq","ms":191271,"at":"2026-11-16T07:18:57.087Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":3,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":212026,"at":"2026-11-16T08:20:39.952Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":4,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":204539,"at":"2026-11-16T08:41:55.885Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":5,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":215641,"at":"2026-11-16T11:54:46.349Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":6,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":214878,"at":"2026-11-16T11:58:48.728Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":7,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":223986,"at":"2026-11-16T12:02:44.024Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":8,"track":"toomemagi","name":"SunsetWave","car":"rav4","ms":205086,"at":"2026-11-16T12:52:54.662Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":9,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":196813,"at":"2026-11-16T14:25:53.659Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":10,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":207881,"at":"2026-11-16T14:29:21.498Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":11,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":199792,"at":"2026-11-16T14:34:07.292Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":12,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":192683,"at":"2026-11-16T14:37:19.909Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":13,"track":"toomemagi","name":"SunsetWave","car":"mazda6","ms":192620,"at":"2026-11-16T14:40:32.533Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":14,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":229003,"at":"2026-11-16T15:55:18.598Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":15,"track":"toomemagi","name":"SunsetWave","car":"f40","ms":207876,"at":"2026-11-16T15:58:46.634Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":16,"track":"toomemagi","name":"VaporDolphin","car":"f40","ms":239710,"at":"2026-11-16T17:14:05.492Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":17,"track":"toomemagi","name":"VaporDolphin","car":"f40","ms":191467,"at":"2026-11-16T17:17:17.054Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":18,"track":"toomemagi","name":"SunsetWave","car":"w201","ms":195619,"at":"2026-11-16T17:37:49.531Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":19,"track":"toomemagi","name":"Martin","car":"enyaq","ms":234377,"at":"2026-11-16T18:15:29.967Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":20,"track":"toomemagi","name":"Martin","car":"enyaq","ms":202876,"at":"2026-11-16T18:18:53.092Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":21,"track":"toomemagi","name":"Martin","car":"enyaq","ms":196644,"at":"2026-11-16T18:22:09.704Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":22,"track":"toomemagi","name":"Martin","car":"enyaq","ms":181182,"at":"2026-11-16T18:25:10.862Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":23,"track":"toomemagi","name":"VaporDolphin","car":"crv","ms":215956,"at":"2026-11-16T19:40:51.897Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":24,"track":"toomemagi","name":"Martin","car":"bz4x","ms":180704,"at":"2026-11-16T21:33:21.564Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":25,"track":"toomemagi","name":"Martin","car":"rav4","ms":192760,"at":"2026-11-16T21:50:05.978Z","day":"2026-11-16","splits":null,"cp":null,"inp":null}
+{"id":26,"track":"toomemagi","name":"VaporDolphin","car":"cgt","ms":246424,"at":"2026-11-17T06:19:40.394Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":27,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":192846,"at":"2026-11-17T07:18:24.804Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":28,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":202834,"at":"2026-11-17T07:21:47.617Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":29,"track":"toomemagi","name":"Vapormidagi","car":"m3","ms":178392,"at":"2026-11-17T07:24:46.001Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":30,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":213463,"at":"2026-11-17T07:30:18.737Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":31,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":201408,"at":"2026-11-17T07:33:40.216Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":32,"track":"toomemagi","name":"Vapormidagi","car":"crv","ms":196861,"at":"2026-11-17T07:36:57.098Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":33,"track":"toomemagi","name":"Vapormidagi","car":"audi200","ms":248570,"at":"2026-11-17T10:36:34.619Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":34,"track":"toomemagi","name":"Vapormidagi","car":"audi200","ms":181382,"at":"2026-11-17T12:27:47.387Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":35,"track":"toomemagi","name":"Vapormidagi","car":"bz4x","ms":173804,"at":"2026-11-17T14:19:14.369Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":36,"track":"toomemagi","name":"NeonDawn","car":"enyaq","ms":179154,"at":"2026-11-17T15:10:41.935Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":37,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":187463,"at":"2026-11-17T16:55:05.807Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":38,"track":"toomemagi","name":"NeonDawn","car":"bus","ms":313226,"at":"2026-11-17T18:48:11.376Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":39,"track":"toomemagi","name":"NeonDawn","car":"bus","ms":295981,"at":"2026-11-17T18:53:07.479Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":40,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":180358,"at":"2026-11-17T21:17:57.884Z","day":"2026-11-17","splits":null,"cp":null,"inp":null}
+{"id":41,"track":"toomemagi","name":"MagentaDolphin","car":"cgt","ms":198195,"at":"2026-11-18T07:42:13.680Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":42,"track":"toomemagi","name":"NeonDawn","car":"cgt","ms":194805,"at":"2026-11-18T12:23:00.037Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":43,"track":"toomemagi","name":"NeonVapor","car":"cgt","ms":404884,"at":"2026-11-18T18:14:52.929Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":44,"track":"toomemagi","name":"NeonVapor","car":"w201","ms":191032,"at":"2026-11-18T18:43:43.083Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":45,"track":"toomemagi","name":"NeonComet","car":"passat","ms":226845,"at":"2026-11-18T19:17:29.798Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":46,"track":"toomemagi","name":"SynthHeron","car":"m3","ms":224469,"at":"2026-11-18T20:18:03.267Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":47,"track":"toomemagi","name":"SynthHeron","car":"m3","ms":182240,"at":"2026-11-18T20:23:39.475Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":48,"track":"toomemagi","name":"siuru","car":"m3","ms":219494,"at":"2026-11-18T20:53:02.115Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":49,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":208367,"at":"2026-11-18T20:58:18.390Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":50,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":202827,"at":"2026-11-18T21:01:41.219Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":51,"track":"toomemagi","name":"siuru","car":"m3","ms":176104,"at":"2026-11-18T21:01:37.853Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":52,"track":"toomemagi","name":"NeonVapor","car":"crv","ms":198171,"at":"2026-11-18T21:07:04.611Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":53,"track":"toomemagi","name":"siuru","car":"bus","ms":300812,"at":"2026-11-18T21:08:45.335Z","day":"2026-11-18","splits":null,"cp":null,"inp":null}
+{"id":54,"track":"toomemagi","name":"NeonVapor","car":"passat","ms":196889,"at":"2026-11-18T22:01:06.430Z","day":"2026-11-19","splits":null,"cp":null,"inp":null}
+{"id":55,"track":"toomemagi","name":"ChromeWave","car":"audi200","ms":191626,"at":"2026-11-19T11:41:24.636Z","day":"2026-11-19","splits":"[30305,85683,135408,167100]","cp":"342,1036,1612,2071","inp":null}
+{"id":56,"track":"toomemagi","name":"wombats","car":"audi200","ms":218891,"at":"2026-11-19T12:08:53.015Z","day":"2026-11-19","splits":"[32891,94732,146253,181414]","cp":"342,1036,1612,2071","inp":null}
+{"id":57,"track":"toomemagi","name":"ChromeWave","car":"audi200","ms":181322,"at":"2026-11-19T13:05:59.958Z","day":"2026-11-19","splits":"[28818,82880,127383,158675]","cp":"342,1036,1612,2071","inp":null}
+{"id":58,"track":"toomemagi","name":"ChromeWave","car":"m3","ms":196005,"at":"2026-11-19T13:10:10.645Z","day":"2026-11-19","splits":"[33064,95532,143871,173863]","cp":"342,1036,1612,2071","inp":null}
+{"id":59,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":273133,"at":"2026-11-19T13:15:40.772Z","day":"2026-11-19","splits":"[42189,121613,181919,223881]","cp":"342,1036,1612,2071","inp":null}
+{"id":60,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":287115,"at":"2026-11-19T13:20:27.905Z","day":"2026-11-19","splits":"[69696,138477,209977,252056]","cp":"342,1036,1612,2071","inp":null}
+{"id":61,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":250836,"at":"2026-11-19T13:24:38.859Z","day":"2026-11-19","splits":"[35209,111626,172772,215789]","cp":"342,1036,1612,2071","inp":null}
+{"id":62,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":218377,"at":"2026-11-19T13:31:06.988Z","day":"2026-11-19","splits":"[33974,103331,152915,187919]","cp":"342,1036,1612,2071","inp":null}
+{"id":63,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":187579,"at":"2026-11-19T13:54:20.538Z","day":"2026-11-19","splits":"[28357,89506,135111,165236]","cp":"342,1036,1612,2071","inp":null}
+{"id":64,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":244284,"at":"2026-11-19T14:00:58.446Z","day":"2026-11-19","splits":"[36263,119669,169743,213041]","cp":"342,1036,1612,2071","inp":null}
+{"id":65,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":225382,"at":"2026-11-19T14:09:23.799Z","day":"2026-11-19","splits":"[34116,96577,163637,199924]","cp":"342,1036,1612,2071","inp":null}
+{"id":66,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":220531,"at":"2026-11-19T14:13:23.648Z","day":"2026-11-19","splits":"[31664,90634,151223,185736]","cp":"342,1036,1612,2071","inp":null}
+{"id":67,"track":"toomemagi","name":"Sirje poeg","car":"w201","ms":209767,"at":"2026-11-19T14:25:05.890Z","day":"2026-11-19","splits":"[32430,94543,147309,181462]","cp":"342,1036,1612,2071","inp":null}
+{"id":68,"track":"toomemagi","name":"Sirje poeg","car":"f40","ms":195751,"at":"2026-11-19T14:39:15.736Z","day":"2026-11-19","splits":"[29604,87623,131149,168279]","cp":"342,1036,1612,2071","inp":null}
+{"id":69,"track":"toomemagi","name":"CosmicHedgehog","car":"cgt","ms":180002,"at":"2026-11-19T15:05:15.713Z","day":"2026-11-19","splits":"[29993,83185,128723,157914]","cp":"342,1036,1612,2071","inp":null}
+{"id":70,"track":"toomemagi","name":"CosmicHedgehog","car":"cgt","ms":173847,"at":"2026-11-19T15:08:09.557Z","day":"2026-11-19","splits":"[27636,78945,120979,152355]","cp":"342,1036,1612,2071","inp":null}
+{"id":71,"track":"toomemagi","name":"CosmicHedgehog","car":"mazda6","ms":191138,"at":"2026-11-19T15:12:47.521Z","day":"2026-11-19","splits":"[31385,87198,132635,166613]","cp":"342,1036,1612,2071","inp":null}
+{"id":72,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":196936,"at":"2026-11-19T15:22:32.876Z","day":"2026-11-19","splits":"[29929,82439,129277,160786]","cp":"342,1036,1612,2071","inp":null}
+{"id":73,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":201921,"at":"2026-11-19T15:25:54.793Z","day":"2026-11-19","splits":"[26902,93457,134574,163281]","cp":"342,1036,1612,2071","inp":null}
+{"id":74,"track":"toomemagi","name":"CosmicHedgehog","car":"m3","ms":174837,"at":"2026-11-19T15:37:37.975Z","day":"2026-11-19","splits":"[27983,83295,123794,153302]","cp":"342,1036,1612,2071","inp":null}
+{"id":75,"track":"toomemagi","name":"CosmicHedgehog","car":"f40","ms":201436,"at":"2026-11-19T15:47:50.230Z","day":"2026-11-19","splits":"[28165,81292,130283,160807]","cp":"342,1036,1612,2071","inp":null}
+{"id":76,"track":"toomemagi","name":"CosmicHedgehog","car":"audi200","ms":178856,"at":"2026-11-19T16:10:14.730Z","day":"2026-11-19","splits":"[28030,81240,125143,156535]","cp":"342,1036,1612,2071","inp":null}
+{"id":77,"track":"toomemagi","name":"CosmicHedgehog","car":"passat","ms":204109,"at":"2026-11-19T17:27:36.758Z","day":"2026-11-19","splits":"[32666,95267,145075,179003]","cp":"342,1036,1612,2071","inp":null}
+{"id":78,"track":"toomemagi","name":"CosmicHedgehog","car":"passat","ms":193695,"at":"2026-11-19T17:34:23.109Z","day":"2026-11-19","splits":"[31128,87992,134980,168558]","cp":"342,1036,1612,2071","inp":null}
+{"id":79,"track":"toomemagi","name":"CosmicHedgehog","car":"bus","ms":293062,"at":"2026-11-19T18:04:49.419Z","day":"2026-11-19","splits":"[44472,131509,206471,256246]","cp":"342,1036,1612,2071","inp":null}
+{"id":80,"track":"toomemagi","name":"CosmicHedgehog","car":"enyaq","ms":183694,"at":"2026-11-19T18:33:26.096Z","day":"2026-11-19","splits":"[28209,81553,129726,160601]","cp":"342,1036,1612,2071","inp":null}
+{"id":81,"track":"toomemagi","name":"CosmicHedgehog","car":"enyaq","ms":179603,"at":"2026-11-19T18:36:25.696Z","day":"2026-11-19","splits":"[27483,80776,125363,156237]","cp":"342,1036,1612,2071","inp":null}
+{"id":82,"track":"toomemagi","name":"VaporBadger","car":"f40","ms":188926,"at":"2026-11-19T19:38:40.692Z","day":"2026-11-19","splits":"[28431,82722,135439,166030]","cp":"342,1036,1612,2071","inp":null}
+{"id":83,"track":"toomemagi","name":"VaporBadger","car":"w201","ms":190004,"at":"2026-11-20T07:13:54.397Z","day":"2026-11-20","splits":"[33314,89528,133180,165290]","cp":"342,1036,1612,2071","inp":null}
+{"id":84,"track":"toomemagi","name":"wombats","car":"audi200","ms":203091,"at":"2026-11-20T13:42:49.704Z","day":"2026-11-20","splits":"[31267,90244,138366,172707]","cp":"342,1036,1612,2071","inp":"kb"}
+{"id":85,"track":"toomemagi","name":"VaporWave","car":"passat","ms":305572,"at":"2026-11-20T14:37:31.482Z","day":"2026-11-20","splits":"[52061,129099,188170,263514]","cp":"342,1036,1612,2071","inp":"touch"}
+{"id":86,"track":"toomemagi","name":"VaporBadger","car":"f40","ms":347765,"at":"2026-11-20T16:17:15.203Z","day":"2026-11-20","splits":"[60161,125319,294156,326051]","cp":"342,1036,1612,2071","inp":"kb"}
+{"id":87,"track":"toomemagi","name":"VaporBadger","car":"w201","ms":198002,"at":"2026-11-20T20:48:51.990Z","day":"2026-11-20","splits":"[32595,91569,138627,173319]","cp":"342,1036,1612,2071","inp":"kb"}
+{"id":88,"track":"toomemagi","name":"VaporBadger","car":"w201","ms":194476,"at":"2026-11-20T20:52:06.476Z","day":"2026-11-20","splits":"[31062,87828,133291,165761]","cp":"342,1036,1612,2071","inp":"kb"}
+{"id":89,"track":"toomemagi","name":"NeonComet","car":"m3","ms":198892,"at":"2026-11-20T21:34:11.563Z","day":"2026-11-20","splits":"[29474,83972,134797,173574]","cp":"342,1036,1612,2071","inp":"touch"}
+{"id":90,"track":"toomemagi","name":"NeonComet","car":"m3","ms":206791,"at":"2026-11-20T21:37:39.383Z","day":"2026-11-20","splits":"[32777,92462,144561,183496]","cp":"342,1036,1612,2071","inp":"touch"}

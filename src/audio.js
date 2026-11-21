@@ -394,18 +394,19 @@ export function createAudio() {
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
     if (!ctx || ctx.state !== 'running') return;
-    const join = kind === 'join';
-    const notes = join ? [659.25, 987.77] : [783.99, 523.25];     // E5 -> B5, G5 -> C5
+    const join = kind === 'join' || kind === 'record';
+    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7
+    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : join ? [659.25, 987.77] : [783.99, 523.25];
     const t0 = ctx.currentTime + 0.01, level = join ? 0.16 : 0.12;
     notes.forEach((f, i) => {
-      const t = t0 + i * 0.11;
+      const t = t0 + i * (kind === 'record' ? 0.08 : 0.11);
       const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
       o.type = join ? 'sine' : 'triangle'; o.frequency.value = f;
       o2.type = 'sine'; o2.frequency.value = f * 2.005;           // a little shimmer an octave up
       g2.gain.value = join ? 0.25 : 0.12;
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(level, t + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0008, t + (i ? 0.42 : 0.2));
+      g.gain.exponentialRampToValueAtTime(0.0008, t + (i === notes.length - 1 ? 0.42 : 0.2));
       o.connect(g); o2.connect(g2); g2.connect(g); g.connect(master);
       o.start(t); o2.start(t); o.stop(t + 0.45); o2.stop(t + 0.45);
     });

@@ -35,11 +35,12 @@ export function createPeople({ mp, onFocus }) {
   let last = '';
   function refresh() {
     // (stealth, ?off=100: a reminder that nobody else can see us)
-    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}` : '';
+    const myRec = mp.name ? mp.recordOf(mp.name) : '';
+    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}${myRec ? ` · ${myRec}` : ''}` : '';
     if (elMe.textContent !== nm) elMe.textContent = nm;
     const drivers = mp.online ? mp.players() : [];
     const n = mp.online ? drivers.length + 1 : 0;
-    const key = `${n}|${mp.name}|${drivers.map((p) => p.name).join('|')}`;
+    const key = `${n}|${mp.name}|${drivers.map((p) => p.name + mp.recordOf(p.name)).join('|')}`;
     if (key === last) return;
     last = key;
     elCount.classList.toggle('hidden', n === 0);
@@ -49,7 +50,7 @@ export function createPeople({ mp, onFocus }) {
     if (n < 2) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
     const names = drivers.map((p) => p.name).sort((a, b) => a.localeCompare(b));
     const more = names.length > listMax ? names.length - listMax + 1 : 0;
-    const rows = names.slice(0, more ? listMax - 1 : listMax).map((s) => `<li>${escapeHtml(s)}</li>`);
+    const rows = names.slice(0, more ? listMax - 1 : listMax).map((s) => { const r = mp.recordOf(s); return `<li>${escapeHtml(s)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');

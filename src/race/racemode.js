@@ -57,6 +57,22 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   splash.id = 'rsplash'; splash.className = 'hidden';
   hud.appendChild(splash);
   let splashTimer = 0;
+  function showSplash(html, ms, kind) {
+    splash.innerHTML = html;
+    splash.className = kind || '';
+    splash.style.animationDuration = `${ms}ms`;
+    void splash.offsetWidth; splash.classList.add('go');
+    document.body.classList.add('racesplash');
+    clearTimeout(splashTimer); splashTimer = setTimeout(() => { splash.classList.add('hidden'); document.body.classList.remove('racesplash'); }, ms);
+    chime?.(kind === 'rec' ? 'record' : 'join');
+  }
+  // the record line: the car, and by how much the old best fell (and whose it was)
+  function recLine(lap, prev) {
+    const car = (cars[lap.car]?.short || lap.car || '').toUpperCase();
+    let gain = 'FIRST LAP IN THIS CAR';
+    if (prev?.ms > lap.ms) gain = `−${((prev.ms - lap.ms) / 1000).toFixed(2)}${prev.name && prev.name !== mp.name ? ` · BEAT ${escapeHtml(prev.name).toUpperCase()}` : ''}`;
+    return { car: escapeHtml(car), gain };
+  }
   const lamps = [...lights.querySelectorAll('.lamps i')], lCap = lights.querySelector('.cap');
 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
@@ -272,9 +288,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     // where the car is held on the grid, or null
     get pin() { return pin; },
     // our lap timer finished a lap
-    lap() {
+    // a lap was completed (race.js); info.rec: it is a lap record for the car, info.prev: the best it beat
+    lap(lap, info) {
+      const rec = info?.rec ? recLine(lap, info.prev) : null;
       const m = me();
-      if (!m || !active(m) || phaseOf() !== 'race' || finishedMs != null) return;
+      if (!r || !m || !active(m) || phaseOf() !== 'race' || finishedMs != null) {
+        if (rec) showSplash(`<div class="k">NEW LAP RECORD</div><div class="p tm">${fmtTime(lap.ms / 1000)}</div><div class="t">${rec.car} <em>${rec.gain}</em></div>`, 3600, 'rec');
+        return;
+      }
       finishedMs = Math.round(now() - r.tGreen);
       mp.raceSend({ t: 'rf', ms: finishedMs });
       listOpen = true; showLast = false; listUntil = now() + LIST_MS;
@@ -282,11 +303,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const ahead = r.racers.filter((x) => x.id !== mp.id && x.ms != null && x.ms < finishedMs).length;
       const pos = ahead + 1, n = r.racers.length;
       const word = pos === 1 ? (n > 1 ? 'WINNER!' : 'RACE COMPLETE') : `${pos}${['ST', 'ND', 'RD'][pos - 1] || 'TH'} OF ${n}`;
-      splash.innerHTML = `<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>`;
-      splash.classList.remove('hidden', 'go'); void splash.offsetWidth; splash.classList.add('go');
-      document.body.classList.add('racesplash');
-      clearTimeout(splashTimer); splashTimer = setTimeout(() => { splash.classList.add('hidden'); document.body.classList.remove('racesplash'); }, 4800);
-      chime?.('join');
+      showSplash(`<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>${
+        rec ? `<div class="r">NEW ${rec.car} LAP RECORD · ${fmtTime(lap.ms / 1000)} <em>${rec.gain}</em></div>` : ''}`, rec ? 5600 : 4800, rec ? 'rec' : '');
     },
     // out of the race: kind 'off' (off the track), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {

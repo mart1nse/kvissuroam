@@ -286,7 +286,7 @@ let still = lite && !params.has('drive');
 // hand-built streets were in): see world/phonetex.js. ?smalltex tries it on a desktop, ?smalltex=0 turns
 // it off, ?smalltex=keep only makes the pictures smaller.
 let shrinker = (lite || params.has('smalltex')) && params.get('smalltex') !== '0'
-  ? createPhoneTextures(renderer, { release: params.get('smalltex') !== 'keep' }) : null;
+  ? createPhoneTextures(renderer, { release: params.get('smalltex') !== 'keep', rest: params.get('rest') !== '0' }) : null;   // (?rest=0: pictures of places left behind stay on the card)
 const part = { build: 0, draw: 0 };   // ms a frame of queued building work, and of handing the drawing to the graphics card (running averages, for the readout)
 let pace = 16.7;                 // the usual frame time in ms, for the building work's share of a frame
 let xlowRun = 0, xlowWas = 0; // seconds of driving on the two lowest levels, or above them (the mark for extra low at the next start)

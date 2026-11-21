@@ -18,7 +18,7 @@ self.onmessage = async (e) => {
       const d = g.getImageData(0, 0, w, h).data;
       let solid = true;
       for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) { solid = false; break; }
-      blob = await c.convertToBlob(solid ? { type: 'image/jpeg', quality: 0.92 } : { type: 'image/png' });
+      blob = await c.convertToBlob(solid ? { type: 'image/jpeg', quality: 0.88 } : { type: 'image/png' });
     }
   } catch { blob = null; /* no OffscreenCanvas here: the picture simply stays on the card as before */ }
   try { bitmap.close(); } catch {}

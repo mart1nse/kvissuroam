@@ -36,7 +36,7 @@ const SETTLE = 3000;            // ms a picture must have been on the card, unch
 const REST_AT = 650, WAKE_AT = 420;   // m from the car to the nearest thing wearing the picture
 const REST_MIN_PX = 256 * 256;        // smaller pictures are not worth it
 const WAKE_GAP = 120;                 // ms between two pictures sent to the card again
-const PACK_MAX = 120e6;               // bytes of packed copies kept at most (PNGs on Safari are big): past it, pictures stay as before
+const PACK_MAX = 60e6;                // bytes of packed copies kept at most (PNGs on Safari are big): past it, pictures stay as before
 
 export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, perScan = Infinity, rest = true } = {}) {
   const state = new WeakMap();         // texture -> { orig, ver, redraws, upAt, done }

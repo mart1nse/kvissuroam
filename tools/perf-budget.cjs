@@ -178,7 +178,10 @@ async function waitForServer(url, ms) {
     // with a phone's. What the graphics card itself does with new things is not seen here.)
     for (const [who, touch] of [['desktop', false], ['phone', true]]) {
       try {
-        const r = await drive({ port: PORT, route: 'centre', touch });
+        // (a drive whose profile came without idle samples cannot tell busy from waiting: once more, and
+        // if that one is the same, the frames' game code time stands in, which the printout says)
+        let r = await drive({ port: PORT, route: 'centre', touch });
+        if (summarise(r).busyFrom !== 'profile') r = await drive({ port: PORT, route: 'centre', touch });
         out.drive[who] = { ...summarise(r), errors: r.errs.slice(0, 5), slow: r.slow };
         out.driveReport[who] = report(r, 12).slice(3);
       } catch (e) { out.drive[who] = null; out.driveReport[who] = [`the ${who} drive failed: ${e.message}`]; }
@@ -221,7 +224,7 @@ async function waitForServer(url, ms) {
   }
   for (const who of ['desktop', 'phone']) {
     const D = out.drive[who];
-    if (D) console.log(`${who} drive ${JSON.stringify({ km: D.km, seconds: D.seconds, frames: D.frames, jsMedian: D.jsMedian, jsP95: D.jsP95, jsP99: D.jsP99, busy50: D.busy50, busy100: D.busy100, busyLongest: D.busyLongest, busyS: D.busyS, gaps50: D.pauses50, gaps100: D.pauses100, longestGap: D.longest, gapsS: D.frozen })}`);
+    if (D) console.log(`${who} drive ${JSON.stringify({ km: D.km, seconds: D.seconds, frames: D.frames, jsMedian: D.jsMedian, jsP95: D.jsP95, jsP99: D.jsP99, busy50: D.busy50, busy100: D.busy100, busyLongest: D.busyLongest, busyS: D.busyS, busyFrom: D.busyFrom, gaps50: D.pauses50, gaps100: D.pauses100, longestGap: D.longest, gapsS: D.frozen })}`);
     if (D?.errors.length) console.log(`${who} drive errors: ${D.errors.join(' | ')}`);
     // what ran in the busy stretches, when a drive figure is over (or the drive failed)
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));

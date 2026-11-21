@@ -55,6 +55,9 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
 
 // The stretches in which the page itself was busy without a break (game code and its calls into the
 // browser), from the CPU profile: [{ t0, dur (both in microseconds), by: Map(what ran -> microseconds) }].
+// The list's `ok` is false when the profile cannot be used for this: now and then (one drive in ten) the
+// browser's profiler takes no samples while the page is idle, and the whole drive then looks like one
+// busy stretch.
 function stretches(profile) {
   const nodes = new Map(); for (const n of profile.nodes) nodes.set(n.id, n);
   const parent = new Map(); for (const n of profile.nodes) for (const c of n.children || []) parent.set(c, n.id);
@@ -76,6 +79,7 @@ function stretches(profile) {
     cur.by.set(key, (cur.by.get(key) || 0) + dt);
   }
   if (cur) runs.push(cur);
+  runs.ok = runs.reduce((a, r) => a + r.dur, 0) < 0.5 * (t - profile.startTime);
   return runs;
 }
 
@@ -89,13 +93,16 @@ function summarise({ fr, stat, profile, runs }) {
   const d = fr.map((f) => f[1]).sort((a, c) => a - c), q = (x) => +d[Math.floor(d.length * x)].toFixed(1);
   const iv = []; for (let i = 1; i < fr.length; i++) iv.push(fr[i][0] - fr[i - 1][0]);
   const over = (n) => iv.filter((x) => x > n).length;
-  const b = (runs || (profile ? stretches(profile) : [])).map((r) => r.dur / 1000), bover = (n) => b.filter((x) => x > n).length;
+  // without a usable profile, the busy figures are the game code's time in each frame: that leaves out
+  // what runs between frames (a loaded map square's first handling), so `busyFrom` says which it was
+  const R = runs || (profile ? stretches(profile) : null), usable = !!(R && R.ok);
+  const b = usable ? R.map((r) => r.dur / 1000) : fr.map((f) => f[1]), bover = (n) => b.filter((x) => x > n).length;
   return {
     km: +(stat.dist / 1000).toFixed(2), seconds: Math.round((fr[fr.length - 1][0] - fr[0][0]) / 1000), frames: fr.length,
     jsMedian: q(0.5), jsP95: q(0.95), jsP99: q(0.99), jsMax: Math.round(d[d.length - 1]),
     js17: d.filter((x) => x > 16.7).length, js33: d.filter((x) => x > 33).length, js50: d.filter((x) => x > 50).length, js100: d.filter((x) => x > 100).length,
     busy50: bover(50), busy100: bover(100), busy200: bover(200), busyLongest: Math.round(Math.max(0, ...b)),
-    busyS: +(b.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(2),
+    busyS: +(b.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(2), busyFrom: usable ? 'profile' : 'frames',
     pauses50: over(50), pauses100: over(100), pauses200: over(200), longest: Math.round(Math.max(...iv)),
     frozen: +(iv.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(1),
   };
@@ -121,6 +128,7 @@ function report({ profile, fr, tStart, stat }, topN = 30) {
   L.push(`frames ${S.frames}: game code median ${S.jsMedian} ms, p95 ${S.jsP95}, p99 ${S.jsP99}, max ${S.jsMax}; over 16.7 ms: ${S.js17}, over 33: ${S.js33}, over 50: ${S.js50}, over 100: ${S.js100}`);
   L.push(`the page busy without a break for over 50 ms: ${S.busy50}, over 100 ms: ${S.busy100}, over 200: ${S.busy200}, longest ${S.busyLongest} ms; ${S.busyS} s in stretches over 50 ms`);
   L.push(`gaps between frames over 50 ms: ${S.pauses50}, over 100 ms: ${S.pauses100}, over 200: ${S.pauses200}, longest ${S.longest} ms; frozen time over 50 ms gaps: ${S.frozen} s of ${S.seconds} s`);
+  if (!runs.ok) { L[1] += ' (from the frames\' game code only)'; L.push('\nthe profile of this drive has no idle samples, so what ran in the busy stretches cannot be told: drive again'); return L; }
   const long = runs.filter((r) => r.dur > 25000).sort((a, c) => c.dur - a.dur);
   L.push(`\nbusy stretches of the main thread over 25 ms: ${long.length} (over 50: ${long.filter((r) => r.dur > 50000).length}, over 100: ${long.filter((r) => r.dur > 100000).length}, over 200: ${long.filter((r) => r.dur > 200000).length}); total ${(long.reduce((a, r) => a + r.dur, 0) / 1e6).toFixed(1)} s`);
   const tot = new Map(), cnt = new Map(), mx = new Map();

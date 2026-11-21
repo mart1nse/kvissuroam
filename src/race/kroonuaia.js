@@ -15,6 +15,7 @@ import { BOX, Parts } from './landmarks.js';
 import { breakableShelter, shelterSolids } from '../world/shelter.js';
 import { skinHouses, rgbHex, paintTexture, tone } from '../world/houseskin.js';
 import { streetKit, setHouseColours } from '../world/streetkit.js';
+import { jobs } from '../jobs.js';
 
 const I0 = 1030, I1 = 1432;                 // the lap indexes this covers
 const ROOF = { tin: 0x9aa3b0, dark: 0x5c5e6c, red: 0xb46a58, blue: 0x8ea2b8, brown: 0x7a6258, green: 0x7f9a8a };
@@ -347,7 +348,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
     });
   }
 
-  function build() {
+  function* build() {
     built = true;
     const P = track.P;
     // a wall is "seen from the road" when the lap passes in front of it within 45 m
@@ -358,6 +359,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
     };
     skinHouses(world, group, HOUSES, { faces, shadows, debug: !!window.__skinDebug });
 
+    yield;
     const K = streetKit(world, group, { shadows });
     const { p } = K;
     const h = (x, z) => world.heightAt(x, z);
@@ -375,6 +377,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
     // the botanic garden's stone wall itself is drawn in emajoe.js; here only the pier where it steps
     { const [gx, gz] = [1267.0, 2268.7]; K.box(gx, gz, 0.95, 2.3, 0.95, 0xcdb4ae); K.box(gx, gz, 1.1, 0.12, 1.1, 0xd98d7f, 0, 2.3); }
 
+    yield;
     // ================= the low stone wall under the car park on Jakobi =================
     {
       const tex = paintTexture(8, 0, 1.3, 44, (P) => { P.rubble(0, 0, 8, 1.3, 61, '#5a5458', [[132, 124, 128], [110, 104, 112], [150, 138, 132], [120, 110, 108]], 1.1); }, { repeat: true });
@@ -392,6 +395,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       }
     }
 
+    yield;
     // ================= fences =================
     {
       const pick = paintTexture(0.5, 0, 1, 128, (P) => { P.c.clearRect(0, 0, 64, 128); P.r(0.03, 0, 0.21, 0.97, '#ffffff'); P.r(0.28, 0, 0.46, 0.97, '#ffffff'); P.poly([[0.03, 0.97], [0.12, 1], [0.21, 0.97]], '#ffffff'); P.poly([[0.28, 0.97], [0.37, 1], [0.46, 0.97]], '#ffffff'); P.r(0, 0.2, 0.5, 0.27, '#d8d8d8'); P.r(0, 0.74, 0.5, 0.81, '#d8d8d8'); }, { repeat: true, alpha: true });
@@ -421,6 +425,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       for (let i = 1217.5; i < 1233; i += 0.7) { const [x, z] = T(i, -(hw(i) + 3.6)); if (world.sdfAt(x, z) > 0.6) K.shrub(x, z, 0.75, 0x5fa565, 0.9); }
     }
 
+    yield;
     // ================= the bus stop =================
     {
       const I = 1112.5, o = hw(I) + 3.1, [x, z] = T(I, o), [tx, tz] = track.tan[Math.floor(I)], yaw = Math.atan2(-tz, tx), y = h(x, z);
@@ -441,6 +446,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       const [bx, bz] = at(-3.1, 0.3); p.add(new THREE.CylinderGeometry(0.2, 0.17, 0.75, 10), 0x2f8a78, bx, y + 0.5, bz, 0);       // the green bin
     }
 
+    yield;
     // ================= the islands at the crossings =================
     for (const I of ISLANDS) {
       // (the ground beside the island: under it the bump already lifts the height)
@@ -455,6 +461,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
     // steps and railing at the Helen Doron door
     { const [x, z] = [936.6, 2591.4]; if (world.sdfAt(x, z) > 0.1) for (let k = 0; k < 3; k++) K.box(x + k * 0.3, z + k * 0.16, 1.4, 0.16, 0.34, 0xa8a4a8, Math.atan2(-0.88, 0.48) + Math.PI / 2, k * 0.16); }
 
+    yield;
     // ================= road paint and patched tarmac =================
     {
       const WHITE = [0.98, 0.97, 1], YELLOW = [1, 0.84, 0.36], BLUE = [0.42, 0.62, 0.95];
@@ -521,6 +528,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       mesh(patch, pm);
     }
 
+    yield;
     K.finish();
     for (const q of extra) {
       if (!q.pos.length) continue;
@@ -537,7 +545,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
   return {
     update(x, z) {
       if (built || Math.hypot(x - 1050, z - 2450) > 700) return;
-      if ([[1300, 2200], [1100, 2390], [1100, 2410], [1000, 2500], [800, 2570]].every(([cx, cz]) => world.ready(cx, cz))) build();
+      if ([[1300, 2200], [1100, 2390], [1100, 2410], [1000, 2500], [800, 2570]].every(([cx, cz]) => world.ready(cx, cz))) { built = true; jobs.add(build, 'kroonuaia'); }
     },
   };
 }

@@ -15,6 +15,7 @@ import { createTrack } from './race.js';
 import { BOX } from './landmarks.js';
 import { streetKit, wallOf, setHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
+import { jobs } from '../jobs.js';
 
 // the cafe front from the LOD2 model (game x, z), left to right seen from the street; base and eave (world y)
 const FRONT = { a: [653.65, 2659.8], b: [659.9, 2651.45], y: 29.89, top: 36.7 };
@@ -92,7 +93,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
   const track = createTrack();
   let built = false;
 
-  function build() {
+  function* build() {
     built = true;
     const K = streetKit(world, group, { shadows });
     const { p } = K;
@@ -134,6 +135,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
       const [x, z] = W.at(s, 0.38);
       glow.push(new THREE.SphereGeometry(0.075, 10, 8).translate(x, W.y + 2.42, z));
     }
+    yield;
     // the name band and its little bracket sign (a cup) above the door
     {
       const s0 = 0.05, s1 = 8.65, y0 = 2.72, y1 = 3.55;
@@ -160,6 +162,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
       g.computeVertexNormals();
       extra.push([g, new THREE.MeshLambertMaterial({ map: stripeTex(), side: THREE.DoubleSide })]);
     }
+    yield;
     // flowers: window boxes under both windows, big hanging petunia baskets
     const bloom = (s, y, n, r, k) => {
       put(new THREE.IcosahedronGeometry(r, 1).scale(1.15, 0.8, 0.9), COL.pink[k % 3], s, y, n, k);
@@ -177,6 +180,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
     put(new THREE.CylinderGeometry(0.22, 0.17, 0.42, 12), COL.metal, 0.15, ground(0.15, 0.45) + 0.21, 0.45);      // urn under the left basket
     put(new THREE.CylinderGeometry(0.03, 0.03, 0.55, 6), COL.metal, 0.15, ground(0.15, 0.45) + 0.65, 0.45);
 
+    yield;
     // the brick terrace from the wall to the pavement
     K.ribbon(along, -1.2, 9.2, 0.12, 2.75, 'red', true);
     // white metal tables and chairs, a bench under the right window
@@ -247,6 +251,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
       solids.push({ x, z, yaw: Math.atan2(-W.uz, W.ux), hx: (s1 - s0) / 2, hz: 0.08 });
     }
 
+    yield;
     // ================= the street before it =================
     const T = (i, lat) => {                                 // track frame at a fractional index; lat > 0 to the right
       const k = Math.floor(i), f = i - k, a = track.P[k], b = track.P[k + 1];
@@ -296,6 +301,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
         }
       });
     }
+    yield;
     // picket fences on concrete posts: slats every 15 cm, two rails
     const picket = (pts, colour, height = 1.1) => {
       for (let k = 0; k < pts.length - 1; k++) {
@@ -324,6 +330,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
       for (let k = 0; k < pts.length - 1; k += 1) K.shrub(...W.at(W.len + 2.2 + k * 2, -0.25), 0.7, COL.hedge[k % 3], 1.1);
     }
 
+    yield;
     // the raised crossing: checkered ramp markings either side of the zebra, the blue and white posts
     {
       const i = ZEBRA.i, [tx, tz] = track.tan[i], rx = -tz, rz = tx;
@@ -371,6 +378,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
       if (g) extra.push([g, new THREE.MeshLambertMaterial({ color: COL.white, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide })]);
     }
 
+    yield;
     K.finish();
     for (const [g, m] of extra) { const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.castShadow = shadows && !m.polygonOffset; group.add(mesh); }
     if (glow.length) {
@@ -383,7 +391,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
   return {
     update(x, z) {
       if (built || Math.hypot(x - CENTRE[0], z - CENTRE[1]) > 600) return;
-      if ([[650, 2655], [690, 2620], [720, 2590], [740, 2565]].every(([cx, cz]) => world.ready(cx, cz))) build();
+      if ([[650, 2655], [690, 2620], [720, 2590], [740, 2565]].every(([cx, cz]) => world.ready(cx, cz))) { built = true; jobs.add(build, 'mandel'); }
     },
   };
 }

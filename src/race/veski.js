@@ -11,6 +11,7 @@ import { createTrack } from './race.js';
 import { streetKit } from '../world/streetkit.js';
 import { islandOuter, ISLAND_END } from './veskiend.js';
 import { drapeGeometry } from '../world/drape.js';
+import { jobs } from '../jobs.js';
 
 export const VESKI = { i0: 1655, i1: 1823, red: [0.15, 1.9], colour: 0xa27c7e };     // red: from the left road edge inwards; it runs out into the junction
 const LINE = { i0: 1657.5, i1: 1820.6, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
@@ -80,7 +81,7 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
 
   // ---- from Juhan Liivi to the end: kerb stones, grass, pavements, and the line of the whole stretch
   let street = false;
-  function buildStreet() {
+  function* buildStreet() {
     street = true;
     const K = streetKit(world, group, { shadows });
     // 2 the grass strip: kerb stones on the face towards the road, grass on top and down the back
@@ -88,18 +89,22 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
     K.ribbon(left((t, u) => -0.03 + u * (Math.min(0.13, stripWidth(t)) + 0.03)), STRIP.i0, STRIP.i1, 0, 1, 'kerb', true);
     K.ribbon(left((t, u) => Math.min(stripWidth(t), 0.13 + u * (top(t) - 0.13))), STRIP.i0, STRIP.i1, 0, 1, 'verge', true);
     K.ribbon(left((t, u) => Math.min(stripWidth(t), top(t) + u * STRIP.back)), STRIP.i0, STRIP.i1, 0, 1, 'verge', true);
+    yield;
     // 1 the pavement behind it, out to the houses and then the board fence
     const outer = (t) => fenceOff(t) - 0.1;
     for (let b = 0; b < 5; b++) K.ribbon(left((t, u) => stripWidth(t) + u * (outer(t) - stripWidth(t))), LEFT.i0, LEFT.i1, b / 5, (b + 1) / 5, 'asphalt');
+    yield;
     // 5 the pavement on the right, with its kerb; it swings out behind the island at the end
     const out = (t) => (islandOuter(t) - 0.1) * ramp(t, RIGHT.island[0], RIGHT.island[1]);
     for (const [a, b] of RIGHT.runs) {
       K.ribbon(right((t, u) => -0.03 + u * 0.17), a, Math.min(b, RIGHT.island[0] + 1), 0, 1, 'kerb');
       for (let k = 0; k < 4; k++) K.ribbon(right((t, u) => 0.14 + out(t) + u * (RIGHT.width - 0.14)), a, b, k / 4, (k + 1) / 4, 'asphalt');
     }
+    yield;
     // the line between the red lane and the car lane: long dashes, short gaps
     const line = left((t, u) => -(LINE.at[0] + u * (LINE.at[1] - LINE.at[0])));
     for (let t = LINE.i0; t + LINE.dash <= LINE.i1; t += LINE.dash + LINE.gap) K.ribbon(line, t, t + LINE.dash, 0, 1, 'white', true);
+    yield;
     // the bicycle and the arrow in the red lane, drawn the way a rider coming from the junction reads them:
     // picture x across the lane to the rider's right, picture y along the lane ahead of the rider
     {
@@ -133,6 +138,7 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
         group.add(m);
       }
     }
+    yield;
     // weeds and a few low shrubs in the grass towards the end, where it grows wild, and the planted bed at
     // the junction: shrubs, dark red perennials and a mass of pale blue-green grass at its end (not solid)
     if (K.leafy.ok) {
@@ -161,6 +167,7 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
         }
       }
     }
+    yield;
     K.finish();
   }
 
@@ -244,7 +251,7 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
       if (!street && near(x, z, laneRef)) {
         let ok = true;
         for (let i = VESKI.i0; i <= LEFT.i1 && ok; i += 3) ok = world.ready(...at(i, -hwAt(i) - 3)) && world.ready(...at(i, hwAt(i) + 4));
-        if (ok) buildStreet();
+        if (ok) { street = true; jobs.add(buildStreet, 'veski street'); }
       }
       if (!fenceSegs && near(x, z, fence[0]) && fence.every((p) => world.ready(p[0], p[1]))) buildFence();
     },

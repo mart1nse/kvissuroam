@@ -16,6 +16,7 @@ import { drapeGeometry } from '../world/drape.js';
 import { paverTex, GRASS } from '../world/streetkit.js';
 import { breakableShelter, shelterSolids } from '../world/shelter.js';
 import { adAtlas, adCell } from '../world/adverts.js';
+import { jobs } from '../jobs.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
 const LAI_END = 948;                                      // the Lai junction (src/race/lai.js) has its own lines up to here
@@ -455,7 +456,7 @@ export function createEmajoe(world, group) {
     return { near, far };
   }
 
-  function build() {
+  function* build() {
     built = true;
     const marks = [], pave = [];
     const edge = (i) => hw(i) - 0.18;
@@ -477,6 +478,7 @@ export function createEmajoe(world, group) {
       }
       for (let k = 0; k < zig.length - 1; k++) strip([zig[k], zig[k + 1]], COL.yellow, 0.065, marks);
     }
+    yield;
     // ---- the river-side pavement, the kerb of the bay
     {
       // the pavement is draped in 1.5 m triangles wound to the sky: the old 3.4 m quads let the bank poke
@@ -500,10 +502,13 @@ export function createEmajoe(world, group) {
         near.push(...turn.near.pts); far.push(...turn.far.pts);
         for (const p of turn.near.pts) outer.push([...p, 0.14]);
       }
+      yield;
       const top = { heightAt: (x, z) => world.topAt(x, z, 1) };
       const g = drapeGeometry(top, [[[...near, ...far.reverse()]]], 0.05, 1.6, 1.5);
+      yield;
       if (g) { const m = new THREE.Mesh(g, paveMat); m.receiveShadow = true; group.add(m); }
       if (outer.length > 1) strip(outer, COL.kerb, 0.06, pave, top.heightAt);
+      yield;
       // the kerb along the straight: its face down to the road, the stone on top, and behind the pavement
       // the grass bank down to the ground
       {
@@ -540,6 +545,7 @@ export function createEmajoe(world, group) {
     for (const [list, mat] of [[marks, markMat], [pave, kerbMat]]) { const m = meshOf(list, mat, true); if (m) group.add(m); }
 
 
+    yield;
     // ---- the glass shelter, its bench and advert, and the bus stop sign
     const p = new Parts(), solids = [];
     const glass = [], sp = new Parts(), adverts = [], advertGlass = [];
@@ -584,6 +590,7 @@ export function createEmajoe(world, group) {
     }
     // (the bus stop sign is a prop that snaps off when hit: emajoeProps)
 
+    yield;
     // ---- the garden wall: driveway gate, then the high wall along the map's wall line
     const stone = { pos: [], uv: [] }, flat = { pos: [], col: [] };
     const first = GARDEN_WALL[0];
@@ -623,6 +630,7 @@ export function createEmajoe(world, group) {
     wallParts(dense, high, stone, flat);
     wallParts(GARDEN_WALL.slice(3), stoneHigh, stone, flat);
     wallMeshes(stone, flat);
+    yield;
     // brick gate posts with grey caps, and the iron gate between them
     const gyaw = Math.atan2(-gu[1], gu[0]);
     for (const [x, z] of [GATE.a, postB]) {
@@ -644,6 +652,7 @@ export function createEmajoe(world, group) {
       solids.push({ x: mx, z: mz, yaw: gyaw, hx: span / 2, hz: 0.12 });
     }
 
+    yield;
     const m = p.mesh(solidMat);
     if (m) { m.castShadow = m.receiveShadow = true; group.add(m); }
     // the shelter can be smashed: its glass bursts and its frame bends (src/world/shelter.js)
@@ -665,7 +674,7 @@ export function createEmajoe(world, group) {
     update(x, z) {
       if (built || Math.hypot(ref[0] - x, ref[1] - z) > 700) return;
       const pts = [...GARDEN_WALL, GATE.a, track.P[E.i0], track.P[E.i1], track.P[SHELTER.i]];
-      if (pts.every(([px, pz]) => world.ready(px, pz))) build();
+      if (pts.every(([px, pz]) => world.ready(px, pz))) { built = true; jobs.add(build, 'emajoe'); }
     },
   };
 }

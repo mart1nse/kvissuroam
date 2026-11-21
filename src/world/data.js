@@ -161,11 +161,16 @@ export async function loadWorldData(onProgress = () => {}) {
       for (let r = r0; r <= r1; r++) keep.set(D.subarray(r * dn + c0, r * dn + c1 + 1), (r - r0) * w);
       (s.kept ||= new Map()).set(b, { r0, r1, c0, c1, keep });
     }
+    // (cells further from the box than the field reaches are passed over, and the distance is a plain
+    // square root: a hand-built place's hundred boxes were 20 ms in one go, 100 ms on a slow computer)
+    const far = dmin + dspan;
     for (let r = r0; r <= r1; r++) {
       for (let col = c0; col <= c1; col++) {
         const px = s.x0 + col * dres - b.x, pz = s.z0 + r * dres - b.z;
         const qx = Math.abs(px * c - pz * sn) - b.hx, qz = Math.abs(px * sn + pz * c) - b.hz;
-        const d = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
+        if (qx >= far || qz >= far) continue;
+        const ox = qx > 0 ? qx : 0, oz = qz > 0 ? qz : 0;
+        const d = Math.sqrt(ox * ox + oz * oz) + Math.min(Math.max(qx, qz), 0);
         const v = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
         const i = r * dn + col;
         if (v < D[i]) D[i] = v;

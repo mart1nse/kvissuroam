@@ -20,6 +20,7 @@ import { setHouseColours } from './streetkit.js';
 import { frame, areaKit, cellKit } from './handbuilt.js';
 import { BOX } from '../race/landmarks.js';
 import { canvasTex, tileTex } from './katoliku.js';
+import { jobs } from '../jobs.js';
 
 // the church's frame: s from the main door toward the apse (north), v across it to the east (Veski side)
 const C = frame([680.6, 2613.56], [0.27295, -0.96203]);
@@ -108,7 +109,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
   const inVilla = (s, v) => s > -1 && s < 15.6 && v > -1 && v < 14.5;
   world.addClearing({ test: (x, z) => inChurch(...C.sv(x, z)) || inVilla(...VF.sv(x, z)) });
 
-  function build() {
+  function* build() {
     built = true;
     const A = areaKit(world, group, { shadows, fenceColour: COL.iron });
     const { p, h } = A;
@@ -191,6 +192,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         frieze(P, 0, w, EV - 0.75);
       }, ppm);
 
+      yield;
       // ---- the walls
       // the nave's sides: a narrow bay by the tower, three big bays, a short one before the transept
       const bays = [[N0, 4.6, 'nBayS'], [4.6, 9.75, 'nBay'], [9.75, 14.9, 'nBay'], [14.9, N1, 'nBay']];
@@ -219,6 +221,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       wall(TOWER[1], TOWER[2], TOWER[0], TOWER[2], 'tSide');
       wall(TOWER[1], TOWER[3], TOWER[1], TOWER[2], 'tSide');
 
+      yield;
       // ---- the bodies behind the painted walls
       blk(N0, N1 + 0.2, NW[0] + 0.1, NW[1] - 0.1, -1.5, EV, COL.brick3);
       blk(N1, T1, TW[0] + 0.1, TW[1] - 0.1, -1.5, EV, COL.brick3);
@@ -262,6 +265,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         const [mx, mz] = at(-0.45, 0);
         p.add(prism(2.5, 1.62, 0.92).rotateY(Math.PI / 2), COL.metal, mx, G + 4.92, mz, C.YAW);
       }
+      yield;
       // ---- the roofs: grey standing-seam metal
       const o = 0.45, e = EV - o * KN;
       const R = metal.on(at, G);
@@ -301,6 +305,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         p.add(new THREE.ConeGeometry(0.7, 5.0, 8), COL.metal, x, G + RG + 3.9, z);
         p.box(0.06, 0.8, 0.06, COL.iron, x, G + RG + 6.7, z); p.box(0.45, 0.06, 0.06, COL.iron, x, G + RG + 6.85, z, C.YAW);
       }
+      yield;
       // ---- the tower's spire: grey metal, four corner pinnacles, a gabled lucarne on each side, the cross
       {
         const sc = (TOWER[0] + TOWER[1]) / 2, vc = (TOWER[2] + TOWER[3]) / 2, [x, z] = at(sc, vc), y0 = G + TT;
@@ -332,6 +337,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       for (let k = 0; k < 2; k++) blk(-0.9 + k * 0.3, 0.05, -1.3, 1.3, -0.3, 0.12 + k * 0.14, 0xb8b4ab);
     }
 
+    yield;
     // ================================================================ the wall round the churchyard
     {
       const mk = meshKit(group, shadows);
@@ -377,6 +383,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       mk.finish();
     }
 
+    yield;
     // ================================================================ Veski 5
     {
       const at = VF.at, L = 12.95, Wd = 12.05;
@@ -437,6 +444,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       CK.cell('vBay', 1.0, -1.2, 3.45, rgb(COL.render), (P, w) => { render(P, 0, 0.4, w, 3.45, 59); plinth(P, w); diamond(P, w / 2, 1.0, 0.78, 2.05); }, 40);
       CK.cell('vDorm', 1.1, 0, 1.7, rgb(COL.render), (P, w) => { render(P, 0, 0, w, 1.7, 61); win(P, w / 2, 0.3, 0.62, 1.15, { bars: 1, rails: 1 }); }, 34);
 
+      yield;
       // the walls; the front and back step down where the low north slope comes in
       wall(L, Wd, L, 0, 'vFront', [[0, -1.2], [Wd, -1.2], [Wd, EN], [Wd - vSplit, EH], [0, EH]]);
       wall(0, 0, 0, Wd, 'vBack', [[0, -1.2], [Wd, -1.2], [Wd, EH], [vSplit, EH], [0, EN]]);
@@ -473,6 +481,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         const [rx, rz] = at(s, v + 0.75);
         p.add(prism(1.5, 0.8, 1.9), COL.tile, rx, G + y + 1.68, rz, VF.YAW);
       }
+      yield;
       // the bay: five faces of diamond-paned windows, a dark metal roof, the balcony on top
       const bc = [L, 3.48], ang = [-90, -54, -18, 18, 54, 90].map((d) => d * Math.PI / 180);
       const bp = ang.map((t) => [bc[0] + 1.85 * Math.cos(t), bc[1] + 2.6 * Math.sin(t)]);
@@ -506,6 +515,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       solids.push({ ...(() => { const [x, z] = at(L + 1, bc[1]); return { x, z }; })(), yaw: Math.atan2(-VF.U[1], VF.U[0]), hx: 1.0, hz: 2.4 });
     }
 
+    yield;
     CK.finish();
     A.finish();
     metal.finish(group, metalTex(), shadows);
@@ -517,7 +527,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([[684, 2600], [650, 2630], [705, 2600]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[684, 2600], [650, 2630], [705, 2600]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'katoliku2'); }
     },
   };
 }

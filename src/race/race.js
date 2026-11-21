@@ -538,6 +538,15 @@ export function levelTrackShoulders(world) {
   const FULL = 1.2, FADE = 2.4;
   let REACH = 0; for (let i = 0; i < N; i++) REACH = Math.max(REACH, HW[i] + FADE + 0.1);     // further from the lap than this, nothing changes
   const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  // 8 m squares that have any of the lap within REACH: a grid point outside them is not looked up at all.
+  // (Asking for the nearest piece of the lap at every one of a map square's 66 thousand grid points was 30 ms
+  // in one go as the square arrived, on the test drive of 21 Nov 2026; the answer is unchanged.)
+  const SQ = 8, sqKey = (cx, cz) => (cx + 32768) * 65536 + (cz + 32768), squares = new Set();
+  let seg = 0; for (let i = 0; i < N; i++) { const j = (i + 1) % N; seg = Math.max(seg, Math.hypot(P[j][0] - P[i][0], P[j][1] - P[i][1])); }
+  for (let i = 0; i < N; i++) {
+    const R = REACH + seg;
+    for (let cx = Math.floor((P[i][0] - R) / SQ); cx <= Math.floor((P[i][0] + R) / SQ); cx++) for (let cz = Math.floor((P[i][1] - R) / SQ); cz <= Math.floor((P[i][1] + R) / SQ); cz++) squares.add(sqKey(cx, cz));
+  }
   world.onSectorLoad((s) => {
     const H = s.H;
     if (!H) return;
@@ -557,6 +566,7 @@ export function levelTrackShoulders(world) {
     for (let r = 0; r < hn; r++) {
       for (let c = 0; c < hn; c++) {
         const x = s.x0 + c * res, z = s.z0 + r * res;
+        if (!squares.has(sqKey(Math.floor(x / SQ), Math.floor(z / SQ)))) continue;
         const n = track.nearest(x, z, -1, REACH);
         if (n.i < 0) continue;
         const hw = HW[n.i], d = n.d - hw;

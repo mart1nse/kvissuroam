@@ -88,7 +88,7 @@ export function createRoadPainter(world, size) {
   // In steps (see ../jobs.js). The browser only notes what is drawn on a canvas and paints it when the picture
   // is first read: for a square of the centre that was 50 ms in one go. Reading one pixel after every few
   // dozen strokes makes it paint that much, and each `yield` is then a place to stop until the next frame.
-  const BATCH = 36;
+  const BATCH = 12;      // (36 until 21 Nov 2026: a batch was up to 0.1 s on a slow computer)
   function* steps(s) {
     let drawn = 0;
     const due = (ctx, k = 1) => { if ((drawn += k) < BATCH) return false; drawn = 0; ctx.getImageData(0, 0, 1, 1); return true; };

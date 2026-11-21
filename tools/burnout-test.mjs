@@ -5,6 +5,8 @@
 //  first   brake first, then the throttle (at a standstill the brake alone selects reverse)
 //  roll    rolling at 20 km/h, both pedals go down: seconds to a halt, rear wheelspin on the way
 //  donut   a held donut, then the brake as well: slides on and straightens over 3.5 to 6.5 s
+//  settle  a wide donut (wheel at 0.7), then the brake and the wheel straight: once the car has straightened it
+//          rolls on only a little before it stops (Martin 2026-11-21: it drove on for seconds, fronts dragging)
 //  tilt    a burnout on a road leaning 4 deg to the right: how far the tail steps out
 //  ease    the brake eased off slowly mid burnout until the car goes, then pressed again slowly (reined back)
 //  swing   both pedals on in a slide that swings the car round until it moves backwards for a moment:
@@ -63,6 +65,19 @@ for (const spec of Object.values(CARS)) {
     run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
     out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
     if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5)) ok = false;
+  }
+  // settle
+  {
+    const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+    let tS = null, tStop = null, px = 0, pz = 0, dist = 0;
+    run(car, flat, 14, (t) => ({ up: 1, steer: t > 5 ? 0 : 0.7, down: t > 5 ? 1 : 0 }), (t, c) => {
+      if (t < 5) return;
+      const ang = Math.abs(deg(Math.atan2(c.vy, Math.abs(c.vx) + 0.01)));
+      if (tS === null && ang < 10 && Math.abs(deg(c.yawRate)) < 15) { tS = t; px = c.x; pz = c.z; }
+      if (tS !== null && tStop === null && speedKmh(c) < 1) { tStop = t; dist = Math.hypot(c.x - px, c.z - pz); }
+    });
+    out.push(`settle: straight ${tS === null ? 'never' : (tS - 5).toFixed(1) + ' s'} after the brake, then ${tStop === null ? 'never stops' : `${(tStop - tS).toFixed(1)} s and ${dist.toFixed(1)} m to a stop`}`);
+    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || (dist > 2 && spec.ref.powerKw / spec.mass > 0.15))) ok = false;
   }
   // tilt
   {

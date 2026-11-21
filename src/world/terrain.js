@@ -2,10 +2,33 @@ import * as THREE from 'three';
 import { sunDirection } from './sky.js';
 import { deckTopGeometry } from './decks.js';
 import { createRoadPainter } from './roadtex.js';
+import { jobs } from '../jobs.js';
 
 const BASE = `${import.meta.env.BASE_URL}data/ortho/`;
 
 const SUN = sunDirection();
+
+// Does this browser turn a picture over when asked to while unpacking it (createImageBitmap with
+// imageOrientation 'flipY')? Old Safari takes the option and ignores it, and the ground would lie upside down.
+let flipOk = null;
+function bitmapsFlip() {
+  if (flipOk) return flipOk;
+  flipOk = (async () => {
+    try {
+      if (typeof createImageBitmap !== 'function') return false;
+      const cv = document.createElement('canvas'); cv.width = 1; cv.height = 2;
+      const c = cv.getContext('2d'); c.fillStyle = '#f00'; c.fillRect(0, 0, 1, 1); c.fillStyle = '#00f'; c.fillRect(0, 1, 1, 1);
+      const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
+      const bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      const out = document.createElement('canvas'); out.width = 1; out.height = 2;
+      const o = out.getContext('2d', { willReadFrequently: true }); o.drawImage(bmp, 0, 0);
+      const px = o.getImageData(0, 0, 1, 2).data;
+      bmp.close && bmp.close();
+      return px[2] > 200 && px[0] < 50 && px[4] > 200 && px[6] < 50;      // blue on top now, red below
+    } catch { return false; }
+  })();
+  return flipOk;
+}
 
 function makeDetailTexture() {
   // tiling grain that hides the blur of the aerial photo up close
@@ -354,14 +377,10 @@ export function createTerrain(world, renderer, opts) {
 
   // Ground mask of a sector, built when the first of its tiles comes close and shared by them.
   const paint = createRoadPainter(world, opts.roadTex || 1024);
-  function acquireMask(s) {
-    if (s.mask) { s.mask.refs++; return s.mask; }
-    const road = paint(s);
-    const sn = meta.surface.n, dn = meta.sdf.n, step = (dn - 1) / sn;
-    const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
-    const px = new Uint8Array(sn * sn * 4);
-    // paving the bake found in the aerial photo, beside what the road data has. Thin slivers of it
-    // along a road are the wobble of a 1 m grid, not a yard: an opening removes them.
+  // (the loops over the grid are plain functions: inside a generator the browser runs such loops at half speed)
+  // paving the bake found in the aerial photo, beside what the road data has. Thin slivers of it
+  // along a road are the wobble of a 1 m grid, not a yard: an opening removes them.
+  function openPaving(s, road, sn) {
     const a = new Uint8Array(sn * sn), b = new Uint8Array(sn * sn);
     for (let j = 0; j < sn; j++) for (let i = 0; i < sn; i++) a[j * sn + i] = s.S[j * sn + i] === 1 && !road.hard(i, j) ? 1 : 0;
     for (let j = 1; j < sn - 1; j++) {
@@ -376,6 +395,12 @@ export function createTerrain(world, renderer, opts) {
         a[k] = b[k] | b[k - 1] | b[k + 1] | b[k - sn] | b[k + sn];
       }
     }
+    return a;
+  }
+  function maskPixels(s, a, sn) {
+    const dn = meta.sdf.n, step = (dn - 1) / sn;
+    const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
+    const px = new Uint8Array(sn * sn * 4);
     for (let j = 0; j < sn; j++) {
       for (let i = 0; i < sn; i++) {
         const k = j * sn + i;
@@ -396,6 +421,21 @@ export function createTerrain(world, renderer, opts) {
         }
       }
     }
+    return px;
+  }
+  // (in steps: painting the roads and the passes over the grid are 40 ms a sector together. `gone` says the
+  // tile that asked has been unloaded: then nothing is kept and null comes back)
+  function* maskSteps(s, gone = () => false) {
+    if (s.mask) { s.mask.refs++; return s.mask; }
+    const road = yield* paint.steps(s);
+    yield;
+    if (gone()) { road.cover.dispose(); road.tone.dispose(); return null; }
+    if (s.mask) { road.cover.dispose(); road.tone.dispose(); s.mask.refs++; return s.mask; }
+    const sn = meta.surface.n;
+    const a = openPaving(s, road, sn);
+    yield;
+    if (gone()) { road.cover.dispose(); road.tone.dispose(); return null; }
+    const px = maskPixels(s, a, sn);
     const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);
     tex.magFilter = tex.minFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
@@ -410,7 +450,8 @@ export function createTerrain(world, renderer, opts) {
     s.mask = null;
   }
 
-  function addSector(s) {
+  // the ground of a sector, a tile at a time (each `yield` is a place to stop until the next frame: see jobs.js)
+  function* addSectorSteps(s) {
     const H = s.H;
     const tile = S / s.div;
     const per = Math.round(tile / res);         // grid cells per tile
@@ -434,7 +475,7 @@ export function createTerrain(world, renderer, opts) {
             const ru = Math.max(r - 1, 0), rd = Math.min(r + 1, hn - 1);
             const dx = (hAt(cr, r) - hAt(cl, r)) / ((cr - cl) * res);
             const dz = (hAt(c, rd) - hAt(c, ru)) / ((rd - ru) * res);
-            const l = Math.hypot(dx, 1, dz);
+            const l = Math.sqrt(dx * dx + 1 + dz * dz);
             nor[k * 3] = -dx / l; nor[k * 3 + 1] = 1 / l; nor[k * 3 + 2] = -dz / l;
             uv[k * 2] = i / seg; uv[k * 2 + 1] = 1 - j / seg;
           }
@@ -477,9 +518,12 @@ export function createTerrain(world, renderer, opts) {
         const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
+        yield;
+        if (s.chunks === null || s.H !== H) return;        // unloaded meanwhile
       }
     }
   }
+  function addSector(s) { jobs.run(addSectorSteps(s)); }
 
   function removeSector(s) {
     for (const ch of s.chunks || []) {
@@ -499,37 +543,69 @@ export function createTerrain(world, renderer, opts) {
   const setMat = (ch, m) => { ch.mesh.material = m; if (ch.mesh.userData.deck) ch.mesh.userData.deck.material = m; if (ch.mesh.userData.kerb) ch.mesh.userData.kerb.material = m; };
 
   // ---- hi-res tile streaming around the camera
+  // A photo tile for the ground. Where the browser can, the picture is unpacked away from the game's own
+  // thread (createImageBitmap) and arrives ready for the graphics card; a plain image is unpacked in the
+  // frame that first draws it, 10 to 30 ms a tile, and tiles come several at a time when driving fast.
+  function loadPhoto(url, done, fail) {
+    const dress = (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = aniso;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      return tex;
+    };
+    const plain = () => loader.load(url, (tex) => done(dress(tex)), undefined, fail);
+    bitmapsFlip().then((ok) => {
+      // (nobody driving, or frames too slow to matter: the plain way, which takes fewer turns of the page)
+      if (!ok || !jobs.live) { plain(); return; }
+      fetch(url).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+        .then((blob) => createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
+        .then((bmp) => {
+          const tex = new THREE.Texture(bmp);
+          tex.flipY = false;                         // turned over while unpacking: an image bitmap cannot be turned later
+          tex.needsUpdate = true;
+          tex.addEventListener('dispose', () => bmp.close && bmp.close());
+          done(dress(tex));
+        }, () => plain());
+    });
+  }
   let loading = 0;
   const rHi = opts.tileRadius;
   function load(ch) {
     ch.state = 'loading';
     loading++;
-    loader.load(ch.url, (tex) => {
+    loadPhoto(ch.url, (tex) => {
       loading--;
-      if (ch.gone) { tex.dispose(); return; }
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = aniso;
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      ch.mask = acquireMask(ch.sector);
-      ch.matHi = groundMaterial(tex, detail, null, ch.mask);
-      setMat(ch, ch.matHi);
-      ch.state = 'hi';
-    }, undefined, () => { loading--; ch.state = 'failed'; });
+      jobs.add(function* () {
+        if (ch.gone) { tex.dispose(); return; }
+        const mask = yield* maskSteps(ch.sector, () => ch.gone);
+        if (!mask || ch.gone) { tex.dispose(); return; }
+        ch.mask = mask;
+        // (each picture goes to the graphics card in a frame of its own)
+        for (const t of [tex, mask.tex, mask.cover, mask.tone]) {
+          jobs.upload(t);
+          yield;
+          if (ch.gone) { tex.dispose(); return; }
+        }
+        ch.matHi = groundMaterial(tex, detail, null, ch.mask);
+        setMat(ch, ch.matHi);
+        ch.state = 'hi';
+      }, 'ground tile');
+    }, () => { loading--; ch.state = 'failed'; });
   }
   // extra-sharp version of a tile, swapped in only close to the camera
   function loadX(ch) {
     ch.xstate = 'loading';
     loading++;
-    loader.load(ch.xurl, (tex) => {
+    loadPhoto(ch.xurl, (tex) => {
       loading--;
-      if (ch.gone || ch.state !== 'hi' || ch.xstate !== 'loading') { tex.dispose(); if (ch.xstate === 'loading') ch.xstate = 'none'; return; }
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = aniso;
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      ch.matX = groundMaterial(tex, detail, null, ch.mask);
-      setMat(ch, ch.matX);
-      ch.xstate = 'on';
-    }, undefined, () => { loading--; ch.xstate = 'failed'; });
+      jobs.add(() => {
+        if (ch.gone || ch.state !== 'hi' || ch.xstate !== 'loading') { tex.dispose(); if (ch.xstate === 'loading') ch.xstate = 'none'; return; }
+        jobs.upload(tex);
+        ch.matX = groundMaterial(tex, detail, null, ch.mask);
+        setMat(ch, ch.matX);
+        ch.xstate = 'on';
+      }, 'sharp tile');
+    }, () => { loading--; ch.xstate = 'failed'; });
   }
   function dropX(ch) {
     if (ch.matX) { setMat(ch, ch.matHi || matLow); ch.matX.map.dispose(); ch.matX.dispose(); ch.matX = null; }
@@ -559,5 +635,5 @@ export function createTerrain(world, renderer, opts) {
     want.sort((p, q) => p.d - q.d);
     for (const ch of want) { if (loading >= 4) break; load(ch); }
   }
-  return { group, update, addSector, removeSector, setCoarse, pending: () => loading };
+  return { group, update, addSector, addSectorSteps, removeSector, setCoarse, pending: () => loading };
 }

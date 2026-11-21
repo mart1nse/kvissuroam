@@ -232,7 +232,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         // (ds, dv): the way it stands out of the wall; each set-off's weathering slopes down outward
         for (const [d, y0, y1, w] of [[deep, -1.5, top * 0.55, wide], [deep * 0.62, top * 0.55, top, wide * 0.85]]) {
           const [bx, bz] = at(s + ds * d / 2, v + dv * d / 2);
-          p.add(BOX(ds ? d : w, y1 - y0, dv ? d : w), COL.brick3, bx, G + (y0 + y1) / 2, bz, C.YAW);
+          p.box(ds ? d : w, y1 - y0, dv ? d : w, COL.brick3, bx, G + (y0 + y1) / 2, bz, C.YAW);
           const cap = BOX(ds ? d * 1.12 : w + 0.1, 0.07, dv ? d * 1.12 : w + 0.1);
           if (dv) cap.rotateX(Math.sign(dv) * 0.6); else cap.rotateZ(-Math.sign(ds) * 0.6);
           p.add(cap, COL.metal, bx, G + y1 + d * 0.3, bz, C.YAW);
@@ -299,7 +299,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         const [x, z] = at(sm, VM);
         p.add(new THREE.CylinderGeometry(0.62, 0.62, 1.6, 8), COL.metal, x, G + RG + 0.6, z);
         p.add(new THREE.ConeGeometry(0.7, 5.0, 8), COL.metal, x, G + RG + 3.9, z);
-        p.add(BOX(0.06, 0.8, 0.06), COL.iron, x, G + RG + 6.7, z); p.add(BOX(0.45, 0.06, 0.06), COL.iron, x, G + RG + 6.85, z, C.YAW);
+        p.box(0.06, 0.8, 0.06, COL.iron, x, G + RG + 6.7, z); p.box(0.45, 0.06, 0.06, COL.iron, x, G + RG + 6.85, z, C.YAW);
       }
       // ---- the tower's spire: grey metal, four corner pinnacles, a gabled lucarne on each side, the cross
       {
@@ -308,19 +308,19 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         p.add(new THREE.CylinderGeometry(2.5, 2.9, 0.4, 8).rotateY(Math.PI / 8), COL.metalDark, x, y0 + 0.2, z, C.YAW);
         for (const [ds, dv] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
           const [qx, qz] = at(sc + ds * 2.55, vc + dv * 2.55);
-          p.add(BOX(0.6, 0.9, 0.6), COL.brick3, qx, y0 + 0.45, qz, C.YAW);
+          p.box(0.6, 0.9, 0.6, COL.brick3, qx, y0 + 0.45, qz, C.YAW);
           p.add(new THREE.ConeGeometry(0.42, 3.4, 4).rotateY(Math.PI / 4), COL.metal, qx, y0 + 2.6, qz, C.YAW);
         }
         for (const [ds, dv] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
           const [qx, qz] = at(sc + ds * 1.95, vc + dv * 1.95), yaw = C.YAW + (ds ? 0 : Math.PI / 2);
-          p.add(BOX(0.9, 2.0, 0.9), COL.metal, qx, y0 + 1.6, qz, yaw);
+          p.box(0.9, 2.0, 0.9, COL.metal, qx, y0 + 1.6, qz, yaw);
           p.add(prism(1.05, 0.85, 0.95).rotateY(ds ? Math.PI / 2 : 0), COL.brick3, qx, y0 + 2.6, qz, C.YAW);
           const [wx, wz] = at(sc + ds * 2.42, vc + dv * 2.42);
-          p.add(BOX(0.42, 0.9, 0.42), 0x2d2a28, wx, y0 + 1.55, wz, yaw);
+          p.box(0.42, 0.9, 0.42, 0x2d2a28, wx, y0 + 1.55, wz, yaw);
         }
         p.add(new THREE.SphereGeometry(0.16, 8, 6), 0xb59a52, x, G + SPIRE + 0.05, z);
-        p.add(BOX(0.08, 1.5, 0.08), 0x9c8442, x, G + SPIRE + 0.8, z);
-        p.add(BOX(0.75, 0.08, 0.08), 0x9c8442, x, G + SPIRE + 1.1, z, C.YAW + Math.PI / 2);
+        p.box(0.08, 1.5, 0.08, 0x9c8442, x, G + SPIRE + 0.8, z);
+        p.box(0.75, 0.08, 0.08, 0x9c8442, x, G + SPIRE + 1.1, z, C.YAW + Math.PI / 2);
       }
       solids.push(...[[N0, N1, NW[0], NW[1]], [N1, T1, TW[0], TW[1]], [T1, 31.5, -5.8, 5.3], [-1.8, 5.2, -3, 3]].map(([s0, s1, v0, v1]) => {
         const [x, z] = at((s0 + s1) / 2, (v0 + v1) / 2);
@@ -351,8 +351,8 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
           for (let k = 0; k <= n; k++) {
             if (k === n && i < pts.length - 2) continue;
             const q = [a[0] + ux * len * k / n, a[1] + uz * len * k / n], y = h(...q);
-            p.add(BOX(0.52, 1.7, 0.52), COL.brick3, q[0], y + 0.85 - 0.05, q[1], yaw);
-            p.add(BOX(0.62, 0.1, 0.62), COL.stone3, q[0], y + 1.7, q[1], yaw);
+            p.box(0.52, 1.7, 0.52, COL.brick3, q[0], y + 0.85 - 0.05, q[1], yaw);
+            p.box(0.62, 0.1, 0.62, COL.stone3, q[0], y + 1.7, q[1], yaw);
             p.add(new THREE.ConeGeometry(0.42, 0.24, 4).rotateY(Math.PI / 4), COL.stone3, q[0], y + 1.87, q[1], yaw);
             solids.push({ x: q[0], z: q[1], yaw, hx: 0.28, hz: 0.28 });
           }
@@ -365,8 +365,8 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       const ux = (gb[0] - ga[0]) / len, uz = (gb[1] - ga[1]) / len, yaw = Math.atan2(-uz, ux), nx = -uz, nz = ux;
       for (const q of [ga, gb]) {
         const y = h(...q);
-        p.add(BOX(0.7, 2.3, 0.7), COL.brick3, q[0], y + 1.1, q[1], yaw);
-        p.add(BOX(0.82, 0.12, 0.82), COL.stone3, q[0], y + 2.3, q[1], yaw);
+        p.box(0.7, 2.3, 0.7, COL.brick3, q[0], y + 1.1, q[1], yaw);
+        p.box(0.82, 0.12, 0.82, COL.stone3, q[0], y + 2.3, q[1], yaw);
         p.add(new THREE.ConeGeometry(0.55, 0.32, 4).rotateY(Math.PI / 4), COL.stone3, q[0], y + 2.52, q[1], yaw);
         solids.push({ x: q[0], z: q[1], yaw, hx: 0.36, hz: 0.36 });
       }
@@ -489,7 +489,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
           const a = at(bp[k][0] - 0.12 * Math.cos(ang[k]), bp[k][1] - 0.12 * Math.sin(ang[k])), b = at(bp[k + 1][0] - 0.12 * Math.cos(ang[k + 1]), bp[k + 1][1] - 0.12 * Math.sin(ang[k + 1]));
           A.bar(a, b, 0.05, 4.55, 4.62, COL.iron, G);
           A.bar(a, b, 0.03, 3.85, 3.9, COL.iron, G);
-          A.walk([a, b], 0.14, ([qx, qz]) => p.add(BOX(0.02, 0.7, 0.02), COL.iron, qx, G + 4.22, qz));
+          A.walk([a, b], 0.14, ([qx, qz]) => p.box(0.02, 0.7, 0.02, COL.iron, qx, G + 4.22, qz));
         }
       }
       // the red tiled pent roof along the rest of the front, at the first floor

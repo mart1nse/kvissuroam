@@ -225,7 +225,7 @@ export function createKontserdimaja(scene, world, { shadows = true } = {}) {
     const { p } = A;
     const at = F.at;
     // a box in the frame at absolute heights
-    const blk = (s0, s1, v0, v1, y0, y1, c) => { const [x, z] = at((s0 + s1) / 2, (v0 + v1) / 2); p.add(BOX(s1 - s0, y1 - y0, v1 - v0), c, x, (y0 + y1) / 2, z, F.YAW); };
+    const blk = (s0, s1, v0, v1, y0, y1, c) => { const [x, z] = at((s0 + s1) / 2, (v0 + v1) / 2); p.box(s1 - s0, y1 - y0, v1 - v0, c, x, (y0 + y1) / 2, z, F.YAW); };
     // a bar along s from (sa, ya) to (sb, yb) at v, `t` thick
     const slope = (sa, sb, v, ya, yb, t, tv, c) => {
       const len = Math.hypot(sb - sa, yb - ya), [x, z] = at((sa + sb) / 2, v);
@@ -291,7 +291,7 @@ export function createKontserdimaja(scene, world, { shadows = true } = {}) {
     slope(4, 9, (-0.3 + GV) / 2, YARD - 0.15, TY - 0.15, 0.3, GV + 0.3, 0x9d9992);
     A.pave(F, S0, 4, FV, GV, 'slabs');
     // the ramp's railing: posts and a sloping rail on the wall
-    for (let s = 4.3; s < 9; s += 1.15) { const [x, z] = at(s, -0.35); p.add(BOX(0.05, 1.0, 0.05), 0x80858b, x, deckY(s) + 0.4 + 0.5, z); }
+    for (let s = 4.3; s < 9; s += 1.15) { const [x, z] = at(s, -0.35); p.box(0.05, 1.0, 0.05, 0x80858b, x, deckY(s) + 0.4 + 0.5, z); }
     slope(4, 9, -0.35, YARD + 1.4, TY + 1.4, 0.05, 0.06, 0x80858b);
     slope(4, 9, -0.35, YARD + 0.95, TY + 0.95, 0.03, 0.03, 0x80858b);
 
@@ -316,7 +316,7 @@ export function createKontserdimaja(scene, world, { shadows = true } = {}) {
     };
     for (const v of [2.44, 2.56, 5.05]) {
       rail(v, S1 + 0.5, LAND[1]); rail(v, LAND[1], LAND[0] + T); rail(v, LAND[0] + T, FOOT - 0.3);
-      for (let s = S1 + 0.6; s < FOOT; s += 1.3) { const [x, z] = at(s, v); p.add(BOX(0.05, 0.92, 0.05), STEEL, x, deckY(s) + 0.46, z); }
+      for (let s = S1 + 0.6; s < FOOT; s += 1.3) { const [x, z] = at(s, v); p.box(0.05, 0.92, 0.05, STEEL, x, deckY(s) + 0.46, z); }
     }
 
     // ---- the columns, the front block over them, the soffit and its lights
@@ -379,14 +379,14 @@ export function createKontserdimaja(scene, world, { shadows = true } = {}) {
     // ---- the car park beside it: the gate's orange posts and red and white arm, the disabled bay
     {
       const [x, z] = at(-11.5, 3.3), y = h(x, z);
-      p.add(BOX(0.32, 1.05, 0.32), 0xe2672c, x, y + 0.52, z, F.YAW);
-      for (let k = 0; k < 9; k++) { const [ax, az] = at(-11.8 - 0.5 * k - 0.25, 3.3); p.add(BOX(0.5, 0.09, 0.07), k % 2 ? 0xf2f0ec : 0xd2312c, ax, y + 0.9, az, F.YAW); }
+      p.box(0.32, 1.05, 0.32, 0xe2672c, x, y + 0.52, z, F.YAW);
+      for (let k = 0; k < 9; k++) { const [ax, az] = at(-11.8 - 0.5 * k - 0.25, 3.3); p.box(0.5, 0.09, 0.07, k % 2 ? 0xf2f0ec : 0xd2312c, ax, y + 0.9, az, F.YAW); }
       const [qx, qz] = at(-11.5, 6.4);
-      p.add(BOX(0.32, 0.9, 0.32), 0xe2672c, qx, h(qx, qz) + 0.45, qz, F.YAW);
+      p.box(0.32, 0.9, 0.32, 0xe2672c, qx, h(qx, qz) + 0.45, qz, F.YAW);
       const [bx, bz] = at(-6.5, 3.0), by = h(bx, bz);
-      p.add(BOX(2.6, 0.03, 5.0), 0x3d67c8, bx, by + 0.03, bz, F.YAW);
-      p.add(BOX(0.9, 0.035, 0.9), 0xf1f1ee, bx, by + 0.04, bz, F.YAW);
-      for (let k = 0; k < 4; k++) { const [lx, lz] = at(-4.6, 1.0 + k * 1.2); p.add(BOX(1.1, 0.03, 0.12), 0xe7c53a, lx, h(lx, lz) + 0.03, lz, F.YAW + 0.6); }
+      p.box(2.6, 0.03, 5.0, 0x3d67c8, bx, by + 0.03, bz, F.YAW);
+      p.box(0.9, 0.035, 0.9, 0xf1f1ee, bx, by + 0.04, bz, F.YAW);
+      for (let k = 0; k < 4; k++) { const [lx, lz] = at(-4.6, 1.0 + k * 1.2); p.box(1.1, 0.03, 0.12, 0xe7c53a, lx, h(lx, lz) + 0.03, lz, F.YAW + 0.6); }
     }
 
     A.finish();

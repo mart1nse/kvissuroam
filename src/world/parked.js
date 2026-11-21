@@ -8,11 +8,11 @@
 //  - further away with a simplified copy of it (a few thousand triangles, one material, one draw call)
 //    whose paint colour is a uniform, so every colour shares the same geometry.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MeshoptSimplifier } from 'meshoptimizer';
-import { buildCarModel } from '../cars/models/index.js';
+import { buildCarModel, buildParkedInWorker, buildCarInWorker } from '../cars/models/index.js';
+import { takeParts, mergeNear, bakeLodSteps, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
+import { jobs } from '../jobs.js';
+import { warm } from '../warm.js';
 import { CEED_GREEN } from '../cars/models/ceed.js';
-import { palAt } from '../cars/models/kit.js';
 import { CARS } from '../cars/specs.js';
 import { createTrack } from '../race/race.js';
 import { PARKING, rnd } from '../race/landmarks.js';
@@ -141,139 +141,6 @@ function allSpots() {
   return out;
 }
 
-// ---------------------------------------------------------------- one model, shared by all its parked copies
-const pixels = new Map();
-function sampler(tex) {
-  if (!tex || !tex.image) return null;
-  let p = pixels.get(tex);
-  if (!p) {
-    const im = tex.image;
-    // (a scanned body's 2048 picture is read at 512: one colour per triangle does not need more)
-    const k = Math.min(1, 512 / Math.max(im.width, im.height));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(im, 0, 0, c.width, c.height);
-    p = { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, flip: tex.flipY !== false };
-    pixels.set(tex, p);
-  }
-  return (u, v, out) => {
-    u -= Math.floor(u); v -= Math.floor(v);
-    const px = Math.min(p.w - 1, Math.floor(u * p.w)), py = Math.min(p.h - 1, Math.floor((p.flip ? 1 - v : v) * p.h));
-    const i = (py * p.w + px) * 4;
-    out[0] = p.d[i]; out[1] = p.d[i + 1]; out[2] = p.d[i + 2]; out[3] = p.d[i + 3];
-  };
-}
-
-// The far version: every surface of the model flattened to coloured vertices (palette and lamp textures
-// are read per triangle), welded and simplified. aMat = (is paint, roughness, metalness).
-// (Typed arrays sized up front and a numeric weld table: building it with growing number lists and a
-// text key per vertex made about a gigabyte of garbage per car park, and an iPhone gave up on the page.)
-export function bakeLod(parts, id, tris) {
-  let cap = 0;
-  for (const { geo } of parts) cap += geo.attributes.position.count;
-  const pos = new Float64Array(cap * 3), nrm = new Float64Array(cap * 3), col = new Float64Array(cap * 3), mat = new Float64Array(cap * 3);
-  let n = 0;                                   // vertices written
-  const c = new THREE.Color(), px = [0, 0, 0, 0];
-  for (const { geo, mat: m, paint, scan, tint } of parts) {
-    if (m.transparent && m.opacity < 0.5) continue;
-    const P = geo.attributes.position.array, N = geo.attributes.normal.array, U = geo.attributes.uv?.array;
-    const isPal = !!(m.map && m.metalnessMap && m.map.magFilter === THREE.NearestFilter);
-    const tex = !paint && !isPal && U ? sampler(m.map) : null;
-    // decals lie a few millimetres off the body: lift them clear of the simplified shell
-    const puff = paint || scan ? 0 : isPal ? 0.006 : 0.014;
-    for (let t = 0; t < P.length; t += 9) {
-      let r = m.roughness ?? 0.5, mt = m.metalness ?? 0, isPaint = 0;
-      if (paint) { c.setRGB(1, 1, 1); isPaint = 1; }
-      else if (isPal) { const e = palAt(U[t / 9 * 6]); c.set(e[0]); r = e[1]; mt = e[2]; }
-      else if (tex) {
-        tex((U[t / 9 * 6] + U[t / 9 * 6 + 2] + U[t / 9 * 6 + 4]) / 3, (U[t / 9 * 6 + 1] + U[t / 9 * 6 + 3] + U[t / 9 * 6 + 5]) / 3, px);
-        if (m.alphaTest > 0 && px[3] < m.alphaTest * 255) continue;
-        // a scanned body that takes paint: its white parts are the paint
-        if (tint && Math.min(px[0], px[1], px[2]) > 150) { c.setRGB(1, 1, 1); isPaint = 1; }
-        else c.setRGB(px[0] / 255, px[1] / 255, px[2] / 255, THREE.SRGBColorSpace).multiply(m.color);
-      } else c.copy(m.color);
-      for (let k = 0; k < 9; k += 3) {
-        const a = n * 3;
-        pos[a] = P[t + k] + N[t + k] * puff; pos[a + 1] = P[t + k + 1] + N[t + k + 1] * puff; pos[a + 2] = P[t + k + 2] + N[t + k + 2] * puff;
-        nrm[a] = N[t + k]; nrm[a + 1] = N[t + k + 1]; nrm[a + 2] = N[t + k + 2];
-        col[a] = c.r; col[a + 1] = c.g; col[a + 2] = c.b; mat[a] = isPaint; mat[a + 1] = r; mat[a + 2] = mt;
-        n++;
-      }
-    }
-  }
-  // weld: same place, colour and (roughly) normal. Each vertex gets ten whole numbers (position to
-  // 0.2 mm, normal in thirds, colour in sixtieths, paint or not), kept in an open hash table that
-  // holds the first vertex of each kind (its numbers are worked out again to compare).
-  const index = new Uint32Array(n), first = new Int32Array(n), Q = new Int32Array(10), R = new Int32Array(10);
-  const quant = (a, o) => {
-    o[0] = Math.round(pos[a] * 5000); o[1] = Math.round(pos[a + 1] * 5000); o[2] = Math.round(pos[a + 2] * 5000);
-    o[3] = Math.round(nrm[a] * 3); o[4] = Math.round(nrm[a + 1] * 3); o[5] = Math.round(nrm[a + 2] * 3);
-    o[6] = Math.round(col[a] * 60); o[7] = Math.round(col[a + 1] * 60); o[8] = Math.round(col[a + 2] * 60); o[9] = mat[a];
-  };
-  let size = 1024;
-  while (size < n * 2) size *= 2;
-  const table = new Int32Array(size).fill(-1), maskT = size - 1;
-  let u = 0;                                   // distinct vertices
-  for (let i = 0; i < n; i++) {
-    quant(i * 3, Q);
-    let h = 0x811c9dc5;
-    for (let k = 0; k < 10; k++) h = Math.imul(h ^ Q[k], 0x01000193);
-    h = (h ^ (h >>> 15)) & maskT;
-    let v;
-    for (;;) {
-      v = table[h];
-      if (v < 0) { v = u++; table[h] = v; first[v] = i; break; }
-      quant(first[v] * 3, R);
-      let same = true;
-      for (let k = 0; k < 10; k++) if (R[k] !== Q[k]) { same = false; break; }
-      if (same) break;
-      h = (h + 1) & maskT;
-    }
-    index[i] = v;
-  }
-  let idx = index;
-  if (MeshoptSimplifier.supported) {
-    const target = Math.round(tris * (id === 'bus' ? 0.85 : 1)) * 3;
-    const vp = new Float32Array(u * 3);
-    for (let v = 0; v < u; v++) { const a = first[v] * 3; vp[v * 3] = pos[a]; vp[v * 3 + 1] = pos[a + 1]; vp[v * 3 + 2] = pos[a + 2]; }
-    idx = MeshoptSimplifier.simplify(index, vp, 3, target, 0.03, ['ErrorAbsolute'])[0];
-  }
-  // keep only the vertices still in use
-  const remap = new Int32Array(u).fill(-1), oi = new Uint32Array(idx.length), keep = [];
-  for (let i = 0; i < idx.length; i++) {
-    let v = remap[idx[i]];
-    if (v < 0) { v = remap[idx[i]] = keep.length; keep.push(first[idx[i]]); }
-    oi[i] = v;
-  }
-  const w = keep.length, op = new Float32Array(w * 3), on = new Float32Array(w * 3), oc = new Float32Array(w * 3), om = new Float32Array(w * 3);
-  for (let v = 0; v < w; v++) {
-    const a = keep[v] * 3, b = v * 3;
-    for (let k = 0; k < 3; k++) { op[b + k] = pos[a + k]; on[b + k] = nrm[a + k]; oc[b + k] = col[a + k]; om[b + k] = mat[a + k]; }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(op, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(on, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(oc, 3));
-  g.setAttribute('aMat', new THREE.BufferAttribute(om, 3));
-  g.setIndex(new THREE.BufferAttribute(w > 65535 ? oi : new Uint16Array(oi), 1));
-  g.computeBoundingSphere(); g.computeBoundingBox();
-  return g;
-}
-
-// The very far version (the Kaluri car park, 20 Nov: fifty cars side by side): the far version's own vertices
-// with a much shorter triangle list, so it costs no memory to speak of. A car 100 m off is a few pixels high.
-export function lowLod(lod, tris) {
-  if (!MeshoptSimplifier.supported || !lod.index || lod.index.count <= tris * 3) return lod;
-  const idx = MeshoptSimplifier.simplifySloppy(new Uint32Array(lod.index.array), lod.attributes.position.array, 3, null, tris * 3, 0.08)[0];
-  if (!idx.length) return lod;
-  const g = new THREE.BufferGeometry();
-  for (const k of Object.keys(lod.attributes)) g.setAttribute(k, lod.attributes[k]);
-  g.setIndex(new THREE.BufferAttribute(lod.attributes.position.count > 65535 ? idx : new Uint16Array(idx), 1));
-  g.boundingSphere = lod.boundingSphere; g.boundingBox = lod.boundingBox;
-  return g;
-}
-
 // far material: vertex colours, with the paint colour and its finish as uniforms
 const lodMats = new Map();
 function lodMaterial(name, own = null) {
@@ -306,20 +173,7 @@ function buildTemplate(id, scan = false) {
   return scanned && model.ready ? model.ready.then(() => takeTemplate(id, model)) : takeTemplate(id, model);
 }
 function takeTemplate(id, model) {
-  model.setLights?.({ headlights: false });
-  model.group.updateMatrixWorld(true);
-  const parts = [];
-  const take = (o) => {
-    const geo = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrixWorld);
-    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
-    const scan = !!model.glbLoaded && o.name.endsWith('_glb') && !o.material.name.startsWith('ov_');
-    parts.push({ geo, mat: o.material, paint: o.name === `${id}_paint`, scan, tint: scan && !!TINT[id] });
-  };
-  if (model.glbLoaded) {
-    // the drawn body is hidden under the scan (whole branches of it): leave out what is not shown
-    const walk = (o) => { if (!o.visible) return; if (o.isMesh) take(o); for (const c of o.children) walk(c); };
-    walk(model.group);
-  } else model.group.traverse((o) => { if (o.isMesh && o.visible) take(o); });
+  const parts = takeParts(id, model, !!TINT[id]);
   const paintPart = parts.find((p) => p.paint || p.tint);
   const T = {
     id, lod: null, parts, near: null, nearMats: null, paints: new Map(),
@@ -331,20 +185,28 @@ function takeTemplate(id, model) {
   // the near version is put together the first time a car of this model is close enough to need it
   T.needNear = () => {
     if (T.near) return;
-    const byMat = new Map();
-    for (const p of T.parts) { let l = byMat.get(p.mat); if (!l) byMat.set(p.mat, (l = [])); l.push(p.geo); }
-    const geos = [], mats = [];
-    for (const [m, l] of byMat) {
-      for (const g of l) for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
-      geos.push(l.length > 1 ? mergeGeometries(l) : l[0]); mats.push(m);
-    }
-    T.near = mergeGeometries(geos, true);
-    T.near.computeBoundingSphere();
+    const { near, mats } = mergeNear(T.parts);
+    T.near = near;
     T.nearMats = mats;
     T.paintAt = mats.indexOf(T.paintMat);
-    for (const p of T.parts) p.geo.dispose();
     T.parts = null;
   };
+  return withMaterials(T);
+}
+// A model that came from the worker (src/world/parkedbake.js): everything is made already
+function workerTemplate(id, d) {
+  const u = unpackParked(d);
+  const T = {
+    id, lod: u.lod, low: u.low, parts: null, near: u.near, nearMats: u.nearMats, paintAt: u.paintAt, paints: new Map(),
+    hl: u.size.length / 2, hw: u.size.width / 2, wb: u.wheelbase, tr: u.track,
+    mass: MASS[id] || CARS[id]?.mass || 1500,
+    ownPaint: u.own ? { color: new THREE.Color().fromArray(u.own.color), roughness: u.own.roughness, metalness: u.own.metalness } : { color: new THREE.Color(0xffffff), roughness: 0.4, metalness: 0.3 },
+    paintMat: u.paintAt >= 0 ? u.nearMats[u.paintAt] : undefined, tinted: u.tinted,
+  };
+  T.needNear = () => {};
+  return withMaterials(T);
+}
+function withMaterials(T) {
   // the model's materials, with the body in this colour
   T.materials = (name) => {
     if (!name || T.paintAt < 0) return T.nearMats;
@@ -450,19 +312,39 @@ export function createParked(scene, world, opts = {}) {
       const wait = holdUntil - performance.now();
       if (wait > 0) { setTimeout(run, Math.min(wait, 500)); return; }
       const id = queue.shift();
-      const fail = (e) => { console.warn('parked', id, e); templates.set(id, false); building = false; pump(); };
-      // the far versions in a frame of their own
-      const bake = (T) => setTimeout(() => {
-        try { T.lod = bakeLod(T.parts, id, tris); T.low = lowLod(T.lod, lowTris); templates.set(id, T); } catch (e) { fail(e); return; }
-        building = false;
-        pump();
-      }, touch ? 300 : 120);
-      try {
-        const T = buildTemplate(id, !touch);
-        if (T.then) T.then(bake, fail); else bake(T);
-      } catch (e) { fail(e); }
+      const next = () => { building = false; pump(); };
+      const fail = (e) => { console.warn('parked', id, e); templates.set(id, false); next(); };
+      // the far versions, a step a frame (src/jobs.js)
+      const bake = (T) => setTimeout(() => jobs.add(function* () {
+        try { T.lod = yield* bakeLodSteps(T.parts, id, tris); yield; T.low = lowLod(T.lod, lowTris); templates.set(id, T); } catch (e) { fail(e); return; }
+        next();
+      }, 'parked'), touch ? 300 : 120);
+      // all of it on the page, where there is no worker
+      const here = () => {
+        try {
+          const T = buildTemplate(id, !touch);
+          if (T.then) T.then(bake, fail); else bake(T);
+        } catch (e) { fail(e); }
+      };
+      const scanned = !!SCANNED[id] && !touch;
+      if (scanned) {
+        // a scanned body is put on here on the page: the car under it comes from the worker
+        buildCarInWorker(id, { ...OPTS[id], scan: true }).then((model) => {
+          if (!model) { here(); return; }
+          model.setLights?.({ headlights: false });
+          model.setSoot?.(0);
+          Promise.resolve(model.ready).then(() => jobs.add(() => { try { bake(takeTemplate(id, model)); } catch (e) { fail(e); } }, 'parked'), fail);
+        });
+        return;
+      }
+      // everything else is built in the worker and arrives finished (src/world/parkedbake.js)
+      buildParkedInWorker(id, SCANNED[id] ? { ...OPTS[id], scan: false } : OPTS[id], { tint: false, tris, lowTris }).then((d) => {
+        if (!d) { here(); return; }
+        try { templates.set(id, workerTemplate(id, d)); } catch (e) { console.warn('parked from worker', id, e); here(); return; }
+        next();
+      });
     };
-    MeshoptSimplifier.ready.then(() => setTimeout(run, gap), () => setTimeout(run, gap));
+    simplifierReady().then(() => setTimeout(run, gap));
   }
 
   const up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), v1 = new THREE.Vector3(), qYaw = new THREE.Quaternion(), qTilt = new THREE.Quaternion();
@@ -514,7 +396,17 @@ export function createParked(scene, world, opts = {}) {
       b.g.add(b.near);
     }
     if (b.near) b.near.visible = on;
-    b.far.visible = !on;
+    // (a detailed body just made is still on its way to the graphics card, unseen (warm.js): the plain one stays till then)
+    if (on && warm.holding(b.near)) { b.far.visible = true; if (!swapping.includes(b)) swapping.push(b); } else b.far.visible = !on;
+  }
+  const swapping = [];
+  function swaps() {
+    for (let k = swapping.length - 1; k >= 0; k--) {
+      const b = swapping[k];
+      if (b.near && warm.holding(b.near)) continue;
+      b.far.visible = !b.isNear;
+      swapping.splice(k, 1);
+    }
   }
 
   // ---- the player's car (as a box) against a parked one: share the overlap by mass and swap momentum
@@ -643,6 +535,7 @@ export function createParked(scene, world, opts = {}) {
     }
     if (saveIn > 0 && (saveIn -= dt) <= 0) save();
     // ---- which are drawn, and which of them in full
+    if (swapping.length) swaps();
     if ((lodIn -= dt) <= 0) {
       lodIn = 0.2;
       order.length = 0;

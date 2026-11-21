@@ -68,7 +68,7 @@ export function createTrackKerbs(world, scene) {
   // a run's kerb at (x, z)
   const runAt = (x, z) => {
     // (the nearest piece of the lap anywhere: a hint can settle on another stretch that passes within 30 m)
-    const n = track.nearest(x, z);
+    const n = track.nearest(x, z, -1, 14);
     if (n.i < 0 || n.d > 14) return 0;
     const [tx, tz] = tan[n.i], p = P[n.i];
     const lat = (x - p[0]) * -tz + (z - p[1]) * tx, s = lat > 0 ? 1 : -1;

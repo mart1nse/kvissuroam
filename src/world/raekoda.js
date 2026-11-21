@@ -158,7 +158,7 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
     const F = frame(HALL.a, HALL.b), L = F.len, D = HALL.depth;
     const Y0 = Math.min(h(...F.at(0, 0.5)), h(...F.at(L, 0.5)), h(...F.at(L / 2, 0.5)));
     // a box in the hall's frame: s along the front, n out of it (body: n < 0), y above the front's foot
-    const B = (s0, s1, n0, n1, y0, y1, hex) => p.add(BOX(s1 - s0, y1 - y0, n1 - n0), hex, ...F.at((s0 + s1) / 2, (n0 + n1) / 2).flatMap((v, i) => (i ? [Y0 + (y0 + y1) / 2, v] : [v])), F.yaw);
+    const B = (s0, s1, n0, n1, y0, y1, hex) => p.box(s1 - s0, y1 - y0, n1 - n0, hex, ...F.at((s0 + s1) / 2, (n0 + n1) / 2).flatMap((v, i) => (i ? [Y0 + (y0 + y1) / 2, v] : [v])), F.yaw);
     const G = (geo, hex, s, n, y, rot = 0, parts = p) => { const [x, z] = F.at(s, n); parts.add(geo, hex, x, Y0 + y, z, F.yaw + rot); };
     const front = (s) => (s > RISALIT.s0 && s < RISALIT.s1 ? RISALIT.out : 0);
 
@@ -221,8 +221,8 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
     const endWin = (n, sEnd, dir) => {
       for (const y of [FLOORS.w1, FLOORS.w2]) {
         const [cx, cz] = F.at(sEnd + dir * 0.06, n);
-        p.add(BOX(0.1, y[1] - y[0] + 0.28, 1.58), COL.white, cx, Y0 + (y[0] + y[1]) / 2, cz, F.yaw);
-        p.add(BOX(0.14, y[1] - y[0], 1.3), COL.glass, cx + F.ux * dir * 0.03, Y0 + (y[0] + y[1]) / 2, cz + F.uz * dir * 0.03, F.yaw);
+        p.box(0.1, y[1] - y[0] + 0.28, 1.58, COL.white, cx, Y0 + (y[0] + y[1]) / 2, cz, F.yaw);
+        p.box(0.14, y[1] - y[0], 1.3, COL.glass, cx + F.ux * dir * 0.03, Y0 + (y[0] + y[1]) / 2, cz + F.uz * dir * 0.03, F.yaw);
       }
     };
     for (const n of [-4.5, -9.3, -14.1]) { endWin(n, 0, -1); endWin(n, L, 1); }
@@ -351,8 +351,8 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
     };
     const bench = (x, z, yaw) => {
       const y = h(x, z);
-      p.add(BOX(2.2, 0.38, 0.55), COL.granite, x, y + 0.19, z, yaw);
-      p.add(BOX(2.25, 0.07, 0.6), COL.wood, x, y + 0.42, z, yaw);
+      p.box(2.2, 0.38, 0.55, COL.granite, x, y + 0.19, z, yaw);
+      p.box(2.25, 0.07, 0.6, COL.wood, x, y + 0.42, z, yaw);
     };
     const bollard = (x, z) => { const y = h(x, z); p.add(new THREE.CylinderGeometry(0.17, 0.24, 0.8, 8), 0xd2bcb6, x, y + 0.4, z); p.add(new THREE.SphereGeometry(0.17, 8, 6), 0xd2bcb6, x, y + 0.8, z); };
 
@@ -384,7 +384,7 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
       if (!A || !Bq) continue;
       const T = frame(A, Bq), [n0, n1] = TERRACE_N, len = T.len;
       const yT = Math.max(h(...T.at(0, n0)), h(...T.at(len, n0)), h(...T.at(0, n1)), h(...T.at(len, n1)));
-      const TB = (s0, s1, a0, a1, y0, y1, hex) => { const [x, z] = T.at((s0 + s1) / 2, (a0 + a1) / 2); p.add(BOX(s1 - s0, y1 - y0, a1 - a0), hex, x, yT + (y0 + y1) / 2, z, T.yaw); };
+      const TB = (s0, s1, a0, a1, y0, y1, hex) => { const [x, z] = T.at((s0 + s1) / 2, (a0 + a1) / 2); p.box(s1 - s0, y1 - y0, a1 - a0, hex, x, yT + (y0 + y1) / 2, z, T.yaw); };
       TB(0, len, n0, n1, -1.2, 0.12, COL.deck);
       // fence: planter boxes every ~2.4 m along the front and the two ends, white panels between
       const planter = (s, a) => {
@@ -410,12 +410,12 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
         p.add(new THREE.ConeGeometry(3.0, 0.75, 4, 1, true), COL.umbrella, x, yT + 2.85, z, T.yaw + Math.PI / 4);
         for (const ds of [-1.05, 1.05]) {
           const [tx, tz] = T.at(s + ds, a);
-          p.add(BOX(0.75, 0.05, 0.75), 0x3e3a4a, tx, yT + 0.86, tz, T.yaw);
+          p.box(0.75, 0.05, 0.75, 0x3e3a4a, tx, yT + 0.86, tz, T.yaw);
           p.add(new THREE.CylinderGeometry(0.04, 0.04, 0.72, 5), 0x3e3a4a, tx, yT + 0.48, tz);
           for (const da of [-0.62, 0.62]) {
             const [cx, cz] = T.at(s + ds, a + da);
-            p.add(BOX(0.44, 0.05, 0.44), COL.chair, cx, yT + 0.58, cz, T.yaw);
-            p.add(BOX(0.44, 0.5, 0.05), COL.chair, ...T.at(s + ds, a + da * 1.32).flatMap((v, i) => (i ? [yT + 0.85, v] : [v])), T.yaw);
+            p.box(0.44, 0.05, 0.44, COL.chair, cx, yT + 0.58, cz, T.yaw);
+            p.box(0.44, 0.5, 0.05, COL.chair, ...T.at(s + ds, a + da * 1.32).flatMap((v, i) => (i ? [yT + 0.85, v] : [v])), T.yaw);
           }
         }
       }

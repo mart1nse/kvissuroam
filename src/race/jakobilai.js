@@ -136,13 +136,13 @@ export function createJakobiLai(world, group) {
         const a = T(i, hw(i) + STOP.wallOff), b = T(i + 1, hw(i + 1) + STOP.wallOff);
         const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz), yaw = Math.atan2(-dz, dx);
         const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2, y = Math.min(h(a[0], a[1]), h(b[0], b[1]));
-        p.add(BOX(l + 0.02, H, 0.06), COL.wall, mx, y + H / 2 - 0.1, mz, yaw);
+        p.box(l + 0.02, H, 0.06, COL.wall, mx, y + H / 2 - 0.1, mz, yaw);
         for (let s = 0.1; s < l; s += 0.15) {
           const x = a[0] + dx / l * s, z = a[1] + dz / l * s;
-          p.add(BOX(0.025, H - 0.1, 0.02), COL.wallDark, x - dz / l * 0.04, y + H / 2 - 0.1, z + dx / l * 0.04, yaw);
+          p.box(0.025, H - 0.1, 0.02, COL.wallDark, x - dz / l * 0.04, y + H / 2 - 0.1, z + dx / l * 0.04, yaw);
         }
-        p.add(BOX(l + 0.04, 0.08, 0.16), COL.cap, mx, y + H - 0.08, mz, yaw);
-        if (i % 2 === 0) p.add(BOX(0.12, H + 0.05, 0.12), COL.wallDark, a[0], y + H / 2 - 0.08, a[1], yaw);
+        p.box(l + 0.04, 0.08, 0.16, COL.cap, mx, y + H - 0.08, mz, yaw);
+        if (i % 2 === 0) p.box(0.12, H + 0.05, 0.12, COL.wallDark, a[0], y + H / 2 - 0.08, a[1], yaw);
         solids.push({ x: mx, z: mz, yaw, hx: l / 2, hz: 0.08 });
       }
     }

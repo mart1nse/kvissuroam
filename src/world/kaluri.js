@@ -19,6 +19,8 @@
 import * as THREE from 'three';
 import { frame } from './handbuilt.js';
 import { canvasTex } from './arhitekti.js';
+import { pixelSheet } from './houseskin.js';
+import { jobs } from '../jobs.js';
 import { lawnTex, paverTex, leafyPlants } from './streetkit.js';
 import { paintScale } from './paintscale.js';
 import { greyBack } from './signback.js';
@@ -171,11 +173,16 @@ function asphaltTex(base, seed, old) {
         g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
       }
     }
+    // (the 26 000 grains go on in one piece: drawn one by one they were most of the 0.17 s the car park took)
+    const sh = pixelSheet(g, 0, 0, w, w);
     for (let i = 0; i < 26000 * k * k; i++) {
       const v = 1 + (r() - 0.5) * (old ? 0.5 : 0.36);
-      g.fillStyle = `rgb(${base.map((c) => Math.max(0, Math.min(255, c * v)) | 0).join(',')})`;
-      g.fillRect(r() * w, r() * w, 1 + r() * 1.6, 1 + r() * 1.6);
+      const cr = Math.max(0, Math.min(255, base[0] * v)) | 0, cg = Math.max(0, Math.min(255, base[1] * v)) | 0, cb = Math.max(0, Math.min(255, base[2] * v)) | 0;
+      const x = r() * w, y = r() * w, sw = 1 + r() * 1.6, sv = 1 + r() * 1.6;
+      if (sh) sh.add(x, y, x + sw, y + sv, cr, cg, cb);
+      else { g.fillStyle = `rgb(${cr},${cg},${cb})`; g.fillRect(x, y, sw, sv); }
     }
+    if (sh) sh.lay();
     if (old) {
       g.strokeStyle = 'rgba(52,48,60,0.5)'; g.lineWidth = Math.max(1, 1.3 * k);
       for (let i = 0; i < 7; i++) {
@@ -317,7 +324,8 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     world.addSolids([[-12.1, 14.15], [60, 21.85]].map(([s, v]) => { const [x, z] = F.at(s, v); return { x, z, yaw: 0, hx: 0.22, hz: 0.22 }; }));     // the sign posts
   }
 
-  function build() {
+  // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
+  function* build() {
     built = true;
     const h = (x, z) => world.heightAt(x, z);
     const gy = (s, v) => { const [x, z] = F.at(s, v); return h(x, z); };
@@ -327,13 +335,17 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     const layers = {};
     const layer = (name, map, tile, lift, order) => (layers[name] = { map, tile, lift, order, pos: [], uv: [] });
     layer('park', asphaltTex([158, 154, 168], 3, true), 6, 0.04, -3);
+    yield;
     layer('lane', asphaltTex([108, 106, 120], 9, false), 5, 0.045, -3.5);
+    yield;
     layer('patch', asphaltTex([138, 135, 149], 21, false), 5, 0.045, -3.5);
+    yield;
     layer('cobble', cobbleTex(), 1.7, 0.05, -4);
     layer('red', paverTex([216, 150, 136], 5), 1.6, 0.05, -4);
     layer('paver', paverTex([206, 204, 216], 3), 1.6, 0.05, -4);
     layer('grass', lawnTex(), 4, 0, -4.5);
     layer('gravel', gravelTex(), 1.4, 0, -4.5);
+    yield;
     const vert = (L, s, v, up) => { const [x, z] = F.at(s, v); L.pos.push(x, h(x, z) + L.lift + up, z); L.uv.push(s / L.tile, v / L.tile); };
     // a rectangle of the frame, in cells of about 2.2 m so that it follows the ground
     function strip(name, s0, s1, v0, v1, up = 0) {
@@ -422,7 +434,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       const q = [[A[0], g + y0, A[1]], [B[0], g + y0, B[1]], [A[0], g + y1, A[1]], [B[0], g + y1, B[1]]], uv = [[u0, t0], [u1, t0], [u0, t1], [u1, t1]];
       for (const k of [0, 1, 2, 2, 1, 3]) { quads.pos.push(...q[k]); quads.uv.push(...uv[k]); }
     }
-    const boxAt = (s, v, ls, lv, y0, y1, hex, g, turn = 0) => { const [x, z] = F.at(s, v); p.add(BOX(ls, y1 - y0, lv), hex, x, (g ?? h(x, z)) + (y0 + y1) / 2, z, F.YAW + turn); };
+    const boxAt = (s, v, ls, lv, y0, y1, hex, g, turn = 0) => { const [x, z] = F.at(s, v); p.box(ls, y1 - y0, lv, hex, x, (g ?? h(x, z)) + (y0 + y1) / 2, z, F.YAW + turn); };
 
     // the old switch cabinets on their island at the Soola end, weeds round them
     {
@@ -460,7 +472,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     for (const [s, v, turn, up, hex] of [[-5.2, 23.2, 0.12, KERB, 0x2e8a57], [-8.9, 23.3, -0.1, KERB, 0x2a7f50], [48.6, 24.9, 0.5, 0, 0x2e8a57], [52.0, 25.4, 0.42, 0, 0x34935e]]) {
       const [x, z] = F.at(s, v), g = h(x, z) + up;
       p.add(skip, hex, x, g, z, F.YAW + turn);
-      p.add(BOX(0.5, 0.36, 0.02), 0xd8452e, x + F.V[0] * -0.96, g + 0.75, z + F.V[1] * -0.96, F.YAW + turn);   // the red notice on its side
+      p.box(0.5, 0.36, 0.02, 0xd8452e, x + F.V[0] * -0.96, g + 0.75, z + F.V[1] * -0.96, F.YAW + turn);   // the red notice on its side
     }
     // wheel stops: sand-coloured concrete humps
     const hump = new THREE.CylinderGeometry(0.15, 0.15, 1.75, 8, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2).scale(1, 0.85, 1);
@@ -573,7 +585,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 380) return;
-      if ([F.at(-10, 10), F.at(40, 0), F.at(80, 15), F.at(30, 40)].every((q) => world.ready(q[0], q[1]))) build();
+      if ([F.at(-10, 10), F.at(40, 0), F.at(80, 15), F.at(30, 40)].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'kaluri'); }
     },
   };
 }

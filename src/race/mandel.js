@@ -184,7 +184,7 @@ export function createMandel(world, group, { shadows = true } = {}) {
     const table = (s, n) => {
       metal(new THREE.CylinderGeometry(0.34, 0.34, 0.03, 18), s, 0.72, n);
       metal(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 6), s, 0.36, n);
-      for (const a of [0, 2.1, 4.2]) { const [x, z] = W.at(s, n); p.add(BOX(0.36, 0.025, 0.03), COL.metal, x + Math.cos(a) * 0.15, W.y + ground(s, n) + 0.02, z + Math.sin(a) * 0.15, a); }
+      for (const a of [0, 2.1, 4.2]) { const [x, z] = W.at(s, n); p.box(0.36, 0.025, 0.03, COL.metal, x + Math.cos(a) * 0.15, W.y + ground(s, n) + 0.02, z + Math.sin(a) * 0.15, a); }
       const [x, z] = W.at(s, n);
       solids.push({ x, z, yaw: 0, hx: 0.38, hz: 0.38 });
     };
@@ -192,11 +192,11 @@ export function createMandel(world, group, { shadows = true } = {}) {
       const [x, z] = W.at(s, n), yaw = W.yaw + face, y = W.y + ground(s, n);
       const cs = Math.cos(yaw), sn = Math.sin(yaw);
       const at = (lx, lz) => [x + cs * lx + sn * lz, z - sn * lx + cs * lz];
-      p.add(BOX(0.4, 0.03, 0.4), COL.metal, x, y + 0.46, z, yaw);
-      for (const [lx, lz] of [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]]) { const q = at(lx, lz); p.add(BOX(0.025, 0.46, 0.025), COL.metal, q[0], y + 0.23, q[1], yaw); }
+      p.box(0.4, 0.03, 0.4, COL.metal, x, y + 0.46, z, yaw);
+      for (const [lx, lz] of [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]]) { const q = at(lx, lz); p.box(0.025, 0.46, 0.025, COL.metal, q[0], y + 0.23, q[1], yaw); }
       const b = at(0, -0.19);
-      p.add(BOX(0.4, 0.42, 0.02), COL.metal, b[0], y + 0.7, b[1], yaw);
-      for (const lx of [-0.12, 0, 0.12]) { const q = at(lx, -0.205); p.add(BOX(0.012, 0.36, 0.012), COL.lattice, q[0], y + 0.7, q[1], yaw); }
+      p.box(0.4, 0.42, 0.02, COL.metal, b[0], y + 0.7, b[1], yaw);
+      for (const lx of [-0.12, 0, 0.12]) { const q = at(lx, -0.205); p.box(0.012, 0.36, 0.012, COL.lattice, q[0], y + 0.7, q[1], yaw); }
     };
     table(0.95, 1.35);
     chair(0.35, 1.25, Math.PI / 2); chair(1.55, 1.25, -Math.PI / 2); chair(0.95, 1.95, Math.PI);
@@ -279,19 +279,19 @@ export function createMandel(world, group, { shadows = true } = {}) {
           if (!free(S.mx, S.mz)) return;
           const y = h(S.mx, S.mz);
           if (k === pts.length - 3) {             // the gate: dark iron between two pillars
-            p.add(BOX(S.l - 0.5, 1.05, 0.05), COL.iron, S.mx, y + 0.6, S.mz, S.yaw);
-            for (let d = -S.l / 2 + 0.4; d < S.l / 2 - 0.3; d += 0.13) p.add(BOX(0.02, 1.25, 0.02), COL.iron, S.mx + S.ux * d, y + 0.72, S.mz + S.uz * d, S.yaw);
+            p.box(S.l - 0.5, 1.05, 0.05, COL.iron, S.mx, y + 0.6, S.mz, S.yaw);
+            for (let d = -S.l / 2 + 0.4; d < S.l / 2 - 0.3; d += 0.13) p.box(0.02, 1.25, 0.02, COL.iron, S.mx + S.ux * d, y + 0.72, S.mz + S.uz * d, S.yaw);
           } else {
-            p.add(BOX(S.l + 0.02, 0.95, 0.36), COL.brick, S.mx, y + 0.47, S.mz, S.yaw);
-            p.add(BOX(S.l + 0.02, 0.08, 0.36), COL.brickDark, S.mx, y + 0.12, S.mz, S.yaw);
-            p.add(BOX(S.l + 0.04, 0.07, 0.46), COL.coping, S.mx, y + 0.98, S.mz, S.yaw);
+            p.box(S.l + 0.02, 0.95, 0.36, COL.brick, S.mx, y + 0.47, S.mz, S.yaw);
+            p.box(S.l + 0.02, 0.08, 0.36, COL.brickDark, S.mx, y + 0.12, S.mz, S.yaw);
+            p.box(S.l + 0.04, 0.07, 0.46, COL.coping, S.mx, y + 0.98, S.mz, S.yaw);
           }
           solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2, hz: 0.25 });
         }
         if (k % 3 === 0 || k >= pts.length - 3) {
           if (!free(q[0], q[1])) return;
           const y = h(q[0], q[1]), yaw = k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : seg(pts[k - 1], q).yaw;
-          p.add(BOX(0.55, 1.5, 0.55), COL.brick, q[0], y + 0.75, q[1], yaw);
+          p.box(0.55, 1.5, 0.55, COL.brick, q[0], y + 0.75, q[1], yaw);
           p.add(new THREE.ConeGeometry(0.46, 0.22, 4).rotateY(Math.PI / 4), COL.coping, q[0], y + 1.61, q[1], yaw);
         }
       });
@@ -302,17 +302,17 @@ export function createMandel(world, group, { shadows = true } = {}) {
         const S = seg(pts[k], pts[k + 1]);
         if (!free(S.mx, S.mz, 0.4)) continue;
         const ya = h(pts[k][0], pts[k][1]);
-        p.add(BOX(0.2, height + 0.25, 0.2), COL.concrete, pts[k][0], ya + (height + 0.25) / 2, pts[k][1], S.yaw);
-        p.add(BOX(0.24, 0.06, 0.24), COL.concrete, pts[k][0], ya + height + 0.28, pts[k][1], S.yaw);
-        for (const y of [0.28, height - 0.2]) p.add(BOX(S.l, 0.07, 0.03), colour, S.mx - S.uz * 0.05, h(S.mx, S.mz) + y, S.mz + S.ux * 0.05, S.yaw);
+        p.box(0.2, height + 0.25, 0.2, COL.concrete, pts[k][0], ya + (height + 0.25) / 2, pts[k][1], S.yaw);
+        p.box(0.24, 0.06, 0.24, COL.concrete, pts[k][0], ya + height + 0.28, pts[k][1], S.yaw);
+        for (const y of [0.28, height - 0.2]) p.box(S.l, 0.07, 0.03, colour, S.mx - S.uz * 0.05, h(S.mx, S.mz) + y, S.mz + S.ux * 0.05, S.yaw);
         for (let d = 0.16; d < S.l - 0.08; d += 0.15) {
           const x = pts[k][0] + S.ux * d, z = pts[k][1] + S.uz * d;
-          p.add(BOX(0.075, height - 0.1, 0.022), colour, x - S.uz * 0.075, h(x, z) + 0.08 + (height - 0.1) / 2, z + S.ux * 0.075, S.yaw);
+          p.box(0.075, height - 0.1, 0.022, colour, x - S.uz * 0.075, h(x, z) + 0.08 + (height - 0.1) / 2, z + S.ux * 0.075, S.yaw);
         }
         solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2, hz: 0.12 });
       }
       const q = pts[pts.length - 1];
-      if (free(q[0], q[1], 0.4)) p.add(BOX(0.2, height + 0.25, 0.2), COL.concrete, q[0], h(q[0], q[1]) + (height + 0.25) / 2, q[1], 0);
+      if (free(q[0], q[1], 0.4)) p.box(0.2, height + 0.25, 0.2, COL.concrete, q[0], h(q[0], q[1]) + (height + 0.25) / 2, q[1], 0);
     };
     // the school's fence on the left, before the crossing, is built with its yard in world/katoliku.js
     picket(edgeLine(1484, 1488.5, 1, 2.3, 2.4), COL.villaPicket, 1.15);       // the villa garden, right, after it (from past the mouth of Oru, which stays open)
@@ -340,8 +340,8 @@ export function createMandel(world, group, { shadows = true } = {}) {
       if (g) extra.push([g, new THREE.MeshLambertMaterial({ color: COL.white, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide })]);
       for (const side of [-1, 1]) {
         const q = [o[0] - tx * 3.4 + rx * side * (hw + 0.35), o[1] - tz * 3.4 + rz * side * (hw + 0.35)], y = h(q[0], q[1]);
-        for (let k = 0; k < 7; k++) p.add(BOX(0.13, 0.13, 0.13), k % 2 ? COL.white : COL.blueStripe, q[0], y + 0.07 + k * 0.13, q[1], 0.3);
-        p.add(BOX(0.15, 0.04, 0.15), COL.iron, q[0], y + 0.93, q[1], 0.3);
+        for (let k = 0; k < 7; k++) p.box(0.13, 0.13, 0.13, k % 2 ? COL.white : COL.blueStripe, q[0], y + 0.07 + k * 0.13, q[1], 0.3);
+        p.box(0.15, 0.04, 0.15, COL.iron, q[0], y + 0.93, q[1], 0.3);
         solids.push({ x: q[0], z: q[1], yaw: 0, hx: 0.08, hz: 0.08 });
       }
     }

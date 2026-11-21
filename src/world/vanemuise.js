@@ -188,7 +188,7 @@ export function createVanemuise(scene, world, { shadows = true } = {}) {
     const later = [];
     later.box = (W, x, out, y, w, hh, d, c) => later.push(() => {
       const px = W.a[0] + W.ux * x + W.nx * out, pz = W.a[1] + W.uz * x + W.nz * out;
-      p.add(BOX(w, hh, d), c, px, W.yref + y, pz, Math.atan2(W.nx, W.nz));
+      p.box(w, hh, d, c, px, W.yref + y, pz, Math.atan2(W.nx, W.nz));
     });
     const faces = (W) => { const [, v] = SV(W.mid[0], W.mid[1]); return Math.abs(v) < 62; };
     skinHouses(world, group, houses(later), { faces, shadows, ppm: 24, far: 10 });
@@ -198,7 +198,7 @@ export function createVanemuise(scene, world, { shadows = true } = {}) {
     for (const [k, v] of [36, 39, 42].entries()) {
       const [x, z] = L(244.5, v), y = h(x, z);
       p.add(new THREE.CylinderGeometry(0.05, 0.07, 9, 10), 0xe9e9e6, x, y + 4.5, z);
-      p.add(BOX(0.02, 1.0, 1.6), [0x2a62b8, 0xb1282e, 0xf1f1ee][k], x + D[0] * 0.8, y + 8.3, z + D[1] * 0.8, Math.atan2(D[0], D[1]));
+      p.box(0.02, 1.0, 1.6, [0x2a62b8, 0xb1282e, 0xf1f1ee][k], x + D[0] * 0.8, y + 8.3, z + D[1] * 0.8, Math.atan2(D[0], D[1]));
     }
     K.finish();
   }

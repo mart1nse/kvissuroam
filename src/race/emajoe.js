@@ -553,7 +553,7 @@ export function createEmajoe(world, group) {
       const W = (lu, lr) => [cx + ux * lu + rx * lr, cz + uz * lu + rz * lr];
       const add = (geo, colour, lu, yy, lr) => { const [x, z] = W(lu, lr); sp.add(geo, colour, x, y + yy, z, yaw); };      // the frame: bends when hit
       const L = SHELTER.len, D = SHELTER.depth, H = 2.45;
-      p.add(BOX(L + 0.5, 0.12, D + 0.4), COL.pave, cx, y - 0.04, cz, yaw);                    // slab
+      p.box(L + 0.5, 0.12, D + 0.4, COL.pave, cx, y - 0.04, cz, yaw);                    // slab
       for (const lu of [-L / 2, -L / 6, L / 6, L / 2]) {
         add(BOX(0.07, H, 0.07), COL.frame, lu, H / 2, D / 2);                                 // back posts
         if (Math.abs(lu) > L / 3) add(BOX(0.07, H, 0.07), COL.frame, lu, H / 2, -D / 2);      // front posts at the ends
@@ -627,20 +627,20 @@ export function createEmajoe(world, group) {
     const gyaw = Math.atan2(-gu[1], gu[0]);
     for (const [x, z] of [GATE.a, postB]) {
       const y = world.heightAt(x, z);
-      p.add(BOX(0.72, 2.75, 0.72), COL.brick, x, y + 1.375 - 0.2, z, gyaw);
-      p.add(BOX(0.86, 0.14, 0.86), COL.postCap, x, y + 2.62, z, gyaw);
+      p.box(0.72, 2.75, 0.72, COL.brick, x, y + 1.375 - 0.2, z, gyaw);
+      p.box(0.86, 0.14, 0.86, COL.postCap, x, y + 2.62, z, gyaw);
       p.add(new THREE.ConeGeometry(0.5, 0.32, 4).rotateY(Math.PI / 4), COL.postCap, x, y + 2.85, z, gyaw);
       solids.push({ x, z, yaw: gyaw, hx: 0.38, hz: 0.38 });
     }
     {
       const mx = (GATE.a[0] + postB[0]) / 2, mz = (GATE.a[1] + postB[1]) / 2, y = world.heightAt(mx, mz);
       const span = GATE.w - 0.72, bars = 16;
-      for (const h of [0.15, 1.05, 1.75]) p.add(BOX(span, 0.06, 0.05), COL.iron, mx, y + h, mz, gyaw);
+      for (const h of [0.15, 1.05, 1.75]) p.box(span, 0.06, 0.05, COL.iron, mx, y + h, mz, gyaw);
       for (let k = 0; k <= bars; k++) {
         const o = -span / 2 + span * k / bars;
-        p.add(BOX(0.035, 1.95, 0.035), COL.iron, mx + gu[0] * o, y + 0.97, mz + gu[1] * o, gyaw);
+        p.box(0.035, 1.95, 0.035, COL.iron, mx + gu[0] * o, y + 0.97, mz + gu[1] * o, gyaw);
       }
-      p.add(BOX(0.05, 1.8, 0.05), COL.iron, mx, y + 0.95, mz, gyaw);                          // where the leaves meet
+      p.box(0.05, 1.8, 0.05, COL.iron, mx, y + 0.95, mz, gyaw);                          // where the leaves meet
       solids.push({ x: mx, z: mz, yaw: gyaw, hx: span / 2, hz: 0.12 });
     }
 

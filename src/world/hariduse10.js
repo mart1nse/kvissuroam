@@ -256,7 +256,7 @@ export function createHariduse10(scene, world, { shadows = true } = {}) {
       const [x, z] = at(3.6, 3.8), y = h(x, z);
       p.add(new THREE.CylinderGeometry(0.045, 0.07, 10.5, 8), 0xf2f2f0, x, y + 5.25, z);
       p.add(new THREE.SphereGeometry(0.09, 8, 6), 0xd8d8d2, x, y + 10.55, z);
-      [0x0072ce, 0x111111, 0xf4f4f2].forEach((c, k) => p.add(BOX(0.11, 3.2, 0.02), c, x + 0.1 + k * 0.11, y + 8.7, z + 0.02, H.YAW));
+      [0x0072ce, 0x111111, 0xf4f4f2].forEach((c, k) => p.box(0.11, 3.2, 0.02, c, x + 0.1 + k * 0.11, y + 8.7, z + 0.02, H.YAW));
     }
 
     // ---- the hedge over the mesh fence along Kubjaringi; the fence alone along Hariduse

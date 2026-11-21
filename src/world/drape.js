@@ -5,7 +5,17 @@ import * as THREE from 'three';
 
 export function drapeGeometry(world, shapes, lift, tile = 1, maxEdge = 1.5) {
   const pos = [], uv = [];
-  const v = (p) => { pos.push(p[0], world.heightAt(p[0], p[1]) + lift, p[1]); uv.push(p[0] / tile, p[1] / tile); };
+  // (a corner belongs to six triangles or so: its ground height is looked up once. Near the track's kerbs a
+  // height costs a search along the track, and Lai's island and the Emajõe bank took 0.1 s each to lay)
+  const seen = new Map();
+  const ground = (x, z) => {
+    let row = seen.get(x);
+    if (!row) seen.set(x, (row = new Map()));
+    let h = row.get(z);
+    if (h === undefined) row.set(z, (h = world.heightAt(x, z)));
+    return h;
+  };
+  const v = (p) => { pos.push(p[0], ground(p[0], p[1]) + lift, p[1]); uv.push(p[0] / tile, p[1] / tile); };
   const tri = (a, b, c) => {
     const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
     const m = Math.max(ab, bc, ca);

@@ -500,7 +500,7 @@ export function createJaaaeg(scene, world, { shadows = true } = {}) {
           wood.add(BOX(Math.hypot(sl, Q[2 + side] - P[2 + side]) + 0.02, 0.26, 0.12).rotateZ(pitch), top === 'concrete' ? 0x9d9a96 : COL.woodDark, mx - dz * lat, my - 0.1, mz + dx * lat, yawOf(dx, dz));
         }
         const over = world.heightAt(mx, mz) < LAKE - 0.2;
-        if (floats && over && i % 2 === 0) wood.add(BOX(Math.min(2.6, sl * 1.3), 0.62, hw * 2 - 0.5), COL.float, mx, PIER_Y - 0.45, mz, yawOf(dx, dz));
+        if (floats && over && i % 2 === 0) wood.box(Math.min(2.6, sl * 1.3), 0.62, hw * 2 - 0.5, COL.float, mx, PIER_Y - 0.45, mz, yawOf(dx, dz));
       }
       return { dx, dz, len };
     };
@@ -526,8 +526,8 @@ export function createJaaaeg(scene, world, { shadows = true } = {}) {
       // its railing: the far side and both ends (boards on posts), open towards the pier
       const railAt = (s0, l0, s1, l1) => {
         const a = [c[0] + dx * s0 + qx * l0, c[1] + dz * s0 + qz * l0], b = [c[0] + dx * s1 + qx * l1, c[1] + dz * s1 + qz * l1], [ux, uz, len] = unit(a, b);
-        for (const y of [0.45, 0.95]) wood.add(BOX(len, 0.1, 0.05), COL.wood, (a[0] + b[0]) / 2, PIER_Y + y, (a[1] + b[1]) / 2, yawOf(ux, uz));
-        for (let k = 0; k <= Math.round(len / 1.7); k++) { const t = k / Math.round(len / 1.7); wood.add(BOX(0.09, 1.05, 0.09), COL.woodDark, a[0] + (b[0] - a[0]) * t, PIER_Y + 0.52, a[1] + (b[1] - a[1]) * t, yawOf(ux, uz)); }
+        for (const y of [0.45, 0.95]) wood.box(len, 0.1, 0.05, COL.wood, (a[0] + b[0]) / 2, PIER_Y + y, (a[1] + b[1]) / 2, yawOf(ux, uz));
+        for (let k = 0; k <= Math.round(len / 1.7); k++) { const t = k / Math.round(len / 1.7); wood.box(0.09, 1.05, 0.09, COL.woodDark, a[0] + (b[0] - a[0]) * t, PIER_Y + 0.52, a[1] + (b[1] - a[1]) * t, yawOf(ux, uz)); }
         solids.push({ x: (a[0] + b[0]) / 2, z: (a[1] + b[1]) / 2, yaw: yawOf(ux, uz), hx: len / 2, hz: 0.25 });
       };
       const far = P.lat1 - 0.15, h = P.hw - 0.15;

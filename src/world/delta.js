@@ -49,7 +49,7 @@ export function createDelta(scene, world, { shadows = true } = {}) {
 
     for (const B of [NORTH, SOUTH, EAST]) {
       const y0 = B.base, H = B.H;
-      const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.add(BOX(s1 - s0, b - a, th), hex, x, y0 + (a + b) / 2, z, F.yaw); };
+      const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.box(s1 - s0, b - a, th, hex, x, y0 + (a + b) / 2, z, F.yaw); };
       const shape = new THREE.Shape(B.pts.map(([x, z]) => new THREE.Vector2(x, -z)));
       const g = new THREE.ExtrudeGeometry(shape, { depth: H + 2.5, bevelEnabled: false, curveSegments: 1 });
       g.rotateX(-Math.PI / 2);
@@ -128,7 +128,7 @@ export function createDelta(scene, world, { shadows = true } = {}) {
           const z = (Math.min(...zs) + Math.max(...zs)) / 2 + F0.d[1] * s + F0.n[1] * r;
           if (!inside(x, z, 1.6)) continue;
           p.add(BOX(1.7, 0.06, 1.15).rotateX(0.22), COL.solar, x, y0 + H + 0.45, z, F0.yaw);
-          p.add(BOX(1.72, 0.3, 0.06), COL.solarFrame, x - F0.n[0] * 0.5, y0 + H + 0.17, z - F0.n[1] * 0.5, F0.yaw);
+          p.box(1.72, 0.3, 0.06, COL.solarFrame, x - F0.n[0] * 0.5, y0 + H + 0.17, z - F0.n[1] * 0.5, F0.yaw);
         }
       }
     }

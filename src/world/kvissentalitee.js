@@ -54,13 +54,13 @@ export function createKvissentaliTee(scene, world, { shadows = true } = {}) {
     const W = wallOf(H.nw, sw), S = wallOf(sw, se), E = wallOf(se, H.ne);
     for (const w of [N, W, S, E]) w.y = y;
     const [cx, cz] = N.at(N.len / 2, -H.depth / 2);
-    K.p.add(BOX(N.len, HGT + 1, H.depth), H.wall, cx, y + (HGT - 1) / 2, cz, N.yaw);
-    K.p.add(BOX(N.len - 0.5, 0.08, H.depth - 0.5), COL.roof, cx, y + HGT + 0.03, cz, N.yaw);
+    K.p.box(N.len, HGT + 1, H.depth, H.wall, cx, y + (HGT - 1) / 2, cz, N.yaw);
+    K.p.box(N.len - 0.5, 0.08, H.depth - 0.5, COL.roof, cx, y + HGT + 0.03, cz, N.yaw);
     for (const w of [N, W, S, E]) K.slab(w, -0.03, w.len + 0.03, -0.6, 0.28, 0, 0.03, COL.plinth);
     if (H.solar) for (let r = 0; r < 5; r++) {
       const [px, pz] = N.at(N.len / 2 + 0.3, -3.2 - r * 2.0);
-      K.p.add(BOX(6.2, 0.1, 1.6), COL.solar, px, y + HGT + 0.14, pz, N.yaw);
-      for (let k = 1; k < 6; k++) { const [lx, lz] = N.at(N.len / 2 + 0.3 - 3.1 + k * 6.2 / 6, -3.2 - r * 2.0); K.p.add(BOX(0.04, 0.11, 1.6), COL.solarLine, lx, y + HGT + 0.14, lz, N.yaw); }
+      K.p.box(6.2, 0.1, 1.6, COL.solar, px, y + HGT + 0.14, pz, N.yaw);
+      for (let k = 1; k < 6; k++) { const [lx, lz] = N.at(N.len / 2 + 0.3 - 3.1 + k * 6.2 / 6, -3.2 - r * 2.0); K.p.box(0.04, 0.11, 1.6, COL.solarLine, lx, y + HGT + 0.14, lz, N.yaw); }
     }
     // a window band: dark panel from s0 to s1 with windows let into it
     const band = (w, s0, s1, y0, y1, wins, flip = false, bars = 1) => {
@@ -84,11 +84,11 @@ export function createKvissentaliTee(scene, world, { shadows = true } = {}) {
     const fi = (f) => (flipI ? inner.len - f : f);                       // distance back from the street front -> s on the inner wall
     for (const f of [5.4, 6.5, 7.6, 8.7]) K.win(inner, fi(f) - 0.2, fi(f) + 0.2, 4.0, 5.65, { frame: COL.frame, glass: COL.glass, fw: 0.04, off: 0 });
     // terrace at the garden end, wrapping the outer corner
-    { const [tx, tz] = S.at(S.len / 2 + (H.carport === 'E' ? -0.9 : 0.9), 1.9); K.p.add(BOX(S.len + 1.8, 0.5, 3.8), COL.terrace, tx, y - 0.07, tz, S.yaw); }
+    { const [tx, tz] = S.at(S.len / 2 + (H.carport === 'E' ? -0.9 : 0.9), 1.9); K.p.box(S.len + 1.8, 0.5, 3.8, COL.terrace, tx, y - 0.07, tz, S.yaw); }
 
     // ---- the carport on the inner side: flat roof with a dark fascia, slatted store by the house, white end and back walls
     const C = CARPORT, at = (f, n) => inner.at(fi(f), n);
-    const piece = (f0, f1, n0, n1, y0, y1, hex) => { const [px, pz] = at((f0 + f1) / 2, (n0 + n1) / 2); K.p.add(BOX(f1 - f0, y1 - y0, n1 - n0), hex, px, y + (y0 + y1) / 2, pz, inner.yaw); };
+    const piece = (f0, f1, n0, n1, y0, y1, hex) => { const [px, pz] = at((f0 + f1) / 2, (n0 + n1) / 2); K.p.box(f1 - f0, y1 - y0, n1 - n0, hex, px, y + (y0 + y1) / 2, pz, inner.yaw); };
     piece(C.f0 - 0.25, C.f1 + 0.1, 0, C.w + 0.15, C.h, C.h + 0.32, COL.frame);
     piece(C.f0, C.f1, C.w - 0.22, C.w, -0.5, C.h, H.wall);
     piece(C.f1 - 0.2, C.f1, 0, C.w, -0.5, C.h, H.wall);

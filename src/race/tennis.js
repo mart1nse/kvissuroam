@@ -101,8 +101,8 @@ export function createTennis(world, group) {
     // the net across the middle: posts, a dark net and its white tape
     const half = W / 2 + 0.9, yaw = Math.atan2(-bz, bx);
     const [nx, nz] = at(0, 0), ny = y(nx, nz);
-    p.add(BOX(half * 2, 0.9, 0.03), COL.net, nx, ny + 0.5, nz, yaw);
-    p.add(BOX(half * 2, 0.07, 0.05), COL.tape, nx, ny + 0.96, nz, yaw);
+    p.box(half * 2, 0.9, 0.03, COL.net, nx, ny + 0.5, nz, yaw);
+    p.box(half * 2, 0.07, 0.05, COL.tape, nx, ny + 0.96, nz, yaw);
     for (const s of [-1, 1]) {
       const [px, pz] = at(0, s * half);
       p.add(new THREE.CylinderGeometry(0.04, 0.04, 1.07, 8), COL.post, px, y(px, pz) + 0.535, pz);
@@ -145,11 +145,11 @@ export function createTennis(world, group) {
       const n = Math.max(1, Math.round(l / 3));
       for (let k = 0; k <= n; k++) {
         const x = a[0] + dx * k / n, z = a[1] + dz * k / n;
-        p.add(BOX(0.07, F.h, 0.07), COL.post, x, y(x, z) + F.h / 2, z);
+        p.box(0.07, F.h, 0.07, COL.post, x, y(x, z) + F.h / 2, z);
       }
       for (let k = 0; k < n; k++) {
         const x = a[0] + dx * (k + 0.5) / n, z = a[1] + dz * (k + 0.5) / n, yy = y(x, z);
-        p.add(BOX(l / n, 0.05, 0.05), COL.post, x, yy + F.h, z, yaw);                   // top rail
+        p.box(l / n, 0.05, 0.05, COL.post, x, yy + F.h, z, yaw);                   // top rail
         meshList.push([x, yy, z, l / n, yaw]);
         screenList.push([x, yy, z, l / n, yaw]);
       }
@@ -160,11 +160,11 @@ export function createTennis(world, group) {
     // the double gate: a frame of tubes with mesh in it, closed
     {
       const gz = F.z1, w = GATE.x1 - GATE.x0, gy = y(GATE.x0 + w / 2, gz);
-      for (const x of [GATE.x0, GATE.x1]) p.add(BOX(0.1, F.h - 0.6, 0.1), COL.post, x, y(x, gz) + (F.h - 0.6) / 2, gz);
+      for (const x of [GATE.x0, GATE.x1]) p.box(0.1, F.h - 0.6, 0.1, COL.post, x, y(x, gz) + (F.h - 0.6) / 2, gz);
       for (const s of [0, 1]) {
         const x0 = GATE.x0 + s * w / 2 + 0.06, x1 = x0 + w / 2 - 0.12, cx = (x0 + x1) / 2;
-        for (const h of [0.08, 1.4, 2.7]) p.add(BOX(x1 - x0, 0.05, 0.05), COL.post, cx, gy + h, gz);
-        for (const x of [x0, x1]) p.add(BOX(0.05, 2.65, 0.05), COL.post, x, gy + 1.38, gz);
+        for (const h of [0.08, 1.4, 2.7]) p.box(x1 - x0, 0.05, 0.05, COL.post, cx, gy + h, gz);
+        for (const x of [x0, x1]) p.box(0.05, 2.65, 0.05, COL.post, x, gy + 1.38, gz);
         gateList.push([cx, gy, gz, x1 - x0, 0]);
       }
       solids.push({ x: GATE.x0 + w / 2, z: gz, yaw: 0, hx: w / 2, hz: 0.1 });
@@ -173,7 +173,7 @@ export function createTennis(world, group) {
     for (const [x, z] of [[F.x0 + 0.4, F.z0 + 0.4], [F.x1 - 0.4, F.z0 + 0.4], [F.x0 + 0.4, F.mid - 0.4], [F.x1 - 0.4, F.mid - 0.4]]) {
       const yy = y(x, z);
       p.add(new THREE.CylinderGeometry(0.07, 0.1, 8, 8), COL.pole, x, yy + 4, z);
-      p.add(BOX(0.7, 0.18, 0.4), COL.lamp, x, yy + 8.05, z);
+      p.box(0.7, 0.18, 0.4, COL.lamp, x, yy + 8.05, z);
     }
 
     const m = p.mesh(solidMat);

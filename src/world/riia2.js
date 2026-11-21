@@ -317,11 +317,11 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
       const rg = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2).translate(0, g + T22.top, 0);
       p.add(rg, 0x47484c, 0, 0, 0);
-      for (const [s, v, w, d] of [[165, -22, 5, 3], [173, -30, 3, 6]]) { const [x, z] = L(s, v); p.add(BOX(w, 1.4, d), 0xb9babd, x, g + T22.top + 0.7, z, RIIA2.YAW); }
+      for (const [s, v, w, d] of [[165, -22, 5, 3], [173, -30, 3, 6]]) { const [x, z] = L(s, v); p.box(w, 1.4, d, 0xb9babd, x, g + T22.top + 0.7, z, RIIA2.YAW); }
       // the balconies on the brick front: slabs and railings, floors 2 to 5
       for (let y = 7.0; y <= 16.0; y += 3.0) {
         const [x, z] = L((T22.s0 + T22.s1) / 2, T22.vf + 0.8);
-        p.add(BOX(T22.s1 - T22.s0 - 1.4, 0.2, 1.6), 0x2a2a2d, x, g + y - 0.1, z, RIIA2.YAW);
+        p.box(T22.s1 - T22.s0 - 1.4, 0.2, 1.6, 0x2a2a2d, x, g + y - 0.1, z, RIIA2.YAW);
         R.add(L(T22.s0 + 0.7, T22.vf + 1.58), L(T22.s1 - 0.7, T22.vf + 1.58), g + y, g + y, 1.05);
       }
       // the house number by the door on the lane
@@ -333,9 +333,9 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
     {
       const top = 54.1, c = [1077.1, 3800.6];
       p.add(new THREE.ConeGeometry(4.7, 12.5, 4, 1).rotateY(Math.PI / 4), 0x4f6e64, c[0], top + 6.25, c[1], RIIA2.YAW);
-      p.add(BOX(6.8, 0.35, 6.8), 0x7a3a2a, c[0], top + 0.15, c[1], RIIA2.YAW);
-      p.add(BOX(0.12, 2.0, 0.12), 0x3a3b3d, c[0], top + 13.4, c[1]);
-      p.add(BOX(0.9, 0.12, 0.12), 0x3a3b3d, c[0], top + 13.8, c[1], RIIA2.YAW);
+      p.box(6.8, 0.35, 6.8, 0x7a3a2a, c[0], top + 0.15, c[1], RIIA2.YAW);
+      p.box(0.12, 2.0, 0.12, 0x3a3b3d, c[0], top + 13.4, c[1]);
+      p.box(0.9, 0.12, 0.12, 0x3a3b3d, c[0], top + 13.8, c[1], RIIA2.YAW);
     }
     // the black steel railing along the church's pavement
     for (let s = 268; s < 342; s += 6) R.add(L(s, 12.6), L(s + 6, 12.6), h(...L(s, 12.6)) - 0.02, h(...L(s + 6, 12.6)) - 0.02, 1.2);

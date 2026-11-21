@@ -288,7 +288,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       group.add(m);
     };
     // a box against a wall: s along it, y above y0, standing out from `off`
-    const slab = (W, y0, s0, s1, a, b, off, th, hex) => { const [x, z] = W.at((s0 + s1) / 2, off + th / 2); p.add(BOX(s1 - s0, b - a, th), hex, x, y0 + (a + b) / 2, z, W.yaw); };
+    const slab = (W, y0, s0, s1, a, b, off, th, hex) => { const [x, z] = W.at((s0 + s1) / 2, off + th / 2); p.box(s1 - s0, b - a, th, hex, x, y0 + (a + b) / 2, z, W.yaw); };
 
     // ================================================================ Maarja kirik
     {
@@ -296,7 +296,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       const yaw = Math.atan2(-v[1], v[0]);
       const at = (a, b) => [F0[0] + u[0] * a + v[0] * b, F0[1] + u[1] * a + v[1] * b];
       // a box in the church's frame: a along the nave from the west front, b across it, y above the ground
-      const cb = (a0, a1, b0, b1, y0, y1, hex) => { const [x, z] = at((a0 + a1) / 2, (b0 + b1) / 2); p.add(BOX(Math.abs(b1 - b0), y1 - y0, Math.abs(a1 - a0)), hex, x, G + (y0 + y1) / 2, z, yaw); };
+      const cb = (a0, a1, b0, b1, y0, y1, hex) => { const [x, z] = at((a0 + a1) / 2, (b0 + b1) / 2); p.box(Math.abs(b1 - b0), y1 - y0, Math.abs(a1 - a0), hex, x, G + (y0 + y1) / 2, z, yaw); };
       // triangles given in the church's frame as [a, b, y], wound to face up or outwards from the middle
       const tris = (list, hex, mid = [25, 0, 8]) => {
         const pos = [];
@@ -422,8 +422,8 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
         p.add(new THREE.ConeGeometry(2.35, 2.6, 8), COL.spire, x, G + 32.3, z, yaw + Math.PI / 8);            // the swelling foot of the spire
         p.add(new THREE.ConeGeometry(1.25, 13.6, 8), COL.spire, x, G + 37.8, z, yaw + Math.PI / 8);
         p.add(new THREE.SphereGeometry(0.32, 10, 8), COL.gold, x, G + 44.7, z, 0);
-        p.add(BOX(0.09, 1.7, 0.09), COL.gold, x, G + 45.8, z, yaw);
-        p.add(BOX(0.8, 0.09, 0.09), COL.gold, x, G + 46.1, z, yaw); }
+        p.box(0.09, 1.7, 0.09, COL.gold, x, G + 45.8, z, yaw);
+        p.box(0.8, 0.09, 0.09, COL.gold, x, G + 46.1, z, yaw); }
     }
 
     // ================================================================ Mainor and the white block
@@ -492,7 +492,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
           slab(F, 0, 0.3, F.len - 0.3, y + 0.03, y + 0.08, 0.34, 0.78, COL.plank);
           slab(F, 0, 0.3, F.len - 0.3, y + 1.0, y + 1.05, 1.13, 0.05, COL.steel);
           slab(F, 0, 0.3, F.len - 0.3, y + 0.08, y + 0.23, 1.1, 0.03, COL.plank);              // toe board
-          for (let k = 0; k <= n; k++) { const [x, z] = F.at(0.3 + k * step, 0.72); p.add(BOX(0.05, 0.05, 0.85), COL.steel, x, y - 0.06, z, F.yaw); }
+          for (let k = 0; k <= n; k++) { const [x, z] = F.at(0.3 + k * step, 0.72); p.box(0.05, 0.05, 0.85, COL.steel, x, y - 0.06, z, F.yaw); }
         }
       };
       scaffold(W, EAVE); scaffold(N, EAVE);
@@ -514,7 +514,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       { const q = beside(1979, 5.7), y = hAt(q.x, q.z);
         p.add(new THREE.CylinderGeometry(0.11, 0.13, 0.75, 10), COL.hydrant, q.x, y + 0.37, q.z, 0);
         p.add(new THREE.SphereGeometry(0.13, 10, 6), COL.hydrant, q.x, y + 0.76, q.z, 0);
-        p.add(BOX(0.42, 0.1, 0.1), COL.hydrant, q.x, y + 0.52, q.z, q.yaw); }
+        p.box(0.42, 0.1, 0.1, COL.hydrant, q.x, y + 0.52, q.z, q.yaw); }
       // a hedge: bushes shoulder to shoulder from a to b
       const hedge = (a, b, width, height) => {
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(len / (width * 0.8))), yaw = Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
@@ -522,7 +522,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
           const x = a[0] + (b[0] - a[0]) * k / n, z = a[1] + (b[1] - a[1]) * k / n;
           if (world.sdfAt(x, z) < 0.3) continue;
           if (leafy.ok) leafy.bush(x, hAt(x, z) - 0.05, z, width * 1.5, height, yaw + k, [0.8 + (k % 3) * 0.05, 0.95, 0.8], width);
-          else p.add(BOX(len / n + 0.1, height, width), 0x5fa565, x, hAt(x, z) + height / 2, z, yaw);
+          else p.box(len / n + 0.1, height, width, 0x5fa565, x, hAt(x, z) + height / 2, z, yaw);
         }
       };
       const along = (i0, i1, lat, width, height) => { const a = beside(i0, lat), b = beside(i1, lat); hedge([a.x, a.z], [b.x, b.z], width, height); };

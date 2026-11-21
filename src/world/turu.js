@@ -262,8 +262,8 @@ export function createTuru(scene, world, { shadows = true } = {}) {
     fascia(group, cg, C, 4.9, 5.9, ck, shadows);
     const CF = frame(C[3], [C[0][0] - C[3][0], C[0][1] - C[3][1]]);       // s along the Turu side, v - toward the shop
     const [cx, cz] = CF.at(8.2, -9.45);
-    p.add(BOX(16.4, 0.18, 18.9), 0xe8e8e6, cx, cg + 5.85, cz, CF.YAW);
-    p.add(BOX(16.0, 0.05, 18.5), 0xd2d3d5, cx, cg + 4.92, cz, CF.YAW);
+    p.box(16.4, 0.18, 18.9, 0xe8e8e6, cx, cg + 5.85, cz, CF.YAW);
+    p.box(16.0, 0.05, 18.5, 0xd2d3d5, cx, cg + 4.92, cz, CF.YAW);
     for (const [s, v] of [[3, -4.5], [13.4, -4.5], [3, -14.4], [13.4, -14.4]]) A.box(CF, s, v, 0.45, 0.45, -0.05, 4.95, 0xdedfe1, cg);
     for (const v of [-6.3, -12.6]) {
       A.box(CF, 8.2, v, 9.0, 1.1, -0.05, 0.22, 0xb9bbbd, cg);

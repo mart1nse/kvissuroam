@@ -127,31 +127,31 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     {                                                                        // the bronze Tubin, life size
       const [x, z] = F.at(...STATUE), y = g0 + 0.95, BR = 0x3d4239;
       p.add(new THREE.CylinderGeometry(0.17, 0.2, 0.9, 8), BR, x, y + 0.45, z);
-      p.add(BOX(0.5, 0.72, 0.3), BR, x, y + 1.25, z, F.YAW);
+      p.box(0.5, 0.72, 0.3, BR, x, y + 1.25, z, F.YAW);
       p.add(new THREE.SphereGeometry(0.13, 10, 8), BR, x, y + 1.76, z);
       const [ax, az] = F.at(STATUE[0] + 0.3, STATUE[1] - 0.25);
-      p.add(BOX(0.12, 0.55, 0.12), BR, ax, y + 1.45, az, F.YAW);           // the raised conducting arm
+      p.box(0.12, 0.55, 0.12, BR, ax, y + 1.45, az, F.YAW);           // the raised conducting arm
     }
 
     // ---- the big grey display board at the top of the lawn, a dark screen on its face to Ülikooli
     {
       const [x, z] = F.at(22, 47.5), y = h(x, z);
-      p.add(BOX(4.6, 3.3, 0.4), 0x9b9fa4, x, y + 1.65, z, F.YAW);
+      p.box(4.6, 3.3, 0.4, 0x9b9fa4, x, y + 1.65, z, F.YAW);
       const [sx, sz] = F.at(22, 47.28);
-      p.add(BOX(4.1, 2.2, 0.02), 0x23262b, sx, y + 2.05, sz, F.YAW);
+      p.box(4.1, 2.2, 0.02, 0x23262b, sx, y + 2.05, sz, F.YAW);
     }
     // ---- poster stands (dark green, by the pavement) and the corner's signpost with brown finger signs
     for (const [ps, pv, w, hh, c] of [[63.5, 20.3, 0.62, 1.9, 0x2d3b32], [2.6, 21.5, 1.2, 1.7, 0x222326]]) {
       const [x, z] = F.at(ps, pv), y = h(x, z);
-      p.add(BOX(0.08, 0.6, 0.08), IRON0, x, y + 0.3, z);
-      p.add(BOX(w, hh, 0.22), c, x, y + 0.6 + hh / 2, z, F.YAW);
+      p.box(0.08, 0.6, 0.08, IRON0, x, y + 0.3, z);
+      p.box(w, hh, 0.22, c, x, y + 0.6 + hh / 2, z, F.YAW);
     }
     {
       const [x, z] = F.at(4.2, 19.6), y = h(x, z);
       p.add(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 6), 0x5a3a2c, x, y + 1.6, z);
       for (let k = 0; k < 8; k++) {
         const yaw = F.YAW + [0.4, 0.4, -1.2, 0.4, -1.2, 2.0, 0.4, -1.2][k], [ox, oz] = [Math.cos(yaw) * 0.5, -Math.sin(yaw) * 0.5];
-        p.add(BOX(1.0, 0.17, 0.03), 0x7a3b2a, x + ox, y + 1.9 + k * 0.2, z + oz, yaw);
+        p.box(1.0, 0.17, 0.03, 0x7a3b2a, x + ox, y + 1.9 + k * 0.2, z + oz, yaw);
       }
     }
 
@@ -209,10 +209,10 @@ export function createTeatripark(scene, world, { shadows = true } = {}) {
     const WOOD = 0x8a6a4c, IRON = IRON0;
     for (const s of [52.2, 54.6, 57, 59.4]) {
       const [x, z] = F.at(s, 17.6), y = h(x, z);
-      p.add(BOX(1.8, 0.07, 0.46), WOOD, x, y + 0.45, z, F.YAW);
+      p.box(1.8, 0.07, 0.46, WOOD, x, y + 0.45, z, F.YAW);
       const [bx, bz] = F.at(s, 17.85);
-      p.add(BOX(1.8, 0.38, 0.06), WOOD, bx, y + 0.72, bz, F.YAW);
-      for (const e of [-0.75, 0.75]) { const [lx, lz] = F.at(s + e, 17.7); p.add(BOX(0.07, 0.45, 0.42), IRON, lx, y + 0.22, lz, F.YAW); }
+      p.box(1.8, 0.38, 0.06, WOOD, bx, y + 0.72, bz, F.YAW);
+      for (const e of [-0.75, 0.75]) { const [lx, lz] = F.at(s + e, 17.7); p.box(0.07, 0.45, 0.42, IRON, lx, y + 0.22, lz, F.YAW); }
     }
     const bin = new THREE.CylinderGeometry(0.24, 0.22, 0.8, 9);
     for (const s of [50.6, 61]) { const [x, z] = F.at(s, 17.7); p.add(bin, 0x2f4a3c, x, h(x, z) + 0.4, z); }

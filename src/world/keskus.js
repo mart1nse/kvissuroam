@@ -274,16 +274,16 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
       const yaw = yawOf(dx, dz), S0 = -3, S1 = 59.5, D = 12.2;
       const g0 = h(...q(10, D)), top = g0 + 8.3;
       const [mx, mz] = q((S0 + S1) / 2, D / 2);
-      p.add(BOX(S1 - S0, 0.5, D + 0.3), COL.canopy, mx, top - 0.25, mz, yaw);                      // the deck
-      const edge = (s0, s1, o, hh = 1.5) => { const [x, z] = q((s0 + s1) / 2, o); p.add(BOX(s1 - s0, hh, 0.35), COL.canopy, x, top - hh / 2 + 0.25, z, yaw); };
+      p.box(S1 - S0, 0.5, D + 0.3, COL.canopy, mx, top - 0.25, mz, yaw);                      // the deck
+      const edge = (s0, s1, o, hh = 1.5) => { const [x, z] = q((s0 + s1) / 2, o); p.box(s1 - s0, hh, 0.35, COL.canopy, x, top - hh / 2 + 0.25, z, yaw); };
       edge(S0, S1, D, 1.5);
-      { const [x, z] = q(S0, D / 2); p.add(BOX(0.35, 1.5, D + 0.3), COL.canopy, x, top - 0.5, z, yaw); }
+      { const [x, z] = q(S0, D / 2); p.box(0.35, 1.5, D + 0.3, COL.canopy, x, top - 0.5, z, yaw); }
       // the higher block of the canopy at the corner, with the name on both of its faces
       edge(S0, 17, D + 0.2, 3.0);
-      { const [x, z] = q(S0 - 0.2, D / 2); p.add(BOX(0.4, 3.0, D + 0.6), COL.canopy, x, top - 1.25, z, yaw); }
+      { const [x, z] = q(S0 - 0.2, D / 2); p.box(0.4, 3.0, D + 0.6, COL.canopy, x, top - 1.25, z, yaw); }
       for (let s = 2; s <= S1; s += 8.2) {
         const [x, z] = q(s, D - 0.5), y = h(x, z);
-        p.add(BOX(0.28, top - y, 0.28), COL.steel, x, (y + top) / 2, z, yaw);
+        p.box(0.28, top - y, 0.28, COL.steel, x, (y + top) / 2, z, yaw);
         solids.push({ x, z, yaw, hx: 0.16, hz: 0.16 });
       }
       const face = yaw;                                                                           // a plane turned to look out over the street
@@ -296,17 +296,17 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
       const scr = (s, o, w, hh, y, yw) => { const [x, z] = q(s, o); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), sm); m.position.set(x, y, z); m.rotation.y = yw; group.add(m); };
       scr(4.6, D + 0.5, 9.4, 5.0, top - 4.6, face);
       scr(S0 - 0.5, D - 3.4, 6.4, 5.0, top - 4.6, yaw - Math.PI / 2);
-      { const [x, z] = q(4.4, D + 0.2); p.add(BOX(9.8, 5.4, 0.5), 0x18181e, x, top - 4.6, z, yaw); }
-      { const [x, z] = q(S0 - 0.2, D - 3.4); p.add(BOX(0.5, 5.4, 6.8), 0x18181e, x, top - 4.6, z, yaw); }
+      { const [x, z] = q(4.4, D + 0.2); p.box(9.8, 5.4, 0.5, 0x18181e, x, top - 4.6, z, yaw); }
+      { const [x, z] = q(S0 - 0.2, D - 3.4); p.box(0.5, 5.4, 6.8, 0x18181e, x, top - 4.6, z, yaw); }
       // the roof letters over the corner, looking north over the junction
       const cy = KV_RIIA[0].top;
       sign('kvartal', c[0] + 1.5, cy + 2.2, c[1] + 7.5, 17, 3.6, Math.PI, '#ffffff', '600');
-      for (const ox of [-7, 0, 7]) p.add(BOX(0.12, 4.2, 0.12), COL.steel, c[0] + 1.5 + ox, cy + 2.0, c[1] + 7.8);
+      for (const ox of [-7, 0, 7]) p.box(0.12, 4.2, 0.12, COL.steel, c[0] + 1.5 + ox, cy + 2.0, c[1] + 7.8);
       // benches and shrub planters under the canopy
       for (const s of [20, 34, 48]) {
         const [x, z] = q(s, 4.2), y = h(x, z);
-        p.add(BOX(6, 0.5, 1.6), COL.planter, x, y + 0.25, z, yaw);
-        p.add(BOX(6.4, 0.1, 0.5), COL.wood, x + nx * 1.05, y + 0.5, z + nz * 1.05, yaw);
+        p.box(6, 0.5, 1.6, COL.planter, x, y + 0.25, z, yaw);
+        p.box(6.4, 0.1, 0.5, COL.wood, x + nx * 1.05, y + 0.5, z + nz * 1.05, yaw);
         solids.push({ x, z, yaw, hx: 3, hz: 0.8 });
         plants.push([x, y + 0.45, z, 5.4, 1.3, yaw, 1.3]);
       }
@@ -320,14 +320,14 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
     {
       // the stone pylon between the curve and the Turu face
       const x = 1870.6, z = 3091.4, y = h(x, z);
-      p.add(BOX(6.6, 27 - y, 5.4), COL.stone, x, (y + 27) / 2, z, yawOf(0.72, 0.69));
+      p.box(6.6, 27 - y, 5.4, COL.stone, x, (y + 27) / 2, z, yawOf(0.72, 0.69));
       const m = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 9), new THREE.MeshLambertMaterial({ map: (() => { const P = painter(3.6, 0, 9, 40); P.rect(0, 3.6, 0, 9, '#f1dc8a'); P.disc(1.8, 5.6, 1.3, '#e8a0c0'); P.disc(1.8, 5.6, 0.8, '#f1dc8a'); P.vtext('TASKU', 1.8, 2.2, 0.8, '#5a4a6a', '800'); return P.texture(); })() }));
       m.position.set(x - 0.69 * 2.76, 14, z + 0.72 * 2.76); m.rotation.y = yawOf(0.72, 0.69);
       group.add(m);
       // the letters on the roof over the curve
       const q = curve.where(curve.len * 0.6, 0.3);
       sign('tasku', q[0] + q[3] * 0.4, 26.6, q[1] - q[2] * 0.4, 16, 4.6, yawOf(q[2], q[3]), '#bfe9ee', '500');
-      for (const e of [-6, 0, 6]) p.add(BOX(0.14, 3.6, 0.14), COL.steel, q[0] + q[3] * 0.7 + q[2] * e, 25.4, q[1] - q[2] * 0.7 + q[3] * e);
+      for (const e of [-6, 0, 6]) p.box(0.14, 3.6, 0.14, COL.steel, q[0] + q[3] * 0.7 + q[2] * e, 25.4, q[1] - q[2] * 0.7 + q[3] * e);
     }
     {
       // the glass tower: a curved front on the river side, a flat back

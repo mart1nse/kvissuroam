@@ -2,7 +2,6 @@
 // photos (kaldaerofotod, 2024) and orthophoto: the row of white kiosks on Küüni, the café terrace at the start line and
 // the Barclay park playground. Modelled geometry only (no photos are pasted). Kiosks are solid.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Kaubamaja footprint corners from the LOD2 building model (game x, z), and its roof height (world y)
 const KM = { N: [1735.2, 3015.6], S: [1713.8, 3144.9], W: [1659.6, 3088.7] };      // Kaubamaja itself: src/world/kaubamaja.js
@@ -40,23 +39,66 @@ export function rnd(seed) {
 }
 
 // collects coloured parts and merges them into one mesh
+// (the corners are written straight into plain number lists: one geometry object per part, turned, moved and
+// merged afterwards, was most of the time some places took to build: Delta's 2 000 boxes took 0.15 s)
+const HEX = new Map();
+function rgbOf(hex) {
+  if (typeof hex !== 'number' && typeof hex !== 'string') return new THREE.Color(hex);
+  let c = HEX.get(hex);
+  if (!c) { c = new THREE.Color(hex); if (HEX.size < 4096) HEX.set(hex, c); }
+  return c;
+}
+let UNIT = null;                         // a 1 m cube as 36 corners: [positions, normals]
+function unit() {
+  if (!UNIT) { const g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed(); UNIT = [g.attributes.position.array, g.attributes.normal.array]; }
+  return UNIT;
+}
+const fr = Math.fround;
 export class Parts {
-  constructor() { this.list = []; }
-  add(geo, hex, x, y, z, yaw = 0) {
-    const g = geo.index ? geo.toNonIndexed() : geo.clone();
-    g.deleteAttribute('uv');
-    g.rotateY(yaw).translate(x, y, z);
-    const c = new THREE.Color(hex), n = g.attributes.position.count, col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    this.list.push(g);
+  constructor() { this.P = new Float32Array(0); this.N = this.C = this.P; this.count = 0; }
+  // n corners from `pos`/`nor` (through `idx` if given), sized by sx, sy, sz, turned by yaw and moved to x, y, z
+  put(pos, nor, idx, n, sx, sy, sz, hex, x, y, z, yaw) {
+    const at = this.count * 3, need = at + n * 3;
+    if (need > this.P.length) {
+      const cap = Math.max(need, this.P.length * 2, 3072);
+      for (const k of ['P', 'N', 'C']) { const a = new Float32Array(cap); a.set(this[k].subarray(0, at)); this[k] = a; }
+    }
+    const P = this.P, N = this.N, C = this.C;
+    const c = Math.cos(yaw), s = Math.sin(yaw), col = rgbOf(hex), plain = !yaw, cr = col.r, cg = col.g, cb = col.b;
+    for (let i = 0, o = at; i < n; i++, o += 3) {
+      const k = (idx ? idx[i] : i) * 3;
+      const px = fr(pos[k] * sx), pz = fr(pos[k + 2] * sz);
+      // (rounded as three.js would between turning and moving, so that nothing shifts by a hair)
+      if (plain) { P[o] = px + x; P[o + 2] = pz + z; } else { P[o] = fr(c * px + s * pz) + x; P[o + 2] = fr(c * pz - s * px) + z; }
+      P[o + 1] = fr(pos[k + 1] * sy) + y;
+      if (nor) {
+        const nx = nor[k], nz = nor[k + 2];
+        if (plain) { N[o] = nx; N[o + 2] = nz; } else { N[o] = c * nx + s * nz; N[o + 2] = c * nz - s * nx; }
+        N[o + 1] = nor[k + 1];
+      } else N[o] = N[o + 1] = N[o + 2] = 0;
+      C[o] = cr; C[o + 1] = cg; C[o + 2] = cb;
+    }
+    this.count += n;
   }
+  add(geo, hex, x, y, z, yaw = 0) {
+    const pos = geo.attributes.position, nor = geo.attributes.normal, idx = geo.index;
+    const ok = (a) => a.isBufferAttribute && !a.isInterleavedBufferAttribute && a.itemSize === 3 && a.array instanceof Float32Array;
+    if (ok(pos) && (!nor || ok(nor))) { this.put(pos.array, nor ? nor.array : null, idx ? idx.array : null, idx ? idx.count : pos.count, 1, 1, 1, hex, x, y, z, yaw); return; }
+    const g = idx ? geo.toNonIndexed() : geo.clone();          // anything unusual: the long way round
+    g.rotateY(yaw).translate(x, y, z);
+    this.put(g.attributes.position.array, g.attributes.normal ? g.attributes.normal.array : null, null, g.attributes.position.count, 1, 1, 1, hex, 0, 0, 0, 0);
+    g.dispose();
+  }
+  // a box of w x h x d: the same as add(BOX(w, h, d), ...) without the geometry in between
+  box(w, h, d, hex, x, y, z, yaw = 0) { const u = unit(); this.put(u[0], u[1], null, 36, w, h, d, hex, x, y, z, yaw); }
   mesh(mat) {
-    if (!this.list.length) return null;
-    const m = new THREE.Mesh(mergeGeometries(this.list), mat);
-    for (const g of this.list) g.dispose();
-    this.list = [];
-    return m;
+    if (!this.count) return null;
+    const n = this.count * 3, g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.P.slice(0, n), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.N.slice(0, n), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(this.C.slice(0, n), 3));
+    this.P = this.N = this.C = new Float32Array(0); this.count = 0;
+    return new THREE.Mesh(g, mat);
   }
 }
 
@@ -65,11 +107,11 @@ export const BOX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 // a generic hatchback / saloon, local +x along the car
 export function addCar(p, x, y, z, yaw, colour, r) {
   const L = 4.2 + r() * 0.6, W = 1.78, wagon = r() < 0.35;
-  p.add(BOX(L, 0.62, W), colour, x, y + 0.58, z, yaw);                                   // body
+  p.box(L, 0.62, W, colour, x, y + 0.58, z, yaw);                                   // body
   const cl = wagon ? L * 0.62 : L * 0.5, cx = wagon ? -L * 0.08 : -L * 0.04;
   const ox = Math.cos(yaw), oz = -Math.sin(yaw);
-  p.add(BOX(cl, 0.55, W - 0.16), 0x1b1f27, x + ox * cx, y + 1.16, z + oz * cx, yaw);      // glass house
-  p.add(BOX(cl - 0.3, 0.06, W - 0.2), colour, x + ox * cx, y + 1.46, z + oz * cx, yaw);   // roof
+  p.box(cl, 0.55, W - 0.16, 0x1b1f27, x + ox * cx, y + 1.16, z + oz * cx, yaw);      // glass house
+  p.box(cl - 0.3, 0.06, W - 0.2, colour, x + ox * cx, y + 1.46, z + oz * cx, yaw);   // roof
   const wheel = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 10).rotateX(Math.PI / 2);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const lx = sx * (L / 2 - 0.75), lz = sz * (W / 2 - 0.08);
@@ -77,7 +119,7 @@ export function addCar(p, x, y, z, yaw, colour, r) {
   }
   for (const sz of [-1, 1]) {                                                             // tail lights
     const lx = -L / 2 - 0.01, lz = sz * (W / 2 - 0.22);
-    p.add(BOX(0.04, 0.12, 0.32), 0x8a1018, x + ox * lx + Math.sin(yaw) * lz, y + 0.75, z + oz * lx + Math.cos(yaw) * lz, yaw);
+    p.box(0.04, 0.12, 0.32, 0x8a1018, x + ox * lx + Math.sin(yaw) * lz, y + 0.75, z + oz * lx + Math.cos(yaw) * lz, yaw);
   }
 }
 
@@ -106,11 +148,11 @@ export function createLandmarks(world, track) {
       const r = rnd(7);
       for (let i = 0; i < n; i++) {
         const t = i / (n - 1), x = a[0] + dx * t, z = a[1] + dz * t, y = g(x, z);
-        p.add(BOX(2.5, 2.5, 2.3), 0xf1efe9, x, y + 1.25, z, yaw);
+        p.box(2.5, 2.5, 2.3, 0xf1efe9, x, y + 1.25, z, yaw);
         p.add(roof, 0xfbfaf8, x, y + 2.5 + 0.75, z, yaw);
-        p.add(BOX(1.7, 0.95, 0.06), 0x262a33, x + fx * 1.17, y + 1.45, z + fz * 1.17, yaw);   // window
-        p.add(BOX(1.9, 0.08, 0.45), 0xd8d4cc, x + fx * 1.3, y + 0.95, z + fz * 1.3, yaw);    // counter
-        if (r() < 0.6) p.add(BOX(2.2, 0.3, 0.05), [0xc8323c, 0x2f6f8f, 0x3c8a4f, 0xd8a12c][Math.floor(r() * 4)], x + fx * 1.18, y + 2.25, z + fz * 1.18, yaw);   // name board
+        p.box(1.7, 0.95, 0.06, 0x262a33, x + fx * 1.17, y + 1.45, z + fz * 1.17, yaw);   // window
+        p.box(1.9, 0.08, 0.45, 0xd8d4cc, x + fx * 1.3, y + 0.95, z + fz * 1.3, yaw);    // counter
+        if (r() < 0.6) p.box(2.2, 0.3, 0.05, [0xc8323c, 0x2f6f8f, 0x3c8a4f, 0xd8a12c][Math.floor(r() * 4)], x + fx * 1.18, y + 2.25, z + fz * 1.18, yaw);   // name board
         solids.push({ x, z, yaw, hx: 1.3, hz: 1.2 });
       }
     }
@@ -133,13 +175,13 @@ export function createLandmarks(world, track) {
         p.add(new THREE.CylinderGeometry(0.05, 0.05, 0.74, 6), 0x2b2b2e, x, y + 0.37, z);
         for (let c = 0; c < 4; c++) {
           const a = c * Math.PI / 2 + r() * 0.4, chx = x + Math.cos(a) * 0.75, chz = z + Math.sin(a) * 0.75;
-          p.add(BOX(0.42, 0.45, 0.42), 0x5a3a26, chx, y + 0.22, chz, a);
-          p.add(BOX(0.42, 0.45, 0.05), 0x5a3a26, chx + Math.cos(a) * 0.2, y + 0.65, chz + Math.sin(a) * 0.2, a + Math.PI / 2);
+          p.box(0.42, 0.45, 0.42, 0x5a3a26, chx, y + 0.22, chz, a);
+          p.box(0.42, 0.45, 0.05, 0x5a3a26, chx + Math.cos(a) * 0.2, y + 0.65, chz + Math.sin(a) * 0.2, a + Math.PI / 2);
         }
       }
       // fence on the street side of the terrace
       const fx = cx - lx * 1.7, fz = cz - lz * 1.7;
-      p.add(BOX(16.5, 0.9, 0.08), 0x3d2f2a, fx, g(fx, fz) + 0.45, fz, yaw);
+      p.box(16.5, 0.9, 0.08, 0x3d2f2a, fx, g(fx, fz) + 0.45, fz, yaw);
     }
 
     // ---- playground in Barclay park: green rubber discs, a climbing frame with a slide, swings
@@ -149,19 +191,19 @@ export function createLandmarks(world, track) {
     }
     {
       const [x, z] = PLAY[0], y = g(x, z);
-      for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) p.add(BOX(0.12, 2.6, 0.12), 0xd9c08a, x + ox, y + 1.3, z + oz);
-      p.add(BOX(2.2, 0.12, 2.2), 0xc8402f, x, y + 1.3, z);
+      for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) p.box(0.12, 2.6, 0.12, 0xd9c08a, x + ox, y + 1.3, z + oz);
+      p.box(2.2, 0.12, 2.2, 0xc8402f, x, y + 1.3, z);
       p.add(new THREE.ConeGeometry(1.6, 1.0, 4).rotateY(Math.PI / 4), 0x2d6fb5, x, y + 3.1, z);
       const slide = BOX(0.7, 0.06, 3.2);
       slide.rotateX(0.42);
       p.add(slide, 0xf0c22c, x, y + 0.65, z + 2.55);
       const [sx, sz] = PLAY[1], sy = g(sx, sz);
       for (const s of [-1, 1]) {
-        p.add(BOX(0.1, 2.5, 0.1), 0x4a4f58, sx + s * 1.6, sy + 1.25, sz - 0.6);
-        p.add(BOX(0.1, 2.5, 0.1), 0x4a4f58, sx + s * 1.6, sy + 1.25, sz + 0.6);
+        p.box(0.1, 2.5, 0.1, 0x4a4f58, sx + s * 1.6, sy + 1.25, sz - 0.6);
+        p.box(0.1, 2.5, 0.1, 0x4a4f58, sx + s * 1.6, sy + 1.25, sz + 0.6);
       }
-      p.add(BOX(3.4, 0.1, 0.1), 0x4a4f58, sx, sy + 2.5, sz);
-      for (const s of [-0.7, 0.7]) p.add(BOX(0.5, 0.06, 0.25), 0xd6352f, sx + s, sy + 0.5, sz);
+      p.box(3.4, 0.1, 0.1, 0x4a4f58, sx, sy + 2.5, sz);
+      for (const s of [-0.7, 0.7]) p.box(0.5, 0.06, 0.25, 0xd6352f, sx + s, sy + 0.5, sz);
     }
 
     const m = p.mesh(solidMat);

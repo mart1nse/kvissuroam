@@ -222,7 +222,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     let prev = null;
     for (let i = 0; i <= n; i++) {
       const q = F.at(t0 + (t1 - t0) * i / n, lat), y = h(q[0], q[1]);
-      p.add(BOX(0.07, height + 0.1, 0.07), post, q[0], y + (height + 0.1) / 2, q[1], 0);
+      p.box(0.07, height + 0.1, 0.07, post, q[0], y + (height + 0.1) / 2, q[1], 0);
       if (prev) panel(prev, q, height);
       prev = q;
     }
@@ -236,7 +236,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
   // ---- house fronts: flat boxes standing against a wall (s along it, y above the house's ground)
   const slab = (W, s0, s1, y0, y1, off, thick, hex) => {
     const [x, z] = W.at((s0 + s1) / 2, off + thick / 2);
-    p.add(BOX(s1 - s0, y1 - y0, thick), hex, x, W.y + (y0 + y1) / 2, z, W.yaw);
+    p.box(s1 - s0, y1 - y0, thick, hex, x, W.y + (y0 + y1) / 2, z, W.yaw);
   };
   const face = (W, hex, y0 = -1, y1 = W.top - W.y + 0.03) => slab(W, -0.04, W.len + 0.04, y0, y1, 0.03, 0.09, hex);
   // a window: frame, glass, `bars` uprights and `rails` cross bars
@@ -260,7 +260,7 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     p.add(new THREE.IcosahedronGeometry(r, 1).scale(1.1, squash, 1), hex, x, h(x, z) + r * squash * 0.75, z, x + z);
   };
   // a box standing on the ground
-  const box = (x, z, w, height, d, hex, yaw = 0, y0 = 0) => p.add(BOX(w, height, d), hex, x, h(x, z) + y0 + height / 2, z, yaw);
+  const box = (x, z, w, height, d, hex, yaw = 0, y0 = 0) => p.box(w, height, d, hex, x, h(x, z) + y0 + height / 2, z, yaw);
 
   function finish() {
     const flat = (G, mat) => {

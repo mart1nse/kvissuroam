@@ -5,11 +5,93 @@
 import * as THREE from 'three';
 import { rnd } from '../race/landmarks.js';
 import { paintScale } from './paintscale.js';
+import { jobs as work } from '../jobs.js';
 
 export const tone = (rgb, k) => `rgb(${Math.min(255, rgb[0] * k) | 0},${Math.min(255, rgb[1] * k) | 0},${Math.min(255, rgb[2] * k) | 0})`;
 const hexRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const shade = (hex, k) => tone(hexRgb(hex), k);
 export const rgbHex = (rgb) => (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+
+// Many small rectangles at once (the bricks of a wall, the grains of an asphalt picture). Each one's share
+// of every pixel it touches is worked out here, as the canvas would blend it, and the lot is laid on the
+// canvas in one piece: drawn one by one, the 20 000 bricks of a big wall were a third of the time a painted
+// street took to build.
+//   pixelSheet(c, i0, j0, i1, j1, base) -> { add(left, top, right, bottom, r, g, b), lay() } or null (then draw the old way)
+//   base [r, g, b]: the area is one plain colour already. Then the sheet replaces those pixels (no blending
+//   by the canvas, and its clip does not hold: keep the area inside what may be painted).
+let ACC = new Float32Array(0), IMG = null, SCRATCH = null;
+export function pixelSheet(c, i0, j0, i1, j1, base = null) {
+  i0 = Math.max(0, Math.floor(i0)); j0 = Math.max(0, Math.floor(j0)); i1 = Math.min(c.canvas.width, Math.ceil(i1)); j1 = Math.min(c.canvas.height, Math.ceil(j1));
+  const w = i1 - i0, h = j1 - j0, n = w * h * 4;
+  if (w <= 0 || h <= 0 || typeof ImageData === 'undefined' || (c.getTransform && !c.getTransform().isIdentity)) return null;
+  if (ACC.length < n) ACC = new Float32Array(n);
+  const acc = ACC;                       // colour times cover in three numbers and the cover in the fourth, per pixel
+  if (base) for (let o = 0; o < n; o += 4) { acc[o] = base[0]; acc[o + 1] = base[1]; acc[o + 2] = base[2]; acc[o + 3] = 1; }
+  else acc.fill(0, 0, n);
+  return {
+    add(l, t, r, b, cr, cg, cb) {
+      const ja = Math.max(j0, Math.floor(t)), jb = Math.min(j1, Math.ceil(b)), ia = Math.max(i0, Math.floor(l)), ib = Math.min(i1, Math.ceil(r));
+      for (let j = ja; j < jb; j++) {
+        const cy = Math.min(b, j + 1) - Math.max(t, j);
+        if (cy <= 0) continue;
+        for (let i = ia, o = ((j - j0) * w + ia - i0) * 4; i < ib; i++, o += 4) {
+          const al = (Math.min(r, i + 1) - Math.max(l, i)) * cy;
+          if (al <= 0) continue;
+          const keep = 1 - al;
+          acc[o] = cr * al + acc[o] * keep; acc[o + 1] = cg * al + acc[o + 1] * keep; acc[o + 2] = cb * al + acc[o + 2] * keep; acc[o + 3] = al + acc[o + 3] * keep;
+        }
+      }
+    },
+    lay() {
+      if (!IMG || IMG.width < w || IMG.height < h) IMG = new ImageData(Math.max(w, IMG ? IMG.width : 256), Math.max(h, IMG ? IMG.height : 256));
+      const d = IMG.data, W = IMG.width;
+      for (let j = 0; j < h; j++) {
+        for (let i = 0, o = j * w * 4, q = j * W * 4; i < w; i++, o += 4, q += 4) {
+          const a = acc[o + 3];
+          if (a > 0) { d[q] = acc[o] / a + 0.5; d[q + 1] = acc[o + 1] / a + 0.5; d[q + 2] = acc[o + 2] / a + 0.5; d[q + 3] = a * 255 + 0.5; } else d[q + 3] = 0;
+        }
+      }
+      if (base) { c.putImageData(IMG, i0, j0, 0, 0, w, h); return; }
+      if (!SCRATCH || SCRATCH.width < w || SCRATCH.height < h) {
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(w, SCRATCH ? SCRATCH.width : 256); cv.height = Math.max(h, SCRATCH ? SCRATCH.height : 256);
+        SCRATCH = cv;
+      }
+      SCRATCH.getContext('2d', { willReadFrequently: true }).putImageData(IMG, 0, 0, 0, 0, w, h);
+      c.drawImage(SCRATCH, 0, 0, w, h, i0, j0, w, h);
+    },
+  };
+}
+// The bricks of a wall for any painter: X, Y turn metres into the canvas's pixels, lim [left, top, right, bottom]
+// is the part of the canvas this painter may paint on. Few bricks are drawn one by one, a wall of them as a sheet.
+export function paintBricks(c, X, Y, ppm, lim, x0, ya, x1, yb, rgb, seed = 1) {
+  const r = rnd(seed), bh = Math.max(1, 0.066 * ppm);
+  c.fillStyle = tone(rgb, 0.8); c.fillRect(X(x0), Y(yb), (x1 - x0) * ppm, (yb - ya) * ppm);
+  const many = ((yb - ya) / 0.09) * ((x1 - x0) / 0.26) > 120;
+  // (the sheet replaces the mortar's pixels: only those wholly inside the mortar, and inside the painter's own part)
+  const i0 = Math.ceil(Math.max(lim[0], X(x0))), j0 = Math.ceil(Math.max(lim[1], Y(yb))), i1 = Math.floor(Math.min(lim[2], X(x1))), j1 = Math.floor(Math.min(lim[3], Y(ya)));
+  const sh = many ? pixelSheet(c, i0, j0, i1, j1, [Math.min(255, rgb[0] * 0.8) | 0, Math.min(255, rgb[1] * 0.8) | 0, Math.min(255, rgb[2] * 0.8) | 0]) : null;
+  for (let y = ya, row = 0; y < yb; y += 0.09, row++) {
+    for (let x = x0 - (row % 2) * 0.13; x < x1; x += 0.26) {
+      const k = 0.9 + r() * 0.2;
+      const xa = Math.max(x0, x + 0.012), xb = Math.min(x1, x + 0.25);
+      if (xb <= xa) continue;
+      const l = X(xa), t = Y(Math.min(yb, y + 0.078));
+      if (!sh) { c.fillStyle = tone(rgb, k); c.fillRect(l, t, (xb - xa) * ppm, bh); continue; }
+      const rr = l + (xb - xa) * ppm, bb = t + bh;
+      sh.add(l, t, rr, bb, Math.min(255, rgb[0] * k) | 0, Math.min(255, rgb[1] * k) | 0, Math.min(255, rgb[2] * k) | 0);
+      if (l < i0 || rr > i1 || t < j0 || bb > j1) {     // what of a brick lies on the half pixels round the sheet
+        c.fillStyle = tone(rgb, k);
+        if (l < i0) c.fillRect(l, t, Math.min(rr, i0) - l, bh);
+        if (rr > i1) c.fillRect(Math.max(l, i1), t, rr - Math.max(l, i1), bh);
+        const la = Math.max(l, i0), ra = Math.min(rr, i1);
+        if (ra > la && t < j0) c.fillRect(la, t, ra - la, Math.min(bb, j0) - t);
+        if (ra > la && bb > j1) c.fillRect(la, Math.max(t, j1), ra - la, bb - Math.max(t, j1));
+      }
+    }
+  }
+  if (sh) sh.lay();
+}
 
 // ---------------------------------------------------------------- the paint box
 // Drawing in metres on a rectangle of an atlas canvas: x along the wall, y up from the house's ground line.
@@ -48,17 +130,7 @@ export function painter(c, px, py, wm, y0, y1, ppm) {
         for (let k = 1; k <= rails; k++) { const y = ya + (yb - ya) * k / (rails + 1); P.r(x0, y - fw / 2, x1, y + fw / 2, frame); }
       }
     },
-    brick(x0, ya, x1, yb, rgb, seed = 1) {
-      const r = rnd(seed);
-      P.r(x0, ya, x1, yb, tone(rgb, 0.8));
-      for (let y = ya, row = 0; y < yb; y += 0.09, row++) {
-        for (let x = x0 - (row % 2) * 0.13; x < x1; x += 0.26) {
-          c.fillStyle = tone(rgb, 0.9 + r() * 0.2);
-          const xa = Math.max(x0, x + 0.012), xb = Math.min(x1, x + 0.25);
-          if (xb > xa) c.fillRect(X(xa), Y(Math.min(yb, y + 0.078)), (xb - xa) * ppm, Math.max(1, 0.066 * ppm));
-        }
-      }
-    },
+    brick(x0, ya, x1, yb, rgb, seed = 1) { paintBricks(c, X, Y, ppm, [px - 2, py - 2, px + wm * ppm + 2, py + (y1 - y0) * ppm + 2], x0, ya, x1, yb, rgb, seed); },
     // field stones in mortar
     rubble(x0, ya, x1, yb, seed = 1, mortar = '#6f675f', tones = [[176, 160, 140], [150, 138, 128], [190, 172, 150], [160, 140, 124], [140, 134, 136], [186, 150, 132]], size = 1) {
       const r = rnd(seed);
@@ -197,79 +269,88 @@ export function wallPlanes(world, secKey, base, pick) {
 //   plinth { h, type 'plaster' | 'rubble' | 'brick', col }; floors [{ sill, h }] ; win { w, pitch, ... P.win options };
 //   belts [y]; attic { w, h }; doors [{ x, w, h, col, canopy }] (per wall via walls[].doors); draw(P, W, auto)
 export function skinHouses(world, group, houses, { faces = () => true, ppm = 26, far = 11, shadows = true, debug = false } = {}) {
-  const atlas = createAtlas();
-  const jobs = [];
-  const h = (x, z) => world.heightAt(x, z);
-  for (const H of houses) {
-    const r2 = (H.r || 16) ** 2;
-    const planes = wallPlanes(world, H.sec, H.base, (x, z, top) => (x - H.at[0]) ** 2 + (z - H.at[1]) ** 2 < r2 && (!H.pick || H.pick(x, z, top)));
-    if (debug) console.log('house', H.name || H.base, planes.map((w) => `${w.mid[0].toFixed(1)},${w.mid[1].toFixed(1)} L${w.len.toFixed(1)} n${w.nx.toFixed(2)},${w.nz.toFixed(2)}`).join(' | '));
-    for (const W of planes) {
-      const over = (H.walls || []).find((o) => Math.hypot(o.near[0] - W.mid[0], o.near[1] - W.mid[1]) < (o.within || 2.5)) || {};
-      if (over.skip) continue;
-      const spec = { ...H.spec, ...(over.spec || {}) };
-      // the ground along the wall's foot; the house's ground line is its highest point
-      let gmax = -1e9, gmin = 1e9;
-      for (let k = 0; k <= 4; k++) { const y = h(W.a[0] + W.ux * W.len * k / 4 + W.nx * 0.6, W.a[1] + W.uz * W.len * k / 4 + W.nz * 0.6); if (y > gmax) gmax = y; if (y < gmin) gmin = y; }
-      W.yref = over.yref ?? gmax;
-      const ylo = Math.max(W.ylo, gmin - 0.6), yhi = W.yhi;
-      if (yhi - ylo < 0.6) continue;
-      const front = faces(W);
-      let q = (front ? (over.ppm || spec.ppm || ppm) : far) * paintScale();
-      const most = atlas.size * 0.88;
-      q = Math.min(q, most / W.len, most / (yhi - ylo));
-      const pw = Math.max(4, Math.round(W.len * q)), ph = Math.max(4, Math.round((yhi - ylo) * q));
-      const rect = atlas.take(pw, ph);
-      const pg = atlas.pages[rect.k], c = pg.c;
-      c.save();
-      c.beginPath(); c.rect(rect.x - 2, rect.y - 2, pw + 4, ph + 4); c.clip();
-      const P = painter(c, rect.x, rect.y, W.len, ylo - W.yref, yhi - W.yref, pw / W.len);
-      // helpers that know the wall's outline
-      const k = (x) => Math.max(0, Math.min(W.top.length - 1, Math.floor(x / W.len * W.top.length)));
-      W.topAt = (x) => W.top[k(x)] - W.yref;
-      W.botAt = (x) => W.bot[k(x)] - W.yref;
-      const sorted = Array.from(W.top).filter((v) => v > -1e8).sort((a, b) => a - b);
-      W.eaves = (sorted[Math.floor(sorted.length * 0.12)] ?? yhi) - W.yref;
-      W.peak = yhi - W.yref;
-      W.foot = Math.min(...Array.from(W.bot)) - W.yref;
-      W.front = front;
-      c.fillStyle = typeof spec.wall === 'string' ? spec.wall : tone(spec.wall || [200, 200, 200], 1);
-      c.fillRect(rect.x - 2, rect.y - 2, pw + 4, ph + 4);
-      paintWall(P, W, spec, over, H);
-      c.restore();
-      jobs.push({ W, rect, pw, ph, ylo, yhi });
-    }
-  }
-  // geometry: every wall's own triangles, pushed 7 cm out, one mesh per atlas page
-  const S = atlas.size, OFF = 0.07;
-  atlas.pages.forEach((pg, pk) => {
-    const pos = [], nor = [], uv = [];
-    for (const { W, rect, pw, ph, ylo, yhi } of jobs) {
-      if (rect.k !== pk) continue;
-      for (const tr of W.tris) {
-        const ex = tr[1][0] - tr[0][0], ey = tr[1][1] - tr[0][1], ez = tr[1][2] - tr[0][2], fx = tr[2][0] - tr[0][0], fy = tr[2][1] - tr[0][1], fz = tr[2][2] - tr[0][2];
-        const cx = ey * fz - ez * fy, cz = ex * fy - ey * fx;
-        const order = cx * W.nx + cz * W.nz >= 0 ? [0, 1, 2] : [0, 2, 1];
-        for (const i of order) {
-          const p = tr[i], sm = p[0] * W.ux + p[2] * W.uz - W.s0;
-          pos.push(p[0] + W.nx * OFF, p[1], p[2] + W.nz * OFF);
-          nor.push(W.nx, 0, W.nz);
-          uv.push((rect.x + sm / W.len * pw) / S, 1 - (rect.y + (yhi - Math.max(ylo, p[1])) / (yhi - ylo) * ph) / S);
-        }
+  // (queued: a wall is painted at a time, a few milliseconds of it a frame, and the fronts are hung on the
+  // houses when the last one is done. Painted in one go, a street of them was 0.1 to 0.3 s of standstill.)
+  work.add(function* () {
+    const atlas = createAtlas();
+    const done = [];
+    const h = (x, z) => world.heightAt(x, z);
+    for (const H of houses) {
+      const r2 = (H.r || 16) ** 2;
+      let planes;
+      try { planes = wallPlanes(world, H.sec, H.base, (x, z, top) => (x - H.at[0]) ** 2 + (z - H.at[1]) ** 2 < r2 && (!H.pick || H.pick(x, z, top))); } catch { continue; }      // (its square of the map was unloaded while this waited)
+      if (debug) console.log('house', H.name || H.base, planes.map((w) => `${w.mid[0].toFixed(1)},${w.mid[1].toFixed(1)} L${w.len.toFixed(1)} n${w.nx.toFixed(2)},${w.nz.toFixed(2)}`).join(' | '));
+      for (const W of planes) {
+        const over = (H.walls || []).find((o) => Math.hypot(o.near[0] - W.mid[0], o.near[1] - W.mid[1]) < (o.within || 2.5)) || {};
+        if (over.skip) continue;
+        const spec = { ...H.spec, ...(over.spec || {}) };
+        // the ground along the wall's foot; the house's ground line is its highest point
+        let gmax = -1e9, gmin = 1e9;
+        for (let k = 0; k <= 4; k++) { const y = h(W.a[0] + W.ux * W.len * k / 4 + W.nx * 0.6, W.a[1] + W.uz * W.len * k / 4 + W.nz * 0.6); if (y > gmax) gmax = y; if (y < gmin) gmin = y; }
+        W.yref = over.yref ?? gmax;
+        const ylo = Math.max(W.ylo, gmin - 0.6), yhi = W.yhi;
+        if (yhi - ylo < 0.6) continue;
+        const front = faces(W);
+        let q = (front ? (over.ppm || spec.ppm || ppm) : far) * paintScale();
+        const most = atlas.size * 0.88;
+        q = Math.min(q, most / W.len, most / (yhi - ylo));
+        const pw = Math.max(4, Math.round(W.len * q)), ph = Math.max(4, Math.round((yhi - ylo) * q));
+        const rect = atlas.take(pw, ph);
+        const pg = atlas.pages[rect.k], c = pg.c;
+        c.save();
+        c.beginPath(); c.rect(rect.x - 2, rect.y - 2, pw + 4, ph + 4); c.clip();
+        const P = painter(c, rect.x, rect.y, W.len, ylo - W.yref, yhi - W.yref, pw / W.len);
+        // helpers that know the wall's outline
+        const k = (x) => Math.max(0, Math.min(W.top.length - 1, Math.floor(x / W.len * W.top.length)));
+        W.topAt = (x) => W.top[k(x)] - W.yref;
+        W.botAt = (x) => W.bot[k(x)] - W.yref;
+        const sorted = Array.from(W.top).filter((v) => v > -1e8).sort((a, b) => a - b);
+        W.eaves = (sorted[Math.floor(sorted.length * 0.12)] ?? yhi) - W.yref;
+        W.peak = yhi - W.yref;
+        W.foot = Math.min(...Array.from(W.bot)) - W.yref;
+        W.front = front;
+        c.fillStyle = typeof spec.wall === 'string' ? spec.wall : tone(spec.wall || [200, 200, 200], 1);
+        c.fillRect(rect.x - 2, rect.y - 2, pw + 4, ph + 4);
+        paintWall(P, W, spec, over, H);
+        c.restore();
+        done.push({ W, rect, pw, ph, ylo, yhi });
+        yield;
       }
     }
-    if (!pos.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    const tex = new THREE.CanvasTexture(pg.cv);
-    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
-    m.receiveShadow = shadows;
-    group.add(m);
-  });
-  return jobs.map((j) => j.W);
+    // geometry: every wall's own triangles, pushed 7 cm out, one mesh per atlas page
+    const S = atlas.size, OFF = 0.07;
+    for (let pk = 0; pk < atlas.pages.length; pk++) {
+      const pg = atlas.pages[pk];
+      const pos = [], nor = [], uv = [];
+      for (const { W, rect, pw, ph, ylo, yhi } of done) {
+        if (rect.k !== pk) continue;
+        for (const tr of W.tris) {
+          const ex = tr[1][0] - tr[0][0], ey = tr[1][1] - tr[0][1], ez = tr[1][2] - tr[0][2], fx = tr[2][0] - tr[0][0], fy = tr[2][1] - tr[0][1], fz = tr[2][2] - tr[0][2];
+          const cx = ey * fz - ez * fy, cz = ex * fy - ey * fx;
+          const order = cx * W.nx + cz * W.nz >= 0 ? [0, 1, 2] : [0, 2, 1];
+          for (const i of order) {
+            const p = tr[i], sm = p[0] * W.ux + p[2] * W.uz - W.s0;
+            pos.push(p[0] + W.nx * OFF, p[1], p[2] + W.nz * OFF);
+            nor.push(W.nx, 0, W.nz);
+            uv.push((rect.x + sm / W.len * pw) / S, 1 - (rect.y + (yhi - Math.max(ylo, p[1])) / (yhi - ylo) * ph) / S);
+          }
+        }
+      }
+      if (!pos.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      const tex = new THREE.CanvasTexture(pg.cv);
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
+      m.receiveShadow = shadows;
+      yield;
+      work.upload(tex);                   // the page goes to the graphics card by itself, not with the others in one frame
+      group.add(m);
+      yield;
+    }
+  }, 'house fronts');
 }
 
 const css = (v, k = 1) => (typeof v === 'string' ? (k === 1 ? v : shade(v, k)) : tone(v, k));

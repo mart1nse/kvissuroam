@@ -170,7 +170,7 @@ function mast(p, base, y0, H = 52) {
       seg(k % 2 ? a : e, k % 2 ? c : b, 0.07, col);
     }
   }
-  p.add(BOX(0.12, 6, 0.12), 0xd9d7d1, base[0], y0 + H + 3, base[1]);
+  p.box(0.12, 6, 0.12, 0xd9d7d1, base[0], y0 + H + 3, base[1]);
   p.add(new THREE.CylinderGeometry(0.45, 0.45, 1.6, 10), 0xe8e6e0, base[0] + 0.5, y0 + H - 2, base[1]);
   p.add(new THREE.CylinderGeometry(0.45, 0.45, 1.6, 10), 0xe8e6e0, base[0] - 0.4, y0 + H - 6, base[1] + 0.3);
 }
@@ -233,9 +233,9 @@ export function createRiia3(scene, world, { shadows = true } = {}) {
       // keep-right signs and striped posts on the dividing wall's ends
       for (const [s, d] of [[RB.s0 - 0.15, -1], [RB.s1 + 0.15, 1]]) {
         const [x, z] = L(s, 0);
-        p.add(BOX(0.12, 1.1, 0.12), 0xe9e9e6, x, gy + 1.55, z);
+        p.box(0.12, 1.1, 0.12, 0xe9e9e6, x, gy + 1.55, z);
         p.add(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 20).rotateZ(Math.PI / 2), 0x1f5fb4, x + U[0] * d * 0.08, gy + 2.3, z + U[1] * d * 0.08, RIIA2.YAW);
-        for (let k = 0; k < 4; k++) p.add(BOX(0.16, 0.24, 0.16), k % 2 ? 0xf2f2f2 : 0xd22f2a, x + U[0] * d * 0.4, gy + 0.12 + k * 0.24, z + U[1] * d * 0.4);
+        for (let k = 0; k < 4; k++) p.box(0.16, 0.24, 0.16, k % 2 ? 0xf2f2f2 : 0xd22f2a, x + U[0] * d * 0.4, gy + 0.12 + k * 0.24, z + U[1] * d * 0.4);
       }
       // the steel railings along both edges
       for (const s of [RB.s0 + 0.15, RB.s1 - 0.15]) R.add(L(s, -RB.v), L(s, RB.v), gy + RB.top + 0.25, gy + RB.top + 0.25, 1.15);
@@ -261,7 +261,7 @@ export function createRiia3(scene, world, { shadows = true } = {}) {
     {
       const b = L(602, -32);
       mast(p, b, h(b[0], b[1]) - 0.3);
-      p.add(BOX(5.6, 0.5, 5.6), 0x8d8f8b, b[0], h(b[0], b[1]) - 0.05, b[1], RIIA2.YAW);
+      p.box(5.6, 0.5, 5.6, 0x8d8f8b, b[0], h(b[0], b[1]) - 0.05, b[1], RIIA2.YAW);
     }
     R.finish();
     CK.finish();

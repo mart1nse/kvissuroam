@@ -42,7 +42,7 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
 {
   const { g, moves } = run(N, N - 1, (l) => 125 * 0.75 ** (N - 1 - l), 120);
   check(moves[0]?.to === N - 3, 'very slow frames skip a rung');
-  check(g.level <= 2, `software rendering reaches the bottom rungs (${g.level}) in 2 min`);
+  check(g.level <= 3, `software rendering reaches the bottom rungs (${g.level}) in 2 min`);   // (3: the same rung as 2 was before the extra low rung went in under it)
 }
 
 // 4. battery saver: 30 Hz whatever we do; must not stay low

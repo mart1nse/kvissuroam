@@ -9,7 +9,8 @@ enough to make that happen at DRIVE.
   is moving, run `node tools/perf-budget.cjs` and keep it inside `tools/perf-budget.json`. Raise a
   budget figure only with a reason in the commit. It measures a phone's memory (the iPhone 13 crashes)
   and drives 4.5 km through the centre counting how often and how long the game stands still (the
-  freeze frames).
+  freeze frames), and counts what the lowest graphics level draws at the Riia and Turu junction (old
+  laptops at 10 to 18 FPS, 21 Nov).
   It takes about 6 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
   it only prints that result (the last run is noted in the project's shared folder). Use `--force` when
   Martin asks, or when the change is likely to weigh a lot (a new painted street, a car model, hundreds
@@ -35,6 +36,12 @@ enough to make that happen at DRIVE.
   y, z, yaw)`. Ground textures: `groundTextures()` in `arhitekti.js`, shared by all places.
 - `node tools/freeze-profile.cjs route=centre` (dev server on 5198) shows where a drive stands still
   and what ran there; add a route to `tools/freeze-routes.cjs` for a new part of the map.
+- Old computers (two processor cores, Intel graphics) get the extra low setup (`xlow` in `src/main.js`:
+  the phone's ground, no edge smoothing, the bottom rung of `LADDER` in `src/quality.js` with a 1.5 km
+  view). Something new that is seen from far away needs a simple far form or a distance limit that
+  follows the level, or the lowest level grows heavier again. `node tools/freeze-profile.cjs
+  route=centre slow=5` drives as such a computer (processor 5 times slower, 15 frames a second) and
+  also shows how long built things waited to get into the picture.
 - Reuse geometry and materials (instancing, merged meshes); dispose what is removed from the scene.
 - New shader variants: warm them (`renderer.compileAsync`) rather than compiling on the first frame.
 - Graphics quality follows the frame rate (`src/quality.js`); new effects should follow the level

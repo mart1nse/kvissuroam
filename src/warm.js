@@ -17,6 +17,7 @@ import { jobs } from './jobs.js';
 
 let renderer = null, scene = null, camera = null, depth = 0, off = false, send = null;
 const held = new Map();        // object -> the layers it is drawn in (0 while held)
+const since = new WeakMap();   // object -> when it was held
 const fresh = [];              // held objects in the order they came
 let stage = null;              // the batch being made ready: { list, mats, tex, k, t0, shown }
 const now = () => performance.now();
@@ -28,6 +29,7 @@ function hold(root) {
   root.traverse((o) => {
     if (!DRAWN(o) || held.has(o) || o.layers.mask === 0) return;
     held.set(o, o.layers.mask);
+    since.set(o, now());
     o.layers.mask = 0;
     fresh.push(o);
   });
@@ -83,6 +85,8 @@ export const warm = {
   // what `fn` adds to the scene is held back until it is ready to be drawn
   scope(fn) { depth++; try { return fn(); } finally { depth--; } },
   get waiting() { return held.size; },
+  // how long the oldest thing still held back has been waiting, in ms (0 with nothing held)
+  get waited() { const o = stage ? stage.list[stage.shown] : fresh[0]; return o ? now() - (since.get(o) || now()) : 0; },
   get state() { return { held: held.size, fresh: fresh.length, stage: stage && { n: stage.list.length, mats: stage.mats.length, tex: stage.tex ? stage.tex.length : -1, k: stage.k, shown: stage.shown, ms: Math.round(now() - stage.t0) } }; },
   // is this object still held back?
   holding(o) { return held.has(o); },
@@ -92,13 +96,17 @@ export const warm = {
     for (const o of [...held.keys()]) show(o);
     fresh.length = 0; stage = null;
   },
-  // each frame while driving
-  tick() {
+  // each frame while driving. `k`: how much bigger the steps are than at 60 frames a second (main.js passes
+  // the frame time over a sixtieth, and four times that when things have waited long): the amounts below
+  // are per frame, and an old computer at 10 frames a second would otherwise need six times as long by the
+  // clock, with the street empty meanwhile.
+  tick(k = 1) {
     if (off) return;
     if (!jobs.live) { this.flush(); return; }
+    k = Math.max(1, Math.min(32, k));
     if (!stage) {
       if (!fresh.length) return;
-      const list = fresh.splice(0, 40).filter((o) => { if (attached(o)) return true; show(o); return false; });
+      const list = fresh.splice(0, Math.round(40 * k)).filter((o) => { if (attached(o)) return true; show(o); return false; });
       if (!list.length) return;
       let mats = [];
       try { mats = [...renderer.compile({ traverseVisible() {}, traverse: (f) => { for (const o of list) f(o); } }, camera, scene)]; } catch (err) { console.warn(err); }
@@ -106,21 +114,24 @@ export const warm = {
       return;
     }
     const S = stage;
-    if (S.mats.length) {                                   // shaders still compiling: wait (4 s at most)
+    if (S.mats.length) {                                   // shaders still compiling: wait (4 s at most, 1 s when in a hurry)
       S.mats = S.mats.filter((m) => { const p = renderer.properties.get(m).currentProgram; return p && p.isReady && !p.isReady(); });
-      if (S.mats.length && now() - S.t0 < 4000) return;
+      if (S.mats.length && now() - S.t0 < (k > 8 ? 1000 : 4000)) return;
       S.mats = [];
     }
     if (!S.tex) S.tex = texturesOf(S.list);
     if (S.k < S.tex.length) {                              // pictures: about 1.5 megapixels a frame
-      for (let px = 0; S.k < S.tex.length && px < 1.5e6; S.k++) {
+      for (let px = 0; S.k < S.tex.length && px < 1.5e6 * k; S.k++) {
         const t = S.tex[S.k];
         px += (t.image.width || 0) * (t.image.height || 0);
+        const s0 = now();
         try { send(t); } catch (err) { console.warn(err); }
+        // (a picture that took long to send is noted with the queue's slow steps, for tools/freeze-profile.cjs)
+        if (now() - s0 > 20) jobs.note(`picture ${t.image.width}x${t.image.height}${t.name ? ' ' + t.name : ''}${t.isCanvasTexture ? ' (painted)' : ''}`, Math.round(now() - s0));
       }
       return;
     }
-    for (let mb = 0; S.shown < S.list.length && mb < 3; S.shown++) {      // into the picture: about 3 MB of model a frame
+    for (let mb = 0; S.shown < S.list.length && mb < 3 * k; S.shown++) {      // into the picture: about 3 MB of model a frame
       const o = S.list[S.shown];
       mb += weight(o);
       show(o);

@@ -1,4 +1,4 @@
-// Where does the game stand still during a drive?   node tools/freeze-profile.cjs [route=centre] [step=0.8] [touch] [port=5198] [out=file.json]
+// Where does the game stand still during a drive?   node tools/freeze-profile.cjs [route=centre] [step=0.8] [touch] [slow=5] [port=5198] [out=file.json]
 //
 // Needs the dev server (npx vite --port 5198). Drawing is switched off, so frames run at 60 a second even
 // without a graphics card, and the car is moved along a line of map points (no physics), `step` metres a
@@ -6,6 +6,8 @@
 // which the page was busy, by what ran in it. What the graphics card does (pictures sent, shaders compiled)
 // is not seen here: tools/gpu-burst.cjs counts that.
 //   routes: tools/freeze-routes.cjs, and `lap` (the race track). touch: as a phone (light mode, small pictures).
+//   slow=5: as an old computer: the processor five times slower, 15 frames a second, light mode and extra low.
+//           Then the thing to read is how long queued building work had to wait (the city standing empty).
 // tools/perf-budget.cjs drives the centre route with this as part of the budget check (drive, summarise, report).
 const { chromium, devices } = require('playwright');
 const fs = require('fs');
@@ -18,7 +20,7 @@ const FLY = require('./freeze-fly.cjs');
 
 // One test drive. Returns { errs, slow, profile, fr, tStart, stat }: page errors, the queue's slow steps, the
 // CPU profile, each frame as [time, game code ms, x, z], and how far it got.
-async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = false } = {}) {
+async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = false, slow: slowBy = 0 } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: 640, height: 360 } });
@@ -29,9 +31,18 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
     await p.addInitScript(() => {
       const raf = window.requestAnimationFrame.bind(window);
       window.__fr = [];
-      window.requestAnimationFrame = (f) => raf((ts) => { const t0 = performance.now(); f(ts); const d = performance.now() - t0; if (window.__rec && f.name === 'frame') __fr.push([t0, d, __game.car?.x | 0, __game.car?.z | 0]); });
+      // (__every: only every so many screen refreshes get a frame, for a slow machine's frame rate)
+      window.__every = 1; let tick = 0;
+      window.requestAnimationFrame = (f) => {
+        const run = (ts) => {
+          if (f.name === 'frame' && window.__every > 1 && ++tick % window.__every) return raf(run);
+          const t0 = performance.now(); f(ts); const d = performance.now() - t0;
+          if (window.__rec && f.name === 'frame') { const g = __game; __fr.push([t0, d, g.car?.x | 0, g.car?.z | 0, g.jobs?.pending | 0, g.warmer?.waiting | 0, Math.round(Math.max(g.jobs?.waited || 0, g.warmer?.waited || 0))]); }
+        };
+        return raf(run);
+      };
     });
-    await p.goto(`http://localhost:${port}/`, { timeout: 180000 });
+    await p.goto(`http://localhost:${port}/${slowBy ? '?lite&xlow' : ''}`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     await p.waitForTimeout(2000);
     const ROUTE = name === 'lap' ? await p.evaluate(() => __game.race().track.P.filter((_, i) => i % 4 === 0).map((q) => [q[0], q[1]])) : ROUTES[name];
@@ -39,6 +50,7 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
     const cdp = await ctx.newCDPSession(p);
     await cdp.send('Profiler.enable');
     await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
+    if (slowBy) { await cdp.send('Emulation.setCPUThrottlingRate', { rate: slowBy }); await p.evaluate(() => { window.__every = 4; }); }
     // start: drive, jump to the first point, let it settle, then record
     await p.evaluate(async (r) => { __game.renderer.render = () => {}; __game.startDriving(); await __game.world.loadAround(r[0][0], r[0][1], 260); __game.place({ x: r[0][0], z: r[0][1], yaw: 0 }); }, ROUTE);
     await p.waitForTimeout(touch ? 14000 : 6000);
@@ -105,13 +117,18 @@ function summarise({ fr, stat, profile, runs }) {
     busyS: +(b.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(2), busyFrom: usable ? 'profile' : 'frames',
     pauses50: over(50), pauses100: over(100), pauses200: over(200), longest: Math.round(Math.max(...iv)),
     frozen: +(iv.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(1),
+    // queued building work and things held back from the picture: how much on average, and the longest wait (s)
+    queueMean: +(fr.reduce((a, f) => a + (f[4] || 0), 0) / fr.length).toFixed(1), queueMax: Math.max(...fr.map((f) => f[4] || 0)),
+    heldMean: +(fr.reduce((a, f) => a + (f[5] || 0), 0) / fr.length).toFixed(1), heldMax: Math.max(...fr.map((f) => f[5] || 0)),
+    waitedMax: +(Math.max(...fr.map((f) => f[6] || 0)) / 1000).toFixed(1),
+    waitedOver4S: +(fr.reduce((a, f, i) => a + (i && (f[6] || 0) > 4000 ? f[0] - fr[i - 1][0] : 0), 0) / 1000).toFixed(1),
   };
 }
 
 if (require.main === module) (async () => {
-  const step = +arg('step', 0.8), touch = process.argv.includes('touch'), port = arg('port', 5198), name = arg('route', 'centre');
+  const step = +arg('step', 0.8), touch = process.argv.includes('touch'), port = arg('port', 5198), name = arg('route', 'centre'), slow = +arg('slow', 0);
   const out = arg('out', path.join(os.tmpdir(), `freeze-${name}${touch ? '-phone' : ''}.json`));
-  const r = await drive({ port, route: name, step, touch });
+  const r = await drive({ port, route: name, step, touch, slow });
   fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat }));
   console.log(`${touch ? 'phone' : 'desktop'}, route ${name}: ${(r.stat.dist / 1000).toFixed(2)} km, errors ${r.errs.length} ${r.errs.slice(0, 3).join(' | ')}`);
   console.log('queued steps over 20 ms [label, step, ms]: ' + JSON.stringify(r.slow));
@@ -128,6 +145,7 @@ function report({ profile, fr, tStart, stat }, topN = 30) {
   L.push(`frames ${S.frames}: game code median ${S.jsMedian} ms, p95 ${S.jsP95}, p99 ${S.jsP99}, max ${S.jsMax}; over 16.7 ms: ${S.js17}, over 33: ${S.js33}, over 50: ${S.js50}, over 100: ${S.js100}`);
   L.push(`the page busy without a break for over 50 ms: ${S.busy50}, over 100 ms: ${S.busy100}, over 200: ${S.busy200}, longest ${S.busyLongest} ms; ${S.busyS} s in stretches over 50 ms`);
   L.push(`gaps between frames over 50 ms: ${S.pauses50}, over 100 ms: ${S.pauses100}, over 200: ${S.pauses200}, longest ${S.longest} ms; frozen time over 50 ms gaps: ${S.frozen} s of ${S.seconds} s`);
+  if (S.queueMax || S.heldMax) L.push(`queued building work: ${S.queueMean} pieces on average, ${S.queueMax} at most; held back from the picture: ${S.heldMean} on average, ${S.heldMax} at most; longest wait ${S.waitedMax} s, ${S.waitedOver4S} s of the drive with something waiting over 4 s`);
   if (!runs.ok) { L[1] += ' (from the frames\' game code only)'; L.push('\nthe profile of this drive has no idle samples, so what ran in the busy stretches cannot be told: drive again'); return L; }
   const long = runs.filter((r) => r.dur > 25000).sort((a, c) => c.dur - a.dur);
   L.push(`\nbusy stretches of the main thread over 25 ms: ${long.length} (over 50: ${long.filter((r) => r.dur > 50000).length}, over 100: ${long.filter((r) => r.dur > 100000).length}, over 200: ${long.filter((r) => r.dur > 200000).length}); total ${(long.reduce((a, r) => a + r.dur, 0) / 1e6).toFixed(1)} s`);

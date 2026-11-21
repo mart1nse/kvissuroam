@@ -14,6 +14,9 @@
 //    from the same canvas later, a clone with another wrap mode say, still gets a picture, if a soft
 //    one.) A picture that is still being painted now and then (its version keeps going up) is left alone.
 //
+// A texture marked userData.keepImage (the scanned car bodies, freed from the card at a car change and
+// sent again later) is only made smaller, never let go: its stand-in would be all the card got back.
+//
 // Weak desktops get the same (main.js: lite). Where it is switched on in the middle of a drive the
 // pictures are already on the card, so perScan makes only a few small copies each scan, not all at once.
 const MAX_PX = 1024 * 1024;
@@ -95,6 +98,8 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       st.ver = t.version;
       return true;
     }
+    // (a picture that is freed from the card and sent again later, a scanned car body: its image is kept)
+    if (t.userData.keepImage) return false;
     if (!release) return !!st.orig;
     if (!onCard(t)) { st.upAt = 0; return true; }
     if (!st.upAt) { st.upAt = now; return true; }

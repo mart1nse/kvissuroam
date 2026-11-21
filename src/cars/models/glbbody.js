@@ -25,6 +25,12 @@ function load(url) {
         });
         s.dispose();
       }
+      // These pictures belong to every car of this kind (the player's, parked ones, other players') and stay
+      // in this cache: when the player changes car they are freed from the graphics card (freeModel in
+      // main.js) and sent again from their image when this car is next drawn. So on phones and in light
+      // mode the picture shrinker (phonetex.js) must not swap their image for its small stand-in, or the
+      // body comes back as a smear of the scan's 256 px pieces (Martin, 2026-11-21).
+      for (const m of meshes) for (const v of Object.values(m.material)) if (v?.isTexture) v.userData.keepImage = true;
       return meshes;
     }));
   }

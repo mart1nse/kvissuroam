@@ -254,11 +254,13 @@ export function createDecor(track, world) {
       g.shadowColor = '#2ff3ff'; g.shadowBlur = 8; g.strokeStyle = '#2ff3ff'; g.lineWidth = 6;
       g.strokeRect(4, 4, w - 8, h - 8);
     });
-    st.halo = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.6, H), new THREE.MeshBasicMaterial({
+    // up to the underside of the black START · FINISH banner (its centre H - 0.6, its height (width + 0.6) / 8)
+    const hh = H - 0.6 - (width + 0.6) / 16;
+    st.halo = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.6, hh), new THREE.MeshBasicMaterial({
       map: ht, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
     }));
     st.halo.rotation.y = yaw;
-    st.halo.position.set(st.x, y0 + H / 2, st.z);
+    st.halo.position.set(st.x, y0 + hh / 2, st.z);
     st.halo.renderOrder = 4;
     st.halo.visible = st.haloOn;
     fixed.add(st.halo);

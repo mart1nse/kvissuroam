@@ -11,6 +11,7 @@ const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
 const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinning rear wheels under throttle (a figure eight)
+const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
@@ -736,7 +737,11 @@ function substep(car, input, world, dt) {
   let spinMax = 0, drive_cut = false;
   const absOn = [0, 0];
   // (the electronics stay out of a burnout: brake and throttle together is the driver asking for one)
-  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb && !car.burn ? s.tc : 0;
+  // (and floored at low speed it stays out of the way, as in a manual: the tyres light up from a standstill,
+  // and a flick where the wheel passes the centre or the car swings round backwards keeps its wheelspin
+  // instead of the tyres being pulled back to grip mid swing; Martin 2026-11-21)
+  const tcLow = throttle >= 0.9 ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
+  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb && !car.burn ? s.tc * tcLow : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';

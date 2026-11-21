@@ -199,5 +199,33 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// Floored flick from a standstill that swings the car round past sideways, the wheel passing the centre on
+// the way (Carrera GT, Martin 2026-11-21: the spin stopped and it crawled back): the rears must keep spinning
+// while the car moves backwards (lowest rear slip in km/h, judged: over SPIN_MIN), and flooring it straight
+// from a standstill lights the tyres up (peak slip in the first second, judged: over LIGHT_MIN).
+const SPIN_MIN = 15, LIGHT_MIN = 20;   // km/h
+console.log('\nfloored flick swung backwards: lowest rear wheelspin while rolling back / straight launch peak spin (km/h)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    let low = Infinity, light = 0;
+    for (const st0 of [0, 0.2, 0.5]) for (const t1 of [0.8, 1, 1.2, 1.5]) for (const t2 of [0.3, 0.6]) for (const seed of [0, 1]) {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      for (let t = 0; t < 5; t += dt) {
+        const steer = t < st0 ? 0 : t < st0 + t1 ? 1 : t < st0 + t1 + t2 ? -1 : 0;
+        stepCar(car, { up: 1, steer }, world(surf), dt);
+        if (car.vx < -0.3) low = Math.min(low, car.slipVR * 3.6);   // (slipVR is in m/s)
+      }
+    }
+    { const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+      for (let t = 0; t < 1; t += dt) { stepCar(car, { up: 1, steer: 0 }, world(surf), dt); light = Math.max(light, car.slipVR * 3.6); } }
+    // (judged on the cars with traction control, which used to step in; the others are only shown)
+    if (spec.tc && ((low < Infinity && low < SPIN_MIN) || light < LIGHT_MIN)) ok = false;
+    row.push(`${spec.short} ${low === Infinity ? '-' : low.toFixed(0)} / ${light.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

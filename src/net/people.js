@@ -40,7 +40,7 @@ export function createPeople({ mp, onFocus }) {
     if (elMe.textContent !== nm) elMe.textContent = nm;
     const drivers = mp.online ? mp.players() : [];
     const n = mp.online ? drivers.length + 1 : 0;
-    const key = `${n}|${mp.name}|${drivers.map((p) => p.name + mp.recordOf(p.name)).join('|')}`;
+    const key = `${n}|${mp.name}|${drivers.map((p) => p.name + p.colour + mp.recordOf(p.name)).join('|')}`;
     if (key === last) return;
     last = key;
     elCount.classList.toggle('hidden', n === 0);
@@ -48,9 +48,10 @@ export function createPeople({ mp, onFocus }) {
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
     if (n < 2) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
-    const names = drivers.map((p) => p.name).sort((a, b) => a.localeCompare(b));
-    const more = names.length > listMax ? names.length - listMax + 1 : 0;
-    const rows = names.slice(0, more ? listMax - 1 : listMax).map((s) => { const r = mp.recordOf(s); return `<li>${escapeHtml(s)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
+    // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
+    const sorted = drivers.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const more = sorted.length > listMax ? sorted.length - listMax + 1 : 0;
+    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => { const r = mp.recordOf(p.name); return `<li><i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');
@@ -86,7 +87,7 @@ export function createPeople({ mp, onFocus }) {
       if (!mp.online || !others.length) { list.classList.add('hidden'); return; }
       const driving = others.filter((p) => p.x !== undefined), away = others.filter((p) => p.x === undefined);
       shown = [{ name: `${mp.name} (you)`, me: true, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : '<b>●</b>'} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}</li>`;
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}</li>`;
       list.innerHTML = `<h4>${driving.length + 1} ONLINE</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
     },

@@ -3,7 +3,9 @@
 // The game measures every frame. When the typical frame (the median of a two second window) stays
 // slow, the graphics step one rung down a ladder: sharpness (pixel ratio) first, then the leafy tree
 // distance, the shadow map, how far the city streams in, and at the bottom a softer, lower
-// resolution picture. When the frame rate has room to spare for a while, it tries one rung up, and if
+// resolution picture, and under that an extra low rung for old computers and slow phones (half
+// sharpness, a short view into the haze, fewer streets loaded; Martin's ThinkPad T440s of 2013 ran the
+// old bottom rung at 18 FPS, 21 Nov 2026). When the frame rate has room to spare for a while, it tries one rung up, and if
 // that rung drops it straight back down, the rung is barred for a growing time (twice: for the
 // session), so it never flickers between two settings. Where the browser lets us time the graphics
 // card, a card close to its limit counts as slow even at a full 60 FPS (frames then queue up and the
@@ -14,7 +16,9 @@
 
 // Rungs from the bottom (0) to the top. Every rung is a whole setting; the device caps (phones, a
 // 1x screen) are applied on top, and rungs that come out the same are merged.
+// (far: how far the camera sees, in metres; only the extra low rung pulls it in, the haze with it)
 export const LADDER = [
+  { dpr: 0.5,  shadow: 0,    trees: 40,  load: 340, far: 1500 },
   { dpr: 0.6,  shadow: 0,    trees: 45,  load: 420 },
   { dpr: 0.75, shadow: 0,    trees: 50,  load: 480 },
   { dpr: 0.9,  shadow: 0,    trees: 60,  load: 560 },
@@ -35,9 +39,10 @@ export function deviceLadder(caps) {
       shadow: Math.min(r.shadow, caps.shadow),
       trees: Math.min(r.trees, caps.trees),
       load: Math.min(r.load, caps.load),
+      far: Math.min(r.far ?? Infinity, caps.far ?? Infinity),
     };
     const p = out[out.length - 1];
-    if (p && p.dpr === l.dpr && p.shadow === l.shadow && p.trees === l.trees && p.load === l.load) continue;
+    if (p && p.dpr === l.dpr && p.shadow === l.shadow && p.trees === l.trees && p.load === l.load && p.far === l.far) continue;
     out.push(l);
   }
   return out;
@@ -216,7 +221,39 @@ export function createGpuTimer(gl) {
   return out;
 }
 
-const KEY = 'kvissuroam.gfx', AUTOKEY = 'kvissuroam.gfxAuto2';   // (2: saved the way below from 19 Nov evening; the old key could hold a passing low)
+// (gfxAuto3, gfxCap2, alive2: level numbers count from the extra low rung added 21 Nov 2026; what the keys
+// before it hold is read once, one level up)
+// How far the picture is behind the game. The browser hands the drawing calls of a frame to the graphics
+// card and goes on; a card (or a processor feeding it) that cannot keep up works through a growing queue,
+// and what is on the screen is then older than what the game is doing: at the worst, after DRIVE on an old
+// computer, an empty picture for many seconds while the game already drives (Martin's 2019 MacBook Air,
+// 21 Nov 2026). A marker goes in after each frame's calls; `behind` is how long the oldest marker the card
+// has not reached yet has been waiting (0 when it keeps up), `ms` how long the last one took.
+export function createLag(gl) {
+  const out = { ms: 0, behind: 0, available: !!(gl && gl.fenceSync), mark() {}, poll() {} };
+  if (!out.available) return out;
+  const open = [];
+  out.mark = () => {
+    if (open.length >= 12) return;
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!sync) return;
+    open.push({ sync, t: performance.now() });
+    gl.flush();
+  };
+  // (a marker's state only changes between frames, so this is asked once a frame)
+  out.poll = () => {
+    const t = performance.now();
+    while (open.length && gl.getSyncParameter(open[0].sync, gl.SYNC_STATUS) === gl.SIGNALED) {
+      const o = open.shift();
+      gl.deleteSync(o.sync);
+      out.ms = t - o.t;
+    }
+    out.behind = open.length ? t - open[0].t : 0;
+  };
+  return out;
+}
+
+const KEY = 'kvissuroam.gfx', AUTOKEY = 'kvissuroam.gfxAuto3', OLD = { 'kvissuroam.gfxAuto3': 'kvissuroam.gfxAuto2', 'kvissuroam.gfxCap2': 'kvissuroam.gfxCap', 'kvissuroam.alive2': 'kvissuroam.alive' };
 export const MODES = ['auto', 'high', 'medium', 'low'];
 
 // Applies levels to the running game. hooks: { renderer, sun, scene, camera, quality, setTrees(m) }.
@@ -228,6 +265,17 @@ export function createQuality(hooks, caps, opts = {}) {
   if (fixed.medium <= 0) fixed.medium = Math.round(top / 2);
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  // a saved { ladder, level }: from its key, or once from the key of before the extra low rung (one level up)
+  const readLevel = (k) => {
+    try {
+      const now = JSON.parse(read(k) || 'null');
+      if (now) return now;
+      const old = JSON.parse(read(OLD[k]) || 'null');
+      if (!old) return null;
+      localStorage.removeItem(OLD[k]);
+      return old.level >= 0 ? { ...old, level: old.level + 1 } : null;
+    } catch { return null; }
+  };
   const ladderId = `${caps.dpr}/${caps.shadow}/${caps.trees}/${caps.load}`;
 
   let mode = MODES.includes(read(KEY)) ? read(KEY) : 'auto';
@@ -238,10 +286,10 @@ export function createQuality(hooks, caps, opts = {}) {
   // Only a level kept lower for two minutes running replaces it.
   let start = top;
   try {
-    const saved = JSON.parse(read(AUTOKEY) || 'null');
+    const saved = readLevel(AUTOKEY);
     if (saved && saved.ladder === ladderId && saved.level >= 0) start = Math.min(top, saved.level);
   } catch {}
-  if (opts.software) start = Math.min(start, 1);
+  if (opts.software) start = Math.min(start, 2);
   const auto = !opts.headless;
 
   // Crash guard. A phone that runs out of memory kills the page and reloads it, with no warning the
@@ -250,12 +298,12 @@ export function createQuality(hooks, caps, opts = {}) {
   // died on screen: auto then keeps at least one level below that one (fewer streamed streets, smaller
   // shadow map), lower again after another crash. After 10 minutes on screen at that cap without a
   // crash, the next visit may go one level higher again.
-  const ALIVE = 'kvissuroam.alive', CAPKEY = 'kvissuroam.gfxCap';
+  const ALIVE = 'kvissuroam.alive2', CAPKEY = 'kvissuroam.gfxCap2';
   let cap = top, crashed = false;
   try {
-    const c = JSON.parse(read(CAPKEY) || 'null');
+    const c = readLevel(CAPKEY);
     if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
-    const alive = JSON.parse(read(ALIVE) || 'null');
+    const alive = readLevel(ALIVE);
     if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
       crashed = true;
       cap = Math.max(0, Math.min(cap, alive.level - 1));
@@ -316,6 +364,7 @@ export function createQuality(hooks, caps, opts = {}) {
     }
     if (renderer.shadowMap.enabled !== want) setShadows(want);
     hooks.setTrees(l.trees);
+    hooks.setFar?.(l.far);
     quality.loadRadius = l.load;
     for (const f of listeners) f();
   }

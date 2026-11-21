@@ -37,9 +37,13 @@ export const jobs = {
   run(gen) { let r; do r = gen.next(); while (!r.done); return r.value; },
   // each frame: steps until `budget` ms have gone. After a step that took long by itself, nothing for a
   // moment, so that long steps come as single late frames with smooth driving between and not as a freeze.
-  tick(budget = 4) {
+  // `long`: what counts as a long step (a slow machine's frames are long anyway: main.js passes a share of
+  // the frame time). `hurry`: the work has fallen far behind (see `waited`), so no rest after a long step,
+  // the budget is used up: an old computer otherwise did one step every other frame and drove through an
+  // empty city for minutes (Martin's 2019 MacBook Air, 21 Nov 2026).
+  tick(budget = 4, long = 12, hurry = false) {
     const t0 = now();
-    if (t0 < restUntil) return;
+    if (t0 < restUntil && !hurry) return;
     while (queue.length) {
       const job = queue[0];
       if (job.done) { queue.shift(); continue; }
@@ -48,7 +52,7 @@ export const jobs = {
       try { if (job.it.next().done) { job.done = true; queue.shift(); } } catch (err) { console.error(err); job.done = true; queue.shift(); }
       const t = now();
       if (t - s0 > 20) { slow.push([job.label, job.n, Math.round(t - s0)]); if (slow.length > 40) slow.shift(); }
-      if (t - s0 > 12) { restUntil = t + pause(t); break; }
+      if (t - s0 > long && !hurry) { restUntil = t + pause(t); break; }
       if (t - t0 >= budget) break;
     }
   },
@@ -56,8 +60,12 @@ export const jobs = {
   rest() { const t = now(); restUntil = Math.max(restUntil, t + pause(t)); },
   get resting() { return now() < restUntil; },
   get pending() { return queue.length; },
+  // how long the oldest piece of queued work has been waiting, in ms (0 with nothing queued)
+  get waited() { while (queue.length && queue[0].done) queue.shift(); return queue.length ? now() - queue[0].t : 0; },
   get live() { return live; },
   get slow() { return slow; },
+  // something slow outside the queue (the warmer sending a big picture), for the same list
+  note(label, ms) { slow.push([label, 0, ms]); if (slow.length > 40) slow.shift(); },
   get labels() { return queue.map((j) => j.label + (j.done ? ' (done)' : '') + ' ' + j.n); },
   // live while somebody is driving and watching; switching it off finishes everything queued at once
   setLive(v) {

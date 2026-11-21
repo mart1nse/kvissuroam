@@ -631,7 +631,7 @@ export function createWater(world) {
     color: 0x24305e, roughness: 0.12, metalness: 0.55, transparent: true, opacity: 0.9,
     normalMap, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 1.4,
   });
-  const ponds = [];
+  const ponds = [], cells = new Map();
   for (const w of world.vectors.water) {
     for (const poly of w.polys) {
       if (poly.outer.length < 4) continue;
@@ -650,16 +650,37 @@ export function createWater(world) {
       const idx = geo.index.array;
       for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
       geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.matrixAutoUpdate = false;
-      mesh.renderOrder = 2;
-      group.add(mesh);
+      // the ponds and streams of one 1.5 km square become one mesh (there are nearly a thousand of them,
+      // and each used to be looked at and drawn by itself in every frame); the river stays its own
+      geo.computeBoundingSphere();
+      const c = geo.boundingSphere.center, key = geo.boundingSphere.radius > 600 ? `own${cells.size}` : `${Math.floor(c.x / 1500)},${Math.floor(c.z / 1500)}`;
+      let cell = cells.get(key);
+      if (!cell) cells.set(key, cell = { pos: [], nor: [], uv: [], idx: [], n: 0 });
+      const gi = geo.index.array, base = cell.n;
+      cell.pos.push(geo.attributes.position.array); cell.nor.push(geo.attributes.normal.array); cell.uv.push(geo.attributes.uv.array);
+      const shifted = new Uint32Array(gi.length);
+      for (let i = 0; i < gi.length; i++) shifted[i] = gi[i] + base;
+      cell.idx.push(shifted);
+      cell.n += pos.count;
+      geo.dispose();
       if (!w.river) {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         for (const [x, z] of poly.outer) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
         ponds.push({ minX, maxX, minZ, maxZ, level: w.level, ring: poly.outer });
       }
     }
+  }
+  const join = (parts, n) => { const out = new (parts[0].constructor)(n); let o = 0; for (const q of parts) { out.set(q, o); o += q.length; } return out; };
+  for (const cell of cells.values()) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(join(cell.pos, cell.n * 3), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(join(cell.nor, cell.n * 3), 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(join(cell.uv, cell.n * 2), 2));
+    geo.setIndex(new THREE.BufferAttribute(join(cell.idx, cell.idx.reduce((a, q) => a + q.length, 0)), 1));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false;
+    mesh.renderOrder = 2;
+    group.add(mesh);
   }
   const inside = (ring, x, z) => {
     let hit = false;

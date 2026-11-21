@@ -112,7 +112,7 @@ import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
-import { createQuality, probeGpu, createGpuTimer, weakDesktop } from './quality.js';
+import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
 import { setPaintScale } from './world/paintscale.js';
 
@@ -127,7 +127,7 @@ const quality = isTouch
 // realistic trees; ?trees=old brings back the simple shapes
 quality.realTrees = params.get('trees') !== 'old';
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
-const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius };
+const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };
 const lockedLow = params.get('q') === 'low';
 if (lockedLow) Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride: 2, treeDetail: 0, treeShadows: false, thinTrees: true, loadRadius: 420 });
 // a browser drawing without the graphics card (hardware acceleration off: often the case in Brave
@@ -135,8 +135,25 @@ if (lockedLow) Object.assign(quality, { pixelRatio: 1, shadow: 0, terrainStride:
 const gpu = probeGpu();
 if (gpu.software) console.warn('WebGL is running in software, without the graphics card:', gpu.renderer || '(renderer hidden)');
 
+// Extra low for old computers (Martin's ThinkPad T440s of 2013, 21 Nov 2026: 18 FPS on the lowest level,
+// half of each frame the browser preparing the picture and half the graphics chip drawing it). What can
+// only be chosen before the game is built: the phones' ground (a 4 m grid instead of 2 m: the ground was
+// over half of all triangles), ground squares loaded less far, thinner far trees, smaller road pictures,
+// and no edge smoothing. A desktop gets it when the browser says it is weak, when graphics are set to
+// LOW, or when auto graphics spent the last visit on the two lowest levels (the mark is taken away once a
+// drive holds full sharpness, so a computer that was only busy gets the full game back). ?xlow tries it
+// anywhere, ?xlow=0 turns it off. The auto levels still work on top of it.
+const XLOW = 'kvissuroam.xlow';
+const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const xlow = isTouch || params.get('xlow') === '0' ? '' : params.has('xlow') ? 'asked for with ?xlow'
+  : navigator.webdriver ? '' : weakDesktop(gpu) || (stored('kvissuroam.gfx') === 'low' ? 'graphics set low' : stored(XLOW) ? 'slow last time' : '');
+if (xlow) {
+  Object.assign(quality, { terrainStride: 2, tileRadius: 380, treeShadows: false, thinTrees: true, anisotropy: 4, xTiles: false, roadTex: 512 });
+  console.info('Extra low (simple ground, no edge smoothing):', xlow);
+}
+
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software && !xlow, powerPreference: 'high-performance' });
 // pictures of queued work go to the graphics card one by one (on phones as their small copy: see phonetex.js)
 const sendTex = (tex) => { shrinker?.texture(tex); renderer.initTexture(tex); };
 jobs.setUploader(sendTex);
@@ -158,7 +175,16 @@ sky.scale.setScalar(quality.far * 0.9);
 scene.add(sky);
 const lights = createLights(scene, quality.shadow);
 const gpuTimer = createGpuTimer(renderer.getContext());
-const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance }, gfxCaps, {
+const lag = createLag(renderer.getContext());   // how far the picture is behind the game (see createLag)
+// how far the camera sees (the extra low level pulls it in): the haze ends just before it, the sky dome follows
+function setFar(m) {
+  const far = Math.min(quality.far, m);
+  if (camera.far === far) return;
+  camera.far = far; camera.updateProjectionMatrix();
+  sky.scale.setScalar(far * 0.9);
+  scene.fog.far = far < quality.far ? far * 0.95 : 2800;
+}
+const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar }, gfxCaps, {
   locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
@@ -245,6 +271,9 @@ let still = lite && !params.has('drive');
 // it off, ?smalltex=keep only makes the pictures smaller.
 let shrinker = (lite || params.has('smalltex')) && params.get('smalltex') !== '0'
   ? createPhoneTextures(renderer, { release: params.get('smalltex') !== 'keep' }) : null;
+const part = { build: 0, draw: 0 };   // ms a frame of queued building work, and of handing the drawing to the graphics card (running averages, for the readout)
+let pace = 16.7;                 // the usual frame time in ms, for the building work's share of a frame
+let xlowRun = 0, xlowWas = 0; // seconds of driving on the two lowest levels, or above them (the mark for extra low at the next start)
 let lowSince = 0;                // since when auto graphics has been below full sharpness (desktops; see liteLate)
 const liteLate = !isTouch && params.get('lite') !== '0' && params.get('smalltex') !== '0';
 // Behind the still picture the game warms up, unseen: a few frames are drawn from beside the car, each
@@ -252,6 +281,20 @@ const liteLate = !isTouch && params.get('lite') !== '0' && params.get('smalltex'
 // (not all in the first frame after DRIVE), and their canvases are let go while the menu is still up.
 const WARM_FRAMES = 20;
 let warm = 0, warmSkip = 0, pickTimer = 0;
+// DRIVE pressed before that warm-up is through: the menu picture stays up, saying so, until the graphics
+// card has drawn the last warm-up frame (or 40 s have gone). On an old computer the card needs many
+// seconds for the first whole picture, and the game used to start at once: an empty picture with the car
+// already driving (Martin's 2019 MacBook Air, 21 Nov 2026). Each warm-up frame also waits for the card to
+// finish the one before (createLag in quality.js). Test runs start at once, as before (?warmgate tries it).
+const warmGate = lag.available && params.get('warmgate') !== '0' && (!navigator.webdriver || params.has('warmgate'));
+let readyWait = 0;               // when DRIVE was pressed during the warm-up (0: not waiting)
+const warmedUp = () => warm >= WARM_FRAMES && lag.behind === 0;
+function showReady() {
+  const b = $('#drive b');
+  if (!readyWait) { if (b.dataset.was) { b.textContent = b.dataset.was; delete b.dataset.was; } return; }
+  b.dataset.was ||= b.textContent;
+  b.textContent = `GETTING READY ${Math.round(100 * Math.min(warm, WARM_FRAMES - 1) / WARM_FRAMES)}%`;
+}
 // (on phones the car's name sits small under the GAS and BRAKE buttons, not under the rev counter)
 if (isTouch) $('#touch .pad.right').appendChild($('#carname'));
 document.body.classList.toggle('still', still);
@@ -704,6 +747,11 @@ function buildMenu() {
 let softwareTold = false;
 function startDriving() {
   if (mode === 'drive') return;
+  if (still && warmGate && !warmedUp() && !(readyWait && performance.now() - readyWait > 40000)) {
+    if (!readyWait) { readyWait = performance.now(); showReady(); }
+    return;
+  }
+  if (readyWait) { readyWait = 0; showReady(); }
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
@@ -942,9 +990,9 @@ function showGfx(force) {
   for (const b of $('#opt-gfx').children) b.classList.toggle('on', b.dataset.gfx === gfx.mode);
   const l = gfx.levels[gfx.level];
   const m = gfx.meter;
-  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)}${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms)`;
+  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} [drawing ${part.draw.toFixed(1)}, building ${part.build.toFixed(1)}]${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms${lag.ms > m.frame * 2.5 ? `; picture ${Math.round(lag.ms)} ms behind` : ''})`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -1162,6 +1210,7 @@ function frame(ts) {
   const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
   if (++rafTick % every) return;
   const t0 = performance.now();
+  lag.poll();
   clock.update(ts);
   const rawDt = clock.getDelta();
   let dt = Math.min(rawDt, 0.05);
@@ -1407,6 +1456,16 @@ function frame(ts) {
         lowSince ||= performance.now();
         if (performance.now() - lowSince > 20000) { shrinker = createPhoneTextures(renderer, { perScan: 3 }); liteWhy = 'slow in this drive'; console.info('Light mode: small pictures from now on (slow in this drive)'); }
       } else lowSince = 0;
+      // (and the mark for the next start: extra low after 20 s of a drive on the two lowest levels, the
+      // full game again after a minute at full sharpness; see xlow at the top)
+      if (!isTouch && gfx.auto && mode === 'drive' && !navigator.webdriver) {
+        const lv = gfx.levels[gfx.level], now = gfx.level <= 1 ? 1 : lv && lv.dpr >= 1 ? -1 : 0;
+        xlowRun = now === xlowWas ? xlowRun + 1 : 0; xlowWas = now;
+        try {
+          if (now === 1 && xlowRun === 20 && !stored(XLOW)) localStorage.setItem(XLOW, '1');
+          if (now === -1 && xlowRun === 60 && stored(XLOW)) localStorage.removeItem(XLOW);
+        } catch {}
+      }
     }
     if (!jobs.resting) {
       const b0 = performance.now();
@@ -1421,12 +1480,24 @@ function frame(ts) {
   // queued building work (map squares, painted fronts, ground tiles): a few milliseconds of it every frame
   // (the queue gets about a third of a frame: 5 ms at 60 a second, more where frames are longer, so that the
   // work gets done as fast by the clock on a slow machine)
+  // Work that has waited over 4 s (an old computer, or a very fast drive into the centre) is hurried: up
+  // to half a frame of it, no rests, and bigger steps into the picture. An empty street is worse than a
+  // slower frame. What counts as a long step is a share of the frame time too (12 ms at 60 a second).
   const q0 = performance.now();
-  warmer.scope(() => jobs.tick(Math.max(2.5, Math.min(14, rawDt * 300))));
+  // (frameMs: the usual frame time, not the last frame's. It follows a longer frame by a quarter at most, so
+  // one late frame does not make the next one's share bigger and later still: in the check of 21 Nov two
+  // 2048 px pictures went to the card in the frame after a long one, 150 ms.)
+  pace = Math.max(4, pace + (Math.min(200, rawDt * 1000, pace * 1.25) - pace) * 0.05);
+  const frameMs = pace, hurry = jobs.live && (jobs.waited > 4000 || warmer.waited > 4000);
+  warmer.scope(() => jobs.tick(hurry ? Math.max(5, Math.min(50, frameMs * 0.5)) : Math.max(2.5, Math.min(14, frameMs * 0.3)), Math.max(12, frameMs * 0.25), hurry));
   // what all that added to the scene: made ready unseen, then let in (src/warm.js). Not in a frame where the
   // queue's step was a long one, and after a long step of its own the queue rests: one long thing a frame.
   const q1 = performance.now();
-  if (!jobs.live || q1 - q0 < 8) { warmer.tick(); if (jobs.live && performance.now() - q1 > 8) jobs.rest(); }
+  if (!jobs.live || hurry || q1 - q0 < Math.max(8, frameMs * 0.15)) {
+    warmer.tick((frameMs / 16.7) * (hurry ? 4 : 1));
+    if (jobs.live && !hurry && performance.now() - q1 > Math.max(8, frameMs * 0.15)) jobs.rest();
+  }
+  part.build += (performance.now() - q0 - part.build) * 0.05;
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);
@@ -1440,16 +1511,20 @@ function frame(ts) {
     for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = !hideTrees;
     treesHidden = hideTrees;
     photos.render(scene, camera, model.group);
-  } else if (!still || (warm < WARM_FRAMES && world.ready(car.x, car.z) && ++warmSkip % 4 === 0)) {
+  } else if (!still || (warm < WARM_FRAMES && world.ready(car.x, car.z) && (!warmGate || lag.behind === 0) && (readyWait || ++warmSkip % 4 === 0))) {
     // (behind the phones' still menu picture nothing is drawn, but for the warm-up frames: see WARM_FRAMES)
     const far = camera.far;
     if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
+    const d0 = performance.now();
     gpuTimer.begin();
     renderer.render(scene, camera);
     gpuTimer.end();
+    lag.mark();
+    part.draw += (performance.now() - d0 - part.draw) * 0.05;
     if (still) camera.far = far;
   }
+  if (readyWait) { showReady(); if (warmedUp() || performance.now() - readyWait > 40000) startDriving(); }
 
   // ---- graphics quality follows the measured frame rate (src/quality.js)
   // (not judged: a tab coming back, the city loading after a jump, the phones' menu shot drawn at half rate)
@@ -1481,7 +1556,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, get lite() { return liteWhy; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

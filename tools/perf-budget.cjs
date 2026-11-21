@@ -25,6 +25,14 @@
 //            then standing still for 0.1 to 1 s): places, painted house fronts and map squares built in one
 //            go as the car came near. Before the fix (PR #372) the game was busy for over 0.1 s 12 times
 //            on this drive, the longest 379 ms; after it, not once (longest about 70 ms).
+//   an old computer (light mode, the extra low setup, GRAPHICS LOW): the pieces drawn and the triangles in
+//            one frame at the Riia and Turu junction.
+//            Why: a ThinkPad T440s and a 2019 MacBook Air (two processor cores, Intel graphics) ran at 10
+//            to 18 FPS on the lowest level (Martin, 21 Nov 2026). The lowest level then drew 461 pieces
+//            and 957 thousand triangles at this junction; with the extra low level 383 and 577 thousand
+//            (this check's own view of it reads 386 and 634). New things
+//            must not make the lowest level heavier again (far-away things, things without a simple far
+//            form, shadows that ignore the level).
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
@@ -170,6 +178,30 @@ async function waitForServer(url, ms) {
     out.phone.errors = errors;
     await ctx.close();
 
+    // ---- an old computer: what the lowest graphics level asks to be drawn
+    // (light mode + the extra low setup + GRAPHICS LOW, standing at the Riia and Turu junction, the heaviest
+    // view of the centre: pieces drawn and triangles in one frame. No frame rate can be measured without
+    // a graphics card, but these two are what an old laptop's chip pays for.)
+    try {
+      const old = await browser.newContext({ viewport: { width: 1366, height: 700 } });
+      await old.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); localStorage.setItem('kvissuroam.gfx', 'low'); });
+      const q = await old.newPage();
+      await q.goto(`${url}?lite&xlow`, { timeout: 180000 });
+      await q.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
+      await q.evaluate(() => __game.startDriving());
+      await q.waitForTimeout(6000);
+      await q.evaluate(async () => { await __game.world.loadAround(1930, 3160, 260); __game.place({ x: 1930, z: 3160, yaw: Math.atan2(-50, 50) }); });
+      // until nothing more is being built or let into the picture
+      let same = 0, last = '';
+      for (let k = 0; k < 30 && same < 3; k++) {
+        await q.waitForTimeout(2000);
+        const st = await q.evaluate(() => [__game.jobs.pending, __game.renderer.info.render.calls, __game.renderer.info.memory.geometries].join('|'));
+        same = st === last ? same + 1 : 0; last = st;
+      }
+      out.lowest = await q.evaluate(() => { const i = __game.renderer.info, l = __game.gfx.levels[__game.gfx.level]; return { calls: i.render.calls, ktris: Math.round(i.render.triangles / 1000), level: __game.gfx.level, dpr: l.dpr, far: __game.camera.far }; });
+      await old.close();
+    } catch (e) { out.lowest = null; console.warn('the lowest level pass failed:', e.message); }
+
     await browser.close(); browser = null;
 
     // ---- the test drive: does the game stand still on the way through the centre?
@@ -202,6 +234,10 @@ async function waitForServer(url, ms) {
     ['phone graphics card growth after 3 car changes and back to the first car', out.phone.cars && out.phone.cars.gl - out.phone.drive.gl, budget.phone.carChangeGrowthMB],
     ['phone graphics card peak during the car changes', out.phone.cars?.glPeak, budget.phone.carChangeGlPeakMB],
   ];
+  checks.push(
+    ['lowest graphics level at the Riia and Turu junction: pieces drawn in a frame', out.lowest?.calls, budget.lowest.calls],
+    ['lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands)', out.lowest?.ktris, budget.lowest.kTriangles],
+  );
   for (const who of ['desktop', 'phone']) {
     const D = out.drive[who], B = budget.drive[who];
     checks.push(
@@ -230,6 +266,7 @@ async function waitForServer(url, ms) {
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));
   }
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
+  console.log('lowest level', JSON.stringify(out.lowest));
   console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
   if (out.over.some((n) => n.startsWith('phone ') && !n.startsWith('phone drive'))) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
   try {

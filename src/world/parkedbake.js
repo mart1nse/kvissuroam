@@ -55,6 +55,39 @@ export function mergeNear(parts) {
   return { near, mats };
 }
 
+// The merged near version holds a corner once for every triangle that meets there, about 150 000 corners a
+// car at 32 bytes each: 5 MB a model, 76 MB for the fifteen models met on a drive through the centre, kept
+// for good and again on the graphics card for the ones shown (21 Nov 2026). With each different corner
+// once and an index it is a third of that. Corners count as the same within a tenth of a millimetre, a
+// hundredth of the normal and a ten-thousandth of the picture. Takes 0.1 s or more: for the worker.
+export function shareCorners(g) {
+  const P = g.attributes.position.array, N = g.attributes.normal.array, U = g.attributes.uv.array, n = P.length / 3;
+  const seen = new Map(), idx = new Uint32Array(n), src = [];
+  for (let i = 0; i < n; i++) {
+    const a = i * 3, b = i * 2;
+    const key = `${Math.round(P[a] * 1e4)},${Math.round(P[a + 1] * 1e4)},${Math.round(P[a + 2] * 1e4)},${Math.round(N[a] * 100)},${Math.round(N[a + 1] * 100)},${Math.round(N[a + 2] * 100)},${Math.round(U[b] * 1e4)},${Math.round(U[b + 1] * 1e4)}`;
+    let k = seen.get(key);
+    if (k === undefined) { k = src.length; seen.set(key, k); src.push(i); }
+    idx[i] = k;
+  }
+  const m = src.length, p = new Float32Array(m * 3), nn = new Float32Array(m * 3), u = new Float32Array(m * 2);
+  for (let k = 0; k < m; k++) {
+    const a = src[k] * 3, b = src[k] * 2;
+    p[k * 3] = P[a]; p[k * 3 + 1] = P[a + 1]; p[k * 3 + 2] = P[a + 2];
+    nn[k * 3] = N[a]; nn[k * 3 + 1] = N[a + 1]; nn[k * 3 + 2] = N[a + 2];
+    u[k * 2] = U[b]; u[k * 2 + 1] = U[b + 1];
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nn, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(u, 2));
+  out.setIndex(new THREE.BufferAttribute(m > 65535 ? idx : Uint16Array.from(idx), 1));
+  for (const x of g.groups) out.addGroup(x.start, x.count, x.materialIndex);   // (the index runs in the old order)
+  out.boundingSphere = g.boundingSphere; out.boundingBox = g.boundingBox;
+  g.dispose();
+  return out;
+}
+
 // ---- for the worker: everything about one model as plain data, and back on the page
 const geoData = (g, transfer) => {
   const attrs = {};
@@ -69,8 +102,9 @@ export function packParked(id, model, { tint = false, tris, lowTris, pack = fals
   const paint = parts.find((p) => p.paint), paintPart = parts.find((p) => p.paint || p.tint);
   const own = paint ? { color: paint.mat.color.toArray(), roughness: paint.mat.roughness, metalness: paint.mat.metalness } : null;
   const lod = bakeLod(parts, id, tris), low = lowLod(lod, lowTris);
-  const { near, mats } = mergeNear(parts);
-  near.computeBoundingBox();
+  const merged = mergeNear(parts), mats = merged.mats;
+  merged.near.computeBoundingBox();
+  const near = shareCorners(merged.near);
   const g = new THREE.Group();
   g.add(new THREE.Mesh(near, mats));
   const { data, transfer, packs } = serializeCar({ group: g }, pack);

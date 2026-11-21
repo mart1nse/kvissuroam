@@ -46,7 +46,7 @@ function weight(o) {
   const g = o.geometry;
   if (!g || sent.has(g)) return 0;
   sent.add(g);
-  let n = g.index ? g.index.array.byteLength : 0;
+  let n = g.index?.array?.byteLength || 0;       // (no array: let go once the card had it, src/world/parked.js)
   for (const k in g.attributes) n += g.attributes[k].array?.byteLength || 0;
   return n / 1048576;
 }

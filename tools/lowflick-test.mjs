@@ -167,5 +167,37 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// A donut begun from a run (Martin 2026-11-21, sixth ask, video of the 190E): floored at full lock from 15-40 km/h,
+// the car flicks round, slides sideways until that dies away, then sets off into the donut. The last of the
+// sideways slide was stopped dead by the walking-pace damper (44-51 km/h per second over the last few km/h)
+// and the hold then flung the tail round again at full strength. Reported: the sharpest slowing below 8 km/h
+// once the first flick is over (km/h/s, judged: under STOP_MAX) and the sharpest yaw kick in the 1.5 s after
+// the rotation is slowest (deg/s2, shown).
+const STOP_MAX = 30;   // km/h per second
+console.log('\ndonut from a run: sharpest slowing at a crawl (km/h/s) / kick as it sets off again (deg/s2)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    let stop = 0, kick = 0;
+    for (const v0 of [15, 25, 35]) for (const seed of [0, 1]) {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      for (let t = 0; t < 10 && speedKmh(car) < v0; t += dt) stepCar(car, { up: 1, steer: 0 }, world(surf), dt);
+      let pk = 0, ymin = 99, tmin = 0, phase = 0, pv = speedKmh(car); const ys = [];
+      for (let t = 0; t < 6; t += dt) {
+        stepCar(car, { up: 1, steer: 1 }, world(surf), dt); ys.push(car.yawRate);
+        const y = deg(car.yawRate), v = speedKmh(car);
+        if (phase === 0) { pk = Math.max(pk, y); if (pk > 40 && y < pk - 10) phase = 1; }
+        if (phase === 1) { if (y < ymin) { ymin = y; tmin = t; } if (v < 8 && v > 1) stop = Math.max(stop, (pv - v) / dt); if (y > ymin + 40) phase = 2; }
+        if (phase >= 1 && t > tmin && t < tmin + 1.5 && ys.length > 6) kick = Math.max(kick, deg(car.yawRate - ys[ys.length - 7]) / (6 * dt));
+        pv = v;
+      }
+    }
+    if (stop > STOP_MAX) ok = false;
+    row.push(`${spec.short} ${stop.toFixed(0)} / ${kick.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

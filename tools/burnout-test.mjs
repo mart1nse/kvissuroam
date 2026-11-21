@@ -59,19 +59,26 @@ for (const spec of Object.values(CARS)) {
     run(car, flat, 8, { up: 1, down: 1 }, (t, c) => { if (tStop === null && speedKmh(c) < 1) tStop = t; if (t < 1.5) { spin += c.slipVR * 3.6; n++; } });
     out.push(`roll 20: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, rear tread over road ${(spin / n).toFixed(0)} km/h on the way`);
   }
-  // donut then brake
+  // donut then brake, at four moments of the donut's circle (a single moment passed or failed by luck: the
+  // 190E halts in 3.2-3.6 s depending on where in its circle the brake comes, and before 2026-11-21 braking
+  // at its quickest moment, about 14 km/h, locked the front wheels at the first touch and stopped it in 2 s
+  // with the slide snapping straight at 190 deg/s)
   {
-    const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
-    let tStop = null, v0 = 0, snap = 0; const angs = [];
-    run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => {
-      if (t > 4.9 && t < 5) v0 = speedKmh(c);
-      if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5;
-      // (how fast the slide angle swings round at the end, over 0.1 s, while the car still moves)
-      if (t > 5) { angs.push(deg(Math.atan2(c.vy, Math.abs(c.vx)))); if (t > 5.5 && speedKmh(c) > 1.5 && angs.length > 12) snap = Math.max(snap, Math.abs(angs.at(-1) - angs.at(-13)) / 0.1); }
-    });
-    out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, slide angle swings at most ${snap.toFixed(0)} deg/s, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
-    // (Martin 2026-11-21: the end of the slide straightened in a quarter second, 150-250 deg/s; now it fades)
-    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5 || snap > 160)) ok = false;
+    const rows = [];
+    for (const tb of [4.6, 5, 5.4, 5.8]) {
+      const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+      let tStop = null, v0 = 0, snap = 0; const angs = [];
+      run(car, flat, tb + 8, (t) => ({ up: 1, steer: 1, down: t > tb ? 1 : 0 }), (t, c) => {
+        if (t > tb - 0.1 && t < tb) v0 = speedKmh(c);
+        if (t > tb && tStop === null && speedKmh(c) < 1) tStop = t - tb;
+        // (how fast the slide angle swings round at the end, over 0.1 s, while the car still moves)
+        if (t > tb) { angs.push(deg(Math.atan2(c.vy, Math.abs(c.vx)))); if (t > tb + 0.5 && speedKmh(c) > 1.5 && angs.length > 12) snap = Math.max(snap, Math.abs(angs.at(-1) - angs.at(-13)) / 0.1); }
+      });
+      rows.push(`${v0.toFixed(0)} km/h ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'} ${snap.toFixed(0)} deg/s`);
+      // (Martin 2026-11-21: the end of the slide straightened in a quarter second, 150-250 deg/s; now it fades)
+      if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.2 || tStop > 6.5 || snap > 160)) ok = false;
+    }
+    out.push(`donut then brake (speed, halt, sharpest slide-angle swing): ${rows.join(' | ')}`);
   }
   // settle
   {

@@ -11,6 +11,7 @@ import { Parts, BOX } from '../race/landmarks.js';
 import { setHouseColours } from './streetkit.js';
 import { glassShards } from './shards.js';
 import { stats } from '../stats.js';
+import { jobs } from '../jobs.js';
 
 const BASE = 10.58, H = 13.7;                       // ground (world y) and roof above it
 const FLOORS = [0, 3.5, 6.9, 10.3];
@@ -193,7 +194,7 @@ export function createOrident(scene, world, { shadows = true } = {}) {
       if (breakable) { breakable.update(car, dt, sound); return; }
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([CURVE[0], REST[1], REST[4]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([CURVE[0], REST[1], REST[4]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'orident'); }      // (queued: it was 18 ms in the frame on a fast processor, 90 on an old one)
     },
     // (for the tools)
     info: () => breakable?.info() ?? null,

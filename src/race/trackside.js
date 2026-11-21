@@ -33,6 +33,7 @@ import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
 import { createPlaytech, playtechProps } from './playtech.js';
 import { jobs } from '../jobs.js';
+import { still } from '../still.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -267,7 +268,7 @@ export function extraProps() {
 
 export function createTrackside(world, scene) {
   const track = createTrack();
-  const group = new THREE.Group();
+  const group = still(new THREE.Group());       // nothing here moves once built (src/still.js)
   scene.add(group);
   const lambert = (colour, extra = {}) => new THREE.MeshLambertMaterial({ color: colour, ...extra });
 

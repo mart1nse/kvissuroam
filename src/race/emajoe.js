@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { createTrack } from './race.js';
 import { Parts, BOX } from './landmarks.js';
-import { drapeGeometry } from '../world/drape.js';
+import { drapeSteps } from '../world/drape.js';
 import { paverTex, GRASS } from '../world/streetkit.js';
 import { breakableShelter, shelterSolids } from '../world/shelter.js';
 import { adAtlas, adCell } from '../world/adverts.js';
@@ -504,7 +504,7 @@ export function createEmajoe(world, group) {
       }
       yield;
       const top = { heightAt: (x, z) => world.topAt(x, z, 1) };
-      const g = drapeGeometry(top, [[[...near, ...far.reverse()]]], 0.05, 1.6, 1.5);
+      const g = yield* drapeSteps(top, [[[...near, ...far.reverse()]]], 0.05, 1.6, 1.5);
       yield;
       if (g) { const m = new THREE.Mesh(g, paveMat); m.receiveShadow = true; group.add(m); }
       if (outer.length > 1) strip(outer, COL.kerb, 0.06, pave, top.heightAt);

@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import DATA from './lai.json';
 import { paverTex, grassTex } from '../world/streetkit.js';
-import { drapeGeometry } from '../world/drape.js';
+import { drapeSteps } from '../world/drape.js';
 import { jobs } from '../jobs.js';
 
 const BOX = [1370, 2296, 1515, 2440];
@@ -93,7 +93,7 @@ export function createLai(world, group) {
     });
   }
 
-  const drape = (shapes, lift, tile) => drapeGeometry(world, shapes, lift, tile, MAX_EDGE);
+  const drape = (shapes, lift, tile) => drapeSteps(world, shapes, lift, tile, MAX_EDGE);      // (a job's steps: `yield*` it)
   const mat = (opts, f) => new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide });
   const add = (g, m) => { if (!g) return; const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); };
   // thin lines (bike symbols) as 9 cm ribbons
@@ -116,16 +116,16 @@ export function createLai(world, group) {
     sett.repeat.set(1, 2);                                   // square 10 cm setts from the 20 x 10 cm bond
     // (in steps for the work queue: draping these over the ground was 44 ms in one go on the test drive)
     yield;
-    add(drape(DATA.areas.grass, 0.06, 10), mat({ map: grassTex() }, -3));    // the verges: the shared grass (grassTex in streetkit.js) began here
+    add(yield* drape(DATA.areas.grass, 0.06, 10), mat({ map: grassTex() }, -3));    // the verges: the shared grass (grassTex in streetkit.js) began here
     yield;
-    add(drape(DATA.areas.paver, 0.075, 1.6), mat({ map: paverTex([208, 206, 218], 3) }, -4));
+    add(yield* drape(DATA.areas.paver, 0.075, 1.6), mat({ map: paverTex([208, 206, 218], 3) }, -4));
     yield;
-    add(drape(DATA.areas.setts, 0.075, 1.6), mat({ map: sett }, -4));
+    add(yield* drape(DATA.areas.setts, 0.075, 1.6), mat({ map: sett }, -4));
     yield;
-    add(drape(DATA.areas.cycle, 0.07, 1), mat({ color: COL.cycle }, -4));
-    add(drape(DATA.red.map((q) => [q]), 0.08, 1), mat({ color: COL.red }, -5));
+    add(yield* drape(DATA.areas.cycle, 0.07, 1), mat({ color: COL.cycle }, -4));
+    add(yield* drape(DATA.red.map((q) => [q]), 0.08, 1), mat({ color: COL.red }, -5));
     yield;
-    add(drape([...DATA.marks, ...ribbons(DATA.lines, 0.09)], 0.09, 1), mat({ color: COL.white }, -6));
+    add(yield* drape([...DATA.marks, ...ribbons(DATA.lines, 0.09)], 0.09, 1), mat({ color: COL.white }, -6));
     yield;
     // the kerb stones round the islands: from the road up to the setts, just outside the rounded edge
     const pos = [];

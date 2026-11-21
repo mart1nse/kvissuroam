@@ -60,8 +60,8 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
     await p.waitForFunction(() => __flyStat.done, null, { timeout: 1800000, polling: 1000 });
     await p.waitForTimeout(3000);
     const { profile } = await cdp.send('Profiler.stop');
-    const { fr, stat, slow } = await p.evaluate(() => ({ fr: __fr, stat: __flyStat, slow: __game.jobs?.slow || [] }));
-    return { errs, slow, profile, fr, tStart, stat };
+    const { fr, stat, slow, doubles } = await p.evaluate(() => ({ fr: __fr, stat: __flyStat, slow: __game.jobs?.slow || [], doubles: __game.jobs?.doubles || 0 }));
+    return { errs, slow, doubles, profile, fr, tStart, stat };
   } finally { await b.close(); }
 }
 
@@ -132,6 +132,7 @@ if (require.main === module) (async () => {
   fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat }));
   console.log(`${touch ? 'phone' : 'desktop'}, route ${name}: ${(r.stat.dist / 1000).toFixed(2)} km, errors ${r.errs.length} ${r.errs.slice(0, 3).join(' | ')}`);
   console.log('queued steps over 20 ms [label, step, ms]: ' + JSON.stringify(r.slow));
+  if (r.doubles) console.log(`building work queued again while it was still waiting: ${r.doubles} times (set the place's built flag before jobs.add)`);
   console.log(report(r).join('\n'));
   console.log(`\n(profile kept in ${out})`);
 })().catch((e) => { console.error(e); process.exit(1); });

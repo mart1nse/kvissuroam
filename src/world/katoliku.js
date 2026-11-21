@@ -724,7 +724,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([[700, 2630], [760, 2640], [790, 2660], [740, 2580]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'katoliku');
+      if ([[700, 2630], [760, 2640], [790, 2660], [740, 2580]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'katoliku'); }      // (the flag first: the queue may start the job some frames later, and every frame until then queued the whole place again)
     },
   };
 }

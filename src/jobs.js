@@ -8,7 +8,7 @@
 // function is a job of one step. While the queue is not live (the loading screen, the menu, a jump across
 // the map: nobody is watching the road), a job runs at once and to its end, exactly as before.
 const queue = [];
-let live = false, restUntil = 0, uploader = null;
+let live = false, restUntil = 0, uploader = null, doubles = 0, stepAt = Infinity;   // stepAt: when the step now running began (Infinity outside the queue)
 const slow = [];                            // the last steps that took over 20 ms: [label, step, ms] (for looking into pauses)
 const now = () => performance.now();
 const GEN = Object.getPrototypeOf(function* () {}).constructor;
@@ -29,7 +29,12 @@ function finish(job) {
 export const jobs = {
   // queue a job; returns a handle: { done, cancel() }
   add(fn, label = '') {
-    const job = { it: fn instanceof GEN ? fn() : (function* () { fn(); })(), done: false, label, n: 0, t: now(), cancel() { this.done = true; } };
+    // (the same function while it still waits or runs: not again. A place whose `built` flag was set only
+    // inside its build was queued anew every frame until the queue reached it, and then built that many
+    // times over: Katoliku nine times in a test drive as an old computer, 21 Nov 2026. `doubles` counts
+    // them for the perf check.)
+    if (live) for (const q of queue) if (q.fn === fn && !q.done) { doubles++; if (doubles === 1) console.warn('queued twice:', label); return q; }
+    const job = { fn, it: fn instanceof GEN ? fn() : (function* () { fn(); })(), done: false, label, n: 0, t: now(), cancel() { this.done = true; } };
     if (live) queue.push(job); else finish(job);
     return job;
   },
@@ -47,15 +52,22 @@ export const jobs = {
     while (queue.length) {
       const job = queue[0];
       if (job.done) { queue.shift(); continue; }
-      const s0 = now();
+      const s0 = stepAt = now();
       job.n++;
       try { if (job.it.next().done) { job.done = true; queue.shift(); } } catch (err) { console.error(err); job.done = true; queue.shift(); }
+      stepAt = Infinity;
       const t = now();
       if (t - s0 > 20) { slow.push([job.label, job.n, Math.round(t - s0)]); if (slow.length > 150) slow.shift(); }
       if (t - s0 > long && !hurry) { restUntil = t + pause(t); break; }
       if (t - t0 >= budget) break;
     }
   },
+  // Has the step now running taken over `ms`? For long loops inside a job: `if (jobs.late()) yield;` after
+  // every so many rows or items. A fixed number of rows a step is the right length on one machine only: the
+  // ground mask of a map square was two steps of 10 to 15 ms on a fast processor and of 100 to 150 ms on a
+  // 2019 MacBook Air, each a freeze there (Martin, 21 Nov 2026). Outside the queue (the menu, a jump across
+  // the map, a job run to its end) it is never late, so nothing stops.
+  late(ms = 5) { return now() - stepAt > ms; },
   // something long ran outside the queue (a place built itself): the queue rests as after a long step
   rest() { const t = now(); restUntil = Math.max(restUntil, t + pause(t)); },
   get resting() { return now() < restUntil; },
@@ -64,6 +76,7 @@ export const jobs = {
   get waited() { while (queue.length && queue[0].done) queue.shift(); return queue.length ? now() - queue[0].t : 0; },
   get live() { return live; },
   get slow() { return slow; },
+  get doubles() { return doubles; },
   // something slow outside the queue (the warmer sending a big picture), for the same list
   note(label, ms) { slow.push([label, 0, ms]); if (slow.length > 150) slow.shift(); },
   get labels() { return queue.map((j) => j.label + (j.done ? ' (done)' : '') + ' ' + j.n); },

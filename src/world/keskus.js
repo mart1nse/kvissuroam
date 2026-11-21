@@ -12,6 +12,7 @@ import { Parts, BOX } from '../race/landmarks.js';
 import { painter } from './kaubamaja.js';
 import { realTreeKit } from './scenery.js';
 import { leafyPlants, addHouseColours } from './streetkit.js';
+import { still } from '../still.js';
 
 const CENTRE = [1840, 3080];
 const COL = {
@@ -201,7 +202,7 @@ function screenTexture() {
 }
 
 export function createKeskus(scene, world, { shadows = true } = {}) {
-  const group = new THREE.Group();
+  const group = still(new THREE.Group());       // nothing here moves once built (src/still.js)
   scene.add(group);
   let built = false;
 

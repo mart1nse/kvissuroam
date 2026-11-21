@@ -78,6 +78,7 @@ import { createTuru5, turu5Walls } from './world/turu5.js';
 import { createTuru6, turu6Walls } from './world/turu6.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
+import { skipHidden, onePass } from './still.js';
 import { createRiia3, riia3Walls, riia3Clear } from './world/riia3.js';
 import { createRiia4, riia4Walls } from './world/riia4.js';
 import { createRiia5, riia5Walls } from './world/riia5.js';
@@ -168,6 +169,7 @@ renderer.shadowMap.enabled = quality.shadow > 0;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
+skipHidden(scene);                // hidden places are not walked every frame (src/still.js)
 scene.fog = new THREE.Fog(FOG_COLOR, 420, 2800);
 const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, quality.far);
 // (what builds itself during a drive is made ready for the graphics card before it is shown: src/warm.js; ?warm=0 for the old way)
@@ -217,7 +219,11 @@ let liteWhy = isTouch || params.get('lite') === '0' ? '' : params.has('lite') ? 
 const lite = isTouch || !!liteWhy;
 // light mode paints the hand-built house fronts, shop signs and walls with fewer pixels per metre
 // (0.6 each way: a third of the memory). ?paint=1 keeps them full; ?paint=0.5 tries another scale.
+// The extra low setup paints them at 0.45: its picture is drawn at half sharpness, where the difference is
+// not seen, and painting a house front and sending it to the graphics card were among the longest single
+// steps on an old computer (0.1 s and more each, Martin's 2019 MacBook Air, 21 Nov 2026).
 if (params.has('paint')) setPaintScale(+params.get('paint') || 1);
+else if (xlow) setPaintScale(0.45);
 else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
@@ -517,7 +523,9 @@ async function boot() {
     s.job = jobs.add(function* () {
       yield* terrain.addSectorSteps(s);
       if (!here()) return;
-      s.bMesh = buildBuildings(s);
+      const houses = yield* buildBuildings.steps(s);
+      if (!here()) { houses?.geometry.dispose(); return; }
+      s.bMesh = houses;
       if (s.bMesh) scene.add(s.bMesh);
       yield; if (!here()) return;
       s.tree = buildTrees(s);
@@ -1463,7 +1471,7 @@ function frame(ts) {
     tileTimer = 0.25;
     if (++shrinkTick % 4 === 0) {
       // (once a second: what the city streamed in since)
-      if (shrinker) shrinker.scan(scene);
+      if (shrinker) shrinker.scan(scene, jobs.live ? 3 : Infinity);
       else if (liteLate && mode === 'drive' && gfx.auto && lowRung()) {
         // a desktop that auto graphics has kept below full sharpness for 20 s: small pictures from now on
         lowSince ||= performance.now();
@@ -1530,6 +1538,7 @@ function frame(ts) {
     if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
     const d0 = performance.now();
+    onePass(scene);                                // see-through sheets in one go (src/still.js)
     gpuTimer.begin();
     renderer.render(scene, camera);
     gpuTimer.end();

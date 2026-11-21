@@ -380,28 +380,31 @@ export function createTerrain(world, renderer, opts) {
   // (the loops over the grid are plain functions: inside a generator the browser runs such loops at half speed)
   // paving the bake found in the aerial photo, beside what the road data has. Thin slivers of it
   // along a road are the wobble of a 1 m grid, not a yard: an opening removes them.
-  function openPaving(s, road, sn) {
-    const a = new Uint8Array(sn * sn), b = new Uint8Array(sn * sn);
-    for (let j = 0; j < sn; j++) for (let i = 0; i < sn; i++) a[j * sn + i] = s.S[j * sn + i] === 1 && !road.hard(i, j) ? 1 : 0;
-    for (let j = 1; j < sn - 1; j++) {
+  // (each pass takes the rows j0 to j1, so that maskSteps can stop between bands of rows)
+  const BAND = 64;
+  function pavingRows(s, road, sn, a, j0, j1) {
+    for (let j = j0; j < j1; j++) for (let i = 0; i < sn; i++) a[j * sn + i] = s.S[j * sn + i] === 1 && !road.hard(i, j) ? 1 : 0;
+  }
+  function erodeRows(sn, a, b, j0, j1) {
+    for (let j = Math.max(1, j0); j < Math.min(sn - 1, j1); j++) {
       for (let i = 1; i < sn - 1; i++) {
         const k = j * sn + i;
         b[k] = a[k] & a[k - 1] & a[k + 1] & a[k - sn] & a[k + sn];
       }
     }
-    for (let j = 1; j < sn - 1; j++) {
+  }
+  function dilateRows(sn, a, b, j0, j1) {
+    for (let j = Math.max(1, j0); j < Math.min(sn - 1, j1); j++) {
       for (let i = 1; i < sn - 1; i++) {
         const k = j * sn + i;
         a[k] = b[k] | b[k - 1] | b[k + 1] | b[k - sn] | b[k + sn];
       }
     }
-    return a;
   }
-  function maskPixels(s, a, sn) {
+  function pixelRows(s, a, sn, px, j0, j1) {
     const dn = meta.sdf.n, step = (dn - 1) / sn;
     const dmin = meta.sdf.min, dspan = meta.sdf.max - meta.sdf.min;
-    const px = new Uint8Array(sn * sn * 4);
-    for (let j = 0; j < sn; j++) {
+    for (let j = j0; j < j1; j++) {
       for (let i = 0; i < sn; i++) {
         const k = j * sn + i;
         const d = dmin + (s.D[Math.round((j + 0.5) * step) * dn + Math.round((i + 0.5) * step)] / 255) * dspan;
@@ -410,18 +413,16 @@ export function createTerrain(world, renderer, opts) {
         px[k * 4 + 3] = 255;
       }
     }
-    {                                       // soften the 1 m steps of the surface grid
-      const src = new Uint8Array(sn * sn);
-      for (let k = 0; k < sn * sn; k++) src[k] = px[k * 4];
-      for (let j = 1; j < sn - 1; j++) {
-        for (let i = 1; i < sn - 1; i++) {
-          const k = j * sn + i;
-          px[k * 4] = (src[k] * 4 + (src[k - 1] + src[k + 1] + src[k - sn] + src[k + sn]) * 2
-            + src[k - sn - 1] + src[k - sn + 1] + src[k + sn - 1] + src[k + sn + 1]) >> 4;
-        }
+  }
+  // soften the 1 m steps of the surface grid
+  function softenRows(sn, px, src, j0, j1) {
+    for (let j = Math.max(1, j0); j < Math.min(sn - 1, j1); j++) {
+      for (let i = 1; i < sn - 1; i++) {
+        const k = j * sn + i;
+        px[k * 4] = (src[k] * 4 + (src[k - 1] + src[k + 1] + src[k - sn] + src[k + sn]) * 2
+          + src[k - sn - 1] + src[k - sn + 1] + src[k + sn - 1] + src[k + sn + 1]) >> 4;
       }
     }
-    return px;
   }
   // (in steps: painting the roads and the passes over the grid are 40 ms a sector together. `gone` says the
   // tile that asked has been unloaded: then nothing is kept and null comes back)
@@ -432,10 +433,21 @@ export function createTerrain(world, renderer, opts) {
     if (gone()) { road.cover.dispose(); road.tone.dispose(); return null; }
     if (s.mask) { road.cover.dispose(); road.tone.dispose(); s.mask.refs++; return s.mask; }
     const sn = meta.surface.n;
-    const a = openPaving(s, road, sn);
+    // (the passes over the grid a band of rows at a time, stopping between bands when the step has grown long:
+    // as two steps they were 100 to 150 ms each on an old computer, see jobs.late)
+    const a = new Uint8Array(sn * sn), b = new Uint8Array(sn * sn), px = new Uint8Array(sn * sn * 4);
+    const lost = () => { if (!gone()) return false; road.cover.dispose(); road.tone.dispose(); return true; };
+    for (let j = 0; j < sn; j += BAND) { pavingRows(s, road, sn, a, j, Math.min(sn, j + BAND)); if (jobs.late()) { yield; if (lost()) return null; } }
+    for (let j = 0; j < sn; j += BAND) { erodeRows(sn, a, b, j, j + BAND); if (jobs.late()) { yield; if (lost()) return null; } }
+    for (let j = 0; j < sn; j += BAND) { dilateRows(sn, a, b, j, j + BAND); if (jobs.late()) { yield; if (lost()) return null; } }
     yield;
-    if (gone()) { road.cover.dispose(); road.tone.dispose(); return null; }
-    const px = maskPixels(s, a, sn);
+    if (lost()) return null;
+    if (s.mask) { road.cover.dispose(); road.tone.dispose(); s.mask.refs++; return s.mask; }
+    for (let j = 0; j < sn; j += BAND) { pixelRows(s, a, sn, px, j, Math.min(sn, j + BAND)); if (jobs.late()) { yield; if (lost()) return null; } }
+    const src = new Uint8Array(sn * sn);
+    for (let k = 0; k < sn * sn; k++) src[k] = px[k * 4];
+    for (let j = 0; j < sn; j += BAND) { softenRows(sn, px, src, j, j + BAND); if (jobs.late()) { yield; if (lost()) return null; } }
+    if (s.mask) { road.cover.dispose(); road.tone.dispose(); s.mask.refs++; return s.mask; }
     const tex = new THREE.DataTexture(px, sn, sn, THREE.RGBAFormat);
     tex.magFilter = tex.minFilter = THREE.LinearFilter;
     tex.needsUpdate = true;

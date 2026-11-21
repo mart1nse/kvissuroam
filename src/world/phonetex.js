@@ -28,7 +28,7 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
   const gone = new WeakSet();          // canvases let go (now a small stand-in)
   const seenMat = new WeakSet();
   const watch = new Set();             // textures not finished with yet
-  let saved = 0, freed = 0, nFreed = 0, dynamic = 0, copies = 0;
+  let saved = 0, freed = 0, nFreed = 0, dynamic = 0, copies = 0, drops = 0, maxDrops = Infinity;
   const freeze = (t) => Object.defineProperty(t, 'needsUpdate', { set() {}, configurable: true });
 
   const isCanvas = (i) => typeof HTMLCanvasElement !== 'undefined' && i instanceof HTMLCanvasElement;
@@ -109,6 +109,10 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       if (!c) continue;
       for (const o of users.get(c) || []) if (o !== t && !onCard(o)) return true;
     }
+    // (a few a scan while somebody drives: letting a big canvas go is 3 to 20 ms on a slow processor, and a
+    // street's worth in one scan was a 0.1 s stop there)
+    if (drops >= maxDrops) return true;
+    drops += st.orig ? 2 : 1;
     for (const c of [t.image, st.orig]) if (c) for (const o of users.get(c) || []) freeze(o);
     drop(t.image); if (st.orig) drop(st.orig);
     st.orig = null;
@@ -123,7 +127,9 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
   }
 
   return {
-    scan(root) {
+    // most: how many pictures' canvases may be let go in this scan
+    scan(root, most = Infinity) {
+      drops = 0; maxDrops = most;
       root.traverse((o) => {
         if (!o.material) return;
         if (Array.isArray(o.material)) o.material.forEach(material); else material(o.material);

@@ -4,10 +4,9 @@
 // start/finish line on Küüni. Crossing it forwards starts a lap; crossing it again with every
 // checkpoint passed finishes the lap and starts the next one. Driving more than 300 m off the
 // track during a lap (a wrong turn or a shortcut through the city) cancels it; overshooting a
-// corner and coming back is fine. Coming back onto the track far ahead of where the car left it
-// (the Jakobi short cut past the Emajõe loop: the lap crosses itself there) cancels the lap as
-// soon as the car has driven on along that later part, and a checkpoint reached while an earlier
-// one is missing cancels it too. Near the track its edges glow faintly so the way is clear.
+// corner and coming back is fine. A checkpoint reached while an earlier one is missing (the Jakobi
+// short cut past the Emajõe loop: the lap crosses itself there) cancels the lap at that checkpoint.
+// Near the track its edges glow faintly so the way is clear.
 import * as THREE from 'three';
 import TRACK from './track.json';
 import { createDecor } from './decor.js';
@@ -19,8 +18,6 @@ const OFF_LIMIT = 300;         // metres off the track before the lap is cancell
 const NEAR = 45;               // within this of the track the edges and the lap panel show
 const CP_RADIUS = 28;          // how close a checkpoint has to be passed
 const MIN_LAP = 30;            // seconds; anything faster is a glitch (a reset onto the line)
-const SKIP = 150;              // metres of the lap jumped over that count as a short cut
-const SKIP_ON = 50;            // metres driven on along the later part before the cut is called
 const CUT_TEXT = 'SHORT CUT · LAP CANCELLED';
 const LOCAL_KEY = 'kvissuroam.laps';
 const CP_KEY = TRACK.checkpoints.join(',');      // which checkpoints a lap's split times belong to
@@ -313,9 +310,6 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const st = {
     running: false, t0: 0, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null,
-    // how far along the lap the car has got in order (metres), and where it came back onto the
-    // track far ahead of that (a possible short cut), or -1
-    at: 0, cut: -1,
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -374,21 +368,6 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       clearTimeout(splitTimer);
       splitTimer = setTimeout(() => split.classList.add('hidden'), 3800);
     }
-  }
-  // the order the lap is driven in (only numbers already worked out this frame: nothing per frame).
-  // sCar: the car's distance along the lap at its nearest point on the track
-  function inOrder(sCar, onTrack) {
-    if (!onTrack) return;
-    const L = track.length;
-    const ahead = (sCar - st.at + L) % L;
-    if (ahead > L / 2) { st.cut = -1; return; }         // behind (backing up, or the other pass at a crossing)
-    if (ahead <= SKIP) { st.at = sCar; st.cut = -1; return; }
-    // far ahead of where the car left the lap: a short cut once it drives on along there
-    // (overshooting onto the other pass at the Jakobi crossing and coming back is fine)
-    if (st.cut < 0) { st.cut = sCar; return; }
-    const on = (sCar - st.cut + L) % L;
-    if (on > L / 2) st.cut = sCar;                       // backed up along it: start from here
-    else if (on >= SKIP_ON) cancel(CUT_TEXT, true, 'cut');
   }
 
   // this browser's own best lap in the car being driven (the overall best is the line above)
@@ -471,14 +450,11 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               } else toast('GO!', 1200);
               onEvent?.('start');
               st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
-              st.at = 0; st.cut = -1;
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
           if (st.running) {
-            const i1 = (near.i + 1) % track.N;
-            inOrder(near.i === track.N - 1 ? track.s[near.i] + near.t * (track.length - track.s[near.i]) : track.s[near.i] + near.t * (track.s[i1] - track.s[near.i]), onTrack);
-            if (st.running) track.checkpoints.forEach((cp, k) => {
+            track.checkpoints.forEach((cp, k) => {
               if (!st.running || st.cps.has(cp.i) || Math.hypot(x - cp.x, z - cp.z) >= track.HW[cp.i] + CP_RADIUS) return;
               // a checkpoint with an earlier one missing: the lap was cut short
               if (st.cps.size < k) { cancel(CUT_TEXT, true, 'cut'); return; }

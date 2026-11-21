@@ -1,7 +1,7 @@
 // Short cuts on the lap: drives made-up paths through the lap timer (race.js) and checks which laps
 // count. A full lap and a lap with an overshoot at the Jakobi crossing must count; skipping the Emajõe
-// loop up Jakobi (Martin, 21 Nov) or cutting through the city must cancel with SHORT CUT, and the
-// cancel must come before the next checkpoint.
+// loop up Jakobi (Martin, 21 Nov) must cancel with SHORT CUT at the next checkpoint (the one after
+// the missed one). A cut that misses no checkpoint is left to the 300 m off-track limit.
 // Needs the dev server (npx vite --port 5198) and Playwright. Usage: node tools/shortcut-test.mjs
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -31,9 +31,9 @@ const cases = [
   { name: 'full lap', path: lap(along(0, N)), expect: 'lap' },
   { name: 'overshoot at the Jakobi crossing and back', path: lap(along(0, 628), straight(P[628], P[1350]), straight(P[1350], P[628]), along(628, N)), expect: 'lap' },
   { name: 'overshoot 40 m along the other pass and back', path: lap(along(0, 628), straight(P[628], P[1345]), along(1345, 1365), straight(P[1365], P[628]), along(628, N)), expect: 'lap' },
-  { name: 'Emajõe loop skipped up Jakobi', path: lap(along(0, 628), straight(P[628], P[1345]), along(1345, N)), expect: 'cut', before: 1612 },
-  { name: 'Emajõe loop skipped, other line', path: lap(along(0, 615), straight(P[615], P[1360]), along(1360, N)), expect: 'cut', before: 1612 },
-  { name: 'through the city past Lai', path: lap(along(0, 900), straight(P[900], P[1000]), along(1000, N)), expect: 'cut', before: 1036 },
+  { name: 'Emajõe loop skipped up Jakobi', path: lap(along(0, 628), straight(P[628], P[1345]), along(1345, N)), expect: 'cut', at: 1612 },
+  { name: 'Emajõe loop skipped, other line', path: lap(along(0, 615), straight(P[615], P[1360]), along(1360, N)), expect: 'cut', at: 1612 },
+  { name: 'through the city past Lai (no checkpoint missed)', path: lap(along(0, 900), straight(P[900], P[1000]), along(1000, N)), expect: 'lap' },
   { name: 'small corner cut', path: lap(along(0, 500), straight(P[500], P[540]), along(540, N)), expect: 'lap' },
 ];
 
@@ -70,9 +70,9 @@ for (const c of cases) {
     return { laps: r.laps.length - n0, cutAt, msg: document.querySelector('#lapmsg')?.textContent };
   }, { path: c.path, P });
   const got = res.laps > 0 ? 'lap' : res.cutAt >= 0 ? 'cut' : 'nothing';
-  const ok = got === c.expect && (c.before == null || res.cutAt < c.before);
+  const ok = got === c.expect && (c.at == null || Math.abs(res.cutAt - c.at) < 30);
   if (!ok) bad++;
-  console.log(`${ok ? 'OK  ' : 'FAIL'} ${c.name}: ${got}${res.cutAt >= 0 ? ` at track point ${res.cutAt}` : ''}${c.before ? ` (next checkpoint ${c.before})` : ''} · ${res.msg}`);
+  console.log(`${ok ? 'OK  ' : 'FAIL'} ${c.name}: ${got}${res.cutAt >= 0 ? ` at track point ${res.cutAt}` : ''}${c.at ? ` (checkpoint at ${c.at})` : ''} · ${res.msg}`);
 }
 await browser.close();
 process.exit(bad ? 1 : 0);

@@ -65,10 +65,14 @@ function haloMesh() {
   return m;
 }
 
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, hotlap = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, hotlap = () => false }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
+  // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
+  // quickest of the recent round trips
+  let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false;
+  const clockAsk = () => send({ t: 'clock', c: Date.now() });
   let carId = 'w201';
   const labels = document.createElement('div');
   labels.id = 'names';
@@ -100,6 +104,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       retry = 1; online = true;
       send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined });
       ping = setInterval(() => send('ping'), 25000);
+      clockRtt = Infinity;
+      clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
+      clearInterval(clockTimer); clockTimer = setInterval(() => { clockRtt *= 1.5; clockAsk(); }, 20000);
+      if (driving && !STEALTH) send({ t: 'drv', on: 1 });
       flushLaps();
     };
     sock.onmessage = (e) => {
@@ -109,7 +117,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       onMessage(m);
     };
     sock.onclose = () => {
-      clearInterval(ping);
+      clearInterval(ping); clearInterval(clockTimer);
       online = false;
       if (ws === sock) ws = null;
       for (const id of [...others.keys()]) drop(id);
@@ -213,6 +221,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (o) setRemoteCar(o, m.car);
         break;
       }
+      case 'clock': {
+        const t = Date.now(), rtt = t - Number(m.c);
+        if (rtt >= 0 && rtt < 5000 && Number.isFinite(m.s) && rtt <= clockRtt) { clockRtt = rtt; clockOff = m.s + rtt / 2 - t; }
+        break;
+      }
+      case 'race':
+        if (m.r && typeof m.r === 'object') onRace?.(m.r);
+        break;
       case 'board':
         if (!m.board) break;
         setBoard(m.board);
@@ -458,6 +474,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       return name;
     },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
+    // the online race
+    get id() { return myId; },
+    serverNow: () => Date.now() + clockOff,
+    raceSend(m) { if (!STEALTH) send(m); },
+    // driving on the map (counts for the race votes), or in the garage / another tab
+    setDriving(on) { on = !!on; if (on === driving) return; driving = on; if (!STEALTH) send({ t: 'drv', on: on ? 1 : 0 }); },
+    poseOf(id) { const o = others.get(id); return o?.pose || null; },
+    nameOf(id) { return others.get(id)?.name; },
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp });

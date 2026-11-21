@@ -117,6 +117,7 @@ import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
 import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
+import { createRaceMode } from './race/racemode.js';
 import { setPaintScale } from './world/paintscale.js';
 
 const $ = (s) => document.querySelector(s);
@@ -255,6 +256,7 @@ addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === '
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
+let raceMode = null;               // the online race (src/race/racemode.js)
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, parked;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
@@ -615,14 +617,15 @@ async function boot() {
       if (kind === 'join' || kind === 'leave') audio.chime?.(kind);
       people?.event(kind, name, old);
     },
-    // our lap timer is running: the others see it and their cars pass through ours
-    hotlap: () => !!race?.running && mode === 'drive',
+    // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
+    hotlap: () => (!!race?.running && mode === 'drive') || !!raceMode?.ghost,
+    onRace: (r) => raceMode?.message(r),
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap) => { mp.submitLap(lap); stats.lap('finish', lap.car); },
-    onEvent: (k, cps) => stats.lap(k, cps),
+    onLap: (lap) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(); },
+    onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'jump') raceMode?.out(k); },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
@@ -632,6 +635,10 @@ async function boot() {
     },
   });
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER });
+  raceMode = createRaceMode({
+    mp, track: race.track, cars: CARS, isTouch, toast: (t, ms) => hud.toast(t, ms), chime: (k) => audio.chime?.(k),
+    place: (pose) => place(pose), isDriving: () => mode === 'drive',
+  });
   const trackPath = (ctx) => {
     ctx.beginPath();
     race.track.P.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
@@ -755,6 +762,7 @@ function setCar(id, now = false) {
   audio.setCar(spec);
   hud.setCar(spec);
   mp?.setCar(id);
+  raceMode?.out('car');                            // after the lights another car means out of the race
   race?.cancel('LAP CANCELLED');
   layoutMenu();
 }
@@ -864,6 +872,7 @@ function place(pose) {
 }
 
 function goHome() {
+  raceMode?.out('start');
   history.length = 0;
   wetAt = null;
   place(startPose);
@@ -926,6 +935,7 @@ function insideBoundary(x, z) {
 async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
+  raceMode?.out('map');
   stats.count('mapjump');
   getReady();                                      // (at once: the click is answered before the map is read)
   parked.hold(8);
@@ -1055,6 +1065,8 @@ if (gpu.software) {
 }
 const toggleOptions = () => showOverlay('options');
 input.on('KeyO', toggleOptions);
+input.on('Digit1', () => raceMode?.act());
+input.on('Numpad1', () => raceMode?.act());
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
 
@@ -1286,6 +1298,9 @@ function frame(ts) {
       stepCar(car, idle, world, dt);
       car.x = x; car.z = z; car.yaw = yaw; car.vx = car.vy = car.yawRate = 0;
     }
+    // on the race grid: held on the spot until the lights go out (the wheels may spin)
+    const pin = raceMode?.pin;
+    if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     mp.collide(car);
     trackside.collide(car);
     props.update(car, dt);
@@ -1314,6 +1329,8 @@ function frame(ts) {
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
+  mp.setDriving((mode === 'drive' || drivenOnce) && !document.hidden);
+  raceMode?.update(car, dt);
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
 

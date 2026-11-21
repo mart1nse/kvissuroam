@@ -642,8 +642,8 @@ body.touch #ctlbtn { display: none; }
 @font-face { font-family: 'Russo One'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/russo-one-latin.woff2') format('woff2'); }
 #racebox { left: max(16px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 #rbtn { pointer-events: auto; display: flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap;
-  width: clamp(250px, 26vw, 470px); height: clamp(58px, 5.6vw, 100px); padding: 0 14px; border: none; border-radius: 999px;
-  font-family: 'Russo One', var(--font); font-size: clamp(28px, 3vw, 54px); letter-spacing: .04em; line-height: 1;
+  width: clamp(200px, 20.8vw, 376px); height: clamp(46px, 4.5vw, 80px); padding: 0 12px; border: none; border-radius: 999px;
+  font-family: 'Russo One', var(--font); font-size: clamp(22px, 2.4vw, 43px); letter-spacing: .04em; line-height: 1;
   color: var(--cyan); background: rgba(18, 6, 43, .62); text-shadow: 0 0 8px var(--cyan); }
 #rbtn.lit { color: var(--sun); background: rgba(70, 40, 10, .55); text-shadow: 0 0 10px var(--sun); animation: rpulse 1.1s ease-in-out infinite; }
 #rbtn.voted { color: #7dff5a; text-shadow: 0 0 8px #7dff5a; }
@@ -651,18 +651,18 @@ body.touch #ctlbtn { display: none; }
 #rbtn.pink { color: #fff; background: rgba(90, 10, 70, .55); text-shadow: 0 0 8px var(--hot); }
 #rbtn.pink.on { color: #ffd0f4; }
 @keyframes rpulse { 50% { background: rgba(110, 70, 10, .7); } }
-#rsub { margin-left: 10px; font-size: clamp(12px, 1.15vw, 21px); font-weight: 800; letter-spacing: .08em; white-space: nowrap; color: #fff;
+#rsub { margin-left: 10px; font-size: clamp(10px, .98vw, 18px); font-weight: 800; letter-spacing: .08em; white-space: nowrap; color: #fff;
   text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 #rsub b { color: var(--cyan); }
 #rsub .pips { display: inline-flex; gap: 3px; margin-right: .5em; vertical-align: middle; }
 #rsub .pips i { width: .75em; height: .75em; border-radius: 50%; border: 1.5px solid var(--cyan); }
 #rsub .pips i.on { background: var(--sun); border-color: var(--sun); box-shadow: 0 0 6px var(--sun); }
-#rchip { pointer-events: auto; border: none; border-radius: 999px; background: rgba(18, 6, 43, .62); color: #fff; font: 800 clamp(12px, 1vw, 17px) var(--font);
+#rchip { pointer-events: auto; border: none; border-radius: 999px; background: rgba(18, 6, 43, .62); color: #fff; font: 800 clamp(10px, .85vw, 14.5px) var(--font);
   letter-spacing: .08em; padding: .6em 1.1em; white-space: nowrap; }
 #rchip em, #rlist em { font-style: normal; color: var(--sun); }
 .flag { display: inline-block; width: 1em; height: 1em; vertical-align: -.12em; border: 1px solid rgba(255, 255, 255, .7);
   background: conic-gradient(#fff 0 25%, #12062b 0 50%, #fff 0 75%, #12062b 0) 0 0 / 50% 50%; }
-#rlist { pointer-events: auto; left: max(16px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + clamp(58px, 5.6vw, 100px) + clamp(12px, 1.15vw, 21px) + 26px);
+#rlist { pointer-events: auto; left: max(16px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + clamp(46px, 4.5vw, 80px) + clamp(12px, 1.15vw, 21px) + 26px);
   width: min(620px, 46vw, calc(50vw - 210px)); max-height: 48vh; overflow: hidden; padding: 12px 18px; border-radius: 18px; background: rgba(18, 6, 43, .55);
   font-size: clamp(11px, 1vw, 15px); font-variant-numeric: tabular-nums; }
 #rlist .hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
@@ -684,20 +684,29 @@ body.touch #ctlbtn { display: none; }
 #rlist tr.me td { background: rgba(125, 255, 90, .12); } #rlist tr.me td.n { color: #7dff5a; }
 #rlist tr.out td { opacity: .5; }
 #rlist .ft { margin-top: 6px; font-size: .78em; font-weight: 700; letter-spacing: .08em; opacity: .85; }
+/* the live list during a race: half as wide, position, name, car and gap only */
+#rlist.live { width: min(310px, 23vw); padding: 10px 14px; }
+#rlist.live .hd { align-items: center; gap: 10px; }
+#rlist.live .pos { flex: 1; font-size: 1.7em; }
+#rlist.live .pos .dot { font-size: .45em; vertical-align: .35em; color: #ff2a2a; text-shadow: 0 0 8px #ff2a2a; }
+#rlist.live .rt { font-weight: 800; color: var(--cyan); }
+#rlist.live td.n { max-width: 8.5em; }
+#rlist .hd button.ask { width: auto; padding: 0 .9em; border-radius: 99px; background: #e0182d; font: 400 .95em 'Russo One', var(--font); letter-spacing: .06em; white-space: nowrap; }
 #rcount { left: 0; right: 0; top: 20%; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 #rcount .big { display: flex; align-items: baseline; gap: .4em; }
 #rcount .t1 { font: 400 clamp(16px, 1.6vw, 26px) 'Russo One', var(--font); letter-spacing: .25em; color: var(--sun); text-shadow: 2px 2px 0 var(--hot); }
 #rcount .t2 { font: 400 clamp(56px, 7vw, 130px) 'Russo One', var(--font); line-height: .9; color: #fff; text-shadow: 4px 4px 0 var(--hot), 0 0 26px rgba(255, 43, 214, .8); }
-#rcount .card { pointer-events: auto; max-width: min(620px, 92vw); padding: 12px 18px; border-radius: 18px; background: rgba(18, 6, 43, .6); font-size: clamp(11px, 1vw, 15px); }
+#rcount .rcard { pointer-events: auto; max-width: min(620px, 92vw); padding: 12px 18px; border-radius: 18px; background: rgba(18, 6, 43, .6); font-size: clamp(11px, 1vw, 15px); }
 #rcount .names { display: flex; flex-wrap: wrap; gap: .4em; justify-content: center; margin-bottom: 10px; max-width: 34em; }
 #rcount .names span { padding: .2em .65em; border-radius: 99px; background: rgba(255, 255, 255, .12); font-weight: 700; }
 #rcount .names span.me { background: rgba(125, 255, 90, .22); color: #7dff5a; }
 #rcount .names span.wait { opacity: .5; font-style: italic; }
 #rcount .btns { display: flex; gap: 10px; justify-content: center; }
-#rcount .btns button { white-space: nowrap; border: none; border-radius: 999px; padding: .7em 1.4em; font: 400 1.25em 'Russo One', var(--font); letter-spacing: .06em; }
+#rcount .btns { gap: 14px; }
+#rcount .btns button { white-space: nowrap; border: none; border-radius: 999px; padding: .6em 1.5em; font: 400 2em 'Russo One', var(--font); letter-spacing: .06em; }
 #rcount .btns .go { background: linear-gradient(180deg, #ffe58a, #ffb52e); color: var(--ink); }
 #rcount .btns .in { background: rgba(20, 60, 20, .5); color: #7dff5a; }
-#rcount .btns [data-r="no"] { background: rgba(18, 6, 43, .6); color: rgba(255, 255, 255, .85); font-size: .95em; }
+#rcount .btns [data-r="no"] { background: rgba(18, 6, 43, .6); color: rgba(255, 255, 255, .85); font-size: 1.6em; }
 #rcount .small { margin-top: 8px; font-size: .8em; opacity: .85; letter-spacing: .08em; font-weight: 700; }
 #rlights { left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: .35em;
   padding: .55em 1.2em .65em; border-radius: 26px; background: rgba(10, 4, 24, .62); font-size: clamp(14px, 1.4vw, 24px); }
@@ -708,12 +717,14 @@ body.touch #ctlbtn { display: none; }
 #rlights.go .cap { color: #7dff5a; font-size: 2em; }
 #rlights .sub { font-size: max(9.5px, .45em); font-weight: 700; letter-spacing: .1em; opacity: .85; }
 body.touch #racebox { left: auto; right: calc(50% + clamp(52px, 15.5vh, 75px) + 8px); top: max(5px, env(safe-area-inset-top)); gap: 4px; align-items: center; }
-body.touch #rbtn { width: clamp(96px, 13vw, 130px); height: clamp(44px, 12vh, 56px); white-space: normal; font-size: clamp(16px, 2.35vw, 24px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }
+body.touch #rbtn { width: clamp(77px, 10.4vw, 104px); height: clamp(35px, 9.6vh, 45px); white-space: normal; font-size: clamp(13px, 1.9vw, 19px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }
 body.touch #rsub { margin: 0; font-size: clamp(9px, 1.15vw, 11.5px); }
 body.touch #rchip { font-size: 9.5px; }
 body.touch #rlist { left: calc(max(10px, env(safe-area-inset-left)) + 46px); top: clamp(70px, 19vh, 90px); width: min(380px, 40vw); max-height: 70vh; padding: 8px 12px; font-size: 10px; border-radius: 14px; }
 body.touch #rlist td.w { display: none; }
+body.touch #rlist.live { width: min(230px, 28vw); padding: 6px 10px; }
 body.touch #rcount { top: 20%; gap: 6px; }
-body.touch #rcount .card { max-width: 440px; padding: 8px 14px; }
+body.touch #rcount .rcard { max-width: 92vw; padding: 8px 14px; }
+body.touch #rcount .btns button { font-size: 1.7em; } body.touch #rcount .btns [data-r="no"] { font-size: 1.35em; }
 body.racegrid #lap, body.touch.racelist #lap, body.touch.racelist #lapmsg { visibility: hidden; }
 body.touch #rlights { top: 30%; font-size: 13px; }

@@ -46,16 +46,16 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   hud.appendChild(list);
   const count = document.createElement('div');
   count.id = 'rcount'; count.className = 'hidden';
-  count.innerHTML = '<div class="big"><span class="t1">RACE STARTS IN</span><span class="t2"></span></div><div class="card"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED</button></div><div class="small">AT 0 RACERS GO TO THE GRID ON KÜÜNI · GARAGE OPEN UNTIL THE LIGHTS</div></div>';
+  count.innerHTML = '<div class="big"><span class="t1">RACE STARTS IN</span><span class="t2"></span></div><div class="rcard"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED</button></div></div>';
   hud.appendChild(count);
   const lights = document.createElement('div');
   lights.id = 'rlights'; lights.className = 'hidden';
-  lights.innerHTML = `<div class="lamps">${'<i></i>'.repeat(5)}</div><div class="cap"></div><div class="sub"></div>`;
+  lights.innerHTML = `<div class="lamps">${'<i></i>'.repeat(5)}</div><div class="cap"></div>`;
   hud.appendChild(lights);
-  const lamps = [...lights.querySelectorAll('.lamps i')], lCap = lights.querySelector('.cap'), lSub = lights.querySelector('.sub');
+  const lamps = [...lights.querySelectorAll('.lamps i')], lCap = lights.querySelector('.cap');
 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
-  let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0;
+  let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
   let tick = 0, sample = 0;
@@ -83,7 +83,23 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   }
   btn.addEventListener('click', act);
   chip.addEventListener('click', () => { showLast = true; listOpen = true; listUntil = Infinity; render(); });
-  list.addEventListener('click', (e) => { if (e.target.closest('[data-r="x"]')) { listOpen = false; showLast = false; render(); } });
+  // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
+  // otherwise it tucks the list away
+  const racingNow = () => { const m = me(); return phaseOf() === 'race' && !!m && active(m) && finishedMs == null; };
+  list.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-r="x"]')) return;
+    if (racingNow()) {
+      if (now() < askQuit) {
+        const solo = r.racers.filter(active).length <= 1;
+        askQuit = 0; quitFor = r.id;
+        mp.raceSend({ t: 'rj', on: 0 });
+        toast(solo ? 'RACE CANCELLED' : 'LEFT THE RACE', 2000);
+        listOpen = false; showLast = false; hidFor = r.id;
+      } else askQuit = now() + 4000;
+      render(); return;
+    }
+    listOpen = false; showLast = false; hidFor = r?.id || 0; render();
+  });
   count.addEventListener('click', (e) => {
     const k = e.target.closest('[data-r]')?.dataset.r;
     if (k === 'join') { if (!me()) mp.raceSend({ t: 'rj', on: 1 }); }
@@ -129,13 +145,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     return rows;
   }
 
-  function rowsHtml(rows) {
+  // compact (the live list in a race, Martin 2026-11-21): position, name, car and gap only
+  function rowsHtml(rows, compact) {
     let pos = 0, prevMs = null;
     return rows.map((x, i) => {
       if (!x.out && (x.ms == null || x.ms !== prevMs)) pos = i + 1;
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n">${escapeHtml(x.name)}${x.id === mp.id ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td><td class="w">${x.where}</td></tr>`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n">${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 
@@ -191,21 +208,21 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const e = t - r.tGrid, n5 = ph === 'race' ? 0 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
       lamps.forEach((l, i) => l.classList.toggle('on', i < n5));
       setText(lCap, ph === 'race' ? 'GO!' : n5 ? 'WAIT FOR LIGHTS OUT' : `LIGHTS IN ${Math.max(1, Math.ceil((5000 - e) / 1000))}`);
-      setText(lSub, ph === 'race' ? '' : n5 ? 'GARAGE CLOSED · HOLD GAS FOR A BURNOUT' : `GRID ${r.racers.length} · HOLD GAS FOR A BURNOUT · GARAGE OPEN UNTIL THE LIGHTS`);
       lights.classList.toggle('go', ph === 'race');
     }
 
     // the list: live during the race for racers, results after
     const live = ph === 'race' && mine;
-    if (live && !listOpen && finishedMs == null && !showLast) { listOpen = true; listUntil = Infinity; }
+    if (live && !listOpen && finishedMs == null && !showLast && hidFor !== r.id) { listOpen = true; listUntil = Infinity; }
     if (listOpen && t > listUntil) { listOpen = false; showLast = false; }
-    let rows = null, head = '', foot = '';
+    let rows = null, head = '', foot = '', compact = false;
     if (listOpen && live && !showLast) {
       rows = standings(r.racers, true);
       const myRow = rows.findIndex((x) => x.id === mp.id);
       const done = r.racers.filter((x) => x.ms != null).length;
-      head = finishedMs != null ? `<h3><i class="flag"></i> RACE RESULTS</h3>` : `<h3><b class="dot">●</b> RACE · LIVE</h3><span class="pos">P${myRow + 1}<small> / ${rows.length}</small> <em>${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em></span>`;
-      foot = `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
+      compact = finishedMs == null;
+      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
+      foot = compact ? '' : `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
     } else if (listOpen && r.last) {
       rows = standings(r.last.racers, false);
       head = '<h3><i class="flag"></i> RACE RESULTS</h3>';
@@ -213,7 +230,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     }
     show(list, !!rows);
     document.body.classList.toggle('racelist', !!rows);
-    if (rows) setText(list, `<div class="hd">${head}<button data-r="x">✕</button></div><table><tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>${rowsHtml(rows)}</table><div class="ft">${foot}</div>`);
+    list.classList.toggle('live', compact);
+    const asking = compact && t < askQuit;
+    const xBtn = asking ? `<button data-r="x" class="ask">${r.racers.filter(active).length <= 1 ? 'END RACE?' : 'LEAVE RACE?'}</button>` : '<button data-r="x">✕</button>';
+    if (rows) setText(list, `<div class="hd">${head}${xBtn}</div><table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>${foot ? `<div class="ft">${foot}</div>` : ''}`);
     // the LAST RACE chip, when the list is tucked away
     const lastRows = r.last ? standings(r.last.racers, false) : null;
     const myPos = lastRows ? lastRows.findIndex((x) => x.id === mp.id) : -1;
@@ -234,7 +254,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         if (who && prevN === 0) { toast(`${who.toUpperCase()} WANTS TO ${v.kind === 'restart' ? 'RESTART' : 'RACE'} · ${isTouch ? 'TAP' : 'PRESS 1'}`, 4000); chime?.('join'); }
       }
       // a race just ended: show its results to those in it
-      if (r.last && r.last.id !== prevLast && prevLast !== undefined && r.last.racers.some((x) => x.id === mp.id)) {
+      if (r.last && r.last.id !== prevLast && prevLast !== undefined && r.last.id !== quitFor && r.last.racers.some((x) => x.id === mp.id)) {
         showLast = true; listOpen = true; listUntil = now() + LIST_MS;
       }
       render();

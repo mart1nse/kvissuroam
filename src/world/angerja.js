@@ -166,15 +166,23 @@ function layGround(world, group) {
   };
   const L = G.lawn, LK = KINDS.lawn;
   L.alpha = true;
-  for (let x = ZONE.x0; x < ZONE.x1; x += 0.5) for (let z = ZONE.z0; z < ZONE.z1; z += 0.5) {
-    const q = [[x, z], [x + 0.5, z], [x, z + 0.5], [x + 0.5, z + 0.5]], a = q.map((p) => alphaAt(p[0], p[1]));
-    if (a[0] + a[1] + a[2] + a[3] === 0) continue;
-    for (const k of [0, 2, 1, 1, 2, 3]) {
-      const [px, pz] = q[k], stripe = (0.94 + 0.06 * ((Math.floor((px * 0.6 + pz * 0.8) / 1.2) & 1)))
-        * (0.9 + 0.05 * Math.sin(px * 0.21 + 2 * Math.sin(pz * 0.13)) + 0.04 * Math.sin(pz * 0.37 - px * 0.11));   // drier and lusher patches
-      L.pos.push(px, h(px, pz) + LK.lift, pz);
+  // (the mesh's corners are worked out once each, not once for each of the squares and triangles that meet
+  // there: fade, height and tint. Done per triangle corner this loop was 60 ms of standstill on the way in.)
+  const MX = NX * 2 + 1, MZ = NZ * 2 + 1, fade = new Float32Array(MX * MZ), hy = new Float32Array(MX * MZ).fill(NaN), tint = new Float32Array(MX * MZ);
+  for (let i = 0; i < MX; i++) for (let j = 0; j < MZ; j++) fade[i * MZ + j] = alphaAt(ZONE.x0 + i * 0.5, ZONE.z0 + j * 0.5);
+  const CORNER = [0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1];           // the two triangles of a square, as steps in x and z
+  for (let i = 0; i < MX - 1; i++) for (let j = 0; j < MZ - 1; j++) {
+    if (fade[i * MZ + j] + fade[(i + 1) * MZ + j] + fade[i * MZ + j + 1] + fade[(i + 1) * MZ + j + 1] === 0) continue;
+    for (let k = 0; k < 12; k += 2) {
+      const ci = i + CORNER[k], cj = j + CORNER[k + 1], n = ci * MZ + cj, px = ZONE.x0 + ci * 0.5, pz = ZONE.z0 + cj * 0.5;
+      if (hy[n] !== hy[n]) {
+        hy[n] = h(px, pz) + LK.lift;
+        tint[n] = (0.94 + 0.06 * ((Math.floor((px * 0.6 + pz * 0.8) / 1.2) & 1)))
+          * (0.9 + 0.05 * Math.sin(px * 0.21 + 2 * Math.sin(pz * 0.13)) + 0.04 * Math.sin(pz * 0.37 - px * 0.11));   // drier and lusher patches
+      }
+      L.pos.push(px, hy[n], pz);
       L.uv.push(px / LK.tile, pz / LK.tile);
-      L.col.push(stripe, stripe, stripe, a[k]);
+      L.col.push(tint[n], tint[n], tint[n], fade[n]);
     }
   }
   // the strips: cut in 1 m pieces along and across

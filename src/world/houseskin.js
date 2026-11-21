@@ -274,6 +274,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
   work.add(function* () {
     const atlas = createAtlas();
     const done = [];
+    let inked = 0;                      // pixels painted since the canvas was last made to paint
     const h = (x, z) => world.heightAt(x, z);
     for (const H of houses) {
       const r2 = (H.r || 16) ** 2;
@@ -314,6 +315,9 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
         paintWall(P, W, spec, over, H);
         c.restore();
         done.push({ W, rect, pw, ph, ylo, yhi });
+        // (a canvas only really paints when it is first read: without this the whole page was painted at
+        // its upload, 50 to 80 ms in one frame. Reading one pixel now and then spreads that over the walls.)
+        if (work.live && (inked += pw * ph) > 150000) { inked = 0; c.getImageData(rect.x, rect.y, 1, 1); }
         yield;
       }
     }

@@ -32,6 +32,7 @@ import { raekodaClear } from '../world/raekoda.js';
 import { createTennis } from './tennis.js';
 import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
 import { createPlaytech, playtechProps } from './playtech.js';
+import { jobs } from '../jobs.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -542,27 +543,28 @@ export function createTrackside(world, scene) {
     }
   }
 
+  let pieceAt = 0;
+  const PIECES = [
+    (x, z) => corners.update(x, z), (x, z) => valli.update(x, z), (x, z) => veski.update(x, z), (x, z) => mandel.update(x, z),
+    (x, z) => valliStreet.update(x, z), (x, z) => baeriStreet.update(x, z), (x, z) => veskiEnd.update(x, z), (x, z) => kroonuaia.update(x, z),
+    (x, z) => jakobiLai.update(x, z), (x, z) => emajoe.update(x, z), (x, z) => lai.update(x, z), (x, z) => tennis.update(x, z),
+    (x, z) => uueturu.update(x, z), (x, z) => playtech.update(x, z),
+    (x, z) => { for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k); },
+    (x, z) => { if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall(); },
+    (x, z) => { if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush(); },
+    (x, z) => { if (!pad && near(edgePoint(track, PEPLERI.pad[0], -1, 4), x, z) && readyAll(sideLine(track, PEPLERI.pad[0], PEPLERI.pad[1], -1, PEPLERI.pad[3]))) buildPad(); },
+    (x, z) => { if (!treeMesh && trees.length && near([trees[0].x, trees[0].z], x, z) && trees.every((t) => world.ready(t.x, t.z))) buildTrees(); },
+  ];
+
   return {
+    // (one piece at a time while somebody is driving: after a piece that built itself, a long step, the
+    // rest wait for the next call. Two corners coming due together used to be one pause of their sum.)
     update(x, z) {
-      corners.update(x, z);
-      valli.update(x, z);
-      veski.update(x, z);
-      mandel.update(x, z);
-      valliStreet.update(x, z);
-      baeriStreet.update(x, z);
-      veskiEnd.update(x, z);
-      kroonuaia.update(x, z);
-      jakobiLai.update(x, z);
-      emajoe.update(x, z);
-      lai.update(x, z);
-      tennis.update(x, z);
-      uueturu.update(x, z);
-      playtech.update(x, z);
-      for (const k of kerbs) if (!k.mesh && near(k.line[0], x, z) && readyAll(k.line)) buildKerb(k);
-      if (!wallMesh && wallSegs === null && near(wallLine[0], x, z) && readyAll(wallLine)) buildWall();
-      if (!bush && near(bushAt, x, z) && world.ready(...bushAt)) buildBush();
-      if (!pad && near(edgePoint(track, PEPLERI.pad[0], -1, 4), x, z) && readyAll(sideLine(track, PEPLERI.pad[0], PEPLERI.pad[1], -1, PEPLERI.pad[3]))) buildPad();
-      if (!treeMesh && trees.length && near([trees[0].x, trees[0].z], x, z) && trees.every((t) => world.ready(t.x, t.z))) buildTrees();
+      for (let k = 0; k < PIECES.length; k++) {
+        const t0 = performance.now();
+        PIECES[(pieceAt + k) % PIECES.length](x, z);
+        if (jobs.live && performance.now() - t0 > 6) { pieceAt = (pieceAt + k + 1) % PIECES.length; jobs.rest(); break; }
+      }
     },
     // keep the car out of the wall and the tree trunks
     collide(car) {

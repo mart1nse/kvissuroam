@@ -50,16 +50,26 @@ const modern = (o = {}) => ({ T: false, bars: 1, rails: 0, surround: 0, frame: '
 const facing = (W, p) => { const tx = p[0] - W.mid[0], tz = p[1] - W.mid[1]; return (tx * W.nx + tz * W.nz) / (Math.hypot(tx, tz) || 1); };
 
 // the nearest point on a street (not a cycle path) to a point
+// (the streets within 500 m of the area are picked out once: going through every road of the map for each
+// of the houses was 90 ms of standstill on the way in)
+let streets = null;
 function nearestStreet(world, q) {
-  let best = null, bd = 1e9;
-  for (const r of world.vectors?.roads || []) {
-    if (r.type === 'Kergliiklustee' || !r.pts || r.pts.length < 2) continue;
-    for (let i = 0; i < r.pts.length - 1; i++) {
-      const a = r.pts[i], b = r.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1;
-      const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dz) / l2)), p = [a[0] + dx * t, a[1] + dz * t];
-      const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
-      if (d < bd) { bd = d; best = p; }
+  if (!streets) {
+    streets = [];
+    for (const r of world.vectors?.roads || []) {
+      if (r.type === 'Kergliiklustee' || !r.pts || r.pts.length < 2) continue;
+      for (let i = 0; i < r.pts.length - 1; i++) {
+        const a = r.pts[i], b = r.pts[i + 1];
+        if (Math.min(Math.abs(a[0] - 2130), Math.abs(b[0] - 2130)) < 500 && Math.min(Math.abs(a[1] + 295), Math.abs(b[1] + 295)) < 500) streets.push(a[0], a[1], b[0], b[1]);
+      }
     }
+  }
+  let best = null, bd = 1e9;
+  for (let i = 0; i < streets.length; i += 4) {
+    const ax = streets[i], az = streets[i + 1], dx = streets[i + 2] - ax, dz = streets[i + 3] - az, l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((q[0] - ax) * dx + (q[1] - az) * dz) / l2)), px = ax + dx * t, pz = az + dz * t;
+    const d = Math.hypot(px - q[0], pz - q[1]);
+    if (d < bd) { bd = d; best = [px, pz]; }
   }
   return best;
 }

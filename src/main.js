@@ -1152,7 +1152,7 @@ let back = null;                 // the half minute after coming back to the tab
 // Intel graphics near 100% on LOW). 120 Hz gives 60 frames a second, 144 Hz 72, 165 Hz 82, 240 Hz 80.
 // (A computer that cannot keep up misses refreshes, the measured interval grows and nothing is skipped.)
 let rafLast = 0, rafMs = 1000 / 60, rafTick = 0;
-let crawl = 0;                              // frames in a row that took over 0.2 s
+let crawl = 4;                              // frames in a row that took over 0.2 s (a crawl until the first quick frame: the start's own work is done at once)
 let PLACES = null, placeAt = 0;             // the places that build on approach, and which one is asked first
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -1421,8 +1421,12 @@ function frame(ts) {
   // queued building work (map squares, painted fronts, ground tiles): a few milliseconds of it every frame
   // (the queue gets about a third of a frame: 5 ms at 60 a second, more where frames are longer, so that the
   // work gets done as fast by the clock on a slow machine)
+  const q0 = performance.now();
   warmer.scope(() => jobs.tick(Math.max(2.5, Math.min(14, rawDt * 300))));
-  warmer.tick();              // what all that added to the scene: made ready unseen, then let in (src/warm.js)
+  // what all that added to the scene: made ready unseen, then let in (src/warm.js). Not in a frame where the
+  // queue's step was a long one, and after a long step of its own the queue rests: one long thing a frame.
+  const q1 = performance.now();
+  if (!jobs.live || q1 - q0 < 8) { warmer.tick(); if (jobs.live && performance.now() - q1 > 8) jobs.rest(); }
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);

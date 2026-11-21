@@ -19,7 +19,8 @@ import * as THREE from 'three';
 import { setHouseColours } from './streetkit.js';
 import { skinHouses, wallPlanes } from './houseskin.js';
 import { areaKit, frame } from './handbuilt.js';
-import { buildCarModel } from '../cars/models/index.js';
+import { buildCarModel, buildCarInWorker } from '../cars/models/index.js';
+import { warm } from '../warm.js';
 
 // ---------------------------------------------------------------- the road frame
 // s metres along Nõela tee from route 41, v metres across it, + to the west (left going north)
@@ -233,14 +234,15 @@ export function createNoela(scene, world, { shadows = true } = {}) {
     const cgt = { x: -7318.6, z: -7513.2, yaw: 1.32 };                    // nose east, along the gable (Martin, 20 Nov)
     const fx = Math.sin(cgt.yaw), fz = -Math.cos(cgt.yaw);
     world.addSolids([{ x: cgt.x, z: cgt.z, yaw: Math.atan2(-fz, fx), hx: 2.3, hz: 0.96 }]);
-    setTimeout(() => {
-      const model = buildCarModel('cgt');
+    // (built off the page where it can be, about 0.2 s of work, and let into the picture warmed)
+    const park = (model) => {
       model.setLights?.({ headlights: false });
       model.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -cgt.yaw);
       model.group.position.set(cgt.x, world.heightAt(cgt.x, cgt.z) + 0.02, cgt.z);
       model.group.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
-      group.add(model.group);
-    }, 300);
+      warm.scope(() => group.add(model.group));
+    };
+    buildCarInWorker('cgt').then((model) => park(model || buildCarModel('cgt'))).catch((err) => console.warn(err));
   }
 
   return {

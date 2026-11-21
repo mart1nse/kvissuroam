@@ -23,6 +23,7 @@ const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
 const DONUT_SPIN = 2.4;          // ...and pushes only while the car turns slower than this (rad/s; a held donut turns 90-120 deg/s)
 const DONUT_PUSH_KMH = 6, DONUT_PUSH_RAMP = 12;   // ...and starts the tail round only above this speed, fully this much faster (km/h)...
 const DONUT_TURNING = 0.6;       // ...unless the car already turns faster than this (rad/s): a donut that has slowed is kept going
+const DONUT_START = 0.5, DONUT_RISE = 1;   // ...until a donut is under way, its push is this much gentler and rises at most this much a second
 const DONUT_EASE = 4;            // ...its moment changing at most this much a second (share of DONUT)
 const EV_SLIDE_REAR = 0.7;
 // Burnouts (brake and throttle together in a rear-driven car under 30 km/h, Martin 2026-11-21)
@@ -889,8 +890,8 @@ function substep(car, input, world, dt) {
   // on loose ground as it is.)
   const weakCar = (s.ref?.powerKw ?? 100) / s.mass < 0.03;
   const pushGate = weakCar || (car.slideMem > 0 && brake > 0) ? 1 : Math.min(1, Math.max(0, (speed * 3.6 - DONUT_PUSH_KMH) / DONUT_PUSH_RAMP));
-  let want = 0;
-  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
+  let want = 0, rise = DONUT_EASE;
+  if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.inDonut = false; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
   else {
     car.donutT = (car.donutT || 0) + dt;
     const turn = Math.sign(steerIn);
@@ -924,6 +925,14 @@ function substep(car, input, world, dt) {
       // ...and in between the hold itself breathes, as a driver's hands and feet never stay still
       sway = Math.max(-1, Math.min(1, 0.6 * n * pw - 1.2 * tuck + 0.4 * slack));
     }
+    // (a donut is under way once the tail has been out in its band; it ends when the wheel or the throttle is
+    // let go, or when a burnout has brought the car to a stop. Until then the push that starts the tail out is
+    // gentler, DONUT_START, and builds up more slowly, DONUT_RISE, so the step-out begins softly (Martin
+    // 2026-11-21: the beginning of the flick was abrupt); once under way a donut that bogs down is pushed on
+    // as before, whatever its speed)
+    if (ang > lo) car.inDonut = true;
+    if (car.burn > 0 && brake > 0 && speed < 1) car.inDonut = false;
+    if (!car.inDonut && !weakCar) rise = DONUT_RISE;
     if (w > 0) {
       let err = 0;
       // (only a true donut, near full lock at low speed, is pushed round; a
@@ -934,7 +943,7 @@ function substep(car, input, world, dt) {
         // (loose ground lets go more easily, so there it waits a touch longer)
         const wait = DONUT_WAIT + (surfR === 1 ? 0 : 0.2);
         const build = Math.min(1, Math.max(0, (car.donutT - wait) / 1.0));
-        err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck);
+        err = Math.min(1, (lo - angP) / 0.5) * build * (1 - 0.7 * tuck) * (car.inDonut || weakCar ? 1 : DONUT_START);
       }
       else if (angP > hi) err = -Math.min(1, (angP - hi) / 0.35);
       // The wander belongs to a donut, so it fades out above donut pace (27..36 km/h). And the hold never
@@ -950,14 +959,15 @@ function substep(car, input, world, dt) {
       // as a held donut does, leaving the tyres to carry on. At walking pace there is no momentum to swing the
       // tail hard: pushing on had the car whipping round at nearly twice a donut's rate and then hanging past
       // 80 deg, Martin 2026-11-21.)
-      else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6)) * Math.max(pushGate, Math.min(1, Math.max(0, (car.yawRate * turn - DONUT_TURNING) / 0.5)));
+      else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6)) * (car.inDonut ? 1 : Math.max(pushGate, Math.min(1, Math.max(0, (car.yawRate * turn - DONUT_TURNING) / 0.5))));
       // (rotating against the wheel already: leave the driver to sort it out)
       // (with the brake on as well the donut is over: no holding it in its band, the car slides on as it will)
       if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / BURN_SLIDE_HOLD));
     }
   }
   // (the hold's moment moves at most DONUT_EASE per second, so it never jumps from a full push to a hold)
-  { const dm = want - (car.donutM || 0); car.donutM = (car.donutM || 0) + Math.max(-DONUT_EASE * dt, Math.min(DONUT_EASE * dt, dm)); }
+  { const m0 = car.donutM || 0, dm = want - m0, r = dm * m0 >= 0 && Math.abs(want) > Math.abs(m0) ? rise : DONUT_EASE;
+    car.donutM = m0 + Math.max(-r * dt, Math.min(r * dt, dm)); }
   if (car.donutM) MZ += car.donutM * DONUT * m * G * L * load;
   // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and
   // the driveline winds up first. The slip-angle model overstates the bite there (and the donut hold

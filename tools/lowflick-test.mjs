@@ -71,5 +71,33 @@ for (const [surf, name] of [[1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// The start of the step-out (Martin 2026-11-21, third ask: the beginning of the flick was abrupt, "Audi on grass
+// and the rwd ones"): from 0, 3 or 6 km/h or out of a burnout on full lock, the sharpest yaw kick over 50 ms
+// until the tail is 30 deg out (and 0.3 s after). Before, the donut hold's start-up push came on in about a
+// third of a second: 203-237 deg/s2 for these cars; now it is gentler until a donut is under way.
+const ONSET_MAX = 185;   // deg/s2
+console.log('\nstart of the step-out: sharpest yaw kick until the tail is 30 deg out (deg/s2)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3', 'audi200']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    let worst = 0;
+    for (const sc of [0, 3, 6, 'burn']) for (const seed of [0, 1, 2]) {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      if (sc !== 'burn') car.vx = sc / 3.6;
+      const t0 = sc === 'burn' ? 3 : 0, ys = []; let got = null;
+      for (let t = 0; t < t0 + 4; t += dt) {
+        stepCar(car, sc === 'burn' ? { up: 1, steer: 1, down: t < 3 ? 1 : 0 } : { up: 1, steer: 1 }, world(surf), dt);
+        ys.push(car.yawRate); if (t < t0) continue;
+        if (ys.length > 6 && (got === null || t - t0 < got + 0.3)) worst = Math.max(worst, deg(car.yawRate - ys[ys.length - 7]) / (6 * dt));
+        if (got === null && Math.abs(Math.atan2(car.vy, Math.abs(car.vx))) > 30 / 57.3 && speedKmh(car) > 3) got = t - t0;
+      }
+    }
+    if (worst > ONSET_MAX) ok = false;
+    row.push(`${spec.short} ${worst.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

@@ -1,4 +1,4 @@
-// The online race (Martin, 2026-11-21): vote, RACE STARTS IN, the grid behind the line on Küüni, five
+// The online race (Martin, 2026-11-21): vote, TO RACE START (the countdown), the grid behind the line on Küüni, five
 // red lights, one lap, results. The rules and the clock live on the server (worker/race.js); this is
 // what a player sees and does, and the live order of the racers worked out from their positions.
 //
@@ -46,7 +46,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   hud.appendChild(list);
   const count = document.createElement('div');
   count.id = 'rcount'; count.className = 'hidden';
-  count.innerHTML = '<div class="big"><span class="t1">RACE STARTS IN</span><span class="t2"></span></div><div class="rcard"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED</button></div></div>';
+  count.innerHTML = '<div class="big"><span class="t1">TO RACE START</span><span class="t2"></span></div><div class="rcard"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED</button></div></div>';
   hud.appendChild(count);
   const lights = document.createElement('div');
   lights.id = 'rlights'; lights.className = 'hidden';
@@ -215,7 +215,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = lab; btn.className = cls; }
     setText(sub, line);
 
-    // RACE STARTS IN
+    // TO RACE START (the countdown)
     const cnt = ph === 'count' && dismissed !== r.id;
     show(count, cnt);
     if (cnt) {

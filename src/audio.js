@@ -20,6 +20,14 @@ let lite = false;
 const HEAR = 240;          // metres: further off than this a car is silent
 const REF = 7;             // metres: at this distance another car is as loud as our own
 const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, which is also what bends its pitch
+// wheelspin howl: its gain at full spin (tools/engine-space-demo.mjs --tyres renders it in a burnout and donuts)
+export const SPIN_LEVEL = 0.4;
+// how hard the tyres spin, 0..1: only the spin beyond the creep of a gripping tyre counts (the callers
+// leave out loose ground, the air and a dead engine)
+export function spinAmount(c) {
+  const over = (c.slipV || 0) - 0.2 * Math.max(Math.abs(c.vx), 3) - 1.5;
+  return Math.max(0, Math.min(1, over / 9));
+}
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
@@ -260,11 +268,10 @@ export function createAudio() {
     skid += (k - skid) * 0.2;
     skidFilt.frequency.setTargetAtTime(1050 + Math.min(v, 35) * 16, t, 0.08);
     skidGain.gain.setTargetAtTime(Math.max(0, skid - 0.15) * 0.07, t, 0.07);
-    // (only the spin beyond the creep of a gripping tyre counts, and only on paving)
-    const over = dead || flying || car.surface !== 1 ? 0 : (car.slipV || 0) - 0.2 * Math.max(Math.abs(car.vx), 3) - 1.5;
-    spinS += (Math.max(0, Math.min(1, over / 9)) - spinS) * 0.15;
+    // (only on paving)
+    spinS += ((dead || flying || car.surface !== 1 ? 0 : spinAmount(car)) - spinS) * 0.15;
     spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
-    spinGain.gain.setTargetAtTime(spinS * 0.05, t, 0.08);
+    spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
   }
 
   // ---- other players' cars
@@ -351,10 +358,9 @@ export function createAudio() {
     v.skid += (k - v.skid) * 0.2;
     v.tyreFilt.frequency.setTargetAtTime(1050 + Math.min(speed, 35) * 16, t, 0.08);
     v.tyreGain.gain.setTargetAtTime(Math.max(0, v.skid - 0.15) * 0.07, t, 0.07);
-    const over = r.paved ? r.slipV - 0.2 * Math.max(Math.abs(r.vx), 3) - 1.5 : 0;
-    v.spin += (Math.max(0, Math.min(1, over / 9)) - v.spin) * 0.15;
+    v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.15;
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
-    v.spinGain.gain.setTargetAtTime(v.spin * 0.05, t, 0.08);
+    v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
   }
   // list: other players' cars (multiplayer.js remotes()); cam: the camera, which is where the ears are
   const near = [];

@@ -23,6 +23,9 @@
 //   The room the revs add near the limiter (setRev) follows the shift sounds as audio.js does; --room=<er>,<rev>
 //   sets how much, after downshifts too (--room=0,0: none, the "before" clip).
 //   --back=<er>,<rev>: the room the chase camera dropping back at speed adds (setBack; 0,0: none).
+//   --burnout: brake and throttle together at a standstill (a standing burnout), a lift, then a donut.
+//   --tyres[=<spin level>]: the tyre sounds as audio.js plays them (scrub and wheelspin howl, into the car
+//   bus); the level is the wheelspin gain at full spin (default the game's SPIN_LEVEL, 0.05 before 21 Nov).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -47,10 +50,13 @@ const MIX = val('mix') ? (([er, tail]) => ({ er, tail }))(val('mix').split(',').
 if (val('room')) MIX.room = MIX.roomDown = (([er, rev]) => ({ er, rev }))(val('room').split(',').map(Number));
 if (val('back')) MIX.back = (([er, rev]) => ({ er, rev }))(val('back').split(',').map(Number));
 const DONUT = !!flag('donut');
+const BURNOUT = !!flag('burnout');
+const { SPIN_LEVEL, spinAmount } = await import('../src/audio.js').catch(() => ({}));
+const TYRES = flag('tyres') ? Number(val('tyres') || SPIN_LEVEL || 0.05) : 0;
 const TURBO = flag('turbo') ? val('turbo') || 'new' : flag('shift') ? 'new' : null;
 const DRONE = !!flag('drone');
 const SHIFT = flag('shift') ? val('shift') || 'new' : null;
-const { createShiftSound } = SHIFT === 'new' || DONUT ? await import('../src/audio-shift.js') : {};
+const { createShiftSound } = SHIFT === 'new' || DONUT || BURNOUT ? await import('../src/audio-shift.js') : {};
 const { revRoom } = await import('../src/audio-space.js');
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
@@ -63,6 +69,13 @@ function donutScript(t) {
   if (t < 9) return { up: 1, steer: 1 };
   if (t < 10.5) return { up: 0, steer: 1 };
   if (t < 16) return { up: 1, steer: 1 };
+  return { up: 0, steer: 1 };
+}
+function burnoutScript(t) {
+  if (t < 0.8) return { up: 0 };
+  if (t < 6) return { up: 1, down: 1 };
+  if (t < 7) return { up: 0 };
+  if (t < 15) return { up: 1, steer: 1 };
   return { up: 0, steer: 1 };
 }
 function script(t) {
@@ -171,11 +184,14 @@ for (const id of ids) {
   // the turbo as audio.js hears it, at the game's 60 Hz: the whistle (for the old oscillator) and events
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false;
+  // the tyres as audio.js hears them, at 60 Hz: time, scrub band, scrub gain, spin band, spin gain
+  const TY = [];
+  let skid = 0, spinS = 0;
   // the downshift sounds as audio.js has them, at the game's 60 Hz
-  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' || DONUT ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [], RM = [];
+  const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' || DONUT || BURNOUT ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [], RM = [];
   let sh = { blip: 0, crackle: 0, over: 0, bark: 0, rpm: 0 }, nextSh = 0, lastG = 1;
   for (let i = 0; i < total; i += BLOCK) {
-    const t = i / SR, s = drv ? drv(t, car) : DONUT ? donutScript(t) : TURBO ? turboScript(t) : script(t);
+    const t = i / SR, s = drv ? drv(t, car) : DONUT ? donutScript(t) : BURNOUT ? burnoutScript(t) : TURBO ? turboScript(t) : script(t);
     if (s.z) shiftGear(car, -1);
     if (!s.hold) stepCar(car, { up: s.up, down: s.down || 0, steer: s.steer || 0 }, flat, BLOCK / SR);
     if (car.gear !== lastG) { gLog.push(`${lastG}>${car.gear} ${t.toFixed(2)} s ${(Math.hypot(car.vx, car.vy) * 3.6).toFixed(0)} km/h`); lastG = car.gear; }
@@ -212,6 +228,12 @@ for (const id of ids) {
         }
         wasShift = !!car.shiftCut;
       }
+      if (TYRES) {
+        const k = Math.max(car.skidF || 0, car.skidR || 0);
+        skid += (k - skid) * 0.2;
+        spinS += (spinAmount(car) - spinS) * 0.15;
+        TY.push(t, 1050 + Math.min(v, 35) * 16, Math.max(0, skid - 0.15) * 0.07, 680 + 420 * spinS, spinS * TYRES);
+      }
       const p = along(dist + 2);
       if (camYaw === null) camYaw = p.yaw;
       let d = p.yaw - camYaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -247,7 +269,12 @@ for (const id of ids) {
   page.on('console', (m) => console.log('  [page]', m.text()));
   await page.goto(`http://127.0.0.1:${server.port}/`);
   if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
-  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP, RM }) => {
+  if (TY.length) {
+    let pk = 0, on = 0;
+    for (let k = 0; k < TY.length; k += 5) { pk = Math.max(pk, TY[k + 4]); if (TY[k + 4] > TYRES * 0.5) on++; }
+    console.log(`  wheelspin: peak gain ${pk.toFixed(3)}, over half for ${(on / FPS).toFixed(1)} s`);
+  }
+  const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP, RM, TY }) => {
     const { createSpace, chaseBack } = await import('/src/audio-space.js');
     const get = async (u) => new Float32Array(await (await fetch(u)).arrayBuffer());
     const mono = await get('/__in/mono'), poses = await get('/__in/poses'), grid = await get('/__in/grid');
@@ -277,6 +304,20 @@ for (const id of ids) {
       for (let k = 0; k < SP.length; k += 2) pg.gain.setTargetAtTime(SP[k + 1], SP[k], 0.01);
     }
     const n = poses.length / 8, log = [];
+    if (TY.length) {
+      // the tyre scrub and the wheelspin howl: one looped noise through two narrow bands into the car bus
+      const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
+      let sd = 77; for (let i = 0; i < d.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; d[i] = sd / 2147483648 - 1; }
+      const ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true; ns.start(0);
+      const band = (f, q) => { const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; return b; };
+      const sf = band(1300, 5), sg = ctx.createGain(), pf = band(800, 6), pg = ctx.createGain();
+      sg.gain.value = pg.gain.value = 0;
+      ns.connect(sf).connect(sg).connect(space.input); ns.connect(pf).connect(pg).connect(space.input);
+      for (let k = 0; k < TY.length; k += 5) {
+        sf.frequency.setTargetAtTime(TY[k + 1], TY[k], 0.08); sg.gain.setTargetAtTime(TY[k + 2], TY[k], 0.07);
+        pf.frequency.setTargetAtTime(TY[k + 3], TY[k], 0.1); pg.gain.setTargetAtTime(TY[k + 4], TY[k], 0.08);
+      }
+    }
     if (TB) {
       // the turbo sounds straight into the car bus, as in audio.js
       let seed = 4242;
@@ -341,7 +382,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

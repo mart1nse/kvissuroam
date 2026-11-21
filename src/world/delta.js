@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { setHouseColours } from './streetkit.js';
+import { jobs } from '../jobs.js';
 
 // the LOD2 outlines (game x, z), clockwise seen from above; base world y and roof height above it
 const NORTH = { pts: [[1619.7, 2179.0], [1616.2, 2218.4], [1567.3, 2251.7], [1524.5, 2246.6]], base: -1.89, H: 19.8 };
@@ -37,9 +38,11 @@ export function createDelta(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
-  function build() {
+  // (in steps, see ../jobs.js: the three houses in one go took 55 ms)
+  function* build() {
     built = true;
     const p = new Parts();
+    const solar = BOX(1.7, 0.06, 1.15).rotateX(0.22);            // one panel's shape, shared by all of them
     let seed = 11;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const face = (a, b) => {
@@ -104,6 +107,7 @@ export function createDelta(scene, world, { shadows = true } = {}) {
         for (let s = 2; s < F.len; s += 4.8) for (let f = 1; f <= floors; f++) slab(F, s - 0.03, s + 0.03, GROUND + 0.2 + f * fh - 0.1, GROUND + 0.2 + f * fh, 0, LO, COL.slatDark);
       }
 
+      yield;
       // solar panels on the roof: rows inside the outline
       const xs = B.pts.map((q) => q[0]), zs = B.pts.map((q) => q[1]);
       const inside = (x, z, m) => {
@@ -127,10 +131,11 @@ export function createDelta(scene, world, { shadows = true } = {}) {
           const x = (Math.min(...xs) + Math.max(...xs)) / 2 + F0.d[0] * s + F0.n[0] * r;
           const z = (Math.min(...zs) + Math.max(...zs)) / 2 + F0.d[1] * s + F0.n[1] * r;
           if (!inside(x, z, 1.6)) continue;
-          p.add(BOX(1.7, 0.06, 1.15).rotateX(0.22), COL.solar, x, y0 + H + 0.45, z, F0.yaw);
+          p.add(solar, COL.solar, x, y0 + H + 0.45, z, F0.yaw);
           p.box(1.72, 0.3, 0.06, COL.solarFrame, x - F0.n[0] * 0.5, y0 + H + 0.17, z - F0.n[1] * 0.5, F0.yaw);
         }
       }
+      yield;
     }
 
     const mesh = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
@@ -141,7 +146,7 @@ export function createDelta(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 700) return;
-      if ([NORTH.pts[0], NORTH.pts[3], SOUTH.pts[4], EAST.pts[2]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([NORTH.pts[0], NORTH.pts[3], SOUTH.pts[4], EAST.pts[2]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'delta');
     },
   };
 }

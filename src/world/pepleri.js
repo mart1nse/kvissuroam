@@ -16,6 +16,7 @@ import { Parts, BOX } from '../race/landmarks.js';
 import { createTrack } from '../race/race.js';
 import { setHouseColours, leafyPlants, streetKit } from './streetkit.js';
 import { paintScale } from './paintscale.js';
+import { jobs } from '../jobs.js';
 
 const CENTRE = [1150, 3340];
 const COL = {
@@ -265,7 +266,8 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
-  function build() {
+  // (in steps, see ../jobs.js: in one go it took 0.1 s)
+  function* build() {
     built = true;
     const p = new Parts(), leafy = leafyPlants(group, shadows);
     const hAt = (x, z) => world.heightAt(x, z);
@@ -290,6 +292,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
     // a box against a wall: s along it, y above y0, standing out from `off`
     const slab = (W, y0, s0, s1, a, b, off, th, hex) => { const [x, z] = W.at((s0 + s1) / 2, off + th / 2); p.box(s1 - s0, b - a, th, hex, x, y0 + (a + b) / 2, z, W.yaw); };
 
+    yield;
     // ================================================================ Maarja kirik
     {
       const G = 31.15, F0 = [1095.85, 3264.5], u = [0.4947, 0.8691], v = [0.8691, -0.4947];
@@ -426,6 +429,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
         p.box(0.8, 0.09, 0.09, COL.gold, x, G + 46.1, z, yaw); }
     }
 
+    yield;
     // ================================================================ Mainor and the white block
     {
       const G = 32.21, EAVE = 12.8;
@@ -472,6 +476,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       for (let s = 0.15; s < F.len; s += 0.15) slab(F, fy, s - 0.008, s + 0.008, 0.08, 1.62, 0.05, 0.01, 0x8e98aa);
     }
 
+    yield;
     // ================================================================ the yellow block in its scaffolding
     {
       const G = 30.58, EAVE = 14.6;
@@ -498,6 +503,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       scaffold(W, EAVE); scaffold(N, EAVE);
     }
 
+    yield;
     // ================================================================ the painted gables
     {
       const bird = wallOf([1179.3, 3303.5], [1168.4, 3309.5]);
@@ -508,6 +514,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       sheet(band, 27.25 - 0.6, 15.6, painting(band.len, 17.7, (P) => { P.c.translate(0, 0.6); P.r(0, -0.6, band.len, 0, '#cfcdcf'); P.h = 17.1; bandMural(P); }), { peak: 2.1 });
     }
 
+    yield;
     // ================================================================ small things along the street
     {
       // the red hydrant on the church side
@@ -544,6 +551,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       }
     }
 
+    yield;
     // ================================================================ the ground
     {
       const K = streetKit(world, group, { shadows });
@@ -573,6 +581,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
       K.finish();
     }
 
+    yield;
     leafy.finish();
     const mesh = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
     if (mesh) { mesh.castShadow = shadows; mesh.receiveShadow = true; group.add(mesh); }
@@ -582,7 +591,7 @@ export function createPepleri(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 520) return;
-      if ([[1050, 3250], [1140, 3260], [1180, 3340], [1240, 3440]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1050, 3250], [1140, 3260], [1180, 3340], [1240, 3440]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'pepleri');
     },
   };
 }

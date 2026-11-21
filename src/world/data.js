@@ -147,6 +147,57 @@ export async function loadWorldData(onProgress = () => {}) {
   // Extra solid boxes added at run time (parked cars, kiosks): written into the obstacle distance field
   // of every sector they touch, now and whenever that sector loads again. b: { x, z, yaw, hx, hz }
   const solids = [];
+
+  // The thin ones among them (guard rails, lane dividers, walls between carriageways, kiosks) and the map's
+  // own walls also collide as exact boxes (world.solidsNear): the 0.5 m distance field blurs anything less
+  // than a metre or so thick, so a car could slip half way through one and then be pushed both ways at once
+  // and not get free (Martin, 21 Nov: as it did with tree trunks before they became exact circles). Kept in
+  // a bucket grid of 8 m cells; a box is in every cell its outline's bounding square touches.
+  const EXACT_MAX = 1.0;                             // m: boxes no thicker than twice this collide exactly
+  const XC = 8, exGrid = new Map();
+  const xkey = (c, r) => (c + 32768) * 65536 + (r + 32768);
+  function exCells(b, fn) {
+    const c = Math.abs(Math.cos(b.yaw)), sn = Math.abs(Math.sin(b.yaw));
+    const ax = b.hx * c + b.hz * sn, az = b.hx * sn + b.hz * c;
+    const c0 = Math.floor((b.x - ax) / XC), c1 = Math.floor((b.x + ax) / XC);
+    const r0 = Math.floor((b.z - az) / XC), r1 = Math.floor((b.z + az) / XC);
+    for (let r = r0; r <= r1; r++) for (let col = c0; col <= c1; col++) fn(xkey(col, r));
+  }
+  function exAdd(b) {
+    if (Math.min(b.hx, b.hz) > EXACT_MAX || b.hx <= 0 || b.hz <= 0) return;
+    exCells(b, (k) => { let a = exGrid.get(k); if (!a) exGrid.set(k, (a = [])); a.push(b); });
+  }
+  function exRemove(b) {
+    exCells(b, (k) => {
+      const a = exGrid.get(k), i = a ? a.indexOf(b) : -1;
+      if (i < 0) return;
+      a.splice(i, 1);
+      if (!a.length) exGrid.delete(k);
+    });
+  }
+  // the map's walls (vectors.json, baked into the field as lines 0.3 m either side) as boxes of up to 3 m,
+  // made the first time a car asks (after the hand-built places have edited the list); pieces in ground a
+  // place freed of the map's obstacles are left out, as the field leaves them out
+  let mapWalls = null;
+  function makeMapWalls() {
+    mapWalls = [];
+    for (const w of world.vectors.walls || []) {
+      for (let i = 0; i < w.length - 1; i++) {
+        const a = w[i], b = w[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+        if (l < 0.05) continue;
+        const n = Math.ceil(l / 3), ux = dx / l, uz = dz / l, yaw = Math.atan2(-uz, ux);
+        for (let k = 0; k < n; k++) {
+          // (the first and last piece of a segment reach 0.3 m past its ends, as the line's round caps do)
+          const t0 = (k / n) * l - (k === 0 ? 0.3 : 0), t1 = ((k + 1) / n) * l + (k === n - 1 ? 0.3 : 0), t = (t0 + t1) / 2;
+          const box = { x: a[0] + ux * t, z: a[1] + uz * t, yaw, hx: (t1 - t0) / 2, hz: 0.3, map: true };
+          if (frees.some((f) => inBox(f, box.x, box.z))) continue;
+          mapWalls.push(box);
+          exAdd(box);
+        }
+      }
+    }
+  }
+  let exStamp = 0;
   function stamp(s, b) {
     const reach = Math.hypot(b.hx, b.hz) + dspan + dmin;
     if (b.x + reach < s.x0 || b.x - reach > s.x1 || b.z + reach < s.z0 || b.z - reach > s.z1) return;
@@ -381,6 +432,7 @@ export async function loadWorldData(onProgress = () => {}) {
     // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
     addSolids(list) {
       solids.push(...list);
+      for (const b of list) exAdd(b);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
     },
     // Walls that only stop cars below their top (see ledgePush).
@@ -396,6 +448,7 @@ export async function loadWorldData(onProgress = () => {}) {
     // inside the map's footprint: free the strip between, and add the house's walls with addSolids.
     addFree(list) {
       frees.push(...list);
+      if (mapWalls) mapWalls = mapWalls.filter((b) => (list.some((f) => inBox(f, b.x, b.z)) ? (exRemove(b), false) : true));
       for (const s of sectors.values()) {
         if (s.state !== 'ready') continue;
         carve(s, list);
@@ -405,7 +458,7 @@ export async function loadWorldData(onProgress = () => {}) {
     // Take away boxes added with removable: true: the field under each is put back as it was, and
     // the solids still there that reach into it are written in again.
     removeSolids(list) {
-      for (const b of list) { const k = solids.indexOf(b); if (k >= 0) solids.splice(k, 1); }
+      for (const b of list) { const k = solids.indexOf(b); if (k >= 0) { solids.splice(k, 1); exRemove(b); } }
       for (const s of sectors.values()) {
         if (s.state !== 'ready' || !s.kept) continue;
         let touched = false;
@@ -575,6 +628,30 @@ export async function loadWorldData(onProgress = () => {}) {
             if (Math.abs(tx - x) > reach || Math.abs(tz - z) > reach) continue;
             out.push(tx, tz, Math.min(0.45, Math.max(0.14, 0.035 * rec[i * 6 + 3])));   // as baked (tools/bake/surface.py trunk)
           }
+        }
+      }
+      return out;
+    },
+
+    // The thin solid boxes ({ x, z, yaw, hx, hz }, see EXACT_MAX) that come within reach of (x, z), into out.
+    // The physics collides with them as exact boxes and leaves the distance field out right next to them.
+    solidsNear(x, z, reach, out) {
+      out.length = 0;
+      if (mapWalls === null) makeMapWalls();
+      const st = ++exStamp;
+      const c0 = Math.floor((x - reach) / XC), c1 = Math.floor((x + reach) / XC);
+      const r0 = Math.floor((z - reach) / XC), r1 = Math.floor((z + reach) / XC);
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        const a = exGrid.get(xkey(c, r));
+        if (a === undefined) continue;
+        for (let i = 0; i < a.length; i++) {
+          const b = a[i];
+          if (b._xq === st) continue;
+          b._xq = st;
+          // (a rough first cut: the box's centre within reach plus its half diagonal)
+          const R = reach + b.hx + b.hz;
+          if (Math.abs(b.x - x) > R || Math.abs(b.z - z) > R) continue;
+          out.push(b);
         }
       }
       return out;

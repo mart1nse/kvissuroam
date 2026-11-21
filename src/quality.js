@@ -265,15 +265,23 @@ export function createQuality(hooks, caps, opts = {}) {
   if (fixed.medium <= 0) fixed.medium = Math.round(top / 2);
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-  // a saved { ladder, level }: from its key, or once from the key of before the extra low rung (one level up)
-  const readLevel = (k) => {
+  // a saved { ladder, level }: from its key, or once from the key of before the extra low rung (one level up).
+  // `keep`: what came from the old key is written under the new one there and then. Without that the old
+  // one was taken away and nothing put in its place, so the second visit after the extra low rung arrived
+  // (21 Nov 2026) had forgotten both the level a device runs well at and the level a phone must stay under
+  // after running out of memory: an iPhone 13 went back to the top level and reloaded itself drive after
+  // drive, one level lower each time.
+  const readLevel = (k, keep = false) => {
     try {
       const now = JSON.parse(read(k) || 'null');
       if (now) return now;
       const old = JSON.parse(read(OLD[k]) || 'null');
       if (!old) return null;
       localStorage.removeItem(OLD[k]);
-      return old.level >= 0 ? { ...old, level: old.level + 1 } : null;
+      if (!(old.level >= 0)) return null;
+      const moved = { ...old, level: old.level + 1 };
+      if (keep) store(k, JSON.stringify(moved));
+      return moved;
     } catch { return null; }
   };
   const ladderId = `${caps.dpr}/${caps.shadow}/${caps.trees}/${caps.load}`;
@@ -286,7 +294,7 @@ export function createQuality(hooks, caps, opts = {}) {
   // Only a level kept lower for two minutes running replaces it.
   let start = top;
   try {
-    const saved = readLevel(AUTOKEY);
+    const saved = readLevel(AUTOKEY, true);
     if (saved && saved.ladder === ladderId && saved.level >= 0) start = Math.min(top, saved.level);
   } catch {}
   if (opts.software) start = Math.min(start, 2);
@@ -301,13 +309,16 @@ export function createQuality(hooks, caps, opts = {}) {
   const ALIVE = 'kvissuroam.alive2', CAPKEY = 'kvissuroam.gfxCap2';
   let cap = top, crashed = false;
   try {
-    const c = readLevel(CAPKEY);
+    const c = readLevel(CAPKEY, true);
     if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
     const alive = readLevel(ALIVE);
     if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
       crashed = true;
-      cap = Math.max(0, Math.min(cap, alive.level - 1));
-      store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap }));
+      // (two levels down when the last one was under half an hour ago: a phone far above what its memory
+      // holds otherwise needs a crash for every level on the way down)
+      const again = c && Date.now() - (c.t || 0) < 30 * 60e3;
+      cap = Math.max(0, Math.min(cap, alive.level - (again ? 2 : 1)));
+      store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap, t: Date.now() }));
       console.warn(`The last visit ended on screen at level ${alive.level + 1} (out of memory?): auto graphics stay at ${cap + 1} or lower`);
     }
   } catch {}

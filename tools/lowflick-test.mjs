@@ -132,6 +132,34 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// After a quick lift mid donut (Martin 2026-11-21, the 200 Avant "flicks pretty heavy"): on four driven wheels the
+// slide angle does not build, so the hold's push all went into spinning the car faster, 29 to 95 deg/s in 0.6 s.
+// Reported: how much faster the car turns in the 1.2 s after the throttle goes down again than when it was
+// lifted (deg/s). Judged under SURGE_MAX for the 200 Avant and the rear-driven cars; the others are shown.
+// Before: 200 Avant 45-66, bZ4X 61-126, Enyaq 23-81, rear-driven 23-48. After: 200 Avant 19-26, rear-driven 10-30.
+const SURGE_MAX = 40;   // deg/s
+console.log('\nafter a quick lift mid donut: extra rotation in the 1.2 s after the throttle goes back down (deg/s)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3', 'audi200', 'enyaq', 'bz4x']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    let surge = 0;
+    for (const seed of [0, 1, 2]) for (const T0 of [5, 5.6, 6.2, 6.8, 7.4]) for (const L of [0.1, 0.2, 0.3, 0.5, 0.8]) {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      let y0 = null, ymax = -Infinity;
+      for (let t = 0; t < T0 + L + 1.2; t += dt) {
+        stepCar(car, { up: t > T0 && t < T0 + L ? 0 : 1, steer: 1 }, world(surf), dt);
+        if (t > T0 && y0 === null) y0 = deg(car.yawRate);
+        if (t > T0) ymax = Math.max(ymax, deg(car.yawRate));
+      }
+      surge = Math.max(surge, ymax - y0);
+    }
+    if ((spec.drive === 'rwd' || id === 'audi200') && surge > SURGE_MAX) ok = false;
+    row.push(`${spec.short} ${surge.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 // The swing through the middle of a figure eight (Martin 2026-11-21, fifth ask): with the rears spinning, the
 // slide-catching help unwound the opposite lock as the tail came back through the middle, so the rotation
 // stalled for a moment and then carried on. Reported: the sharpest slowing of the rotation over 50 ms in the

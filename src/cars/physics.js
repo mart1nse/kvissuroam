@@ -30,6 +30,8 @@ const BURN_BITE = 0.3, BURN_BITE_T = 0.8;   // the brake's first squeeze, and ho
 const BURN_MELT = 0.45;          // how much grip the hot, smoking rear tread loses
 const BURN_PRESS = 0.6;          // ...brake pedal from which it heats fully
 const BURN_HEAT_T = 0.6, BURN_COOL_T = 0.4;   // ...how fast it heats and cools (s)
+const BURN_SLIDE_V = 0.05;       // locked front tyres stick below this speed (m/s)
+const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 3;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
 const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
 const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
 const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
@@ -388,8 +390,14 @@ function substep(car, input, world, dt) {
   // (a burnout's brake is squeezed on rather than stamped: pressed together with the throttle the car jumps
   // forward a little before the fronts take hold, and on the move it comes to a halt gradually, rears
   // smoking; a brake already held when the throttle goes down holds at once)
-  car.pedalT = down > 0 ? (car.pedalT || 0) + dt : 0;
-  if (car.burn > 0) brake *= Math.min(1, BURN_BITE + (1 - BURN_BITE) * car.pedalT / BURN_BITE_T);
+  // Sliding sideways (out of a donut, say) the squeeze is gentler and slower still, so the car first slides
+  // on with the momentum it has, then straightens and comes to a stop (Martin 2026-11-21).
+  if (!(down > 0)) car.pedalT = 0;
+  else { if (!car.pedalT) car.pedalV = Math.min(1, Math.abs(car.vy) * 3.6 / BURN_SLIDE_KMH); car.pedalT = (car.pedalT || 0) + dt; }
+  if (car.burn > 0) {
+    const mv = car.pedalV || 0, b0 = BURN_BITE * (1 - 0.6 * mv), bt = BURN_BITE_T + BURN_SLIDE_T * mv;
+    brake *= Math.min(1, b0 + (1 - b0) * car.pedalT / bt);
+  }
   car.throttle = throttle; car.brake = brake;
 
   // ---- ground under the wheels
@@ -646,12 +654,13 @@ function substep(car, input, world, dt) {
       const sx = kappa / surf.kp, sy = Math.abs(Math.tan(alpha)) * surf.b / 2.3;
       const sig = Math.hypot(sx, sy) + 1e-6;
       // (a burnout's tread scrubbing on one spot heats and melts the rubber, which then grips far less)
-      const g = (sig < 1 ? sig * (2 - sig) : surf.tail + (1 - surf.tail) * Math.exp(-(sig - 1) / 3)) * (1 - BURN_MELT * (front ? car.heatF || 0 : car.heatR || 0));
+      const melt = 1 - BURN_MELT * (front ? car.heatF || 0 : car.heatR || 0);
+      const g = (sig < 1 ? sig * (2 - sig) : surf.tail + (1 - surf.tail) * Math.exp(-(sig - 1) / 3)) * melt;
       const f = cap * g;
       const sent = (f * sx) / sig;
       fx = dir * sent;
       // (a little sideways bite always remains, so slides stay catchable)
-      fy = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * cap * Math.min(1, sy));
+      fy = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * melt * cap * Math.min(1, sy));
       // (Above first gear the spin builds more slowly, GEAR_SPIN_LAG per gear up: a tyre spinning faster
       // and faster heats, smears and scrubs more rubber, so a shift up mid donut or burnout drops the
       // revs and lets them climb back gradually instead of flaring straight to the limiter.)
@@ -732,8 +741,20 @@ function substep(car, input, world, dt) {
     const rub = (skid, slipV, vLat, locked) => skid * Math.hypot(locked ? car.vx : Math.max(0, slipV - 0.2 * Math.max(Math.abs(car.vx), 3)), vLat);
     car.rubF = rub(car.skidF, car.slipVF, vLatF, false); car.rubR = rub(car.skidR, car.slipVR, vLatR, hb);
   } else car.skidF = car.skidR = car.rubF = car.rubR = 0;
-  const fyF = fySpinF !== null ? fySpinF : -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
+  let fyF = fySpinF !== null ? fySpinF : -latCapF * Math.sin(1.35 * Math.atan(sf.b * slipF));
   const fyR = fySpinR !== null ? fySpinR : -latCapR * Math.sin(1.35 * Math.atan(sr.b * slipR));
+  // A burnout's front wheels, braked past their grip, are locked: they no longer steer, they just slide,
+  // pushing back against whichever way the nose is moving. So the brake going on mid donut stops the nose
+  // while the car carries on sliding and swinging round it, and the spin dies away over a second or two
+  // instead of the locked wheels, still pointing into the turn, snapping it straight (Martin 2026-11-21).
+  // (locked once the brake and the cornering together ask more than the tyres have)
+  const lockF = !drivenF && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) : 0;
+  if (lockF > 0) {
+    const ux = car.vx, uy = car.vy + car.a * car.yawRate, un = Math.max(Math.hypot(ux, uy), BURN_SLIDE_V);
+    const bx = -capF * ux / un, by = -capF * uy / un;
+    fxF += (bx * cd + by * sd - fxF) * lockF;
+    fyF += (by * cd - bx * sd - fyF) * lockF;
+  }
 
   // ---- resistances and slope
   const drag = 0.5 * RHO * s.cdA * car.vx * Math.abs(car.vx);
@@ -822,7 +843,8 @@ function substep(car, input, world, dt) {
       // 80 deg, Martin 2026-11-21.)
       else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6));
       // (rotating against the wheel already: leave the driver to sort it out)
-      if (car.yawRate * turn > -0.2) want = turn * k * w;
+      // (with the brake on as well the donut is over: no holding it in its band, the car slides on as it will)
+      if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / 0.3));
     }
   }
   // (the hold's moment moves at most DONUT_EASE per second, so it never jumps from a full push to a hold)

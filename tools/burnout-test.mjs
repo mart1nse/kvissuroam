@@ -35,7 +35,7 @@ for (const spec of Object.values(CARS)) {
     out.push(`stand: lurch ${lurch.toFixed(2)} m, creep ${creep.toFixed(1)} km/h, rear tread ${(spin / n).toFixed(0)} km/h, rpm ${rMin.toFixed(0)}..${rMax.toFixed(0)} (avg ${(rpm / n).toFixed(0)}), moved ${(-car.z).toFixed(1)} m, ${speedKmh(car).toFixed(1)} km/h at 5 s, yaw ${deg(car.yaw).toFixed(1)} deg`);
     // (held by the end, not reversing; every car but the bus spinning its rears, the bus not moving off; the
     // F40's turbos take a second to wake, so it rolls a few metres before its rears light up)
-    if (speedKmh(car) > 1 || car.reversing || -car.z > 6 || (weak ? -car.z > 1 : spin / n < 8)) ok = false;
+    if (!Number.isFinite(car.x + car.z + car.vx + car.rpm) || speedKmh(car) > 1 || car.reversing || -car.z > 6 || (weak ? -car.z > 1 : spin / n < 8)) ok = false;
   }
   // first: brake 0.3 s, then both
   {

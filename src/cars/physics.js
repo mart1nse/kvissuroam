@@ -20,7 +20,17 @@ const DONUT_LO = 0.6, DONUT_HI = 1.1;    // ...the slide angle band it keeps the
 const DONUT_WAIT = 0.3;          // ...and only starts pushing a car round this long after it is floored (s)
 const DONUT_SWAY = 0.5;          // ...how much the hold wanders in between
 const DONUT_LEAD = 0.3;          // ...judged this far ahead (s)
+const DONUT_SPIN = 2.4;          // ...and pushes only while the car turns slower than this (rad/s; a held donut turns 90-120 deg/s)
+const DONUT_EASE = 4;            // ...its moment changing at most this much a second (share of DONUT)
 const EV_SLIDE_REAR = 0.7;
+// Burnouts (brake and throttle together in a rear-driven car under 30 km/h, Martin 2026-11-21)
+const BURN_REAR = 0.4;           // how much less the rear brakes are held than in a stop...
+const BURN_FEEL = 0.25;          // ...once the driver has felt for it this long (s)
+const BURN_BITE = 0.3, BURN_BITE_T = 0.8;   // the brake's first squeeze, and how long it takes to hold fully (s)
+const BURN_MELT = 0.45;          // how much grip the hot, smoking rear tread loses
+const BURN_PRESS = 0.6;          // ...brake pedal from which it heats fully
+const BURN_HEAT_T = 0.6, BURN_COOL_T = 0.4;   // ...how fast it heats and cools (s)
+const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
 const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
 const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
 const ABS_HZ = 8;                // anti-lock pressure cycling (spec.abs: 0..1, how much of the lock-up it prevents)      // rear share a two-motor EV moves to while powersliding under 100 km/h
@@ -347,11 +357,24 @@ function substep(car, input, world, dt) {
 
   // ---- arrow-key semantics: up drives forward, down brakes then reverses
   let throttle = 0, brake = 0;
+  // Both pedals at once in a rear-driven car under about 30 km/h: a burnout. The brake holds (at a standstill
+  // too, where on its own the pedal would select reverse), so a car strong enough to overcome its rear
+  // brakes spins its rear tyres while the fronts keep it in place; easing the brake lets it go, pressing
+  // again reins it back in. Above 30 km/h both pedals are just braking with the throttle open.
+  // (a bus has a sixth of a car's power per tonne: it just strains against its brakes)
+  const kmh = Math.abs(car.vx) * 3.6;
+  const burn = s.drive === 'rwd' && up > 0 && down > 0 && car.vx > -0.6 && kmh < 30;
+  if (burn && car.reversing) car.reversing = false;
+  car.burn = burn && (s.ref?.powerKw ?? 100) / s.mass >= 0.03 ? Math.min(1, (30 - kmh) / 10) : 0;
+  car.burnT = burn ? (car.burnT || 0) + dt : 0;
+  // (from a standstill the brake pedal alone holds the car for REV_WAIT before reverse goes in, as an
+  // automatic takes a moment to select R; so brake first, then throttle, is a burnout too, not a reverse)
+  car.revWait = !car.reversing && down > 0 && up === 0 && car.vx <= 0.6 ? (car.revWait || 0) + dt : 0;
   if (!car.reversing) {
     throttle = up;
     if (down > 0) {
-      if (car.vx > 0.6) brake = down;
-      else if (up === 0) car.reversing = true;
+      if (car.vx > 0.6 || burn) brake = down;
+      else if (up === 0) { if (car.revWait > REV_WAIT || s.drive !== 'rwd') car.reversing = true; else brake = down; }
     }
   }
   if (car.reversing) {
@@ -362,6 +385,11 @@ function substep(car, input, world, dt) {
     }
   }
   if (car.reversing && down === 0 && up === 0 && Math.abs(car.vx) < 0.2) car.reversing = false;
+  // (a burnout's brake is squeezed on rather than stamped: pressed together with the throttle the car jumps
+  // forward a little before the fronts take hold, and on the move it comes to a halt gradually, rears
+  // smoking; a brake already held when the throttle goes down holds at once)
+  car.pedalT = down > 0 ? (car.pedalT || 0) + dt : 0;
+  if (car.burn > 0) brake *= Math.min(1, BURN_BITE + (1 - BURN_BITE) * car.pedalT / BURN_BITE_T);
   car.throttle = throttle; car.brake = brake;
 
   // ---- ground under the wheels
@@ -541,8 +569,14 @@ function substep(car, input, world, dt) {
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
   const drive = engineForce(car, throttle, dt);
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
+  // (held on the brakes at a standstill, as in a burnout, the pads grip like static friction: whatever
+  // pushes the car is met up to the brakes' and tyres' limit, so it creeps at most a few cm a second)
+  const bSign = Math.max(-1, Math.min(1, car.vx / 0.05));
   const brakeTotal = brake * (s.brakeG ?? 1.05) * m * G * Math.min(1, load * 4);
-  const brakeF = brakeTotal * 0.66, brakeR = brakeTotal * 0.34;
+  // (in a burnout the brake is held just hard enough to pin the front wheels rather than stamped on, so the
+  // rear brakes fight the engine a little less: the 190E only just manages it, revs struggling; the front
+  // brakes grip like static friction at a standstill, see bSign)
+  const brakeF = brakeTotal * 0.66, brakeR = brakeTotal * 0.34 * (1 - BURN_REAR * car.burn * Math.min(1, car.burnT / BURN_FEEL));
   // Share of the drive sent to the rear axle. Two-motor EVs have a fixed
   // split set by their motors; an on-demand coupling sends more to the rear
   // only once the front wheels start to spin. Nothing moves torque towards
@@ -578,7 +612,8 @@ function substep(car, input, world, dt) {
   const ts = drivenR ? (drivenF ? (sf.tail < sr.tail ? sf : sr) : sr) : sf;
   let spinMax = 0, drive_cut = false;
   const absOn = [0, 0];
-  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb ? s.tc : 0;
+  // (the electronics stay out of a burnout: brake and throttle together is the driver asking for one)
+  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb && !car.burn ? s.tc : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';
@@ -610,7 +645,8 @@ function substep(car, input, world, dt) {
     if (spinning) {
       const sx = kappa / surf.kp, sy = Math.abs(Math.tan(alpha)) * surf.b / 2.3;
       const sig = Math.hypot(sx, sy) + 1e-6;
-      const g = sig < 1 ? sig * (2 - sig) : surf.tail + (1 - surf.tail) * Math.exp(-(sig - 1) / 3);
+      // (a burnout's tread scrubbing on one spot heats and melts the rubber, which then grips far less)
+      const g = (sig < 1 ? sig * (2 - sig) : surf.tail + (1 - surf.tail) * Math.exp(-(sig - 1) / 3)) * (1 - BURN_MELT * (front ? car.heatF || 0 : car.heatR || 0));
       const f = cap * g;
       const sent = (f * sx) / sig;
       fx = dir * sent;
@@ -629,7 +665,7 @@ function substep(car, input, world, dt) {
       const d = throttle > 0 && share > 0 && lon > 0 ? Math.max(0, Math.min(1, demand / lon)) : 0;
       const slipEq = (1 - Math.sqrt(1 - d)) * surf.kp * Math.max(Math.abs(car.vx), 3);
       slipV += (slipEq - slipV) * Math.min(1, dt * 25);
-      fx = ((drive_cut && front) || trimmed ? demand * dir : drive * share - vSign * brakeK);
+      fx = ((drive_cut && front) || trimmed ? demand * dir : drive * share - bSign * brakeK);
       if (hb && !front) fx = -vSign * surf.mu * fzR * 0.95;
       ask = hb && !front ? 2 : Math.abs(fx) / cap;
       // Anti-lock brakes (spec.abs): instead of locking, each axle is held just short of its peak, and short
@@ -651,6 +687,14 @@ function substep(car, input, world, dt) {
 
     if (front) { car.slipVF = slipV; fxF = fx; fySpinF = fy; askF = ask; }
     else { car.slipVR = slipV; fxR = fx; fySpinR = fy; askR = ask; }
+    // Tyre heat in a burnout: builds over BURN_HEAT_T while the tread spins well ahead of the road with both
+    // pedals down, and cools quickly once the brake is off. The first moment of a burnout, on cool tyres,
+    // the rears push the car forward a little before the heat lets the front brakes hold it.
+    // (the harder the car is held, the longer the tread scrubs the same spot: easing the brake cools it)
+    const hot = spinning ? car.burn * Math.min(1, brake / BURN_PRESS) * Math.min(1, Math.max(0, (slipV - 0.5) / 3)) : 0;
+    const h0 = (front ? car.heatF : car.heatR) || 0;
+    const h1 = h0 + (hot - h0) * Math.min(1, dt / (hot > h0 ? BURN_HEAT_T : BURN_COOL_T));
+    if (front) car.heatF = h1; else car.heatR = h1;
   };
   axle(true, shareF, sf, capF, lonF, slipF, brakeF);
   axle(false, shareR, sr, capR, lonR, slipR, brakeR);
@@ -715,6 +759,7 @@ function substep(car, input, world, dt) {
   // the wheel is held into the rotation, the pedal down and the wheels spin.
   // (a quick lift and re-press mid-donut picks up where it left off; only a
   // longer break makes the next one wait for the revs again)
+  let want = 0;
   if (!(throttle > 0.5 && !car.reversing && Math.abs(steerIn) > 0.5 && load > 0.3)) { car.donutAng = undefined; car.donutT = Math.max(0, Math.min(DONUT_WAIT + 1.2, car.donutT || 0) - dt * 1.5); }
   else {
     car.donutT = (car.donutT || 0) + dt;
@@ -723,7 +768,10 @@ function substep(car, input, world, dt) {
     // (looking a moment ahead, so a fast swing is met before it overshoots)
     const dAng = car.donutAng === undefined ? 0 : Math.max(-6, Math.min(6, (ang - car.donutAng) / dt));
     car.donutAng = ang;
-    const angP = ang + DONUT_LEAD * dAng;
+    // (nearly stopped, the direction of travel and so the slide angle swing wildly from one moment to the
+    // next: the hold is faded out under a walking pace rather than flung from one side to the other)
+    const sure = Math.min(1, Math.max(0, (speed - 0.3) / 1.2));
+    const angP = ang + DONUT_LEAD * dAng * sure * sure;
     const spinW = Math.min(1, car.slipVR / 4);      // (the rear wheels: a front driver washes wide)
     const slow = Math.min(1, Math.max(0, (70 - speed * 3.6) / 30));
     const w = throttle * Math.min(1, (Math.abs(steerIn) - 0.5) / 0.4) * spinW * slow;
@@ -768,10 +816,18 @@ function substep(car, input, world, dt) {
       // (and holding it back only ever slows the rotation: it never swings the car back against the lock,
       // which had it skating sideways in a straight line for a second)
       if (k < 0) k *= Math.min(1, Math.max(0, (ang - 0.3) / 0.3)) * Math.min(1, Math.max(0, car.yawRate * turn / 0.3));
+      // (and pushing, whether to start the rotation or as the hold's wander, stops once the car turns as fast
+      // as a held donut does, leaving the tyres to carry on. At walking pace there is no momentum to swing the
+      // tail hard: pushing on had the car whipping round at nearly twice a donut's rate and then hanging past
+      // 80 deg, Martin 2026-11-21.)
+      else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6));
       // (rotating against the wheel already: leave the driver to sort it out)
-      if (car.yawRate * turn > -0.2) MZ += turn * k * w * DONUT * m * G * L * load;
+      if (car.yawRate * turn > -0.2) want = turn * k * w;
     }
   }
+  // (the hold's moment moves at most DONUT_EASE per second, so it never jumps from a full push to a hold)
+  { const dm = want - (car.donutM || 0); car.donutM = (car.donutM || 0) + Math.max(-DONUT_EASE * dt, Math.min(DONUT_EASE * dt, dm)); }
+  if (car.donutM) MZ += car.donutM * DONUT * m * G * L * load;
   // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and
   // the driveline winds up first. The slip-angle model overstates the bite there (and the donut hold
   // adds its own push), so below about 30 km/h the swing is damped, more so for the cars not driven

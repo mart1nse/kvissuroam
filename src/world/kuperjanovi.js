@@ -112,7 +112,7 @@ export function createKuperjanovi(scene, world, { shadows = true } = {}) {
     const tN = body.arc[0], tW = body.arc[body.arc.length - 1];      // where the bay meets the two flat walls
     const FN = face(tN, [-body.dN[0], -body.dN[1]], body.nN);         // along Kuperjanovi, away from the corner
     const FW = face(tW, body.dW, body.nW);                            // along the junction side, away from the corner
-    const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.add(BOX(s1 - s0, b - a, th), hex, x, y0 + (a + b) / 2, z, F.yaw); };
+    const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.box(s1 - s0, b - a, th, hex, x, y0 + (a + b) / 2, z, F.yaw); };
     // a window in a brown wooden frame with white reveals and sill, `panes` across
     const win = (F, s0, s1, a, b, panes = 2) => {
       slab(F, s0 - 0.12, s1 + 0.12, a - 0.1, b + 0.1, 0, 0.05, COL.mullion);
@@ -136,10 +136,10 @@ export function createKuperjanovi(scene, world, { shadows = true } = {}) {
       slab(F, s0, s1, y - 0.04, y + 0.14, 0, 1.15, COL.ledge);
       const [ax, az] = F.at(s0 + 0.05, 1.08), [bx, bz] = F.at(s1 - 0.05, 1.08);
       const yaw = F.yaw, len = s1 - s0 - 0.1;
-      p.add(BOX(len, 0.05, 0.05), COL.rail, (ax + bx) / 2, y0 + y + 1.12, (az + bz) / 2, yaw);
-      p.add(BOX(len, 0.03, 0.03), COL.rail, (ax + bx) / 2, y0 + y + 0.32, (az + bz) / 2, yaw);
-      for (let s = s0 + 0.08; s < s1 - 0.04; s += 0.12) { const [x, z] = F.at(s, 1.08); p.add(BOX(0.018, 0.98, 0.018), COL.rail, x, y0 + y + 0.64, z, yaw); }
-      for (const s of [s0 + 0.05, s1 - 0.05]) for (let o = 0.12; o < 1.05; o += 0.12) { const [x, z] = F.at(s, o); p.add(BOX(0.018, 0.98, 0.018), COL.rail, x, y0 + y + 0.64, z, yaw); }
+      p.box(len, 0.05, 0.05, COL.rail, (ax + bx) / 2, y0 + y + 1.12, (az + bz) / 2, yaw);
+      p.box(len, 0.03, 0.03, COL.rail, (ax + bx) / 2, y0 + y + 0.32, (az + bz) / 2, yaw);
+      for (let s = s0 + 0.08; s < s1 - 0.04; s += 0.12) { const [x, z] = F.at(s, 1.08); p.box(0.018, 0.98, 0.018, COL.rail, x, y0 + y + 0.64, z, yaw); }
+      for (const s of [s0 + 0.05, s1 - 0.05]) for (let o = 0.12; o < 1.05; o += 0.12) { const [x, z] = F.at(s, o); p.box(0.018, 0.98, 0.018, COL.rail, x, y0 + y + 0.64, z, yaw); }
       win(F, s0 + 0.25, s0 + 1.15, y + 0.95, y + 2.5, 1);
       slab(F, s0 + 1.45, s0 + 2.35, y + 0.16, y + 2.5, 0.03, 0.05, COL.wood);
       slab(F, s0 + 1.53, s0 + 2.27, y + 0.9, y + 2.42, 0.06, 0.03, COL.glass);
@@ -185,33 +185,33 @@ export function createKuperjanovi(scene, world, { shadows = true } = {}) {
         for (let k = 0; k < n; k++) {
           const a = a0 + da * (k + 0.5) / n, w = Math.abs(da) * R / n;
           const [x, z] = at(a, R + 0.04);
-          p.add(BOX(w - m, yb - ya, 0.05), COL.glass, x, y0 + (ya + yb) / 2, z, tang(a));
+          p.box(w - m, yb - ya, 0.05, COL.glass, x, y0 + (ya + yb) / 2, z, tang(a));
           const [fx, fz] = at(a, R + 0.07);
-          p.add(BOX(w - m, 0.05, 0.04), COL.wood, fx, y0 + ya + (yb - ya) * 0.72, fz, tang(a));
+          p.box(w - m, 0.05, 0.04, COL.wood, fx, y0 + ya + (yb - ya) * 0.72, fz, tang(a));
         }
         for (let k = 0; k <= n; k++) {
           const a = a0 + da * k / n, [x, z] = at(a, R + 0.08);
-          p.add(BOX(m + 0.04, yb - ya + 0.04, 0.12), COL.mullion, x, y0 + (ya + yb) / 2, z, tang(a));
+          p.box(m + 0.04, yb - ya + 0.04, 0.12, COL.mullion, x, y0 + (ya + yb) / 2, z, tang(a));
         }
         // the white ledges under and over the band
         for (const [yy, out] of [[ya - 0.1, 0.22], [yb + 0.1, 0.16]]) {
           for (let k = 0; k < 16; k++) {
             const a = a0 + da * (k + 0.5) / 16, w = Math.abs(da) * (R + out / 2) / 16 + 0.04;
             const [x, z] = at(a, R + out / 2);
-            p.add(BOX(w, 0.12, out + 0.02), COL.ledge, x, y0 + yy, z, tang(a));
+            p.box(w, 0.12, out + 0.02, COL.ledge, x, y0 + yy, z, tang(a));
           }
         }
       }
       // brown cladding and the shop door on the ground floor of the bay, a porthole at the top
       for (let k = 0; k < 16; k++) {
         const a = a0 + da * (k + 0.5) / 16, w = Math.abs(da) * R / 16 + 0.03, [x, z] = at(a, R + 0.03);
-        p.add(BOX(w, 2.6, 0.04), COL.clad, x, y0 + 0.45 + 1.3, z, tang(a));
+        p.box(w, 2.6, 0.04, COL.clad, x, y0 + 0.45 + 1.3, z, tang(a));
       }
       {
         const a = a0 + da * 0.5, [x, z] = at(a, R + 0.07);
-        p.add(BOX(1.0, 2.2, 0.05), COL.door, x, y0 + 0.4 + 1.1, z, tang(a));
+        p.box(1.0, 2.2, 0.05, COL.door, x, y0 + 0.4 + 1.1, z, tang(a));
         const [gx, gz] = at(a, R + 0.1);
-        p.add(BOX(0.7, 0.8, 0.02), COL.glass, gx, y0 + 1.95, gz, tang(a));
+        p.box(0.7, 0.8, 0.02, COL.glass, gx, y0 + 1.95, gz, tang(a));
         const [px, pz] = at(a, R + 0.05);
         p.add(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 20).rotateX(Math.PI / 2), COL.mullion, px, y0 + 10.7, pz, tang(a));
         const [qx, qz] = at(a, R + 0.08);
@@ -228,7 +228,7 @@ export function createKuperjanovi(scene, world, { shadows = true } = {}) {
         const [ox, oz] = [x - body.nN[0] * 1.4, z - body.nN[1] * 1.4];
         p.add(BOX(0.8, 0.12, 1.0).rotateX(-0.45), COL.skylight, ox, y0 + EAVE + 0.95, oz, FN.yaw);
       }
-      for (const [x, z] of [[ne[0] - 6, ne[1] + 4], [se[0] - 9, se[1] - 3]]) p.add(BOX(0.7, 1.4, 0.7), COL.chimney, x, y0 + RIDGE + 0.4, z, FN.yaw);
+      for (const [x, z] of [[ne[0] - 6, ne[1] + 4], [se[0] - 9, se[1] - 3]]) p.box(0.7, 1.4, 0.7, COL.chimney, x, y0 + RIDGE + 0.4, z, FN.yaw);
     }
 
     const mesh = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));

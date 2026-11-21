@@ -386,7 +386,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
         strip(q, a, b, -0.3, 1.0, run / 8, (run + l) / 8);
         strip(q, a2, b2, -0.3, 1.0, run / 8, (run + l) / 8);
         const m = T(i + 0.75, o - 0.25);
-        p.add(BOX(l + 0.05, 0.08, 0.62), 0x8f8a8c, m[0], (h(a[0], a[1]) + h(b[0], b[1])) / 2 + 1.02, m[1], Math.atan2(-(b[1] - a[1]), b[0] - a[0]));
+        p.box(l + 0.05, 0.08, 0.62, 0x8f8a8c, m[0], (h(a[0], a[1]) + h(b[0], b[1])) / 2 + 1.02, m[1], Math.atan2(-(b[1] - a[1]), b[0] - a[0]));
         solids.push({ x: m[0], z: m[1], yaw: Math.atan2(-(b[1] - a[1]), b[0] - a[0]), hx: l / 2, hz: 0.3 });
         run += l;
       }
@@ -408,7 +408,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
             const l = Math.hypot(pt[0] - prev[0], pt[1] - prev[1]), yaw = Math.atan2(-(pt[1] - prev[1]), pt[0] - prev[0]), mx = (pt[0] + prev[0]) / 2, mz = (pt[1] + prev[1]) / 2;
             if (style === 'rails') {
               const y = (h(pt[0], pt[1]) + h(prev[0], prev[1])) / 2, hexc = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
-              for (const yy of [0.45, 0.9]) p.add(BOX(l, 0.1, 0.05), hexc, mx, y + yy, mz, yaw);
+              for (const yy of [0.45, 0.9]) p.box(l, 0.1, 0.05, hexc, mx, y + yy, mz, yaw);
             } else strip(Q[style] || Q.boards, prev, pt, 0.04, height, run / 0.5, (run + l) / 0.5, rgb);
             run += l;
             solids.push({ x: mx, z: mz, yaw, hx: l / 2, hz: 0.06 });
@@ -429,9 +429,9 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       K.ribbon({ at: (t, lat) => T(t, lat) }, 1104.5, 1123, hw(1112) + 4.4, hw(1112) + 12, 'lawn');
       // the frame bends and the glass bursts when a car hits it (src/world/shelter.js)
       const sp = new Parts();
-      for (const s of [-2.0, 0, 2.0]) for (const n of [-0.7, 0.7]) { const [px, pz] = at(s, n); sp.add(BOX(0.08, 2.35, 0.08), G, px, y + 1.18, pz, yaw); }
-      { const [px, pz] = at(0, 0); sp.add(BOX(4.5, 0.1, 1.9), 0x3a4a48, px, y + 2.42, pz, yaw); sp.add(BOX(4.3, 0.06, 0.06), G, px, y + 2.3, pz, yaw); }
-      { const [px, pz] = at(0, 0.45); sp.add(BOX(2.6, 0.06, 0.4), 0x8a6a50, px, y + 0.48, pz, yaw); for (const s of [-1.1, 1.1]) { const [qx, qz] = at(s, 0.45); sp.add(BOX(0.06, 0.46, 0.34), G, qx, y + 0.24, qz, yaw); } }
+      for (const s of [-2.0, 0, 2.0]) for (const n of [-0.7, 0.7]) { const [px, pz] = at(s, n); sp.box(0.08, 2.35, 0.08, G, px, y + 1.18, pz, yaw); }
+      { const [px, pz] = at(0, 0); sp.box(4.5, 0.1, 1.9, 0x3a4a48, px, y + 2.42, pz, yaw); sp.box(4.3, 0.06, 0.06, G, px, y + 2.3, pz, yaw); }
+      { const [px, pz] = at(0, 0.45); sp.box(2.6, 0.06, 0.4, 0x8a6a50, px, y + 0.48, pz, yaw); for (const s of [-1.1, 1.1]) { const [qx, qz] = at(s, 0.45); sp.box(0.06, 0.46, 0.34, G, qx, y + 0.24, qz, yaw); } }
       const panes = [[-2.0, 0.7, 2.0, 0.7], [-2.0, -0.7, -2.0, 0.7], [2.0, -0.2, 2.0, 0.7]].map(([s0, n0, s1, n1]) => ({ a: at(s0, n0), b: at(s1, n1), y0: y + 0.25, y1: y + 2.25 }));
       const frame = sp.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
       if (frame) { frame.castShadow = shadows; frame.receiveShadow = true; group.add(frame); }
@@ -446,7 +446,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       // (the ground beside the island: under it the bump already lifts the height)
       const [x, z] = T(I, -0.2), [tx, tz] = track.tan[Math.floor(I)], yaw = Math.atan2(-tz, tx), y = (h(...T(I - 1, -0.2)) + h(...T(I + 1, -0.2))) / 2;
       p.add(new THREE.CylinderGeometry(0.62, 0.74, 0.13, 14).scale(1.7, 1, 1), 0xf0c84a, x, y + 0.07, z, yaw);
-      for (const a of [-0.8, 0, 0.8]) p.add(BOX(0.2, 0.135, 1.2), 0x2a2a30, x + tx * a, y + 0.07, z + tz * a, yaw);
+      for (const a of [-0.8, 0, 0.8]) p.box(0.2, 0.135, 1.2, 0x2a2a30, x + tx * a, y + 0.07, z + tz * a, yaw);
     }
     // the planters in front of the school annex
     for (const I of [1262.5, 1264.5]) { const [x, z] = T(I, -(hw(I) + 2.2)); if (world.sdfAt(x, z) > 0.5) K.box(x, z, 1.5, 0.6, 0.7, 0x2c2c34, Math.atan2(-track.tan[1263][1], track.tan[1263][0])); }

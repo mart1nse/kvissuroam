@@ -85,27 +85,34 @@ export function createRoadPainter(world, size) {
   };
 
   // paint(sector) -> { cover, tone, hard(i, j) } ; hard: is cell (i, j) of the 1 m surface grid on a painted road
-  return (s) => {
+  // In steps (see ../jobs.js). The browser only notes what is drawn on a canvas and paints it when the picture
+  // is first read: for a square of the centre that was 50 ms in one go. Reading one pixel after every few
+  // dozen strokes makes it paint that much, and each `yield` is then a place to stop until the next frame.
+  const BATCH = 36;
+  function* steps(s) {
+    let drawn = 0;
+    const due = (ctx, k = 1) => { if ((drawn += k) < BATCH) return false; drawn = 0; ctx.getImageData(0, 0, 1, 1); return true; };
     const e = bySector.get(`${s.sx}_${s.sz}`) || { roads: [], areas: [], over: [], tone: [] };
     const [cv, ctx] = canvas(size, s);
     ctx.fillStyle = '#000';
     ctx.fillRect(s.x0, s.z0, S, S);
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = '#f00';
-    for (const a of e.areas) { ring(ctx, a); ctx.fill('evenodd'); }
+    for (const a of e.areas) { ring(ctx, a); ctx.fill('evenodd'); if (due(ctx)) yield; }
     for (const r of e.roads) {
       if (r.s === 2 || r.s === 3) continue;
       ctx.strokeStyle = KERBED.has(r.type) && r.w >= 4.5 ? '#ff0' : '#f00';
       ctx.lineWidth = r.w;
       line(ctx, r.pts);
       ctx.stroke();
+      if (due(ctx)) yield;
     }
     // gravel and dirt: the larger value where two meet ('lighten' keeps R and G as they are)
     ctx.globalCompositeOperation = 'lighten';
     for (const r of e.roads) {
       if (r.s !== 2 && r.s !== 3) continue;
       line(ctx, r.pts);
-      if (r.w > RUTTED) { ctx.strokeStyle = '#00f'; ctx.lineWidth = r.w; ctx.stroke(); continue; }
+      if (r.w > RUTTED) { ctx.strokeStyle = '#00f'; ctx.lineWidth = r.w; ctx.stroke(); if (due(ctx)) yield; continue; }
       // the slope, in bands about 0.35 m apart (narrowest last), each the value at its middle: across the
       // road, and two bands outside it so that the edge (0.5) falls in the right place
       const h = r.w / 2, n = Math.max(2, Math.round(h / 0.35)), step = h / n;
@@ -115,9 +122,12 @@ export function createRoadPainter(world, size) {
         ctx.lineWidth = 2 * d;
         ctx.stroke();
       }
+      if (due(ctx, n + 2)) yield;
     }
     ctx.globalCompositeOperation = 'source-over';
-    for (const a of e.over) { ctx.fillStyle = a.cover; ring(ctx, a); ctx.fill('evenodd'); }
+    for (const a of e.over) { ctx.fillStyle = a.cover; ring(ctx, a); ctx.fill('evenodd'); if (due(ctx)) yield; }
+    ctx.getImageData(0, 0, 1, 1); drawn = 0;
+    yield;
     const n2 = size / 2;
     const [tv, tctx] = canvas(n2, s);
     tctx.fillStyle = toneOf(null, false);
@@ -128,21 +138,28 @@ export function createRoadPainter(world, size) {
       tctx.lineWidth = r.w + 6;
       line(tctx, r.pts);
       tctx.stroke();
+      if (due(tctx)) yield;
     }
-    for (const a of e.areas) { tctx.fillStyle = toneOf(a.c, a.t === 2); ring(tctx, a); tctx.fill('evenodd'); }
+    for (const a of e.areas) { tctx.fillStyle = toneOf(a.c, a.t === 2); ring(tctx, a); tctx.fill('evenodd'); if (due(tctx)) yield; }
     for (const r of e.roads) {
       if (r.s === 2 || r.s === 3) continue;
       tctx.strokeStyle = toneOf(r.c, r.s === 1);
       tctx.lineWidth = r.w + 2.5;
       line(tctx, r.pts);
       tctx.stroke();
+      if (due(tctx)) yield;
     }
-    for (const a of e.tone) { tctx.fillStyle = a.tone; ring(tctx, a); tctx.fill(); }
+    for (const a of e.tone) { tctx.fillStyle = a.tone; ring(tctx, a); tctx.fill(); if (due(tctx)) yield; }
+    tctx.getImageData(0, 0, 1, 1);
+    yield;
     const img = ctx.getImageData(0, 0, size, size).data;
     const k = size / S;
     return {
       cover: texture(cv, true), tone: texture(tv, false),
       hard: (i, j) => img[(Math.floor((j + 0.5) * k) * size + Math.floor((i + 0.5) * k)) * 4] > 90,
     };
-  };
+  }
+  const paint = (s) => { const it = steps(s); let r; do r = it.next(); while (!r.done); return r.value; };
+  paint.steps = steps;
+  return paint;
 }

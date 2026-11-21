@@ -99,7 +99,7 @@ export function createElva(scene, world, { shadows = true } = {}) {
     const hl = (s, v) => h(...L(s, v));
     const FK = facadeKit(group, shadows);
     // a box by its extents in the frame; y0, y1 above gy
-    const block = (s0, s1, v0, v1, gy, y0, y1, c) => { const [x, z] = L((s0 + s1) / 2, (v0 + v1) / 2); p.add(BOX(s1 - s0, y1 - y0, v1 - v0), c, x, gy + (y0 + y1) / 2, z, YAW); };
+    const block = (s0, s1, v0, v1, gy, y0, y1, c) => { const [x, z] = L((s0 + s1) / 2, (v0 + v1) / 2); p.box(s1 - s0, y1 - y0, v1 - v0, c, x, gy + (y0 + y1) / 2, z, YAW); };
     // a painted wall from frame point a to b (seen from outside, a on the left)
     const wall = (a, b, gy, y0, y1, base, draw, opts) => FK.wall(L(...a), L(...b), gy, y0, y1, base, draw, opts);
     // triangles (both windings, so roofs show from below too) from frame points [s, v, y]
@@ -286,9 +286,9 @@ export function createElva(scene, world, { shadows = true } = {}) {
       // the attic windows in the gables
       for (const [s, sg] of [[A0, -1], [A1, 1]]) {
         const [x, z] = L(s + sg * 0.04, BM), [xg, zg] = L(s + sg * 0.08, BM), [xb, zb] = L(s + sg * 0.1, BM);
-        p.add(BOX(0.06, 1.15, 1.5), 0xf3f2ee, x, G7 + E7 + 1.05, z, YAW);
-        p.add(BOX(0.06, 0.95, 1.3), 0x4d5866, xg, G7 + E7 + 1.05, zg, YAW);
-        p.add(BOX(0.05, 0.95, 0.07), 0xf3f2ee, xb, G7 + E7 + 1.05, zb, YAW);
+        p.box(0.06, 1.15, 1.5, 0xf3f2ee, x, G7 + E7 + 1.05, z, YAW);
+        p.box(0.06, 0.95, 1.3, 0x4d5866, xg, G7 + E7 + 1.05, zg, YAW);
+        p.box(0.05, 0.95, 0.07, 0xf3f2ee, xb, G7 + E7 + 1.05, zb, YAW);
       }
     }
     chimney(27.6, BM, G7, 5.5, 8.0, 0.55);
@@ -361,15 +361,15 @@ export function createElva(scene, world, { shadows = true } = {}) {
     wallRun([WS, 17.4], [WS, 33.5]);
     // gate pillars and the gates: a dark metal one to the path, two leaves to the drive
     for (const [s, v] of [[-3.1, WV], [-1.7, WV], [WS, 12.45], [WS, 17.55]]) {
-      const [x, z] = L(s, v); p.add(BOX(0.34, 1.55, 0.34), COL.wall, x, h(x, z) + 0.375, z, YAW);
-      p.add(BOX(0.4, 0.06, 0.4), COL.wallCap, x, h(x, z) + 1.18, z, YAW);
+      const [x, z] = L(s, v); p.box(0.34, 1.55, 0.34, COL.wall, x, h(x, z) + 0.375, z, YAW);
+      p.box(0.4, 0.06, 0.4, COL.wallCap, x, h(x, z) + 1.18, z, YAW);
     }
     const gy = (s, v) => hl(s, v) + 0.04;
     fenceMesh(group, L(-2.9, WV), L(-1.9, WV), gy(-2.4, WV), () => 1.05, COL.gate, 3, { gap: 0.07, width: 0.035, rails: '#3d3f45' }, shadows);
     fenceMesh(group, L(WS, 12.65), L(WS, 15.0), gy(WS, 13.8), (u) => 1.1 + 0.08 * Math.sin(Math.PI * u), COL.gate, 5, { gap: 0.08, width: 0.035, rails: '#3d3f45' }, shadows);
     fenceMesh(group, L(WS, 15.0), L(WS, 17.35), gy(WS, 16.2), (u) => 1.1 + 0.08 * Math.sin(Math.PI * u), COL.gate, 7, { gap: 0.08, width: 0.035, rails: '#3d3f45' }, shadows);
     // the grey mailbox on the wall by the gate and the house number on its pillar
-    { const [x, z] = L(-3.75, WV - 0.2); p.add(BOX(0.36, 0.42, 0.2), 0x8a8d93, x, h(x, z) + 0.82, z, YAW); p.add(BOX(0.4, 0.04, 0.24), 0x6f7277, x, h(x, z) + 1.05, z, YAW); }
+    { const [x, z] = L(-3.75, WV - 0.2); p.box(0.36, 0.42, 0.2, 0x8a8d93, x, h(x, z) + 0.82, z, YAW); p.box(0.4, 0.04, 0.24, 0x6f7277, x, h(x, z) + 1.05, z, YAW); }
     { const [x, z] = L(-3.1, WV - 0.19); signPlate(group, x, h(x, z) + 1.12, z, YAW + Math.PI, 0.26, 0.16, (g, w, hh) => {
       g.fillStyle = '#f4f2ec'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#2b2d33'; g.lineWidth = 4; g.strokeRect(3, 3, w - 6, hh - 6);
       g.fillStyle = '#2b2d33'; g.font = `700 ${hh * 0.62 | 0}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('35b', w / 2, hh * 0.54);
@@ -380,7 +380,7 @@ export function createElva(scene, world, { shadows = true } = {}) {
     const pickets = (a, b, seed) => fenceMesh(group, L(...a), L(...b), gy((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), (u) => 1.05 + 0.02 * Math.sin(u * 9), COL.picket, seed, { rails: '#857a68' }, shadows);
     for (let s = 16.7, k = 0; s < 39.9; s += 2.6, k++) pickets([Math.min(s + 2.6, 40), WV], [s, WV], 20 + k);
     for (let v = WV, k = 0; v < 25.9; v += 2.6, k++) pickets([16.55, v], [16.55, Math.min(v + 2.6, 26)], 40 + k);
-    for (let s = 16.7; s <= 40.1; s += 2.6) { const [x, z] = L(Math.min(s, 40), WV); p.add(BOX(0.09, 1.2, 0.09), 0x6d6352, x, h(x, z) + 0.55, z, YAW); }
+    for (let s = 16.7; s <= 40.1; s += 2.6) { const [x, z] = L(Math.min(s, 40), WV); p.box(0.09, 1.2, 0.09, 0x6d6352, x, h(x, z) + 0.55, z, YAW); }
 
     // ================= plants and things in the gardens =================
     const Lf = K.leafy;

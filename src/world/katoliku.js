@@ -375,7 +375,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       p.add(new THREE.CylinderGeometry(0.85, 0.85, 0.1, 8), COL.white3, x, G + CRIDGE + 1.12, z);
       p.add(new THREE.ConeGeometry(0.92, 1.1, 8), 0x7f878e, x, G + CRIDGE + 1.7, z);
       p.add(new THREE.SphereGeometry(0.12, 8, 6), 0x7f878e, x, G + CRIDGE + 2.32, z);
-      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + Math.PI / 8; p.add(BOX(0.28, 0.6, 0.04), 0x39424a, x + Math.cos(a) * 0.79, G + CRIDGE + 0.5, z + Math.sin(a) * 0.79, -a + Math.PI / 2); }
+      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + Math.PI / 8; p.box(0.28, 0.6, 0.04, 0x39424a, x + Math.cos(a) * 0.79, G + CRIDGE + 0.5, z + Math.sin(a) * 0.79, -a + Math.PI / 2); }
     }
     blk(SE / 2 - 28.7, SE / 2 + 28.7, D / 2 - 0.12, D / 2 + 0.12, RIDGE - 0.05, RIDGE + 0.12, 0x8d3a2c);    // the main ridge tiles
 
@@ -446,7 +446,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       blk(28.7, 36.3, 12.6, 22.7, 3.0, 3.15, 0xe9e7e0);
       for (const [a, b] of [[[28.8, 22.6], [36.2, 22.6]], [[28.8, 12.8], [28.8, 22.6]], [[36.2, 12.8], [36.2, 22.6]]]) {
         A.bar(at(...a), at(...b), 0.06, 4.0, 4.08, 0x5b4636, G);
-        A.walk([at(...a), at(...b)], 1.2, ([x, z]) => p.add(BOX(0.06, 0.9, 0.06), 0x5b4636, x, G + 3.6, z));
+        A.walk([at(...a), at(...b)], 1.2, ([x, z]) => p.box(0.06, 0.9, 0.06, 0x5b4636, x, G + 3.6, z));
       }
     }
 
@@ -527,7 +527,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       p.add(g, 0xb34a3e, x, y, z);
       for (let k = 0; k < SEG; k++) {
         const a = (k + 0.5) / SEG * Math.PI * 2, rx = x + Math.cos(a) * MOUND.r * 1.04, rz = z + Math.sin(a) * MOUND.r * 1.04;
-        p.add(BOX(0.22, 0.32, MOUND.r * 1.04 * Math.PI * 2 / SEG + 0.04), 0x9c3f35, rx, h(rx, rz) + 0.12, rz, -a);
+        p.box(0.22, 0.32, MOUND.r * 1.04 * Math.PI * 2 / SEG + 0.04, 0x9c3f35, rx, h(rx, rz) + 0.12, rz, -a);
       }
     }
     const tube = (a, b, r = 0.05, c = COL.redTube) => {
@@ -566,9 +566,9 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     // ---- benches (white seats on black frames), bike hoops, dome bollards, black lamp posts
     const bench = (x, z, yaw) => {
       const y = h(x, z), dx = Math.cos(yaw), dz = -Math.sin(yaw), nx = -dz, nz = dx;
-      p.add(BOX(1.8, 0.06, 0.45), COL.bench, x, y + 0.45, z, yaw);
-      p.add(BOX(1.8, 0.38, 0.05), COL.bench, x - nx * 0.22, y + 0.72, z - nz * 0.22, yaw);
-      for (const e of [-0.75, 0.75]) p.add(BOX(0.06, 0.45, 0.45), COL.iron, x + dx * e, y + 0.22, z + dz * e, yaw);
+      p.box(1.8, 0.06, 0.45, COL.bench, x, y + 0.45, z, yaw);
+      p.box(1.8, 0.38, 0.05, COL.bench, x - nx * 0.22, y + 0.72, z - nz * 0.22, yaw);
+      for (const e of [-0.75, 0.75]) p.box(0.06, 0.45, 0.45, COL.iron, x + dx * e, y + 0.22, z + dz * e, yaw);
     };
     for (const [x, z] of [[724, 2618.4], [745.4, 2598.6], [752, 2608.6], [699.8, 2635.1], [704.9, 2646.7], [714.2, 2654.0], [723.7, 2647.6]]) bench(x, z, S.YAW + Math.PI / 2 + (x * 7 % 1) * 0.2);
     for (const s0 of [12.6, 47.0]) for (let k = 0; k < 8; k++) {
@@ -612,8 +612,8 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
         for (let k = 0; k <= n; k++) {
           if (k === n && i < pts.length - 2) continue;
           const q = [a[0] + ux * len * k / n, a[1] + uz * len * k / n], y = h(...q);
-          p.add(BOX(0.38, 1.5, 0.38), COL.post, q[0], y + 0.75, q[1], yaw);
-          p.add(BOX(0.46, 0.08, 0.46), COL.cap, q[0], y + 1.54, q[1], yaw);
+          p.box(0.38, 1.5, 0.38, COL.post, q[0], y + 0.75, q[1], yaw);
+          p.box(0.46, 0.08, 0.46, COL.cap, q[0], y + 1.54, q[1], yaw);
           solids.push({ x: q[0], z: q[1], yaw, hx: 0.2, hz: 0.2 });
         }
       }
@@ -624,8 +624,8 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       const ga = [719.4, 2664.5], gb = [723.6, 2670.3], ux = (gb[0] - ga[0]) / 7.15, uz = (gb[1] - ga[1]) / 7.15;
       for (const q of [ga, gb]) {
         const y = h(...q);
-        p.add(BOX(0.5, 1.75, 0.5), COL.post, q[0], y + 0.87, q[1], Math.atan2(-uz, ux));
-        p.add(BOX(0.6, 0.1, 0.6), COL.cap, q[0], y + 1.8, q[1], Math.atan2(-uz, ux));
+        p.box(0.5, 1.75, 0.5, COL.post, q[0], y + 0.87, q[1], Math.atan2(-uz, ux));
+        p.box(0.6, 0.1, 0.6, COL.cap, q[0], y + 1.8, q[1], Math.atan2(-uz, ux));
         solids.push({ x: q[0], z: q[1], yaw: Math.atan2(-uz, ux), hx: 0.27, hz: 0.27 });
       }
       // the leaves stand open, turned in against the yard side of the fence
@@ -634,11 +634,11 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       pk.panel([ga[0] + nx * 0.35, ga[1] + nz * 0.35], [ga[0] + nx * 0.35 - ux * 2.2, ga[1] + nz * 0.35 - uz * 2.2], ya + 0.08, 1.3);
       pk.panel([gb[0] + nx * 0.35, gb[1] + nz * 0.35], [gb[0] + nx * 0.35 + ux * 2.2, gb[1] + nz * 0.35 + uz * 2.2], yb + 0.08, 1.3);
       const mb = [ga[0] - nx * 0.28 + ux * 0.0, ga[1] - nz * 0.28];
-      p.add(BOX(0.36, 0.42, 0.18), 0x6b4130, mb[0], ya + 1.1, mb[1], Math.atan2(-uz, ux));
-      p.add(BOX(0.4, 0.05, 0.22), 0x4f2f23, mb[0], ya + 1.33, mb[1], Math.atan2(-uz, ux));
+      p.box(0.36, 0.42, 0.18, 0x6b4130, mb[0], ya + 1.1, mb[1], Math.atan2(-uz, ux));
+      p.box(0.4, 0.05, 0.22, 0x4f2f23, mb[0], ya + 1.33, mb[1], Math.atan2(-uz, ux));
       const pl = [ga[0] - ux * 2.5 - nx * 0.12, ga[1] - uz * 2.5 - nz * 0.12];
-      p.add(BOX(0.42, 0.55, 0.03), 0x22252c, pl[0], ya + 0.95, pl[1], Math.atan2(-uz, ux));
-      p.add(BOX(0.2, 0.26, 0.035), 0xb79a52, pl[0], ya + 1.0, pl[1], Math.atan2(-uz, ux));
+      p.box(0.42, 0.55, 0.03, 0x22252c, pl[0], ya + 0.95, pl[1], Math.atan2(-uz, ux));
+      p.box(0.2, 0.26, 0.035, 0xb79a52, pl[0], ya + 1.0, pl[1], Math.atan2(-uz, ux));
     }
     // the pavement and verge along Oru on the school's side, the globe lamps
     {
@@ -669,7 +669,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       pk.panel(BOARD[i], BOARD[i + 1], h(...BOARD[i]) - 0.05, 1.45, 'board');
       const len = Math.hypot(BOARD[i + 1][0] - BOARD[i][0], BOARD[i + 1][1] - BOARD[i][1]);
       solids.push({ x: (BOARD[i][0] + BOARD[i + 1][0]) / 2, z: (BOARD[i][1] + BOARD[i + 1][1]) / 2, yaw: Math.atan2(-(BOARD[i + 1][1] - BOARD[i][1]), BOARD[i + 1][0] - BOARD[i][0]), hx: len / 2, hz: 0.06 });
-      A.walk([BOARD[i], BOARD[i + 1]], 2.4, ([x, z]) => p.add(BOX(0.1, 1.55, 0.1), 0x8a5a2c, x, h(x, z) + 0.75, z));
+      A.walk([BOARD[i], BOARD[i + 1]], 2.4, ([x, z]) => p.box(0.1, 1.55, 0.1, 0x8a5a2c, x, h(x, z) + 0.75, z));
     }
     {
       // the bins stand in a row along the lane, between it and the mesh fence
@@ -680,11 +680,11 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
         const [x, z] = F.at(t, 0), y = h(x, z);
         const ribs = new THREE.CylinderGeometry(0.72, 0.72, 1.25, 20, 1, true);
         p.add(ribs, COL.bin, x, y + 0.62, z);
-        for (let k = 0; k < 20; k += 2) { const a = k / 20 * Math.PI * 2; p.add(BOX(0.07, 1.2, 0.05), 0x4a4e54, x + Math.cos(a) * 0.73, y + 0.62, z + Math.sin(a) * 0.73, -a); }
+        for (let k = 0; k < 20; k += 2) { const a = k / 20 * Math.PI * 2; p.box(0.07, 1.2, 0.05, 0x4a4e54, x + Math.cos(a) * 0.73, y + 0.62, z + Math.sin(a) * 0.73, -a); }
         p.add(new THREE.CylinderGeometry(0.74, 0.74, 0.07, 20), 0x9aa0a6, x, y + 0.1, z);
         p.add(new THREE.SphereGeometry(0.76, 20, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.42, 1), COL.lid, x, y + 1.24, z);
-        p.add(BOX(0.5, 0.1, 0.12), 0x26292d, x + n[0] * 0.45, y + 1.5, z + n[1] * 0.45, Math.atan2(-d[1], d[0]));
-        p.add(BOX(0.22, 0.32, 0.02), t ? 0xd9c43a : 0x5aa055, x - n[0] * 0.735, y + 0.75, z - n[1] * 0.735, Math.atan2(-n[1], n[0]) + Math.PI / 2);
+        p.box(0.5, 0.1, 0.12, 0x26292d, x + n[0] * 0.45, y + 1.5, z + n[1] * 0.45, Math.atan2(-d[1], d[0]));
+        p.box(0.22, 0.32, 0.02, t ? 0xd9c43a : 0x5aa055, x - n[0] * 0.735, y + 0.75, z - n[1] * 0.735, Math.atan2(-n[1], n[0]) + Math.PI / 2);
         solids.push({ x, z, yaw: 0, hx: 0.7, hz: 0.7 });
       }
     }

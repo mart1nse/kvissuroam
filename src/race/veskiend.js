@@ -75,10 +75,10 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
         if (!free(mx, mz)) continue;
         for (let d = 0.07; d < l; d += 0.135) {
           const x = a[0] + ux * d, z = a[1] + uz * d;
-          p.add(BOX(0.12, FENCE.height, 0.025), (Math.round(d * 7.4) + k) % 5 ? FENCE.colour : FENCE.dark, x, h(x, z) + 0.06 + FENCE.height / 2, z, yaw);
+          p.box(0.12, FENCE.height, 0.025, (Math.round(d * 7.4) + k) % 5 ? FENCE.colour : FENCE.dark, x, h(x, z) + 0.06 + FENCE.height / 2, z, yaw);
         }
-        for (const y of [0.3, FENCE.height - 0.2]) p.add(BOX(l, 0.08, 0.04), FENCE.dark, mx + uz * 0.03, h(mx, mz) + y, mz - ux * 0.03, yaw);
-        p.add(BOX(0.1, FENCE.height + 0.12, 0.1), FENCE.dark, a[0], h(a[0], a[1]) + (FENCE.height + 0.12) / 2, a[1], yaw);
+        for (const y of [0.3, FENCE.height - 0.2]) p.box(l, 0.08, 0.04, FENCE.dark, mx + uz * 0.03, h(mx, mz) + y, mz - ux * 0.03, yaw);
+        p.box(0.1, FENCE.height + 0.12, 0.1, FENCE.dark, a[0], h(a[0], a[1]) + (FENCE.height + 0.12) / 2, a[1], yaw);
         solids.push({ x: mx, z: mz, yaw, hx: l / 2, hz: 0.08 });
       }
     }
@@ -100,7 +100,7 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
         const a = ring[k], b = ring[k + 1], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
         if (l < 0.05) continue;
         const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
-        p.add(BOX(l + 0.04, 0.14, 0.14), COL.kerb, mx, h(mx, mz) + 0.07, mz, Math.atan2(-dz, dx));
+        p.box(l + 0.04, 0.14, 0.14, COL.kerb, mx, h(mx, mz) + 0.07, mz, Math.atan2(-dz, dx));
       }
       const L = K.leafy, wide = (t) => lat1(t) - lat0;
       const spot = (t, d) => { const q = T(t, hwAt(t) + lat0 + d); return [q[0], h(q[0], q[1]), q[1]]; };
@@ -167,7 +167,7 @@ export function createVeskiEnd(world, group, { shadows = true } = {}) {
       for (const bi of ISLAND.benches) {
         const k = Math.floor(bi), [tx, tz] = track.tan[k], rx = -tz, rz = tx, yaw = Math.atan2(-tz, tx);
         const c = T(bi, hwAt(bi) + lat1(bi) - 0.42), y0 = h(c[0], c[1]) + 0.08;
-        const part = (w, hh, d, hex, a, b, yy) => p.add(BOX(w, hh, d), hex, c[0] + tx * a + rx * b, y0 + yy, c[1] + tz * a + rz * b, yaw);
+        const part = (w, hh, d, hex, a, b, yy) => p.box(w, hh, d, hex, c[0] + tx * a + rx * b, y0 + yy, c[1] + tz * a + rz * b, yaw);
         for (const b of [0.02, 0.15, 0.28]) part(1.7, 0.04, 0.11, COL.bench, 0, b, 0.45);
         for (const yy of [0.62, 0.77]) part(1.7, 0.11, 0.035, COL.bench, 0, -0.1, yy);
         for (const a of [-0.72, 0.72]) {

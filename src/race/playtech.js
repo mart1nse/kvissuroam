@@ -260,8 +260,8 @@ export function createPlaytech(world, group, { shadows = true } = {}) {
     // ---- the poster stand on the plaza: a lit poster on both sides
     {
       const [x, z] = POSTER, y = h(x, z), ux = 0.69, uz = 0.72, yaw = Math.atan2(-uz, ux);
-      p.add(BOX(0.5, 0.5, 0.3), 0x2a2b33, x, y + 0.25, z, yaw);
-      p.add(BOX(1.4, 2.05, 0.2), 0x2a2b33, x, y + 1.5, z, yaw);
+      p.box(0.5, 0.5, 0.3, 0x2a2b33, x, y + 0.25, z, yaw);
+      p.box(1.4, 2.05, 0.2, 0x2a2b33, x, y + 1.5, z, yaw);
       const tex = facade(1.2, 0, 1.8, 120, (P) => {
         P.grad(0, 0, 1.2, 1.8, '#ff5fb0', '#7a2fd0');
         P.arc(0.6, 0.78, 0.5, '#ffd27a'); P.r(0, 0, 1.2, 0.62, '#2a1650');
@@ -378,8 +378,8 @@ export function createPlaytech(world, group, { shadows = true } = {}) {
           quad(prevTop > top ? A2 : A, prevTop > top ? A : A2, Math.min(prevTop, top), Math.min(prevTop, top), Math.max(prevTop, top), 0, 0.72);
         }
         const [cx, cz] = at(m, 0);
-        p.add(BOX(s1 - s + 0.06, 0.12, 0.84), 0x9a9288, cx, top + 0.05, cz, Math.atan2(-uz, ux));
-        p.add(BOX(s1 - s, 1.0, 0.7), 0x7d766f, cx, top - 0.5, cz, Math.atan2(-uz, ux));
+        p.box(s1 - s + 0.06, 0.12, 0.84, 0x9a9288, cx, top + 0.05, cz, Math.atan2(-uz, ux));
+        p.box(s1 - s, 1.0, 0.7, 0x7d766f, cx, top - 0.5, cz, Math.atan2(-uz, ux));
         // the hillside from the back of the wall's top down to the ground 5.5 m behind it (the strip just behind
         // the wall is levelled with the street so that the pavement meets the wall square)
         {

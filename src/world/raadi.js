@@ -170,7 +170,7 @@ export function createRaadi(scene, world, { shadows = true } = {}) {
     for (let k = 0; k < 3; k++) {
       const [x, z] = FOXLOT.at(40 + k * 2.2, 21);
       p.add(new THREE.CylinderGeometry(0.05, 0.07, 9, 8), 0xe8e8ea, x, h(x, z) + 4.5, z);
-      p.add(BOX(0.03, 1.2, 1.9), [0xffffff, 0x2c4f9e, 0x2b2b2b][k], x + FOXLOT.U[0] * 0.95, h(x, z) + 8.2, z + FOXLOT.U[1] * 0.95, Math.atan2(-FOXLOT.U[1], FOXLOT.U[0]) + Math.PI / 2);
+      p.box(0.03, 1.2, 1.9, [0xffffff, 0x2c4f9e, 0x2b2b2b][k], x + FOXLOT.U[0] * 0.95, h(x, z) + 8.2, z + FOXLOT.U[1] * 0.95, Math.atan2(-FOXLOT.U[1], FOXLOT.U[0]) + Math.PI / 2);
     }
     A.box(FOXLOT, 4, 22, 2.6, 2.2, 0, 2.4, 0xeeeeea);
     // the playground by 9/2: a sand ring with a play tower

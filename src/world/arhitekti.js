@@ -196,7 +196,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     const h = (x, z) => world.heightAt(x, z);
     const F = facadeKit(group, shadows);
     // a box by its extents; y0, y1 are heights above gy
-    const block = (x0, x1, z0, z1, gy, y0, y1, c) => p.add(BOX(x1 - x0, y1 - y0, z1 - z0), c, (x0 + x1) / 2, gy + (y0 + y1) / 2, (z0 + z1) / 2);
+    const block = (x0, x1, z0, z1, gy, y0, y1, c) => p.box(x1 - x0, y1 - y0, z1 - z0, c, (x0 + x1) / 2, gy + (y0 + y1) / 2, (z0 + z1) / 2);
     const bar = (a, b, t, c) => {
       const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), d = vb.clone().sub(va), len = d.length();
       const g = BOX(t, len, t);
@@ -394,7 +394,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     for (let z = Z0; z < Z1; z += 1) {
       const a = R.at(z, KERB + 0.07), b = R.at(z + 1, KERB + 0.07), y = yR(z + 0.5, KERB);
       const top = low(z + 0.5) ? 0.05 : 0.12;
-      p.add(BOX(0.15, top + 0.12, 0.98), COL.kerb, (a[0] + b[0]) / 2, y + (top - 0.12) / 2, (a[1] + b[1]) / 2, -Math.atan2(b[0] - a[0], b[1] - a[1]));
+      p.box(0.15, top + 0.12, 0.98, COL.kerb, (a[0] + b[0]) / 2, y + (top - 0.12) / 2, (a[1] + b[1]) / 2, -Math.atan2(b[0] - a[0], b[1] - a[1]));
     }
     // west side: the worn sandy edge, then grass under the trees
     lay(TX.sand, R, Z0, Z1, WEST - 0.85, WEST - 0.05, 0.05);
@@ -422,7 +422,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     K.ribbon(R, 4177.4, 4190, 11.7, 19.5, 'lawn', true);
     // a manhole in 24's slabs, a drain grid at the kerb
     for (const [z, lat] of [[4143.4, 3.1]]) { const [x, zz] = R.at(z, lat); p.add(new THREE.CylinderGeometry(0.33, 0.33, 0.03, 16), 0x5c5862, x, h(x, zz) + 0.1, zz); }
-    { const [x, z] = R.at(4160.2, KERB - 0.3); p.add(BOX(0.4, 0.03, 0.6), 0x3e3c44, x, h(x, z) + 0.035, z); }
+    { const [x, z] = R.at(4160.2, KERB - 0.3); p.box(0.4, 0.03, 0.6, 0x3e3c44, x, h(x, z) + 0.035, z); }
 
     // ---- 24's front: the low rubble edging, the tall hedge, the brown picket gate and its grey leaf
     const stones = rnd(5);
@@ -442,7 +442,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
           const [x, zz] = R.at(z, mid + (r() - 0.5) * wild * d);
           const k = 1 + (r() - 0.5) * wild, t = tint.map((v) => v * (0.92 + r() * 0.14));
           if (L.ok) L.bush(x, h(x, zz) - 0.06 + lift, zz, w * k, th * k, r() * 6, t, Math.max(d * 1.15, 1.2) * k);
-          else p.add(BOX(d, th, w * 0.42), 0x4f8a4a, x, h(x, zz) + lift + th / 2, zz);
+          else p.box(d, th, w * 0.42, 0x4f8a4a, x, h(x, zz) + lift + th / 2, zz);
         }
       }
     };
@@ -465,7 +465,7 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     for (const [x, z, s] of [[-970.2, 4155.4, 1.2], [-981.5, 4151.6, 0.9]]) if (L.ok) L.bush(x, h(x, z) - 0.05, z, s * 1.3, s, x, [0.85, 1, 0.8], s);
     p.add(new THREE.CylinderGeometry(0.52, 0.42, 0.32, 18).scale(1.4, 1, 1), COL.tub, -970.8, h(-970.8, 4153.9) + 0.16, 4153.9);
     { const x = -981.3, z = 4150.95, y = h(x, z);
-      p.add(BOX(0.58, 0.98, 0.72), COL.bin, x, y + 0.49, z); p.add(BOX(0.62, 0.06, 0.8), 0x1d1e21, x, y + 1.0, z + 0.02);
+      p.box(0.58, 0.98, 0.72, COL.bin, x, y + 0.49, z); p.box(0.62, 0.06, 0.8, 0x1d1e21, x, y + 1.0, z + 0.02);
       for (const dz of [-0.24, 0.24]) p.add(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10).rotateX(Math.PI / 2), 0x111114, x + 0.24, y + 0.1, z + dz); }
 
     // ---- the gates and fences
@@ -476,8 +476,8 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     pickets(at(4141.25), at(4143.45), gy(4142), (u) => 1.28 - 0.07 * Math.sin(Math.PI * u), COL.picket, 3);
     pickets(at(4143.45), at(4145.65), gy(4144.5), (u) => 1.28 - 0.07 * Math.sin(Math.PI * u), COL.picket, 5);
     pickets(at(4145.7), at(4147.35), gy(4146.5), (u) => 1.22 + 0.05 * Math.sin(Math.PI * u), COL.pickedGrey, 7, { rails: '#7d776e' });
-    for (const z of [4141.15, 4143.45, 4145.68, 4147.4]) { const [x, zz] = at(z); p.add(BOX(0.1, 1.42, 0.1), z === 4145.68 ? 0x6f5c4b : 0x4f3328, x, gy(z) + 0.66, zz); }
-    { const [x, z] = at(4142.75, 4.13); p.add(BOX(0.14, 0.32, 0.36), COL.mailRed, x, gy(4142.75) + 1.02, z); p.add(BOX(0.16, 0.04, 0.4), 0x6e2022, x, gy(4142.75) + 1.19, z); }
+    for (const z of [4141.15, 4143.45, 4145.68, 4147.4]) { const [x, zz] = at(z); p.box(0.1, 1.42, 0.1, z === 4145.68 ? 0x6f5c4b : 0x4f3328, x, gy(z) + 0.66, zz); }
+    { const [x, z] = at(4142.75, 4.13); p.box(0.14, 0.32, 0.36, COL.mailRed, x, gy(4142.75) + 1.02, z); p.box(0.16, 0.04, 0.4, 0x6e2022, x, gy(4142.75) + 1.19, z); }
     { const [x, z] = at(4142.0, 4.12); signPlate(group, x, gy(4142) + 0.95, z, Math.PI / 2, 0.34, 0.2, (g, w, hh) => {
       g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, hh); g.fillStyle = '#c0282d'; g.fillRect(0, 0, w, hh * 0.34);
       g.fillStyle = '#ffffff'; g.font = `700 ${hh * 0.26 | 0}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('WARNING', w / 2, hh * 0.18);
@@ -485,8 +485,8 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
     }); }
     // 26: the weathered wooden gate with its arched top, the red post and the number plate
     pickets(at(4149.4, 4.3), at(4150.32, 4.3), gy(4149.9, 4.3), (u) => 1.42 + 0.14 * Math.sin(Math.PI * u), COL.pickedGrey, 9, { gap: 0.012, width: 0.1, rails: '#857d72' });
-    { const [x, z] = at(4149.3, 4.3); p.add(BOX(0.1, 1.62, 0.1), COL.gateRed, x, gy(4149.3) + 0.75, z); }
-    { const [x, z] = at(4150.4, 4.3); p.add(BOX(0.1, 1.5, 0.1), 0x7b7266, x, gy(4150.4) + 0.7, z); }
+    { const [x, z] = at(4149.3, 4.3); p.box(0.1, 1.62, 0.1, COL.gateRed, x, gy(4149.3) + 0.75, z); }
+    { const [x, z] = at(4150.4, 4.3); p.box(0.1, 1.5, 0.1, 0x7b7266, x, gy(4150.4) + 0.7, z); }
     { const [x, z] = at(4149.85, 4.24); signPlate(group, x, gy(4149.9) + 1.18, z, Math.PI / 2, 0.22, 0.12, (g, w, hh) => {
       g.fillStyle = '#9fa2a6'; g.fillRect(0, 0, w, hh); g.fillStyle = '#2a2c30'; g.font = `700 ${hh * 0.7 | 0}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('26', w / 2, hh * 0.54);
     }); }
@@ -498,11 +498,11 @@ export function createArhitekti(scene, world, { shadows = true } = {}) {
       for (const q of [A, B]) bar([q[0], ya, q[1]], [q[0], ya + 1.25, q[1]], 0.05, COL.rust);
       const m = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2]; bar([m[0], ya, m[1]], [m[0], ya + 1.22, m[1]], 0.03, COL.rust);
     }
-    for (const z of [4166.25, 4169.65]) { const [x, zz] = at(z, 4.15); p.add(BOX(0.08, 1.45, 0.08), COL.rust, x, gy(z, 4.15) + 0.68, zz); }
-    { const [x, z] = at(4174.45, 4.55), y = gy(4174.45, 4.55); bar([x, y - 0.1, z], [x, y + 1.0, z], 0.06, 0x3a3a3e); p.add(BOX(0.36, 0.44, 0.24), COL.mailBlack, x, y + 1.18, z); }
+    for (const z of [4166.25, 4169.65]) { const [x, zz] = at(z, 4.15); p.box(0.08, 1.45, 0.08, COL.rust, x, gy(z, 4.15) + 0.68, zz); }
+    { const [x, z] = at(4174.45, 4.55), y = gy(4174.45, 4.55); bar([x, y - 0.1, z], [x, y + 1.0, z], 0.06, 0x3a3a3e); p.box(0.36, 0.44, 0.24, COL.mailBlack, x, y + 1.18, z); }
 
     // ---- the west verge: a grey cabinet by the lamp across from 26
-    { const [x, z] = R.at(4157.0, -4.45), y = h(x, z); p.add(BOX(0.32, 0.95, 0.42), COL.cabinet, x, y + 0.47, z); p.add(BOX(0.36, 0.05, 0.46), 0x9ea2a8, x, y + 0.97, z); }
+    { const [x, z] = R.at(4157.0, -4.45), y = h(x, z); p.box(0.32, 0.95, 0.42, COL.cabinet, x, y + 0.47, z); p.box(0.36, 0.05, 0.46, 0x9ea2a8, x, y + 0.97, z); }
 
     // ---- apples in the apple trees
     const apples = [];
@@ -558,8 +558,11 @@ function corrugatedTex() {
     for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${r() < 0.5 ? '90,80,60' : '255,255,255'},${0.04 + r() * 0.06})`; g.fillRect(r() * w, r() * w, 4 + r() * 30, 10 + r() * 60); }
   });
 }
-// ground textures: [texture, tile metres]
+// ground textures: [texture, tile metres]. Painted once and shared by every place that lays them (each place
+// used to paint its own set: six pictures and about 40 ms a place, and six more on the graphics card)
+let GROUND = null;
 export function groundTextures() {
+  if (GROUND) return GROUND;
   const speck = (base, n, spread, seed, dots = 1.6) => (g, w) => {
     const r = rnd(seed);
     g.fillStyle = `rgb(${base.join(',')})`; g.fillRect(0, 0, w, w);
@@ -569,7 +572,7 @@ export function groundTextures() {
       g.fillRect(r() * w, r() * w, dots + r() * dots, dots + r() * dots);
     }
   };
-  return {
+  return (GROUND = {
     gravel: { map: canvasTex(256, 256, speck([196, 186, 168], 9000, 0.45, 2, 2.2)), tile: 2 },
     sand: { map: canvasTex(256, 256, (g, w) => {
       speck([190, 176, 152], 7000, 0.35, 4)(g, w);
@@ -604,7 +607,7 @@ export function groundTextures() {
       }
       for (let k = 0; k < 12; k++) { g.fillStyle = 'rgba(96,128,80,0.5)'; g.fillRect(r() * w, (r() * 16 | 0) * 16, 8 + r() * 20, 2); }
     }), tile: 1.6 },
-  };
+  });
 }
 // textured ground strips laid in a road frame (like streetKit's ribbon, but with these textures)
 export function groundLayer(world, group) {

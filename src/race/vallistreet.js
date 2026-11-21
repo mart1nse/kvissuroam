@@ -17,6 +17,7 @@ import { BOX, rnd, PARKING } from './landmarks.js';
 import { streetKit, wallOf, addHouseColours } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
 import { paintScale } from '../world/paintscale.js';
+import { paintBricks } from '../world/houseskin.js';
 
 // wall lines from the LOD2 model (game x, z), the street on the right-hand side going a -> b;
 // y: ground at the wall, top: the wall's top (world y)
@@ -149,17 +150,7 @@ export function facade(wm, y0, y1, ppm, draw) {
       for (let k = 1; k <= rails; k++) { const y = ya + (yb - ya) * k / (rails + 1); P.r(x0, y - fw / 2, x1, y + fw / 2, frame); }
     },
     // brickwork: courses of 9 cm, each brick its own shade
-    brick(x0, ya, x1, yb, rgb, seed = 1) {
-      const r = rnd(seed);
-      P.r(x0, ya, x1, yb, tone(rgb, 0.8));
-      for (let y = ya, row = 0; y < yb; y += 0.09, row++) {
-        for (let x = x0 - (row % 2) * 0.13; x < x1; x += 0.26) {
-          c.fillStyle = tone(rgb, 0.9 + r() * 0.2);
-          const xa = Math.max(x0, x + 0.012), xb = Math.min(x1, x + 0.25);
-          if (xb > xa) c.fillRect(X(xa), Y(Math.min(yb, y + 0.078)), (xb - xa) * ppm, Math.max(1, 0.066 * ppm));
-        }
-      }
-    },
+    brick(x0, ya, x1, yb, rgb, seed = 1) { paintBricks(c, X, Y, ppm, [0, 0, cv.width, cv.height], x0, ya, x1, yb, rgb, seed); },
     // field stones in mortar
     rubble(x0, ya, x1, yb, seed = 1) {
       const r = rnd(seed);
@@ -566,8 +557,8 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
     {
       const a = WALLS.L1.b, b = WALLS.H3.a, dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
       const y = Math.min(h(a[0], a[1] + 0.5), h(b[0], b[1] + 0.5));
-      p.add(BOX(l, 2.0, 0.08), 0xc4c896, (a[0] + b[0]) / 2, y + 1.0, (a[1] + b[1]) / 2 + 0.05, Math.atan2(-dz, dx));
-      for (let k = 0; k <= 5; k++) p.add(BOX(0.04, 2.0, 0.1), 0xa9ae80, a[0] + dx * k / 5, y + 1.0, a[1] + dz * k / 5 + 0.06, Math.atan2(-dz, dx));
+      p.box(l, 2.0, 0.08, 0xc4c896, (a[0] + b[0]) / 2, y + 1.0, (a[1] + b[1]) / 2 + 0.05, Math.atan2(-dz, dx));
+      for (let k = 0; k <= 5; k++) p.box(0.04, 2.0, 0.1, 0xa9ae80, a[0] + dx * k / 5, y + 1.0, a[1] + dz * k / 5 + 0.06, Math.atan2(-dz, dx));
     }
     // the painted gable: a theatre stage full of people, in faded colours
     skin(W.M1, (P) => {
@@ -638,8 +629,8 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
         let z = 3104.6;
         while (z > 3099 && world.surfaceAt && world.surfaceAt(x, z) === 0) z -= 0.4;
         const y = h(x, z), tall = wd > 1 ? 1.15 : 0.95;
-        p.add(BOX(wd, tall, 1.05), hex, x, y + 0.2 + tall / 2, z, 0);
-        p.add(BOX(wd + 0.08, 0.1, 1.13), wd > 1 ? COL.binLid : hex, x, y + 0.25 + tall, z, 0);
+        p.box(wd, tall, 1.05, hex, x, y + 0.2 + tall / 2, z, 0);
+        p.box(wd + 0.08, 0.1, 1.13, wd > 1 ? COL.binLid : hex, x, y + 0.25 + tall, z, 0);
         for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) p.add(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 8).rotateZ(Math.PI / 2), COL.iron, x + ox * (wd / 2 - 0.15), y + 0.1, z + oz * 0.4, 0);
         solids.push({ x, z, yaw: 0, hx: wd / 2, hz: 0.55 });
       }
@@ -680,7 +671,7 @@ export function createValliStreet(world, group, { shadows = true } = {}) {
             pos.push(pt[0], y, pt[1]); uv.push((run + (pt === B ? l : 0)) / 8, v);
           }
           // coping
-          p.add(BOX(l + 0.05, 0.1, 0.8), 0x9a9288, mx, (ya + yb) / 2 + 1.76, mz, Math.atan2(-dz, dx));
+          p.box(l + 0.05, 0.1, 0.8, 0x9a9288, mx, (ya + yb) / 2 + 1.76, mz, Math.atan2(-dz, dx));
           run += l;
         }
       }

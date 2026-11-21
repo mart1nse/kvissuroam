@@ -36,13 +36,13 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
   // a box in a frame: centre (s, v), size ls along s, lv across, from y0 to y1 above the ground there
   function box(F, s, v, ls, lv, y0, y1, c, gy = null) {
     const [x, z] = F.at(s, v), g = gy ?? h(x, z);
-    p.add(BOX(ls, y1 - y0, lv), c, x, g + (y0 + y1) / 2, z, F.YAW);
+    p.box(ls, y1 - y0, lv, c, x, g + (y0 + y1) / 2, z, F.YAW);
   }
   // a box between two map points (a wall, a rail, a kerb): thickness t, from y0 to y1 above the ground
   function bar(a, b, t, y0, y1, c, gy = null) {
     const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
     const x = (a[0] + b[0]) / 2, z = (a[1] + b[1]) / 2, g = gy ?? (h(a[0], a[1]) + h(b[0], b[1])) / 2;
-    p.add(BOX(len, y1 - y0, t), c, x, g + (y0 + y1) / 2, z, Math.atan2(-dz, dx));
+    p.box(len, y1 - y0, t, c, x, g + (y0 + y1) / 2, z, Math.atan2(-dz, dx));
   }
   // points every `step` metres along a polyline, with the direction there
   function walk(pts, step, fn) {
@@ -77,7 +77,7 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
       const a = pts[i], b = pts[i + 1];
       const y0 = Math.min(h(a[0], a[1]), h(b[0], b[1])) - 0.02;
       fenceMesh(group, a, b, y0, () => height, rgb, 7 + i, opts, shadows);
-      for (const q of [a, b]) p.add(BOX(0.09, height + 0.08, 0.09), 0x4b4a4c, q[0], h(q[0], q[1]) + (height + 0.08) / 2 - 0.02, q[1]);
+      for (const q of [a, b]) p.box(0.09, height + 0.08, 0.09, 0x4b4a4c, q[0], h(q[0], q[1]) + (height + 0.08) / 2 - 0.02, q[1]);
     }
   }
   // a welded mesh fence along a polyline, posts every 2.5 m
@@ -92,12 +92,12 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
   function gate(a, b, height = 1.3, c = 0x3d3f45) {
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]), g = Math.min(h(a[0], a[1]), h(b[0], b[1]));
     bar(a, b, 0.05, 0.1, 0.16, c, g); bar(a, b, 0.05, height - 0.06, height, c, g);
-    for (let k = 0; k <= Math.round(len / 0.13); k++) { const q = lerp(a, b, k / Math.round(len / 0.13)); p.add(BOX(0.025, height - 0.1, 0.025), c, q[0], g + 0.05 + (height - 0.1) / 2, q[1]); }
-    for (const q of [a, b]) p.add(BOX(0.1, height + 0.15, 0.1), c, q[0], g + (height + 0.15) / 2, q[1]);
+    for (let k = 0; k <= Math.round(len / 0.13); k++) { const q = lerp(a, b, k / Math.round(len / 0.13)); p.box(0.025, height - 0.1, 0.025, c, q[0], g + 0.05 + (height - 0.1) / 2, q[1]); }
+    for (const q of [a, b]) p.box(0.1, height + 0.15, 0.1, c, q[0], g + (height + 0.15) / 2, q[1]);
   }
   // a W-beam steel guard rail along a polyline: posts every 2 m, the beam at 0.45 to 0.75 m
   function guardrail(pts) {
-    walk(pts, 2, ([x, z]) => p.add(BOX(0.12, 0.8, 0.1), 0x8d9096, x, h(x, z) + 0.4, z));
+    walk(pts, 2, ([x, z]) => p.box(0.12, 0.8, 0.1, 0x8d9096, x, h(x, z) + 0.4, z));
     for (let i = 0; i < pts.length - 1; i++) {
       bar(pts[i], pts[i + 1], 0.06, 0.45, 0.6, 0xc4c8ce);
       bar(pts[i], pts[i + 1], 0.07, 0.6, 0.75, 0xb4b8be);
@@ -122,7 +122,7 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
     const y = h(x, z);
     p.add(new THREE.CylinderGeometry(r, r, 0.05, 24), 0x1c1d21, x, y + 0.85, z);
     p.add(new THREE.TorusGeometry(r, 0.07, 6, 24).rotateX(Math.PI / 2), 0x2f6f4a, x, y + 0.88, z);
-    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; p.add(BOX(0.05, 2.6, 0.05), 0x2a2b2f, x + Math.cos(a) * r, y + 1.3, z + Math.sin(a) * r); }
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; p.box(0.05, 2.6, 0.05, 0x2a2b2f, x + Math.cos(a) * r, y + 1.3, z + Math.sin(a) * r); }
     p.add(new THREE.TorusGeometry(r, 0.03, 4, 24).rotateX(Math.PI / 2), 0x2a2b2f, x, y + 2.55, z);
   }
   // a small greenhouse (glazed box with a ridge) in a frame
@@ -136,7 +136,7 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
   // a garden pavilion: eight sided, open, with a pointed roof
   function gazebo(x, z, r = 1.6, c = 0xece9e2, roof = 0x6b4b3e) {
     const y = h(x, z);
-    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; p.add(BOX(0.12, 2.2, 0.12), c, x + Math.cos(a) * r, y + 1.1, z + Math.sin(a) * r); }
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; p.box(0.12, 2.2, 0.12, c, x + Math.cos(a) * r, y + 1.1, z + Math.sin(a) * r); }
     p.add(new THREE.CylinderGeometry(r, r, 0.5, 8, 1, true), c, x, y + 0.25, z);
     p.add(new THREE.ConeGeometry(r * 1.2, 1.3, 8), roof, x, y + 2.85, z);
   }
@@ -158,8 +158,8 @@ export function areaKit(world, group, { shadows = true, fenceColour = 0x6b6d72 }
   function lamp(x, z, dir, hh = 8, reach = 1.2) {
     const y = h(x, z);
     p.add(new THREE.CylinderGeometry(0.06, 0.1, hh, 8), 0x8d9096, x, y + hh / 2, z);
-    p.add(BOX(reach, 0.08, 0.08), 0x8d9096, x + dir[0] * reach / 2, y + hh, z + dir[1] * reach / 2, Math.atan2(-dir[1], dir[0]));
-    p.add(BOX(0.6, 0.12, 0.28), 0x6d7076, x + dir[0] * reach, y + hh - 0.04, z + dir[1] * reach, Math.atan2(-dir[1], dir[0]));
+    p.box(reach, 0.08, 0.08, 0x8d9096, x + dir[0] * reach / 2, y + hh, z + dir[1] * reach / 2, Math.atan2(-dir[1], dir[0]));
+    p.box(0.6, 0.12, 0.28, 0x6d7076, x + dir[0] * reach, y + hh - 0.04, z + dir[1] * reach, Math.atan2(-dir[1], dir[0]));
   }
 
   function finish() { lay.finish(); K.finish(); }

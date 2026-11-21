@@ -231,7 +231,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     built = true;
     const p = new Parts(), solids = [];
     const h = (x, z) => world.heightAt(x, z);
-    const box = (q, w, hh, d, hex, y, yaw) => p.add(BOX(w, hh, d), hex, q[0], y, q[1], yaw);
+    const box = (q, w, hh, d, hex, y, yaw) => p.box(w, hh, d, hex, q[0], y, q[1], yaw);
     // a box given in the a/b frame: a0..a1, b0..b1, y0..y1
     const slab = (a0, a1, b0, b1, y0, y1, hex) => box(at((a0 + a1) / 2, (b0 + b1) / 2), a1 - a0, y1 - y0, b1 - b0, hex, (y0 + y1) / 2, SIDES.kuuni.yaw);
     const plane = (S, s0, s1, y0, y1, out, tex) => {
@@ -307,8 +307,8 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       // line of the last corner (Martin, 19 Nov), each (a, b) in the roof frame: a along Küüni, b along the park face
       for (const [a, b] of [[-21, 1.5], [-25.5, -1], [-28.5, 3.5], [-32.5, 0], [-36.5, 3.2]]) {
         const [x, z] = at(a, b), y = h(x, z), yaw = SIDES.kuuni.yaw;
-        p.add(BOX(3.8, 0.1, 1.7), COL.wood, x, y + 0.42, z, yaw);
-        p.add(BOX(3.5, 0.38, 1.45), 0x55525e, x, y + 0.18, z, yaw);
+        p.box(3.8, 0.1, 1.7, COL.wood, x, y + 0.42, z, yaw);
+        p.box(3.5, 0.38, 1.45, 0x55525e, x, y + 0.18, z, yaw);
         solids.push({ x, z, yaw, hx: 1.9, hz: 0.85 });
       }
     }
@@ -320,7 +320,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       const s0 = 6, s1 = LB - 5, n = Math.round((s1 - s0) / 2.5), posts = [];
       for (let k = 0; k <= n; k++) {
         const s = s0 + (s1 - s0) * k / n, [x, z] = M(s, OUT - 1.1), y = h(x, z);
-        p.add(BOX(0.07, 1.05, 0.07), COL.steel, x, y + 0.52, z, S.yaw);
+        p.box(0.07, 1.05, 0.07, COL.steel, x, y + 0.52, z, S.yaw);
         posts.push([x, y, z]);
       }
       // the rails from post to post, so they follow the ground and the bend

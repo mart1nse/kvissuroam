@@ -237,8 +237,8 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
     const glow = [];
     const solids = [];
     // a box in the street frame: s along, w across (from the east fronts), y above the ground there
-    const nb = (s, w, len, wid, y0, y1, hex, yaw = 0) => { const [x, z] = N(s, w); p.add(BOX(len, y1 - y0, wid), hex, x, h(x, z) + (y0 + y1) / 2, z, NYAW + yaw); };
-    const sb = (t, r, len, wid, y0, y1, hex, yaw = 0) => { const [x, z] = S(t, r); p.add(BOX(len, y1 - y0, wid), hex, x, h(x, z) + (y0 + y1) / 2, z, SYAW + yaw); };
+    const nb = (s, w, len, wid, y0, y1, hex, yaw = 0) => { const [x, z] = N(s, w); p.box(len, y1 - y0, wid, hex, x, h(x, z) + (y0 + y1) / 2, z, NYAW + yaw); };
+    const sb = (t, r, len, wid, y0, y1, hex, yaw = 0) => { const [x, z] = S(t, r); p.box(len, y1 - y0, wid, hex, x, h(x, z) + (y0 + y1) / 2, z, SYAW + yaw); };
 
     // ================= the park stretch
     // the clipped hedge along the park, on a low granite kerb
@@ -247,7 +247,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
       for (let k = 0; k <= n; k++) {
         const t = t0 + ((t1 - t0) * k) / n, [x, z] = S(t, hr - 0.75), y = h(x, z);
         if (K.leafy.ok) K.leafy.bush(x, y - 0.02, z, 2.0, 1.15, SYAW + k, [0.82, 0.95, 0.82], 1.25);
-        else p.add(BOX(1.7, 1.05, 1.2), 0x5e9a5e, x, y + 0.52, z, SYAW);
+        else p.box(1.7, 1.05, 1.2, 0x5e9a5e, x, y + 0.52, z, SYAW);
       }
       sb((t0 + t1) / 2, hr - 0.04, t1 - t0 + 1, 0.18, -0.2, 0.14, 0xd6d2dc);
       const [cx, cz] = S((t0 + t1) / 2, hr - 0.75);
@@ -298,7 +298,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
       p.add(new THREE.ConeGeometry(2.1, 0.6, 4, 1, true), 0xf6f2ea, F[0] + 0.2, y + 2.55, F[1], yaw + Math.PI / 4);
       for (const dz of [-2.6, 2.9]) {
         const [px, pz] = [F[0] + 1.6, F[1] + dz];
-        p.add(BOX(1.1, 0.55, 0.5), 0x8a5a3e, px, h(px, pz) + 0.27, pz, yaw);
+        p.box(1.1, 0.55, 0.5, 0x8a5a3e, px, h(px, pz) + 0.27, pz, yaw);
         for (let k = 0; k < 4; k++) p.add(new THREE.IcosahedronGeometry(0.17, 0), [0xe8456a, 0xfaf0f4, 0xf06a8c, 0x5f9a5e][k], px - 0.4 + k * 0.27, h(px, pz) + 0.65, pz, yaw);
       }
     }
@@ -376,7 +376,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
       const pole = new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6).translate(0, 1.3, 0).rotateZ(-a);
       p.add(pole, 0xe8e4ee, x0, g + 4.4, z0, NYAW - Math.PI / 2);
       const ex = 2.6 * Math.sin(a), ey = 2.6 * Math.cos(a), hh = 1.1 / stripes.length;
-      stripes.forEach((col, k) => { const [cx, cz] = N(s, wf - ex + 0.06); p.add(BOX(0.03, hh, 1.6), col, cx, g + 4.4 + ey - 0.05 - hh * (k + 0.5), cz, NYAW); });
+      stripes.forEach((col, k) => { const [cx, cz] = N(s, wf - ex + 0.06); p.box(0.03, hh, 1.6, col, cx, g + 4.4 + ey - 0.05 - hh * (k + 0.5), cz, NYAW); });
     };
     flag(19.9, [0x3a7bd5, 0x1c1c22, 0xf4f4f6]); flag(22.6, [0xf4f4f6, 0xd8323c]);
     flag(70.4, [0x3a7bd5, 0x1c1c22, 0xf4f4f6]);
@@ -384,10 +384,10 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
     const bike = (s, w, col) => {
       const [x, z] = N(s, w), y = h(x, z);
       for (const d of [-0.52, 0.52]) { const [bx, bz] = N(s, w + d); p.add(new THREE.TorusGeometry(0.33, 0.03, 4, 14), 0x22222a, bx, y + 0.34, bz, NYAW + Math.PI / 2); }
-      p.add(BOX(0.04, 0.04, 1.0), col, x, y + 0.55, z, NYAW);
-      p.add(BOX(0.04, 0.5, 0.04), col, ...N(s, w + 0.15).flatMap((v, i) => (i ? [y + 0.6, v] : [v])), NYAW);
-      p.add(BOX(0.5, 0.04, 0.06), 0x22222a, ...N(s, w - 0.45).flatMap((v, i) => (i ? [y + 0.95, v] : [v])), NYAW);
-      p.add(BOX(0.12, 0.05, 0.26), 0x22222a, ...N(s, w + 0.18).flatMap((v, i) => (i ? [y + 0.88, v] : [v])), NYAW);
+      p.box(0.04, 0.04, 1.0, col, x, y + 0.55, z, NYAW);
+      p.box(0.04, 0.5, 0.04, col, ...N(s, w + 0.15).flatMap((v, i) => (i ? [y + 0.6, v] : [v])), NYAW);
+      p.box(0.5, 0.04, 0.06, 0x22222a, ...N(s, w - 0.45).flatMap((v, i) => (i ? [y + 0.95, v] : [v])), NYAW);
+      p.box(0.12, 0.05, 0.26, 0x22222a, ...N(s, w + 0.18).flatMap((v, i) => (i ? [y + 0.88, v] : [v])), NYAW);
     };
     [[18.6, 0x3c6ea0], [19.6, 0xd8d4dc], [20.5, 0x9a3f48], [21.6, 0x2c2a34]].forEach(([s, c]) => bike(s, westW(s) - 1.0, c));
     // the street's lamp posts on the park stretch: tall poles with a flat head

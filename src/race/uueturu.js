@@ -178,7 +178,7 @@ export function createUueturu(world, group) {
     // a flat box standing against wall W: s0..s1 along it, y0..y1, its back `off` out from the wall
     const slab = (W, s0, s1, y0, y1, off, thick, hex) => {
       const [x, z] = W.at((s0 + s1) / 2, off + thick / 2);
-      p.add(BOX(s1 - s0, y1 - y0, thick), hex, x, (y0 + y1) / 2, z, W.yaw);
+      p.box(s1 - s0, y1 - y0, thick, hex, x, (y0 + y1) / 2, z, W.yaw);
     };
     // a window: dark frame, glass, upright bars
     const win = (W, s0, s1, y0, y1, bars, glass = COL.glass) => {
@@ -208,8 +208,8 @@ export function createUueturu(world, group) {
     {
       const A = ANNEX, ga = Math.min(g(B.at(A.s0, A.depth + 0.5)), g(B.at(A.s1, A.depth + 0.5))), top = ga + A.h;
       const [x, z] = B.at((A.s0 + A.s1) / 2, A.depth / 2);
-      p.add(BOX(A.s1 - A.s0, A.h + 1, A.depth), COL.annex, x, top - (A.h + 1) / 2, z, B.yaw);
-      p.add(BOX(A.s1 - A.s0 + 0.3, 0.25, A.depth + 0.3), COL.plinth, x, top + 0.12, z, B.yaw);       // coping
+      p.box(A.s1 - A.s0, A.h + 1, A.depth, COL.annex, x, top - (A.h + 1) / 2, z, B.yaw);
+      p.box(A.s1 - A.s0 + 0.3, 0.25, A.depth + 0.3, COL.plinth, x, top + 0.12, z, B.yaw);       // coping
       const Aw = { ...B, at: (s, n) => B.at(s, n + A.depth) };                                      // its front face
       const pitch = (A.s1 - A.s0) / A.cols;
       for (let r = 0; r < A.rows; r++) for (let c = 0; c < A.cols; c++) {

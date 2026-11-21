@@ -382,7 +382,7 @@ export function createLounakeskus(scene, world, { shadows = true } = {}) {
       for (const [s, turn] of [[3, 0], [11, -0.5]]) {
         const [x, z] = F.at(s, -4), g = h(...F.at(s, 3)) + 14.3;
         add(new THREE.Mesh(new THREE.BoxGeometry(9, 3, 0.4), [dark, dark, dark, dark, mat(t), mat(t)]), x, g + 1.5, z, faceYaw + turn + 1.2);
-        p.add(BOX(0.2, 1.2, 0.2), 0x2b2c30, x, g - 0.4, z);
+        p.box(0.2, 1.2, 0.2, 0x2b2c30, x, g - 0.4, z);
       }
     }
     // lamp posts down the car park, double heads
@@ -391,8 +391,8 @@ export function createLounakeskus(scene, world, { shadows = true } = {}) {
       p.add(new THREE.CylinderGeometry(0.08, 0.13, 10, 8), 0x9a9da2, x, y + 5, z);
       for (const d of [-1, 1]) {
         const q = BAY.at(s + d * 1.4, 23.5);
-        p.add(BOX(2.8, 0.08, 0.08), 0x9a9da2, (x + q[0]) / 2, y + 10, (z + q[1]) / 2, Math.atan2(0.46, -0.89));
-        p.add(BOX(0.7, 0.14, 0.3), 0x6d7076, q[0], y + 9.95, q[1], Math.atan2(0.46, -0.89));
+        p.box(2.8, 0.08, 0.08, 0x9a9da2, (x + q[0]) / 2, y + 10, (z + q[1]) / 2, Math.atan2(0.46, -0.89));
+        p.box(0.7, 0.14, 0.3, 0x6d7076, q[0], y + 9.95, q[1], Math.atan2(0.46, -0.89));
       }
     }
     // the car park's tarmac (the air photo under it is bleached pale) and the bay lines

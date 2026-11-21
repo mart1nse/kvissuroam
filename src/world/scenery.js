@@ -14,6 +14,8 @@ const BRICK = [
   [1458, 3075],        // Vallikraavi 4, the red brick house with the statue
 ];
 
+// what three.js makes of each of the 256 steps of a colour channel
+const LIN = Float64Array.from({ length: 256 }, (_, v) => new THREE.Color().setRGB(v / 255, 0, 0, THREE.SRGBColorSpace).r);
 function buildingGeometry(sector, walls) {
   const { nv, buf, offset } = sector.buildings;
   let o = offset;
@@ -59,10 +61,10 @@ function buildingGeometry(sector, walls) {
       const x = pq[i * 3] * 0.05, y = pq[i * 3 + 1] * 0.01, z = pq[i * 3 + 2] * 0.05;
       if (!(e && e.hide) && !cut) { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }       // a hidden house keeps no triangles
       nor[i * 3] = nq[i * 3] / 127; nor[i * 3 + 1] = nq[i * 3 + 1] / 127; nor[i * 3 + 2] = nq[i * 3 + 2] / 127;
-      if (e && kind[i] === 1 && e.roof !== undefined) c.setHex(e.roof, THREE.SRGBColorSpace);
-      else if (e && kind[i] !== 1) c.setRGB(((e.rgb >> 16) & 255) / 255, ((e.rgb >> 8) & 255) / 255, (e.rgb & 255) / 255, THREE.SRGBColorSpace);
-      else c.setRGB(cq[i * 3] / 255, cq[i * 3 + 1] / 255, cq[i * 3 + 2] / 255, THREE.SRGBColorSpace);
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      // (colours from a table of the 256 steps: converting each corner's colour was a third of this function)
+      if (e && kind[i] === 1 && e.roof !== undefined) { col[i * 3] = LIN[(e.roof >> 16) & 255]; col[i * 3 + 1] = LIN[(e.roof >> 8) & 255]; col[i * 3 + 2] = LIN[e.roof & 255]; }
+      else if (e && kind[i] !== 1) { col[i * 3] = LIN[(e.rgb >> 16) & 255]; col[i * 3 + 1] = LIN[(e.rgb >> 8) & 255]; col[i * 3 + 2] = LIN[e.rgb & 255]; }
+      else { col[i * 3] = LIN[cq[i * 3]]; col[i * 3 + 1] = LIN[cq[i * 3 + 1]]; col[i * 3 + 2] = LIN[cq[i * 3 + 2]]; }
       aKind[i] = e && e.plain && kind[i] === 2 ? 0 : kind[i]; aBase[i] = base[i] * 0.01; gkey[i] = key;
       if (x < g.x0) g.x0 = x; if (x > g.x1) g.x1 = x;
       if (z < g.z0) g.z0 = z; if (z > g.z1) g.z1 = z;

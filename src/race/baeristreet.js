@@ -17,6 +17,7 @@ import { BOX, rnd } from './landmarks.js';
 import { streetKit, wallOf, setHouseColours, grassTex } from '../world/streetkit.js';
 import { facade } from './vallistreet.js';
 import { drapeGeometry } from '../world/drape.js';
+import { jobs } from '../jobs.js';
 
 // wall lines from the LOD2 model (game x, z), the open side on the right-hand side going a -> b; top: world y
 const WALLS = {
@@ -313,7 +314,8 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     return out;
   };
 
-  function build(zone) {
+  // (in steps, see ../jobs.js: the painted fronts of one stretch took 0.14 s in one go, on the lap)
+  function* build(zone) {
     const K = streetKit(world, group, { shadows });
     const { p } = K;
     const extra = [], glow = [], solids = [];
@@ -420,11 +422,11 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     const ironFence = (pts, { height = 1.25, foot = 0.35, solid = false } = {}) => {
       for (let k = 0; k < pts.length; k++) {
         const q = pts[k], y = h(q[0], q[1]);
-        p.add(BOX(0.36, height + 0.2, 0.36), COL.concrete, q[0], y + (height + 0.2) / 2, q[1], k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : 0);
-        p.add(BOX(0.46, 0.09, 0.46), 0xaaa69f, q[0], y + height + 0.24, q[1], 0);
+        p.box(0.36, height + 0.2, 0.36, COL.concrete, q[0], y + (height + 0.2) / 2, q[1], k < pts.length - 1 ? seg(q, pts[k + 1]).yaw : 0);
+        p.box(0.46, 0.09, 0.46, 0xaaa69f, q[0], y + height + 0.24, q[1], 0);
         if (k === pts.length - 1) break;
         const S = seg(q, pts[k + 1]);
-        p.add(BOX(S.l, foot, 0.2), 0x8a8680, S.mx, h(S.mx, S.mz) + foot / 2 - 0.02, S.mz, S.yaw);
+        p.box(S.l, foot, 0.2, 0x8a8680, S.mx, h(S.mx, S.mz) + foot / 2 - 0.02, S.mz, S.yaw);
         quad(iron, q, pts[k + 1], foot - 0.03, height - foot, 0, S.l / 0.5);
         if (solid) solids.push({ x: S.mx, z: S.mz, yaw: S.yaw, hx: S.l / 2 + 0.2, hz: 0.22 });
       }
@@ -433,7 +435,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     const railFence = (pts, height = 0.95) => {
       for (let k = 0; k < pts.length; k++) {
         const q = pts[k];
-        p.add(BOX(0.1, height + 0.05, 0.1), COL.wood, q[0], h(q[0], q[1]) + (height + 0.05) / 2, q[1], 0);
+        p.box(0.1, height + 0.05, 0.1, COL.wood, q[0], h(q[0], q[1]) + (height + 0.05) / 2, q[1], 0);
         if (k === pts.length - 1) break;
         const S = seg(q, pts[k + 1]), dy = h(pts[k + 1][0], pts[k + 1][1]) - h(q[0], q[1]);
         for (const y of [0.3, 0.6, 0.9]) p.add(BOX(Math.hypot(S.l, dy), 0.09, 0.035).rotateZ(Math.atan2(dy, S.l)), y === 0.6 ? COL.woodDark : COL.wood, S.mx, h(q[0], q[1]) + dy / 2 + y * height / 0.95, S.mz, S.yaw);
@@ -452,14 +454,14 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       const S = seg(a, b), n = Math.max(2, Math.round(S.l / 0.42));
       for (let k = 0; k < n; k++) {
         const t = (k + 0.5) / n, x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t;
-        p.add(BOX(S.l / n + 0.04, 0.22, width), k % 2 ? COL.step : 0xa6a2a8, x, h(x, z) + 0.03, z, S.yaw);
+        p.box(S.l / n + 0.04, 0.22, width, k % 2 ? COL.step : 0xa6a2a8, x, h(x, z) + 0.03, z, S.yaw);
       }
       if (!rails) return;
       for (const side of [-1, 1]) {
         const o = side * (width / 2 + 0.05), m = Math.max(2, Math.round(S.l / 1.8));
         for (let k = 0; k <= m; k++) {
           const t = k / m, x = a[0] + (b[0] - a[0]) * t - S.uz * o, z = a[1] + (b[1] - a[1]) * t + S.ux * o, y = h(x, z);
-          p.add(BOX(0.05, 0.95, 0.05), 0x8f939c, x, y + 0.47, z, 0);
+          p.box(0.05, 0.95, 0.05, 0x8f939c, x, y + 0.47, z, 0);
           if (k === m) break;
           const t2 = (k + 1) / m, x2 = a[0] + (b[0] - a[0]) * t2 - S.uz * o, z2 = a[1] + (b[1] - a[1]) * t2 + S.ux * o, dy = h(x2, z2) - y, l = S.l / m;
           for (const yy of [0.92, 0.5]) p.add(BOX(Math.hypot(l, dy), 0.05, 0.05).rotateZ(Math.atan2(dy, l)), 0x8f939c, (x + x2) / 2, y + dy / 2 + yy, (z + z2) / 2, S.yaw);
@@ -521,33 +523,52 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       const w = hw(i) * 2 - 0.6;
       for (let k = 0; k < bars; k++) { const lat = -w / 2 + (w - 0.5) * k / (bars - 1); band(paint.white, i - 1.0, i + 1.0, () => lat, () => lat + 0.5, 2); }
     };
-    if (zone === 0) buildValli();
-    if (zone === 1) buildToome();
-    if (zone === 2) buildJakobi();
+    if (zone === 0) yield* buildValli();
+    if (zone === 1) yield* buildToome();
+    if (zone === 2) yield* buildJakobi();
 
     // ============================================================ upper Vallikraavi
-    function buildValli() {
+    function* buildValli() {
       // ---- the houses without photos: quiet guessed fronts
       skin(W.S60, (P) => plaster(P, { col: '#e6d9b8', floors: [1.6, 4.6], pitch: 2.9, door: 17.5, cornice: P.y1 - 0.5, baseCol: '#9a948e' }));
+      yield;
       skin(W.S60e, (P) => plaster(P, { col: '#e6d9b8', floors: [4.6], xs: [P.w / 2 - 0.55], cornice: P.y1 - 0.5, baseCol: '#9a948e' }));
+      yield;
       skin(W.S60w, (P) => plaster(P, { col: '#e6d9b8', floors: [1.6, 4.6], pitch: 3.4, baseCol: '#9a948e' }));
+      yield;
       skin(W.N64, (P) => plaster(P, { col: '#c9d0dc', floors: [1.5, 4.7], pitch: 2.7, door: 5.2, cornice: P.y1 - 0.45 }));
+      yield;
       skin(W.N97, (P) => wooden(P, { rgb: [178, 192, 170], floors: [1.6, 4.9], pitch: 2.6, door: 8.4, eave: 8.2, seed: 5 }));
+      yield;
       skin(W.N97e, (P) => wooden(P, { rgb: [178, 192, 170], floors: [1.6], xs: [P.w / 2 - 0.5], seed: 6 }));
+      yield;
       skin(W.N97w, (P) => wooden(P, { rgb: [178, 192, 170], floors: [1.6, 4.9], pitch: 3.6, seed: 7 }));
+      yield;
       skin(W.N75, (P) => wooden(P, { rgb: [234, 222, 196], floors: [1.5, 4.8], pitch: 2.8, eave: 7.6, seed: 8, sc: '#b98a5a' }));
+      yield;
       skin(W.N75e, (P) => wooden(P, { rgb: [234, 222, 196], floors: [1.5, 4.8], pitch: 3.2, seed: 9, sc: '#b98a5a', door: 6 }));
+      yield;
       skin(W.N75w, (P) => wooden(P, { rgb: [234, 222, 196], floors: [1.5, 4.8], pitch: 3.6, seed: 10, sc: '#b98a5a' }));
+      yield;
       const white = (P, o = {}) => { plaster(P, { col: '#e9e6ee', trim: '#d4d0dc', floors: [1.3, 4.3, 7.3], wh: 1.6, ww: 1.5, pitch: 3.1, bars: 2, rails: 0, baseCol: '#8e8c98', glass: '#4f5d78', ...o }); P.r(0, P.y1 - 0.3, P.w, P.y1, '#b9b6c2'); };
       skin(W.S33a, (P) => white(P, { xs: [P.w / 2 - 0.75] }));
+      yield;
       skin(W.S33b, (P) => white(P, { door: 7.5 }));
+      yield;
       skin(W.S33c, (P) => white(P));
+      yield;
       skin(W.S33d, (P) => white(P, { floors: [1.3, 4.3, 7.3, 10.3] }));
+      yield;
       skin(W.S33e, (P) => white(P, { pitch: 3.6 }));
+      yield;
       skin(W.S33f, (P) => white(P, { xs: [P.w / 2 - 0.75] }));
+      yield;
       skin(W.S33w, (P) => white(P, { xs: [P.w / 2 - 0.75] }));
+      yield;
       skin(W.N18, (P) => { P.boards(0, -1.2, P.w, P.y1, [170, 158, 148], 0.2); for (const x of [1.2, 5.2, 9.4]) { P.r(x, 0, x + 2.6, 2.3, '#7d7068'); for (let q = 0.4; q < 2.6; q += 0.45) P.r(x + q, 0, x + q + 0.03, 2.3, '#665a54'); } weather(P, 0.12); });
+      yield;
       skin(W.N18e, (P) => wooden(P, { rgb: [170, 158, 148], floors: [1.5, 4.4], pitch: 3.0, seed: 12 }));
+      yield;
 
       // ---- the yellow wooden house: cream boards, tall windows in ochre surrounds
       const YEL = { rgb: [232, 218, 160], sc: '#c9933f', trim: '#f6f0dc', floors: [1.7, 5.3], wh: 2.1, ww: 1.15, base: 0.8, rails: 2 };
@@ -558,9 +579,13 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         P.boards(0, 8.75, P.w, P.y1, [222, 208, 150], 0.14);
       };
       skin(W.Y1, (P) => yellow(P, { xs: [1.2, 4.4, 7.6], seed: 14 }));
+      yield;
       skin(W.Y2, (P) => yellow(P, { xs: [1.0, 4.6], seed: 15, door: 3.4, doorCol: '#8a5a34' }));
+      yield;
       skin(W.Y3, (P) => { yellow(P, { xs: [2.2, 6.4, 10.6], seed: 16 }); P.win(P.w / 2 - 0.55, 9.3, P.w / 2 + 0.55, 10.7, { frame: '#f6f0dc', sc: '#c9933f', surround: 0.1, bars: 1, rails: 1 }); });
+      yield;
       skin(W.Y4, (P) => { yellow(P, { xs: [2.0, 5.9, 9.8], seed: 17 }); P.win(P.w / 2 - 0.55, 9.3, P.w / 2 + 0.55, 10.7, { frame: '#f6f0dc', sc: '#c9933f', surround: 0.1, bars: 1, rails: 1 }); });
+      yield;
 
       // ---- the terraced flats: red-brown brick, grey concrete floor bands, ribbon windows in red frames,
       // brown board panels, wooden balcony rails with flower boxes, the set-back top floor behind a rail
@@ -602,9 +627,13 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         if (door !== null) { P.r(door - 1.0, -0.4, door + 1.0, 2.5, '#3c3438'); P.win(door - 0.8, -0.3, door + 0.8, 2.3, { frame: '#8e4636', glass: '#7a8fa0', bars: 1, sill: 0, lit: 1 }); P.r(door - 1.4, 2.5, door + 1.4, 2.7, '#b4b1b0'); }
       };
       skin(W.K1, (P) => flats(P, 31, { door: 6.5, balc: [[1.0, 6.0, 1], [9.5, 15.5, 2], [17.5, 23.6, 1]] }), { ppm: 30 });
+      yield;
       skin(W.K2, (P) => flats(P, 32, { balc: [[1.2, 7.8, 1], [1.2, 7.8, 2]] }), { ppm: 30 });
+      yield;
       skin(W.K3, (P) => flats(P, 33, { balc: [[2.0, 8.0, 2]] }));
+      yield;
       skin(W.K4, (P) => flats(P, 34, { balc: [[3.0, 9.0, 1], [10.0, 17.0, 2]] }));
+      yield;
       put(W.K1, BOX(1.3, 3.2, 1.1), 0xa9a6a6, 15, W.K1.top - W.K1.y + 1.0, -3.5);                         // the chimney block on the roof
       // number plate by the door
       // ---- the red brick villa: stone base, three floors of tall windows under brick arches, zinc mansard
@@ -635,10 +664,15 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         mansard(P, m, xs.filter((_, k) => k % 2 === 0).map((x) => x - 0.1));
       };
       skin(W.R1, (P) => villa(P, 41, { xs: [1.3, 4.1, 6.9, 9.7, 12.5, 14.4].slice(0, 5), door: 7.45 }), { ppm: 30 });
+      yield;
       skin(W.R2, (P) => villa(P, 42, { xs: [1.2, 3.6, 6.0] }), { ppm: 30 });
+      yield;
       skin(W.R3, (P) => villa(P, 43, { xs: [1.6] }));
+      yield;
       skin(W.R4, (P) => villa(P, 44, { xs: [0.9, 3.0] }));
+      yield;
       skin(W.R5, (P) => villa(P, 45, { xs: [1.4, 4.4, 7.4, 10.4] }));
+      yield;
       { const w = W.R1; put(w, BOX(2.8, 0.14, 1.3), 0x4a4650, 7.45, 3.25, 0.65); for (let k = 0; k < 3; k++) put(w, BOX(2.4 - k * 0.2, 0.17, 0.34), 0xb9b2a8, 7.45, 0.08 + k * 0.17 - 0.3, 1.1 - k * 0.34); }
 
       // ---- along the street
@@ -647,12 +681,12 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         const pts = edge(199, 206.5, -1, 2.5, 2.2);
         for (let k = 0; k < pts.length - 1; k++) {
           const S = seg(pts[k], pts[k + 1]), y = Math.max(h(pts[k][0], pts[k][1]), h(pts[k + 1][0], pts[k + 1][1]));
-          p.add(BOX(S.l + 0.02, 1.25, 0.4), COL.granite, S.mx, y + 0.35, S.mz, S.yaw);
-          p.add(BOX(S.l + 0.06, 0.08, 0.5), COL.graniteTop, S.mx, y + 1.0, S.mz, S.yaw);
+          p.box(S.l + 0.02, 1.25, 0.4, COL.granite, S.mx, y + 0.35, S.mz, S.yaw);
+          p.box(S.l + 0.06, 0.08, 0.5, COL.graniteTop, S.mx, y + 1.0, S.mz, S.yaw);
           quad(iron, pts[k], pts[k + 1], 1.0 + (y - h(pts[k][0], pts[k][1])), 0.75, 0, S.l / 0.5);
         }
         const q = pts[pts.length - 1];
-        p.add(BOX(0.6, 1.9, 0.6), COL.granite, q[0], h(q[0], q[1]) + 0.75, q[1], seg(pts[pts.length - 2], q).yaw);
+        p.box(0.6, 1.9, 0.6, COL.granite, q[0], h(q[0], q[1]) + 0.75, q[1], seg(pts[pts.length - 2], q).yaw);
         hedge(edge(208.5, 221, -1, 3.4, 0.95), 1.2, 1.25);
         K.box(...T(207.6, -(hw(207) + 2.6)), 0.9, 1.25, 0.4, 0x8f9498, seg(T(207, -5), T(208, -5)).yaw);     // the electrical cabinet
       }
@@ -673,7 +707,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         const yaw = Math.atan2(gx, gz);                                       // rows run across the slope
         for (let k = -4; k <= 4; k++) {
           const x = c[0] + gx * k * 1.15, z = c[1] + gz * k * 1.15;
-          p.add(BOX(15 - Math.abs(k) * 0.4, 0.5, 1.15), k % 2 ? COL.stone : COL.stoneDark, x, h(x, z) + 0.12, z, yaw);
+          p.box(15 - Math.abs(k) * 0.4, 0.5, 1.15, k % 2 ? COL.stone : COL.stoneDark, x, h(x, z) + 0.12, z, yaw);
         }
       }
       // the stair with handrails up the bank on the right, to the path under the trees
@@ -695,7 +729,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     }
 
     // ============================================================ Baeri under Toomemägi
-    function buildToome() {
+    function* buildToome() {
       // the long outbuilding: stained plaster, brown windows, a boarded door, spray paint all along
       const OUT = '#e2dccc';
       skin(W.O1, (P) => {
@@ -708,8 +742,11 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         P.r(0, P.y1 - 0.22, P.w, P.y1, '#8c9099');
         weather(P, 0.16);
       }, { ppm: 36 });
+      yield;
       skin(W.O2, (P) => { P.r(0, -1.2, P.w, P.y1, OUT); P.r(0, -1.2, P.w, 0.35, '#b9b2a4'); P.win(3.4, 1.0, 4.5, 2.5, { frame: '#7a5444', glass: '#4a5462', bars: 1, rails: 2, sc: '#7a5444' }); graffiti(P, 0.3, P.w - 0.3, 0.1, 2.3, 72, 5); P.r(0, P.y1 - 0.22, P.w, P.y1, '#8c9099'); weather(P, 0.16); }, { ppm: 36 });
+      yield;
       skin(W.O3, (P) => { P.r(0, -1.2, P.w, P.y1, OUT); P.r(0, -1.2, P.w, 0.35, '#b9b2a4'); graffiti(P, 0.3, P.w - 0.3, 0.1, 2.4, 73, 5); P.r(0, P.y1 - 0.22, P.w, P.y1, '#8c9099'); weather(P, 0.16); }, { ppm: 36 });
+      yield;
       // two brick chimneys on its roof
       for (const s of [4.5, 15.5]) put(W.O1, BOX(0.6, 1.7, 0.6), 0xb0705e, s, W.O1.top - W.O1.y + 1.3, -3.6);
       // the stair with handrails from the street up to Hezeli, on the left before the bend
@@ -723,26 +760,35 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     }
 
     // ============================================================ Baeri down to Jakobi
-    function buildJakobi() {
+    function* buildJakobi() {
       // ---- left: the green wooden corner house
       const GRN = { rgb: [158, 176, 126], trim: '#f4f1e6', floors: [1.25], wh: 1.5, ww: 1.1, base: 0.5, rails: 1, bars: 2 };
       skin(W.G1, (P) => { wooden(P, { ...GRN, xs: [1.5, 4.3, 12.2, 15.0, 17.6], door: 8.6, doorCol: '#5f7a52', seed: 81 }); P.r(0, P.y1 - 0.25, P.w, P.y1, '#b4b8c0'); });
+      yield;
       skin(W.G2, (P) => {
         wooden(P, { ...GRN, xs: [2.0, 8.4], seed: 82 });
         P.win(P.w / 2 - 0.9, 4.6, P.w / 2 + 0.9, 6.1, { frame: '#f4f1e6', sc: '#f4f1e6', surround: 0.1, bars: 2, rails: 1, lit: on(0.4) });      // the gable window
         P.r(0, 3.7, P.w, 3.85, tone(GRN.rgb, 0.8));
       });
+      yield;
       // the grey plastered house: a door under a small tin canopy
       skin(W.P1, (P) => { plaster(P, { col: '#b6bcc8', trim: '#c9ced8', floors: [1.5, 4.8], wh: 1.8, pitch: 2.2, door: 2.2, doorCol: '#e6e2dc', cornice: 7.4, baseCol: '#8c9098' }); P.r(1.2, 3.05, 3.2, 3.25, '#7fae9a'); P.r(0, 7.6, P.w, P.y1, '#b6bcc8'); });
+      yield;
       skin(W.P2, (P) => plaster(P, { col: '#b6bcc8', trim: '#c9ced8', floors: [1.5, 4.8], wh: 1.8, pitch: 4.2, baseCol: '#8c9098' }));
+      yield;
       // the blue wooden house
       skin(W.B1, (P) => { wooden(P, { rgb: [128, 150, 184], floors: [1.6, 4.9], wh: 1.8, pitch: 2.4, door: 10.6, doorCol: '#8a5a3c', eave: 7.5, seed: 84 }); P.win(P.w / 2 - 0.9, 8.6, P.w / 2 + 0.9, 10.2, { frame: '#f6f2e8', sc: '#f6f2e8', surround: 0.1, bars: 2, rails: 1, lit: on(0.4) }); });
+      yield;
       skin(W.B2, (P) => wooden(P, { rgb: [128, 150, 184], floors: [1.6, 4.9], wh: 1.8, pitch: 3.6, seed: 85 }));
+      yield;
       // the yellow wooden house
       const YW = { rgb: [234, 216, 156], floors: [1.5, 4.7], wh: 1.75, seed: 86 };
       skin(W.J1, (P) => wooden(P, { ...YW, pitch: 2.35, door: 12.9, doorCol: '#9a6a44', eave: 7.3 }));
+      yield;
       skin(W.J2, (P) => wooden(P, { ...YW, pitch: 3.8, seed: 87 }));
+      yield;
       skin(W.J3, (P) => wooden(P, { ...YW, pitch: 3.4, seed: 88 }));
+      yield;
       // the tall board fence between the yellow house and the grey one
       boardFence(edge(588, 599.5, -1, 1.7, 2.4));
       // the grey house: rusticated arched doorway with a fanlight, three floors, zinc mansard with dormers
@@ -764,8 +810,11 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         P.r(d - 1.1, -0.45, d + 1.1, -0.2, '#b4b0b0');
         mansard(P, m, [2.0, 6.6, 11.2, 15.8, 20.4]);
       }, { ppm: 30 });
+      yield;
       skin(W.A2, (P) => { const m = P.y1 - 1.4; plaster(P, { col: GH, trim: '#e2dfe4', floors: [1.9, 5.6], wh: 1.4, ww: 1.3, xs: [2.2, 8.0], cornice: m - 0.25, baseCol: '#a9a5a8', bars: 1, rails: 1 }); mansard(P, m, []); for (let k = 0; k < 40; k++) P.arc(P.w - 0.6 + Math.sin(k * 7) * 0.5, 0.3 + k * 0.16, 0.28, k % 2 ? '#4f8a56' : '#5f9a62'); });
+      yield;
       skin(W.A3, (P) => { const m = P.y1 - 1.4; plaster(P, { col: GH, trim: '#e2dfe4', floors: [1.7, 5.0, 8.2], wh: 1.85, ww: 1.2, pitch: 3.0, cornice: m - 0.3, baseCol: '#a9a5a8', rails: 2 }); mansard(P, m, []); });
+      yield;
       put(W.A1, BOX(2.0, 0.2, 0.9), 0xb4b0b0, 7.35, -0.1, 0.5); put(W.A1, BOX(1.6, 0.2, 0.5), 0xbcb8b8, 7.35, 0.1, 0.3);
 
       // ---- right: the long brick warehouse
@@ -787,6 +836,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         graffiti(P, P.w - 9, P.w - 0.5, 1.1, 2.6, 95, 3);
         weather(P, 0.1);
       }, { ppm: 28 });
+      yield;
       skin(W.W2, (P) => {
         P.brick(0, 1.0, P.w, P.y1, WB, 96);
         P.rubble(0, -1.2, P.w, 1.0, 97);
@@ -796,6 +846,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         graffiti(P, 0.3, P.w - 0.3, 1.1, 2.2, 102, 2);
         weather(P, 0.1);
       }, { ppm: 32 });
+      yield;
       bracketLantern(W.W1, 4.5, 3.9); bracketLantern(W.W1, 19.5, 3.9);
       // the old stone block lying by the gable
       { const [x, z] = W.W2.at(W.W2.len + 3.5, 1.5); K.box(x, z, 3.4, 0.7, 1.0, COL.stone, W.W2.yaw + 0.2, -0.1); K.box(x + 0.3, z + 0.2, 3.0, 0.12, 0.9, 0x7f9a70, W.W2.yaw + 0.2, 0.58); }
@@ -813,10 +864,14 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
         weather(P, 0.08);
       };
       skin(W.X1, (P) => second(P, 104, [1.2, 3.9, 6.6, 9.3, 12.0], 6.9));
+      yield;
       skin(W.X2, (P) => second(P, 106, [2.2]));
+      yield;
       skin(W.X3, (P) => second(P, 108, [1.4, 5.4]));
+      yield;
       bracketLantern(W.X1, 3.0, 4.0); bracketLantern(W.X1, 11.0, 4.0);
       skin(W.U1, (P) => second(P, 110, fit(P.w, 3.2, 1.0, 1.4)));
+      yield;
 
       // ---- the street: the poster column on the paved corner, the stair up the hill, the lantern's bin
       {
@@ -857,6 +912,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       deco(paint.red, 0.08, 1, { color: 0xd98a80 }, -6);
       deco(paint.white, 0.1, 1, { color: 0xf6f3fa }, -7);
     }
+    yield;
     const softMesh = (list, opts, alpha, f = -6, order = 1) => {
       if (!list.length) return;
       const g = new THREE.BufferGeometry();
@@ -896,7 +952,7 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
     update(x, z) {
       ZONES.forEach((Z, k) => {
         if (done[k] || Math.hypot(x - Z.c[0], z - Z.c[1]) > 600) return;
-        if (Z.ready.every(([cx, cz]) => world.ready(cx, cz))) { done[k] = true; build(k); }
+        if (Z.ready.every(([cx, cz]) => world.ready(cx, cz))) { done[k] = true; jobs.add(function* () { yield* build(k); }, 'baeri'); }
       });
     },
   };

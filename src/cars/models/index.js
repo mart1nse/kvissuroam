@@ -81,7 +81,14 @@ function startWorker() {
     worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
   } catch (e) { console.warn('car worker unavailable', e); workerOk = false; return null; }
   worker.onmessage = (e) => {
-    const { id, data, error } = e.data;
+    const { id, key, data, error } = e.data;
+    if (key != null) {                                 // an answer for the parked cars
+      const done = asked.get(key);
+      asked.delete(key);
+      if (error) console.warn('car worker', id, error);
+      done?.(error ? null : data);
+      return;
+    }
     pending.delete(id);
     if (templates.has(id)) return;
     if (error) { console.warn('car worker', id, error); workerOk = false; return; }
@@ -93,10 +100,40 @@ function startWorker() {
       adopt(id, T);
     } catch (err) { console.warn('car from worker', id, err); workerOk = false; }
   };
-  worker.onerror = (e) => { console.warn('car worker failed', e.message); workerOk = false; pending.clear(); };
+  worker.onerror = (e) => { console.warn('car worker failed', e.message); workerOk = false; pending.clear(); for (const done of asked.values()) done(null); asked.clear(); };
   return worker;
 }
 const SOOT = { passat: setPassatSoot };
+
+// Other work for the worker than a player's car. Each resolves with null where there is no worker or it
+// failed: then the page does the work itself.
+const asked = new Map();
+let askKey = 0;
+function ask(msg) {
+  return new Promise((resolve) => {
+    if (!BUILDERS[msg.id] || !startWorker()) { resolve(null); return; }
+    const key = ++askKey;
+    // (no answer in 20 s: done on the page after all)
+    const timer = setTimeout(() => { if (asked.delete(key)) resolve(null); }, 20000);
+    asked.set(key, (data) => { clearTimeout(timer); resolve(data); });
+    worker.postMessage({ ...msg, key });
+  });
+}
+// a parked car's model, near and far versions and all, as data (src/world/parkedbake.js)
+export const buildParkedInWorker = (id, opts, parked) => ask({ id, opts, parked });
+// a car built with the builder's options (a parked one with a scanned body: the body is put on here)
+export function buildCarInWorker(id, opts) {
+  return ask({ id, opts }).then((data) => {
+    if (!data) return null;
+    try {
+      const T = deserializeCar(data);
+      T.setLights = (o = {}) => applyLights(T, o);
+      if (T.soot) { T.sootFor = SOOT[id]; T.setSoot = (k) => T.sootFor(T, k); }
+      if (T.glbArgs) useGlbBody(T, T.glbArgs.file, T.glbArgs.opts);
+      return T;
+    } catch (err) { console.warn('car from worker', id, err); return null; }
+  });
+}
 
 // Is this car's template ready for instanceCarModel? If not, it is built in the worker (true once it
 // is back). now: the car is needed straight away and may be built here if there is no worker.

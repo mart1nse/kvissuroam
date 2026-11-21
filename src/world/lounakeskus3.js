@@ -235,9 +235,9 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
     const ax = paintTexture(18, 0, 1.0, 24, (P) => { P.r(0, 0, 18, 1.0, '#ffffff'); P.r(0, 0, 18, 0.22, '#005eb8'); P.text('alexela', 9, 0.6, 0.62, '#005eb8', BOLD); });
     fascia(group, [[-940.3, 5465.4], [-923.9, 5459.2], [-920.9, 5467.1], [-937.3, 5473.3]], 49.1, 1.0, ax, shadows);
     for (const [x, z] of [[-935.0, 5466.8], [-929.6, 5464.8], [-924.2, 5462.8]]) {
-      p.add(BOX(0.9, 0.25, 4.0), 0xb9bbbd, x, h(x, z) + 0.12, z + 2.0, -0.36);
-      p.add(BOX(0.6, 1.9, 0.9), 0xeeeeec, x, h(x, z) + 1.2, z + 2.0, -0.36);
-      p.add(BOX(0.62, 0.35, 0.92), 0x005eb8, x, h(x, z) + 2.0, z + 2.0, -0.36);
+      p.box(0.9, 0.25, 4.0, 0xb9bbbd, x, h(x, z) + 0.12, z + 2.0, -0.36);
+      p.box(0.6, 1.9, 0.9, 0xeeeeec, x, h(x, z) + 1.2, z + 2.0, -0.36);
+      p.box(0.62, 0.35, 0.92, 0x005eb8, x, h(x, z) + 2.0, z + 2.0, -0.36);
     }
     tall(-919, 5462, 1.8, 8.5, 0.5, paintTexture(1.8, 0, 8.5, 24, (P) => {
       P.r(0, 0, 1.8, 8.5, '#005eb8'); P.r(0, 0, 1.8, 1.6, '#2b2c30'); P.r(0.1, 6.6, 1.7, 8.2, '#ffffff'); P.text('alexela', 0.9, 7.4, 0.36, '#005eb8', BOLD);
@@ -248,9 +248,9 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
     fascia(group, [[-586.3, 5833.2], [-567.1, 5832.4], [-566.8, 5842.0], [-585.9, 5842.8]], 47.1, 1.0, ol, shadows);
     for (const x of [-582, -576.5, -571]) {
       const z = 5837.6;
-      p.add(BOX(0.9, 0.25, 4.0), 0xb9bbbd, x, h(x, z) + 0.12, z, 0.04);
-      p.add(BOX(0.6, 1.9, 0.9), 0x2b2c30, x, h(x, z) + 1.2, z, 0.04);
-      p.add(BOX(0.62, 0.35, 0.92), 0xffd100, x, h(x, z) + 2.0, z, 0.04);
+      p.box(0.9, 0.25, 4.0, 0xb9bbbd, x, h(x, z) + 0.12, z, 0.04);
+      p.box(0.6, 1.9, 0.9, 0x2b2c30, x, h(x, z) + 1.2, z, 0.04);
+      p.box(0.62, 0.35, 0.92, 0xffd100, x, h(x, z) + 2.0, z, 0.04);
     }
     tall(-559, 5846, 1.7, 8, 0.5, paintTexture(1.7, 0, 8, 24, (P) => {
       P.r(0, 0, 1.7, 8, '#ffd100'); P.r(0, 0, 1.7, 1.4, '#1d1e21'); P.text('OLEREX', 0.85, 7.1, 0.36, '#1d1e21', BOLD);

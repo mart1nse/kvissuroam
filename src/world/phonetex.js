@@ -127,6 +127,8 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       copies = 0;
       for (const t of watch) if (!step(t, now)) watch.delete(t);
     },
+    // one picture, now: it is about to be sent to the graphics card ahead of its first frame (warm.js, jobs.js)
+    texture(t) { if (!t || !t.isTexture) return; watch.add(t); copies = 0; if (!step(t, performance.now())) watch.delete(t); },
     // look at this material again (a texture was put on it after it was first seen)
     again(root) { root.traverse((o) => { for (const m of [o.material].flat()) if (m) seenMat.delete(m); }); },
     get stats() { return { shrunkMB: saved / 1e6, freedMB: freed / 1e6, freed: nFreed, watching: watch.size, dynamic }; },

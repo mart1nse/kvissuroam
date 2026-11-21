@@ -10,7 +10,7 @@
 // emulation: light mode, small pictures) and the way a desktop does:
 //   phone:   at the menu, the peak in the first 5 s after DRIVE (garbage not yet collected included), 15 s after DRIVE, after three car changes, and the peak during a map jump to
 //            Kvissentali: live canvases, textures and buffers on the graphics card, JS heap.
-//   desktop: the game code's milliseconds per frame while driving (full settings).
+//   desktop: the game code's milliseconds per frame while driving (full settings), the drawing call left out.
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then
 // lists the biggest canvas makers so the cause is easy to find.
 //
@@ -154,10 +154,16 @@ async function waitForServer(url, ms) {
     await d.addInitScript(() => {
       const raf = window.requestAnimationFrame.bind(window);
       window.__js = [];
-      window.requestAnimationFrame = (f) => raf((ts) => { const t0 = performance.now(); f(ts); window.__js.push(performance.now() - t0); });
+      window.__draw = 0;
+      window.requestAnimationFrame = (f) => raf((ts) => { const t0 = performance.now(), d0 = window.__draw; f(ts); window.__js.push(performance.now() - t0 - (window.__draw - d0)); });
     });
     await d.goto(`${url}?drive`, { timeout: 180000 });
     await d.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
+    // The drawing call is left out of the figure (Martin's go-ahead, 21 Nov 2026). Without a graphics card
+    // these 15 s are about fifteen frames, and what a frame's drawing costs here (new pictures sent and
+    // shaders compiled in software) says nothing about a real machine: whether new things arrived in one
+    // frame or spread over five moved the median from 10 to 25 ms with the same game code per frame.
+    await d.evaluate(() => { const r = window.__game.renderer, draw = r.render.bind(r); r.render = (...a) => { const t = performance.now(); try { return draw(...a); } finally { window.__draw += performance.now() - t; } }; });
     await d.waitForTimeout(10000);
     await d.evaluate(() => { window.__js.length = 0; });
     await d.waitForTimeout(15000);

@@ -107,7 +107,7 @@ export function createAksi(scene, world, opts = {}) {
       p.add(new THREE.TorusGeometry(r, 0.13, 6, 28).rotateX(Math.PI / 2), 0x2a63c4, x, y + 0.92, z);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
-        p.add(BOX(0.06, 0.9, 0.06), 0x5a5d66, px, y + 0.45, pz);
+        p.box(0.06, 0.9, 0.06, 0x5a5d66, px, y + 0.45, pz);
         p.add(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 6), 0x2a63c4, px, y + 1.8, pz);
       }
       p.add(new THREE.TorusGeometry(r, 0.03, 4, 28).rotateX(Math.PI / 2), 0x2a63c4, x, y + 2.7, z);
@@ -118,13 +118,13 @@ export function createAksi(scene, world, opts = {}) {
       p.add(new THREE.CylinderGeometry(r, r, 1.1, 32, 1, true), 0x9fb2c6, x, y + 0.55, z);
       p.add(new THREE.TorusGeometry(r, 0.05, 4, 32).rotateX(Math.PI / 2), 0xe8edf2, x, y + 1.1, z);
       p.add(new THREE.CylinderGeometry(r - 0.03, r - 0.03, 0.02, 32), 0x58c7e6, x, y + 0.95, z);
-      p.add(BOX(0.5, 1.3, 0.08), 0xc8ccd2, x - r - 0.25, y + 0.65, z);
+      p.box(0.5, 1.3, 0.08, 0xc8ccd2, x - r - 0.25, y + 0.65, z);
     }
     // mailbox on a post at the gate of the house in the bend
     {
       const [x, z] = MAILBOX, y = g(x, z);
-      p.add(BOX(0.08, 1.05, 0.08), 0x6b5440, x, y + 0.52, z);
-      p.add(BOX(0.42, 0.3, 0.24), 0x2b5f8a, x, y + 1.17, z, Math.PI / 2 + 0.4);
+      p.box(0.08, 1.05, 0.08, 0x6b5440, x, y + 0.52, z);
+      p.box(0.42, 0.3, 0.24, 0x2b5f8a, x, y + 1.17, z, Math.PI / 2 + 0.4);
       p.add(new THREE.CylinderGeometry(0.12, 0.12, 0.42, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), 0x2b5f8a, x, y + 1.32, z, Math.PI / 2 + 0.4);
     }
     const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));

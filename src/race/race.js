@@ -45,27 +45,39 @@ export function createTrack() {
     const keys = new Set([cellKey(Math.floor(a[0] / CELL), Math.floor(a[1] / CELL)), cellKey(Math.floor(b[0] / CELL), Math.floor(b[1] / CELL))]);
     for (const k of keys) { let l = grid.get(k); if (!l) grid.set(k, (l = [])); l.push(i); }
   }
+  // (squared distances while comparing: this runs for every ground height looked up near the kerbs)
+  let SEG = 0;                                  // the longest segment
+  for (let i = 0; i < N; i++) SEG = Math.max(SEG, Math.hypot(P[(i + 1) % N][0] - P[i][0], P[(i + 1) % N][1] - P[i][1]));
   const segDist = (i, x, z, out) => {
     const a = P[i], b = P[(i + 1) % N];
     const dx = b[0] - a[0], dz = b[1] - a[1];
     const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
-    const d = Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
-    if (out && d < out.d) { out.d = d; out.i = i; out.t = t; }
-    return d;
+    const ex = x - a[0] - dx * t, ez = z - a[1] - dz * t, d2 = ex * ex + ez * ez;
+    if (d2 < out.d2) { out.d2 = d2; out.i = i; out.t = t; }
   };
-  // nearest point on the track; with a hint, only near the hint (the track crosses itself at Jakobi)
-  function nearest(x, z, hint = -1) {
-    const out = { d: Infinity, i: -1, t: 0 };
+  // nearest point on the track; with a hint, only near the hint (the track crosses itself at Jakobi).
+  // maxD: the caller has no use for anything further than that, so the cells further away are not looked at
+  // (the answer is the same whenever it is within maxD; beyond it, it may be any point or none)
+  function nearest(x, z, hint = -1, maxD = Infinity) {
+    const out = { d: Infinity, d2: Infinity, i: -1, t: 0 };
     if (hint >= 0) {
       for (let k = -50; k <= 50; k++) segDist((hint + k + N) % N, x, z, out);
-      if (out.d < 30) return out;
-      out.d = Infinity;
+      if (out.d2 < 900) { out.d = Math.sqrt(out.d2); return out; }
+      out.d2 = Infinity;
     }
-    const c = Math.floor(x / CELL), r = Math.floor(z / CELL);
-    for (let dc = -2; dc <= 2; dc++) for (let dr = -2; dr <= 2; dr++) {
-      const l = grid.get(cellKey(c + dc, r + dr));
-      if (l) for (const i of l) segDist(i, x, z, out);
+    const c = Math.floor(x / CELL), r = Math.floor(z / CELL), reach = maxD + SEG;
+    for (let dc = -2; dc <= 2; dc++) {
+      // how far the cell column is from x, and the row from z
+      const gx = dc < 0 ? x - (c + dc + 1) * CELL : dc > 0 ? (c + dc) * CELL - x : 0;
+      if (gx > reach) continue;
+      for (let dr = -2; dr <= 2; dr++) {
+        const gz = dr < 0 ? z - (r + dr + 1) * CELL : dr > 0 ? (r + dr) * CELL - z : 0;
+        if (gz > reach) continue;
+        const l = grid.get(cellKey(c + dc, r + dr));
+        if (l) for (let k = 0; k < l.length; k++) segDist(l[k], x, z, out);
+      }
     }
+    out.d = Math.sqrt(out.d2);
     return out;
   }
   const sp = TRACK.spawn;
@@ -524,6 +536,7 @@ export function levelTrackShoulders(world) {
   const { P, HW, N } = track;
   const hm = world.meta.height, hn = hm.n, res = hm.res;
   const FULL = 1.2, FADE = 2.4;
+  let REACH = 0; for (let i = 0; i < N; i++) REACH = Math.max(REACH, HW[i] + FADE + 0.1);     // further from the lap than this, nothing changes
   const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
   world.onSectorLoad((s) => {
     const H = s.H;
@@ -544,7 +557,7 @@ export function levelTrackShoulders(world) {
     for (let r = 0; r < hn; r++) {
       for (let c = 0; c < hn; c++) {
         const x = s.x0 + c * res, z = s.z0 + r * res;
-        const n = track.nearest(x, z);
+        const n = track.nearest(x, z, -1, REACH);
         if (n.i < 0) continue;
         const hw = HW[n.i], d = n.d - hw;
         if (d < -0.6 || d > FADE) continue;

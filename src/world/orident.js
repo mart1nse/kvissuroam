@@ -73,7 +73,7 @@ export function createOrident(scene, world, { shadows = true } = {}) {
       const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), d = [dx / len, dz / len], n = [d[1], -d[0]];
       return { len, d, n, yaw: Math.atan2(-d[1], d[0]), at: (s, o) => [a[0] + d[0] * s + n[0] * o, a[1] + d[1] * s + n[1] * o] };
     };
-    const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.add(BOX(s1 - s0, b - a, th), hex, x, y0 + (a + b) / 2, z, F.yaw); };
+    const slab = (F, s0, s1, a, b, off, th, hex) => { const [x, z] = F.at((s0 + s1) / 2, off + th / 2); p.box(s1 - s0, b - a, th, hex, x, y0 + (a + b) / 2, z, F.yaw); };
     const win = (F, s0, s1, a, b) => {
       slab(F, s0 - 0.08, s1 + 0.08, a - 0.08, b + 0.08, 0, 0.05, COL.frame);
       slab(F, s0, s1, a, b, 0.03, 0.04, COL.win);
@@ -91,9 +91,9 @@ export function createOrident(scene, world, { shadows = true } = {}) {
     const balcony = (F, s0, s1, y) => {
       slab(F, s0, s1, y - 0.05, y + 0.12, 0, 1.2, COL.slab);
       const [ax, az] = F.at(s0 + 0.04, 1.15), [bx, bz] = F.at(s1 - 0.04, 1.15), len = s1 - s0 - 0.08;
-      for (const yy of [1.1, 0.55, 0.25]) p.add(BOX(len, 0.04, 0.04), COL.rail, (ax + bx) / 2, y0 + y + yy, (az + bz) / 2, F.yaw);
-      for (let s = s0 + 0.05; s < s1; s += 0.6) { const [x, z] = F.at(s, 1.15); p.add(BOX(0.04, 1.0, 0.04), COL.rail, x, y0 + y + 0.6, z, F.yaw); }
-      for (const s of [s0 + 0.04, s1 - 0.04]) for (const yy of [1.1, 0.55]) { const [x, z] = F.at(s, 0.6); p.add(BOX(0.04, 0.04, 1.15), COL.rail, x, y0 + y + yy, z, F.yaw); }
+      for (const yy of [1.1, 0.55, 0.25]) p.box(len, 0.04, 0.04, COL.rail, (ax + bx) / 2, y0 + y + yy, (az + bz) / 2, F.yaw);
+      for (let s = s0 + 0.05; s < s1; s += 0.6) { const [x, z] = F.at(s, 1.15); p.box(0.04, 1.0, 0.04, COL.rail, x, y0 + y + 0.6, z, F.yaw); }
+      for (const s of [s0 + 0.04, s1 - 0.04]) for (const yy of [1.1, 0.55]) { const [x, z] = F.at(s, 0.6); p.box(0.04, 0.04, 1.15, COL.rail, x, y0 + y + yy, z, F.yaw); }
       slab(F, s0 + 0.3, s0 + 1.2, y + 0.12, y + 2.4, 0.02, 0.05, COL.frame);
       slab(F, s0 + 0.38, s0 + 1.12, y + 0.2, y + 2.32, 0.05, 0.03, COL.win);
       win(F, s0 + 1.6, s1 - 0.3, y + 0.9, y + 2.4);
@@ -113,7 +113,7 @@ export function createOrident(scene, world, { shadows = true } = {}) {
         }
         slab(F, -0.03, F.len + 0.03, H - 0.65, H + 0.65, 0, 0.34, COL.mullion);                          // the heavy cornice
         const [x, z] = F.at(0, 0.1), m0 = FLOORS[1] + 0.3;
-        p.add(BOX(0.12, H + 0.35 - m0, 0.2), COL.mullion, x, y0 + (m0 + H + 0.35) / 2, z, F.yaw);        // mullion, above the ground floor
+        p.box(0.12, H + 0.35 - m0, 0.2, COL.mullion, x, y0 + (m0 + H + 0.35) / 2, z, F.yaw);        // mullion, above the ground floor
         // inside the bay: the roller blind's box under the ceiling, the ceiling and the floor
         slab(F, 0.08, F.len - 0.08, FLOORS[1] - 0.2, FLOORS[1] - 0.06, -0.24, 0.12, COL.blindBox);
       }
@@ -126,9 +126,9 @@ export function createOrident(scene, world, { shadows = true } = {}) {
         slab(B, 0, B.len, -0.2, FLOORS[1] - 0.05, 0, 0.02, COL.room);
       }
       const [x, z] = G[G.length - 1];
-      p.add(BOX(0.4, H + 0.7, 0.4), COL.mullion, x, y0 + (H + 0.7) / 2, z);
+      p.box(0.4, H + 0.7, 0.4, COL.mullion, x, y0 + (H + 0.7) / 2, z);
       const [x0, z0] = G[0];
-      p.add(BOX(0.4, H + 0.7, 0.4), COL.mullion, x0, y0 + (H + 0.7) / 2, z0);
+      p.box(0.4, H + 0.7, 0.4, COL.mullion, x0, y0 + (H + 0.7) / 2, z0);
     }
 
     // ---- the brick faces
@@ -171,10 +171,10 @@ export function createOrident(scene, world, { shadows = true } = {}) {
     }
 
     // ---- roof: vent boxes and two chimneys
-    for (const [x, z, w, h, d] of [[960, 2624, 2.4, 0.9, 1.6], [965.5, 2625.5, 1.4, 0.7, 1.4], [953, 2627.5, 1.8, 0.8, 1.2]]) p.add(BOX(w, h, d), COL.vent, x, y0 + H + h / 2, z, 0.32);
+    for (const [x, z, w, h, d] of [[960, 2624, 2.4, 0.9, 1.6], [965.5, 2625.5, 1.4, 0.7, 1.4], [953, 2627.5, 1.8, 0.8, 1.2]]) p.box(w, h, d, COL.vent, x, y0 + H + h / 2, z, 0.32);
     for (const [x, z] of [[968.5, 2627.2], [955.3, 2631.2]]) {
-      p.add(BOX(0.8, 1.8, 0.8), COL.brick, x, y0 + H + 0.9, z, 0.32);
-      p.add(BOX(0.95, 0.12, 0.95), COL.cope, x, y0 + H + 1.85, z, 0.32);
+      p.box(0.8, 1.8, 0.8, COL.brick, x, y0 + H + 0.9, z, 0.32);
+      p.box(0.95, 0.12, 0.95, COL.cope, x, y0 + H + 1.85, z, 0.32);
     }
 
     const mesh = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
+import { jobs } from './jobs.js';
+import { warm as warmer } from './warm.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createGarage } from './garage.js';
@@ -135,6 +137,9 @@ if (gpu.software) console.warn('WebGL is running in software, without the graphi
 
 const canvas = $('#view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software, powerPreference: 'high-performance' });
+// pictures of queued work go to the graphics card one by one (on phones as their small copy: see phonetex.js)
+const sendTex = (tex) => { shrinker?.texture(tex); renderer.initTexture(tex); };
+jobs.setUploader(sendTex);
 renderer.setPixelRatio(quality.pixelRatio);
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -146,6 +151,8 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, 420, 2800);
 const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, quality.far);
+// (what builds itself during a drive is made ready for the graphics card before it is shown: src/warm.js; ?warm=0 for the old way)
+warmer.init(renderer, scene, camera, { on: params.get('warm') !== '0', send: sendTex });
 const sky = createSky();
 sky.scale.setScalar(quality.far * 0.9);
 scene.add(sky);
@@ -450,24 +457,36 @@ async function boot() {
   levelTrackShoulders(world);                      // before the ground of a sector is built from its heights
   levelEmajoeWall(world);                          // the strip from the kerb to the garden wall, level with the street
   levelKontserdimaja(world);                       // and the pavements up Vanemuise to its stone wall and the concert house
+  // A square of the map has arrived: its ground, houses, trees, markings, walls, bridges, props and signs.
+  // In steps (src/jobs.js): done in one go it was 50 to 140 ms on a fast machine, a pause in the drive each time.
   world.onSectorLoad((s) => {
-    terrain.addSector(s);
-    s.bMesh = buildBuildings(s);
-    if (s.bMesh) scene.add(s.bMesh);
-    s.tree = buildTrees(s);
-    if (s.tree) scene.add(s.tree.group);
-    s.low = buildLow(s);
-    if (s.low) scene.add(s.low);
-    s.marks = buildMarks(s);
-    if (s.marks) scene.add(s.marks);
-    s.walls = buildWalls(s);
-    if (s.walls) scene.add(s.walls);
-    s.decks = buildDeckBodies(world, s);
-    if (s.decks) scene.add(s.decks);
-    attachProps(s, (g) => { if (s.props) return; s.props = g; scene.add(g); });
-    attachSigns(s, (g) => { if (s.signs) return; s.signs = g; scene.add(g); });
+    const H = s.H, here = () => s.state === 'ready' && s.H === H;       // not unloaded (or loaded afresh) meanwhile
+    s.job = jobs.add(function* () {
+      yield* terrain.addSectorSteps(s);
+      if (!here()) return;
+      s.bMesh = buildBuildings(s);
+      if (s.bMesh) scene.add(s.bMesh);
+      yield; if (!here()) return;
+      s.tree = buildTrees(s);
+      if (s.tree) scene.add(s.tree.group);
+      yield; if (!here()) return;
+      s.low = buildLow(s);
+      if (s.low) scene.add(s.low);
+      s.marks = buildMarks(s);
+      if (s.marks) scene.add(s.marks);
+      yield; if (!here()) return;
+      s.walls = buildWalls(s);
+      if (s.walls) scene.add(s.walls);
+      s.decks = buildDeckBodies(world, s);
+      if (s.decks) scene.add(s.decks);
+      yield; if (!here()) return;
+      attachProps(s, (g) => { if (s.props || !here()) { g.userData.dispose?.(); return; } s.props = g; scene.add(g); });
+      yield; if (!here()) return;
+      attachSigns(s, (g) => { if (s.signs || !here()) { g.userData.dispose?.(); return; } s.signs = g; scene.add(g); });
+    }, 'sector');
   });
   world.onSectorUnload((s) => {
+    s.job?.cancel(); s.job = null;
     terrain.removeSector(s);
     if (s.bMesh) { scene.remove(s.bMesh); s.bMesh.geometry.dispose(); s.bMesh = null; }
     if (s.tree) { scene.remove(s.tree.group); s.tree.dispose(); s.tree = null; }
@@ -482,13 +501,13 @@ async function boot() {
   const sp = createTrack().spawn;
   world.meta.start = { x: sp.x + Math.cos(sp.yaw) * 1.5, z: sp.z + Math.sin(sp.yaw) * 1.5, heading: sp.yaw };
   const s0 = world.meta.start;
-  const jobs = [world.loadAround(s0.x, s0.z, 200)];
+  const loads = [world.loadAround(s0.x, s0.z, 200)];
   if (!params.has('drive') && !params.has('nointro') && !still) {
     intro = createIntro(world, { fixed: fixedIntro, shot: params.has('shot') ? +params.get('shot') : null });
     introFocus = intro.start();
-    jobs.push(world.loadAround(introFocus.x, introFocus.z, 450));
+    loads.push(world.loadAround(introFocus.x, introFocus.z, 450));
   }
-  await Promise.all(jobs);
+  await Promise.all(loads);
   water = createWater(world);
   scene.add(water.group);
   edge = createEdgeGrid(world);
@@ -1133,6 +1152,8 @@ let back = null;                 // the half minute after coming back to the tab
 // Intel graphics near 100% on LOW). 120 Hz gives 60 frames a second, 144 Hz 72, 165 Hz 82, 240 Hz 80.
 // (A computer that cannot keep up misses refreshes, the measured interval grows and nothing is skipped.)
 let rafLast = 0, rafMs = 1000 / 60, rafTick = 0;
+let crawl = 4;                              // frames in a row that took over 0.2 s (a crawl until the first quick frame: the start's own work is done at once)
+let PLACES = null, placeAt = 0;             // the places that build on approach, and which one is asked first
 function frame(ts) {
   requestAnimationFrame(frame);
   const gap = ts - rafLast;
@@ -1155,6 +1176,11 @@ function frame(ts) {
   setup.update();
   padMenu();
   if (!car) return;
+  // building work is spread over frames only while somebody drives and watches the road (src/jobs.js).
+  // Not at a crawl either (under 5 frames a second for a while: drawing without a graphics card, a test taking
+  // pictures): there a frame is too long to hide anything in, and the queue would take minutes.
+  crawl = rawDt > 0.2 ? Math.min(crawl + 1, 8) : 0;
+  jobs.setLive(mode === 'drive' && !dropping && !document.hidden && crawl < 4 && world.ready(car.x, car.z));
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
@@ -1171,66 +1197,24 @@ function frame(ts) {
     props.update(car, dt);
     updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames
     janese.update(car, dt);
-    parked.update(car, dt, camera.position);
+    warmer.scope(() => parked.update(car, dt, camera.position));
     busStops?.update(car);
     aksi.update(car, dt);
-    pootsmani.update(car);
-    angerja.update(car);
-    raekoda.update(car);
-    kuuni.update(car);
-    kuperjanovi.update(car);
-    pepleri.update(car);
-    kaubamaja.update(car);
-    keskus.update(car);
-    keskusTee.update(car);
-    orident.update(car, dt, audio);           // (its glass corner breaks: shards, blinds, dents)
-    delta.update(car);
+    if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
     vabadusLights.update(performance.now() / 1000);          // clock time: the lights fade at their own pace
-    kvissentali.update(car);
-    sireli.update(car);
-    coop.update(car);
-    jaaaeg.update(car);
     discgolf.update(car, dt);
-    janeseMaja.update(car);
-    arhitekti.update(car);
-    elva.update(car);
-    vanemuise.update(car);
-    korve.update(car);
-    korve2.update(car);
-    riia.update(car);
-    teatri.update(car);
-    kontserdimaja.update(car);
-    korve3.update(car);
-    korve4.update(car);
-    haridus10.update(car);
-    katoliku.update(car);
-    katoliku2.update(car);
-    noela.update(car);
-    raadi.update(car);
-    raadi2.update(car);
-    raadi3.update(car);
-    raadi4.update(car);
-    louna.update(car);
-    louna2.update(car);
-    louna3.update(car);
-    louna4.update(car);
-    louna5.update(car);
-    turu.update(car);
-    turu2.update(car);
-    turu3.update(car);
-    turu4.update(car);
-    turu5.update(car);
-    turu6.update(car);
-    kaluri.update(car);
-    riia2.update(car);
-    riia3.update(car);
-    riia4.update(car);
-    riia5.update(car);
-    riia6.update(car);
-    riia7.update(car);
-    ravila.update(car);
-    ravila2.update(car);
-    ravila3.update(car);
+    // The hand-made places build themselves when the car comes near. One at a time while driving: after one
+    // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
+    // Three streets coming due in one frame used to be one freeze of their sum.
+    if (!jobs.resting) {
+      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3];
+      for (let k = 0; k < PLACES.length; k++) {
+        const b0 = performance.now();
+        const P = PLACES[(placeAt + k) % PLACES.length];
+        warmer.scope(() => P.update(car));
+        if (jobs.live && performance.now() - b0 > 6) { placeAt = (placeAt + k + 1) % PLACES.length; jobs.rest(); break; }
+      }
+    }
     skids.update(car);
     skids.updateOthers(mp.remotes(), car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());
@@ -1424,13 +1408,25 @@ function frame(ts) {
         if (performance.now() - lowSince > 20000) { shrinker = createPhoneTextures(renderer, { perScan: 3 }); liteWhy = 'slow in this drive'; console.info('Light mode: small pictures from now on (slow in this drive)'); }
       } else lowSince = 0;
     }
-    trackside.update(car.x, car.z);
-    trackKerbs.update(car.x, car.z);
+    if (!jobs.resting) {
+      const b0 = performance.now();
+      warmer.scope(() => { trackside.update(car.x, car.z); trackKerbs.update(car.x, car.z); });
+      if (jobs.live && performance.now() - b0 > 6) jobs.rest();
+    }
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
     terrain.update(camera.position);
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
   }
+  // queued building work (map squares, painted fronts, ground tiles): a few milliseconds of it every frame
+  // (the queue gets about a third of a frame: 5 ms at 60 a second, more where frames are longer, so that the
+  // work gets done as fast by the clock on a slow machine)
+  const q0 = performance.now();
+  warmer.scope(() => jobs.tick(Math.max(2.5, Math.min(14, rawDt * 300))));
+  // what all that added to the scene: made ready unseen, then let in (src/warm.js). Not in a frame where the
+  // queue's step was a long one, and after a long step of its own the queue rests: one long thing a frame.
+  const q1 = performance.now();
+  if (!jobs.live || q1 - q0 < 8) { warmer.tick(); if (jobs.live && performance.now() - q1 > 8) jobs.rest(); }
   hudTimer -= dt;
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
   if (mode === 'drive') hud.needle(car, dt);
@@ -1485,7 +1481,7 @@ function frame(ts) {
 window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, tex: () => shrinker?.stats, get lite() { return liteWhy; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, get lite() { return liteWhy; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

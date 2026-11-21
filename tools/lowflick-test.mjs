@@ -99,5 +99,38 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// Mid donut (Martin 2026-11-21, fourth ask, two videos of the 190E on grass): (a) a brief lift of the throttle
+// with the wheel held at full lock, then floored again; (b) figure eights, the wheel swapped from full lock one
+// way to the other. In both the donut hold pushed at full strength at once: the slide slowed or reversed, then
+// the tail was flung out at 300-420 deg/s2 (figure eights) and up to 210 (after a lift). Reported: the sharpest
+// 50 ms yaw kick in the way the car already turns (over 30 deg/s and 1.5 km/h) after the lift or the first swap.
+// Judged on grass and gravel; on tarmac a figure eight above 15 km/h swings the car round on its tyres alone
+// (180-270 deg/s2, the hold adds nothing there), so tarmac is shown only for the figure eights.
+const MID_MAX = 185;   // deg/s2
+console.log('\nmid donut: sharpest kick after a brief lift / in figure eights (deg/s2)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3', 'audi200']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    const kick = (inp, T0, end, seed) => {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      const ys = []; let worst = 0;
+      for (let t = 0; t < end; t += dt) {
+        stepCar(car, inp(t), world(surf), dt); ys.push(car.yawRate);
+        if (t > T0 && Math.abs(car.yawRate) > 0.5 && speedKmh(car) > 1.5) worst = Math.max(worst, deg(Math.sign(car.yawRate) * (car.yawRate - ys[ys.length - 7])) / (6 * dt));
+      }
+      return worst;
+    };
+    let lift = 0, fig = 0;
+    for (const seed of [0, 1, 2]) for (const T0 of [5, 6.2, 7.4]) {
+      for (const L of [0.15, 0.3, 0.5]) lift = Math.max(lift, kick((t) => ({ up: t > T0 && t < T0 + L ? 0 : 1, steer: 1 }), T0, T0 + L + 2.5, seed));
+      for (const P of [1.5, 2.5, 3.5]) fig = Math.max(fig, kick((t) => ({ up: 1, steer: t < T0 || Math.floor((t - T0) / P) % 2 ? 1 : -1 }), T0, T0 + 2 * P, seed));
+    }
+    if (lift > MID_MAX || (surf !== 1 && fig > MID_MAX)) ok = false;
+    row.push(`${spec.short} ${lift.toFixed(0)} / ${fig.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

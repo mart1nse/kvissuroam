@@ -25,7 +25,14 @@ self.onmessage = async (e) => {
       bake ||= import('../../world/parkedbake.js');
       const B = await bake;
       await B.simplifierReady();
-      const { data, transfer } = B.packParked(id, build(id, opts), parked);
+      const { data, transfer, packs } = B.packParked(id, build(id, opts), parked);
+      // The bigger pictures go as PNG files (a few dozen kB where the pixels are 2 MB): the page unpacks one
+      // when a car of the model is first seen close up (keepPacked in src/world/parked.js). The copy is
+      // taken here and now, before anything else can paint on the canvas.
+      await Promise.all(packs.map(([i, c]) => c.convertToBlob().then((blob) => { data.near.texs[i].blob = blob; }, () => {
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        data.near.texs[i].data = new Uint8Array(d.buffer); transfer.push(d.buffer);
+      })));
       self.postMessage({ id, key, data }, transfer);
       return;
     }

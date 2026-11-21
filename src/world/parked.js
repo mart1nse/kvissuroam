@@ -8,7 +8,7 @@
 //  - further away with a simplified copy of it (a few thousand triangles, one material, one draw call)
 //    whose paint colour is a uniform, so every colour shares the same geometry.
 import * as THREE from 'three';
-import { buildCarModel, buildParkedInWorker, buildCarInWorker } from '../cars/models/index.js';
+import { buildCarModel, buildParkedInWorker, buildCarInWorker, unpackPicture } from '../cars/models/index.js';
 import { takeParts, takePartsSteps, mergeNear, bakeLodSteps, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
 import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
@@ -241,7 +241,44 @@ function workerTemplate(id, d) {
     paintMat: u.paintAt >= 0 ? u.nearMats[u.paintAt] : undefined, tinted: u.tinted,
   };
   T.needNear = () => {};
+  keepPacked(T);
   return withMaterials(T);
+}
+// A model from the worker brings its bigger pictures packed, as PNG files of a few dozen kB. Sent as pixels
+// they are 2 to 3 MB a model (the bus 8), and every model's pixels stayed in memory for good, on the card
+// or not: 50 MB after 2 km through the centre, where a phone shows three cars close up at a time (21 Nov
+// 2026). Now the pixels are unpacked when a car of the model is first wanted close up (the plain version
+// stays for those few frames) and let go again once the graphics card has them.
+function keepPacked(T) {
+  const texs = new Set();
+  for (const m of T.nearMats) for (const v of Object.values(m)) if (v?.isTexture && v.userData.packed) texs.add(v);
+  let busy = false, retry = 0;
+  const fill = (t) => unpackPicture(t.userData.packed).then((px) => {
+    if (!px || px.length !== t.image.width * t.image.height * 4) throw new Error('picture did not unpack');
+    t.image.data = px;
+    t.needsUpdate = true;
+  });
+  const lacks = (t) => !t.userData.sent && !t.image.data;
+  for (const t of texs) {
+    // (sent to the card: the pixels can go. Sent without its pixels, it is not there and is unpacked again)
+    t.onUpdate = () => { t.userData.sent = !!t.image.data; t.image.data = null; };
+    // (taken off the card by somebody: the pixels are needed again)
+    t.addEventListener('dispose', () => { t.userData.sent = false; if (T.showing && !t.image.data) fill(t).catch((e) => console.warn('parked picture', T.id, e)); });
+  }
+  // The car drove on before the pictures were sent (they go to the card when a car wearing them is first
+  // drawn): nothing will send them now, so the pixels go again. showNear calls this as the last car of the
+  // model stops being shown close up.
+  T.letGo = () => { if (!T.showing && !busy) for (const t of texs) if (!t.userData.sent) t.image.data = null; };
+  // are the pictures ready to be shown? If not they are on their way (asked again a few times a second)
+  T.awake = () => {
+    const need = [...texs].filter(lacks);
+    if (need.length && !busy && performance.now() >= retry) {
+      busy = true;
+      Promise.all(need.map(fill)).then(() => { busy = false; setTimeout(T.letGo, 15000); },
+        (e) => { console.warn('parked pictures', T.id, e); busy = false; retry = performance.now() + 5000; });
+    }
+    return !need.length;
+  };
 }
 function withMaterials(T) {
   // the model's materials, with the body in this colour
@@ -383,7 +420,7 @@ export function createParked(scene, world, opts = {}) {
         return;
       }
       // everything else is built in the worker and arrives finished (src/world/parkedbake.js)
-      buildParkedInWorker(id, SCANNED[id] ? { ...OPTS[id], scan: false } : OPTS[id], { tint: false, tris, lowTris }).then((d) => {
+      buildParkedInWorker(id, SCANNED[id] ? { ...OPTS[id], scan: false } : OPTS[id], { tint: false, tris, lowTris, pack: true }).then((d) => {
         if (!d) { here(); return; }
         try { templates.set(id, workerTemplate(id, d)); } catch (e) { console.warn('parked from worker', id, e); here(); return; }
         next();
@@ -434,7 +471,10 @@ export function createParked(scene, world, opts = {}) {
   }
   function showNear(b, on) {
     if (b.isNear === on) return;
+    if (on && b.T.awake && !b.T.awake()) return;     // (its pictures are being unpacked: the plain version stays)
     b.isNear = on;
+    b.T.showing = (b.T.showing || 0) + (on ? 1 : -1);
+    if (!on && !b.T.showing) b.T.letGo?.();
     if (on && !b.near) {
       b.T.needNear();
       b.near = new THREE.Mesh(b.T.near, b.T.materials(b.s.paint));

@@ -1,15 +1,16 @@
 // A built car as plain data and back: the worker (worker.js) builds a car and posts it to the page,
 // where it becomes the template for other players' cars (instanceCarModel in index.js). Covers what the
 // car models are made of: groups and meshes, buffer geometry, standard and physical materials, and
-// canvas or data textures (sent as pixels).
+// canvas or data textures (sent as pixels; with pack, the bigger canvases are left for the caller to send
+// as picture files instead: packs lists [index in texs, canvas], see worker.js and src/world/parked.js).
 import * as THREE from 'three';
 
 const SKIP = new Set(['id', 'uuid', 'version', '_listeners']);
 // (by name, so that the bundle keeps only these of three.js)
 const MATERIALS = { MeshStandardMaterial: THREE.MeshStandardMaterial, MeshPhysicalMaterial: THREE.MeshPhysicalMaterial, MeshBasicMaterial: THREE.MeshBasicMaterial, MeshLambertMaterial: THREE.MeshLambertMaterial };
 
-export function serializeCar(car) {
-  const geos = [], mats = [], texs = [], transfer = [];
+export function serializeCar(car, pack = false) {
+  const geos = [], mats = [], texs = [], transfer = [], packs = [];
   const gi = new Map(), mi = new Map(), ti = new Map(), ni = new Map();
   // (copies: the worker keeps some of these in caches for the next car)
   const own = (a) => { const c = a.slice(); transfer.push(c.buffer); return c; };
@@ -18,6 +19,7 @@ export function serializeCar(car) {
       const img = t.image;
       let data;
       if (t.isDataTexture) data = own(img.data);
+      else if (pack && img.convertToBlob && img.width * img.height >= 16384) { data = null; packs.push([texs.length, img]); }
       else { const d = img.getContext('2d').getImageData(0, 0, img.width, img.height).data; data = new Uint8Array(d.buffer); transfer.push(d.buffer); }
       const p = {};
       for (const k of ['name', 'colorSpace', 'anisotropy', 'wrapS', 'wrapT', 'magFilter', 'minFilter', 'generateMipmaps', 'flipY', 'premultiplyAlpha', 'unpackAlignment', 'rotation', 'mapping']) p[k] = t[k];
@@ -84,14 +86,15 @@ export function serializeCar(car) {
     fields: { wheelRadius: car.wheelRadius, wheelbase: car.wheelbase, track: car.track, size: car.size, triangles: car.triangles, lights: car.lights, glbGlow: car.glbGlow },
     glbArgs: car.glbArgs ? JSON.parse(JSON.stringify(car.glbArgs)) : null,
   };
-  return { data, transfer };
+  return { data, transfer, packs };
 }
 
 export function deserializeCar(data) {
   const texs = data.texs.map((d) => {
     const t = new THREE.DataTexture(d.data, d.w, d.h, d.format, d.type);
     for (const [k, v] of Object.entries(d.p)) { if (Array.isArray(v)) t[k].set(v[0], v[1]); else t[k] = v; }
-    t.needsUpdate = true;
+    // (a packed picture has no pixels yet: whoever shows it unpacks the file first, see unpackPicture in index.js)
+    if (d.blob) t.userData.packed = d.blob; else t.needsUpdate = true;
     return t;
   });
   const val = (x) => {

@@ -62,7 +62,7 @@ const geoData = (g, transfer) => {
   const s = g.boundingSphere, b = g.boundingBox;
   return { attrs, sphere: [s.center.x, s.center.y, s.center.z, s.radius], box: [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] };
 };
-export function packParked(id, model, { tint = false, tris, lowTris }) {
+export function packParked(id, model, { tint = false, tris, lowTris, pack = false }) {
   model.setLights?.({ headlights: false });
   model.setSoot?.(0);
   const parts = takeParts(id, model, tint);
@@ -73,7 +73,7 @@ export function packParked(id, model, { tint = false, tris, lowTris }) {
   near.computeBoundingBox();
   const g = new THREE.Group();
   g.add(new THREE.Mesh(near, mats));
-  const { data, transfer } = serializeCar({ group: g });
+  const { data, transfer, packs } = serializeCar({ group: g }, pack);
   const lowIndex = low === lod ? null : low.index.array;
   const lodIndex = lod.index.array;
   const out = {
@@ -83,7 +83,7 @@ export function packParked(id, model, { tint = false, tris, lowTris }) {
   };
   transfer.push(lodIndex.buffer);
   if (lowIndex) transfer.push(lowIndex.buffer);
-  return { data: out, transfer: [...new Set(transfer)] };
+  return { data: out, transfer: [...new Set(transfer)], packs };
 }
 export function unpackParked(d) {
   const mesh = deserializeCar(d.near).group.children[0];

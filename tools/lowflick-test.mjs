@@ -132,5 +132,40 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   }
   console.log(`  ${name}: ${row.join(' | ')}`);
 }
+// The swing through the middle of a figure eight (Martin 2026-11-21, fifth ask): with the rears spinning, the
+// slide-catching help unwound the opposite lock as the tail came back through the middle, so the rotation
+// stalled for a moment and then carried on. Reported: the sharpest slowing of the rotation over 50 ms in the
+// middle of a swing, before it peaks (the key held the same way throughout, under 45 km/h, deg/s2); the rear-driven
+// cars must stay under STALL_MAX. Before: 50-91 deg/s2 for them.
+const STALL_MAX = 30;   // deg/s2
+console.log('\nfigure eight: rotation slowing mid swing before it peaks (deg/s2)');
+for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const id of ['w201', 'f40', 'cgt', 'm3', 'audi200']) {
+    const spec = CARS[id];
+    if (only && id !== only) continue;
+    let worst = 0;
+    for (const seed of [0, 1, 2]) for (const P of [1.5, 2.5, 3.5]) for (const T0 of [5, 6.2]) {
+      const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+      let seg = [], w0 = 0, st0 = 0, same = true;
+      // (the swing from 15 deg/s until 10 deg/s short of its peak: the sharpest slowing of the rotation over 50 ms)
+      const judge = () => { let pk = 0; for (let i = 0; i < seg.length; i++) if (seg[i] > seg[pk]) pk = i;
+        if (same) for (let i = 6; i < pk; i++) if (seg[i - 6] > 15 && seg[i] < seg[pk] - 10) worst = Math.max(worst, (seg[i - 6] - seg[i]) / (6 * dt)); };
+      for (let t = 0; t < T0 + 4 * P; t += dt) {
+        const steer = t < T0 || Math.floor((t - T0) / P) % 2 ? 1 : -1;
+        stepCar(car, { up: 1, steer }, world(surf), dt);
+        if (t < T0) continue;
+        const w = Math.sign(car.yawRate);
+        if (w !== w0) { judge(); seg = []; w0 = w; st0 = steer; same = true; }
+        if (steer !== st0 || speedKmh(car) > 45) same = false;
+        seg.push(deg(Math.abs(car.yawRate)));
+      }
+      judge();
+    }
+    if (spec.drive === 'rwd' && worst > STALL_MAX) ok = false;
+    row.push(`${spec.short} ${worst.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

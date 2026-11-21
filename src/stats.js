@@ -8,7 +8,8 @@
 const HEAT = 250;                // heat map squares, metres (the same as HEAT in worker/stats.js)
 
 const params = new URLSearchParams(location.search);
-const on = params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0');
+// (never in stealth mode, ?off=100: see net/stealth.js)
+const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
 const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, err: [] });

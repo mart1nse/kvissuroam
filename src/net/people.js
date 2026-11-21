@@ -34,7 +34,8 @@ export function createPeople({ mp, onFocus }) {
   const elMe = box.querySelector('.me');
   let last = '';
   function refresh() {
-    const nm = mp.name ? `YOU: ${mp.name}` : '';
+    // (stealth, ?off=100: a reminder that nobody else can see us)
+    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}` : '';
     if (elMe.textContent !== nm) elMe.textContent = nm;
     const drivers = mp.online ? mp.players() : [];
     const n = mp.online ? drivers.length + 1 : 0;

@@ -29,7 +29,8 @@
 //            one frame at the Riia and Turu junction.
 //            Why: a ThinkPad T440s and a 2019 MacBook Air (two processor cores, Intel graphics) ran at 10
 //            to 18 FPS on the lowest level (Martin, 21 Nov 2026). The lowest level then drew 461 pieces
-//            and 957 thousand triangles here; with the extra low level 383 and 577 thousand. New things
+//            and 957 thousand triangles at this junction; with the extra low level 383 and 577 thousand
+//            (this check's own view of it reads 386 and 634). New things
 //            must not make the lowest level heavier again (far-away things, things without a simple far
 //            form, shadows that ignore the level).
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists

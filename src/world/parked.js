@@ -9,7 +9,7 @@
 //    whose paint colour is a uniform, so every colour shares the same geometry.
 import * as THREE from 'three';
 import { buildCarModel, buildParkedInWorker, buildCarInWorker } from '../cars/models/index.js';
-import { takeParts, mergeNear, bakeLodSteps, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
+import { takeParts, takePartsSteps, mergeNear, bakeLodSteps, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
 import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
 import { CEED_GREEN } from '../cars/models/ceed.js';
@@ -172,8 +172,44 @@ function buildTemplate(id, scan = false) {
   model.setSoot?.(0);
   return scanned && model.ready ? model.ready.then(() => takeTemplate(id, model)) : takeTemplate(id, model);
 }
-function takeTemplate(id, model) {
-  const parts = takeParts(id, model, !!TINT[id]);
+// A scanned body's pictures are 2048 px, and sending one to the graphics card as the first parked car of
+// its kind came near took 50 to 150 ms in one go (the last stop over 0.1 s on the test drive, 21 Nov 2026).
+// A parked car wears a half-size copy: a quarter of the pixels, a few ms to send, 16 MB less on the card.
+// Not when the picture is on the card already (the player drives that car: sharing it costs nothing).
+// Making a copy takes about 20 ms on the page, so these are steps for the work queue, one picture each;
+// gives a promise that the parts wear the copies.
+const halves = new WeakMap();   // a big picture -> a promise of its half-size twin
+function halfOf(t) {
+  let p = halves.get(t);
+  if (!p) {
+    const im = t.image;
+    p = createImageBitmap(im, { resizeWidth: im.width >> 1, resizeHeight: im.height >> 1, resizeQuality: 'medium', premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
+      .then((small) => { const c = t.clone(); c.source = new THREE.Source(small); c.needsUpdate = true; return c; });
+    halves.set(t, p);
+  }
+  return p;
+}
+const MAPS = ['map', 'normalMap', 'metalnessMap', 'roughnessMap', 'emissiveMap'];
+function* lighterScan(parts) {
+  const mats = new Map(), waits = [];
+  if (typeof createImageBitmap !== 'function') return Promise.resolve();
+  for (const p of parts) {
+    const m = p.mat;
+    if (!m || mats.has(m)) continue;
+    const big = MAPS.filter((k) => { const t = m[k], im = t?.image; return im && im.width * im.height > 1.1e6 && !im.data && !im.getContext && !warm.onCard(t); });
+    if (!big.length) continue;
+    const c = m.clone();
+    mats.set(m, c);
+    for (const k of big) {
+      const fresh = !halves.has(m[k]);
+      try { waits.push(halfOf(m[k]).then((t) => { c[k] = t; }, () => {})); } catch { /* the full picture stays */ }
+      if (fresh) yield;
+    }
+  }
+  for (const p of parts) if (mats.has(p.mat)) p.mat = mats.get(p.mat);
+  return Promise.all(waits);
+}
+function takeTemplate(id, model, parts = takeParts(id, model, !!TINT[id])) {
   const paintPart = parts.find((p) => p.paint || p.tint);
   const T = {
     id, lod: null, parts, near: null, nearMats: null, paints: new Map(),
@@ -333,7 +369,14 @@ export function createParked(scene, world, opts = {}) {
           if (!model) { here(); return; }
           model.setLights?.({ headlights: false });
           model.setSoot?.(0);
-          Promise.resolve(model.ready).then(() => jobs.add(() => { try { bake(takeTemplate(id, model)); } catch (e) { fail(e); } }, 'parked'), fail);
+          Promise.resolve(model.ready).then(() => jobs.add(function* () {
+            try {
+              const parts = yield* takePartsSteps(id, model, !!TINT[id]);
+              yield;
+              const small = yield* lighterScan(parts);
+              small.then(() => jobs.add(() => { try { bake(takeTemplate(id, model, parts)); } catch (e) { fail(e); } }, 'parked'), fail);
+            } catch (e) { fail(e); }
+          }, 'parked'), fail);
         });
         return;
       }

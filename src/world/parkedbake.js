@@ -13,7 +13,9 @@ import { jobs } from '../jobs.js';
 export const simplifierReady = () => MeshoptSimplifier.ready.catch(() => {});
 
 // the model's shown meshes, each in the car's own frame. tint: a scanned body whose white is its paint
-export function takeParts(id, model, tint = false) {
+export function takeParts(id, model, tint = false) { return jobs.run(takePartsSteps(id, model, tint)); }
+// (in steps for the work queue: a scanned body's meshes are big, 50 ms together on the test drive)
+export function* takePartsSteps(id, model, tint = false) {
   model.setLights?.({ headlights: false });
   model.group.updateMatrixWorld(true);
   const parts = [];
@@ -23,11 +25,18 @@ export function takeParts(id, model, tint = false) {
     const scan = !!model.glbLoaded && o.name.endsWith('_glb') && !o.material.name.startsWith('ov_');
     parts.push({ geo, mat: o.material, paint: o.name === `${id}_paint`, scan, tint: scan && tint });
   };
+  const meshes = [];
   if (model.glbLoaded) {
     // the drawn body is hidden under the scan (whole branches of it): leave out what is not shown
-    const walk = (o) => { if (!o.visible) return; if (o.isMesh) take(o); for (const c of o.children) walk(c); };
+    const walk = (o) => { if (!o.visible) return; if (o.isMesh) meshes.push(o); for (const c of o.children) walk(c); };
     walk(model.group);
-  } else model.group.traverse((o) => { if (o.isMesh && o.visible) take(o); });
+  } else model.group.traverse((o) => { if (o.isMesh && o.visible) meshes.push(o); });
+  let n = 0;
+  for (const o of meshes) {
+    take(o);
+    n += o.geometry.attributes.position.count;
+    if (n > 20000) { n = 0; yield; }
+  }
   return parts;
 }
 
@@ -142,6 +151,7 @@ export function* bakeLodSteps(parts, id, tris) {
     // decals lie a few millimetres off the body: lift them clear of the simplified shell
     const puff = paint || scan ? 0 : isPal ? 0.006 : 0.014;
     for (let t = 0; t < P.length; t += 9) {
+      if (t % 73728 === 73719) yield;          // (every 8192 triangles: a scanned body is one part of 100 thousand)
       let r = m.roughness ?? 0.5, mt = m.metalness ?? 0, isPaint = 0;
       if (paint) { c.setRGB(1, 1, 1); isPaint = 1; }
       else if (isPal) { const e = palAt(U[t / 9 * 6]); c.set(e[0]); r = e[1]; mt = e[2]; }
@@ -191,7 +201,7 @@ export function* bakeLodSteps(parts, id, tris) {
       h = (h + 1) & maskT;
     }
     index[i] = v;
-    if ((i & 16383) === 16383) yield;
+    if ((i & 4095) === 4095) yield;
   }
   yield;
   let idx = index;

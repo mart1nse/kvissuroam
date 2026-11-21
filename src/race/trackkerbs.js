@@ -90,7 +90,16 @@ export function createTrackKerbs(world, scene) {
     // and up to a metre across, from the top of the rounded edge to the foot of the back slope
     top(tx0, tz0, size, out) {
       const inTile = (p) => p[0] >= tx0 && p[0] < tx0 + size && p[1] >= tz0 && p[1] < tz0 + size;
-      const y = (p) => world.heightAt(Math.max(tx0, Math.min(tx0 + size, p[0])), Math.max(tz0, Math.min(tz0 + size, p[1]))) + 0.012;
+      // (a point is a corner of up to six triangles, and a ground height here asks the kerbs themselves,
+      // which look up the nearest piece of the lap: each point's height is worked out once. A map square
+      // with kerbs took 20 to 60 ms in one step of its ground tile before, 21 Nov 2026.)
+      const seen = new Map();
+      const y = (p) => {
+        const k = Math.round(p[0] * 64) * 4194304 + Math.round(p[1] * 64);
+        let v = seen.get(k);
+        if (v === undefined) seen.set(k, (v = world.heightAt(Math.max(tx0, Math.min(tx0 + size, p[0])), Math.max(tz0, Math.min(tz0 + size, p[1]))) + 0.012));
+        return v;
+      };
       for (const r of runs) {
         for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
           if (skip(r, t)) continue;
@@ -144,14 +153,19 @@ export function createTrackKerbs(world, scene) {
     const pos = [], col = [];
     const quad = (A, B, C, D, c) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(c.r, c.g, c.b); };
     const P3 = (t, d, lift) => { const [x, z] = at(t, r.s * (hwAt(t) + val(r, 'f', t) + d)); return [x, world.heightAt(x, z) + lift, z]; };
+    // the face: from just under the road up the rounded edge as the cars feel it, then the stone on top.
+    // (The nine points across the kerb at one place along it are worked out once and shared by the quads
+    // before and after: each height asks the kerbs for the nearest piece of the lap, and four points per
+    // quad made this 30 ms a run, 160 ms on a slow computer.)
+    const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * EDGE);
+    const across = (t) => [P3(t, -0.03, -0.03), ...R.map((d) => P3(t, d, 0.012)), P3(t, STONE, 0.016)];
+    let at0 = NaN, row0 = null;
     for (let t = r.i0; t < r.i1 - 1e-6; t += 0.5) {
       if (skip(r, t)) continue;
       const u = Math.min(r.i1, t + 0.5);
-      // the face: from just under the road up the rounded edge as the cars feel it, then the stone on top
-      const R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * EDGE);
-      quad(P3(t, -0.03, -0.03), P3(u, -0.03, -0.03), P3(t, 0, 0.012), P3(u, 0, 0.012), cF);
-      for (let q = 0; q < R.length - 1; q++) quad(P3(t, R[q], 0.012), P3(u, R[q], 0.012), P3(t, R[q + 1], 0.012), P3(u, R[q + 1], 0.012), q < 3 ? cF : cS);
-      quad(P3(t, EDGE, 0.012), P3(u, EDGE, 0.012), P3(t, STONE, 0.016), P3(u, STONE, 0.016), cS);
+      const A = at0 === t ? row0 : across(t), B = across(u);
+      for (let q = 0; q < 8; q++) quad(A[q], B[q], A[q + 1], B[q + 1], q < 4 ? cF : cS);
+      at0 = u; row0 = B;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -169,12 +183,14 @@ export function createTrackKerbs(world, scene) {
     const quad = (A, B, C, D, k) => { pos.push(...A, ...B, ...C, ...C, ...B, ...D); for (let q = 0; q < 6; q++) col.push(k.r, k.g, k.b); };
     const P3 = (j, d, lift) => { const q = c.pts[j], n = c.vN[j], x = q[0] + n[0] * d, z = q[1] + n[1] * d; return [x, world.heightAt(x, z) + lift, z]; };
     const E = c.edge, R = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1].map((f) => f * E), ST = E + 0.12;
+    // (the points across the kerb once per place along it, as in build)
+    const across = (j) => [P3(j, -0.03, -0.03), ...R.map((d) => P3(j, d, 0.012)), P3(j, ST, 0.016)];
+    let at0 = -1, row0 = null;
     for (let j = 0; j < c.pts.length - 1; j++) {
       if (!c.draw[j] || !c.draw[j + 1]) continue;
-      const k = j + 1;
-      quad(P3(j, -0.03, -0.03), P3(k, -0.03, -0.03), P3(j, 0, 0.012), P3(k, 0, 0.012), cF);
-      for (let q = 0; q < R.length - 1; q++) quad(P3(j, R[q], 0.012), P3(k, R[q], 0.012), P3(j, R[q + 1], 0.012), P3(k, R[q + 1], 0.012), q < 3 ? cF : cS);
-      quad(P3(j, E, 0.012), P3(k, E, 0.012), P3(j, ST, 0.016), P3(k, ST, 0.016), cS);
+      const A = at0 === j ? row0 : across(j), B = across(j + 1);
+      for (let q = 0; q < 8; q++) quad(A[q], B[q], A[q + 1], B[q + 1], q < 4 ? cF : cS);
+      at0 = j + 1; row0 = B;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

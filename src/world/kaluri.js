@@ -168,6 +168,7 @@ function asphaltTex(base, seed, old) {
     for (let i = 0; i < 26; i++) {                                  // soft blotches, wrapped round the edges
       const x = r() * w, y = r() * w, rad = (30 + r() * 80) * k, dark = r() < 0.6;
       for (const ox of [-w, 0, w]) for (const oy of [-w, 0, w]) {
+        if (x + ox + rad <= 0 || x + ox - rad >= w || y + oy + rad <= 0 || y + oy - rad >= w) continue;   // (a copy that does not reach the picture)
         const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
         gr.addColorStop(0, dark ? `rgba(40,38,48,${old ? 0.13 : 0.08})` : `rgba(255,250,255,${old ? 0.1 : 0.05})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
@@ -406,10 +407,12 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     strip('paver', -11, 52, -9.3, -5.1);                                                             // grey pavers to the building
     strip('paver', 52, LANE.s1, -8.6, COB.ne);                                                       // the paved corner at the AHHAA end
     // the zebra at the AHHAA end (bars along the lane) and the give-way teeth before it
+    yield;
     for (const v of [-0.95, 0.1, 1.15, 2.2]) line(82.5, v, 85.9, v, WHITE, 0.5);
     for (const v of [-0.9, 0.0, 0.9, 1.8]) { const q = [at3(80.6, v - 0.3, 0.065), at3(80.6, v + 0.3, 0.065), at3(81.3, v, 0.065)]; fpush(q, WHITE); }
 
     // ---------------- the car park
+    yield;
     strip('park', -16.8, 80.5, COB.sw, 21.3);
     strip('park', -16.8, -10.5, LANE.v1, COB.sw);
     strip('park', 41.4, 46.2, 21.3, 25.2);                                                           // the way in from the Circle K yard
@@ -423,9 +426,10 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       line(a[0], a[1], b[0], a[1], WHITE, 0.1); line(a[0], b[1], b[0], b[1], WHITE, 0.1); line(a[0], a[1], a[0], b[1], WHITE, 0.1); line(b[0], a[1], b[0], b[1], WHITE, 0.1);
       for (let s = a[0]; s < b[0] - 1.9; s += 1.6) line(s, b[1], s + 2, a[1], WHITE, 0.1);
     }
-    for (const I of ISLANDS) island(I);
+    for (const I of ISLANDS) { island(I); yield; }
 
     // ---------------- things standing on it
+    yield;
     const quads = { pos: [], uv: [] };
     // an upright picture from (s0, v0) to (s1, v1), y0..y1 above gyv, showing an atlas cell (seen from the right going a -> b)
     function face(a, b, y0, y1, g, cell) {
@@ -459,6 +463,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       face([0.66, 21.45], [0.66, 23.95], 0, 2.3, g, 'kend');
     }
     // green steel skips: sloping sides, a ridged lid with two hatches
+    yield;
     const skip = (() => {
       const L = 3.1, w0 = 1.3, w1 = 1.85, hb = 1.15, hr = 1.5, l0 = 2.3;          // length, bottom and top width, body and ridge height, bottom length
       const v = [[-l0 / 2, 0, -w0 / 2], [l0 / 2, 0, -w0 / 2], [l0 / 2, 0, w0 / 2], [-l0 / 2, 0, w0 / 2], [-L / 2, hb, -w1 / 2], [L / 2, hb, -w1 / 2], [L / 2, hb, w1 / 2], [-L / 2, hb, w1 / 2], [-L / 2 + 0.25, hr, 0], [L / 2 - 0.25, hr, 0]];
@@ -475,6 +480,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       p.box(0.5, 0.36, 0.02, 0xd8452e, x + F.V[0] * -0.96, g + 0.75, z + F.V[1] * -0.96, F.YAW + turn);   // the red notice on its side
     }
     // wheel stops: sand-coloured concrete humps
+    yield;
     const hump = new THREE.CylinderGeometry(0.15, 0.15, 1.75, 8, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2).scale(1, 0.85, 1);
     for (const [s, v] of STOPS) { const [x, z] = F.at(s, v); p.add(hump, 0xc9b27c, x, h(x, z) + 0.03, z, F.YAW + Math.PI / 2); }
     // the EUROPARK sign on its round concrete foot at the Soola end, another on the thin strip by McDonald's
@@ -502,6 +508,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     if (leafy.ok) for (const [s, v, w, hh] of [[76.9, 7.0, 1.3, 1.1], [76.3, 6.2, 0.9, 0.8]]) { const [x, z] = F.at(s, v); leafy.bush(x, h(x, z) + KERB - 0.05, z, w, hh, s, [0.82, 0.9, 0.56]); }
 
     // ---- bikes: a simple frame on two thin wheels, x along the bike
+    yield;
     const bikeParts = (() => {
       const wheel = new THREE.TorusGeometry(0.33, 0.022, 4, 12), out = [];
       const bar = (x0, y0, x1, y1, t = 0.035) => { const l = Math.hypot(x1 - x0, y1 - y0); return new THREE.BoxGeometry(l, t, t).rotateZ(Math.atan2(y1 - y0, x1 - x0)).translate((x0 + x1) / 2, (y0 + y1) / 2, 0); };
@@ -516,10 +523,12 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     };
     // the rack by Kaluri 2's Soola corner
     const BIKES = [0x8a2f2a, 0x2f5f8a, 0xd9d6cf, 0x2a2b30, 0x3a7a55, 0xb87f2a, 0x55585e, 0x7a3a6a];
+    yield;
     for (let k = 0; k < 8; k++) bike(-8.6 + k * 0.72, -6.4 + (k % 2) * 0.12, F.YAW + Math.PI / 2 + (k % 3 - 1) * 0.08, BIKES[k], (k % 2 ? 1 : -1) * 0.1);
     for (let k = 0; k < 5; k++) { boxAt(-8.6 + k * 1.44 + 0.36, -6.95, 0.05, 0.05, 0, 0.8, 0x8d9096); }
     boxAt(-5.36, -6.95, 6.2, 0.05, 0.76, 0.81, 0x8d9096);
     // the bike share dock at the AHHAA end: a low dark rail, white and blue bikes nose in
+    yield;
     boxAt(64, -6.9, 8.4, 0.3, 0, 0.12, 0x2b2d31);
     for (let k = 0; k < 9; k++) {
       boxAt(60.2 + k * 0.95, -6.9, 0.12, 0.2, 0.12, 0.85, 0x33363b);
@@ -542,6 +551,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
     }
 
     // ---------------- into the scene
+    yield;
     const upNormals = (n) => { const a = new Float32Array(n); for (let k = 1; k < n; k += 3) a[k] = 1; return new THREE.BufferAttribute(a, 3); };
     for (const L of Object.values(layers)) {
       if (!L.pos.length) continue;
@@ -560,6 +570,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: L.map, polygonOffset: true, polygonOffsetFactor: L.order, polygonOffsetUnits: L.order, side: THREE.DoubleSide }));
       m.receiveShadow = true; group.add(m);
     }
+    yield;
     {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(flat.pos, 3));
@@ -576,6 +587,7 @@ export function createKaluri(scene, world, { shadows = true } = {}) {
       const m = new THREE.Mesh(g, greyBack(new THREE.MeshLambertMaterial({ map: atlasTex() })));
       group.add(m);
     }
+    yield;
     leafy.finish();
     const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
     if (m) { m.castShadow = shadows; m.receiveShadow = true; group.add(m); }

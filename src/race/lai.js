@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import DATA from './lai.json';
 import { paverTex, grassTex } from '../world/streetkit.js';
 import { drapeGeometry } from '../world/drape.js';
+import { jobs } from '../jobs.js';
 
 const BOX = [1370, 2296, 1515, 2440];
 const COL = { cycle: 0xb2a8c8, setts: 0xd9c3cf, red: 0xe9868f, white: 0xfaf8ff };
@@ -109,16 +110,23 @@ export function createLai(world, group) {
     return shapes;
   }
 
-  function build() {
+  function* build() {
     built = true;
     const sett = paverTex([224, 200, 212], 11);
     sett.repeat.set(1, 2);                                   // square 10 cm setts from the 20 x 10 cm bond
+    // (in steps for the work queue: draping these over the ground was 44 ms in one go on the test drive)
+    yield;
     add(drape(DATA.areas.grass, 0.06, 10), mat({ map: grassTex() }, -3));    // the verges: the shared grass (grassTex in streetkit.js) began here
+    yield;
     add(drape(DATA.areas.paver, 0.075, 1.6), mat({ map: paverTex([208, 206, 218], 3) }, -4));
+    yield;
     add(drape(DATA.areas.setts, 0.075, 1.6), mat({ map: sett }, -4));
+    yield;
     add(drape(DATA.areas.cycle, 0.07, 1), mat({ color: COL.cycle }, -4));
     add(drape(DATA.red.map((q) => [q]), 0.08, 1), mat({ color: COL.red }, -5));
+    yield;
     add(drape([...DATA.marks, ...ribbons(DATA.lines, 0.09)], 0.09, 1), mat({ color: COL.white }, -6));
+    yield;
     // the kerb stones round the islands: from the road up to the setts, just outside the rounded edge
     const pos = [];
     for (const { r } of islands) {
@@ -146,7 +154,7 @@ export function createLai(world, group) {
   return {
     update(x, z) {
       if (built || Math.hypot(x - 1445, z - 2365) > 700) return;
-      if (corners.every(([cx, cz]) => world.ready(cx, cz))) build();
+      if (corners.every(([cx, cz]) => world.ready(cx, cz))) { built = true; jobs.add(build, 'lai'); }
     },
   };
 }

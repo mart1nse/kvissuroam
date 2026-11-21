@@ -5,6 +5,7 @@
 // The Toome Kohvik building south of them and the Toomkirik ruins behind are in the building model.
 import * as THREE from 'three';
 import { Parts, BOX } from './landmarks.js';
+import { jobs } from '../jobs.js';
 
 // blocks of clay measured on the orthophoto (game x, z)
 const UP = { x0: 875.0, x1: 918.5, z0: 2831.8, z1: 2865.2 };
@@ -109,7 +110,7 @@ export function createTennis(world, group) {
     }
   }
 
-  function build() {
+  function* build() {
     built = true;
     const p = new Parts(), solids = [];
 
@@ -119,6 +120,7 @@ export function createTennis(world, group) {
     rect(ground, MINI, COL.pickle, 0.03);
     const mcx = (MINI.x0 + MINI.x1) / 2, mcz = (MINI.z0 + MINI.z1) / 2;
     rect(lines, { x0: mcx - 3.05, x1: mcx + 3.05, z0: mcz - 6.7, z1: mcz + 6.7 }, COL.pickleIn, 0.045, 1.6);
+    yield;
     // two courts in the north block (long axis north-south), one in the south block (east-west)
     const upc = (UP.z0 + UP.z1) / 2, upw = (UP.x1 - UP.x0) / 2;
     court(UP.x0 + upw / 2, upc, 0, 1, 23.77, 10.97, 8.23, 6.4, p);
@@ -131,6 +133,7 @@ export function createTennis(world, group) {
     paint([mcx, mcz + 2.13], [mcx, mcz + 6.7], 0.05, COL.line);
     for (const [list, mat] of [[ground, groundMat], [lines, lineMat]]) { const m = meshOf(list, mat); if (m) group.add(m); }
 
+    yield;
     // ---- the fence: posts every 3 m, a green windscreen low down and mesh above it
     const F = FENCE;
     const runs = [
@@ -157,6 +160,7 @@ export function createTennis(world, group) {
         solids.push({ x: (a[0] + b[0]) / 2, z: (a[1] + b[1]) / 2, yaw, hx: l / 2, hz: 0.1 });
       }
     }
+    yield;
     // the double gate: a frame of tubes with mesh in it, closed
     {
       const gz = F.z1, w = GATE.x1 - GATE.x0, gy = y(GATE.x0 + w / 2, gz);
@@ -176,9 +180,11 @@ export function createTennis(world, group) {
       p.box(0.7, 0.18, 0.4, COL.lamp, x, yy + 8.05, z);
     }
 
+    yield;
     const m = p.mesh(solidMat);
     if (m) { m.castShadow = m.receiveShadow = true; group.add(m); }
 
+    yield;
     // mesh panels (see-through) and windscreens (opaque, below the mesh), as merged planes
     const tex = meshTex();
     const panels = (list, from, height, mat, uvScale) => {
@@ -207,8 +213,11 @@ export function createTennis(world, group) {
       group.add(mesh);
     };
     panels(gateList, 0.05, 2.7, new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), 3);
+    yield;
     panels(meshList, F.screen + 0.1, F.h - F.screen - 0.1, new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), 3);
+    yield;
     panels(screenList, 0.1, F.screen, new THREE.MeshLambertMaterial({ color: COL.screen, side: THREE.DoubleSide }), 0);
+    yield;
     world.addSolids(solids);
   }
 
@@ -217,7 +226,7 @@ export function createTennis(world, group) {
     update(x, z) {
       if (built || Math.hypot(ref[0] - x, ref[1] - z) > 700) return;
       const pts = [[FENCE.x0, FENCE.z0], [FENCE.x1, FENCE.z0], [FENCE.x0, FENCE.z1], [FENCE.x1, FENCE.z1]];
-      if (pts.every(([px, pz]) => world.ready(px, pz))) build();
+      if (pts.every(([px, pz]) => world.ready(px, pz))) { built = true; jobs.add(build, 'tennis'); }
     },
   };
 }

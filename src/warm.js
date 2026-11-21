@@ -50,6 +50,15 @@ function weight(o) {
   for (const k in g.attributes) n += g.attributes[k].array?.byteLength || 0;
   return n / 1048576;
 }
+const whose = new WeakMap();   // picture -> [the first object that wears it, as which map], for the slow list
+function where(t) {
+  const w = whose.get(t);
+  if (!w) return '';
+  const names = [];
+  for (let q = w[0]; q && names.length < 4; q = q.parent) if (q.name) names.push(q.name);
+  const e = w[0].matrixWorld.elements;
+  return ` ${w[1]} at ${Math.round(e[12])}, ${Math.round(e[14])}${names.length ? ' ' + names.join(' < ') : ''}`;
+}
 function texturesOf(list) {
   const out = new Set();
   for (const o of list) {
@@ -64,6 +73,7 @@ function texturesOf(list) {
         const p = renderer.properties.get(t);
         if (p.__webglTexture !== undefined && p.__version === t.version) continue;
         out.add(t);
+        if (!whose.has(t)) whose.set(t, [o, k]);
       }
     }
   }
@@ -90,6 +100,8 @@ export const warm = {
   get state() { return { held: held.size, fresh: fresh.length, stage: stage && { n: stage.list.length, mats: stage.mats.length, tex: stage.tex ? stage.tex.length : -1, k: stage.k, shown: stage.shown, ms: Math.round(now() - stage.t0) } }; },
   // is this object still held back?
   holding(o) { return held.has(o); },
+  // is this picture on the graphics card already?
+  onCard(t) { return !!renderer && renderer.properties.get(t).__webglTexture !== undefined; },
   // everything into the picture at once (nobody is watching the road: the menu, a jump across the map)
   flush() {
     if (!held.size) return;
@@ -121,13 +133,16 @@ export const warm = {
     }
     if (!S.tex) S.tex = texturesOf(S.list);
     if (S.k < S.tex.length) {                              // pictures: about 1.5 megapixels a frame
-      for (let px = 0; S.k < S.tex.length && px < 1.5e6 * k; S.k++) {
+      // (and no further picture once this frame's sending has taken 4 ms, times k: on a slow computer one
+      // 1024 px picture takes 40 ms, and six in a frame, as the pixel count alone allowed, were a 0.2 s stop)
+      const f0 = now();
+      for (let px = 0; S.k < S.tex.length && px < 1.5e6 * k && (px === 0 || now() - f0 < 4 * k); S.k++) {
         const t = S.tex[S.k];
         px += (t.image.width || 0) * (t.image.height || 0);
         const s0 = now();
         try { send(t); } catch (err) { console.warn(err); }
         // (a picture that took long to send is noted with the queue's slow steps, for tools/freeze-profile.cjs)
-        if (now() - s0 > 20) jobs.note(`picture ${t.image.width}x${t.image.height}${t.name ? ' ' + t.name : ''}${t.isCanvasTexture ? ' (painted)' : ''}`, Math.round(now() - s0));
+        if (now() - s0 > 20) jobs.note(`picture ${t.image.width}x${t.image.height}${t.name ? ' ' + t.name : ''}${t.isCanvasTexture ? ' (painted)' : ` (${t.image.constructor?.name})`}${where(t)}`, Math.round(now() - s0));
       }
       return;
     }

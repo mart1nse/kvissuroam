@@ -51,7 +51,7 @@ export const jobs = {
       job.n++;
       try { if (job.it.next().done) { job.done = true; queue.shift(); } } catch (err) { console.error(err); job.done = true; queue.shift(); }
       const t = now();
-      if (t - s0 > 20) { slow.push([job.label, job.n, Math.round(t - s0)]); if (slow.length > 40) slow.shift(); }
+      if (t - s0 > 20) { slow.push([job.label, job.n, Math.round(t - s0)]); if (slow.length > 150) slow.shift(); }
       if (t - s0 > long && !hurry) { restUntil = t + pause(t); break; }
       if (t - t0 >= budget) break;
     }
@@ -65,7 +65,7 @@ export const jobs = {
   get live() { return live; },
   get slow() { return slow; },
   // something slow outside the queue (the warmer sending a big picture), for the same list
-  note(label, ms) { slow.push([label, 0, ms]); if (slow.length > 40) slow.shift(); },
+  note(label, ms) { slow.push([label, 0, ms]); if (slow.length > 150) slow.shift(); },
   get labels() { return queue.map((j) => j.label + (j.done ? ' (done)' : '') + ' ' + j.n); },
   // live while somebody is driving and watching; switching it off finishes everything queued at once
   setLive(v) {

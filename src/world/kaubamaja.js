@@ -12,6 +12,7 @@ import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
 import { paintScale } from './paintscale.js';
 import { medianShift } from './keskustee.js';
+import { jobs } from '../jobs.js';
 
 const O = [1659.6, 3088.7];                              // west corner of the roof (game x, z)
 const UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];     // along Küüni (to the south corner), along the park face (to the north corner)
@@ -227,7 +228,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
-  function build() {
+  function* build() {
     built = true;
     const p = new Parts(), solids = [];
     const h = (x, z) => world.heightAt(x, z);
@@ -254,6 +255,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     slab(37, 39, 30, 72, TOP + 5.6, TOP + 5.9, 0x6f86a8);                           // the skylight strip
 
     // ---- the colonnade: round columns just inside the roof edge
+    yield;
     const column = new THREE.CylinderGeometry(0.4, 0.4, 1, 14);
     const colAt = (a, b) => {
       const [x, z] = at(a, b), y0 = h(x, z) - 0.4;
@@ -266,6 +268,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     for (let k = 1; k < 9; k++) { const a = E + (LA - 2 * E) * k / 9; colAt(a, E); colAt(a, LB - E); }
 
     // ---- edge band and body faces
+    yield;
     const letters = { kuuni: 27, riia: 43, vabaduse: 50, park: 22 };
     let seed = 3;
     for (const [name, S] of Object.entries(SIDES)) {
@@ -275,9 +278,11 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       const P = painter(len, 0, 20, Math.min(22, 4096 / len));
       FACES[name](P, len, gy);
       plane(S, INSET, S.len - INSET, 0, 20, -INSET + 0.07, P.texture());
+      yield;
     }
 
     // ---- Riia side: entrance canopy, the paved terrace behind its orange wall, the orange ramp down to the pavement
+    yield;
     {
       const S = SIDES.riia, gy = (s, out = 0.5) => { const [x, z] = S.at(s, out); return h(x, z); };
       const fl = gy(INSET + 32);                                                     // floor level at the doors
@@ -299,6 +304,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       along(s0 - 6, s0, 2.0, 5.0, fl - 4, fl + 0.02, COL.paving);                    // the landing at its top
     }
     // ---- Küüni side: the entrance canopy; platform benches on the plaza
+    yield;
     {
       const S = SIDES.kuuni, gy = (s) => { const [x, z] = S.at(s, 0.5); return h(x, z); };
       const fl = gy(INSET + 17);
@@ -314,6 +320,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     }
 
     // ---- the Riia median: a steel railing along its Kaubamaja edge and a row of young limes
+    yield;
     {
       // the median's line bends 1.65 m out at the Küüni end to meet the median past the crossing (medianShift)
       const S = SIDES.riia, OUT = 18.9, list = [], M = (s, o) => S.at(s, o + medianShift(s));
@@ -354,6 +361,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       }
     }
 
+    yield;
     const mesh = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
     if (mesh) { mesh.castShadow = shadows; mesh.receiveShadow = true; group.add(mesh); }
     world.addSolids(solids);
@@ -363,7 +371,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([at(0, 0), at(LA, 0), at(LA, LB), at(0, LB), SIDES.riia.at(50, 18)].every((q) => world.ready(q[0], q[1]))) build();
+      if ([at(0, 0), at(LA, 0), at(LA, LB), at(0, LB), SIDES.riia.at(50, 18)].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'kaubamaja'); }
     },
   };
 }

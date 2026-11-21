@@ -3,6 +3,7 @@
 // on the Küüni paving. Measured from the 2024 orthophoto. No names or numbers are painted on the road.
 import * as THREE from 'three';
 import { roadFrame, streetKit } from './streetkit.js';
+import { jobs } from '../jobs.js';
 
 const S = [1713.8, 3144.9], UB = [0.7189, -0.6951];      // Kaubamaja's south corner, along its Riia face towards the junction
 const CENTRE = [1750, 3120];
@@ -37,7 +38,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
   let built = false;
-  function build() {
+  function* build() {
     built = true;
     const K = streetKit(world, group, { shadows });
     // Riia: t is the map x along the face, `out` metres from the roof edge towards Kvartal
@@ -52,6 +53,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     };
     strip(3, 103, 17.7, 20.7, 'lawn');                                       // the median
     strip(3, 103, 17.45, 17.7, 'concrete'); strip(3, 103, 20.7, 20.95, 'concrete');
+    yield;
     const dashes = (s0, s1, o) => { for (let s = s0; s < s1; s += 6) strip(s, s + 2, o - 0.06, o + 0.06, 'white'); };
     dashes(4, 84, 14.9);                                                     // Kaubamaja side: two lanes
     for (const o of [24.0, 27.3, 30.6]) dashes(4, 78, o);                    // Kvartal side: four lanes
@@ -59,8 +61,11 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     strip(84, 99, 14.84, 14.96, 'white');
     strip(99, 99.45, 21.2, 33.6, 'white');                                   // stop line towards the junction
     strip(1.5, 1.95, 12.4, 17.3, 'white');                                   // and the one before the Küüni crossing
+    yield;
     K.finish();
+    yield;
     redCross();
+    yield;
     junction();
   }
   // ---- the red brick cross round Kaubamaja's west corner, where the lap turns (Martin, 19 Nov, his lines on
@@ -217,7 +222,7 @@ export function createKeskusTee(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 900) return;
-      if ([[1650, 3080], [1600, 3050], [1500, 2940], [1550, 2990], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[1650, 3080], [1600, 3050], [1500, 2940], [1550, 2990], [1700, 3010], [1720, 3160], [1805, 3085], [1770, 3110], [1850, 3045], [1840, 3096]].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'keskustee'); }
     },
   };
 }

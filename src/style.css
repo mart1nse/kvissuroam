@@ -152,7 +152,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .neon:active { transform: scale(.97); }
 .neon.alt { border-color: var(--cyan); text-shadow: 0 0 12px var(--cyan); box-shadow: 0 0 22px rgba(47, 243, 255, .45), inset 0 0 18px rgba(47, 243, 255, .2); background: rgba(47, 243, 255, .12); }
 #sunk h2 { margin: 0; font-size: clamp(28px, 7vw, 72px); font-style: italic; font-weight: 900; color: var(--cyan); text-shadow: 3px 3px 0 var(--hot), 0 0 24px rgba(47, 243, 255, .7); }
-#sunk p { margin: 0 0 8px; letter-spacing: .1em; }
 #sunk .neon { font-size: clamp(11px, 1.7vw, 17px); letter-spacing: .18em; }
 .row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
 

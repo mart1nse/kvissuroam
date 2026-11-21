@@ -1,0 +1,59 @@
+{
+ "when": "2026-11-21T01:19:24.742Z",
+ "commit": "8911e22",
+ "phone": {
+  "menu": {
+   "canvas": 173,
+   "gl": 156,
+   "tex": 125,
+   "buf": 31,
+   "heap": 280,
+   "glPeak": 156
+  },
+  "driveSpike": 642,
+  "drive": {
+   "canvas": 108,
+   "gl": 184,
+   "tex": 149,
+   "buf": 36,
+   "heap": 339,
+   "glPeak": 184
+  },
+  "canvases": [
+   "   38 MB  page (src/world/houseskin.js:119 < Object.take (src/world/houseskin.js:129",
+   "    9 MB  page (src/world/houseskin.js:119 < Object.take (src/world/houseskin.js:127",
+   "    8 MB  createHologram (src/world/hologram.js:113 < createKuuni (src/world/kuuni.js:221",
+   "    6 MB  facade (src/race/vallistreet.js:123 < skin (src/race/vallistreet.js:230",
+   "    5 MB  facade (src/race/vallistreet.js:123 < skin (src/race/baeristreet.js:334",
+   "    5 MB  copy (src/world/phonetex.js:37 < step (src/world/phonetex.js:77",
+   "    3 MB  canvas (src/world/roadtex.js:70 < src/world/roadtex.js:90",
+   "    2 MB  canvasTex (src/world/streetkit.js:38 < paverTex (src/world/streetkit.js:54",
+   "    2 MB  painting (src/world/pepleri.js:97 < build (src/world/pepleri.js:479",
+   "    2 MB  canvasTex (src/cars/models/kit.js:718 < atlasTex (src/cars/models/f31.js:41",
+   "    2 MB  canvasTex (src/cars/models/kit.js:718 < atlasTex (src/cars/models/passat.js:99",
+   "    2 MB  canvasTex (src/cars/models/kit.js:718 < atlasTex (src/cars/models/mazda6.js:47"
+  ],
+  "cars": {
+   "canvas": 119,
+   "gl": 185,
+   "tex": 149,
+   "buf": 37,
+   "heap": 380,
+   "glPeak": 189
+  },
+  "jump": {
+   "canvas": 139,
+   "gl": 185,
+   "tex": 160,
+   "buf": 26,
+   "heap": 346,
+   "glPeak": 212
+  },
+  "errors": []
+ },
+ "desktop": {
+  "jsMedian": 10.6,
+  "frames": 9
+ },
+ "over": []
+}

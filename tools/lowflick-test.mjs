@@ -43,5 +43,33 @@ for (const [surf, name] of [[1, 'tarmac'], [2, 'gravel']]) {
     console.log(`  ${spec.short.padEnd(13)}${spec.drive} | worst yaw accel ${deg(worst.k).toFixed(0).padStart(5)} deg/s2 (v0 ${worst.v0} thr ${worst.thr} seed ${worst.seed} pre ${worst.pre} t ${worst.at.toFixed(2)}) peak rate ${deg(worst.r).toFixed(0)} | mean of runs: peak rate ${deg(sumR / nR).toFixed(0)} accel ${deg(sumK / nR).toFixed(0)}`);
   }
 }
+// Out of a burnout on full lock (brake let go) or a slide braked to a stop and then driven off: the car stands
+// still with its rear wheels already spinning, and before 2026-11-21 (second ask) the donut hold pushed the tail
+// round at once, 7 to 19 km/h sideways and up to 136 deg/s before the car had reached 12 km/h. Now the tail
+// may come out only as the car gathers pace: the rear axle's sideways speed and the yaw rate are reported up
+// to 12 km/h, and the strong rear-driven cars must stay under TAIL_MAX.
+const TAIL_MAX = 8, YAW_MAX = 95;   // km/h, deg/s
+console.log('\nfrom a standstill with the rears spinning (tail sideways km/h / yaw deg/s before 12 km/h)');
+for (const [surf, name] of [[1, 'tarmac'], [2, 'gravel']]) {
+  const row = [];
+  for (const spec of Object.values(CARS)) {
+    if (only && spec.id !== only) continue;
+    if (spec.drive !== 'rwd' || spec.ref.powerKw / spec.mass < 0.03) continue;
+    let tail = 0, yaw = 0;
+    for (const [tm, inp] of [[3, (t) => ({ up: 1, steer: 1, down: t < 3 ? 1 : 0 })], [11.5, (t) => ({ up: 1, steer: 1, down: t > 5 && t < 11.5 ? 1 : 0 })]])
+      for (const seed of [0, 1, 2, 3]) {
+        const car = createCar(spec, { x: seed * 41, z: seed * 17, yaw: 0 }); car.time = seed * 3.3;
+        let fast = false;
+        for (let t = 0; t < tm + 2; t += dt) {
+          stepCar(car, inp(t), world(surf), dt);
+          if (t < tm || fast || (fast = speedKmh(car) > 12)) continue;
+          tail = Math.max(tail, Math.abs(car.vy - car.b * car.yawRate) * 3.6); yaw = Math.max(yaw, Math.abs(deg(car.yawRate)));
+        }
+      }
+    if (tail > TAIL_MAX || yaw > YAW_MAX) ok = false;
+    row.push(`${spec.short} ${tail.toFixed(1)} / ${yaw.toFixed(0)}`);
+  }
+  console.log(`  ${name}: ${row.join(' | ')}`);
+}
 console.log(ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

@@ -202,6 +202,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       else if (n) { label = 'VOTE START'; cls = 'lit'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> VOTES${isTouch ? '' : ' · PRESS 1 TO RACE'}`; }
       else { label = 'START RACE'; line = `${pips(0, v.need)}<b>0 / ${v.need}</b> VOTES${isTouch ? '' : ' TO START · PRESS 1'}`; }
       if (ph === 'race' && !isTouch) line += ' · RACE STILL ON';
+      // drivers on the map the server does not count: a page from before race mode (it cannot vote
+      // until it is reloaded)
+      const old = mp.players().length + (isDriving() && !mp.stealth ? 1 : 0) - v.of;
+      if (old > 0) line += isTouch ? ` · ${old} OLD PAGE${old > 1 ? 'S' : ''}` : ` · ${old} ON AN OLD PAGE`;
     } else {
       label = 'RACE ON'; cls = 'dim';
       const on = r.racers.filter(active).length;

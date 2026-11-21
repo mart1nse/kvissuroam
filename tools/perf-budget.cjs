@@ -1,28 +1,45 @@
-// Memory and frame-cost budget check: node tools/perf-budget.cjs [--force] [--json out.json] [--port 5197]
+// Memory and freeze-frame budget check: node tools/perf-budget.cjs [--force] [--json out.json] [--port 5197]
 //
-// It takes about two minutes, so it does not run after every merge: when any thread (or the nightly
+// It takes about six minutes, so it does not run after every merge: when any thread (or the nightly
 // run) ran it less than 2 hours ago, it prints that result and stops (Martin, 20 Nov 2026). --force
 // runs it anyway: when Martin asks, or for a change that is likely to weigh (new painted streets, car
-// models, many objects). The last run is kept in the project's shared folder (perf/last-run.json);
-// a skipped run with --json writes that last run's figures there.
+// models, many objects, anything built while driving). The last run is kept in the project's shared
+// folder (perf/last-run.json); a skipped run with --json writes that last run's figures there.
 //
-// Starts the game (vite) and measures it in headless Chromium the way a phone sees it (iPhone 13
-// emulation: light mode, small pictures) and the way a desktop does:
-//   phone:   at the menu, the peak in the first 5 s after DRIVE (garbage not yet collected included), 15 s after DRIVE, after three car changes, and the peak during a map jump to
-//            Kvissentali: live canvases, textures and buffers on the graphics card, JS heap.
-//   desktop: the game code's milliseconds per frame while driving (full settings), the drawing call left out.
-// Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then
-// lists the biggest canvas makers so the cause is easy to find.
+// Starts the game (vite) and measures it in headless Chromium. Each part is there because of something
+// that went wrong for a player; when a new kind of trouble turns up, add a part that would have caught it.
+//   phone memory (iPhone 13 emulation: light mode, small pictures): at the menu, the peak in the first 5 s
+//            after DRIVE (garbage not yet collected included), 15 s after DRIVE, after three car changes and
+//            back to the first car, and the peak during a map jump to Kvissentali: live canvases, textures and buffers on the
+//            graphics card, JS heap.
+//            Why: an iPhone 13 reloads the page when it runs out of memory (Martin's son's phone, 20 Nov
+//            2026, after one morning of new hand-painted streets; again 1-2 s after DRIVE while parked car
+//            models were being built).
+//   test drive (tools/freeze-profile.cjs, once as a desktop and once as a phone): 4.5 km through the
+//            centre at 48 m/s. Judged: the stretches in which the page itself was busy without a break
+//            (how many over 0.1 s, the longest, the time in those over 50 ms), the gaps between frames
+//            over 0.1 s, the game code's time per frame, page errors. The longest gap between frames is
+//            shown and not judged: without a graphics card the software drawing process now and then
+//            stalls for 0.2 to 0.5 s while the page sits idle (about one drive in four).
+//            Why: freeze frames while driving (Martin's Xiaomi, 20 Nov 2026: smooth at 60 to 120 FPS and
+//            then standing still for 0.1 to 1 s): places, painted house fronts and map squares built in one
+//            go as the car came near. Before the fix (PR #372) the game was busy for over 0.1 s 12 times
+//            on this drive, the longest 379 ms; after it, not once (longest about 70 ms).
+// Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
+// the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
+// is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
 //
-// Why: an iPhone 13 reloads the page when it runs out of memory (Martin's son's phone, 20 Nov 2026,
-// after one morning of new hand-painted streets). Every addition should fit the budget; the check also
-// runs every night (a scheduled task) and its history is kept on the perf-reports branch.
-// Headless draws without a graphics card (SwiftShader), so frame rates mean nothing here: memory and the
-// game code's own work per frame are what is measured.
+// What it cannot see: headless draws without a graphics card (SwiftShader), so real frame rates, the
+// graphics card's own time and what a real card does when new things arrive (pictures sent, shaders
+// compiled: tools/gpu-burst.cjs counts those) are not measured, the phone is Chromium dressed as an
+// iPhone and not Safari's engine, and other players joining are not played through.
+// The check runs every night after a day with changes (a scheduled task); its history is kept on the
+// perf-reports branch.
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { chromium, devices } = require('playwright');
+const { drive, summarise, report } = require('./freeze-profile.cjs');
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -105,7 +122,7 @@ async function waitForServer(url, ms) {
 (async () => {
   const vite = spawn(process.execPath, [path.join(ROOT, 'node_modules/vite/bin/vite.js'), '--port', String(PORT), '--strictPort'], { cwd: ROOT, env: { ...process.env, NO_HMR: '1' }, stdio: 'ignore' });
   const url = `http://localhost:${PORT}/`;
-  const out = { when: new Date().toISOString(), commit: '', phone: {}, desktop: {}, over: [] };
+  const out = { when: new Date().toISOString(), commit: '', phone: {}, drive: {}, driveReport: {}, checks: [], over: [] };
   try { out.commit = require('child_process').execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim(); } catch {}
   let browser;
   try {
@@ -139,7 +156,12 @@ async function waitForServer(url, ms) {
     await p.waitForTimeout(9500);
     out.phone.drive = await take();
     out.phone.canvases = await p.evaluate(() => __perfCanvases());
-    for (const id of ['f40', 'enyaq', 'audi200']) { await p.evaluate((i) => __game.setCar(i, true), id); await p.waitForTimeout(2500); }
+    // three other cars and back to the first: what is still held then was not given back. (Read right after
+    // the third change, as it was until 21 Nov, the figure was 1 MB or 17 MB by chance: the Audi's scanned
+    // body arrives a few seconds after the car. It is waited for here, and counted in the peak.)
+    const firstCar = await p.evaluate(() => __game.car.spec.id);
+    await p.evaluate(() => __perfPeak());
+    for (const [id, ms] of [['f40', 2500], ['enyaq', 2500], ['audi200', 8000], [firstCar, 6000]]) { await p.evaluate((i) => __game.setCar(i, true), id); await p.waitForTimeout(ms); }
     out.phone.cars = await take();
     await p.evaluate(() => __perfPeak());
     await p.evaluate(() => __game.dropAt(70, 0));                 // Kvissentali, across the city
@@ -148,29 +170,22 @@ async function waitForServer(url, ms) {
     out.phone.errors = errors;
     await ctx.close();
 
-    // ---- desktop: the game code's work per frame while driving
-    const dctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-    const d = await dctx.newPage();
-    await d.addInitScript(() => {
-      const raf = window.requestAnimationFrame.bind(window);
-      window.__js = [];
-      window.__draw = 0;
-      window.requestAnimationFrame = (f) => raf((ts) => { const t0 = performance.now(), d0 = window.__draw; f(ts); window.__js.push(performance.now() - t0 - (window.__draw - d0)); });
-    });
-    await d.goto(`${url}?drive`, { timeout: 180000 });
-    await d.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
-    // The drawing call is left out of the figure (Martin's go-ahead, 21 Nov 2026). Without a graphics card
-    // these 15 s are about fifteen frames, and what a frame's drawing costs here (new pictures sent and
-    // shaders compiled in software) says nothing about a real machine: whether new things arrived in one
-    // frame or spread over five moved the median from 10 to 25 ms with the same game code per frame.
-    await d.evaluate(() => { const r = window.__game.renderer, draw = r.render.bind(r); r.render = (...a) => { const t = performance.now(); try { return draw(...a); } finally { window.__draw += performance.now() - t; } }; });
-    await d.waitForTimeout(10000);
-    await d.evaluate(() => { window.__js.length = 0; });
-    await d.waitForTimeout(15000);
-    const js = (await d.evaluate(() => window.__js.slice())).filter((x) => x > 0.3).sort((a, b) => a - b);
-    out.desktop.jsMedian = js.length ? +js[js.length >> 1].toFixed(1) : null;
-    out.desktop.frames = js.length;
-    await dctx.close();
+    await browser.close(); browser = null;
+
+    // ---- the test drive: does the game stand still on the way through the centre?
+    // (tools/freeze-profile.cjs: the car is moved 4.5 km through the centre at 48 m/s with drawing switched
+    // off, so frames run at 60 a second without a graphics card; once with a desktop's settings and once
+    // with a phone's. What the graphics card itself does with new things is not seen here.)
+    for (const [who, touch] of [['desktop', false], ['phone', true]]) {
+      try {
+        // (a drive whose profile came without idle samples cannot tell busy from waiting: once more, and
+        // if that one is the same, the frames' game code time stands in, which the printout says)
+        let r = await drive({ port: PORT, route: 'centre', touch });
+        if (summarise(r).busyFrom !== 'profile') r = await drive({ port: PORT, route: 'centre', touch });
+        out.drive[who] = { ...summarise(r), errors: r.errs.slice(0, 5), slow: r.slow };
+        out.driveReport[who] = report(r, 12).slice(3);
+      } catch (e) { out.drive[who] = null; out.driveReport[who] = [`the ${who} drive failed: ${e.message}`]; }
+    }
   } finally {
     await browser?.close();
     vite.kill();
@@ -184,18 +199,39 @@ async function waitForServer(url, ms) {
     ['phone total at DRIVE', out.phone.drive && out.phone.drive.canvas + out.phone.drive.gl + out.phone.drive.heap, budget.phone.driveTotalMB],
     ['phone peak in the 5 s after DRIVE, garbage included', out.phone.driveSpike, budget.phone.driveSpikeMB],
     ['phone graphics card peak in a map jump', out.phone.jump?.glPeak, budget.phone.jumpGlPeakMB],
-    ['phone graphics card growth over 3 car changes', out.phone.cars && out.phone.cars.gl - out.phone.drive.gl, budget.phone.carChangeGrowthMB],
-    ['desktop game code per frame (ms)', out.desktop.jsMedian, budget.desktop.jsMedianMs],
+    ['phone graphics card growth after 3 car changes and back to the first car', out.phone.cars && out.phone.cars.gl - out.phone.drive.gl, budget.phone.carChangeGrowthMB],
+    ['phone graphics card peak during the car changes', out.phone.cars?.glPeak, budget.phone.carChangeGlPeakMB],
   ];
+  for (const who of ['desktop', 'phone']) {
+    const D = out.drive[who], B = budget.drive[who];
+    checks.push(
+      [`${who} drive through the centre: times the game was busy for over 0.1 s`, D?.busy100, B.busyOver100ms],
+      [`${who} drive: longest the game was busy without a break (ms)`, D?.busyLongest, B.busyLongestMs],
+      [`${who} drive: time in busy stretches over 50 ms (s)`, D?.busyS, B.busyS],
+      [`${who} drive: gaps between frames over 0.1 s`, D?.pauses100, B.gapsOver100ms],
+      [`${who} drive: game code per frame, 95th percentile (ms)`, D?.jsP95, B.jsP95Ms],
+      [`${who} drive: page errors`, D ? D.errors.length : null, 0],
+      // shown, not judged (budget null): see the note on the software drawing process at the top
+      [`${who} drive: longest gap between frames (ms), not judged`, D?.longest, null],
+    );
+  }
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {
-    const bad = v == null || v > max;
+    const bad = v == null || (max != null && v > max);
     if (bad) out.over.push(name);
-    console.log(`${bad ? 'OVER' : 'ok  '} ${name}: ${v ?? 'not measured'} (budget ${max})`);
+    out.checks.push({ name, figure: v ?? null, budget: max, ok: !bad });
+    console.log(`${bad ? 'OVER' : max == null ? 'info' : 'ok  '} ${name}: ${v ?? 'not measured'}${max == null ? '' : ` (budget ${max})`}`);
+  }
+  for (const who of ['desktop', 'phone']) {
+    const D = out.drive[who];
+    if (D) console.log(`${who} drive ${JSON.stringify({ km: D.km, seconds: D.seconds, frames: D.frames, jsMedian: D.jsMedian, jsP95: D.jsP95, jsP99: D.jsP99, busy50: D.busy50, busy100: D.busy100, busyLongest: D.busyLongest, busyS: D.busyS, busyFrom: D.busyFrom, gaps50: D.pauses50, gaps100: D.pauses100, longestGap: D.longest, gapsS: D.frozen })}`);
+    if (D?.errors.length) console.log(`${who} drive errors: ${D.errors.join(' | ')}`);
+    // what ran in the busy stretches, when a drive figure is over (or the drive failed)
+    if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));
   }
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
-  if (out.over.length) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
+  if (out.over.some((n) => n.startsWith('phone ') && !n.startsWith('phone drive'))) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });
     const d = out.phone.drive;

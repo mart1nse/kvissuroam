@@ -187,18 +187,21 @@ export function painter(c, px, py, wm, y0, y1, ppm) {
 // ---------------------------------------------------------------- the atlas
 export function createAtlas(size = paintScale() < 1 ? 1024 : 2048) {
   const pages = [];
-  const page = () => {
+  let cur = null;                // the page being filled
+  const page = (w = size, h = size) => {
     const cv = document.createElement('canvas');
-    cv.width = cv.height = size;
-    const p = { cv, c: cv.getContext('2d'), x: 2, y: 2, row: 0 };
+    cv.width = w; cv.height = h;
+    const p = { cv, c: cv.getContext('2d'), x: 2, y: 2, row: 0, w, h };
     pages.push(p);
     return p;
   };
-  // a rectangle of w x h pixels: { page index, x, y }
+  // a rectangle of w x h pixels: { page index, x, y }. A rectangle too big for a page gets a page of its
+  // own, just its size (pages have their size in .w and .h).
   function take(w, h) {
-    let p = pages[pages.length - 1] || page();
+    if (w + 4 > size || h + 4 > size) { const p = page(w + 4, h + 4); return { k: pages.indexOf(p), x: 2, y: 2 }; }
+    let p = cur || (cur = page());
     if (p.x + w + 2 > size) { p.x = 2; p.y += p.row + 4; p.row = 0; }
-    if (p.y + h + 2 > size) { p = page(); }
+    if (p.y + h + 2 > size) { p = cur = page(); }
     const r = { k: pages.indexOf(p), x: p.x, y: p.y };
     p.x += w + 4; p.row = Math.max(p.row, h);
     return r;
@@ -272,7 +275,10 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
   // (queued: a wall is painted at a time, a few milliseconds of it a frame, and the fronts are hung on the
   // houses when the last one is done. Painted in one go, a street of them was 0.1 to 0.3 s of standstill.)
   work.add(function* () {
-    const atlas = createAtlas();
+    // (pages of 1024 pixels, also where the fronts are painted at full size: a 2048 page was one picture of
+    // 16 MB sent to the graphics card in one step, 50 to 480 ms of standstill in the test drives. The fronts
+    // themselves are as sharp as before: a wall too big for a page gets a page of its own.)
+    const atlas = createAtlas(1024);
     const done = [];
     let inked = 0;                      // pixels painted since the canvas was last made to paint
     const h = (x, z) => world.heightAt(x, z);
@@ -293,7 +299,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
         if (yhi - ylo < 0.6) continue;
         const front = faces(W);
         let q = (front ? (over.ppm || spec.ppm || ppm) : far) * paintScale();
-        const most = atlas.size * 0.88;
+        const most = (paintScale() < 1 ? 1024 : 2048) * 0.88;
         q = Math.min(q, most / W.len, most / (yhi - ylo));
         const pw = Math.max(4, Math.round(W.len * q)), ph = Math.max(4, Math.round((yhi - ylo) * q));
         const rect = atlas.take(pw, ph);
@@ -322,7 +328,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       }
     }
     // geometry: every wall's own triangles, pushed 7 cm out, one mesh per atlas page
-    const S = atlas.size, OFF = 0.07;
+    const OFF = 0.07;
     for (let pk = 0; pk < atlas.pages.length; pk++) {
       const pg = atlas.pages[pk];
       const pos = [], nor = [], uv = [];
@@ -336,7 +342,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
             const p = tr[i], sm = p[0] * W.ux + p[2] * W.uz - W.s0;
             pos.push(p[0] + W.nx * OFF, p[1], p[2] + W.nz * OFF);
             nor.push(W.nx, 0, W.nz);
-            uv.push((rect.x + sm / W.len * pw) / S, 1 - (rect.y + (yhi - Math.max(ylo, p[1])) / (yhi - ylo) * ph) / S);
+            uv.push((rect.x + sm / W.len * pw) / pg.w, 1 - (rect.y + (yhi - Math.max(ylo, p[1])) / (yhi - ylo) * ph) / pg.h);
           }
         }
       }

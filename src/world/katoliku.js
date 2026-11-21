@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { setHouseColours } from './streetkit.js';
 import { frame, areaKit, cellKit } from './handbuilt.js';
 import { BOX, rnd } from '../race/landmarks.js';
+import { jobs } from '../jobs.js';
 
 // The school's frame: s along the yard front to the north-east (from the corner at the Oru end), v across it
 // to the back (south-east); the yard is at v < 0
@@ -166,7 +167,8 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
   trees.push([...atS(39.2, -6.6), 4.2, 1.1, 0], [...atS(26.5, -6.6), 4.0, 1.0, 0]);    // the young trees on stakes by the middle block
   world.addTrees(trees);
 
-  function build() {
+  // (in steps, see ../jobs.js: in one go it took 55 ms)
+  function* build() {
     built = true;
     const A = areaKit(world, group, { shadows, fenceColour: 0x34503f });
     const { p, h, box, pave } = A;
@@ -180,6 +182,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     const wall = (sa, va, sb, vb, key, outline) => CK.put(at(sa, va), at(sb, vb), G, key, outline);
     const ppm = 34;
 
+    yield;
     // ---- the cells
     CK.cell('bay', BAY, -1.8, EAVE, rgb(COL.render), (P, w) => { wallBase(P, w, EAVE, 3); bayWindows(P, w / 2); }, ppm);
     CK.cell('plain', 1.0, -1.8, EAVE, rgb(COL.render), (P, w) => wallBase(P, w, EAVE, 5), ppm);
@@ -274,6 +277,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     CK.cell('annex', 4.0, -3, AH, rgb(COL.annex), (P, w) => annexBay(P, w, 41), 26);
     CK.cell('annexPlain', 2.0, -3, AH, rgb(COL.annex), (P, w) => { render(P, 0, -3, w, AH, 43, COL.annex); P.r(0, AH - 0.35, w, AH, '#e4e4e2'); }, 16);
 
+    yield;
     // ---- the walls
     // a long wall from s0 to s1 at v (outside: -V when front, +V when back): margins of plain render, bays
     const longWall = (s0, s1, v, front, nb, dorm) => {
@@ -307,6 +311,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       CK.put(at(CS0, CV0 + 0.08), at(CS1, CV0 + 0.08), G, 'parBack', out.map(([s, y]) => [CW - s, y]));
     }
 
+    yield;
     // ---- the body: boxes behind the painted walls
     const Y0 = -1.8;
     blk(0, CS0, 0, D, Y0, EAVE, COL.yellow3);
@@ -324,6 +329,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       p.add(BOX(Math.hypot(run, yb - ya) + 0.04, 0.16, 0.38).rotateZ(-Math.atan2(yb - ya, run)), COL.white3, x, G + (ya + yb) / 2 + 0.03, z, S.YAW);
     }
 
+    yield;
     // ---- the roofs: red tiles (a small repeating picture), white fascias, grey gutters
     const roof = { pos: [], uv: [] };
     // a roof triangle in (s, v, y) with its slope k (rise per metre) and the direction it faces (ds, dv): the
@@ -428,6 +434,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       blk(s - 0.1, s + 0.1, vv - 0.1, vv + 0.1, 0, 0.3, COL.gutter);
     }
 
+    yield;
     // ---- the steps up to the main door, the cellar canopy at the Oru end
     for (let k = 0; k < 4; k++) blk(CS0 + 7.7 - (3 - k) * 0.3, CS1 - 7.7 + (3 - k) * 0.3, CV0 - 2.0 + k * 0.45, CV0, -0.3, 0.16 + k * 0.16, 0xc9c7c0);
     {
@@ -440,6 +447,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       for (let i = 0; i < 6; i++) blk(1.5 + i * 1.2, 2.7 + i * 1.2, -1.95, -0.1, -1.4, -0.1 - i * 0.22, 0xbcbab3);  // the steps going down
       blk(s1 - 0.6, s1, -2.0, -0.05, -1.4, -0.1, 0xbcbab3);
     }
+    yield;
     // ---- the low terrace block at the back of the middle, a railing on its roof
     {
       blk(28.8, 36.2, 12.7, 22.6, -2.5, 3.0, 0xd9d0ab);
@@ -450,6 +458,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       }
     }
 
+    yield;
     // ---- the annex: two storeys of grey, a flat roof, the bridge over the passage to the back yard
     {
       const blkA = (s0, s1, v0, v1, y0) => { blk(s0, s1, v0, v1, y0, AH, 0xb6b9bc); blk(s0 - 0.1, s1 + 0.1, v0 - 0.1, v1 + 0.1, AH, AH + 0.2, 0xdedfdd); };
@@ -470,6 +479,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       CK.put(at(65.95, 15.7), at(65.95, 11.95), G + 3.2, 'annexPlain', [[0, 0], [2, 0], [2, AH - 3.2], [0, AH - 3.2]]);
     }
 
+    yield;
     // ---- the yard: tarmac, red brick paving and a red band to the playground, grass by the wall
     pave(S, 0.5, 64, -24, -6.3, 'tarmac', 0.06);
     pave(S, 0.2, CS0, -6.3, -3.4, 'red', 0.07); pave(S, CS1, 69, -6.3, -3.4, 'red', 0.07);
@@ -499,6 +509,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       p.add(new THREE.CylinderGeometry(1.72, 1.72, 0.1, 28), 0x6d8a50, x, y + 0.05, z);
     }
 
+    yield;
     // ---- the playground: red rubber, the mound, the red tube frames
     const rubberT = rubberTex();
     A.pave(S, 35, 54, -27.5, -18.5, rubberT, 0.08);
@@ -563,6 +574,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     // the spinner disc
     { const q = P3(38.5, -21.5, 0); p.add(new THREE.CylinderGeometry(0.08, 0.1, 0.5, 8), 0x4d4f55, q[0], q[1] + 0.25, q[2]); p.add(new THREE.CylinderGeometry(0.65, 0.6, 0.08, 18), 0x9aa0a6, q[0], q[1] + 0.5, q[2]); }
 
+    yield;
     // ---- benches (white seats on black frames), bike hoops, dome bollards, black lamp posts
     const bench = (x, z, yaw) => {
       const y = h(x, z), dx = Math.cos(yaw), dz = -Math.sin(yaw), nx = -dz, nz = dx;
@@ -592,6 +604,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     signPost(A, at(55.2, -3.6), 0, 'stop');
     signPost(A, at(13.2, -3.6), 0, 'stop');
 
+    yield;
     // ---- the fences: cream pickets between grey rendered posts on a low concrete curb
     const solids = [];
     const VESKI = [[740.25, 2579.0], [737.46, 2582.15], [711.47, 2611.43], [687.09, 2638.86]];
@@ -656,6 +669,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       pave(F, 9, len + 4, 7.4, 8.9, 'slabs', 0.1);
     }
 
+    yield;
     // ---- the lane along the yard's north-east side: tarmac, the green mesh fence, the neighbours' board
     // fence, the three deep waste bins on their slab
     const LANE = [[735.23, 2569.92], [739.84, 2575.12], [740.93, 2576.36], [761.59, 2609.39], [765.94, 2614.1], [775.06, 2618.23], [784.67, 2624.9]];
@@ -702,6 +716,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
       m.castShadow = shadows; m.receiveShadow = true;
       group.add(m);
     }
+    yield;
     world.addSolids(solids);
   }
 
@@ -709,7 +724,7 @@ export function createKatoliku(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([[700, 2630], [760, 2640], [790, 2660], [740, 2580]].every((q) => world.ready(q[0], q[1]))) build();
+      if ([[700, 2630], [760, 2640], [790, 2660], [740, 2580]].every((q) => world.ready(q[0], q[1]))) jobs.add(build, 'katoliku');
     },
   };
 }

@@ -113,6 +113,7 @@ export const CARS = {
     wheelRadius: 0.364,
     cdA: 0.33 * 2.62,
     drive: 'awd',
+    abs: 0.4,                   // a light anti-lock: the wheels half lock under a full stop, the car still steers a little
     // Dynamic Torque Control: front-biased, couples up to half to the rear
     rearShare: 0.25, rearShareMax: 0.5,
     engine: {
@@ -193,6 +194,7 @@ export const CARS = {
     wheelRadius: 0.343,
     cdA: 0.28 * 2.30,
     drive: 'fwd',
+    abs: 0.4,                   // a light anti-lock, as on the RAV4
     engine: {
       type: 'ice',
       idle: 700,

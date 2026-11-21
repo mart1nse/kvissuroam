@@ -31,7 +31,8 @@ const BURN_MELT = 0.45;          // how much grip the hot, smoking rear tread lo
 const BURN_PRESS = 0.6;          // ...brake pedal from which it heats fully
 const BURN_HEAT_T = 0.6, BURN_COOL_T = 0.4;   // ...how fast it heats and cools (s)
 const BURN_SLIDE_V = 0.05;       // locked front tyres stick below this speed (m/s)
-const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 3;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
+const BURN_SLIDE_KMH = 5, BURN_SLIDE_T = 7;   // ...and how much longer it takes sliding sideways at 5 km/h or more (s)
+const BURN_SLIDE_HOLD = 1.0;     // the donut keeper lets go of a slide only as the brake reaches this (Martin 2026-11-21: slide on twice as long)
 const REV_WAIT = 0.35;           // s the brake alone holds a rear-driven car at a standstill before reverse goes in
 const GEAR_SPIN_LAG = 1.5;       // how much more slowly spinning wheels build up per gear above first
 const LOW_YAW_DAMP = 1.5;       // yaw damping at walking pace (1/s)
@@ -391,7 +392,8 @@ function substep(car, input, world, dt) {
   // forward a little before the fronts take hold, and on the move it comes to a halt gradually, rears
   // smoking; a brake already held when the throttle goes down holds at once)
   // Sliding sideways (out of a donut, say) the squeeze is gentler and slower still, so the car first slides
-  // on with the momentum it has, then straightens and comes to a stop (Martin 2026-11-21).
+  // on with the momentum it has, then straightens and comes to a stop (Martin 2026-11-21; at his ask the slide
+  // now lasts twice as long, about 4 to 5 s from donut to standstill, a little more or less on a leaning road).
   if (!(down > 0)) car.pedalT = 0;
   else { if (!car.pedalT) car.pedalV = Math.min(1, Math.abs(car.vy) * 3.6 / BURN_SLIDE_KMH); car.pedalT = (car.pedalT || 0) + dt; }
   if (car.burn > 0) {
@@ -844,7 +846,7 @@ function substep(car, input, world, dt) {
       else k *= Math.min(1, Math.max(0, (DONUT_SPIN - car.yawRate * turn) / 0.6));
       // (rotating against the wheel already: leave the driver to sort it out)
       // (with the brake on as well the donut is over: no holding it in its band, the car slides on as it will)
-      if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / 0.3));
+      if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / BURN_SLIDE_HOLD));
     }
   }
   // (the hold's moment moves at most DONUT_EASE per second, so it never jumps from a full push to a hold)

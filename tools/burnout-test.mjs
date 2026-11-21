@@ -4,7 +4,7 @@
 //          about spinning with the revs struggling, the bus not at all)
 //  first   brake first, then the throttle (at a standstill the brake alone selects reverse)
 //  roll    rolling at 20 km/h, both pedals go down: seconds to a halt, rear wheelspin on the way
-//  donut   a held donut, then the brake as well
+//  donut   a held donut, then the brake as well: slides on and straightens over 3.5 to 6.5 s
 //  tilt    a burnout on a road leaning 4 deg to the right: how far the tail steps out
 //  ease    the brake eased off slowly mid burnout until the car goes, then pressed again slowly (reined back)
 //  fast    both pedals at 60 km/h: plain braking, as before
@@ -56,9 +56,9 @@ for (const spec of Object.values(CARS)) {
   {
     const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
     let tStop = null, v0 = 0;
-    run(car, flat, 9, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
+    run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
     out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
-    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop > 3)) ok = false;
+    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5)) ok = false;
   }
   // tilt
   {

@@ -121,6 +121,39 @@ function ask(msg) {
 }
 // a parked car's model, near and far versions and all, as data (src/world/parkedbake.js)
 export const buildParkedInWorker = (id, opts, parked) => ask({ id, opts, parked });
+
+// The pixels of a picture that the worker sent as a file (serial.js: userData.packed), as a Uint8Array.
+// In a small worker of its own where the browser can, else here on the page.
+let unpacker = null, unpackerOk = typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof window !== 'undefined';
+const unpacking = new Map();
+let unpackKey = 0;
+async function unpackHere(blob) {
+  const bm = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = bm.width; c.height = bm.height;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(bm, 0, 0);
+  bm.close?.();
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  c.width = c.height = 0;
+  return new Uint8Array(d.buffer);
+}
+export function unpackPicture(blob) {
+  if (unpackerOk && !unpacker) {
+    try {
+      unpacker = new Worker(new URL('./unpack-worker.js', import.meta.url), { type: 'module' });
+      unpacker.onmessage = (e) => { const done = unpacking.get(e.data.key); unpacking.delete(e.data.key); done?.(e.data.error ? null : e.data.data); };
+      unpacker.onerror = () => { unpackerOk = false; for (const done of unpacking.values()) done(null); unpacking.clear(); };
+    } catch { unpackerOk = false; }
+  }
+  if (!unpackerOk) return unpackHere(blob);
+  return new Promise((resolve) => {
+    const key = ++unpackKey;
+    const timer = setTimeout(() => { if (unpacking.delete(key)) resolve(null); }, 10000);
+    unpacking.set(key, (data) => { clearTimeout(timer); resolve(data); });
+    unpacker.postMessage({ key, blob });
+  }).then((data) => data || unpackHere(blob));
+}
 // a car built with the builder's options (a parked one with a scanned body: the body is put on here)
 export function buildCarInWorker(id, opts) {
   return ask({ id, opts }).then((data) => {

@@ -31,9 +31,9 @@ function chevronTex() {
   });
 }
 
-// the first board the player sees from the spawn: a big START LINE billboard on two posts at the
-// first left turn, with left chevrons and the distance to the line
-function startBoardTex(dist) {
+// the first board the player sees from the spawn: a big LAP START billboard on two posts at the
+// first left turn, with left chevrons (Martin, 21 Nov: no line under it, the text sits in the middle)
+function startBoardTex() {
   return canvasTex(1024, 432, (g, w, h) => {
     g.fillStyle = 'rgba(18,6,43,0.82)';
     g.fillRect(0, 0, w, h);
@@ -51,19 +51,15 @@ function startBoardTex(dist) {
       g.shadowBlur = blur; g.strokeStyle = col; g.lineWidth = lw;
       for (let k = 0; k < 3; k++) {
         const x = 120 + k * 62;
-        g.beginPath(); g.moveTo(x, 120); g.lineTo(x - 52, 196); g.lineTo(x, 272); g.stroke();
+        g.beginPath(); g.moveTo(x, 140); g.lineTo(x - 52, 216); g.lineTo(x, 292); g.stroke();
       }
     }
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = 'italic 900 128px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
     g.shadowColor = '#ff2bd6'; g.shadowBlur = 0;
-    g.fillStyle = '#ff2bd6'; g.fillText('START LINE', 626, 186);      // hot offset shadow
+    g.fillStyle = '#ff2bd6'; g.fillText('LAP START', 626, 232);      // hot offset shadow
     g.shadowColor = '#2ff3ff'; g.shadowBlur = 20;
-    g.fillStyle = '#2ff3ff'; g.fillText('START LINE', 620, 180);
-    g.font = 'italic 800 46px "Avenir Next", "Futura", "Trebuchet MS", sans-serif';
-    g.shadowColor = '#ff2bd6'; g.shadowBlur = 14;
-    g.fillStyle = '#ffd45e';
-    g.fillText(`TURN LEFT · LAP STARTS IN ${dist} M`, w / 2, 318);
+    g.fillStyle = '#2ff3ff'; g.fillText('LAP START', 620, 226);
   });
 }
 
@@ -157,8 +153,7 @@ export function createDecor(track, world) {
   const corners = findCorners(track);
   const sp = track.spawnI ?? 0;
   const first = corners.reduce((b, c) => (((c.i - sp + N) % N) < ((b.i - sp + N) % N) ? c : b), corners[0]);
-  const toLine = Math.round((track.length - track.s[first.i]) / 10) * 10;
-  const startTex = startBoardTex(toLine);
+  const startTex = startBoardTex();
   // the billboard is not additive: it has to read as a solid sign in daylight
   const matStart = new THREE.MeshBasicMaterial({ map: startTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
   for (const c of corners) {

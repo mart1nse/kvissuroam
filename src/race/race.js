@@ -425,14 +425,16 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
                   const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
                   showSplit(`FINISH${vs(ref)}`, lapT, ref ? ref.ms / 1000 : null);
+                  // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
+                  const b = bestFor(carId);
+                  const pb = !b || lap.ms < b.ms;
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);
                   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(laps)); } catch { /* private mode */ }
                   renderLast();
-                  const b = bestFor(carId);
-                  const pb = !b || lap.ms < b.ms;
-                  toast(`${pb ? 'NEW RECORD · ' : 'LAP · '}${fmtTime(lapT)}`, 4000);
-                  onLap?.(lap);
+                  // a record gets the big LAP RECORD banner (racemode.js) instead of a toast
+                  if (!pb) toast(`LAP · ${fmtTime(lapT)}`, 4000);
+                  onLap?.(lap, { rec: pb, prev: b });
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');

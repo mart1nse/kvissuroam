@@ -65,7 +65,7 @@ function haloMesh() {
   return m;
 }
 
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, hotlap = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -91,7 +91,21 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the lap ticket the page asked for as it opened (index.html); without one the first hello gets one
   const ticketReady = Promise.resolve(window.__lapTicket).then((k) => { if (typeof k === 'string' && !ticket) ticket = k; }).catch(() => {});
 
-  function setBoard(b) { board = b; onBoard?.(b); }
+  // lap records set while we are online (Martin 2026-11-21): name -> { car, t }; the name carries an
+  // "M3 LAP RECORD" tag in the online list and over the car for REC_MS, while the record stands
+  const REC_MS = 15 * 60000;
+  const recs = new Map();
+  function setBoard(b) {
+    board = b;
+    for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
+    onBoard?.(b);
+  }
+  function recordOf(n) {
+    const r = recs.get(n);
+    if (!r) return '';
+    if (Date.now() - r.t > REC_MS) { recs.delete(n); return ''; }
+    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD`;
+  }
 
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
 
@@ -235,10 +249,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'board':
         if (!m.board) break;
         setBoard(m.board);
-        if (m.lap && typeof m.lap.name === 'string' && m.lap.name !== name) {
+        if (m.lap && typeof m.lap.name === 'string') {
           const best = m.board.allTime?.find((b) => b.car === m.lap.car);
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
-          if (best && best.ms === m.lap.ms && best.name === m.lap.name) toast(`${m.lap.name.toUpperCase()} SET A ${short} RECORD`, 3000);
+          if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
+            recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
+            if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
+          }
         }
         break;
       default:
@@ -430,6 +447,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       if (o.halo) o.halo.visible = hot;
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
+      const rec = recs.size ? recordOf(o.name) : '';
+      if (rec !== (o.rec || '')) { o.rec = rec; if (rec) o.el.dataset.rec = rec; else delete o.el.dataset.rec; }
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
       g.visible = true;
       g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
@@ -485,6 +504,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     setDriving(on) { on = !!on; if (on === driving) return; driving = on; if (!STEALTH) send({ t: 'drv', on: on ? 1 : 0 }); },
     poseOf(id) { const o = others.get(id); return o?.pose || null; },
     nameOf(id) { return others.get(id)?.name; },
+    // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''
+    recordOf,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp });

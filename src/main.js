@@ -620,11 +620,12 @@ async function boot() {
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
     hotlap: () => (!!race?.running && mode === 'drive') || !!raceMode?.ghost,
     onRace: (r) => raceMode?.message(r),
+    onRecord: () => audio.chime?.('record'),
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(); },
+    onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'jump') raceMode?.out(k); },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {

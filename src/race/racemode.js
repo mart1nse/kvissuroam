@@ -304,7 +304,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const pos = ahead + 1, n = r.racers.length;
       const word = pos === 1 ? (n > 1 ? 'WINNER!' : 'RACE COMPLETE') : `${pos}${['ST', 'ND', 'RD'][pos - 1] || 'TH'} OF ${n}`;
       showSplash(`<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>${
-        rec ? `<div class="r">NEW ${rec.car} LAP RECORD · ${fmtTime(lap.ms / 1000)} <em>${rec.gain}</em></div>` : ''}`, rec ? 5600 : 4800, rec ? 'rec' : '');
+        rec ? `<div class="k rk">NEW LAP RECORD</div><div class="p tm rtm">${fmtTime(lap.ms / 1000)}</div>` : ''}`, rec ? 5600 : 4800, rec ? 'rec' : '');
     },
     // out of the race: kind 'off' (off the track), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {

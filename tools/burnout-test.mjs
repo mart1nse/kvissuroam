@@ -4,7 +4,8 @@
 //          about spinning with the revs struggling, the bus not at all)
 //  first   brake first, then the throttle (at a standstill the brake alone selects reverse)
 //  roll    rolling at 20 km/h, both pedals go down: seconds to a halt, rear wheelspin on the way
-//  donut   a held donut, then the brake as well: slides on and straightens over 3.5 to 6.5 s
+//  donut   a held donut, then the brake as well: slides on and straightens over 3.5 to 6.5 s, the slide
+//          angle fading out at the end rather than snapping straight
 //  settle  a wide donut (wheel at 0.7), then the brake and the wheel straight: once the car has straightened it
 //          rolls on only a little before it stops (Martin 2026-11-21: it drove on for seconds, fronts dragging)
 //  tilt    a burnout on a road leaning 4 deg to the right: how far the tail steps out
@@ -61,10 +62,16 @@ for (const spec of Object.values(CARS)) {
   // donut then brake
   {
     const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
-    let tStop = null, v0 = 0;
-    run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => { if (t > 4.9 && t < 5) v0 = speedKmh(c); if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5; });
-    out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
-    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5)) ok = false;
+    let tStop = null, v0 = 0, snap = 0; const angs = [];
+    run(car, flat, 13, (t) => ({ up: 1, steer: 1, down: t > 5 ? 1 : 0 }), (t, c) => {
+      if (t > 4.9 && t < 5) v0 = speedKmh(c);
+      if (t > 5 && tStop === null && speedKmh(c) < 1) tStop = t - 5;
+      // (how fast the slide angle swings round at the end, over 0.1 s, while the car still moves)
+      if (t > 5) { angs.push(deg(Math.atan2(c.vy, Math.abs(c.vx)))); if (t > 5.5 && speedKmh(c) > 1.5 && angs.length > 12) snap = Math.max(snap, Math.abs(angs.at(-1) - angs.at(-13)) / 0.1); }
+    });
+    out.push(`donut ${v0.toFixed(0)} km/h: halt in ${tStop === null ? 'never' : tStop.toFixed(1) + ' s'}, slide angle swings at most ${snap.toFixed(0)} deg/s, rear tread ${(car.slipVR * 3.6).toFixed(0)} km/h at the end`);
+    // (Martin 2026-11-21: the end of the slide straightened in a quarter second, 150-250 deg/s; now it fades)
+    if (spec.ref.powerKw / spec.mass >= 0.03 && (tStop === null || tStop < 3.5 || tStop > 6.5 || snap > 160)) ok = false;
   }
   // settle
   {

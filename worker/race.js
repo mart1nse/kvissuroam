@@ -138,6 +138,7 @@ export class RaceDesk {
     switch (m.t) {
       case 'clock':
         try { ws.send(JSON.stringify({ t: 'clock', c: Number(m.c) || 0, s: now })); } catch { /* closing */ }
+        if (m.r) this.sendTo(ws);     // the browser has no race state yet
         return true;
       case 'drv': {
         const on = !!m.on;

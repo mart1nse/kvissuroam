@@ -72,7 +72,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false;
-  const clockAsk = () => send({ t: 'clock', c: Date.now() });
+  // until the race state has come on this connection, each clock question also asks for it (r: 1):
+  // a browser that missed it on joining otherwise had no race button until somebody voted
+  let raceSeen = false;
+  const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
   const labels = document.createElement('div');
   labels.id = 'names';
@@ -101,7 +104,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     ws = sock;
     let ping = 0;
     sock.onopen = () => {
-      retry = 1; online = true;
+      retry = 1; online = true; raceSeen = false;
       send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
@@ -227,7 +230,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       }
       case 'race':
-        if (m.r && typeof m.r === 'object') onRace?.(m.r);
+        if (m.r && typeof m.r === 'object') { raceSeen = true; onRace?.(m.r); }
         break;
       case 'board':
         if (!m.board) break;

@@ -19,6 +19,13 @@ const HB_HOLD_T = 0.9;          // s: how long the revs are kept up on the handb
 const HB_DUMP = 0.6;            // share of the engine-over-wheels speed that turns into wheelspin when that clutch drops
 const HB_DUMP_MAX = 6;          // m/s: ...and the most of it
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
+// ?turnin=high (Martin 2026-11-22, on trial): held into the turn as the tail steps out, the wheels start where a
+// released wheel would be (CASTER) and give way to the driver over TURNIN_HOLD_T, ending at TURNIN_END, so a short
+// hold still lets the car catch itself and a stubborn one gets nearly full lock into the turn; switched into the
+// slide from opposite lock or from a released wheel they wind in over TURNIN_SWAP_T.
+const TURNIN_HOLD_T = 1.0, TURNIN_SWAP_T = 0.5, TURNIN_END = 0.05;
+let turnInHigh = false;
+export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
 const DONUT = 0.4;              // how firmly a held donut is kept going (share of m*g*L as yaw moment)
@@ -662,7 +669,16 @@ function substep(car, input, world, dt) {
   // (a controller's stick or wheel moves off centre gradually, so the caster fades out over the first
   // quarter of its travel instead of switching off; keys are 0 or 1 and see no change)
   const held = Math.min(1, Math.abs(steerIn) / 0.25);
-  const follow = CASTER + ((steerIn * align < 0 ? HOLD_FOLLOW : 1) - CASTER) * held;
+  let holdFollow = HOLD_FOLLOW;
+  if (turnInHigh) {
+    // (how long the wheel has been held into the slide, and how quickly it is to give way: slowly if the slide
+    // began under a wheel already held in, quicker if the driver has just switched into it)
+    const into = steerIn * align < 0;
+    if (!into) { car.giveT = 0; car.giveDur = sliding > 0 ? TURNIN_SWAP_T : TURNIN_HOLD_T; }
+    else car.giveT = (car.giveT || 0) + dt;
+    holdFollow = CASTER + (TURNIN_END - CASTER) * Math.min(1, (car.giveT || 0) / (car.giveDur || TURNIN_HOLD_T));
+  }
+  const follow = CASTER + ((steerIn * align < 0 ? holdFollow : 1) - CASTER) * held;
   // Catching a slide: held opposite lock points the wheels past the direction
   // of travel, and once the tail swings back that extra lock keeps rotating
   // the car, flinging it into a slide the other way (a tank-slapper). A driver
@@ -1331,7 +1347,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

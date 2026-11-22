@@ -1,12 +1,15 @@
 // Donut check: full lock, full throttle for a long time on grass, gravel and tarmac.
 // The slide should keep going: no snapping straight once the car has scrubbed off
 // its speed, and the revs stay up.
-// Run: node tools/donut-test.mjs [carId] [surf] (verbose trace)
+// Run: node tools/donut-test.mjs [carId] [surf] (verbose trace) [donut=0: without the donut helper, shown only]
 import { CARS } from '../src/cars/specs.js';
-import { createCar, stepCar, speedKmh } from '../src/cars/physics.js';
+import { createCar, stepCar, speedKmh, setDonutHelp } from '../src/cars/physics.js';
 const world = (surf) => ({ meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => surf, sdfAt: () => 100, sdfGrad: (x, z, o) => o });
 const dt = 1 / 120, deg = (r) => (r * 180) / Math.PI;
-const [onlyId, onlySurf] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const bare = argv.includes('donut=0');
+if (bare) setDonutHelp(false);
+const [onlyId, onlySurf] = argv.filter((a) => a !== 'donut=0');
 let ok = true;
 for (const [surf, name] of [[0, 'grass'], [2, 'gravel'], [1, 'tarmac']]) {
   if (onlySurf !== undefined && +onlySurf !== surf) continue;
@@ -37,9 +40,9 @@ for (const [surf, name] of [[0, 'grass'], [2, 'gravel'], [1, 'tarmac']]) {
     // gravel but cannot spin its tyres on dry tarmac, so there it only has to circle)
     const weak = spec.ref.powerKw / spec.mass < 0.03 && surf === 1;
     const must = !weak && (spec.drive === 'rwd' || (spec.drive === 'awd' && spec.engine.type === 'ev'));
-    if (must && (straightT > 1 || !Number.isFinite(car.vx))) ok = false;
+    if (must && !bare && (straightT > 1 || !Number.isFinite(car.vx))) ok = false;
     console.log(`  ${spec.short.padEnd(13)}${spec.drive} | yaw rate ${minYaw.toFixed(0)}..${maxYaw.toFixed(0)} avg ${(sumYaw / n).toFixed(0)} deg/s | slide ${minB.toFixed(0)}..${maxB.toFixed(0)} deg, straight for ${straightT.toFixed(1)} s of 16 | ${minV.toFixed(0)}..${maxV.toFixed(0)} km/h | rpm min ${minRpm.toFixed(0)}`);
   }
 }
-console.log(ok ? '\nok' : '\nFAILED');
+console.log(bare ? '\nwithout the donut helper: shown only, not judged' : ok ? '\nok' : '\nFAILED');
 process.exit(ok ? 0 : 1);

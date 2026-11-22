@@ -12,6 +12,7 @@
 // drive:   saturation; gain: overall level; idleVol: share of the level left at idle.
 // fireAt:  crank angle of each firing in `order`, for engines with uneven firing intervals.
 // stagger: up to this many degrees of fixed offset per cylinder (unequal manifold runners).
+// cylGain: pulse strength of cylinders 1..n (default 1 each): runners of unlike length deliver unlike pulses.
 // smoothTop: for loud, open engines: induction roar cut off above its band, ticks fading with revs, lower
 //          turbo hiss. Without it their noise turns into a sharp hiss; quieter engines keep a brighter top.
 // edge:    0..1, how much sharper the front of each exhaust pulse is than its tail (loud pulses steepen in
@@ -151,6 +152,25 @@ export const ENGINE_SOUNDS = {
     // (0.25, 9, a tad too uneven); more edge and rasp, driven harder and a touch brighter)
     edge: 0.55, rasp: 0.5,
     turbo: true, turboMuffle: 170, hiss: 0.02, whistle: 0.5, whistleF: 1.1,
+  },
+  // Subaru EJ22G: 2.2 litre DOHC 16-valve flat four with one IHI turbo, firing order 1-3-2-4. Cylinders 1 and 3
+  // lie on the right, 2 and 4 on the left, and the cast manifold's runners are of unequal length: the right
+  // bank's pulses reach the turbine together and early, the left bank's come the long way round, late and
+  // softened. So instead of four even beats a turn you hear them in pairs, strong-strong-weak-weak, once every
+  // two turns: the off-beat boxer burble, deep and lumpy at idle, a hard flat drone with a rasp on top as it
+  // pulls, the turbo whistling over it.
+  impreza: {
+    revUp: 30000, blipLag: 0.035,
+    seed: 22, order: [1, 3, 2, 4], banks: [0, 1, 0, 1],
+    fireAt: [0, 180, 374, 554], cylGain: [1.2, 0.74, 1.2, 0.74], stagger: 3,
+    pipes: [{ len: 0.78, fb: -0.5, damp: 0.5 }, { len: 1.34, fb: -0.44, damp: 0.56 }],
+    res: [[88, 1.5, 0.7], [176, 2.0, 0.55], [410, 2.4, 0.34], [980, 2.8, 0.14]], dry: 0.45,
+    lp0: 330, lpRpm: 190, lpLoad: 1250, hp: 26,
+    base: 0.45, overrun: 0.8, pulseDeg: 30, noise: 0.13, rough: 0.07, bias: 0.06,
+    intake: 0.36, intakeF: 560, intakeQ: 1.2, tick: 0.022, tickF: 3800,
+    jitter: 1.5, lope: 12, drive: 2.1, gain: 0.92, idleVol: 0.36,
+    edge: 0.5, rasp: 0.42,
+    turbo: true, turboMuffle: 210, hiss: 0.025, whistle: 0.8, whistleF: 1.0, pops: 0.02,
   },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy

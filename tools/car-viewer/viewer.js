@@ -1,8 +1,11 @@
 // Dev viewer: /tools/car-viewer/index.html?car=w201&view=rear[&brake=1&head=1&reverse=1&steer=0.3&hud=0]
 // Optional free camera: &cam=x,y,z&tgt=x,y,z&fov=40
+// A raw scan as it came (before picture): &glb=/models/_raw.glb&len=4.365 (front +z, scaled to that length);
+// without &len the file is shown as it is (a finished game body)
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildCarModel, CAR_IDS } from '../../src/cars/models/index.js';
 
 const q = new URLSearchParams(location.search);
@@ -56,9 +59,20 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshSta
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
 const t0 = performance.now();
-const car = buildCarModel(id);
+let car;
+if (q.get('glb')) {
+  // the scan as it came: turned to the game's axes (front -z), on the ground, scaled to its real length
+  const g = await new GLTFLoader().loadAsync(q.get('glb'));
+  const group = new THREE.Group(); group.add(g.scene);
+  const b0 = new THREE.Box3().setFromObject(g.scene), s0 = b0.getSize(new THREE.Vector3());
+  if (q.get('len')) { const k = +q.get('len') / s0.z; g.scene.scale.setScalar(k); g.scene.rotation.y = Math.PI; g.scene.position.y = -b0.min.y * k; }
+  let tris = 0;
+  g.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; tris += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3; } });
+  car = { group, triangles: tris, wheels: {}, setLights() {} };
+} else car = buildCarModel(id, q.get('scan') === '0' ? { scan: false } : undefined);   // &scan=0: the stand-in body
 const buildMs = performance.now() - t0;
 scene.add(car.group); window.__car = car;
+await car.ready;
 car.setLights({ brake: q.get('brake') === '1', reverse: q.get('reverse') === '1', headlights: q.get('head') === '1' });
 if (q.get('steer')) { car.wheels.fl.steer.rotation.y = +q.get('steer'); car.wheels.fr.steer.rotation.y = +q.get('steer'); }
 if (q.get('spin')) for (const k in car.wheels) car.wheels[k].spin.rotation.x = +q.get('spin');

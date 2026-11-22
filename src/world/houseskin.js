@@ -271,7 +271,7 @@ export function wallPlanes(world, secKey, base, pick) {
 //   kind 'wood' | 'plaster' | 'brick' | 'stone'; wall; upright; pitch; weather; trim (corner boards, belts, eaves);
 //   plinth { h, type 'plaster' | 'rubble' | 'brick', col }; floors [{ sill, h }] ; win { w, pitch, ... P.win options };
 //   belts [y]; attic { w, h }; doors [{ x, w, h, col, canopy }] (per wall via walls[].doors); draw(P, W, auto)
-export function skinHouses(world, group, houses, { faces = () => true, ppm = 26, far = 11, shadows = true, debug = false } = {}) {
+export function skinHouses(world, group, houses, { faces = () => true, ppm = 26, far = 11, shadows = true, debug = false, label = 'house fronts' } = {}) {
   // (queued: a wall is painted at a time, a few milliseconds of it a frame, and the fronts are hung on the
   // houses when the last one is done. Painted in one go, a street of them was 0.1 to 0.3 s of standstill.)
   work.add(function* () {
@@ -363,7 +363,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       group.add(m);
       yield;
     }
-  }, 'house fronts');
+  }, label);                            // (a place can give its own name, so that the freeze profile says whose fronts took long)
 }
 
 const css = (v, k = 1) => (typeof v === 'string' ? (k === 1 ? v : shade(v, k)) : tone(v, k));

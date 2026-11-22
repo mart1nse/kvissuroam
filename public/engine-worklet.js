@@ -85,7 +85,8 @@ export class EngineCore {
     // (fireAt gives uneven firing intervals; stagger shifts each cylinder's pulse by up to that many
     // degrees, as unequal manifold runners do)
     const step = 720 / c.order.length;
-    this.bias = c.order.map(() => 1 + (r() * 2 - 1) * c.bias);
+    // (cylGain: a fixed strength for each cylinder, 1..n, on top: a boxer's long and short manifold runners)
+    this.bias = c.order.map((_, i) => (1 + (r() * 2 - 1) * c.bias) * (c.cylGain ? c.cylGain[i] : 1));
     this.events = c.order.map((cyl, k) => {
       const a = (c.fireAt ? c.fireAt[k] : k * step) + (c.stagger ? (r() * 2 - 1) * c.stagger : 0);
       return { a: ((a % 720) + 720) % 720, cyl, bank: c.bankOf(cyl) };

@@ -21,6 +21,8 @@ const ROUTES = {
   // Narva mnt: from Tasku over Võidu sild, past Kivi, Delta and the Jüri church to Peetri kirik and Raadi Maxima
   // (kaardista 22 Nov)
   narva: [[1905, 3060], [1893, 2950], [1897, 2887], [1877, 2764], [1825, 2693], [1716, 2522], [1646, 2376], [1635, 2255], [1640, 2140], [1667, 1975], [1734, 1774], [1831, 1583], [1874, 1504]],
+  // Ujula: off Narva mnt past the Coop Konsum and along the university sports hall's car park (22 Nov)
+  ujula: [[1646, 2376], [1635, 2255], [1600, 2160], [1530, 2110], [1500, 2070], [1460, 2040], [1420, 2000], [1440, 1975], [1480, 1940], [1520, 1900]],
   // from Narva mnt at Raadi out to ERM, round its car park and along the museum to its east end (22 Nov)
   erm: [[1874, 1504], [2100, 1350], [2300, 1160], [2384, 990], [2470, 960], [2600, 975], [2760, 1000], [2930, 1000], [3080, 1060]],
   // Vaksali: from Kuperjanovi past the railway station, the hotel and the water tower and back (22 Nov)

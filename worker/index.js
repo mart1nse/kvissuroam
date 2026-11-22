@@ -127,6 +127,15 @@ export class Lobby extends DurableObject {
 
   async alarm() { this.race.alarm(); }
 
+  // a race that closed (or start votes that lapsed) for the stats page: a call to the stats object,
+  // not waited for, so a slow or failing stats object never holds the race up
+  raceStat(r) {
+    const st = this.env?.STATS;
+    if (!st) return;
+    const p = st.get(st.idFromName('stats')).addRace(r).catch(() => {});
+    this.ctx.waitUntil?.(p);
+  }
+
   meta(k) { return this.sql.exec('SELECT v FROM meta WHERE k = ?', k).toArray()[0]?.v ?? null; }
   setMeta(k, v) { this.sql.exec('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v', k, v); }
 

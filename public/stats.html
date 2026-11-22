@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>LINNARING game stats</title>
-<meta name="description" content="How LINNARING is played: anonymous daily totals of visits, cars, laps and where people drive." />
+<meta name="description" content="How LINNARING is played: anonymous daily totals of visits, cars, laps, online races and where people drive." />
 <meta name="robots" content="noindex" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <style>
@@ -69,6 +69,8 @@
   .trouble small, .trouble th small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; }
   .trouble td.tr0 { color: var(--muted); }
   th.n { text-align: right; }
+  .rtab td.n, .rtab th.n { width: auto; white-space: nowrap; }
+  .rtab td.n small { color: var(--muted); margin-left: 5px; font-size: 11.5px; }
   td code { color: var(--ink2); word-break: break-word; font-size: 12.5px; }
   #tip { position: fixed; pointer-events: none; z-index: 9; background: #0b0320; border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; padding: 6px 9px; border-radius: 8px; white-space: nowrap; display: none; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
@@ -153,6 +155,7 @@
       [fmt(t.km, (t.km || 0) < 100 ? 1 : 0) + ' km', 'distance', fmt(misc.drives || 0) + ' DRIVE presses'],
       [fmt(laps.finish), 'laps finished', fmt(laps.start) + ' started'],
       [fmt(t.peak), 'most online at once', fmt(misc.mp || 0) + ' visits met another car'],
+      [fmt((t.race || {}).n), 'online races', fmt((t.race || {}).racers) + ' racers on the grid'],
     ].map(function (x) { return '<div class="tile"><b>' + x[0] + '</b><span>' + x[1] + '</span><small>' + x[2] + '</small></div>'; }).join('') + '</div>';
 
     h += '<div class="grid">';
@@ -165,7 +168,7 @@
       var mx = Math.max(1, Math.max.apply(null, days.map(function (r) { return r.sessions; })));
       var cols = days.map(function (r) {
         var only = Math.max(0, r.sessions - r.drove);
-        var tipT = esc(r.day) + '<br>' + fmt(r.sessions) + ' visits · ' + fmt(r.drove) + ' drove' + (r.drive ? ' · ' + dur(r.drive) : '') + (r.laps ? ' · ' + fmt(r.laps) + ' laps' : '');
+        var tipT = esc(r.day) + '<br>' + fmt(r.sessions) + ' visits · ' + fmt(r.drove) + ' drove' + (r.drive ? ' · ' + dur(r.drive) : '') + (r.laps ? ' · ' + fmt(r.laps) + ' laps' : '') + (r.races ? ' · ' + fmt(r.races) + (r.races === 1 ? ' race' : ' races') : '');
         return '<div class="col" data-tip="' + tipT + '">' +
           (only ? '<div class="seg" style="height:' + (only / mx * 100) + '%;background:' + C.violet + '"></div>' : '') +
           (r.drove ? '<div class="seg" style="height:' + (r.drove / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
@@ -184,6 +187,8 @@
       ['finished', laps.finish || 0], ['checkpoint missed', laps.missed || 0], ['off the track', laps.off || 0],
       ['reset or map jump', laps.jump || 0], ['changed car', laps.reset || 0], ['left mid-lap', laps.quit || 0]], { keep: true, colour: C.pink }));
     h += card('Where laps are given up', 'Checkpoints passed when a lap was cancelled or left.', bars(rowsOf(t.quit, function (k) { return k + ' of 4'; }).sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }), { keep: true, colour: C.pink }));
+
+    h += races(t, name);
 
     h += card('Devices', null, bars(rowsOf(t.dev)));
     h += card('Systems', null, bars(rowsOf(t.os)));
@@ -226,6 +231,51 @@
     h += '</div>';
     out.innerHTML = h;
     drawMap(t.heat || {}, d.heat);
+  }
+
+  // ---- online races (worker/race.js tells worker/stats.js how each race went: cars, times, no names)
+  var lapTime = function (ms) { var s = ms / 1000, m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(2).padStart(5, '0'); };
+  function races(t, name) {
+    var R = t.race || {}, votes = R.votes || {}, n = R.n || 0, racers = R.racers || 0, fin = R.fin || 0;
+    var h = '';
+    var nums = [
+      [fmt(n), 'races run', 'Races that reached the lights. Each one counts on the day it closed.'],
+      [n ? fmt(racers / n, 1) : '–', 'racers per race', 'Everyone on the grid, late joiners included.'],
+      [pct(fin, racers), 'of racers finished', fmt(fin) + ' of ' + fmt(racers) + ' racers crossed the line.'],
+      [fmt(R.late), 'joined late', 'Joined on the grid after the countdown, or up to 2:30 after the lights with a start of their own. ' + fmt(R.lateFin) + ' of them finished.'],
+      [R.wins ? lapTime(R.winMs / R.wins) : '–', 'average winning time', 'The winner\'s time from lights out, averaged over the races someone finished.'],
+      [fmt(R.cancel), 'called off before the lights', 'Started by a vote, but everyone left before the lights went out.'],
+      [fmt(votes.start), 'START votes', 'Votes to start a race (each driver once per vote).'],
+      [fmt(votes.lapsed), 'START votes lapsed', 'Votes that waited 2 minutes without enough others joining in.'],
+      [fmt(votes.restart), 'RESTART votes', 'Votes by racers to restart a race in progress.'],
+    ];
+    h += card('Online races', 'Races voted for with START: one lap of the Toomemägi circuit from the grid on Küüni.', '<div class="nums">' + nums.map(function (x) {
+      return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>', true);
+    if (!n && !R.cancel && !votes.start) return h;
+    h += card('Racers per race', null, bars(['1', '2', '3', '4-5', '6-9', '10+'].map(function (k) { return [k === '1' ? '1 (alone)' : k + ' racers', (R.size || {})[k] || 0]; }), { keep: true, colour: C.hot }));
+    var end = R.end || {};
+    h += card('How races ended', null, bars([
+      ['all finished or out', end.done || 0], ['7:00 limit reached', end.time || 0],
+      ['restarted by vote', end.restart || 0], ['all dropped out', end.empty || 0]], { keep: true, colour: C.hot }));
+    var OUT = { off: 'off the track', cut: 'short cut', jump: 'reset', car: 'changed car', start: 'pressed START', map: 'map jump', left: 'left the game', time: 'still racing at 7:00', quit: 'retired', restart: 'race restarted' };
+    h += card('Why racers did not finish', fmt(racers - fin) + ' racers did not cross the line.', bars(rowsOf(R.out, function (k) { return OUT[k] || k; }), { colour: C.hot }));
+    // cars on the grid, with how many of them finished and won
+    var cars = Object.keys(R.car || {}).sort(function (a, b) { return R.car[b] - R.car[a]; }).slice(0, 12);
+    var best = t.raceBest || {};
+    h += card('Cars in races', 'Racers per car, how many of them finished and won, and the car\'s fastest race.', cars.length
+      ? '<table class="rtab"><thead><tr><th>Car</th><th class="n">Racers</th><th class="n">Finished</th><th class="n">Wins</th><th class="n">Fastest</th></tr></thead><tbody>' + cars.map(function (c) {
+          var f = (R.carFin || {})[c] || 0;
+          return '<tr><td>' + esc(name(c)) + '</td><td class="n">' + fmt(R.car[c]) + '</td><td class="n">' + fmt(f) + '<small>' + pct(f, R.car[c]) + '</small></td><td class="n">' + fmt((R.carWin || {})[c] || 0) + '</td><td class="n">' + (best[c] ? lapTime(best[c]) : '–') + '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : '<p class="empty">Nothing yet.</p>', true);
+    var hours = R.hour || {}, hm = 1, hc = '';
+    for (var hh = 0; hh < 24; hh++) hm = Math.max(hm, hours[hh] || 0);
+    for (hh = 0; hh < 24; hh++) {
+      var v = hours[hh] || 0;
+      hc += '<div class="col" data-tip="' + hh + ':00–' + hh + ':59 · ' + fmt(v) + (v === 1 ? ' race' : ' races') + '"><div class="seg" style="height:' + (v / hm * 100) + '%;background:' + C.hot + '"></div></div>';
+    }
+    h += card('When people race', 'Races by the hour the lights went out, Tartu time.', '<div class="chart hours">' + hc + '</div><div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
+    return h;
   }
 
   // ---- crashes and freezes, desktop and phone side by side, with how often per 100 visits

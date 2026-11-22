@@ -109,12 +109,59 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
   return true;
 }
 
+// One online race, or start votes that lapsed, added into the day's totals t.race (Martin 2026-11-22).
+// It comes from the lobby (worker/race.js), never from a browser: a race's cars, finish times and
+// why racers dropped out, without names. Finish times are the browsers' own, like lap times.
+const RACE_OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit', 'restart'];
+const RACE_END = ['done', 'time', 'restart', 'empty'];
+export const raceSize = (n) => (n <= 3 ? String(n) : n <= 5 ? '4-5' : n <= 9 ? '6-9' : '10+');
+export function addRace(t, r, now = Date.now()) {
+  if (!r || typeof r !== 'object' || r.v !== 1) return false;
+  const R = (t.race ||= {});
+  const v = r.votes && typeof r.votes === 'object' ? r.votes : {};
+  for (const k of ['start', 'restart', 'lapsed']) { const n = num(v[k], 200); if (n) add((R.votes ||= {}), k, n); }
+  if (r.ran === false) add(R, 'cancel', 1);
+  if (r.ran !== true || !Array.isArray(r.racers) || !r.racers.length) return true;
+  const rs = r.racers.slice(0, 30);
+  add(R, 'n', 1);
+  add(R, 'racers', rs.length);
+  add((R.size ||= {}), raceSize(rs.length), 1);
+  add((R.end ||= {}), RACE_END.includes(r.end) ? r.end : 'done', 1);
+  const at = typeof r.at === 'number' && Math.abs(r.at - now) < 86400000 ? new Date(r.at) : new Date(now);
+  add((R.hour ||= {}), String(tartuHour(at)), 1);
+  let win = null;
+  for (const x of rs) {
+    if (!x || typeof x !== 'object') continue;
+    const car = Object.hasOwn(CARS, x.car) ? x.car : null;
+    if (car) add((R.car ||= {}), car, 1);
+    if (x.late) add(R, 'late', 1);
+    const ms = typeof x.ms === 'number' && x.ms >= 30000 && x.ms <= 420000 ? Math.round(x.ms) : null;
+    if (ms != null) {
+      add(R, 'fin', 1);
+      if (x.late) add(R, 'lateFin', 1);
+      if (car) {
+        add((R.carFin ||= {}), car, 1);
+        const best = (t.raceBest ||= {});
+        if (!best[car] || ms < best[car]) best[car] = ms;
+      }
+      if (!win || ms < win.ms) win = { ms, car };
+    } else add((R.out ||= {}), RACE_OUT.includes(x.out) ? x.out : 'quit', 1);
+  }
+  if (win) {
+    add(R, 'wins', 1);
+    add(R, 'winMs', win.ms);
+    if (win.car) add((R.carWin ||= {}), win.car, 1);
+  }
+  return true;
+}
+
 // several days' totals added together
 export function sumDays(rows) {
   const out = {};
   const merge = (dst, src) => {
     for (const [k, v] of Object.entries(src)) {
       if (k === 'peak') dst.peak = Math.max(dst.peak || 0, v);
+      else if (k === 'raceBest') { const b = (dst.raceBest ||= {}); for (const [c, ms] of Object.entries(v)) if (!b[c] || ms < b[c]) b[c] = ms; }
       else if (typeof v === 'number') add(dst, k, v);
       else if (v && typeof v === 'object') merge((dst[k] ||= {}), v);
     }
@@ -154,6 +201,15 @@ export class Stats extends DurableObject {
     return this.today;
   }
 
+  // a race from the lobby (worker/index.js raceStat): Durable Object RPC, so no browser can call it
+  addRace(r) {
+    const t = this.dayRow(tartuDay());
+    if (!addRace(t.data, r)) return false;
+    this.sql.exec('INSERT INTO days (day, data) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data', t.day, JSON.stringify(t.data));
+    this.cache.clear();
+    return true;
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
     const ip = req.headers.get('cf-connecting-ip') || 'local';
@@ -178,7 +234,7 @@ export class Stats extends DurableObject {
       const from = tartuDay(new Date(Date.now() - (days - 1) * 86400000));
       const rows = this.sql.exec('SELECT day, data FROM days WHERE day >= ? ORDER BY day', from).toArray()
         .map((r) => { try { return { day: r.day, data: JSON.parse(r.data) }; } catch { return { day: r.day, data: {} }; } });
-      const daily = rows.map((r) => ({ day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, peak: r.data.peak || 0 }));
+      const daily = rows.map((r) => ({ day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0 }));
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
       const body = { days, from, to: tartuDay(), heat: HEAT, total: sumDays(rows.map((r) => r.data)), daily, names };
       this.cache.set(days, { at: Date.now(), body });

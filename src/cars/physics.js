@@ -32,13 +32,17 @@ let turnInHigh = true;
 const INWARD_WAIT = 0.6, INWARD_T = 1.2;
 let inwardOn = false;
 export function setInward(on) { inwardOn = !!on; }
-// ?launch=1 (Martin 2026-11-22, on trial): cars with engine.manualLaunch (the F40) pull away like a manual
-// instead of through the torque converter. Floored from a standstill it is as if the car were already
-// creeping in first at idle with the clutch fully in: the engine turns with the wheels from idle up, with
-// no converter holding it at the stall speed and no torque multiplication, so the revs climb with the road
-// speed, the turbos wake late and the rears light up when the boost arrives (gentler than a clutch drop).
-let launchManual = false;
-export function setLaunch(on) { launchManual = !!on; }
+// ?launch=1 (Martin 2026-11-22, on trial): every car with an engine pulls away like a manual
+// instead of through the torque converter: no converter holding the engine at a stall speed and no torque
+// multiplication; once the clutch is in the engine turns with the wheels.
+// Floored from a standstill the clutch is dropped at LAUNCH_SHARE of the way from idle to the redline (about
+// 3250 rpm on the F40; ?launch=<rpm> sets the revs): the flywheel's revs kick the rears into wheelspin at once
+// (as the handbrake clutch does, HB_DUMP), and the clutch slips at those revs for CLUTCH_SLIP_T while it
+// bites, so the turbos keep spooling, then over CLUTCH_FADE_T the engine is pulled down to the wheels.
+// ?launch=idle is the gentler first try: as if creeping in first at idle with the clutch already in.
+const LAUNCH_SHARE = 1 / 3, CLUTCH_SLIP_T = 0.6, CLUTCH_FADE_T = 0.8;
+let launchManual = false, launchRpm = null;   // launchRpm: null = a third of the way up, 0 = from idle
+export function setLaunch(on, rpm = null) { launchManual = !!on; launchRpm = rpm; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -297,8 +301,21 @@ function engineForce(car, throttle, dt, hb = 0) {
   // wheels, so an upshift drops the revs straight to the next gear's, with no converter slip holding them
   // up. The converter only takes over again for a start in first, or when the revs sag towards idle.
   if (car.locked && (car.gear === 1 || car.reversing || wheelRpm < (e.idle ?? 750) * 1.3)) car.locked = false;
-  const manual = launchManual && e.manualLaunch;
-  const stall = car.locked || manual ? e.idle : e.idle + (stallMax - e.idle) * throttle;
+  const manual = launchManual && e.type === 'ice';
+  let stall = car.locked || manual ? e.idle : e.idle + (stallMax - e.idle) * throttle;
+  // (the clutch drop: floored in first at a standstill, see LAUNCH_SHARE)
+  if (manual && launchRpm !== 0) {
+    const L = launchRpm ?? e.idle + (e.redline - e.idle) * LAUNCH_SHARE;
+    if (throttle < 0.5 || car.reversing || car.gear !== 1) car.launchT = undefined;
+    else if (car.launchT === undefined && (car.stabV ?? 0) < 2) {
+      car.launchT = 0;
+      if (L > wheelRpm) car.dump = Math.min(HB_DUMP_MAX, HB_DUMP * throttle * (L - wheelRpm) / ratioOf(car.gear) * (2 * Math.PI / 60) * s.wheelRadius);
+    }
+    if (car.launchT !== undefined && car.launchT < CLUTCH_SLIP_T + CLUTCH_FADE_T) {
+      stall = Math.max(stall, L - (L - e.idle) * Math.max(0, (car.launchT - CLUTCH_SLIP_T) / CLUTCH_FADE_T));
+      car.launchT += dt;
+    }
+  }
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road
   // speed. Off the throttle it is kept on the boil at hbRevs; on the throttle it climbs towards the

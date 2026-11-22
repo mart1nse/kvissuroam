@@ -47,6 +47,7 @@ export const HAND_PLACES = [
   { name: 'Ravila tänav, Tulika to Viljandi mnt', x: -333, z: 4130, r: 130 },
   { name: 'Astelpaju: Mööbliait, Circle K, Magaziin', x: 535, z: -60, r: 120 },
   { name: 'Kvissentali tee, Lootsi to road 3', x: 330, z: -45, r: 150 },
+  { name: 'ERM, its car park and the distillery ruin', x: 2690, z: 1040, r: 260 },
   { name: 'Tartu Airport: terminal, car park, hangars', x: -170, z: 10680, r: 230 },
   { name: 'Lennuakadeemia and Lennu 42', x: 20, z: 10600, r: 150 },
 ];

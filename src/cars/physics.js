@@ -14,6 +14,10 @@ const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinnin
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
+const HB_REV_UP = 9000;         // rpm/s: how fast a free engine (clutch out on the handbrake) revs up at full throttle
+const HB_HOLD_T = 0.9;          // s: how long the revs are kept up on the handbrake with the throttle closed
+const HB_DUMP = 0.6;            // share of the engine-over-wheels speed that turns into wheelspin when that clutch drops
+const HB_DUMP_MAX = 6;          // m/s: ...and the most of it
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -163,7 +167,7 @@ const UP_HOLD = 1;              // s an automatic upshift on the throttle is kep
 // a repeatable 0..1 'random' number, so every car runs the same on every screen
 const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
-function engineForce(car, throttle, dt) {
+function engineForce(car, throttle, dt, hb = 0) {
   // Returns the drive force at the wheels (N, signed along vx) and updates rpm / gear.
   // The engine turns with the driven wheels, so under wheelspin the revs follow
   // the wheel speed (wAbs), not the road speed (vAbs). The gearbox shifts on
@@ -264,7 +268,30 @@ function engineForce(car, throttle, dt) {
   // up. The converter only takes over again for a start in first, or when the revs sag towards idle.
   if (car.locked && (car.gear === 1 || car.reversing || wheelRpm < (e.idle ?? 750) * 1.3)) car.locked = false;
   const stall = car.locked ? e.idle : e.idle + (stallMax - e.idle) * throttle;
-  const rpm = Math.max(wheelRpm, stall);
+  // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
+  // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road
+  // speed. Off the throttle it is kept on the boil at hbRevs; on the throttle it climbs towards the
+  // shift point. Letting the handbrake go drops the clutch back in: the revs stored in the flywheel
+  // (car.carry, below) come back as a kick, which is what lights the tyres on the way out
+  // (Martin 2026-11-22: after a flick the 22B's revs had sagged and the tyres would not always light).
+  // (Off the throttle the revs are only kept, never raised, and only for HB_HOLD_T, the length of a
+  // flick: a car stopped or parked on its handbrake lets its engine fall to idle.)
+  const free = e.hbRevs && hb > 0.5 && !car.reversing && !car.airborne;
+  if (free) {
+    const from = car.free ?? car.rpm;
+    car.freeT = throttle > 0 || car.free === undefined ? 0 : car.freeT + dt;
+    const to = throttle > 0 ? e.hbRevs + (e.shiftRpm - e.hbRevs) * throttle : vAbs > 2 && car.freeT < HB_HOLD_T ? Math.min(from, e.hbRevs) : e.idle;
+    car.free = from < to ? Math.min(to, from + HB_REV_UP * throttle * dt) : Math.max(to, from - (e.revDrop ?? 3200) * dt);
+  } else {
+    // The clutch dropped with the engine turning faster than the wheels: the flywheel drags the tyres up
+    // to its own speed before they can pull it down, so part of the difference becomes wheelspin at once
+    // (car.dump, m/s of tread speed, shared out between the axles in stepCar).
+    if (car.free !== undefined && throttle > 0.3 && car.free > wheelRpm) {
+      car.dump = Math.min(HB_DUMP_MAX, HB_DUMP * throttle * (car.free - wheelRpm) / ratioOf(car.gear) * (2 * Math.PI / 60) * s.wheelRadius);
+    }
+    car.free = undefined;
+  }
+  const rpm = free ? car.free : Math.max(wheelRpm, stall);
   const sr = Math.min(1, wheelRpm / rpm);
   // Turbocharged engines: boost only builds once the exhaust flows enough to
   // spin the turbines, and it takes time to get there (turbo lag). It drops
@@ -293,6 +320,7 @@ function engineForce(car, throttle, dt) {
   if (throttle <= 0) car.carry = car.lifted ? Math.max(0, car.carry - drop * dt) : Math.min(car.rpm, e.redline);
   else car.carry = Math.max(0, car.carry - drop * 1.2 * dt);
   car.lifted = throttle <= 0;
+  if (free) car.carry = car.free;
   // Hard rev limiter, only reached with spinning wheels (shifts come earlier). At the redline the
   // ignition is cut for a moment and stays off until the revs have fallen back, so an engine held flat
   // out on spinning wheels (a donut, a burnout) bounces off the limiter instead of sitting on it.
@@ -321,6 +349,7 @@ function engineForce(car, throttle, dt) {
     car.revCut = 0;
     return -Math.sign(v) * Math.min(0.5, 0.12 + overRev * 2) * s.mass * G;
   }
+  if (free) return 0;
   if (throttle <= 0) {
     // engine braking through the converter
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
@@ -694,7 +723,7 @@ function substep(car, input, world, dt) {
   // traction left on each driven axle once cornering has taken its share
   const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
-  const drive = engineForce(car, throttle, dt);
+  const drive = engineForce(car, throttle, dt, hb);
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
   // (held on the brakes at a standstill, as in a burnout, the pads grip like static friction: whatever
   // pushes the car is met up to the brakes' and tyres' limit, so it creeps at most a few cm a second)
@@ -828,6 +857,10 @@ function substep(car, input, world, dt) {
     const h1 = h0 + (hot - h0) * Math.min(1, dt / (hot > h0 ? BURN_HEAT_T : BURN_COOL_T));
     if (front) car.heatF = h1; else car.heatR = h1;
   };
+  // (the clutch dropped after a handbrake turn, see engineForce: more of the sudden spin goes to the axle
+  // with more of the drive)
+  if (car.dump > 0) { car.slipVF += car.dump * 2 * shareF; car.slipVR += car.dump * 2 * shareR; }
+  car.dump = 0;
   axle(true, shareF, sf, capF, lonF, slipF, brakeF);
   axle(false, shareR, sr, capR, lonR, slipR, brakeR);
   car.spin = spinMax;
@@ -1282,7 +1315,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

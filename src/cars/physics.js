@@ -30,9 +30,10 @@ let turnInHigh = true;
 // turns the wheels past the speed's grip lock, up to full lock over INWARD_T, so a stubborn hold in understeer
 // scrubs the nose round instead of stopping at the limit. A steering wheel is not affected.
 const INWARD_WAIT = 0.6, INWARD_T = 1.2;
-// ...up to no more than this lock at this speed (km/h, deg): full lock to 60 km/h, then easing down to a degree and a
-// half at 170, drawn by Martin over the bZ4X plot (2026-11-22), halfway between full lock and the grip lock
-const INWARD_CAP = [[0, 34.4], [60, 34.4], [70, 33.3], [80, 30.5], [90, 28], [100, 25], [110, 21], [120, 16], [130, 10.5], [140, 7.5], [150, 4.5], [160, 3], [170, 1.5], [400, 0.5]];
+// ...up to no more than this lock at this speed (km/h, deg), never below the grip lock: drawn by Martin over the bZ4X
+// plot (2026-11-22, second drawing): easing from full lock at 15 km/h to 30 deg at 60, 18 at 100, 1.5 at 131
+const INWARD_CAP = [[0, 34.4], [15, 34.4], [25, 34], [30, 33.7], [43, 33.3], [50, 32], [60, 30.4], [70, 28], [80, 25], [90, 22.5], [97, 20], [100, 18], [104, 14], [108, 10.5], [111, 8.5], [118, 5], [124, 3.5], [131, 1.5], [400, 0.5]];
+const INWARD_BACK = 2;     // ...and the wheels come back from it this many times faster than from a crawl's full lock
 const inwardCap = (kmh) => { for (let i = 1; i < INWARD_CAP.length; i++) { const [v1, a1] = INWARD_CAP[i]; if (kmh <= v1) { const [v0, a0] = INWARD_CAP[i - 1]; return (a0 + (a1 - a0) * (kmh - v0) / (v1 - v0)) * Math.PI / 180; } } return 0; };
 let inwardOn = false;
 export function setInward(on) { inwardOn = !!on; }
@@ -785,7 +786,7 @@ function substep(car, input, world, dt) {
   let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * catchK);
   // (?inward=1: the wheels wound in past the grip lock come back as quickly as from a normal full lock: the
   // unwinding speed is that of full lock at a crawl, not the slower one of the speed's grip lock, Martin 2026-11-22)
-  if (inwardOn && Math.abs(target) < Math.abs(car.steer)) rate = Math.max(rate, ((2.6 - 0.9 * held) * maxLock + 0.25) * (1 + 2 * catchK));
+  if (inwardOn && Math.abs(target) < Math.abs(car.steer)) rate = Math.max(rate, INWARD_BACK * ((2.6 - 0.9 * held) * maxLock + 0.25) * (1 + 2 * catchK));
   if (input.steerDirect) {
     // A steering wheel: the front wheels follow its angle (about 13:1 over a wheel calibrated stop to
     // stop), with a little of the slide's caster since the wheel cannot push back, and kept within a

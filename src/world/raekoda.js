@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { addHouseColours } from './streetkit.js';
 import { drapeGeometry } from './drape.js';
+import { markGround, LOOK } from './groundlook.js';
 
 // the town hall front, south corner -> north corner (square on its right); depth back from the front
 const HALL = { a: [1402.65, 2873.9], b: [1386.1, 2841.5], depth: 18.6 };
@@ -448,8 +449,10 @@ export function createRaekoda(scene, world, { shadows = true } = {}) {
     ];
     const mat = (map, f) => new THREE.MeshLambertMaterial({ map, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide });
     const addG = (g, m) => { if (!g) return; const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; group.add(mesh); };
-    addG(drapeGeometry(world, [[SQUARE]], 0.06, 2, 2), mat(settTex(), -3));
-    addG(drapeGeometry(world, slabs, 0.075, 3, 2), mat(slabTex(), -4));
+    const square = drapeGeometry(world, [[SQUARE]], 0.06, 2, 2), slabG = drapeGeometry(world, slabs, 0.075, 3, 2);
+    markGround(square, LOOK.SETTS, 0.06); markGround(slabG, LOOK.PAVED, 0.075);      // for the tyre marks
+    addG(square, mat(settTex(), -3));
+    addG(slabG, mat(slabTex(), -4));
 
     const m = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
     if (m) { m.castShadow = shadows; m.receiveShadow = true; group.add(m); }

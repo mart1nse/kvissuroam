@@ -25,6 +25,7 @@ import { greyBack } from './signback.js';
 import { roadFrame, streetKit, setHouseColours, lawnTex } from './streetkit.js';
 import { createAtlas, painter, tone } from './houseskin.js';
 import { BOX, rnd } from '../race/landmarks.js';
+import { markGround, LOOK } from './groundlook.js';
 
 const R = roadFrame([[-993.5, 3936.3], [-992.8, 3941.7], [-984.6, 4270.8]], 1);
 const Z0 = 4108, Z1 = 4200;                 // the stretch of street that is dressed
@@ -573,20 +574,20 @@ export function groundTextures() {
     }
   };
   return (GROUND = {
-    gravel: { map: canvasTex(256, 256, speck([196, 186, 168], 9000, 0.45, 2, 2.2)), tile: 2 },
-    sand: { map: canvasTex(256, 256, (g, w) => {
+    gravel: { look: LOOK.GRAVEL, map: canvasTex(256, 256, speck([196, 186, 168], 9000, 0.45, 2, 2.2)), tile: 2 },
+    sand: { look: LOOK.GRAVEL, map: canvasTex(256, 256, (g, w) => {
       speck([190, 176, 152], 7000, 0.35, 4)(g, w);
       const r = rnd(8);
       for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(110,138,86,${0.25 + r() * 0.3})`; g.beginPath(); g.ellipse(r() * w, r() * w, 6 + r() * 22, 3 + r() * 10, r() * 3, 0, 7); g.fill(); }
     }), tile: 3 },
-    soil: { map: canvasTex(256, 256, (g, w) => {
+    soil: { look: LOOK.DIRT, map: canvasTex(256, 256, (g, w) => {
       speck([150, 138, 112], 6000, 0.4, 6)(g, w);
       const r = rnd(9);
       for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(112,140,86,${0.3 + r() * 0.4})`; g.beginPath(); g.ellipse(r() * w, r() * w, 8 + r() * 26, 4 + r() * 14, r() * 3, 0, 7); g.fill(); }
     }), tile: 3 },
-    tarmac: { map: canvasTex(256, 256, speck([112, 110, 118], 9000, 0.35, 10)), tile: 3 },
+    tarmac: { look: LOOK.PAVED, map: canvasTex(256, 256, speck([112, 110, 118], 9000, 0.35, 10)), tile: 3 },
     // big square concrete slabs, 1 m, joints and a few cracked or sunk ones
-    slabs: { map: canvasTex(256, 256, (g, w) => {
+    slabs: { look: LOOK.PAVED, map: canvasTex(256, 256, (g, w) => {
       const r = rnd(12);
       g.fillStyle = '#8f8c8c'; g.fillRect(0, 0, w, w);
       for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
@@ -597,7 +598,7 @@ export function groundTextures() {
       g.strokeStyle = 'rgba(80,78,78,0.6)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(40, 20); g.lineTo(70, 60); g.lineTo(66, 110); g.stroke();
     }), tile: 2 },
     // grey concrete block pavers in a running bond, 20 x 10 cm, worn
-    pavers: { map: canvasTex(256, 256, (g, w) => {
+    pavers: { look: LOOK.SETTS, map: canvasTex(256, 256, (g, w) => {
       const r = rnd(14);
       g.fillStyle = '#8c8a8e'; g.fillRect(0, 0, w, w);
       for (let row = 0; row < 16; row++) for (let k = -1; k < 8; k++) {
@@ -632,6 +633,7 @@ export function groundLayer(world, group) {
       g.setAttribute('uv', new THREE.Float32BufferAttribute(L.uv, 2));
       const nor = new Float32Array(L.pos.length); for (let k = 1; k < nor.length; k += 3) nor[k] = 1;
       g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      markGround(L.pos, T.look, L.lift);        // for the tyre marks (groundlook.js)
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: T.map, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide }));
       m.receiveShadow = true;
       group.add(m);

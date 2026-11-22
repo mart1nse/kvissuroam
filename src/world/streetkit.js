@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
+import { markGround, LOOK } from './groundlook.js';
 
 // A road frame over a centre line that runs steadily along one map axis (0: x, 1: z). at(t, lat) gives the
 // point at map coordinate t along that axis, `lat` metres sideways (+: to the left of the direction of travel).
@@ -195,6 +196,10 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
     asphalt: { lift: 0.05, tile: 3, f: -3 }, kerb: { lift: 0.06, tile: 1, f: -5 },       // a tarmac pavement and its kerb stones
     verge: { lift: 0.06, tile: 4, f: -3 }, turf: { lift: 0.07, tile: 1.2, f: -4 },     // turf: grass growing through concrete grid pavers                                               // rougher, deeper green grass beside a road
   };
+  // what a tyre mark on each looks like: rubber on tarmac and concrete, broken by the joints on block paving,
+  // torn turf on grass
+  const LOOKS = { lawn: LOOK.GRASS, verge: LOOK.GRASS, turf: LOOK.GRASS, paver: LOOK.SETTS, red: LOOK.SETTS, dark: LOOK.SETTS,
+    concrete: LOOK.PAVED, white: LOOK.PAVED, asphalt: LOOK.PAVED, kerb: LOOK.PAVED };
   const ground = {};
   for (const k of Object.keys(KINDS)) ground[k] = { pos: [], uv: [] };
   const mesh = { pos: [], uv: [] };
@@ -279,7 +284,11 @@ export function streetKit(world, group, { shadows = true, fenceColour = 0xd8d4e6
       m.receiveShadow = true;
       group.add(m);
     };
-    const decal = (kind, opts) => { const f = KINDS[kind].f; flat(ground[kind], new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide })); };
+    const decal = (kind, opts) => {
+      const f = KINDS[kind].f;
+      markGround(ground[kind].pos, LOOKS[kind], KINDS[kind].lift);      // for the tyre marks (groundlook.js)
+      flat(ground[kind], new THREE.MeshLambertMaterial({ ...opts, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide }));
+    };
     if (ground.lawn.pos.length) decal('lawn', { map: lawnTex() });
     if (ground.verge.pos.length) decal('verge', { map: lawnTex() });     // the same grass as lawn now (was tinted deeper green)
     if (ground.paver.pos.length) decal('paver', { map: paverTex([208, 206, 218], 3) });

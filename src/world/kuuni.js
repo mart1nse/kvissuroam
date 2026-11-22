@@ -18,6 +18,7 @@ import { streetKit, setHouseColours, paverTex } from './streetkit.js';
 import { drapeGeometry } from './drape.js';
 import { skinHouses } from './houseskin.js';
 import { createHologram } from './hologram.js';
+import { markGround, LOOK } from './groundlook.js';
 
 // ---- frames
 // the pedestrian stretch: s along the east fronts from the Poe corner towards Raekoja plats, w across to the west
@@ -202,6 +203,7 @@ function pave(world, group) {
   const layer = (shapes, map, lift, f, tile, rot = 0) => {
     const g = rotateUV(drapeGeometry(world, shapes, lift, tile, 1.6), rot);
     if (!g) return;
+    markGround(g, LOOK.SETTS, lift);          // block paving and granite: tyre marks broken by the joints
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f, side: THREE.DoubleSide }));
     m.receiveShadow = true;
     group.add(m);

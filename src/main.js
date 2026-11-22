@@ -163,7 +163,7 @@ const quality = isTouch
 // realistic trees; ?trees=old brings back the simple shapes
 quality.realTrees = params.get('trees') !== 'old';
 if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helper on (?donut=1)'); }
-if (params.get('turnin') === 'high') { setTurnIn('high'); console.info('steering into a slide gives way gradually (?turnin=high)'); }
+if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old fixed steering into a slide (?turnin=normal)'); }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };
 const lockedLow = params.get('q') === 'low';

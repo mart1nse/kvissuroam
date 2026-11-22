@@ -19,12 +19,13 @@ const HB_HOLD_T = 0.9;          // s: how long the revs are kept up on the handb
 const HB_DUMP = 0.6;            // share of the engine-over-wheels speed that turns into wheelspin when that clutch drops
 const HB_DUMP_MAX = 6;          // m/s: ...and the most of it
 const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the driver keeps steering into the turn
-// ?turnin=high (Martin 2026-11-22, on trial): held into the turn as the tail steps out, the wheels start where a
+// Turn-in give-way (Martin 2026-11-22, the default since he tried it as ?turnin=high; ?turnin=normal for the old fixed
+// HOLD_FOLLOW): held into the turn as the tail steps out, the wheels start where a
 // released wheel would be (CASTER) and give way to the driver over TURNIN_HOLD_T, ending at TURNIN_END, so a short
 // hold still lets the car catch itself and a stubborn one gets nearly full lock into the turn; switched into the
 // slide from opposite lock or from a released wheel they wind in over TURNIN_SWAP_T.
 const TURNIN_HOLD_T = 1.0, TURNIN_SWAP_T = 0.5, TURNIN_END = 0.05;
-let turnInHigh = false;
+let turnInHigh = true;
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin

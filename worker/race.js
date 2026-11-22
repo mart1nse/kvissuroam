@@ -108,7 +108,9 @@ export class RaceDesk {
     s.seed = Math.floor(Math.random() * 1e9);
     s.racers = [...ids].slice(0, MAX_RACERS).map((id) => ({ id, name: d.get(id)?.name || '?', car: d.get(id)?.car || 'w201' }));
     s.votes = {};
-    this.lobby.ctx.storage.setAlarm(s.tGreen + MAX_RACE_MS).catch?.(() => {});
+    // first at the lights (the restart vote opens then, and everyone has to hear it: Martin 2026-11-22
+    // saw no RESTART until some other message came), then at the 7:00 cut-off (alarm below)
+    this.lobby.ctx.storage.setAlarm(s.tGreen).catch?.(() => {});
   }
   // the race is over: what it came to stays as the last race
   close(why, now = Date.now()) {

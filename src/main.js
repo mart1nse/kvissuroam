@@ -166,10 +166,13 @@ quality.realTrees = params.get('trees') !== 'old';
 if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helper on (?donut=1)'); }
 if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old fixed steering into a slide (?turnin=normal)'); }
 if (params.get('inward') === '1') { setInward(true); console.info('held steering turns in past the grip limit (?inward=1)'); }
-if (params.has('launch') && params.get('launch') !== '0') {
+// cars with an engine start like manuals (clutch drop); ?launch=0 brings back the torque converter,
+// ?launch=<rpm> or ?launch=idle change the start, ?slip=1 keeps the clutch slipping on every car (the F40 always)
+if (params.get('launch') === '0') { setLaunch(false); console.info('torque converter starts (?launch=0)'); }
+else if (params.has('launch') || params.get('slip') === '1') {
   const l = params.get('launch'), rpm = l === 'idle' ? 0 : +l > 1000 ? +l : null;
   setLaunch(true, rpm, params.get('slip') === '1');
-  console.info(`cars pull away like a manual, no converter (?launch=${l}): ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}${params.get('slip') === '1' ? ', clutch kept slipping in first (?slip=1)' : ''}`);
+  console.info(`manual starts: ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}${params.get('slip') === '1' ? ', clutch kept slipping in first (?slip=1)' : ''}`);
 }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };

@@ -36,7 +36,8 @@ const INWARD_CAP = [[0, 34.4], [60, 34.4], [70, 33.3], [80, 30.5], [90, 28], [10
 const inwardCap = (kmh) => { for (let i = 1; i < INWARD_CAP.length; i++) { const [v1, a1] = INWARD_CAP[i]; if (kmh <= v1) { const [v0, a0] = INWARD_CAP[i - 1]; return (a0 + (a1 - a0) * (kmh - v0) / (v1 - v0)) * Math.PI / 180; } } return 0; };
 let inwardOn = false;
 export function setInward(on) { inwardOn = !!on; }
-// ?launch=1 (Martin 2026-11-22, on trial): every car with an engine pulls away like a manual
+// Manual starts (Martin 2026-11-22, the default since he tried them as ?launch=1; ?launch=0 brings back the
+// torque converter): every car with an engine pulls away like a manual
 // instead of through the torque converter: no converter holding the engine at a stall speed and no torque
 // multiplication; once the clutch is in the engine turns with the wheels.
 // Floored from a standstill the clutch is dropped at LAUNCH_SHARE of the way from idle to the redline (about
@@ -45,11 +46,11 @@ export function setInward(on) { inwardOn = !!on; }
 // bites, so the turbos keep spooling, then over CLUTCH_FADE_T the engine is pulled down to the wheels.
 // ?launch=idle is the gentler first try: as if creeping in first at idle with the clutch already in.
 const LAUNCH_SHARE = 1 / 3, CLUTCH_SLIP_T = 0.6, CLUTCH_FADE_T = 0.8;
-// ?slip=1 with it (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
+// engine.clutchSlip (the F40; ?slip=1 for every car) (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
 // did): floored in first the driver keeps slipping the clutch, so the engine never falls below the drop revs
 // (for a turbo engine at least where its boost is full)
 // while the wheels turn slower than that. Like the converter's stall speed, but with no torque multiplication.
-let launchManual = false, launchRpm = null;   // launchRpm: null = a third of the way up, 0 = from idle
+let launchManual = true, launchRpm = null;    // launchRpm: null = a third of the way up, 0 = from idle
 let clutchSlip = false;
 export function setLaunch(on, rpm = null, slip = false) { launchManual = !!on; launchRpm = rpm; clutchSlip = !!slip; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
@@ -258,7 +259,12 @@ function engineForce(car, throttle, dt, hb = 0) {
     // kick-down automatic: lowest gear that stays below the shift point
     let g = car.gear;
     // (it also shifts a little early rather than run into the rev limiter when the tyres are only just slipping)
-    const early = rpmAt(g) > e.shiftRpm * 0.88 && rpmAt(g) * wAbs >= e.redline * vAbs;
+    // (a car that keeps its clutch slipping, engine.clutchSlip, spins its tyres long enough to bounce off the limiter
+    // with the car slewed a little off line, so its forward speed reads low: it counts from 80 % of the shift point
+    // and from just below the redline, or the F40 sat on the limiter in first for 1.4 s at 88 km/h; Martin
+    // 2026-11-22. Other cars keep 88 %: at 80 % the Mazda and the 190E changed back down on grass and gravel.)
+    const slipper = launchManual && e.type === 'ice' && (clutchSlip || e.clutchSlip);
+    const early = rpmAt(g) > e.shiftRpm * (slipper ? 0.8 : 0.88) && rpmAt(g) * wAbs >= (slipper ? e.redline - Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) : e.redline) * vAbs;
     // Coming down: on the throttle it kicks down while the lower gear stays under 90 % of the shift point,
     // coasting it waits until the lower gear lands at 55 %, and braking (into a corner) it comes down early,
     // landing high in the revs, ready to pull out of the corner (Martin 2026-11-19: it came down late and low);
@@ -314,9 +320,14 @@ function engineForce(car, throttle, dt, hb = 0) {
   let stall = car.locked || manual ? e.idle : e.idle + (stallMax - e.idle) * throttle;
   // (the clutch drop: floored in first at a standstill, see LAUNCH_SHARE)
   if (manual && launchRpm !== 0) {
-    // (a turbo engine is held where its boost is full, or it bogs off boost: the F40 at 4300 rpm, Martin 2026-11-22)
-    const L = launchRpm ?? Math.max(e.idle + (e.redline - e.idle) * LAUNCH_SHARE, e.turbo?.fullRpm ?? 0);
-    if (throttle < 0.5 || car.reversing || car.gear !== 1) car.launchT = undefined;
+    // (the clutch is dropped at a third of the way up; the slipping clutch below holds a turbo engine where its
+    // boost is full, or it bogs off boost: the F40 at 4300 rpm, Martin 2026-11-22)
+    const third = e.idle + (e.redline - e.idle) * LAUNCH_SHARE;
+    const L = launchRpm ?? third, Lslip = launchRpm ?? Math.max(third, e.turbo?.fullRpm ?? 0);
+    // (held on the race grid the driver keeps the clutch slipping at those revs, wheels spinning as they did
+    // with the converter, and drops it at the lights; four-wheel-drive cars wait clutch in, car.free below)
+    if (car.gridHold) { car.launchT = undefined; if (throttle > 0.5) stall = Math.max(stall, Lslip); }
+    else if (throttle < 0.5 || car.reversing || car.gear !== 1) car.launchT = undefined;
     else if (car.launchT === undefined && (car.stabV ?? 0) < 2) {
       car.launchT = 0;
       if (L > wheelRpm) car.dump = Math.min(HB_DUMP_MAX, HB_DUMP * throttle * (L - wheelRpm) / ratioOf(car.gear) * (2 * Math.PI / 60) * s.wheelRadius);
@@ -325,9 +336,9 @@ function engineForce(car, throttle, dt, hb = 0) {
       stall = Math.max(stall, L - (L - e.idle) * Math.max(0, (car.launchT - CLUTCH_SLIP_T) / CLUTCH_FADE_T));
       car.launchT += dt;
     }
-    // (?slip=1: the clutch kept slipping whenever it is floored in first)
-    // (and in a higher gear once the wheels have dragged the engine down near idle: the driver dips the clutch)
-    if (clutchSlip && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (L - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
+    // (engine.clutchSlip, ?slip=1: the clutch kept slipping whenever it is floored in first,
+    // and in a higher gear once the wheels have dragged the engine down near idle: the driver dips the clutch)
+    if ((clutchSlip || e.clutchSlip) && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (Lslip - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
   }
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road

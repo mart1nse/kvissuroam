@@ -439,7 +439,7 @@ export const CARS = {
     drive: 'awd',
     rearShare: 0.65,            // DCCD centre differential left open: 35 : 65, the tail-happy setting (Martin's notes, 22 Nov)
     grip: 1.08,                 // Pirelli P Zero 235s under 1270 kg
-    abs: 0.2,                   // the real car has none; a tad is left so a full stop still steers a little (Martin 2026-11-22)
+    abs: 0.25,                  // the real car has none; a tad is left so a full stop still steers a little (Martin 2026-11-22)
     engine: {
       type: 'ice',
       idle: 850,

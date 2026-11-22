@@ -43,6 +43,7 @@ export function setInward(on) { inwardOn = !!on; }
 const LAUNCH_SHARE = 1 / 3, CLUTCH_SLIP_T = 0.6, CLUTCH_FADE_T = 0.8;
 // ?slip=1 with it (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
 // did): floored in first the driver keeps slipping the clutch, so the engine never falls below the drop revs
+// (for a turbo engine at least where its boost is full)
 // while the wheels turn slower than that. Like the converter's stall speed, but with no torque multiplication.
 let launchManual = false, launchRpm = null;   // launchRpm: null = a third of the way up, 0 = from idle
 let clutchSlip = false;
@@ -309,7 +310,8 @@ function engineForce(car, throttle, dt, hb = 0) {
   let stall = car.locked || manual ? e.idle : e.idle + (stallMax - e.idle) * throttle;
   // (the clutch drop: floored in first at a standstill, see LAUNCH_SHARE)
   if (manual && launchRpm !== 0) {
-    const L = launchRpm ?? e.idle + (e.redline - e.idle) * LAUNCH_SHARE;
+    // (a turbo engine is held where its boost is full, or it bogs off boost: the F40 at 4300 rpm, Martin 2026-11-22)
+    const L = launchRpm ?? Math.max(e.idle + (e.redline - e.idle) * LAUNCH_SHARE, e.turbo?.fullRpm ?? 0);
     if (throttle < 0.5 || car.reversing || car.gear !== 1) car.launchT = undefined;
     else if (car.launchT === undefined && (car.stabV ?? 0) < 2) {
       car.launchT = 0;
@@ -320,7 +322,8 @@ function engineForce(car, throttle, dt, hb = 0) {
       car.launchT += dt;
     }
     // (?slip=1: the clutch kept slipping whenever it is floored in first)
-    if (clutchSlip && car.gear === 1 && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (L - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
+    // (and in a higher gear once the wheels have dragged the engine down near idle: the driver dips the clutch)
+    if (clutchSlip && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (L - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
   }
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road

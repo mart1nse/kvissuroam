@@ -27,7 +27,7 @@ const COL = {
   awning: 0x6f7fa8, metal: 0xf4f2f0, board: 0x2d2a30, iron: 0x26252b, box: 0x7d5b4c, soil: 0x5e4a40,
   pink: [0xe0559e, 0xf07ab8, 0xc94a8c], leaf: [0x4f8a4a, 0x5f9a52, 0x3f7a44], blue: [0x7f7fe0, 0x9a8cf0],
   hedge: [0x4c7f4f, 0x5a8c55, 0x426f46], brick: 0xc98a7a, brickDark: 0xb27466, coping: 0xc9c5cc,
-  picket: 0xefe8d0, villaPicket: 0xe6e0b6, concrete: 0xbdbcc4, white: 0xfaf8ff, blueStripe: 0x2f5fb8,
+  picket: 0xefe8d0, villaPicket: 0xe6e0b6, concrete: 0xbdbcc4, white: 0xfaf8ff,
 };
 
 export function mandelWalls(walls) {
@@ -38,12 +38,23 @@ export function mandelSignSkip(world) {
   const prev = world.signSkip;
   world.signSkip = (x, z) => Math.hypot(x - SIGN[0], z - SIGN[1]) < 1.5 || (prev ? prev(x, z) : false);
 }
-// the 30 sign on the right just after the crossing, facing the cars coming along the lap
+// the 30 sign on the right just after the crossing, facing the cars coming along the lap, and the white
+// and blue striped posts either side of the raised crossing (props of their own kind, so a car knocks them
+// flying: src/world/props.js STRIPED)
+const STRIPED = 40;
 export function mandelProps() {
   const track = createTrack();
   const i = 1478, [tx, tz] = track.tan[i], hw = track.HW[i];
   const x = track.P[i][0] - tz * (hw + 0.9), z = track.P[i][1] + tx * (hw + 0.9);
-  return [[22, x, z, (Math.atan2(-tx, tz) * 180) / Math.PI]];
+  return [[22, x, z, (Math.atan2(-tx, tz) * 180) / Math.PI], ...crossingPosts(track).map(([px, pz, yaw]) => [STRIPED, px, pz, yaw])];
+}
+// where the two striped posts stand: 3.4 m before the zebra's centre line, 0.35 m beyond each road edge
+function crossingPosts(track) {
+  const i = ZEBRA.i, [tx, tz] = track.tan[i], rx = -tz, rz = tx;
+  const c = track.P[i], dc = (ZEBRA.c[0] - c[0]) * tx + (ZEBRA.c[1] - c[1]) * tz;
+  const o = [c[0] + tx * dc, c[1] + tz * dc], hw = track.HW[i];
+  const bearing = (Math.atan2(tx, -tz) * 180) / Math.PI;
+  return [-1, 1].map((side) => [o[0] - tx * 3.4 + rx * side * (hw + 0.35), o[1] - tz * 3.4 + rz * side * (hw + 0.35), bearing]);
 }
 
 function canvasTex(w, h, draw) {
@@ -331,7 +342,8 @@ export function createMandel(world, group, { shadows = true } = {}) {
     }
 
     yield;
-    // the raised crossing: checkered ramp markings either side of the zebra, the blue and white posts
+    // the raised crossing: checkered ramp markings either side of the zebra (the blue and white posts are
+    // props, mandelProps above)
     {
       const i = ZEBRA.i, [tx, tz] = track.tan[i], rx = -tz, rz = tx;
       const c = track.P[i], dc = (ZEBRA.c[0] - c[0]) * tx + (ZEBRA.c[1] - c[1]) * tz;
@@ -345,12 +357,6 @@ export function createMandel(world, group, { shadows = true } = {}) {
       rows.forEach((d, r) => { for (let l = -hw + 0.15, k = 0; l < hw - 0.3; l += sq, k++) if ((k + r) % 2 === 0) square(d, l); });
       const g = drapeGeometry(world, shapes, 0.07, 1, 1.5);
       if (g) extra.push([g, new THREE.MeshLambertMaterial({ color: COL.white, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide })]);
-      for (const side of [-1, 1]) {
-        const q = [o[0] - tx * 3.4 + rx * side * (hw + 0.35), o[1] - tz * 3.4 + rz * side * (hw + 0.35)], y = h(q[0], q[1]);
-        for (let k = 0; k < 7; k++) p.box(0.13, 0.13, 0.13, k % 2 ? COL.white : COL.blueStripe, q[0], y + 0.07 + k * 0.13, q[1], 0.3);
-        p.box(0.15, 0.04, 0.15, COL.iron, q[0], y + 0.93, q[1], 0.3);
-        solids.push({ x: q[0], z: q[1], yaw: 0, hx: 0.08, hz: 0.08 });
-      }
     }
     // bike symbols on the left of the lane (white lines, 9 cm)
     {

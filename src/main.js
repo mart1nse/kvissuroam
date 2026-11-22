@@ -160,7 +160,7 @@ const quality = isTouch
   : { pixelRatio: Math.min(devicePixelRatio, 2), shadow: 2048, terrainStride: 1, tileRadius: 560, treeDetail: 1, treeShadows: true, thinTrees: false, anisotropy: 8, far: 5200, loadRadius: 1000, xTiles: true };
 // realistic trees; ?trees=old brings back the simple shapes
 quality.realTrees = params.get('trees') !== 'old';
-if (params.get('donut') === '0') { setDonutHelp(false); console.info('donut helper off (?donut=0)'); }
+if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helper on (?donut=1)'); }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };
 const lockedLow = params.get('q') === 'low';

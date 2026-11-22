@@ -76,6 +76,15 @@
   footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
   footer a, .sub a { color: var(--cyan); }
   .status { color: var(--ink2); padding: 30px 0; text-align: center; }
+  #online { margin-bottom: 14px; }
+  #online h2 .live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); margin: 0 8px 1px 0; vertical-align: middle; box-shadow: 0 0 8px var(--cyan); }
+  .who { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 6px 18px; }
+  .who li { display: flex; align-items: baseline; gap: 8px; font-size: 14px; padding: 5px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+  .who .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who .car { color: var(--ink2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who .st { margin-left: auto; font-size: 12px; white-space: nowrap; color: var(--muted); }
+  .who .st.drv { color: var(--cyan); }
+  .who .st.race { color: var(--hot); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -83,12 +92,13 @@
   <header>
     <div>
       <h1><a href="/">LINNARING</a> · STATS</h1>
-      <p class="sub">How the game is played. Anonymous daily totals: no names, addresses or cookies. Days are Tartu time.</p>
+      <p class="sub">How the game is played. Anonymous daily totals: no names, addresses or cookies are kept. Days are Tartu time.</p>
     </div>
     <div class="range" role="group" aria-label="Period">
       <button data-days="1">Today</button><button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button>
     </div>
   </header>
+  <section id="online" class="card" aria-live="polite"><h2><span class="live"></span>Online now</h2><p class="note">Loading…</p></section>
   <main id="out"><p class="status">Loading…</p></main>
   <footer>Counted since 20 November 2026. Visitor counts from Cloudflare Web Analytics are separate. <a href="/">Play LINNARING</a></footer>
 </div>
@@ -143,7 +153,40 @@
     return '<section class="card' + (wide ? ' wide' : '') + '"><h2>' + esc(title) + '</h2>' + (note ? '<p class="note">' + note + '</p>' : '') + body + '</section>';
   }
 
+  // ---- online now (/api/online, asked again every 20 s while the page is in view)
+  var carNames = {}, onlineData = null, onlineTimer = 0;
+  var ago = function (ms) { var m = Math.floor(ms / 60000); return m < 1 ? 'just joined' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
+  function renderOnline() {
+    var el = document.getElementById('online'), o = onlineData;
+    if (!o) return;
+    var ps = o.players || [], drv = ps.filter(function (p) { return p.drv; }).length;
+    var note = ps.length ? fmt(ps.length) + (ps.length === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
+    var r = o.race;
+    if (r) note += r.phase === 'race'
+      ? ' A race is on: ' + fmt(r.racing) + ' racing, ' + fmt(r.finished) + ' finished' + (r.green ? ', lights out ' + (o.now - r.green < 60000 ? 'under a minute ago' : Math.floor((o.now - r.green) / 60000) + ' min ago') : '') + '.'
+      : ' A race is about to start with ' + fmt(r.racers) + (r.racers === 1 ? ' racer.' : ' racers.');
+    var st = function (p) {
+      if (p.race === 'in') return '<span class="st race">RACING</span>';
+      if (p.race === 'fin') return '<span class="st race">FINISHED</span>';
+      if (p.race === 'out') return '<span class="st">out of the race</span>';
+      return p.drv ? '<span class="st drv">driving</span>' : '<span class="st">in the garage</span>';
+    };
+    el.innerHTML = '<h2><span class="live"></span>Online now</h2><p class="note">' + note + ' Names as the game shows them; updates every 20 s.</p>' + (ps.length ? '<ul class="who">' + ps.map(function (p) {
+      return '<li data-tip="' + esc('online for ' + ago(o.now - p.since)) + '"><span class="nm">' + esc(p.name) + '</span><span class="car">' + esc(carNames[p.car] || p.car) + '</span>' + st(p) + '</li>';
+    }).join('') + (o.more ? '<li><span class="car">and ' + fmt(o.more) + ' more</span></li>' : '') + '</ul>' : '');
+  }
+  function loadOnline() {
+    clearTimeout(onlineTimer);
+    if (document.hidden) return;
+    fetch('/api/online', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (o) { onlineData = o; renderOnline(); }, function () {})
+      .then(function () { onlineTimer = setTimeout(loadOnline, 20000); });
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) loadOnline(); });
+  loadOnline();
+
   function render(d) {
+    carNames = d.names || carNames; renderOnline();
     var t = d.total || {}, misc = t.misc || {}, laps = t.laps || {};
     var sessions = t.sessions || 0, drove = t.drove || 0;
     var cancelled = (laps.off || 0) + (laps.jump || 0) + (laps.reset || 0);

@@ -48,7 +48,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   hud.appendChild(list);
   const count = document.createElement('div');
   count.id = 'rcount'; count.className = 'hidden';
-  count.innerHTML = '<div class="big"><span class="t1">TO RACE START</span><span class="t2"></span></div><div class="rcard"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED</button></div></div>';
+  count.innerHTML = `<div class="big"><span class="t1">TO RACE START</span><span class="t2"></span></div><div class="rcard"><div class="names"></div><div class="btns"><button data-r="join"></button><button data-r="no">✕ NOT INTERESTED${isTouch ? '' : ' <small>ESC</small>'}</button></div></div>`;
   hud.appendChild(count);
   const lights = document.createElement('div');
   lights.id = 'rlights'; lights.className = 'hidden';
@@ -134,6 +134,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     }
     listOpen = false; showLast = false; hidFor = r?.id || 0; render();
   });
+  // Esc while TO RACE START is up = NOT INTERESTED (Martin 2026-11-22: finish the hotlap you are on);
+  // ahead of the game's own Esc (the garage)
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape' || count.classList.contains('hidden') || !r) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (me()) mp.raceSend({ t: 'rj', on: 0 });
+    dismissed = r.id; render();
+  }, true);
   count.addEventListener('click', (e) => {
     const k = e.target.closest('[data-r]')?.dataset.r;
     if (k === 'join') { if (!me()) mp.raceSend({ t: 'rj', on: 1 }); }

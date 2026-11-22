@@ -295,6 +295,7 @@ export const CARS = {
     efficiency: 0.86,
     shiftTime: 0.3,
     limiter: null,
+    abs: 0.2,                   // the real car has none; a touch so a full stop still steers a little (Martin 2026-11-22)
     ref: { zeroTo100: 4.1, top: 324, powerKw: 352 },
   },
   cgt: {
@@ -336,6 +337,7 @@ export const CARS = {
     efficiency: 0.88,
     shiftTime: 0.28,
     limiter: null,
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 3.9, top: 330, powerKw: 450 },
   },
   audi200: {
@@ -424,6 +426,7 @@ export const CARS = {
     efficiency: 0.89,
     shiftTime: 0.12,
     limiter: null,              // de-limited: the factory 250 km/h cap is off, drag and gearing set the top speed
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 4.6, top: 300, powerKw: 309 },   // de-limited E92 M3: about 295-305 km/h true speed, set by drag in 7th
   },
   impreza: {

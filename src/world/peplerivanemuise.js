@@ -126,7 +126,7 @@ function fronts() {
     { name: 'pv2497', sec: '3_6', base: 2497, at: MID('s2497'), r: 24, segs: ['s2497'],
       spec: plaster([234, 199, 142], { storey: 3.9, maxFloors: 3, trim: '#f6f1e5', corners: false, belts: [4.75, 8.6], plinth: { h: 1.4, col: '#e4e1da', vents: 2.95 },
         win: { w: 1.3, pitch: 2.95, T: true, surround: 0.16, sc: '#f6f1e5', frame: '#f7f5ef', glass: '#4f5b6c', hood: 0.16 } }),
-      walls: [{ near: MID('s2497'), noAttic: true, draw: poska }] },
+      walls: [{ near: MID('s2497'), noAttic: true, draw: poska, floors: [{ sill: 2.0, h: 2.0 }, { sill: 5.9, h: 2.0 }, { sill: 9.8, h: 2.0 }, { sill: 13.7, h: 1.8 }] }] },
     { name: 'pv2688', sec: '3_6', base: 2688, at: MID('s2688'), r: 24, segs: ['s2688'],
       spec: plaster([236, 229, 203], { storey: 3.0, maxFloors: 4, corners: false, plinth: { h: 0.8, col: '#aaa59b', vents: 3.0 }, win: sq({ w: 1.3, pitch: 2.75, glass: '#4d596b' }) }),
       walls: [{ near: MID('s2688'), doors: [{ x: 20.0, w: 1.8, h: 2.5, col: '#40444c', light: 0.5, panels: 1 }] }] },
@@ -157,7 +157,8 @@ function balconies(P, W, x) {
 function poska(P, W) {
   const len = W.len;
   for (let x = 0.3; x < len; x += 5.9) P.r(x, 1.4, x + 0.55, W.eaves - 0.6, '#f4eee1');
-  for (let x = 1.75; x < len - 0.8; x += 2.95) { P.arc(x, 3.2, 0.78, '#f6f1e5'); P.arc(x, 3.2, 0.62, '#4f5b6c'); }
+  const n = Math.max(1, Math.round((len - 0.6) / 2.95));
+  for (let k = 0; k < n; k++) { const x = (k + 0.5) * len / n; P.arc(x, 4.0, 0.79, '#f6f1e5', Math.PI, Math.PI * 2); P.arc(x, 4.0, 0.62, '#4f5b6c', Math.PI, Math.PI * 2); }   // round heads on the ground-floor windows
   P.r(0, W.eaves - 1.0, len, W.eaves - 0.65, '#f6f1e5'); P.r(0, W.eaves - 0.45, len, W.eaves, '#f6f1e5');
   P.r(0, 1.25, len, 1.4, '#f6f1e5');
 }

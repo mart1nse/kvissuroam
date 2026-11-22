@@ -8,6 +8,7 @@
 // Everything is measured in the shop's own frame: e metres along the front (east +), n metres north, from the
 // front's west corner; y above the paving at the door. The car park is square to this frame.
 import * as THREE from 'three';
+import { jobs } from '../jobs.js';
 import { streetKit, addHouseColours, GRASS } from './streetkit.js';
 import { Parts, BOX } from '../race/landmarks.js';
 import { realTreeKit } from './scenery.js';
@@ -248,7 +249,8 @@ export function createCoop(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
-  function build() {
+  // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame; in one go it was 50 ms)
+  function* build() {
     built = true;
     // the bank is steep: lawn laid on it follows the ground's own triangles (2 m grid, split like the terrain mesh)
     const triH = (x, z) => {
@@ -330,6 +332,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       onWall(Wl, g.scale(k, k, k).translate(s0, y, 0.03), COL.letter, lit);
     };
 
+    yield;
     // ================= the shell =================
     {
       const foot = new THREE.Shape();
@@ -372,6 +375,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
     // back doors and a goods door, so the back is not blank
     wbox(WN, 6, 7.1, 0.1, 2.25, 0, 0.06, 0x8f939c); wbox(WN, 20, 23.2, 0.1, 3.3, 0, 0.06, 0x9a9ea8); wbox(WE, 30, 31.1, 0.1, 2.25, 0, 0.06, 0x8f939c);
 
+    yield;
     // ================= letters =================
     mark(WF, 3.0, 4.52, 1, 0.22);                                              // coop
     wbox(WF, 9.32, 9.42, 4.5, 5.72, 0.03, 0.12, COL.letter);                   // |
@@ -382,6 +386,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
     letters(WF, T.benu, 2.9, 2.95, 0.64);
     mark(WW, WW.len - 12.3, 2.55, 1.72, 0.3);                                  // the big one on the white wall
 
+    yield;
     // ================= canopy, doors, lights =================
     {
       const c = CAN;
@@ -413,6 +418,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       wbox(WF, c.s0 + 0.5, c.s0 + 0.72, 2.75, 2.87, 0.05, 0.3, 0xe9e9ec); wbox(WF, 22.4, 22.56, 2.6, 2.76, 0.05, 0.12, 0xc8342c);
     }
 
+    yield;
     // ================= along the front: bin, flags, racks, lockers =================
     {
       const cyl = (s, off, r, h, hex, y0 = 0) => onWall(WF, new THREE.CylinderGeometry(r, r, h, 14).translate(s, y0 + h / 2, off), hex);
@@ -437,6 +443,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       picture(WF, lockerTex('#e6e8ec', 'rgba(110,116,130,0.8)', ''), 41.02, 43.28, 0.08, 1.96, 0.76);
     }
 
+    yield;
     // ================= the roof =================
     {
       const hatch = (e, n, w, d, glass = true) => {       // smoke hatches with a domed light
@@ -454,6 +461,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       }
     }
 
+    yield;
     // ================= the car park =================
     // flat colour laid on the ground in the shop's frame, in layers: [colour, height above the ground, draw order]
     const LAY = { path: [0xa3a1ae, 0.05, -2], asphalt: [0x9d9ba9, 0.035, -3], blue: [0x86b4e8, 0.042, -4], pink: [0xeaa9a9, 0.042, -4], green: [0xa6dfc2, 0.042, -4], white: [0xf3f1f7, 0.05, -6] };
@@ -538,6 +546,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       solids.push({ x: at(48.45, -16.5)[0], z: at(48.45, -16.5)[1], yaw: -ROT, hx: 1.2, hz: 1.7 });
     }
 
+    yield;
     // ================= ground: paving, grass, fence =================
     K.ribbon(FE, 0, 46.3, -6.6, 0, 'paver', true);                       // the paved apron along the front
     K.ribbon(FE, 0.8, 5.6, -14.6, -6.6, 'paver', true);                  // its pocket at the west end
@@ -548,6 +557,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
     K.fence(FN, -64, -4, 52.2, 1.5, 0x4a6a58);
     K.finish();
 
+    yield;
     // ================= young trees, each between two stakes =================
     const kit = realTreeKit(), r = rnd(31);
     const trees = [];
@@ -585,6 +595,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       add(new THREE.IcosahedronGeometry(w / 2, 1).scale(1, 1.25, 1).translate(e, y + h * 0.7, -n), 0x7fbf6a);
     }
 
+    yield;
     // ---- assemble
     for (const k of Object.keys(quads)) {
       const Q = quads[k];
@@ -617,6 +628,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       group.add(m);
     }
 
+    yield;
     // ---- what a car cannot drive through (the shop itself is solid in the map already)
     const solid = (e, n, he, hn) => { const [x, z] = at(e, n); return { x, z, yaw: -ROT, hx: he, hz: hn }; };
     world.addSolids([
@@ -631,7 +643,7 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       if (built || !car) return;
       const c = at(22, -20);
       if (Math.hypot(car.x - c[0], car.z - c[1]) > 520) return;
-      if ([[0, 0], [45, 38], [-18, 44], [-18, -76], [52, -70], [52, 0]].every((q) => world.ready(...at(q[0], q[1])))) build();
+      if ([[0, 0], [45, 38], [-18, 44], [-18, -76], [52, -70], [52, 0]].every((q) => world.ready(...at(q[0], q[1])))) { built = true; jobs.add(build, 'coop'); }
     },
   };
 }

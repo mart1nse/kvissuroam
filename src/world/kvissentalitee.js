@@ -8,7 +8,8 @@
 import * as THREE from 'three';
 import { roadFrame, wallOf, streetKit, addHouseColours, KIT } from './streetkit.js';
 import { BOX } from '../race/landmarks.js';
-import { buildCarModel } from '../cars/models/index.js';
+import { buildCarModel, buildCarInWorker } from '../cars/models/index.js';
+import { warm } from '../warm.js';
 
 const ROAD = [[-176.9, 9.4], [145.4, -30.6], [333.6, -54.6]];
 const R = roadFrame(ROAD, 0);
@@ -197,14 +198,15 @@ export function createKvissentaliTee(scene, world, { shadows = true } = {}) {
     for (const c of parked) {
       const fx = Math.sin(c.yaw), fz = -Math.cos(c.yaw);
       world.addSolids([{ x: c.x, z: c.z, yaw: Math.atan2(-fz, fx), hx: c.hl, hz: c.hw }]);
-      setTimeout(() => {
-        const model = buildCarModel(c.id);
-        model.setLights({ headlights: false });
+      // (built in the car worker: built here on the page it stood the game still for 0.1 to 0.2 s on the way in)
+      const park = (model) => {
+        model.setLights?.({ headlights: false });
         model.group.quaternion.setFromAxisAngle(up, -c.yaw);
         model.group.position.set(c.x, world.heightAt(c.x, c.z) + 0.02, c.z);
         model.group.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
-        group.add(model.group);
-      }, 300);
+        warm.scope(() => group.add(model.group));
+      };
+      buildCarInWorker(c.id).then((model) => park(model || buildCarModel(c.id))).catch((err) => console.warn(err));
     }
   }
 

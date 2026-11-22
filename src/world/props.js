@@ -12,6 +12,9 @@ import { jobs } from '../jobs.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 21;
+// kinds past the sign faces: the white and blue striped post at raised crossings (Veski by Mandel)
+const STRIPED = 40;
+const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -32,6 +35,8 @@ const SOLID = {
   [BOX]: [box(0.8, 1.15, 0.35, 0, 0.58, 0, 0x7d8a84)],
   // short black street bollard with a reflective band
   [BOLLARD]: [cyl(0.075, 0.82, 0, 0.41, 0, 0x16161b, 8), cyl(0.08, 0.07, 0, 0.7, 0, 0xd8dde6, 8), cyl(0.09, 0.05, 0, 0.84, 0, 0x16161b, 8)],
+  // white and blue striped square post with a dark cap, 0.93 m (the raised crossing before Mandel)
+  [STRIPED]: [...Array.from({ length: 7 }, (_, k) => box(0.13, 0.13, 0.13, 0, 0.065 + k * 0.13, 0, k % 2 ? 0xfaf8ff : 0x2f5fb8)), box(0.15, 0.04, 0.15, 0, 0.93, 0, 0x26252b)],
   // old town lantern on a slim black post (Vallikraavi): light, falls at a touch
   [LANTERN]: [cyl(0.075, 3.3, 0, 1.65, 0, 0x24232a, 8), cyl(0.13, 0.5, 0, 0.25, 0, 0x24232a, 8),
     part(new THREE.CylinderGeometry(0.13, 0.2, 0.36, 4).rotateY(Math.PI / 4).translate(0, 3.47, 0), 0x24232a),
@@ -54,7 +59,7 @@ const SHAFT = {
   [LANTERN]: { r: 0.075, h: 3.3, hex: 0x24232a, sides: 8, top: SOLID[LANTERN].slice(1), glow: [GLOW[LANTERN]] },
   sign: { r: 0.035, h: 2.9, hex: 0x8a8a94, sides: 5, top: [], plate: true },
 };
-const shaftOf = (kind) => (kind >= SIGN0 ? SHAFT.sign : SHAFT[kind]);
+const shaftOf = (kind) => (isSign(kind) ? SHAFT.sign : SHAFT[kind]);
 // the stretch of a shaft between heights y0 and y1 (it tapers to 0.8 of its radius at the top)
 function shaftPiece(sh, y0, y1) {
   const r = (y) => sh.r * (1 - 0.2 * y / sh.h);
@@ -145,8 +150,8 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, sign: 10 };
-const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, sign: 0.08 };
+const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, sign: 10 };
+const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, sign: 0.08 };
 const KNOCK_KEY = 'streetlap.knocked';
 const G = 9.81;
 
@@ -191,7 +196,7 @@ export function createProps(world, opts = {}) {
       const id = `${sector.sx}_${sector.sz}:${i / data.stride}`;
       if (kind !== ZEBRA) {
         if (cleared.has(id)) continue;
-        if (knocked[id]) { rest.push({ id, kind, x, y, z, cs, sn, lift: kind >= SIGN0 ? (extra || 0) * 0.1 : 0 }); continue; }
+        if (knocked[id]) { rest.push({ id, kind, x, y, z, cs, sn, lift: isSign(kind) ? (extra || 0) * 0.1 : 0 }); continue; }
       }
       const m0 = kind === ZEBRA ? null : mark();
       if (kind === ZEBRA) {
@@ -207,7 +212,7 @@ export function createProps(world, opts = {}) {
         }
         continue;
       }
-      if (kind >= SIGN0) {
+      if (isSign(kind)) {
         for (const p of SOLID.sign) solid.add(p, x, y, z, cs, sn);
         sign.add(PLATE, x, y + (extra || 0) * 0.1, z, cs, sn, (kind - SIGN0) / FACES, 1 / FACES);      // extra: the plate sits that many dm higher (signs sharing a post)
         entries.push({ id, kind, x, y, z, cs, sn, lift: (extra || 0) * 0.1, r0: m0, r1: mark(), gone: false });
@@ -302,12 +307,12 @@ export function createProps(world, opts = {}) {
     obj.position.set(e.x + c.x, e.y + c.y, e.z + c.z);
     rec.group.add(obj);
     const size = box.getSize(new THREE.Vector3());
-    const whole = kind >= SIGN0 ? MASS.sign : MASS[kind] || 30;
+    const whole = isSign(kind) ? MASS.sign : MASS[kind] || 30;
     const mass = sh && piece ? Math.max(2, whole * ((y1 - y0) / sh.h + (y1 >= sh.h && kind === LIGHT ? 0.15 : 0))) : whole;
     const L = Math.max(size.x, size.y, size.z);
     const body = {
       id: e.id, kind, e, rec, c, obj, geos, corners, mass, inertia: mass * (L * L) / 10 + 0.5,
-      v: new THREE.Vector3(), w: new THREE.Vector3(), asleep: false, still: 0, reach: (kind >= SIGN0 ? REACH.sign : REACH[kind] || 0.3) + Math.min(size.x, size.z) * 0.5,
+      v: new THREE.Vector3(), w: new THREE.Vector3(), asleep: false, still: 0, reach: (isSign(kind) ? REACH.sign : REACH[kind] || 0.3) + Math.min(size.x, size.z) * 0.5,
       // the shaft's centre line, for driving over it when it lies on the ground
       seg: sh ? [new THREE.Vector3(0, y0, 0).sub(c), new THREE.Vector3(0, y1, 0).sub(c)] : null, r: sh ? sh.r : 0,
       idx: piece ? piece.idx : -1, under: 0, lastPass: -9,
@@ -554,7 +559,7 @@ export function createProps(world, opts = {}) {
         if (car.x < x0 - 8 || car.x > x0 + S + 8 || car.z < z0 - 8 || car.z > z0 + S + 8) continue;
         for (const e of rec.entries) {
           if (e.gone) continue;
-          const reach = e.kind >= SIGN0 ? REACH.sign : REACH[e.kind] || 0.3;
+          const reach = isSign(e.kind) ? REACH.sign : REACH[e.kind] || 0.3;
           if (Math.abs(e.y - car.y) > 3 || !touches(e.x, e.z, reach)) continue;
           hide(rec, e);
           const b = makeBody(e, rec);

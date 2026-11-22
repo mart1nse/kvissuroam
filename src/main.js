@@ -1360,6 +1360,7 @@ function frame(ts) {
     if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
     vabadusLights.update(performance.now() / 1000);          // clock time: the lights fade at their own pace
     discgolf.update(car, dt);
+    laiFronts.tick(car, dt);                                  // (the breakable picket fence at the Jakobi to Lai turn)
     // The hand-made places build themselves when the car comes near. One at a time while driving: after one
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.

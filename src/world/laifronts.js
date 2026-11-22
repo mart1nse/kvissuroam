@@ -233,7 +233,6 @@ function houses() {
 // [i0, i1, side (1 right going up the lap, -1 left), kind, height, pavement from the kerb (m)]
 const FENCES = [
   [656, 661, -1, 'boards', 1.8, 1.6],          // the old board fence by the ivy house (17 Jakobi)
-  [693, 712, -1, 'picket', 1.1, 2.2],          // the grey picket fence in front of the white house (1 Tartu-Tiksoja)
   [700, 713, 1, 'rail', 0.9, 2.0],             // the black railing along the orange house
   [734, 770, 1, 'slats', 1.25, 2.2],           // brown boards between white posts (8 and 15 Lai)
   [736, 766, -1, 'brick', 2.0, 2.2],           // the old red brick garden wall (15 Lai)
@@ -242,6 +241,10 @@ const FENCES = [
   [852, 870, 1, 'iron', 1.6, 2.4],             // the iron fence on stone posts round Uus Teater (38 Lai)
   [846, 906, -1, 'pink', 2.3, 2.2],            // the botanical garden's pink wall (37 to 41 Tartu-Tiksoja)
 ];
+// The grey picket fence on the inside of the Jakobi to Lai turn (1 Tartu-Tiksoja; Martin, 22 Nov: from the corner of the
+// timber house to the white house in one curve, a touch lower, and it breaks when a car drives into it). A curve from
+// a through c to b; panels of about 1.6 m, each one its own piece that flies off when hit.
+const CORNER = { a: [1056.3, 2627.4], c: [1068.45, 2627.0], b: [1073.2, 2616.2], h: 0.9, panel: 1.6 };
 const WALLS = { brick: [0xa65a48, 0x8e4c3e], white: [0xf1eee8, 0xb4604c], pink: [0xeab3a4, 0xd9a090] };   // [wall, cap]
 
 function fenceTextures() {
@@ -339,7 +342,88 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
     if (m) { m.castShadow = shadows; m.receiveShadow = true; group.add(m); }
   }
 
+
+  // ---- the breakable picket fence round the corner (an InstancedMesh: a panel is one instance)
+  const corner = { mesh: null, panels: [], flying: 0, at: null };
+  function* cornerFence() {
+    const { a, b, c, h: H, panel } = CORNER, pts = [];
+    const bez = (t) => [(1 - t) ** 2 * a[0] + 2 * t * (1 - t) * c[0] + t * t * b[0], (1 - t) ** 2 * a[1] + 2 * t * (1 - t) * c[1] + t * t * b[1]];
+    let len = 0, q = bez(0);
+    for (let k = 1; k <= 40; k++) { const r = bez(k / 40); len += Math.hypot(r[0] - q[0], r[1] - q[1]); q = r; }
+    const n = Math.max(2, Math.round(len / panel));
+    for (let k = 0; k <= n; k++) pts.push(bez(k / n));          // (even enough spacing on this gentle curve)
+    const tex = paintTexture(panel, 0, H, 128, (P) => {
+      for (let x = 0.04; x < panel - 0.05; x += 0.13) { P.r(x, 0.04, x + 0.08, H - 0.07, '#a9a7a2'); P.poly([[x, H - 0.07], [x + 0.08, H - 0.07], [x + 0.04, H - 0.01]], '#a9a7a2'); }
+      P.r(0, 0.17, panel, 0.24, '#8f8d88'); P.r(0, H - 0.3, panel, H - 0.23, '#8f8d88');
+      P.r(0, 0, 0.08, H, '#7f7d78');
+    }, { alpha: true });
+    const geo = new THREE.PlaneGeometry(panel, H).translate(0, H / 2, 0);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide }), n);
+    const m4 = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+    for (let k = 0; k < n; k++) {
+      const p0 = pts[k], p1 = pts[k + 1], l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+      const ux = (p1[0] - p0[0]) / l, uz = (p1[1] - p0[1]) / l, mx = (p0[0] + p1[0]) / 2, mz = (p0[1] + p1[1]) / 2;
+      const y = Math.min(world.heightAt(p0[0], p0[1]), world.heightAt(p1[0], p1[1]));
+      const yaw = Math.atan2(-uz, ux);
+      const pn = { p0, p1, mx, mz, y, yaw, sx: l / panel, down: false, rest: false, pos: [mx, y, mz], v: [0, 0, 0], ang: 0, spin: 0, tilt: 0 };
+      qt.setFromAxisAngle(up, yaw);
+      mesh.setMatrixAt(k, m4.compose(new THREE.Vector3(mx, y, mz), qt, new THREE.Vector3(pn.sx, 1, 1)));
+      corner.panels.push(pn);
+    }
+    mesh.computeBoundingSphere();
+    mesh.receiveShadow = true;
+    corner.mesh = mesh;
+    corner.at = bez(0.5);
+    if (typeof window !== 'undefined') window.__laiCorner = corner;      // (for tests: panels, which are down)
+    group.add(mesh);
+    yield;
+  }
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _ax = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+  function tick(car, dt) {
+    const C = corner;
+    if (!C.mesh || !car) return;
+    if (!C.flying && Math.hypot(car.x - C.at[0], car.z - C.at[1]) > 30) return;
+    dt = Math.min(dt || 0.016, 0.05);
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz, speed = Math.hypot(wvx, wvz);
+    const inside = (x, z) => { const dx = x - car.x, dz = z - car.z, l = dx * fx + dz * fz, t = dx * rx + dz * rz; return Math.abs(l) < (car.halfLen || 2.2) + 0.15 && Math.abs(t) < (car.halfWid || 0.9) + 0.15; };
+    let moved = false;
+    for (let k = 0; k < C.panels.length; k++) {
+      const p = C.panels[k];
+      if (!p.down) {
+        if (speed < 0.8 || Math.abs((car.y ?? p.y) - p.y) > 2.5) continue;
+        if (!inside(p.p0[0], p.p0[1]) && !inside(p.p1[0], p.p1[1]) && !inside(p.mx, p.mz)) continue;
+        // knocked off its posts: thrown the way the car goes, tumbling
+        p.down = true; C.flying++;
+        const push = 0.55 + Math.random() * 0.25;
+        p.v = [wvx * push + (Math.random() - 0.5) * 1.5, 1.2 + Math.min(speed, 20) * 0.12 + Math.random(), wvz * push + (Math.random() - 0.5) * 1.5];
+        p.spin = (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 5); p.tilt = (Math.random() - 0.5) * 0.8;
+        car.hit = Math.max(car.hit || 0, Math.min(2.5, speed * 0.08));
+        car.vx *= 0.985;
+      }
+      if (p.rest) continue;
+      p.v[1] -= 9.81 * dt;
+      p.pos[0] += p.v[0] * dt; p.pos[1] += p.v[1] * dt; p.pos[2] += p.v[2] * dt;
+      p.ang += p.spin * dt;
+      p.yaw += p.tilt * dt;
+      const g = world.heightAt(p.pos[0], p.pos[2]) + 0.03;
+      if (p.pos[1] < g) {
+        p.pos[1] = g; p.v[1] *= -0.2; p.v[0] *= 0.5; p.v[2] *= 0.5; p.spin *= 0.5;
+        if (Math.abs(p.v[1]) < 0.5 && Math.hypot(p.v[0], p.v[2]) < 0.3) { p.rest = true; p.ang = Math.PI / 2 * Math.sign(Math.sin(p.ang) || 1); C.flying--; }
+      }
+      // turned to its heading, then tumbling round its own length
+      _q.setFromAxisAngle(_up, p.yaw);
+      _ax.set(1, 0, 0).applyQuaternion(_q);
+      _q2.setFromAxisAngle(_ax, p.ang);
+      _q2.multiply(_q);
+      C.mesh.setMatrixAt(k, _m.compose(_v.set(p.pos[0], p.pos[1], p.pos[2]), _q2, _s.set(p.sx, 1, 1)));
+      moved = true;
+    }
+    if (moved) { C.mesh.instanceMatrix.needsUpdate = true; C.mesh.frustumCulled = C.flying === 0; if (!C.flying) C.mesh.computeBoundingSphere(); }
+  }
+
   return {
+    tick,
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 420) return;
@@ -347,6 +431,7 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
       built = true;
       skinHouses(world, group, houses(), { faces, shadows, ppm: 18, far: 5 });
       jobs.add(fences, 'lai fences');
+      jobs.add(cornerFence, 'lai corner fence');
     },
   };
 }

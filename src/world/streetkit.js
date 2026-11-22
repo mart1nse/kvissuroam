@@ -171,7 +171,11 @@ export function leafyPlants(group, shadows = true) {
       im.setColorAt(k, col.setRGB(b[7][0], b[7][1], b[7][2]));
     });
     im.castShadow = shadows; im.receiveShadow = true;
-    im.frustumCulled = false;
+    // (drawn only when some of them can be in the picture, since 22 Nov 2026: each place's bushes and hedges
+    // were drawn in every frame, and again for the shadows, wherever the camera looked. Four places' worth on
+    // the lap was 415 bushes, 80 thousand triangles a frame. The round they must fit in is measured here.)
+    im.computeBoundingSphere();
+    im.boundingSphere.radius += 1.5;        // (the leaves sway)
     group.add(im);
     return im;
   }

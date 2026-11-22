@@ -138,7 +138,7 @@ export function createRaadi2(scene, world, { shadows = true } = {}) {
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;
     const houses = HOUSES.map((H) => (H[7] ? block(world, H) : house(world, H)));
-    skinHouses(world, group, houses, { shadows, ppm: 14, far: 7, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'raadi2 fronts', shadows, ppm: 14, far: 7, debug: DEBUG });
     // the street fence along the front of 10, 12 and 14 (16 is still a building site) with gaps for the drives
     let s0 = 3;
     for (const [g0, g1] of [...GAPS, [140, 140]]) {

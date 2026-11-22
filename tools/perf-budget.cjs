@@ -1,6 +1,6 @@
 // Memory and freeze-frame budget check: node tools/perf-budget.cjs [--force] [--json out.json] [--port 5197]
 //
-// It takes about six minutes, so it does not run after every merge: when any thread (or the nightly
+// It takes about nine minutes, so it does not run after every merge: when any thread (or the nightly
 // run) ran it less than 2 hours ago, it prints that result and stops (Martin, 20 Nov 2026). --force
 // runs it anyway: when Martin asks, or for a change that is likely to weigh (new painted streets, car
 // models, many objects, anything built while driving). The last run is kept in the project's shared
@@ -29,6 +29,17 @@
 //            then standing still for 0.1 to 1 s): places, painted house fronts and map squares built in one
 //            go as the car came near. Before the fix (PR #372) the game was busy for over 0.1 s 12 times
 //            on this drive, the longest 379 ms; after it, not once (longest about 70 ms).
+//   a lap of the race track (the same test drive, as a desktop, along the track's own line): the short
+//            hitches. Judged: the stretches in which the page was busy for over 25 and over 33 ms, the longest,
+//            the frames whose game code took over 33 ms, the megapixels of house fronts painted on the way,
+//            and what went to the graphics card: megapixels of pictures in all, the frames that sent over
+//            1.1 megapixels, the most in one frame.
+//            Why: on a MacBook Pro M3 the lap had been "totally smooth" and after a night of new house fronts
+//            along the track came "ever so slight microfreezes", as coming down Vanemuise (Martin, 22 Nov
+//            2026). Nothing in the centre drive's figures had moved: they count stops of 0.1 s. The lap sent
+//            a quarter more picture to the card than the day before (123 to 154 megapixels, the fronts' pages
+//            a megapixel each, a map square's three pictures in one frame) and painted half again as many
+//            walls. A fast computer is about twice as fast as this check's, so 25 ms here is a late frame there.
 //   an old computer (light mode, the extra low setup, GRAPHICS LOW): the pieces drawn and the triangles in
 //            one frame at the Riia and Turu junction.
 //            Why: a ThinkPad T440s and a 2019 MacBook Air (two processor cores, Intel graphics) ran at 10
@@ -41,9 +52,9 @@
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
 //
-// What it cannot see: headless draws without a graphics card (SwiftShader), so real frame rates, the
-// graphics card's own time and what a real card does when new things arrive (pictures sent, shaders
-// compiled: tools/gpu-burst.cjs counts those) are not measured, the phone is Chromium dressed as an
+// What it cannot see: headless draws without a graphics card (SwiftShader), so real frame rates and the
+// graphics card's own time are not measured (what is sent to it on the lap is counted, not how long a
+// real card takes over it), the phone is Chromium dressed as an
 // iPhone and not Safari's engine, and other players joining are not played through.
 // The check runs every night after a day with changes (a scheduled task); its history is kept on the
 // perf-reports branch.
@@ -232,12 +243,12 @@ async function waitForServer(url, ms) {
     // (tools/freeze-profile.cjs: the car is moved 4.5 km through the centre at 48 m/s with drawing switched
     // off, so frames run at 60 a second without a graphics card; once with a desktop's settings and once
     // with a phone's. What the graphics card itself does with new things is not seen here.)
-    for (const [who, touch] of [['desktop', false], ['phone', true]]) {
+    for (const [who, touch, route] of [['desktop', false, 'centre'], ['phone', true, 'centre'], ['lap', false, 'lap']]) {
       try {
         // (a drive whose profile came without idle samples cannot tell busy from waiting: once more, and
         // if that one is the same, the frames' game code time stands in, which the printout says)
-        let r = await drive({ port: PORT, route: 'centre', touch });
-        if (summarise(r).busyFrom !== 'profile') r = await drive({ port: PORT, route: 'centre', touch });
+        let r = await drive({ port: PORT, route, touch });
+        if (summarise(r).busyFrom !== 'profile') r = await drive({ port: PORT, route, touch });
         out.drive[who] = { ...summarise(r), errors: r.errs.slice(0, 5), slow: r.slow, doubles: r.doubles || 0 };
         out.driveReport[who] = report(r, 12).slice(3);
       } catch (e) { out.drive[who] = null; out.driveReport[who] = [`the ${who} drive failed: ${e.message}`]; }
@@ -290,6 +301,26 @@ async function waitForServer(url, ms) {
       [`${who} drive: longest gap between frames (ms), not judged`, D?.longest, null],
     );
   }
+  {
+    // the lap of the race track: the short hitches and what went to the graphics card (see the top)
+    const D = out.drive.lap, B = budget.drive.lap;
+    checks.push(
+      ['lap drive round the race track: times the game was busy for over 25 ms', D?.busy25, B.busyOver25ms],
+      ['lap drive: times the game was busy for over 33 ms', D?.busy33, B.busyOver33ms],
+      ['lap drive: longest the game was busy without a break (ms)', D?.busyLongest, B.busyLongestMs],
+      ['lap drive: frames whose game code took over 33 ms', D?.js33, B.framesOver33ms],
+      ['lap drive: house fronts painted on the way (megapixels)', D?.frontsMP, B.frontsMP],
+      ['lap drive: pictures sent to the graphics card (megapixels)', D?.sentMP, B.sentMP],
+      ['lap drive: frames that sent over 1.1 megapixels of pictures', D?.sent11, B.framesOver1MP],
+      ['lap drive: most megapixels of pictures sent in one frame', D?.sentMax, B.mostMPInAFrame],
+      ['lap drive: page errors', D ? D.errors.length : null, 0],
+      ['lap drive: building work queued twice', D ? D.doubles : null, 0],
+      // shown, not judged: these two move by a third from one drive to the next
+      ['lap drive: times the game was busy for over 16 ms, not judged', D?.busy16, null],
+      ['lap drive: frames whose game code took over 16.7 ms, not judged', D?.js17, null],
+      ['lap drive: game code in a frame, the longest (ms), not judged', D?.jsMax, null],
+    );
+  }
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {
     const bad = v == null || (max != null && v > max);
@@ -297,9 +328,9 @@ async function waitForServer(url, ms) {
     out.checks.push({ name, figure: v ?? null, budget: max, ok: !bad });
     console.log(`${bad ? 'OVER' : max == null ? 'info' : 'ok  '} ${name}: ${v ?? 'not measured'}${max == null ? '' : ` (budget ${max})`}`);
   }
-  for (const who of ['desktop', 'phone']) {
+  for (const who of ['desktop', 'phone', 'lap']) {
     const D = out.drive[who];
-    if (D) console.log(`${who} drive ${JSON.stringify({ km: D.km, seconds: D.seconds, frames: D.frames, jsMedian: D.jsMedian, jsP95: D.jsP95, jsP99: D.jsP99, busy50: D.busy50, busy100: D.busy100, busyLongest: D.busyLongest, busyS: D.busyS, busyFrom: D.busyFrom, gaps50: D.pauses50, gaps100: D.pauses100, longestGap: D.longest, gapsS: D.frozen })}`);
+    if (D) console.log(`${who} drive ${JSON.stringify({ km: D.km, seconds: D.seconds, frames: D.frames, jsMedian: D.jsMedian, jsP95: D.jsP95, jsP99: D.jsP99, busy50: D.busy50, busy100: D.busy100, busyLongest: D.busyLongest, busyS: D.busyS, busyFrom: D.busyFrom, busy16: D.busy16, busy25: D.busy25, busy33: D.busy33, js17: D.js17, js33: D.js33, jsMax: D.jsMax, sentMP: D.sentMP, sent11: D.sent11, sent22: D.sent22, sentMax: D.sentMax, frontsMP: D.frontsMP, gaps50: D.pauses50, gaps100: D.pauses100, longestGap: D.longest, gapsS: D.frozen })}`);
     if (D?.errors.length) console.log(`${who} drive errors: ${D.errors.join(' | ')}`);
     // what ran in the busy stretches, when a drive figure is over (or the drive failed)
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));

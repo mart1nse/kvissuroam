@@ -18,6 +18,7 @@ import { setHouseColours } from './streetkit.js';
 import { skinHouses, paintTexture } from './houseskin.js';
 import { areaKit, frame, cellKit } from './handbuilt.js';
 import { BOX } from '../race/landmarks.js';
+import { jobs } from '../jobs.js';
 
 const DEBUG = typeof location !== 'undefined' && /riia2debug/.test(location.search);
 const S36 = ['3_6', 1120, 3040], S37 = ['3_7', 1120, 3680], S27 = ['2_7', 480, 3680];
@@ -167,7 +168,7 @@ function kvDark(P, W, brick = false) {
 const PAINT = { r24, r24a, kirik, kv22a: (P, W) => kvDark(P, W), kvb: (P, W) => kvDark(P, W, true) };
 
 // ---------------------------------------------------------------- Riia Kvartal's new fronts (cells)
-function kvCells(CK) {
+function* kvCells(CK) {
   // the corner tower's brick front: shops and banners below, five floors of balcony doors over them
   CK.cell('f22', T22.s1 - T22.s0, 0, T22.top, '#8e4430', (P, w) => {
     P.brick(0, 0, w, T22.top, [142, 66, 46], 22);
@@ -182,6 +183,7 @@ function kvCells(CK) {
     }
     P.r(0, T22.top - 0.6, w, T22.top, '#2a2a2d');
   }, 26);
+  yield;
   // a bay of the dark board walls: one tall narrow window a floor
   CK.cell('dk', 3.0, 0, T22.top, '#2c2c30', (P, w) => {
     P.boards(0, 0, w, T22.top, [44, 44, 48], 0.12, true);
@@ -190,6 +192,7 @@ function kvCells(CK) {
     P.r(0.7, 0.3, 2.3, 3.4, '#151618'); P.grad(0.78, 0.38, 2.22, 3.32, '#62778a', '#2c3843');
     P.r(0, T22.top - 0.6, w, T22.top, '#232326');
   }, 26);
+  yield;
   // the gabled block: near-black ribbed cladding to the road (Street View), rows of tall narrow windows, glass doors below
   CK.cell('g20f', G20.s1 - G20.s0, 0, G20.eaves, '#303135', (P, w) => {
     P.boards(0, 0, w, G20.eaves, [48, 49, 53], 0.1, true);
@@ -200,6 +203,7 @@ function kvCells(CK) {
       else { P.r(x, 0.9, x + 1.0, 2.9, '#1b1c1f'); P.grad(x + 0.06, 0.96, x + 0.94, 2.84, '#6f8293', '#33404b'); }
     }
   }, 22);
+  yield;
   // its back to the courtyard: dark walls, stacked timber balconies
   CK.cell('g20b', G20.s1 - G20.s0, 0, G20.eaves, '#2f3033', (P, w) => {
     P.boards(0, 0, w, G20.eaves, [48, 49, 52], 0.12, true);
@@ -211,10 +215,12 @@ function kvCells(CK) {
       }
     }
   }, 22);
+  yield;
   CK.cell('g20e', G20.vf - G20.vb, 0, G20.ridge, '#2f3033', (P, w) => {
     P.boards(0, 0, w, G20.ridge, [52, 53, 56], 0.12, true);
     for (let y = 3.7; y < G20.eaves - 1.8; y += 2.95) for (const x of [2.5, w - 3.5]) { P.r(x, y + 0.2, x + 1.0, y + 2.2, '#1b1c1f'); P.grad(x + 0.06, y + 0.26, x + 0.94, y + 2.14, '#7b8ea0', '#38454f'); }
   }, 22);
+  yield;
 }
 
 // map points of the corner tower's outline, outside on the right going round
@@ -266,8 +272,9 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
   let built = false;
   const CENTRE = L(190, 0);
 
-  function build() {
-    built = true;
+  // (through the work queue, in steps, since 22 Nov 2026: built in one go inside `update` it was 20 to 30 ms
+  // of standstill on the lap, where Pepleri comes within sight of Riia)
+  function* build() {
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;
     // ---- the map's blocks with painted walls
@@ -277,11 +284,12 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
       if (PAINT[name]) H.walls = [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }];
       return H;
     });
-    skinHouses(world, group, houses, { shadows, ppm: 14, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'riia2 fronts', shadows, ppm: 14, far: 6, faces, debug: DEBUG });
+    yield;
 
     // ---- Riia Kvartal: the gabled block and the corner tower
     const CK = cellKit(group, { shadows });
-    kvCells(CK);
+    yield* kvCells(CK);
     const R = railings(group);
     {
       const g = h(...L((G20.s0 + G20.s1) / 2, (G20.vf + G20.vb) / 2)) - 0.3;
@@ -340,7 +348,9 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
     // the black steel railing along the church's pavement
     for (let s = 268; s < 342; s += 6) R.add(L(s, 12.6), L(s + 6, 12.6), h(...L(s, 12.6)) - 0.02, h(...L(s + 6, 12.6)) - 0.02, 1.2);
     R.finish();
+    yield;
     CK.finish();
+    yield;
     A.finish();
   }
 
@@ -348,7 +358,7 @@ export function createRiia2(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 380) return;
-      if ([L(0, 0), L(170, -40), L(330, 30), L(250, -20)].every((q) => world.ready(q[0], q[1]))) build();
+      if ([L(0, 0), L(170, -40), L(330, 30), L(250, -20)].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'riia2'); }
     },
   };
 }

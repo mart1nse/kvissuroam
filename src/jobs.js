@@ -4,11 +4,12 @@
 // Martin 20 Nov). Here such work is cut into steps, and each frame only does as many as fit in a few
 // milliseconds.
 //
-// A job is a generator function: every `yield` is a place where it may stop until the next frame. A plain
+// A job is a generator function: every `yield` is a place where it may stop until the next frame
+// (`yield 'frame'` before a step that is long by its nature: that one starts a frame of its own). A plain
 // function is a job of one step. While the queue is not live (the loading screen, the menu, a jump across
 // the map: nobody is watching the road), a job runs at once and to its end, exactly as before.
 const queue = [];
-let live = false, restUntil = 0, uploader = null, doubles = 0, stepAt = Infinity;   // stepAt: when the step now running began (Infinity outside the queue)
+let live = false, restUntil = 0, uploader = null, doubles = 0, sent = 0, stepAt = Infinity;   // stepAt: when the step now running began (Infinity outside the queue)
 const slow = [];                            // the last steps that took over 20 ms: [label, step, ms] (for looking into pauses)
 const now = () => performance.now();
 const GEN = Object.getPrototypeOf(function* () {}).constructor;
@@ -48,18 +49,29 @@ export const jobs = {
   // empty city for minutes (Martin's 2019 MacBook Air, 21 Nov 2026).
   tick(budget = 4, long = 12, hurry = false) {
     const t0 = now();
+    sent = 0;
     if (t0 < restUntil && !hurry) return;
     while (queue.length) {
       const job = queue[0];
       if (job.done) { queue.shift(); continue; }
       const s0 = stepAt = now();
       job.n++;
-      try { if (job.it.next().done) { job.done = true; queue.shift(); } } catch (err) { console.error(err); job.done = true; queue.shift(); }
+      let fresh = false;
+      try { const r = job.it.next(); if (r.done) { job.done = true; queue.shift(); } else fresh = r.value === 'frame'; } catch (err) { console.error(err); job.done = true; queue.shift(); }
       stepAt = Infinity;
       const t = now();
       if (t - s0 > 20) { slow.push([job.label, job.n, Math.round(t - s0)]); if (slow.length > 150) slow.shift(); }
       if (t - s0 > long && !hurry) { restUntil = t + pause(t); break; }
       if (t - t0 >= budget) break;
+      // `yield 'frame'`: the job's next step is a long one by its nature (a big wall to paint, a picture to
+      // send to the graphics card), so it is not started on top of what this frame has done already. The
+      // steps before it used to fill the frame's few milliseconds, and the long one then ran in the same
+      // frame: 5 ms and 10 ms are a late frame, 10 ms by itself is not.
+      if (fresh && t - t0 > 1 && !hurry) break;
+      // a step that sent a picture to the graphics card is the frame's last: the call itself returns in no
+      // time on a real card, which takes the picture in while the next frame is drawn, so two or three used to
+      // go in one frame whatever the code meant (a map square's photo, mask and cover: 2.5 megapixels at once)
+      if (sent && !hurry) break;
     }
   },
   // Has the step now running taken over `ms`? For long loops inside a job: `if (jobs.late()) yield;` after
@@ -89,5 +101,7 @@ export const jobs = {
   drain() { while (queue.length) { const job = queue.shift(); if (!job.done) finish(job); } },
   // sending a picture to the graphics card ahead of the frame that first shows it (set by main.js)
   setUploader(f) { uploader = f; },
-  upload(tex) { if (uploader && live) { try { uploader(tex); } catch (err) { console.warn(err); } } },
+  upload(tex) { if (uploader && live) { sent += (tex.image?.width || 0) * (tex.image?.height || 0) || 1; try { uploader(tex); } catch (err) { console.warn(err); } } },
+  // pixels the queue has sent to the graphics card in this frame (the warmer then sends none of its own)
+  get sentPx() { return sent; },
 };

@@ -114,7 +114,7 @@ export function createRavila(scene, world, { shadows = true } = {}) {
     const { h } = A;
     const faces = (W) => W.foot < 2 && W.len > 4;
     const houses = HOUSES.map(([name, base, at, r, , , pick, spec, walls]) => ({ name, sec: S18[0], base, at, r, pick, spec, walls }));
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'ravila fronts', shadows, ppm: 12, far: 6, faces, debug: DEBUG });
 
     const run = (s0, s1, v) => [L(s0, v), L(s1, v)];
     for (const [s0, s1, kind, side] of FRONTS) {

@@ -110,7 +110,7 @@ export function createRavila2(scene, world, { shadows = true } = {}) {
       name, sec: sec[0], base, at, r, pick, spec: { kind: 'plaster', wall: [236, 236, 232] },
       walls: [{ near: [0, 0], within: 1e9, only: (P, W) => paint(P, W) }],
     }));
-    skinHouses(world, group, houses, { shadows, ppm: 7, far: 4, faces: (W) => W.len > 6, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'ravila2 fronts', shadows, ppm: 7, far: 4, faces: (W) => W.len > 6, debug: DEBUG });
   }
 
   return {

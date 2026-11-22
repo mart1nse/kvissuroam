@@ -104,7 +104,7 @@ export function createKvissentali2(scene, world, { shadows = true } = {}) {
   // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
   function* build() {
     const houses = HOUSES.map(([name, base, at, r, , , o]) => ({ name, sec: S[0], base, at, r, spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: paint(name, o) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 5, faces: (W) => W.len > 5 && W.foot < 2, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'kvissentali2 fronts', shadows, ppm: 10, far: 5, faces: (W) => W.len > 5 && W.foot < 2, debug: DEBUG });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

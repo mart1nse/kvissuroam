@@ -187,7 +187,7 @@ export function createNoela(scene, world, { shadows = true } = {}) {
   function build(part) {
     part.built = true;
     const A = areaKit(world, group, { shadows });
-    skinHouses(world, group, HOUSES.filter((H) => part.names.test(H[0])).map((H) => withDoor(world, H)), { faces, shadows, ppm: 14, far: 6, debug: DEBUG });
+    skinHouses(world, group, HOUSES.filter((H) => part.names.test(H[0])).map((H) => withDoor(world, H)), { label: 'noela fronts', faces, shadows, ppm: 14, far: 6, debug: DEBUG });
     part.extra(A);
     A.finish();
   }

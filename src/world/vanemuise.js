@@ -202,7 +202,7 @@ export function createVanemuise(scene, world, { shadows = true } = {}) {
       p.box(w, hh, d, c, px, W.yref + y, pz, Math.atan2(W.nx, W.nz));
     });
     const faces = (W) => { const [, v] = SV(W.mid[0], W.mid[1]); return Math.abs(v) < 62; };
-    skinHouses(world, group, houses(later), { faces, shadows, ppm: 24, far: 10 });
+    skinHouses(world, group, houses(later), { label: 'vanemuise fronts', faces, shadows, ppm: 18, far: 7 });
     jobs.add(function* () {
       for (let k = 0; k < later.length; k++) { later[k](); if (jobs.late()) yield; }        // (draw callbacks queue boxes that queue more)
       flags();

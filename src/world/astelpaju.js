@@ -106,7 +106,7 @@ export function createAstelpaju(scene, world, { shadows = true } = {}) {
   // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
   function* build() {
     const houses = HOUSES.map(([name, S, base, at, r]) => ({ name, sec: S[0], base, at, r, spec: { wall: [200, 200, 200], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 5, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'astelpaju fronts', shadows, ppm: 10, far: 5, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

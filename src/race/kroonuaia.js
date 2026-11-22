@@ -357,7 +357,7 @@ export function createKroonuaia(world, group, { shadows = true } = {}) {
       for (let i = I0; i <= I1; i += 2) { const d = (P[i][0] - W.mid[0]) ** 2 + (P[i][1] - W.mid[1]) ** 2; if (d < best) { best = d; bi = i; } }
       return best < 45 * 45 && (P[bi][0] - W.mid[0]) * W.nx + (P[bi][1] - W.mid[1]) * W.nz > 0.5;
     };
-    skinHouses(world, group, HOUSES, { faces, shadows, debug: !!window.__skinDebug });
+    skinHouses(world, group, HOUSES, { label: 'kroonuaia fronts', faces, shadows, ppm: 18, far: 7, debug: !!window.__skinDebug });
 
     yield;
     const K = streetKit(world, group, { shadows });

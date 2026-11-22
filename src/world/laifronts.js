@@ -429,7 +429,7 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 420) return;
       if (![P[I0], P[770], P[I1]].every((q) => world.ready(q[0], q[1]))) return;
       built = true;
-      skinHouses(world, group, houses(), { faces, shadows, ppm: 18, far: 5 });
+      skinHouses(world, group, houses(), { label: 'laifronts fronts', faces, shadows, ppm: 18, far: 5 });
       jobs.add(fences, 'lai fences');
       jobs.add(cornerFence, 'lai corner fence');
     },

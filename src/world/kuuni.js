@@ -228,7 +228,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
   function build() {
     built = true;
     const faces = (W) => nearSeg(W.mid[0], W.mid[1], N(-20, 10), N(76, 10), 16) || Math.hypot(W.mid[0] - HOLOGRAM.x, W.mid[1] - HOLOGRAM.z) < 20;
-    skinHouses(world, group, HOUSES, { faces, shadows, debug: !!window.__skinDebug });
+    skinHouses(world, group, HOUSES, { label: 'kuuni fronts', faces, shadows, debug: !!window.__skinDebug });
     pave(world, group);
 
     const K = streetKit(world, group, { shadows });

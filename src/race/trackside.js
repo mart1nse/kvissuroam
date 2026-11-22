@@ -195,8 +195,10 @@ function polyDist(pts, x, z) {
     total += l;
   }
   along = at;
-  return { d: best, lat, along, total };
+  DIST.d = best; DIST.lat = lat; DIST.along = along; DIST.total = total;
+  return DIST;
 }
+const DIST = { d: 0, lat: 0, along: 0, total: 0 };       // (the same one every time: the kerbs ask for every wheel, several times a frame)
 
 // a point `off` metres beyond the road edge on one side of track point i (side +1 right, -1 left)
 function edgePoint(track, i, side, off) {

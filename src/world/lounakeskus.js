@@ -349,8 +349,8 @@ export function createLounakeskus(scene, world, { shadows = true } = {}) {
       H.walls = [{ near: [-1178.2, 5376.0], within: 3, skip: true }, { near: [0, 0], within: 1e9, only: (P, W) => paint(P, W) }];
     }
     const front = houses.filter((H) => FRONTS.has(H.name)), rest = houses.filter((H) => !FRONTS.has(H.name));
-    skinHouses(world, group, front, { shadows, ppm: 10, far: 6, faces: (W) => W.foot < 2 && (W.nx * NNE[0] + W.nz * NNE[1] > 0.9 || W.peak > HOTEL_FROM), debug: DEBUG });
-    skinHouses(world, group, rest, { shadows, ppm: 8, far: 5, debug: DEBUG });
+    skinHouses(world, group, front, { label: 'lounakeskus fronts', shadows, ppm: 10, far: 6, faces: (W) => W.foot < 2 && (W.nx * NNE[0] + W.nz * NNE[1] > 0.9 || W.peak > HOTEL_FROM), debug: DEBUG });
+    skinHouses(world, group, rest, { label: 'lounakeskus fronts', shadows, ppm: 8, far: 5, debug: DEBUG });
 
     const mat = (t, o = {}) => new THREE.MeshLambertMaterial({ map: t, ...o });
     const dark = new THREE.MeshLambertMaterial({ color: 0x1d1e21 });

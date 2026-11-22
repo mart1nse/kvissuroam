@@ -124,7 +124,7 @@ export function createRiia6(scene, world, { shadows = true } = {}) {
     const { h } = A;
     const faces = (W) => W.foot < 2 && W.len > 5;
     const houses = HOUSES.map(([name, base, at, r, , , pick, spec]) => ({ name, sec: S18[0], base, at, r, pick, spec }));
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'riia6 fronts', shadows, ppm: 12, far: 6, faces, debug: DEBUG });
 
     // ---- the rubble wall: a core, the painted street face in 8 m bays following the ground, a cap
     const CK = cellKit(group, { shadows, size: 512 });

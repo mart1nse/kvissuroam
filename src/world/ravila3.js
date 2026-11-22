@@ -92,7 +92,7 @@ export function createRavila3(scene, world, { shadows = true } = {}) {
       { name: 'coop', sec: S07[0], base: 3214, at: L(770, -66), r: 40, pick: rect(745, 796, -95, -38), spec: { kind: 'plaster', wall: [180, 184, 188] },
         walls: [{ near: [0, 0], within: 1e9, only: (P, W) => coop(P, W) }] },
     ];
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 5, faces: (W) => W.len > 5, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'ravila3 fronts', shadows, ppm: 10, far: 5, faces: (W) => W.len > 5, debug: DEBUG });
     const A = areaKit(world, group, { shadows });
     for (const [s0, s1, kind] of FRONTS) {
       if (kind === 'hedge') A.hedge([L(s0, VF), L(s1, VF)], 1.6, 0.8);

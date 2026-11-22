@@ -41,7 +41,9 @@ export function createHud(world) {
   }            // extra drawing in world coordinates (race track, other players)
 
   // spatial hash of named road segments for the street label
-  const cell = 60;
+  // (cells are found by a number, and the map below is drawn with plain loops: 225 text keys and a small
+  // function call per road point, sixteen times a second, were 100 MB of garbage a lap, 22 Nov 2026)
+  const cell = 60, cellKey = (c, r) => (c + 4096) * 8192 + r + 4096;
   const grid = new Map();
   const roads = world.vectors.roads;
   roads.forEach((r, ri) => {
@@ -50,7 +52,7 @@ export function createHud(world) {
       const c0 = Math.floor(Math.min(x0, x1) / cell), c1 = Math.floor(Math.max(x0, x1) / cell);
       const r0 = Math.floor(Math.min(z0, z1) / cell), r1 = Math.floor(Math.max(z0, z1) / cell);
       for (let c = c0; c <= c1; c++) for (let rr = r0; rr <= r1; rr++) {
-        const k = `${c},${rr}`;
+        const k = cellKey(c, rr);
         let l = grid.get(k);
         if (!l) grid.set(k, (l = []));
         l.push(ri, i);
@@ -72,7 +74,7 @@ export function createHud(world) {
     let best = 14, name = '';
     const c = Math.floor(x / cell), r = Math.floor(z / cell);
     for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
-      const l = grid.get(`${c + dc},${r + dr}`);
+      const l = grid.get(cellKey(c + dc, r + dr));
       if (!l) continue;
       for (let k = 0; k < l.length; k += 2) {
         const road = roads[l[k]];
@@ -87,6 +89,7 @@ export function createHud(world) {
     return name;
   }
 
+  const trace = (pts) => { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); };
   function drawMap(car) {
     const n = map.width, R = n / 2, scale = R / 170;    // 170 m radius, heading up
     ctx.clearRect(0, 0, n, n);
@@ -102,7 +105,7 @@ export function createHud(world) {
     for (const p of waterPolys) {
       if (p.minX > car.x + 420 || p.maxX < car.x - 420 || p.minZ > car.z + 420 || p.maxZ < car.z - 420) continue;
       ctx.beginPath();
-      p.outer.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+      trace(p.outer);
       ctx.closePath();
       ctx.fill();
     }
@@ -110,7 +113,7 @@ export function createHud(world) {
     seen.clear();
     const c0 = Math.floor(car.x / cell), r0 = Math.floor(car.z / cell);
     for (let dc = -7; dc <= 7; dc++) for (let dr = -7; dr <= 7; dr++) {
-      const l = grid.get(`${c0 + dc},${r0 + dr}`);
+      const l = grid.get(cellKey(c0 + dc, r0 + dr));
       if (l) for (let k = 0; k < l.length; k += 2) seen.add(l[k]);
     }
     for (const ri of seen) {
@@ -119,13 +122,13 @@ export function createHud(world) {
       ctx.strokeStyle = path ? 'rgba(255,95,162,.45)' : 'rgba(255,225,245,.92)';
       ctx.lineWidth = Math.max(r.w, path ? 2 : 5);
       ctx.beginPath();
-      r.pts.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+      trace(r.pts);
       ctx.stroke();
     }
     // map edge
     ctx.strokeStyle = '#2ff3ff'; ctx.lineWidth = 4;
     ctx.beginPath();
-    world.meta.boundary.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    trace(world.meta.boundary);
     ctx.stroke();
     overlay?.(ctx, scale, car);
     ctx.restore();

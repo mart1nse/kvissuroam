@@ -143,7 +143,7 @@ export function createKorvekula(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const faces = (W) => Math.abs(W.nx) + Math.abs(W.nz) > 0;
-    skinHouses(world, group, houses(), { faces, shadows, ppm: 24, far: 12 });
+    skinHouses(world, group, houses(), { label: 'korvekula fronts', faces, shadows, ppm: 24, far: 12 });
 
     // ================= the lane south of the highway =================
     // the lawns of the three gardens

@@ -160,7 +160,7 @@ export function createRaadi(scene, world, { shadows = true } = {}) {
     const { p, h } = A;
     const near = (W) => facing(W, [2240, -433]) > -2;
     const houses = [foxwayHouse(world), { name: 'annex', sec: SEC, base: 2024, at: HOUSES[1][2], r: 18, spec: SPEC.annex }, ...HOUSES.slice(2).map((H) => terrace(world, H))];
-    skinHouses(world, group, houses, { faces: near, shadows, ppm: 14, far: 7, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'raadi fronts', faces: near, shadows, ppm: 14, far: 7, debug: DEBUG });
 
     // bay lines where the photos show them (the ground under the car parks is the map's own)
     const lines = (F, s0, n, v0, v1) => { for (let k = 0; k <= n; k++) { const s = s0 + k * 2.6; A.pave(F, s - 0.06, s + 0.06, Math.min(v0, v1), Math.max(v0, v1), 'white'); } };

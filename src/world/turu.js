@@ -253,7 +253,7 @@ export function createTuru(scene, world, { shadows = true } = {}) {
       else H.spec = { kind: 'plaster', wall: [236, 235, 230], trim: '#f4f2ec', storey: 2.9, maxFloors: 5, win: { w: 1.3, pitch: 3.0, T: false, bars: 1, surround: 0, frame: '#f2f1ee', glass: '#5b6a7c' }, attic: null, plinth: { h: 0.6, type: 'plaster', col: '#8f8d8a' }, weather: 0.4 };
       return H;
     });
-    skinHouses(world, group, houses, { shadows, ppm: 14, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'turu fronts', shadows, ppm: 14, far: 6, faces, debug: DEBUG });
 
     // ---- Circle K: the canopy (white roof, red fascia), its posts, the pumps, the tall K by Soola, flags
     const C = [[1964.4, 3177.3], [1977.5, 3163.8], [1965.8, 3152.4], [1952.6, 3165.9]];

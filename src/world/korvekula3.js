@@ -79,7 +79,7 @@ export function createKorvekula3(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const debug = /kdebug/.test(location.search);
-    skinHouses(world, group, houses(), { shadows, ppm: 22, far: 12, debug });
+    skinHouses(world, group, houses(), { label: 'korvekula3 fronts', shadows, ppm: 22, far: 12, debug });
 
     // the wooden balconies on the green side of Kubjaringi 1 and 3, two floors
     for (const [mid, n] of [[[3687.0, -2239.1], [0.45, 0.89]], [[3725.6, -2241.1], [-0.35, 0.94]]]) {

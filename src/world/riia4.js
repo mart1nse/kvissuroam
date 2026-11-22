@@ -76,7 +76,7 @@ export function createRiia4(scene, world, { shadows = true } = {}) {
     const { p, h } = A;
     const faces = (W) => W.foot < 2 && W.len > 5;
     const houses = HOUSES.map(([name, base, at, r, , , pick, spec]) => ({ name, sec: S27[0], base, at, r, pick: pick || undefined, spec }));
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'riia4 fronts', shadows, ppm: 12, far: 6, faces, debug: DEBUG });
 
     // ---- the Coop pylon on the car park corner, its faces to the traffic both ways
     const CK = cellKit(group, { shadows, size: 512 });

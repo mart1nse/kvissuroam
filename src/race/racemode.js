@@ -110,7 +110,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (voteOpen && r.vote.kind === 'restart' && !(mine && !mine.out)) return;
     if (voteOpen) {
       if (!isDriving()) return;
-      mp.raceSend({ t: 'rv', on: r.vote.ids.includes(mp.id) ? 0 : 1 });
+      // (voted, and drivers left so the votes in are enough now: pressing again starts it, START NOW)
+      const voted = r.vote.ids.includes(mp.id), enough = r.vote.ids.length >= r.vote.need;
+      mp.raceSend({ t: 'rv', on: voted && !enough ? 0 : 1 });
     }
   }
   btn.addEventListener('click', act);
@@ -215,8 +217,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     } else if (v.kind === 'restart' && mine && !mine.out) {
       label = 'RESTART'; cls = voted ? 'pink on' : 'pink';
       line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> ${isTouch ? 'RACERS' : `RACER VOTES TO RESTART${voted ? ' · YOU VOTED' : ''}`}`;
+      if (voted && n >= v.need) { label = 'RESTART NOW'; cls = 'pink'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> ${key} TO RESTART`; }
     } else if (v.kind === 'start') {
-      if (voted) { label = 'VOTED'; cls = 'voted'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> VOTES${isTouch ? '' : ' · PRESS 1 TO TAKE BACK'}`; }
+      // (enough votes only because drivers left: nothing starts by itself, the voters confirm it)
+      if (voted && n >= v.need) { label = 'START NOW'; cls = 'lit'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> VOTES · ${key} TO START`; }
+      else if (voted) { label = 'VOTED'; cls = 'voted'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> VOTES${isTouch ? '' : ' · PRESS 1 TO TAKE BACK'}`; }
       else if (n) { label = 'VOTE START'; cls = 'lit'; line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> VOTES${isTouch ? '' : ' · PRESS 1 TO RACE'}`; }
       else { label = 'START RACE'; line = `${pips(0, v.need)}<b>0 / ${v.need}</b> VOTES${isTouch ? '' : ' TO START · PRESS 1'}`; }
       if (ph === 'race' && !isTouch) line += ' · RACE STILL ON';

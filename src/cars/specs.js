@@ -34,6 +34,7 @@ export const CARS = {
     efficiency: 0.765,
     shiftTime: 0.5,
     limiter: null,
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 9.2, top: 210, powerKw: 118 },
   },
   crv: {
@@ -69,6 +70,7 @@ export const CARS = {
     efficiency: 0.8,
     shiftTime: 0.45,
     limiter: null,
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 12.2, top: 177, powerKw: 110 },
   },
   enyaq: {
@@ -99,6 +101,7 @@ export const CARS = {
     efficiency: 0.9,
     shiftTime: 0,
     limiter: 160,
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 6.9, top: 160, powerKw: 195 },
   },
   rav4: {
@@ -244,6 +247,7 @@ export const CARS = {
     efficiency: 0.93,
     shiftTime: 0,
     limiter: 180,
+    abs: 0.2,                   // a touch of anti-lock (Martin 2026-11-22)
     ref: { zeroTo100: 4.5, top: 180, powerKw: 280 },
   },
   f40: {

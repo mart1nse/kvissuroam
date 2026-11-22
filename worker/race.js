@@ -35,19 +35,26 @@ export class RaceDesk {
   }
   save() { this.lobby.setMeta('race', JSON.stringify(this.s)); }
 
+  // a socket that has neither pinged nor said hello for 80 s is a page that went to sleep (see prune
+  // in index.js, which only runs when someone joins): it must not be counted for a vote
+  live(ws, a, now = Date.now()) {
+    const ping = this.lobby.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
+    return Math.max(ping, a?.at || 0) > now - 80000;
+  }
   // everyone connected and driving (not a ghost), id -> attachment
   drivers() {
     const out = new Map();
     for (const ws of this.lobby.ctx.getWebSockets()) {
       if (ws === this.skip) continue;
       const a = ws.deserializeAttachment();
+      if (!this.live(ws, a)) continue;
       if (a?.id && !a.ghost && a.drv) out.set(a.id, a);
     }
     return out;
   }
   online() {
     const out = new Set();
-    for (const ws of this.lobby.ctx.getWebSockets()) { if (ws === this.skip) continue; const a = ws.deserializeAttachment(); if (a?.id && !a.ghost) out.add(a.id); }
+    for (const ws of this.lobby.ctx.getWebSockets()) { if (ws === this.skip) continue; const a = ws.deserializeAttachment(); if (a?.id && !a.ghost && this.live(ws, a)) out.add(a.id); }
     return out;
   }
 

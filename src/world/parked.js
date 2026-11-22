@@ -107,7 +107,7 @@ function allSpots() {
       const t = (i + 0.5) / row.n, x = row.a[0] + dx * t, z = row.a[1] + dz * t;
       const cy = row.head ? Math.atan2(-row.head[1], row.head[0]) + (r() - 0.5) * 0.06
         : along + (row.perp ? Math.PI / 2 : 0) + (r() < 0.5 ? Math.PI : 0) + (r() - 0.5) * 0.08;
-      out.push({ key: `r${row.seed}.${i}`, x, z, yaw: Math.PI / 2 - cy, row: true });
+      out.push({ key: `r${row.seed}.${i}`, x, z, yaw: Math.PI / 2 - cy, row: true, drop: row.drop?.includes(i) });
     }
   }
   const ids = deck(MODELS, out.length, 5), paints = deck(COLOURS, out.length, 9);
@@ -119,6 +119,7 @@ function allSpots() {
   });
   for (const [k, paint] of AUDIS) if (out[k]) Object.assign(out[k], { id: 'audi200', paint });
   for (const k of KIAS) if (out[k]) Object.assign(out[k], { id: 'ceedsw', paint: 'sage' });
+  for (let i = out.length - 1; i >= 0; i--) if (out[i].drop) out.splice(i, 1);   // after the decks: nothing else changes
   uueturuParked().forEach((c, i) => out.push({ key: `u${i}`, ...c }));
   AKSI_CARS.forEach(([x, z, yaw, id, paint], i) => out.push({ key: `a${i}`, x, z, yaw, id, paint }));
   SIRELI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `s${i}`, x, z, yaw, id, paint, lift }));

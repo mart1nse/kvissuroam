@@ -43,7 +43,7 @@ export function row(P, W, xs, sill, h, w, opt) {
 // windows on a pitch, belts, a cornice under the eaves. Used for the plain sides and for whole houses.
 export function classic(P, W, o) {
   const len = W.len, top = Math.min(P.y1, W.eaves + 0.05);
-  P.r(0, P.y0, len, P.y1, o.wall); P.weather(0, P.y0, len, P.y1, o.weather ?? 0.3, o.seed || 7);
+  P.r(0, P.y0, len, P.y1, o.wall); if (W.front) P.weather(0, P.y0, len, P.y1, o.weather ?? 0.3, o.seed || 7);      // (rain streaks only where the wall is painted finely: hundreds of soft strokes a wall)
   const raised = W.foot > 2.5, pl = o.plinth || [0.7, '#a7a6a8'];
   if (!raised) {
     if (o.ground) { P.r(0, pl[0], len, o.ground[0], o.ground[1]); if (o.ground[2]) bands(P, 0, len, pl[0], o.ground[0]); P.r(0, o.ground[0], len, o.ground[0] + 0.16, o.trim || '#f3f0e8'); }
@@ -349,7 +349,7 @@ export function createUlikooli(scene, world, { shadows = true } = {}) {
   // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
   function* build() {
     const houses = HOUSES.map(([name, base, at, r, , , paint, walls]) => ({ name, sec: S35[0], base, at, r, spec: { wall: [230, 225, 215], floors: [], attic: null, eaves: false }, walls: [...walls, { near: [0, 0], within: 1e9, only: paint }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 11, far: 6, faces: (W) => W.len > 6 && W.foot < 3, debug: DEBUG });
+    skinHouses(world, group, houses, { shadows, ppm: 11, far: 6, faces: (W) => W.len > 6 && W.foot < 3, debug: DEBUG, label: 'ulikooli fronts' });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

@@ -28,19 +28,23 @@ const STREETS = [
   [[1292.6, 2688.1], [1365.3, 2674.1], [1451.4, 2656.4]],
   [[1391.8, 2830.8], [1412.0, 2827.6], [1445.8, 2818.8]],
 ];
-function onStreet(W) {
-  if (W.len < 6 || W.ylo - W.yref > 3) return false;                // (asked before skinHouses has measured W.foot: a wall that starts above a roof)
-  const px = W.mid[0] + W.nx * 7, pz = W.mid[1] + W.nz * 7;
-  for (const line of STREETS) for (let i = 0; i < line.length - 1; i++) {
-    const a = line[i], b = line[i + 1], dx = b[0] - a[0], dz = b[1] - a[1];
-    const t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (pz - a[1]) * dz) / (dx * dx + dz * dz)));
-    if (Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t) < 9) return true;
-  }
-  return false;
+// a test for skinHouses' `faces`: the wall looks onto one of these lines within some 16 m
+export function facing(lines) {
+  return (W) => {
+    if (W.len < 6 || W.ylo - W.yref > 3) return false;                // (asked before skinHouses has measured W.foot: a wall that starts above a roof)
+    const px = W.mid[0] + W.nx * 7, pz = W.mid[1] + W.nz * 7;
+    for (const line of lines) for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i], b = line[i + 1], dx = b[0] - a[0], dz = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (pz - a[1]) * dz) / (dx * dx + dz * dz)));
+      if (Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t) < 9) return true;
+    }
+    return false;
+  };
 }
+const onStreet = facing(STREETS);
 
 // a shop floor: wide dark windows between piers, a door every third bay, a band over them
-function shops(P, W, o) {
+export function shops(P, W, o) {
   if (W.foot > 2.5 || W.len < 5) return;
   const len = W.len, top = o.top || 3.5, n = Math.max(1, Math.round((len - 0.8) / (o.pitch || 3.4))), xs = axes(0, len, n), w = o.w || 2.3;
   if (o.col) P.r(0, 0.5, len, top + 0.35, o.col);
@@ -53,9 +57,10 @@ function shops(P, W, o) {
   P.r(0, top + 0.35, len, top + 0.5, o.trim || WHT);
 }
 // a plastered house over a shop floor on the street side, plain plaster towards the yard
-const house = (o, shop) => (P, W) => {
-  if (!shop || !W.front) return classic(P, W, o);
-  classic(P, W, { ...o, floors: o.floors.filter(([sill]) => sill > (shop.top || 3.5) + 0.6), doors: [] });
+export const house = (o, shop) => (P, W) => {
+  // (no rain streaks on these: hundreds of soft strokes a wall, 50 ms and more for a long front on an old computer)
+  if (!shop || !W.front) return classic(P, W, { ...o, weather: 0 });
+  classic(P, W, { ...o, weather: 0, floors: o.floors.filter(([sill]) => sill > (shop.top || 3.5) + 0.6), doors: [] });
   shops(P, W, shop);
 };
 
@@ -75,7 +80,7 @@ const r2 = (P, W) => (W.eaves < 11 ? r2low : r2high)(P, W);
 
 // Rüütli 11: six white columns two floors high before the middle of the long front
 function r11(P, W) {
-  const o = { wall: '#f1e6e2', plinth: [0.7, '#b1aba8'], ground: [4.2, '#f4efec', true], floors: [[1.5, 2.0], [5.4, 2.1]], pitch: 2.8, cornice: 0.5, seed: 82 };
+  const o = { wall: '#f1e6e2', plinth: [0.7, '#b1aba8'], ground: [4.2, '#f4efec', true], floors: [[1.5, 2.0], [5.4, 2.1]], pitch: 2.8, cornice: 0.5, weather: 0, seed: 82 };
   if (!W.front || W.len < 38 || W.nx > -0.8) return classic(P, W, o);
   const len = W.len, c = len / 2, h0 = 13, top = Math.min(9.3, W.eaves - 0.2);
   classic(P, W, { ...o, xs: axes(0, len, 15).filter((x) => Math.abs(x - c) > h0 / 2 + 0.6) });

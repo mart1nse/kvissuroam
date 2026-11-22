@@ -731,7 +731,10 @@ function substep(car, input, world, dt) {
     const dirIn = Math.sign(steerIn);
     // (a moment of the tail stepping the other way only eases it back, rather than starting the wait again)
     if (Math.abs(steerIn) < 0.9 || dirIn !== car.inDir) car.inT = 0;
-    else car.inT = Math.max(0, (car.inT || 0) + (steerIn * align > 0 ? -2 * dt : dt));
+    // (steering against the way the car rotates is catching a slide: that eases it back. Judged by the rotation, not
+    // the slide angle: in a tight floored turn at full lock the front axle's path points into the turn as well,
+    // which read as countersteering and halved the lock at 40 km/h, Martin's bZ4X plot 2026-11-22)
+    else car.inT = Math.max(0, (car.inT || 0) + (steerIn * car.yawRate < -0.1 ? -2 * dt : dt));
     car.inDir = dirIn;
     lockIn = lock + (maxLock - lock) * Math.min(1, Math.max(0, (car.inT - INWARD_WAIT) / INWARD_T));
   }

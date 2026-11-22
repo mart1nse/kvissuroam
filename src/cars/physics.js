@@ -36,7 +36,7 @@ const INWARD_WAIT = 0.6, INWARD_T = 1.2;
 const INWARD_CAP = [[0, 34.4], [15, 34.4], [25, 34], [30, 33.7], [40, 32.8], [50, 31.5], [55, 30.6], [60, 29.2], [65, 27.9], [70, 26.1], [75, 24.4], [80, 22.5], [85, 20.6], [90, 18.2], [95, 15.4], [100, 12.5], [105, 9.4], [110, 6.6], [115, 4.8], [120, 3.5], [125, 2.6], [131, 1.5], [400, 0.5]];
 const INWARD_BACK = 2;     // ...and the wheels come back from it this many times faster than from a crawl's full lock
 const inwardCap = (kmh) => { for (let i = 1; i < INWARD_CAP.length; i++) { const [v1, a1] = INWARD_CAP[i]; if (kmh <= v1) { const [v0, a0] = INWARD_CAP[i - 1]; return (a0 + (a1 - a0) * (kmh - v0) / (v1 - v0)) * Math.PI / 180; } } return 0; };
-let inwardOn = false;
+let inwardOn = true;     // (the default since 2026-11-23, Martin; ?inward=0 turns it off)
 export function setInward(on) { inwardOn = !!on; }
 // Manual starts (Martin 2026-11-22, the default since he tried them as ?launch=1; ?launch=0 brings back the
 // torque converter): every car with an engine pulls away like a manual

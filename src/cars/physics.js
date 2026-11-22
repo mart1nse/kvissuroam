@@ -276,6 +276,8 @@ function engineForce(car, throttle, dt, hb = 0) {
   // (Martin 2026-11-22: after a flick the 22B's revs had sagged and the tyres would not always light).
   // (Off the throttle the revs are only kept, never raised, and only for HB_HOLD_T, the length of a
   // flick: a car stopped or parked on its handbrake lets its engine fall to idle.)
+  // (Every four-wheel-drive car with an engine has it: specs.js fills in hbRevs at the power peak when a
+  // car gives none, Martin 2026-11-22.)
   const free = e.hbRevs && hb > 0.5 && !car.reversing && !car.airborne;
   if (free) {
     const from = car.free ?? car.rpm;

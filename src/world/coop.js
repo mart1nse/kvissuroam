@@ -25,6 +25,7 @@ const COL = {
   frame: 0x23252b, black: 0x1b1c20, orange: 0xf0742a, kerb: 0xd9d5d2, grass: GRASS.hex, wood: 0xc9a274, letter: 0xf6f5f2,
 };
 // the footpath between the bank and the car park leans with the road: its centre line at n
+const ISLAND_KERB = 0.14;          // how high the car park islands stand (their top is 14 cm over the asphalt)
 const pathE = (n) => -3.0 + (n + 10) * 0.064;
 const HEADING = (fe, fn) => Math.atan2(fe * C + fn * S, -(fe * S - fn * C));       // a car's yaw for a direction in the shop's frame
 const BEARING = (fe, fn) => (HEADING(fe, fn) * 180) / Math.PI;                      // the same as a compass bearing for props
@@ -503,7 +504,9 @@ export function createCoop(scene, world, { shadows = true } = {}) {
     for (let n = -66.6; n > -77; n -= 1.0) patch('white', -9.4, -5.9, n - 0.5, n);
     // give-way triangles would go here; the arrows on the asphalt are left to the ground picture
 
-    // pale concrete islands at the head of the double rows, grass islands with kerbs at the foot; all solid
+    // pale concrete islands at the head of the double rows, grass islands with kerbs at the foot. A car can drive
+    // over them (Martin, 22 Nov): each is a 14 cm kerb step for the physics (world.addBump), not a solid
+    const islands = [];
     const island = (e0, e1, n0, n1, grass) => {
       const r = Math.min(1.3, (n1 - n0) / 2 - 0.01), s = new THREE.Shape();
       s.moveTo(e0 + r, n0); s.lineTo(e1 - r, n0); s.absarc(e1 - r, n0 + r, r, -Math.PI / 2, 0, false); s.lineTo(e1, n1 - r); s.absarc(e1 - r, n1 - r, r, 0, Math.PI / 2, false);
@@ -526,12 +529,11 @@ export function createCoop(scene, world, { shadows = true } = {}) {
           add(settle(g.rotateX(-Math.PI / 2).translate(0, 0.12, 0)), COL.grass);
         }
       }
-      return { x: at((e0 + e1) / 2, (n0 + n1) / 2)[0], z: at((e0 + e1) / 2, (n0 + n1) / 2)[1], yaw: -ROT, hx: (e1 - e0) / 2 - 0.25, hz: (n1 - n0) / 2 - 0.2 };
+      islands.push({ e0, e1, n0, n1, r });
     };
-    const solids = [
-      island(13.0, 21.9, -15.0, -12.4, false), island(29.9, 39.3, -15.4, -12.6, false),
-      island(1.0, 22.0, -68.4, -64.6, true), island(30.2, 39.2, -68.6, -65.2, true),
-    ];
+    island(13.0, 21.9, -15.0, -12.4, false); island(29.9, 39.3, -15.4, -12.6, false);
+    island(1.0, 22.0, -68.4, -64.6, true); island(30.2, 39.2, -68.6, -65.2, true);
+    const solids = [];
 
     // recycling containers and the charging posts at the east edge
     {
@@ -636,6 +638,16 @@ export function createCoop(scene, world, { shadows = true } = {}) {
       solid(38.4, -0.55, 1.95, 0.5), solid(42.15, -0.45, 1.2, 0.4),       // lockers
       solid(29.9, -3.5, 3.5, 0.55),                                       // bike racks
     ]);
+    // the islands as kerbs (added last: everything above was set on the bare ground)
+    for (const I of islands) {
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [e, n] of [[I.e0, I.n0], [I.e1, I.n0], [I.e0, I.n1], [I.e1, I.n1]]) { const [x, z] = at(e, n); x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      const ce = (I.e0 + I.e1) / 2, cn = (I.n0 + I.n1) / 2, he = (I.e1 - I.e0) / 2 - I.r, hn = (I.n1 - I.n0) / 2 - I.r;
+      world.addBump({ x0, z0, x1, z1, at(x, z) {
+        const [e, n] = local(x, z), de = Math.max(0, Math.abs(e - ce) - he), dn = Math.max(0, Math.abs(n - cn) - hn);
+        return de * de + dn * dn <= I.r * I.r ? ISLAND_KERB : 0;          // inside the rounded outline
+      } });
+    }
   }
 
   return {

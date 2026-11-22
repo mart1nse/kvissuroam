@@ -30,6 +30,10 @@ let turnInHigh = true;
 // turns the wheels past the speed's grip lock, up to full lock over INWARD_T, so a stubborn hold in understeer
 // scrubs the nose round instead of stopping at the limit. A steering wheel is not affected.
 const INWARD_WAIT = 0.6, INWARD_T = 1.2;
+// ...up to no more than this lock at this speed (km/h, deg): full lock to 60 km/h, then easing down to a degree and a
+// half at 170, drawn by Martin over the bZ4X plot (2026-11-22), halfway between full lock and the grip lock
+const INWARD_CAP = [[0, 34.4], [60, 34.4], [70, 33.3], [80, 30.5], [90, 28], [100, 25], [110, 21], [120, 16], [130, 10.5], [140, 7.5], [150, 4.5], [160, 3], [170, 1.5], [400, 0.5]];
+const inwardCap = (kmh) => { for (let i = 1; i < INWARD_CAP.length; i++) { const [v1, a1] = INWARD_CAP[i]; if (kmh <= v1) { const [v0, a0] = INWARD_CAP[i - 1]; return (a0 + (a1 - a0) * (kmh - v0) / (v1 - v0)) * Math.PI / 180; } } return 0; };
 let inwardOn = false;
 export function setInward(on) { inwardOn = !!on; }
 // ?launch=1 (Martin 2026-11-22, on trial): every car with an engine pulls away like a manual
@@ -745,7 +749,7 @@ function substep(car, input, world, dt) {
     // which read as countersteering and halved the lock at 40 km/h, Martin's bZ4X plot 2026-11-22)
     else car.inT = Math.max(0, (car.inT || 0) + (steerIn * car.yawRate < -0.1 ? -2 * dt : dt));
     car.inDir = dirIn;
-    lockIn = lock + (maxLock - lock) * Math.min(1, Math.max(0, (car.inT - INWARD_WAIT) / INWARD_T));
+    lockIn = lock + Math.max(0, Math.min(maxLock, inwardCap(Math.abs(car.vx) * 3.6)) - lock) * Math.min(1, Math.max(0, (car.inT - INWARD_WAIT) / INWARD_T));
   }
   // Catching a slide: held opposite lock points the wheels past the direction
   // of travel, and once the tail swings back that extra lock keeps rotating

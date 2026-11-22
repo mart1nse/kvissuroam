@@ -6,10 +6,15 @@
 // already turned at a donut's rate: 286 to 307 deg/s2 on gravel for the 190E, F40, Carrera GT and M3.
 // Run: node tools/lowflick-test.mjs [carId] [v0 for a trace]   (trace options: SEED, PRE, SURF env)
 import { CARS } from '../src/cars/specs.js';
-const { createCar, stepCar, speedKmh } = await import(process.env.PHYS || '../src/cars/physics.js');
+const { createCar, stepCar, speedKmh, setDonutHelp } = await import(process.env.PHYS || '../src/cars/physics.js');
+// (donut=1: with the donut helper, off for every car since 2026-11-22. The lift surge measured the helper's push
+// coming back after a lift; without it the surge is the tyres' own bite on a re-press, shown, not judged)
+const helper = process.argv.includes('donut=1');
+if (helper) setDonutHelp?.(true);
 const world = (surf) => ({ meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => surf, sdfAt: () => 100, sdfGrad: (x, z, o) => o });
 const dt = 1 / 120, deg = (r) => (r * 180) / Math.PI;
-const only = process.argv[2], verbose = process.argv[3];
+const args = process.argv.slice(2).filter((a) => a !== 'donut=1');
+const only = args[0], verbose = args[1];
 const KICK_MAX = 240;   // deg/s2
 let ok = true;
 for (const [surf, name] of [[1, 'tarmac'], [2, 'gravel']]) {
@@ -138,7 +143,7 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
 // lifted (deg/s). Judged under SURGE_MAX for the 200 Avant and the rear-driven cars; the others are shown.
 // Before: 200 Avant 45-66, bZ4X 61-126, Enyaq 23-81, rear-driven 23-48. After: 200 Avant 19-26, rear-driven 10-30.
 const SURGE_MAX = 40;   // deg/s
-console.log('\nafter a quick lift mid donut: extra rotation in the 1.2 s after the throttle goes back down (deg/s)');
+console.log(`\nafter a quick lift mid donut: extra rotation in the 1.2 s after the throttle goes back down (deg/s)${helper ? '' : ', shown only'}`);
 for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
   const row = [];
   for (const id of ['w201', 'f40', 'cgt', 'm3', 'audi200', 'enyaq', 'bz4x']) {
@@ -155,7 +160,7 @@ for (const [surf, name] of [[0, 'grass'], [1, 'tarmac'], [2, 'gravel']]) {
       }
       surge = Math.max(surge, ymax - y0);
     }
-    if ((spec.drive === 'rwd' || id === 'audi200') && surge > SURGE_MAX) ok = false;
+    if (helper && (spec.drive === 'rwd' || id === 'audi200') && surge > SURGE_MAX) ok = false;
     row.push(`${spec.short} ${surge.toFixed(0)}`);
   }
   console.log(`  ${name}: ${row.join(' | ')}`);

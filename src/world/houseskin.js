@@ -288,6 +288,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       const r2 = (H.r || 16) ** 2;
       let planes;
       try { planes = wallPlanes(world, H.sec, H.base, (x, z, top) => (x - H.at[0]) ** 2 + (z - H.at[1]) ** 2 < r2 && (!H.pick || H.pick(x, z, top))); } catch { continue; }      // (its square of the map was unloaded while this waited)
+      if (work.late(3)) yield;            // (finding a big house's walls is a step's worth by itself on a slow machine)
       if (debug) console.log('house', H.name || H.base, planes.map((w) => `${w.mid[0].toFixed(1)},${w.mid[1].toFixed(1)} L${w.len.toFixed(1)} n${w.nx.toFixed(2)},${w.nz.toFixed(2)}`).join(' | '));
       for (const W of planes) {
         const over = (H.walls || []).find((o) => Math.hypot(o.near[0] - W.mid[0], o.near[1] - W.mid[1]) < (o.within || 2.5)) || {};
@@ -378,6 +379,7 @@ export function paintWall(P, W, spec, over = {}, H = {}) {
   const top = P.y1, low = P.y0;
   // cladding
   if (spec.kind === 'brick') P.brick(0, low, len, top, wall, seed);
+  else if (spec.kind === 'smooth') P.r(0, low, len, top, css(wall));          // fresh render: one fill (the plaster's hundreds of blotches made a 60 m wall one long painting step)
   else if (spec.kind === 'stone') P.rubble(0, low, len, top, seed);
   else if (spec.kind === 'plaster') {
     P.r(0, low, len, top, css(wall));

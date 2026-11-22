@@ -49,6 +49,7 @@ export const HAND_PLACES = [
   { name: 'Kvissentali tee, Lootsi to road 3', x: 330, z: -45, r: 150 },
   { name: 'Tartu Airport: terminal, car park, hangars', x: -170, z: 10680, r: 230 },
   { name: 'Lennuakadeemia and Lennu 42', x: 20, z: 10600, r: 150 },
+  { name: 'Ülenurme Konsum, Võru mnt 2', x: 1690, z: 10085, r: 90 },
 ];
 
 // segments of the road centre lines in a coarse grid

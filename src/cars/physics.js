@@ -40,6 +40,10 @@ const DONUT_SETTLE = 0.15;       // ...a donut being under way once the tail has
 const KICK_A = 2.2, KICK_BAND = 1.0, KICK_TAU = 0.04;   // ...and it eases off while the car already swings its way faster than KICK_A, gone at KICK_A + KICK_BAND (rad/s2)
 const DONUT_EASE = 4;            // ...its moment changing at most this much a second (share of DONUT)
 const EV_SLIDE_REAR = 0.7;
+// The donut helper (the yaw push that holds a donut in its band, with its ease-in, softening and wander, and the
+// twin-motor EVs' rear shift in a slide) can be switched off to feel the bare tyres: ?donut=0 (Martin 2026-11-22).
+let donutHelp = true;
+export function setDonutHelp(on) { donutHelp = !!on; }
 // Burnouts (brake and throttle together in a rear-driven car under 30 km/h, Martin 2026-11-21)
 const BURN_REAR = 0.4;           // how much less the rear brakes are held than in a stop...
 const BURN_FEEL = 0.25;          // ...once the driver has felt for it this long (s)
@@ -752,7 +756,7 @@ function substep(car, input, world, dt) {
   // dragging the car straight and the slide can be held on the throttle
   // (as the drift modes of powerful twin-motor cars do).
   const bodySlip = Math.abs(Math.atan2(car.vy, Math.max(car.vx, 1)));
-  if (s.drive === 'awd' && s.engine.type === 'ev' && throttle > 0.5 && !car.reversing) {
+  if (donutHelp && s.drive === 'awd' && s.engine.type === 'ev' && throttle > 0.5 && !car.reversing) {
     const kSlide = Math.min(1, Math.max(0, (bodySlip - 0.08) / 0.15)) * Math.min(1, Math.max(0, (110 - speed * 3.6) / 30));
     car.evSlide = (car.evSlide || 0) + (kSlide * throttle - (car.evSlide || 0)) * Math.min(1, dt * 4);
   } else car.evSlide = (car.evSlide || 0) * Math.exp(-dt * 4);
@@ -1053,6 +1057,7 @@ function substep(car, input, world, dt) {
       if (car.yawRate * turn > -0.2) want = turn * k * w * (1 - Math.min(1, car.burn * brake / BURN_SLIDE_HOLD));
     }
   }
+  if (!donutHelp) want = 0;      // (?donut=0: no helper, the tyres alone)
   // (and whatever it is doing, the hold eases off while the car already swings its way quickly, so it never adds
   // its own whip on top of the tyres': in figure eights and after a lift it had the tail out at 300-400 deg/s2)
   { const ya = car.yawPrev === undefined ? 0 : (car.yawRate - car.yawPrev) / dt; car.yawPrev = car.yawRate;

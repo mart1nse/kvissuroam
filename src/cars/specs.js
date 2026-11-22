@@ -384,6 +384,7 @@ export const CARS = {
       },
       stallRpm: 2900,
       converterGain: 1.8,
+      clutchSlip: 0.3,          // a bit of the slipping clutch (Martin 2026-11-23)
       brakeTorque: [32, 0.0042],   // off the throttle: 2.2 litres of five-cylinder friction and pumping (one more cylinder's rings and bearings than the 22B) plus three differentials, about 57 Nm at 6000 rpm (0.17 g at the top of 1st, 0.12 g at 100 in 2nd), split evenly by the Torsen
     },
     gears: [3.5, 1.889, 1.32, 0.967, 0.73],
@@ -484,6 +485,7 @@ export const CARS = {
       hbRevs: 6000,             // the handbrake takes the drive off (a rally handbrake turn): the engine is kept up here at its power peak, or revs on up with the throttle
       rollStallRpm: 5200,
       converterGain: 1.6,
+      clutchSlip: 0.15,         // a touch of the slipping clutch (Martin 2026-11-23)
     },
     // close-ratio 5-speed (the STi Type R's set) on a 4.444 final drive, as the Japanese catalogue lists the
     // 22B: the gears top out at about 66, 99, 132 and 178 km/h, and 5th reaches the redline at 250

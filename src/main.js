@@ -165,7 +165,7 @@ const quality = isTouch
 quality.realTrees = params.get('trees') !== 'old';
 if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helper on (?donut=1)'); }
 if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old fixed steering into a slide (?turnin=normal)'); }
-if (params.get('inward') === '1') { setInward(true); console.info('held steering turns in past the grip limit (?inward=1)'); }
+if (params.get('inward') === '0') { setInward(false); console.info('held steering stops at the grip limit (?inward=0)'); }
 // cars with an engine start like manuals (clutch drop); ?launch=0 brings back the torque converter,
 // ?launch=<rpm> or ?launch=idle change the start, ?slip=1 keeps the clutch slipping on every car (the F40 always)
 if (params.get('launch') === '0') { setLaunch(false); console.info('torque converter starts (?launch=0)'); }

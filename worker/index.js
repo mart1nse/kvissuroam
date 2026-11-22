@@ -308,6 +308,25 @@ export class Lobby extends DurableObject {
 
     if (path === '/api/board') return json(this.board());
 
+    if (path === '/api/online') {
+      // who is online now, for the stats page (Martin 2026-11-22: "sometimes check out of curiosity"):
+      // the names, cars and race places everyone in the game already sees, no ids or addresses.
+      // Ghosts (stealth) and sockets silent for 80 s are left out, like in the game's own list.
+      const now = Date.now(), race = this.race, seen = new Set(), players = [];
+      const on = race.s.phase === 'on';
+      for (const ws of this.ctx.getWebSockets()) {
+        const a = ws.deserializeAttachment();
+        if (!a?.id || a.ghost || seen.has(a.id) || !race.live(ws, a, now)) continue;
+        seen.add(a.id);
+        const r = on && race.s.racers.find((x) => x.id === a.id);
+        players.push({ name: a.name, car: a.car, drv: !!a.drv, since: a.at || now, race: r ? (r.ms != null ? 'fin' : r.out ? 'out' : 'in') : null });
+      }
+      players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
+      const ph = race.phase(now);
+      return json({ now, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
+        race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
+    }
+
     if (path === '/api/ticket') {
       // the page asks for its lap ticket as soon as it opens, well before anyone can drive
       if (this.over(`t|${ip}`, 30, 600000)) return busy();

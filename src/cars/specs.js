@@ -26,6 +26,7 @@ export const CARS = {
       torque: [[750, 150], [1500, 178], [2500, 198], [3500, 211], [4600, 220], [5200, 212], [5800, 194], [6300, 172], [6800, 130]],
       stallRpm: 2300,           // torque-converter stall speed
       converterGain: 1.75,
+      brakeTorque: [28, 0.0045],   // off the throttle: 2.6 litres of six-cylinder friction and pumping, the gearbox's oil pump and one differential, about 55 Nm at 6000 rpm, through a converter that slips little on the overrun (0.19 g at the top of 1st, 0.09 g at 100 in 3rd), all of it on the rear wheels
     },
     gears: [4.25, 2.41, 1.49, 1.0],
     reverse: 5.67,
@@ -372,6 +373,7 @@ export const CARS = {
       },
       stallRpm: 2900,
       converterGain: 1.8,
+      brakeTorque: [32, 0.0042],   // off the throttle: 2.2 litres of five-cylinder friction and pumping (one more cylinder's rings and bearings than the 22B) plus three differentials, about 57 Nm at 6000 rpm (0.17 g at the top of 1st, 0.12 g at 100 in 2nd), split evenly by the Torsen
     },
     gears: [3.5, 1.889, 1.32, 0.967, 0.73],
     reverse: 3.455,

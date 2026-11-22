@@ -290,7 +290,10 @@ export const CARS = {
       },
       stallRpm: 3600,
       rollStallRpm: 4200,       // floored on the move it bites like a dropped clutch: higher revs, and the rears go up in smoke once the boost arrives
-      converterGain: 1.7,
+      converterGain: 1.7,       // (only with ?launch=0: the cars start like manuals now)
+      // floored in first the clutch is kept slipping at 4300 rpm, where the boost is full: its long first
+      // gear and weak off-boost torque bogged in donuts and launches otherwise (src/cars/physics.js)
+      clutchSlip: true,
     },
     // the 5-speed transaxle's ratios; the final figure includes the drop gears
     gears: [2.77, 1.71, 1.23, 0.96, 0.77],

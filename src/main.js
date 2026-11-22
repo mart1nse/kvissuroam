@@ -168,8 +168,8 @@ if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old 
 if (params.get('inward') === '1') { setInward(true); console.info('held steering turns in past the grip limit (?inward=1)'); }
 if (params.has('launch') && params.get('launch') !== '0') {
   const l = params.get('launch'), rpm = l === 'idle' ? 0 : +l > 1000 ? +l : null;
-  setLaunch(true, rpm);
-  console.info(`cars pull away like a manual, no converter (?launch=${l}): ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}`);
+  setLaunch(true, rpm, params.get('slip') === '1');
+  console.info(`cars pull away like a manual, no converter (?launch=${l}): ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}${params.get('slip') === '1' ? ', clutch kept slipping in first (?slip=1)' : ''}`);
 }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };

@@ -41,8 +41,12 @@ export function setInward(on) { inwardOn = !!on; }
 // bites, so the turbos keep spooling, then over CLUTCH_FADE_T the engine is pulled down to the wheels.
 // ?launch=idle is the gentler first try: as if creeping in first at idle with the clutch already in.
 const LAUNCH_SHARE = 1 / 3, CLUTCH_SLIP_T = 0.6, CLUTCH_FADE_T = 0.8;
+// ?slip=1 with it (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
+// did): floored in first the driver keeps slipping the clutch, so the engine never falls below the drop revs
+// while the wheels turn slower than that. Like the converter's stall speed, but with no torque multiplication.
 let launchManual = false, launchRpm = null;   // launchRpm: null = a third of the way up, 0 = from idle
-export function setLaunch(on, rpm = null) { launchManual = !!on; launchRpm = rpm; }
+let clutchSlip = false;
+export function setLaunch(on, rpm = null, slip = false) { launchManual = !!on; launchRpm = rpm; clutchSlip = !!slip; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -315,6 +319,8 @@ function engineForce(car, throttle, dt, hb = 0) {
       stall = Math.max(stall, L - (L - e.idle) * Math.max(0, (car.launchT - CLUTCH_SLIP_T) / CLUTCH_FADE_T));
       car.launchT += dt;
     }
+    // (?slip=1: the clutch kept slipping whenever it is floored in first)
+    if (clutchSlip && car.gear === 1 && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (L - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
   }
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road

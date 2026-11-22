@@ -113,7 +113,9 @@ export function createKvissentali2(scene, world, { shadows = true } = {}) {
     A.hedge([[151.6, -42], [151.6, -69]], 2.4, 1.0);
     yield;
     // ---- Ignatsi 2: the white board fence round the corner, thujas inside it
-    A.picket([[157.5, -1], [157.5, -25.5], RW.at(13, 8.6), RW.at(26, 8.6)], 1.25, [238, 238, 234], { gap: 0.012, width: 0.12 });
+    // (close boards read as one face: boxes, not a painted fence, so no canvas for them; this place is built at DRIVE)
+    const boards = (pts, hh, c, post) => { for (let i = 0; i < pts.length - 1; i++) { A.bar(pts[i], pts[i + 1], 0.05, 0, hh, c); A.bar(pts[i], pts[i + 1], 0.07, hh - 0.04, hh + 0.02, post); } A.walk(pts, 2.4, ([x, z]) => p.box(0.09, hh + 0.06, 0.09, post, x, h(x, z) + (hh + 0.06) / 2, z)); };
+    boards([[157.5, -1], [157.5, -25.5], RW.at(13, 8.6), RW.at(26, 8.6)], 1.25, 0xeeeeea, 0xd8d8d4);
     const thujas = [];
     for (let z = -23; z < -2; z += 1.4) thujas.push([159.0, z, 0.8, 1.6 + (z * 7 % 3) * 0.1]);
     // ---- Ignatsi 4: the low black fence, the gate, the row of young thujas behind it
@@ -129,7 +131,7 @@ export function createKvissentali2(scene, world, { shadows = true } = {}) {
     A.picket([RE.at(80, 8.2), RE.at(100, 8.2)], 1.15, [240, 240, 236]);
     A.bar(RE.at(80, 8.3), RE.at(100, 8.3), 0.35, -0.1, 0.25, 0x9a968e);
     // ---- the corner plot at road 3: tall brown boards along Kvissentali tee and down road 3
-    A.picket([RE.at(103, 8.2), RE.at(133, 8.2), [467.8, -66], [467.8, -41]], 1.75, [134, 96, 70], { gap: 0.012, width: 0.12 });
+    boards([RE.at(103, 8.2), RE.at(133, 8.2), [467.8, -66], [467.8, -41]], 1.75, 0x86604a, 0x6e4e3c);
     yield;
     A.finish();
   }

@@ -24,8 +24,8 @@ const COL = {
   navy: 0x323a5a, navyDark: 0x262c44, white: 0xf1eee8, concrete: 0xb9b6b8, roof: 0xdcdde3, cap: 0x23283a, metal: 0xaeb2bc,
   frame: 0x23252b, black: 0x1b1c20, orange: 0xf0742a, kerb: 0xd9d5d2, grass: GRASS.hex, wood: 0xc9a274, letter: 0xf6f5f2,
 };
-// the footpath between the bank and the car park leans with the road: its centre line at n
 const ISLAND_KERB = 0.14;          // how high the car park islands stand (their top is 14 cm over the asphalt)
+// the footpath between the bank and the car park leans with the road: its centre line at n
 const pathE = (n) => -3.0 + (n + 10) * 0.064;
 const HEADING = (fe, fn) => Math.atan2(fe * C + fn * S, -(fe * S - fn * C));       // a car's yaw for a direction in the shop's frame
 const BEARING = (fe, fn) => (HEADING(fe, fn) * 180) / Math.PI;                      // the same as a compass bearing for props

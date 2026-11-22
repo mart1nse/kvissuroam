@@ -310,7 +310,7 @@ export function createVeskiFronts(scene, world, { shadows = true } = {}) {
     });
     const fronts = new Set();
     // (skinHouses is a queued job of its own: a wall a step, a page sent to the card a step)
-    skinHouses(world, group, houses, { shadows, ppm: 22, far: 6, debug: DEBUG,
+    skinHouses(world, group, houses, { label: 'veskifronts fronts', shadows, ppm: 18, far: 6, debug: DEBUG,
       faces: facesTrack });
     yield;
     const mats = fenceTextures();

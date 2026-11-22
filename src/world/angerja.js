@@ -272,7 +272,7 @@ export function createAngerja(scene, world, { shadows = true } = {}) {
   function build() {
     built = true;
     skinHouses(world, group, HOUSES.map((H) => ({ sec: SEC, base: H.base, at: [H.x, H.z], r: H.r, spec: H.spec, walls: H.walls || [], name: H.name })),
-      { faces: () => true, shadows, debug: !!window.__skinDebug });
+      { label: 'angerja fronts', faces: () => true, shadows, debug: !!window.__skinDebug });
     layGround(world, group);
     solarPanels(world, group, 2393, [-1762, -13244], 16, [-0.55, 0.83]);       // the long building's south-west slope
     solarPanels(world, group, 2445, [-1747, -13227], 14, [-0.55, 0.83]);

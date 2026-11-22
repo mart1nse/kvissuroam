@@ -173,7 +173,7 @@ export function createLounakeskus4(scene, world, { shadows = true } = {}) {
     const { h } = A;
     const houses = HOUSES.map(([name, S, base, at0, r]) => ({ name, sec: S[0], base, at: at0, r, spec: { wall: [200, 200, 200], floors: [], attic: null, eaves: false } }));
     for (const H of houses) { const paint = PAINT[H.name]; H.walls = [{ near: [0, 0], within: 1e9, only: (P, W) => paint(P, W) }]; }
-    skinHouses(world, group, houses, { shadows, ppm: 7, far: 5, faces: (W) => W.foot < 2 && W.len > 8 && W.peak > 3, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'lounakeskus4 fronts', shadows, ppm: 7, far: 5, faces: (W) => W.foot < 2 && W.len > 8 && W.peak > 3, debug: DEBUG });
 
     // K-Rauta's blue drum at the entrance corner
     const [dx, dz] = [-558.7, 5559.7];

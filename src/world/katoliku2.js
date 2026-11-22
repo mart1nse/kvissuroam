@@ -135,6 +135,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         traceryWindow(P, w / 2, 3.55, 6.6, 2.3);
         frieze(P, 0, w, EV - 0.75);
       }, ppm);
+      if (jobs.late()) yield;
       CK.cell('nBayS', 3.0, -1.5, EV, rgb(COL.brick), (P, w) => {
         brickWall(P, w, EV, 5);
         P.r(0, 3.3, w, 3.42, '#9f9b93');
@@ -144,6 +145,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       CK.cell('brick', 1.0, -1.5, EV, rgb(COL.brick), (P, w) => { brickWall(P, w, EV, 7); frieze(P, 0, w, EV - 0.75); }, 24);
       // the tower: its front with the portal, lancets, the round window and the bell storey; its sides
       const tw = TOWER[3] - TOWER[2];
+      if (jobs.late()) yield;
       CK.cell('tFront', tw, -1.5, TT, rgb(COL.brick), (P, w) => {
         brickWall(P, w, TT, 11);
         const c = w / 2;
@@ -159,6 +161,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         for (const x of [c - 0.65, c + 0.65]) { lancet(P, x, 13.6, 16.3, 0.62, '#2b2420'); for (let y = 13.8; y < 16.3; y += 0.3) P.r(x - 0.31, y, x + 0.31, y + 0.06, '#5b4a3e'); }
         frieze(P, 0, w, TT - 0.75, 0.5);
       }, ppm);
+      if (jobs.late()) yield;
       CK.cell('tSide', TOWER[1] - TOWER[0], -1.5, TT, rgb(COL.brick), (P, w) => {
         brickWall(P, w, TT, 13);
         const c = w / 2;
@@ -171,6 +174,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       }, ppm);
       // the nave's front either side of the tower: a small lancet, the wall rising with the roof
       const fw = TOWER[2] - NW[0], fTop = EV + fw * KN;
+      if (jobs.late()) yield;
       CK.cell('nFront', fw, -1.5, fTop, rgb(COL.brick), (P, w) => {
         brickWall(P, w, fTop, 15);
         lancet(P, w / 2, 3.6, 6.6, 0.8);
@@ -178,6 +182,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
       }, ppm);
       // the transept's ends: a gable over one big window
       const trW = T1 - N1, trTop = EV + (trW / 2) * KN;
+      if (jobs.late()) yield;
       CK.cell('trEnd', trW, -1.5, trTop, rgb(COL.brick), (P, w) => {
         brickWall(P, w, trTop, 17);
         P.r(0, 3.3, w, 3.42, '#9f9b93');
@@ -185,6 +190,7 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         frieze(P, 0, w, EV - 0.75);
         P.arc(w / 2, EV + 2.2, 0.45, '#6e3324'); P.arc(w / 2, EV + 2.2, 0.32, '#4a5560');
       }, ppm);
+      if (jobs.late()) yield;
       CK.cell('chBay', 2.6, -1.5, EV, rgb(COL.brick), (P, w) => {
         brickWall(P, w, EV, 19);
         P.r(0, 3.3, w, 3.42, '#9f9b93');
@@ -426,15 +432,18 @@ export function createKatoliku2(scene, world, { shadows = true } = {}) {
         P.r(c - 0.03, 4.1, c + 0.03, 6.2, '#7a4a2c'); P.r(c - 0.42, 5.4, c + 0.42, 5.46, '#7a4a2c');
         P.grad(0, EH - 0.4, w, EH, 'rgba(70,56,30,0.3)', 'rgba(70,56,30,0)');
       }, 34);
+      if (jobs.late()) yield;
       CK.cell('vBack', Wd, -1.2, EH, rgb(COL.render), (P, w) => {
         render(P, 0, 0.4, w, EH, 53); plinth(P, w);
         for (const x of [3.2, 8.4]) { win(P, x, 1.2, 1.2, 1.7); win(P, x, 4.6, 1.0, 1.45); }
       }, 20);
+      if (jobs.late()) yield;
       CK.cell('vSouth', L, -1.2, EH, rgb(COL.render), (P, w) => {
         render(P, 0, 0.4, w, EH, 55); plinth(P, w);
         for (const x of [2.4, 5.2, 10.6]) { win(P, x, 1.2, 1.2, 1.7); win(P, x, 4.6, 1.0, 1.45); }
         P.r(7.2, 0.2, 8.4, 2.6, '#7a4a2c');
       }, 22);
+      if (jobs.late()) yield;
       CK.cell('vNorth', L, -1.2, EN, rgb(COL.render), (P, w) => {
         render(P, 0, 0.4, w, EN, 57); plinth(P, w);
         for (const x of [1.8, 4.4, 8.8]) win(P, x, 1.3, 0.9, 1.5);

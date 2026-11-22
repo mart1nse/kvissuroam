@@ -186,7 +186,7 @@ export function createKuperjanovi2(scene, world, { shadows = true } = {}) {
     const houses = HOUSES.map(([name, base, at, r, , , pick]) => ({ name, sec: S6[0], base, at, r, pick,
       spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false },
       walls: [{ near: [0, 0], within: 1e9, only: (P, W) => { W.front = front(W); PAINT[name](P, W); } }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 16, far: 5, faces: (W) => W.len > 5 && W.foot < 2 && front(W) });
+    skinHouses(world, group, houses, { label: 'kuperjanovi2 fronts', shadows, ppm: 16, far: 5, faces: (W) => W.len > 5 && W.foot < 2 && front(W) });
     yield;
     const A = areaKit(world, group, { shadows, fenceColour: 0x8d958f });
     const { p, h } = A;

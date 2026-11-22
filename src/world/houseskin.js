@@ -62,12 +62,55 @@ export function pixelSheet(c, i0, j0, i1, j1, base = null) {
     },
   };
 }
+// A tile of brickwork, 16 bricks wide and 32 courses high (4.16 by 2.88 m), every brick its own shade, mortar
+// between, painted once for a colour and a sharpness and kept: { cv, tw, th }. It repeats without a seam
+// (the half brick that an odd course starts with is the other half of its last). Three different tiles per
+// colour, by the wall's seed.
+const TILES = new Map();
+function brickTile(rgb, ppm, seed) {
+  const NX = 16, NY = 32, BW = 0.26, CH = 0.09;
+  const tw = Math.max(8, Math.round(NX * BW * ppm)), th = Math.max(8, Math.round(NY * CH * ppm)), v = Math.abs(seed | 0) % 3;
+  const key = `${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0}|${tw}x${th}|${v}`;
+  let T = TILES.get(key);
+  if (T) return T;
+  const cv = document.createElement('canvas');
+  cv.width = tw; cv.height = th;
+  const c = cv.getContext('2d', { willReadFrequently: true });
+  const sh = pixelSheet(c, 0, 0, tw, th, [Math.min(255, rgb[0] * 0.8) | 0, Math.min(255, rgb[1] * 0.8) | 0, Math.min(255, rgb[2] * 0.8) | 0]);
+  if (!sh) return null;
+  const sx = tw / (NX * BW), sy = th / (NY * CH), bh = Math.max(1, 0.066 * sy), r = rnd(v * 7 + 3);
+  for (let row = 0; row < NY; row++) {
+    const t = th - (row * CH + 0.078) * sy;
+    for (let k = 0; k < NX; k++) {
+      const x = k * BW - (row % 2) * 0.13, s = 0.9 + r() * 0.2;
+      const cr = Math.min(255, rgb[0] * s) | 0, cg = Math.min(255, rgb[1] * s) | 0, cb = Math.min(255, rgb[2] * s) | 0;
+      sh.add((x + 0.012) * sx, t, (x + 0.25) * sx, t + bh, cr, cg, cb);
+      if (x < 0) sh.add((x + 0.012) * sx + tw, t, (x + 0.25) * sx + tw, t + bh, cr, cg, cb);      // the part that wraps round
+    }
+  }
+  sh.lay();
+  if (TILES.size > 60) TILES.delete(TILES.keys().next().value);
+  TILES.set(key, (T = { cv, tw, th }));
+  return T;
+}
 // The bricks of a wall for any painter: X, Y turn metres into the canvas's pixels, lim [left, top, right, bottom]
 // is the part of the canvas this painter may paint on. Few bricks are drawn one by one, a wall of them as a sheet.
+// A wall of them is laid from a tile (brickTile below), one fill whatever the wall's size: bricks worked out
+// one by one for every wall were the longest steps of painting a street, 20 ms and more for a big wall, and a
+// tenth of all the painting on a lap (22 Nov 2026).
 export function paintBricks(c, X, Y, ppm, lim, x0, ya, x1, yb, rgb, seed = 1) {
   const r = rnd(seed), bh = Math.max(1, 0.066 * ppm);
-  c.fillStyle = tone(rgb, 0.8); c.fillRect(X(x0), Y(yb), (x1 - x0) * ppm, (yb - ya) * ppm);
   const many = ((yb - ya) / 0.09) * ((x1 - x0) / 0.26) > 120;
+  if (many && typeof DOMMatrix !== 'undefined') {
+    const T = brickTile(rgb, ppm, seed), pat = T && c.createPattern(T.cv, 'repeat');
+    if (pat && pat.setTransform) {
+      // (the tile's left edge on the wall's, its foot on the wall's foot: the courses start there)
+      pat.setTransform(new DOMMatrix().translate(Math.round(X(x0)), Math.round(Y(ya)) - T.th));
+      c.fillStyle = pat; c.fillRect(X(x0), Y(yb), (x1 - x0) * ppm, (yb - ya) * ppm);
+      return;
+    }
+  }
+  c.fillStyle = tone(rgb, 0.8); c.fillRect(X(x0), Y(yb), (x1 - x0) * ppm, (yb - ya) * ppm);
   // (the sheet replaces the mortar's pixels: only those wholly inside the mortar, and inside the painter's own part)
   const i0 = Math.ceil(Math.max(lim[0], X(x0))), j0 = Math.ceil(Math.max(lim[1], Y(yb))), i1 = Math.floor(Math.min(lim[2], X(x1))), j1 = Math.floor(Math.min(lim[3], Y(ya)));
   const sh = many ? pixelSheet(c, i0, j0, i1, j1, [Math.min(255, rgb[0] * 0.8) | 0, Math.min(255, rgb[1] * 0.8) | 0, Math.min(255, rgb[2] * 0.8) | 0]) : null;
@@ -185,23 +228,28 @@ export function painter(c, px, py, wm, y0, y1, ppm) {
 }
 
 // ---------------------------------------------------------------- the atlas
-export function createAtlas(size = paintScale() < 1 ? 1024 : 2048) {
+// `high`: the height of a page where it is not square (skinHouses: half-height pages)
+export function createAtlas(size = paintScale() < 1 ? 1024 : 2048, high = size) {
   const pages = [];
   let cur = null;                // the page being filled
-  const page = (w = size, h = size) => {
+  const page = (w = size, h = high) => {
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
-    const p = { cv, c: cv.getContext('2d'), x: 2, y: 2, row: 0, w, h };
+    // (willReadFrequently: the canvas is painted by the processor from the start. Painting is made to happen
+    // wall by wall by reading a pixel (see skinHouses), and on a canvas the graphics card paints, each such
+    // read waits for the card and fetches the picture back; after two of them the browser moves the canvas
+    // to the processor anyway. This way a real computer does what the test drives measure.)
+    const p = { cv, c: cv.getContext('2d', { willReadFrequently: true }), x: 2, y: 2, row: 0, w, h };
     pages.push(p);
     return p;
   };
   // a rectangle of w x h pixels: { page index, x, y }. A rectangle too big for a page gets a page of its
   // own, just its size (pages have their size in .w and .h).
   function take(w, h) {
-    if (w + 4 > size || h + 4 > size) { const p = page(w + 4, h + 4); p.row = h; return { k: pages.indexOf(p), x: 2, y: 2 }; }
+    if (w + 4 > size || h + 4 > high) { const p = page(w + 4, h + 4); p.row = h; return { k: pages.indexOf(p), x: 2, y: 2 }; }
     let p = cur || (cur = page());
     if (p.x + w + 2 > size) { p.x = 2; p.y += p.row + 4; p.row = 0; }
-    if (p.y + h + 2 > size) { p = cur = page(); }
+    if (p.y + h + 2 > high) { p = cur = page(); }
     const r = { k: pages.indexOf(p), x: p.x, y: p.y };
     p.x += w + 4; p.row = Math.max(p.row, h);
     return r;
@@ -221,19 +269,28 @@ export function wallPlanes(world, secKey, base, pick) {
     pq: new Int16Array(buf.slice(offset, offset + nv * 6)), nq: new Int8Array(buf, offset + nv * 6, nv * 3),
     kind: new Uint8Array(buf, offset + nv * 12, nv), base: new Int16Array(buf.slice(offset + nv * 13, offset + nv * 15)),
   });
-  const { pq, nq, kind } = cache, bs = cache.base;
+  const { pq, nq } = cache;
+  // (each house's upright triangles are looked up, not searched for: the square's list was walked from end to
+  // end for every house of a street, and a triangle's corners were made before asking whether it was wanted)
+  if (!cache.byBase) {
+    const { kind } = cache, bs = cache.base, m = (cache.byBase = new Map());
+    for (let t = 0; t < nv; t += 3) {
+      if (kind[t] === 1 || Math.abs(nq[t * 3 + 1]) > 0.3 * 127) continue;
+      const l = m.get(bs[t]);
+      if (l) l.push(t); else m.set(bs[t], [t]);
+    }
+  }
   const groups = [];
-  for (let t = 0; t < nv; t += 3) {
-    if (bs[t] !== base || kind[t] === 1) continue;
-    const ny = nq[t * 3 + 1] / 127;
-    if (Math.abs(ny) > 0.3) continue;
-    const v = [];
-    for (let i = t; i < t + 3; i++) v.push([s.x0 + pq[i * 3] * 0.05, pq[i * 3 + 1] * 0.01, s.z0 + pq[i * 3 + 2] * 0.05]);
-    if (!pick((v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3, Math.max(v[0][1], v[1][1], v[2][1]))) continue;
+  for (const t of cache.byBase.get(base) || []) {
+    const a = t * 3, x0 = s.x0 + pq[a] * 0.05, y0 = pq[a + 1] * 0.01, z0 = s.z0 + pq[a + 2] * 0.05, x1 = s.x0 + pq[a + 3] * 0.05, y1 = pq[a + 4] * 0.01, z1 = s.z0 + pq[a + 5] * 0.05,
+      x2 = s.x0 + pq[a + 6] * 0.05, y2 = pq[a + 7] * 0.01, z2 = s.z0 + pq[a + 8] * 0.05;
+    if (!pick((x0 + x1 + x2) / 3, (z0 + z1 + z2) / 3, Math.max(y0, y1, y2))) continue;
+    const v = [[x0, y0, z0], [x1, y1, z1], [x2, y2, z2]];
     let nx = nq[t * 3] / 127, nz = nq[t * 3 + 2] / 127;
     const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
     const d = v[0][0] * nx + v[0][2] * nz;
-    let g = groups.find((q) => q.nx * nx + q.nz * nz > 0.996 && Math.abs(q.d - d) < 0.3);
+    let g = null;
+    for (const q of groups) if (q.nx * nx + q.nz * nz > 0.996 && Math.abs(q.d - d) < 0.3) { g = q; break; }
     if (!g) groups.push((g = { nx, nz, d, tris: [] }));
     g.tris.push(v);
   }
@@ -271,7 +328,11 @@ export function wallPlanes(world, secKey, base, pick) {
 //   kind 'wood' | 'plaster' | 'brick' | 'stone'; wall; upright; pitch; weather; trim (corner boards, belts, eaves);
 //   plinth { h, type 'plaster' | 'rubble' | 'brick', col }; floors [{ sill, h }] ; win { w, pitch, ... P.win options };
 //   belts [y]; attic { w, h }; doors [{ x, w, h, col, canopy }] (per wall via walls[].doors); draw(P, W, auto)
+// What each call painted, for tools/freeze-profile.cjs: { label, walls, px, pages, ms, longest (ms of one step), at }
+export const skinLog = [];
 export function skinHouses(world, group, houses, { faces = () => true, ppm = 26, far = 11, shadows = true, debug = false, label = 'house fronts' } = {}) {
+  const log = { label, walls: 0, px: 0, pages: 0, ms: 0, longest: 0, at: null };
+  skinLog.push(log);
   // (queued: a wall is painted at a time, a few milliseconds of it a frame, and the fronts are hung on the
   // houses when the last one is done. Painted in one go, a street of them was 0.1 to 0.3 s of standstill.)
   work.add(function* () {
@@ -280,7 +341,10 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
     // themselves are as sharp as before: a wall too big for a page gets a page of its own.)
     // (and of 512 on the extra low setup: a page goes to the graphics card in one step, and an old computer
     // took 50 to 80 ms over one of 1024)
-    const atlas = createAtlas(paintScale() < 0.5 ? 512 : 1024);
+    // (and half as high since 22 Nov 2026: with four streets of new fronts on the lap, a lap sent a quarter
+    // more picture to the graphics card than the day before, a megapixel at a time, and Martin's MacBook
+    // Pro, smooth until then, had the faintest of hitches coming down Vanemuise. Half a megapixel a step.)
+    const atlas = createAtlas(paintScale() < 0.5 ? 512 : 1024, 512);
     const done = [];
     let inked = 0;                      // pixels painted since the canvas was last made to paint
     const h = (x, z) => world.heightAt(x, z);
@@ -291,6 +355,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       if (work.late(3)) yield;            // (finding a big house's walls is a step's worth by itself on a slow machine)
       if (debug) console.log('house', H.name || H.base, planes.map((w) => `${w.mid[0].toFixed(1)},${w.mid[1].toFixed(1)} L${w.len.toFixed(1)} n${w.nx.toFixed(2)},${w.nz.toFixed(2)}`).join(' | '));
       for (const W of planes) {
+        let s0 = performance.now();
         const over = (H.walls || []).find((o) => Math.hypot(o.near[0] - W.mid[0], o.near[1] - W.mid[1]) < (o.within || 2.5)) || {};
         if (over.skip) continue;
         const spec = { ...H.spec, ...(over.spec || {}) };
@@ -302,9 +367,13 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
         if (yhi - ylo < 0.6) continue;
         const front = faces(W);
         let q = (front ? (over.ppm || spec.ppm || ppm) : far) * paintScale();
-        const most = (paintScale() < 1 ? 1024 : 2048) * 0.88;
+        // (no wall wider or higher than 900 pixels, on any device since 22 Nov 2026: a 1290 x 436 px front on
+        // Vanemuise was 20 ms of painting in one step and more than half a megapixel to the card in another)
+        const most = 1024 * 0.88;
         q = Math.min(q, most / W.len, most / (yhi - ylo));
         const pw = Math.max(4, Math.round(W.len * q)), ph = Math.max(4, Math.round((yhi - ylo) * q));
+        // (a big wall is a few milliseconds of painting by itself: not on top of a frame's worth of small ones)
+        if (pw * ph > 50000) { yield 'frame'; s0 = performance.now(); }
         const rect = atlas.take(pw, ph);
         const pg = atlas.pages[rect.k], c = pg.c;
         c.save();
@@ -326,7 +395,9 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
         done.push({ W, rect, pw, ph, ylo, yhi });
         // (a canvas only really paints when it is first read: without this the whole page was painted at
         // its upload, 50 to 80 ms in one frame. Reading one pixel now and then spreads that over the walls.)
-        if (work.live && (inked += pw * ph) > 150000) { inked = 0; c.getImageData(rect.x, rect.y, 1, 1); }
+        // (every 60 thousand pixels since 22 Nov 2026, was 150: the reading step paid for the walls before it)
+        if (work.live && (inked += pw * ph) > 60000) { inked = 0; c.getImageData(rect.x, rect.y, 1, 1); }
+        { const d = performance.now() - s0; log.walls++; log.px += pw * ph; log.ms += d; if (d > log.longest) { log.longest = d; log.at = [Math.round(W.mid[0]), Math.round(W.mid[1]), pw, ph]; } }
         yield;
       }
     }
@@ -338,7 +409,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       if (used > pg.h * 0.85) continue;
       const cv = document.createElement('canvas');
       cv.width = pg.w; cv.height = used;
-      cv.getContext('2d').drawImage(pg.cv, 0, 0);
+      cv.getContext('2d', { willReadFrequently: true }).drawImage(pg.cv, 0, 0);
       pg.cv.width = pg.cv.height = 0;
       pg.cv = cv; pg.c = null; pg.h = used;
       yield;
@@ -372,7 +443,7 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
       tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
       m.receiveShadow = shadows;
-      yield;
+      yield 'frame';
       work.upload(tex);                   // the page goes to the graphics card by itself, not with the others in one frame
       group.add(m);
       yield;

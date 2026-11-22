@@ -82,7 +82,7 @@ export function createTuru6(scene, world, { shadows = true } = {}) {
   function build() {
     built = true;
     const houses = HOUSES.map(([name, S, base, at, r, , , pick]) => ({ name, sec: S[0], base, at, r, pick, spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 6, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'turu6 fronts', shadows, ppm: 10, far: 6, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
   }
 
   return {

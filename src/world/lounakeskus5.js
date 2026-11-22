@@ -139,7 +139,7 @@ export function createLounakeskus5(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const debug = typeof location !== 'undefined' && /lkdebug/.test(location.search);
-    skinHouses(world, group, houses(), { shadows, ppm: 16, far: 8, faces: (W) => W.len > 5 && W.foot < 2, debug });
+    skinHouses(world, group, houses(), { label: 'lounakeskus5 fronts', shadows, ppm: 16, far: 8, faces: (W) => W.len > 5 && W.foot < 2, debug });
     A.finish();
   }
 

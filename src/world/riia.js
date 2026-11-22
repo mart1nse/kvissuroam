@@ -424,7 +424,7 @@ export function createRiia(scene, world, { shadows = true } = {}) {
       const px = W.a[0] + W.ux * x + W.nx * out, pz = W.a[1] + W.uz * x + W.nz * out;
       p.box(w, hh, d, c, px, W.yref + y, pz, Math.atan2(W.nx, W.nz));
     });
-    skinHouses(world, group, houses(later).filter(part.pick), { faces, shadows, ppm: 16, far: 6, debug: DEBUG });
+    skinHouses(world, group, houses(later).filter(part.pick), { label: 'riia fronts', faces, shadows, ppm: 16, far: 6, debug: DEBUG });
     for (let k = 0; k < later.length; k++) later[k]();
     if (part.extra) part.extra(A);
     centreLines(world, group, ...part.paint);

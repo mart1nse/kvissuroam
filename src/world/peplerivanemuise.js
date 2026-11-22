@@ -187,7 +187,7 @@ export function createPepleriVanemuise(scene, world, { shadows = true } = {}) {
     const list = fronts().map((H) => ({ ...H, pick: near(H.segs) }));
     // the walls the lap passes close by are painted finer than the ones back on the forecourts
     const faces = (W) => { for (let i = 1985; i < 2215; i += 3) if (Math.hypot(TRACK.P[i][0] - W.mid[0], TRACK.P[i][1] - W.mid[1]) < 30) return true; return false; };
-    skinHouses(world, group, list, { faces, shadows, ppm: 20, far: 12 });
+    skinHouses(world, group, list, { label: 'peplerivanemuise fronts', faces, shadows, ppm: 18, far: 8 });
     yield;
 
     const p = new Parts(), leafy = leafyPlants(group, shadows);

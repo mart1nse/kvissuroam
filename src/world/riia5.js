@@ -202,7 +202,7 @@ export function createRiia5(scene, world, { shadows = true } = {}) {
     const { p, h } = A;
     const faces = (W) => W.foot < 2 && W.len > 5;
     const houses = HOUSES.map(([name, S, base, at, r, , , pick, spec, walls]) => ({ name, sec: S[0], base, at, r, pick: pick || undefined, spec, walls }));
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'riia5 fronts', shadows, ppm: 12, far: 6, faces, debug: DEBUG });
 
     // ---- Selver ABC
     const CK = cellKit(group, { shadows });

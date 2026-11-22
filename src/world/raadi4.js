@@ -123,7 +123,7 @@ export function createRaadi4(scene, world, { shadows = true } = {}) {
       only: PAINT[name] }));
     // every wall of these four gets the house's own painter
     for (const H of houses) H.walls = [{ near: [0, 0], within: 1e9, only: (P, W) => H.only(P, W) }];
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'raadi4 fronts', shadows, ppm: 12, far: 6, debug: DEBUG });
     // the yellow plane on a pole on the lawn north-west of the Terminal tower, nose to the north
     const [x, z] = [2861.5, -302.0], g = h(x, z), F = frame([x, z], [0, -1]);
     p.add(new THREE.CylinderGeometry(0.12, 0.16, 3.2, 8), 0x8e9298, x, g + 1.6, z);

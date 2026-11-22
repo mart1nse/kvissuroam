@@ -86,7 +86,7 @@ export function createKorvekula4(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const debug = /kdebug/.test(location.search);
-    skinHouses(world, group, houses(), { shadows, ppm: 22, far: 12, debug });
+    skinHouses(world, group, houses(), { label: 'korvekula4 fronts', shadows, ppm: 22, far: 12, debug });
     A.finish();
   }
 

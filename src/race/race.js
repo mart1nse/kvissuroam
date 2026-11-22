@@ -497,7 +497,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
         elTime.textContent = st.running ? fmtTime(time - st.t0) : '0:00.00';
         panel.classList.toggle('idle', !st.running);
         renderBest(carId, carShort);
-        if (!st.running && !elMsg.textContent) elMsg.textContent = 'CROSS THE LINE TO START';
+        if (!st.running && !elMsg.textContent) elMsg.textContent = 'CROSS THE LINE TO START HOTLAP';
         if (st.running && st.off > 60) elMsg.textContent = `OFF TRACK ${Math.round(st.off)} / ${OFF_LIMIT} M`;
         else if (st.running && st.lastSplit) { if (elMsg.innerHTML !== st.lastSplit) elMsg.innerHTML = st.lastSplit; }
         else if (st.running) elMsg.textContent = `CHECKPOINTS ${st.cps.size}/${track.checkpoints.length}`;

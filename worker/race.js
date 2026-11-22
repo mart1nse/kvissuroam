@@ -83,6 +83,9 @@ export class RaceDesk {
     if (ph === 'race') {
       const on = this.online();
       const rs = this.s.racers.filter((r) => !r.out && on.has(r.id)).map((r) => r.id);
+      // the last racer left in, with others driving about: no restart into a race of one (Martin 2026-11-22);
+      // their button ends the race instead, and then everyone can vote. Alone in the world, a restart is fine.
+      if (rs.length === 1 && [...this.drivers().keys()].some((id) => id !== rs[0])) return { kind: 'none', voters: new Set(), need: 0, of: 0 };
       return { kind: 'restart', voters: new Set(rs), need: needRestart(rs.length), of: rs.length };
     }
     return { kind: 'none', voters: new Set(), need: 0, of: 0 };

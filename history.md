@@ -80,3 +80,87 @@ Commits merged to main in the 24 h before the run:
 - bc652c9 Catholic church at Veski 3 and the villa at Veski 5 from Street View and air photos (#320)
 - 67f6caf Laptops: far ground in culled tiles, coarser below full sharpness; at most ~80 fps on fast screens (#319)
 
+
+## 2026-11-22 (main 6217336, run 02:02 UTC)
+
+| Check | Figure | Budget | |
+|---|---|---|---|
+| Phone canvases at DRIVE | 99 | 230 | OK |
+| Phone graphics card at DRIVE | 184 | 250 | OK |
+| Phone JS heap at DRIVE | 264 | 420 | OK |
+| Phone total at DRIVE | 547 | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 646 | 740 | OK |
+| Phone graphics card peak in a map jump | 185 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 201 | 250 | OK |
+| Phone total after 2 km through the centre | 810 | 870 | OK |
+| Phone graphics card peak through the centre | 407 | 445 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 352 | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 562 | 760 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 59 | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.06 | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 1 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 7.1 | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 139 | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 61 | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.06 | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 1 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 5.7 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 127 | - | not judged |
+
+All within budget. Against the 21 Nov 01:19 run: phone total at DRIVE 631 -> 547 MB (heap 339 -> 264, canvases 108 -> 99), map jump card peak 212 -> 185, 5 s spike 642 -> 646. Nothing grew by more than 10 %. Both 4.5 km drives: no busy stretch over 0.1 s, longest 59 ms (desktop) and 61 ms (phone). New since the last log entry: phone after 2 km through the centre 810 MB (budget 870), card peak there 407 (445), lowest level at Riia/Turu 352 pieces and 562k triangles.
+
+Commits merged to main in the 24 h before the run:
+
+- 6217336 Short cut: only the checkpoint order cancels the lap (#416)
+- 881f726 Short cuts cancel the lap (Jakobi cut past the Emajõe loop) (#415)
+- 5f7f1cd Online list dots take each player's map arrow colour, a bit bigger (#414)
+- 355b803 Countdown heading reads TO RACE START (#413)
+- 4edc3e9 Race button: say when drivers on the map are on an old page (#412)
+- acdfd1c Light anti-lock brakes for the RAV4 and the Mazda 6 (#411)
+- 88e0178 Race finish splash: lap record shown as the record banner's two parts (#410)
+- 9a1341c Lap record banner, record line on the race finish splash, tag and sound for the others (#409)
+- 16e323a Finish halo ends at the underside of the START · FINISH banner (#408)
+- 7afd318 Start billboard says LAP START, line under it removed (#407)
+- d0f953d Race: finish splash with your place, glowing finish frame, quieter END RACE? (#406)
+- e8a1722 Wheelspin howl about 18 dB louder (gain 0.05 -> 0.4), own car and other players (#405)
+- 54de8b0 Race HUD tweaks: compact live list, ✕ ends a solo race, bigger JOIN, smaller race button (#404)
+- 9e72bf9 Race button: ask for the race state until it arrives (#403)
+- a54da74 Online race mode: vote to start, grid on Küüni, five red lights, one-lap race, live list and results (#402)
+- 5f8113f After a quick lift mid donut the hold comes back gently (200 Avant and all cars) (#401)
+- ed770e0 Parked cars: detailed models a third of the size, arrays let go once on the card (#400)
+- 5ce2708 Floored at low speed, traction control lets the tyres spin (Carrera GT, M3) (#399)
+- 6abc4ec Parked cars: pictures kept packed, unpacked when a car is first seen close up (#398)
+- 9926d8f Donut from a run: the slide carries through instead of stopping dead (#397)
+- dfc19c4 No hiccup mid swing in figure eights (#396)
+- befc277 Phones: pictures of places left behind rest, GETTING READY on map clicks and respawns (#395)
+- 06f9be1 Remove the "The car has sunk." line from the sunk screen (#394)
+- 7192907 No flick in figure eights or after a brief lift mid donut (#393)
+- e3f48a3 Old computers and phones: less work before each frame, building in finer steps, memory through the centre in the perf check (#392)
+- 4518f31 Phones keep their memory-safe graphics level across the extra low update (#391)
+- 142111f Softer start of the tail step-out: the donut hold's first push is gentler and builds up slowly (#390)
+- 93444aa Stealth mode ?off=100: hidden from other players (#389)
+- 00e8f8f No tail flick from a near standstill: the donut hold pushes only once the car gathers pace (#388)
+- 02e3e42 Thin barriers collide as exact boxes: no more getting stuck in rails, dividers and walls (#387)
+- c847196 The end of a slide out of a donut fades out instead of snapping straight (#386)
+- a927971 Freeze frames: parked scans wear half-size pictures, ten places build in steps, cheaper kerb and lap lookups (#385)
+- e8d48d5 Game comes back whole after switching apps on a phone (no more black houses) (#384)
+- 8143466 Out of a donut, the car stops soon after it straightens (#383)
+- 00d02be Phone lap board: your last laps on the left, 5 latest laps by everyone beside them (#382)
+- fbf2128 Burnout brake stays on when a slide swings the car backwards (#381)
+- 86fab88 Scanned car bodies stay sharp after a car change on phones and in light mode (#380)
+- 4b41951 No long-press buzz when holding the touch pedals (#379)
+- 1d23899 Online players list on phones (#378)
+- 371be41 Braking out of a donut slides on about twice as long (#377)
+- dd4eeaa Extra low graphics for old computers; building keeps pace with slow frames; start waits for the picture (#376)
+- 84269ec Burnout out of a donut keeps its slide, then straightens and stops (#375)
+- 7e7c1d6 Standing burnouts for rear-driven cars, calmer low-speed tail flicks (#374)
+- 2c7db62 Perf check: test drives that catch freeze frames; smaller house-front pages; three places built in steps (#373)
+- 18fb913 Freeze frames while driving: work queue, warmer, lighter builds (#372)

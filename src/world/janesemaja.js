@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { streetKit, addHouseColours } from './streetkit.js';
 import { Parts, BOX } from '../race/landmarks.js';
+import { jobs } from '../jobs.js';
 
 const DIR = [0.758, 0.652], RIGHT = [-0.652, 0.758], ROAD = [1955.2, 1472.2];
 const along = (s, o) => [ROAD[0] + DIR[0] * s + RIGHT[0] * o, ROAD[1] + DIR[1] * s + RIGHT[1] * o];
@@ -133,8 +134,8 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
-  function build() {
-    built = true;
+  // in the work queue, a part a step (it was 26 ms in one frame on Narva mnt, 22 Nov)
+  function* build() {
     const K = streetKit(world, group, { shadows, fenceColour: 0x9fc4ab });
     const F = { at: along };
     const gh = (s, o) => world.heightAt(...along(s, o));
@@ -176,6 +177,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
     const atticO = (s0, s1, o0, o1, y0, yr, hex) => solid([[s0, y0, o0], [s1, y0, o0], [(s0 + s1) / 2, yr, o0], [s0, y0, o1], [s1, y0, o1], [(s0 + s1) / 2, yr, o1]], PRISM, hex);
 
     // ---- patterned surfaces
+    yield;
     const TEX = textures(), quads = {};
     for (const k of Object.keys(TEX)) quads[k] = { pos: [], uv: [] };
     // a flat polygon; the pattern's u runs along U (a direction lying in it), v square to that
@@ -209,6 +211,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
       box(s, s + sign * 0.07, o0, o1, y0, y1, glass);
     };
 
+    yield;
     // ================= the street =================
     strip('asphalt', S0, S1, -3.95, 3.95, 0.07);
     // north-east side: kerb, slab pavement, grass up to the yellow building
@@ -241,6 +244,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
       bar([a[0] + d, a[1] - 0.2, a[2]], mid, 0.025, 0x3a3a44); bar(mid, [b[0] + d, b[1] - 0.2, b[2]], 0.025, 0x3a3a44);
     }
 
+    yield;
     // ================= the yellow building across the street =================
     {
       const wo = (s) => -10.2 - 0.5 * (s + 10.4) / 114.9;            // its street wall, map block 1841
@@ -265,6 +269,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
       for (const s of [-9.6, 13.2, 36.4, 59.3, 82.2, 103.8]) cyl(s, wo(s) + 0.17, 0.06, 16.5, TOP - 0.1, COL.metal);       // downpipes
     }
 
+    yield;
     // ================= Jänese 1: the house =================
     const SA = 33.7, SB = 53.4, OF = 10.0, OB = 19.3, OR = (OF + OB) / 2, SPLIT = 45.3;
     let Y0 = -1e9;
@@ -334,6 +339,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
       winS(21.5, 22.8, Y0 + 1.0, Y0 + 2.2, W0, -1);
     }
 
+    yield;
     // ================= hedge, gate, fences, thujas =================
     {
       const r = rnd(5);
@@ -380,6 +386,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
       }
     }
 
+    yield;
     // ---- meshes
     for (const k of Object.keys(quads)) {
       const Q = quads[k], opt = TEX[k][2] || {};
@@ -414,7 +421,7 @@ export function createJaneseMaja(scene, world, { shadows = true } = {}) {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CX, car.z - CZ) > 450) return;
-      if ([[S0, 0], [S1, 0], [45, 20], [45, -12]].every((q) => world.ready(...along(q[0], q[1])))) build();
+      if ([[S0, 0], [S1, 0], [45, 20], [45, -12]].every((q) => world.ready(...along(q[0], q[1])))) { built = true; jobs.add(build, 'janesemaja'); }
     },
   };
 }

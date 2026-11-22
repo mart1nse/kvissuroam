@@ -4,8 +4,9 @@
 // poster (Martin, 22 Nov), a young artist's shop on Yaga, four cells big in the bottom right corner. It is
 // a picture of its own (public/yaga-torepood.webp, 416 x 592, painted from the shop's own drawings by
 // yaga-poster/src/poster.js in the project's shared files) drawn into the atlas, so it costs no texture
-// of its own. Every shelter shows it on the face towards the buses that come; clicking or tapping it
-// opens the shop (bindClicks in busstops.js).
+// of its own. Every shelter shows it on both faces of its advert box (Martin, 22 Nov: "add to both sides";
+// the made-up ads stay in the atlas, unused for now); clicking or tapping it opens the shop (bindClicks in
+// busstops.js).
 import * as THREE from 'three';
 
 export const AD_COLS = 4, AD_ROWS = 4, AD_W = 208, AD_H = 296;
@@ -18,6 +19,10 @@ const CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13];   // atlas cell of each ad
 let posterImg = new Image();
 posterImg.src = '/yaga-torepood.webp';
 export const adsReady = posterImg.decode().catch(() => {});
+// posters on hand-built shelters (the Emajõe one on the race track): a mesh showing the poster, clickable
+// like the ones on the bus stops (busstops.js bindClicks)
+export const extraPosters = [];
+export function clickablePoster(mesh) { extraPosters.push({ mesh }); }
 function drawPoster(g) {
   g.drawImage(posterImg, 2 * AD_W, 2 * AD_H, 2 * AD_W, 2 * AD_H);
   posterImg = null;                  // (the atlas holds it now)

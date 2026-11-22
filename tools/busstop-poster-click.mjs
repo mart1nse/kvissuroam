@@ -17,6 +17,7 @@ async function run(phone) {
   const ctx = await b.newContext(phone ? { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 } : { viewport: { width: 960, height: 540 } });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => fail('page error ' + e.message));
+  p.on('console', (m) => { if (m.type() === 'error') console.log('  console error', m.text().slice(0, 200)); });
   await p.goto(`${base}/?drive&nointro`);
   await p.waitForFunction(() => window.__game?.world && window.__game.car, null, { timeout: 240000 });
   await p.waitForTimeout(6000);
@@ -35,7 +36,7 @@ async function run(phone) {
   // the poster's middle and a point a metre beside it, on the screen
   const [px, pz] = W(-L / 2 - 0.085, 0), [qx, qz] = W(-L / 2 - 0.085, 1.6);
   const pts = await p.evaluate(([px, pz, qx, qz]) => {
-    const g = __game, cam = g.camera(), st = g.busStops().stops[+document.body.dataset.stop || 0];
+    const g = __game, cam = g.camera, st = g.busStops().stops[+document.body.dataset.stop || 0];
     const r = document.getElementById('view').getBoundingClientRect();
     const scr = (x, y, z) => { const v = cam.position.clone().set(x, y, z).project(cam); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; };
     const y = g.world.heightAt(px, pz);
@@ -79,6 +80,20 @@ async function run(phone) {
     const c2 = await p.evaluate(() => document.getElementById('view').style.cursor);
     console.log(`desktop: cursor over the poster "${c1}", beside it "${c2}"`);
     if (c1 !== 'pointer' || c2 === 'pointer') fail('desktop: hover hand wrong');
+    // the inside face, seen from the bench
+    const [ix, iz] = W(-L / 2 + 2.6, 0.25), [jx, jz] = W(-L / 2 + 0.085, 0);
+    const pin = await p.evaluate(async ([ix, iz, jx, jz]) => {
+      const y = __game.world.heightAt(jx, jz); window.__cam = [ix, y + 1.5, iz, jx, y + 1.25, jz, 55];
+      await new Promise((r) => setTimeout(r, 1500));
+      const cam = __game.camera, r = document.getElementById('view').getBoundingClientRect(), v = cam.position.clone().set(jx, y + 1.25, jz).project(cam);
+      return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
+    }, [ix, iz, jx, jz]);
+    await p.waitForTimeout(1500);
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-inside.png') });
+    await p.mouse.click(pin.x, pin.y); await p.waitForTimeout(400);
+    const n2 = await opened();
+    console.log(`desktop: click on the inside face opens ${n2 - 1}`);
+    if (n2 !== 2) fail('desktop: inside face did not open the shop');
   } else {
     const box = await p.locator('[data-ctl="up"]').boundingBox();
     const cdp = await ctx.newCDPSession(p);
@@ -93,8 +108,98 @@ async function run(phone) {
   }
   await ctx.close();
 }
-await run(false);
-await run(true);
+// the hand-built shelter by the Emajõe on the race track (src/race/emajoe.js) shows it too
+async function emajoe() {
+  const ctx = await b.newContext({ viewport: { width: 960, height: 540 } });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => fail('page error ' + e.message));
+  p.on('console', (m) => { if (m.type() === 'error') console.log('  console error', m.text().slice(0, 200)); });
+  await p.goto(`${base}/?drive&nointro`);
+  await p.waitForFunction(() => window.__game?.world && window.__game.car, null, { timeout: 240000 });
+  await p.waitForTimeout(6000);
+  await p.evaluate(async () => {
+    const t = (await import('/src/race/race.js')).createTrack(), i = 973;
+    const [x, z] = t.P[i - 25], [ux, uz] = t.tan[i - 25];
+    await __game.world.loadAround(x, z, 700);                 // (the place builds when its garden wall is loaded too)
+    __game.place({ x, z, yaw: Math.atan2(ux, -uz) });
+  });
+  const waited = await p.evaluate(async () => { let k = 0; for (; k < 90 && !__game.busStops().extraPosters.length; k++) await new Promise((r) => setTimeout(r, 1000)); return [k, __game.busStops().extraPosters.length, __game.car.x | 0, __game.car.z | 0]; });
+  if (!waited[1]) { fail('emajõe shelter not built ' + waited.join(' ')); await ctx.close(); return; }
+  await p.waitForTimeout(6000);
+  const pt = await p.evaluate(async () => {
+    const { extraPosters } = __game.busStops();
+    const m = extraPosters[0].mesh, cam = __game.camera;
+    // its corners are in world places (shelter.js bakes them): the middle, and the way its front looks
+    m.updateWorldMatrix(true, false);
+    const a = m.geometry.attributes.position, P = (k) => m.position.clone().fromBufferAttribute(a, k).applyMatrix4(m.matrixWorld);
+    const c = m.position.clone().set(0, 0, 0);
+    for (let k = 0; k < a.count; k++) c.add(P(k));
+    c.multiplyScalar(1 / a.count);
+    const nrm = P(1).sub(P(0)).cross(P(2).sub(P(0))).normalize();
+    window.__cam = [c.x + nrm.x * 4.5, c.y + 0.3, c.z + nrm.z * 4.5, c.x, c.y, c.z, 55];
+    window.__pos = [c.x, c.y, c.z, nrm.x, nrm.y, nrm.z].map((v) => +v.toFixed(2));
+    await new Promise((r) => setTimeout(r, 1500));
+    const r = document.getElementById('view').getBoundingClientRect(), v = c.clone().project(cam);
+    return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
+  });
+  await p.waitForTimeout(3000);
+  if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
+  await p.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+  await p.mouse.click(pt.x, pt.y);
+  await p.waitForTimeout(400);
+  await p.mouse.click(pt.x + 300, pt.y);
+  await p.waitForTimeout(400);
+  const n = await p.evaluate(() => window.__opened.length);
+  console.log(`emajõe shelter: click on the poster and one beside it open ${n}`, await p.evaluate(() => JSON.stringify(window.__pos)));
+  if (n !== 1) fail('emajõe shelter poster');
+  await ctx.close();
+}
+// crash into the shelter first (the frame and the poster bend), then click the bent poster
+async function crashed() {
+  const ctx = await b.newContext({ viewport: { width: 960, height: 540 } });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => fail('page error ' + e.message));
+  p.on('console', (m) => { if (m.type() === 'error') console.log('  console error', m.text().slice(0, 200)); });
+  await p.goto(`${base}/?drive&nointro`);
+  await p.waitForFunction(() => window.__game?.world && window.__game.car, null, { timeout: 240000 });
+  await p.waitForTimeout(6000);
+  const [x, z, yaw, L, gap] = D.stops[STOP];
+  const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+  const W = (s, n) => [x + ux * s + nx * n, z + uz * s + nz * n];
+  const [cx, cz] = W(0.6, -(1.55 / 2 + gap) - 4.5), heading = Math.atan2(nx, -nz);   // into the open front, as busstop-crash.mjs
+  await p.evaluate(async ([cx, cz, cy]) => { await __game.world.loadAround(cx, cz, 300); __game.place({ x: cx, z: cz, yaw: cy }); }, [cx, cz, heading]);
+  await p.waitForTimeout(12000);
+  const [ex, ez] = W(-L / 2 - 4.5, -(1.55 / 2 + gap) + 0.2);
+  const res = await p.evaluate(async ([cx, cz, cy, i, ex, ez]) => {
+    const g = __game, { updateShelters } = await import('/src/world/shelter.js');
+    window.requestAnimationFrame = () => 0;                 // stop the frame loop: step by hand (as busstop-crash.mjs)
+    for (let k = 0; k < 8; k++) g.busStops().update(g.car);
+    g.place({ x: cx, z: cz, yaw: cy }); g.car.vx = 9;
+    for (let k = 0; k < 120; k++) { g.sim(1 / 60, { up: 0 }); updateShelters(g.car, 1 / 60, g.audio); }
+    for (let k = 0; k < 90; k++) updateShelters(g.car, 1 / 60, g.audio);
+    const st = g.busStops().stops[i], ad = st.on.ad, a = ad.geometry.attributes.position;
+    // the middle of the bent outside poster (its first six corners), seen from the road
+    ad.updateWorldMatrix(true, false);
+    const c = g.camera.position.clone().set(0, 0, 0), v = c.clone();
+    for (let k = 0; k < 6; k++) c.add(v.fromBufferAttribute(a, k).applyMatrix4(ad.matrixWorld));
+    c.multiplyScalar(1 / 6);
+    g.camera.position.set(ex, c.y + 0.3, ez); g.camera.lookAt(c); g.camera.updateMatrixWorld();
+    g.renderer.render(g.scene, g.camera);
+    const el = document.getElementById('view'), r = el.getBoundingClientRect(), q = c.clone().project(g.camera);
+    const px = r.left + (q.x + 1) / 2 * r.width, py = r.top + (1 - q.y) / 2 * r.height;
+    return { damaged: !!st.br?.damaged(), on: !!g.busStops().posterAt(g.camera, el, px, py, null), beside: !!g.busStops().posterAt(g.camera, el, px + 250, py, null) };
+  }, [cx, cz, heading, STOP, ex, ez]);
+  if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-crashed.png'), timeout: 120000 });
+  console.log(`crashed shelter: damaged ${res.damaged}, the bent poster answers ${res.on}, beside it ${res.beside}`);
+  if (!res.damaged) fail('crash did not damage the shelter');
+  if (!res.on || res.beside) fail('bent poster click');
+  await ctx.close();
+}
+const only = process.env.ONLY;
+if (!only || only.includes('desktop')) await run(false);
+if (!only || only.includes('phone')) await run(true);
+if (!only || only.includes('crash')) await crashed();
+if (!only || only.includes('emajoe')) await emajoe();
 await b.close();
 console.log(ok ? 'ALL OK' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

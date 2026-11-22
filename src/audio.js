@@ -9,6 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
+import { createSqueaker } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -35,7 +36,7 @@ export function createAudio() {
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
-  let noiseSrc = null, workletReady = false;
+  let noiseSrc = null, workletReady = false, squeak = null;
   const voices = [];
   const shiftSound = createShiftSound();
 
@@ -82,6 +83,8 @@ export function createAudio() {
     spinFilt = ctx.createBiquadFilter(); spinFilt.type = 'bandpass'; spinFilt.frequency.value = 800; spinFilt.Q.value = 6;
     spinGain = ctx.createGain(); spinGain.gain.value = 0;
     noise.connect(spinFilt).connect(spinGain).connect(bus);
+    // and now and then the tyres sing over it: groans, squeals and chirps (src/audio-tyres.js)
+    squeak = createSqueaker(ctx, noise, bus);
     noise.start();
     noiseSrc = noise;
   }
@@ -315,6 +318,7 @@ export function createAudio() {
     spinS += ((dead || flying || car.surface !== 1 ? 0 : spinAmount(car)) - spinS) * 0.15;
     spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
     spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
+    squeak.step(t, spinS, skid, v, car.spec.mass);
   }
 
   // ---- other players' cars
@@ -343,6 +347,7 @@ export function createAudio() {
     v.spinFilt = ctx.createBiquadFilter(); v.spinFilt.type = 'bandpass'; v.spinFilt.frequency.value = 800; v.spinFilt.Q.value = 6;
     v.spinGain = ctx.createGain(); v.spinGain.gain.value = 0;
     noiseSrc.connect(v.spinFilt).connect(v.spinGain).connect(v.mix);
+    v.squeak = createSqueaker(ctx, noiseSrc, v.mix, { voices: 1 });
     voices.push(v);
     return v;
   }
@@ -404,6 +409,7 @@ export function createAudio() {
     v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.15;
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
     v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
+    v.squeak.step(t, v.spin, v.skid, speed, s.mass);
   }
   // list: other players' cars (multiplayer.js remotes()); cam: the camera, which is where the ears are
   const near = [];

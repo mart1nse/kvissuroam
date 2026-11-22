@@ -61,6 +61,26 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
     return c;
   }
   const use = (c, t) => { let s = users.get(c); if (!s) users.set(c, (s = new Set())); s.add(t); };
+  // A texture's new picture of another size. A picture already on the graphics card has to be freed there
+  // first: the card keeps the size it was first sent at, and three.js only writes the new picture over its
+  // top left corner, so the rest stays the old picture and the mipmaps are made from the mix. Where light
+  // mode came on in the middle of a drive ('slow in this drive'), every big picture already shown went that
+  // way: the scanned car bodies turned into a patchwork of other parts of the scan (Martin's Impreza 22B
+  // and Audi 200, 21 and 22 Nov 2026). Every texture made from the same picture (clones share it) is freed
+  // too; the next frame that shows one sends the new picture whole, which also frees the big one on the card.
+  const bySource = new WeakMap();      // texture source -> the textures seen wearing it
+  const seen = (t) => { let s = bySource.get(t.source); if (!s) bySource.set(t.source, (s = new Set())); s.add(t); };
+  const size = (i) => [i?.naturalWidth || i?.width || 0, i?.naturalHeight || i?.height || 0];
+  function swap(t, img) {
+    const [w0, h0] = size(t.image), [w1, h1] = size(img);
+    if (w0 !== w1 || h0 !== h1) {
+      mine = true;
+      for (const o of bySource.get(t.source) || [t]) if (renderer.properties.has(o)) o.dispose();
+      mine = false;
+    }
+    t.image = img;
+    t.needsUpdate = true;
+  }
   const onCard = (t) => t.version > 0 && renderer.properties.has(t) && renderer.properties.get(t).__version === t.version;
   function shrink(c) {
     const g = c.getContext('2d');
@@ -225,8 +245,7 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       st = { orig: null, ver: t.version, redraws: 0, upAt: 0 };
       if (w * h > maxPx) {
         copies++;
-        t.image = copy(img, w, h);
-        t.needsUpdate = true;
+        swap(t, copy(img, w, h));
         st.ver = t.version;
         saved += (w * h - t.image.width * t.image.height) * 4 * 1.33;
         if (isCanvas(img)) st.orig = img;            // (watched for its code painting it again)
@@ -240,8 +259,8 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       // painted again by its own code
       st.redraws++; st.upAt = 0;
       if (st.orig) {
-        if (st.redraws > 3) { t.image = st.orig; st.orig = null; t.needsUpdate = true; dynamic++; return false; }   // keeps changing: its own full picture back
-        t.image = copy(st.orig, st.orig.width, st.orig.height); t.needsUpdate = true; use(t.image, t);
+        if (st.redraws > 3) { swap(t, st.orig); st.orig = null; dynamic++; return false; }   // keeps changing: its own full picture back
+        swap(t, copy(st.orig, st.orig.width, st.orig.height)); use(t.image, t);
       } else if (st.redraws > 3) { dynamic++; return false; }
       st.ver = t.version;
       return true;
@@ -271,8 +290,8 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
     if (seenMat.has(m)) return;
     seenMat.add(m);
     const ts = [];
-    for (const v of Object.values(m)) if (v?.isTexture) { watch.add(v); ts.push(v); }
-    if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u?.value?.isTexture) { watch.add(u.value); ts.push(u.value); }
+    for (const v of Object.values(m)) if (v?.isTexture) { watch.add(v); ts.push(v); seen(v); }
+    if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u?.value?.isTexture) { watch.add(u.value); ts.push(u.value); seen(u.value); }
     if (ts.length) texOf.set(m, ts); else texOf.delete(m);
   }
 
@@ -296,7 +315,7 @@ export function createPhoneTextures(renderer, { maxPx = MAX_PX, release = true, 
       for (const t of watch) if (!step(t, now)) watch.delete(t);
     },
     // one picture, now: it is about to be sent to the graphics card ahead of its first frame (warm.js, jobs.js)
-    texture(t) { if (!t || !t.isTexture) return; watch.add(t); copies = 0; if (!step(t, performance.now())) watch.delete(t); },
+    texture(t) { if (!t || !t.isTexture) return; watch.add(t); seen(t); copies = 0; if (!step(t, performance.now())) watch.delete(t); },
     // look at this material again (a texture was put on it after it was first seen)
     again(root) { root.traverse((o) => { for (const m of [o.material].flat()) if (m) seenMat.delete(m); }); },
     wake,

@@ -32,6 +32,13 @@ let turnInHigh = true;
 const INWARD_WAIT = 0.6, INWARD_T = 1.2;
 let inwardOn = false;
 export function setInward(on) { inwardOn = !!on; }
+// ?launch=1 (Martin 2026-11-22, on trial): cars with engine.manualLaunch (the F40) pull away like a manual
+// instead of through the torque converter. Floored from a standstill it is as if the car were already
+// creeping in first at idle with the clutch fully in: the engine turns with the wheels from idle up, with
+// no converter holding it at the stall speed and no torque multiplication, so the revs climb with the road
+// speed, the turbos wake late and the rears light up when the boost arrives (gentler than a clutch drop).
+let launchManual = false;
+export function setLaunch(on) { launchManual = !!on; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -290,7 +297,8 @@ function engineForce(car, throttle, dt, hb = 0) {
   // wheels, so an upshift drops the revs straight to the next gear's, with no converter slip holding them
   // up. The converter only takes over again for a start in first, or when the revs sag towards idle.
   if (car.locked && (car.gear === 1 || car.reversing || wheelRpm < (e.idle ?? 750) * 1.3)) car.locked = false;
-  const stall = car.locked ? e.idle : e.idle + (stallMax - e.idle) * throttle;
+  const manual = launchManual && e.manualLaunch;
+  const stall = car.locked || manual ? e.idle : e.idle + (stallMax - e.idle) * throttle;
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road
   // speed. Off the throttle it is kept on the boil at hbRevs; on the throttle it climbs towards the
@@ -346,7 +354,7 @@ function engineForce(car, throttle, dt, hb = 0) {
     const up = Math.min(want, car.shaft);
     car.boost += (up - car.boost) * Math.min(1, dt * (up > car.boost ? 25 : tb.dump));
   }
-  const gain = 1 + (e.converterGain - 1) * (1 - sr) ** 2;
+  const gain = manual ? 1 : 1 + (e.converterGain - 1) * (1 - sr) ** 2;
   // Engine inertia: after a lift the engine spins down at the rate its
   // flywheel and friction allow (revDrop rpm/s), not at once. Pressing again
   // before it has dropped picks up from those revs, and the torque converter

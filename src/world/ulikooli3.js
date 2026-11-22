@@ -18,7 +18,7 @@ import { skinHouses } from './houseskin.js';
 import { areaKit, frame } from './handbuilt.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
-import { S35, axes, row, classic } from './ulikooli.js';
+import { S35, axes, row, classic, fineWalls } from './ulikooli.js';
 
 const DEBUG = typeof location !== 'undefined' && /ulikoolidebug/.test(location.search);
 const SERIF = '700 %px Georgia, "Times New Roman", serif';
@@ -60,11 +60,11 @@ const plain = (wall, floors, seed, pitch = 3.1) => (P, W) => classic(P, W, { wal
 
 // [name, base, at, reach, wall colour, roof colour, default painter, walls]
 const HOUSES = [
-  ['kohvik', 433, [1270, 2675], 21, 0xe7dfc0, 0x6f7379, kohvik, [{ near: [1282.4, 2689.25], within: 3, only: kohvikFront, ppm: 18 }, { near: [1286.5, 2682.0], within: 2.5, only: kohvik, ppm: 16 }, { near: [1279.4, 2666.95], within: 3, only: kohvik, ppm: 14 }]],
+  ['kohvik', 433, [1270, 2675], 21, 0xe7dfc0, 0x6f7379, kohvik, [{ near: [1282.4, 2689.25], within: 3, only: kohvikFront, ppm: 14 }, { near: [1286.5, 2682.0], within: 2.5, only: kohvik, ppm: 12 }, { near: [1279.4, 2666.95], within: 3, only: kohvik, ppm: 11 }]],
   ['u18a', 483, [1244, 2687], 20, 0xebe3c6, TIN, yard18a, []],
   ['terrace', 609, [1264, 2694], 9, 0xe9e7dc, 0xb9b4a8, terrace, []],
-  ['church', 803, [1224, 2754], 22, 0xf3f0e6, 0xb9bec4, church, [{ near: [1226.3, 2765.5], within: 3, only: church, ppm: 14 }]],
-  ['jak4', 914, [1193, 2781], 15, 0xe3ebe0, TIN, jak4, [{ near: [1202.85, 2775.0], within: 3, only: jak4, ppm: 16 }, { near: [1196.8, 2786.95], within: 3, only: jak4, ppm: 14 }]],
+  ['church', 803, [1224, 2754], 22, 0xf3f0e6, 0xb9bec4, church, [{ near: [1226.3, 2765.5], within: 3, only: church, ppm: 11 }]],
+  ['jak4', 914, [1193, 2781], 15, 0xe3ebe0, TIN, jak4, [{ near: [1202.85, 2775.0], within: 3, only: jak4, ppm: 12 }, { near: [1196.8, 2786.95], within: 3, only: jak4, ppm: 11 }]],
   ['jak4b', 1089, [1168, 2773], 10, 0xe3ebe0, TIN, shed, []],
   ['m550', 550, [1222, 2673], 15, 0xe9e2cf, TIN, plain('#e9e2cf', [[1.5, 1.8], [4.9, 1.9]], 66), []],
   ['m435', 435, [1252, 2655], 19, 0xefe9d8, TIN, plain('#efe9d8', [[1.5, 1.9], [5.0, 2.0], [8.3, 1.6]], 67), []],
@@ -91,7 +91,7 @@ export function createUlikooli3(scene, world, { shadows = true } = {}) {
   // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
   function* build() {
     const houses = HOUSES.map(([name, base, at, r, , , paint, walls]) => ({ name, sec: S35[0], base, at, r, spec: { wall: [230, 228, 218], floors: [], attic: null, eaves: false }, walls: [...walls, { near: [0, 0], within: 1e9, only: paint }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 5, faces: (W) => W.len > 6 && W.foot < 3, debug: DEBUG, label: 'ulikooli3 fronts' });
+    skinHouses(world, group, houses, { shadows, ppm: 10, far: 5, faces: fineWalls(houses), debug: DEBUG, label: 'ulikooli3 fronts' });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

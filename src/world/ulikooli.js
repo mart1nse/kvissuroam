@@ -29,6 +29,13 @@ const SERIF = '700 %px Georgia, "Times New Roman", serif';
 const TILE = 0xb4583e, TIN = 0x8f98a3;
 export const dot = (W, d) => W.nx * d[0] + W.nz * d[1];
 export const axes = (x0, x1, n) => Array.from({ length: n }, (_, k) => x0 + (x1 - x0) * (k + 0.5) / n);
+// Which walls are painted finely: the ones a house lists with a sharpness of their own (`ppm`), the fronts the
+// street photos show. (A test on `W.foot` here never passes: skinHouses asks before it has measured the foot,
+// so every wall came out at the coarse `far` sharpness, the listed fronts and their lettering too.)
+export function fineWalls(houses) {
+  const pts = houses.flatMap((H) => (H.walls || []).filter((o) => o.ppm).map((o) => [o.near[0], o.near[1], o.within || 2.5]));
+  return (W) => W.len > 6 && pts.some((q) => Math.hypot(q[0] - W.mid[0], q[1] - W.mid[1]) < q[2]);
+}
 // horizontal joints of a banded (rusticated) ground floor
 export function bands(P, x0, x1, y0, y1, step = 0.42, col = 'rgba(70,70,80,0.22)') { for (let y = y0 + step; y < y1 - 0.05; y += step) P.r(x0, y - 0.035, x1, y, col); }
 // windows on the axes xs where the wall has room for them
@@ -297,13 +304,13 @@ export const philo = (P, W) => classic(P, W, {
 // [name, base, at, reach, wall colour, roof colour, default painter, walls]
 const HOUSES = [
   ['bock', 605, [1310, 2811], 30, 0xe9d79c, TILE, bockSide, [
-    { near: [1317.7, 2826.1], within: 4, only: mural, ppm: 22 }, { near: [1315.7, 2802.6], within: 5, only: bockFront, ppm: 20 }, { near: [1297.4, 2786.3], within: 4, only: bockNorth, ppm: 20 }]],
-  ['werner', 515, [1338, 2808], 19, 0xf0eadb, TILE, wernerSide, [{ near: [1329.4, 2810.5], within: 4, only: wernerFront, ppm: 20 }]],
+    { near: [1317.7, 2826.1], within: 4, only: mural, ppm: 14 }, { near: [1315.7, 2802.6], within: 5, only: bockFront, ppm: 14 }, { near: [1297.4, 2786.3], within: 4, only: bockNorth, ppm: 14 }]],
+  ['werner', 515, [1338, 2808], 19, 0xf0eadb, TILE, wernerSide, [{ near: [1329.4, 2810.5], within: 4, only: wernerFront, ppm: 14 }]],
   ['kuutri1', 485, [1333, 2787], 27, 0xf1ecdf, TILE, kuutri1, []],
   ['draakon', 551, [1358, 2828], 22, 0xf2efec, TILE, draakonPlain, [
-    { near: [1339.7, 2831.8], within: 4, only: draakonEnd, ppm: 20 }, { near: [1359.8, 2837.1], within: 5, only: draakonSide, ppm: 16 }]],
+    { near: [1339.7, 2831.8], within: 4, only: draakonEnd, ppm: 14 }, { near: [1359.8, 2837.1], within: 5, only: draakonSide, ppm: 12 }]],
   ['lossi3', 736, [1264, 2846], 45, 0xe9bdb0, 0x4c4f57, lossiPlain, [
-    { near: [1269.9, 2857.7], within: 5, only: lossiFront, ppm: 12 }, { near: [1301.1, 2835.6], within: 4, only: lossiEnd, ppm: 16 }]],
+    { near: [1269.9, 2857.7], within: 5, only: lossiFront, ppm: 10 }, { near: [1301.1, 2835.6], within: 4, only: lossiEnd, ppm: 12 }]],
   ['philo', 544, [1255, 2821], 45, 0xeedf9f, TIN, philo, []],
 ];
 const CENTRE = [1322, 2825];
@@ -349,7 +356,7 @@ export function createUlikooli(scene, world, { shadows = true } = {}) {
   // (in steps, see ../jobs.js: each `yield` is a place to stop until the next frame)
   function* build() {
     const houses = HOUSES.map(([name, base, at, r, , , paint, walls]) => ({ name, sec: S35[0], base, at, r, spec: { wall: [230, 225, 215], floors: [], attic: null, eaves: false }, walls: [...walls, { near: [0, 0], within: 1e9, only: paint }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 11, far: 6, faces: (W) => W.len > 6 && W.foot < 3, debug: DEBUG, label: 'ulikooli fronts' });
+    skinHouses(world, group, houses, { shadows, ppm: 11, far: 6, faces: fineWalls(houses), debug: DEBUG, label: 'ulikooli fronts' });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

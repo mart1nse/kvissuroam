@@ -3,7 +3,8 @@
 // platforms, moved by tools/bake/busstops.py onto the pavement of the road the buses use, with room
 // for the shelter (src/world/busstops.json). Each stop gets:
 //  - a glass shelter: posts, roof with a fascia, bench, glass back and end, a lit advert panel at the end
-//    the buses come from (two different made-up adverts, src/world/adverts.js) and a timetable inside;
+//    the buses come from (the TOREPOOD poster outside, Martin 22 Nov, and a made-up advert inside,
+//    src/world/adverts.js) and a timetable inside; clicking or tapping the poster opens the shop;
 //  - the bus stop sign at the kerb and a bin beside the shelter (props, so they snap off when hit);
 //  - the yellow zigzag along the kerb where the bus pulls in.
 // All shelters of a piece of the map are merged into a few meshes. When the car comes within reach of one
@@ -12,7 +13,7 @@
 import * as THREE from 'three';
 import DATA from './busstops.json';
 import { breakableShelter, shelterSolids } from './shelter.js';
-import { adAtlas, adCell, AD_COUNT, TIMETABLE } from './adverts.js';
+import { adAtlas, adCell, AD_COUNT, TIMETABLE, POSTER, POSTER_URL } from './adverts.js';
 
 const D = 1.55, H = 2.45;               // depth and height of a shelter
 const BUS_SIGN = 30, BIN = 4, ZEBRA = 7;
@@ -32,7 +33,7 @@ export const STOPS = DATA.stops.map(([x, z, yaw, L, gap, side, hw, name, sign, b
   const a = (i * 7 + 3) % AD_COUNT, b = (a + 4 + (i % 5)) % AD_COUNT;
   return {
     i, x, z, yaw, L, gap, hw, name: DATA.names[name] || '', sign, bin, ux, uz, nx, nz,
-    style: STYLES[Math.floor(h * STYLES.length)], ads: [a, b],
+    style: STYLES[Math.floor(h * STYLES.length)], ads: [POSTER, b],
     // local (along the road the way the buses go, away from the road) to world
     W: (s, n) => [x + ux * s + nx * n, z + uz * s + nz * n],
     box: { x, z, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 },
@@ -404,8 +405,60 @@ export function createBusStops(scene, world, opts = {}) {
     }
   }
 
+  // The poster opens the shop (Martin, 22 Nov: "make it possible to click on the bus stop banners"): a short
+  // press that does not move, on the 3D view, like the Anderson's hologram (hologram.js). The pedals and
+  // the buttons are elements of their own, so driving never counts as a tap. Worked out by hand against
+  // the poster's rectangle of the stops within reach, nothing is ray-cast; the player's own car in front of
+  // the poster takes the tap.
+  const ray = new THREE.Ray(), ndc = new THREE.Vector2(), caster = new THREE.Raycaster();
+  const REACH = 40, PH = 0.875, PW = D * 0.4;          // m: how far a poster answers; half its height and width
+  function posterAt(camera, el, cx, cy, carNow) {
+    const r = el.getBoundingClientRect();
+    ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    caster.setFromCamera(ndc, camera);
+    ray.copy(caster.ray);
+    const o = ray.origin, d = ray.direction;
+    let best = null, bestT = REACH;
+    for (const st of STOPS) {
+      if (st.y === undefined || !st.rec) continue;              // (its piece of the map is not built)
+      const dx = st.x - o.x, dz = st.z - o.z;
+      if (dx * dx + dz * dz > (REACH + 3) ** 2) continue;
+      if (st.br?.damaged()) continue;                          // a bent shelter: the poster is not where it was
+      // into the shelter's own axes: s along the road, n away from it
+      const os = -dx * st.ux - dz * st.uz, on = -dx * st.nx - dz * st.nz;
+      const ds = d.x * st.ux + d.z * st.uz, dn = d.x * st.nx + d.z * st.nz;
+      const face = -st.L / 2 - 0.085;
+      if (ds <= 1e-4 || os > face) continue;                   // only from the side the poster faces
+      const t = (face - os) / ds;
+      if (t <= 0 || t >= bestT) continue;
+      const n = on + dn * t, y = o.y + d.y * t - st.y - 1.2;
+      if (Math.abs(n) < PW && Math.abs(y) < PH) { best = st; bestT = t; }
+    }
+    if (best && carNow) {
+      const vx = carNow.x - o.x, vy = (carNow.y ?? 0) + 0.7 - o.y, vz = carNow.z - o.z, tc = vx * d.x + vy * d.y + vz * d.z;
+      if (tc > 0 && tc < bestT && vx * vx + vy * vy + vz * vz - tc * tc < 1.1 * 1.1) return null;
+    }
+    return best;
+  }
+  function bindClicks(camera, el, getCar = () => null) {
+    let down = null, hoverT = 0, over = false;
+    el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; }, { passive: true });
+    el.addEventListener('click', (e) => {
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12 || performance.now() - down.t > 800) return;
+      if (posterAt(camera, el, e.clientX, e.clientY, getCar())) window.open(POSTER_URL, '_blank', 'noopener');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const now = performance.now();
+      if (now - hoverT > 120) { hoverT = now; const was = over; over = !!posterAt(camera, el, e.clientX, e.clientY, getCar()); if (was && !over) el.style.cursor = ''; }
+      if (over) el.style.cursor = 'pointer';                   // (after the hologram's own hover, which clears it)
+    }, { passive: true });
+  }
+
   return {
     update,
+    bindClicks,
+    posterAt,
     stops: STOPS,
     info: () => ({ stops: STOPS.length, loaded: [...live.values()].reduce((n, r) => n + r.stops.length, 0), active: active.size }),
   };

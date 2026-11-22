@@ -1,16 +1,33 @@
-// The posters in the bus shelters (Martin, 20 Nov: "vary the advertisings, think of some fun ads"): fifteen
+// The posters in the bus shelters (Martin, 20 Nov: "vary the advertisings, think of some fun ads"): eleven
 // made-up adverts in the game's vaporwave look plus the timetable, painted once into one small atlas
-// (4 x 4 cells, under 1 Mpx so phones keep it as it is). No real shops or brands.
+// (4 x 4 cells, under 1 Mpx so phones keep it as it is). No real shops or brands, but one: the TOREPOOD
+// poster (Martin, 22 Nov), a young artist's shop on Yaga, four cells big in the bottom right corner. It is
+// a picture of its own (public/yaga-torepood.webp, 416 x 592, painted from the shop's own drawings by
+// yaga-poster/src/poster.js in the project's shared files) drawn into the atlas, so it costs no texture
+// of its own. Every shelter shows it on the face towards the buses that come; clicking or tapping it
+// opens the shop (bindClicks in busstops.js).
 import * as THREE from 'three';
 
 export const AD_COLS = 4, AD_ROWS = 4, AD_W = 208, AD_H = 296;
-export const AD_COUNT = 15;          // cells 0..14 are adverts
-export const TIMETABLE = 15;         // the last cell is the timetable
+export const AD_COUNT = 11;          // the made-up adverts
+export const TIMETABLE = 11;         // the timetable
+export const POSTER = 12;            // the TOREPOOD poster, cells 10, 11, 14 and 15
+export const POSTER_URL = 'https://www.yaga.ee/torepood-2';
+const CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13];   // atlas cell of each advert and the timetable
+// loaded from the start; main.js waits for it (a little) before anything paints the atlas
+let posterImg = new Image();
+posterImg.src = '/yaga-torepood.webp';
+export const adsReady = posterImg.decode().catch(() => {});
+function drawPoster(g) {
+  g.drawImage(posterImg, 2 * AD_W, 2 * AD_H, 2 * AD_W, 2 * AD_H);
+  posterImg = null;                  // (the atlas holds it now)
+}
 
 // texture coordinates of cell k: [u0, v0, u1, v1] (v up, the canvas is not flipped twice)
 export function adCell(k) {
-  const c = k % AD_COLS, r = Math.floor(k / AD_COLS);
   const pad = 1.5;
+  if (k === POSTER) return [(2 * AD_W + pad) / (AD_COLS * AD_W), 1 - (4 * AD_H - pad) / (AD_ROWS * AD_H), (4 * AD_W - pad) / (AD_COLS * AD_W), 1 - (2 * AD_H + pad) / (AD_ROWS * AD_H)];
+  const c = CELLS[k] % AD_COLS, r = Math.floor(CELLS[k] / AD_COLS);
   return [(c * AD_W + pad) / (AD_COLS * AD_W), 1 - ((r + 1) * AD_H - pad) / (AD_ROWS * AD_H), ((c + 1) * AD_W - pad) / (AD_COLS * AD_W), 1 - (r * AD_H + pad) / (AD_ROWS * AD_H)];
 }
 
@@ -333,8 +350,8 @@ export function adAtlas() {
   const cv = document.createElement('canvas');
   cv.width = AD_COLS * AD_W; cv.height = AD_ROWS * AD_H;
   const g = cv.getContext('2d');
-  for (let k = 0; k < AD_COLS * AD_ROWS; k++) {
-    const c = k % AD_COLS, r = Math.floor(k / AD_COLS);
+  for (let k = 0; k <= TIMETABLE; k++) {
+    const c = CELLS[k] % AD_COLS, r = Math.floor(CELLS[k] / AD_COLS);
     g.save();
     g.translate(c * AD_W, r * AD_H);
     g.beginPath(); g.rect(0, 0, AD_W, AD_H); g.clip();
@@ -345,5 +362,8 @@ export function adAtlas() {
   atlas = new THREE.CanvasTexture(cv);
   atlas.colorSpace = THREE.SRGBColorSpace;
   atlas.anisotropy = 4;
+  if (posterImg?.complete && posterImg.naturalWidth) drawPoster(g);
+  // (a very slow network: the poster goes in when it comes, one upload of the atlas)
+  else if (posterImg) { const t = atlas; adsReady.then(() => { if (posterImg?.naturalWidth) { drawPoster(g); t.needsUpdate = true; } }); }
   return atlas;
 }

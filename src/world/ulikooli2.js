@@ -6,8 +6,8 @@
 //    The pink wings behind it get their own plain fronts.
 //  - The forecourt: the old stone wall along the pavement with its granite posts and chains, the lawn behind it,
 //    gravel up to the house, the steps, bike hoops, benches, two flower pyramids and two lanterns.
-//  - Opposite: Ülikooli 13 (pale pink, the iron balcony), 15 (pink, the red awning), 17 and 19 (cream with white
-//    strips between dark windows).
+//  - Opposite: Ülikooli 13 (pale pink, the iron balcony), 15 (pink, the red awning), 17 (cream with white strips
+//    between dark windows) and 19 at the Gildi corner (yellow under white ornament, arched windows, a balcony).
 // Window counts follow the shots where they show; the back walls are guessed. No street name on the road, and
 // nothing stands on the carriageway (the cars parked along the kerb in the shots are left out for that reason).
 //
@@ -48,8 +48,10 @@ function mainWall(P, W, xs) {
 }
 function mainSide(P, W) {
   if (W.foot > 12) { P.r(0, P.y0, W.len, P.y1, '#c5cad2'); return; }           // the boxes on the roof
-  if (W.peak < 11.6) return classic(P, W, { wall: '#eab8a7', plinth: [1.0, '#cdb3a8'], ground: [4.3, '#c9c6c4', true], floors: [[1.9, 1.8], [5.5, 2.2]], pitch: 3.4, w: 1.2, seed: 43 });   // the pink wings behind
-  mainWall(P, W, axes(0, W.len, Math.max(1, Math.round((W.len - 0.8) / 3.5))));
+  // the two ends are as the front; the yard side and the wings are pink between white bands (Jakobi, the air photos)
+  const end = Math.abs(W.nz) > 0.9 && W.len > 20 && W.peak > 14 && (W.mid[1] > 2779 || W.mid[1] < 2712), tall = W.peak > 11.6;
+  if (W.nx > 0.5 || end) return mainWall(P, W, axes(0, W.len, Math.max(1, Math.round((W.len - 0.8) / 3.5))));
+  classic(P, W, { wall: '#ebbbae', plinth: [1.0, '#cbb5ab'], ground: tall ? [4.9, '#d9c9c2', true] : [4.3, '#c9c6c4', true], floors: tall ? [[2.1, 2.0], [6.0, 2.6], [10.4, 2.0]] : [[1.9, 1.8], [5.5, 2.2]], belts: tall ? [9.3] : [], pitch: 3.4, w: 1.25, seed: 43, cornice: tall ? 1.2 : 0.5 });
 }
 function porch(P, W) {
   const len = W.len, pk = W.peak, e = Math.min(W.eaves, pk - 2.5), arch = e - 2.1, ped = 2.3;
@@ -102,6 +104,20 @@ function paabelFront(P, W) {                                                // �
   P.r(d - 0.9, P.y0, d + 0.9, 3.4, STRIP); P.arc(d, 3.4, 0.9, STRIP, Math.PI, Math.PI * 2);        // the arched doorway
   P.r(d - 0.7, P.y0, d + 0.7, 3.4, '#4a3328'); P.arc(d, 3.4, 0.7, '#3d4450', Math.PI, Math.PI * 2); P.r(d - 0.012, P.y0, d + 0.012, 3.4, '#2f211b');
 }
+function gildi1Front(P, W) {                                                // Ülikooli 19, the corner of Gildi: yellow under white ornament
+  if (W.len < 14 || W.foot > 2.5 || W.eaves < 9.5) return classic(P, W, { wall: '#e6d8a6', plinth: [1.0, '#a9aeb6'], floors: [[1.8, 2.3], [6.3, 2.5]], belts: [5.0], pitch: 3.2, w: 1.2, seed: 55 });
+  const len = W.len, top = Math.min(P.y1, W.eaves + 0.05), n = Math.max(3, Math.round(len / 3.2)), xs = axes(0, len, n), b = xs[Math.floor(n / 2)];
+  P.r(0, P.y0, len, P.y1, '#e6d8a6'); if (W.front) P.weather(0, P.y0, len, P.y1, 0.2, 55);
+  P.r(0, 1.0, len, 5.0, '#f1ede2'); bands(P, 0, len, 1.0, 5.0, 0.5, 'rgba(120,110,90,0.25)'); P.r(0, 5.0, len, 5.3, WHT); P.r(0, P.y0, len, 1.0, '#a9aeb6');
+  for (const x of xs) {                                                     // arched windows below, tall ones between white columns above
+    P.r(x - 0.6, 1.7, x + 0.6, 3.6, '#3d4450'); P.arc(x, 3.6, 0.6, '#3d4450', Math.PI, Math.PI * 2); P.r(x - 0.03, 1.7, x + 0.03, 4.2, WHT);
+    P.win(x - 0.6, 6.4, x + 0.6, 9.0, { frame: WHT, glass: '#3d4450', bars: 1, rails: 1, surround: 0.16, sc: WHT, hood: 0.2 });
+    P.r(x - 1.25, 5.3, x - 1.0, top - 1.0, WHT); P.r(x + 1.0, 5.3, x + 1.25, top - 1.0, WHT);
+  }
+  P.r(0, top - 1.0, len, top, WHT); for (let x = 0.3; x < len - 0.3; x += 0.6) P.r(x, top - 1.0, x + 0.22, top - 0.6, '#d9d2bd');     // the bracket cornice
+  P.r(0, top - 0.12, len, top, '#6b4a3c');
+  P.r(b - 1.7, 5.3, b + 1.7, 5.55, '#f4f1e8'); for (let x = b - 1.65; x < b + 1.7; x += 0.2) P.r(x, 5.55, x + 0.04, 6.4, '#2e2c2f'); P.r(b - 1.7, 6.4, b + 1.7, 6.47, '#2e2c2f');     // the balcony
+}
 const u15Side = (P, W) => classic(P, W, { wall: '#e9bfb4', plinth: [0.9, '#a9a6aa'], floors: [[1.6, 2.0], [5.4, 2.2], [9.2, 1.8]], pitch: 3.3, w: 1.15, seed: 53 });
 function u15Front(P, W) {                                                   // Ülikooli 15
   if (W.len < 14 || W.foot > 2.5) return u15Side(P, W);
@@ -129,7 +145,7 @@ const HOUSES = [
   ['kuutri4', 458, [1330, 2754], 25, 0xeddcd2, TIN, k4Side, [{ near: [1310.05, 2760.5], within: 3, only: k4Front, ppm: 18 }]],
   ['ulik15', 558, [1322, 2739], 16, 0xe9bfb4, TIN, u15Side, [{ near: [1307.0, 2742.8], within: 3, only: u15Front, ppm: 18 }]],
   ['paabel', 536, [1325, 2722], 26, 0xe7dcc3, TIN, paabelFront, [{ near: [1303.7, 2720.95], within: 3, only: paabelFront, ppm: 18 }]],
-  ['gildi1', 416, [1318, 2698], 22, 0xe7dcc3, TIN, paabelFront, [{ near: [1300.4, 2699.5], within: 3, only: paabelFront, ppm: 18 }]],
+  ['gildi1', 416, [1318, 2698], 22, 0xe6d8a6, TIN, gildi1Front, [{ near: [1300.4, 2699.5], within: 3, only: gildi1Front, ppm: 18 }]],
 ];
 const CENTRE = [1292, 2742];
 

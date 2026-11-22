@@ -299,6 +299,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     act,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
+    // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
+    // (Martin, 2026-11-22: from lights out, not only from the start line)
+    racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
     get holding() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null

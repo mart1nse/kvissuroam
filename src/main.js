@@ -1285,7 +1285,7 @@ keepAwake();
 for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, keepAwake, { passive: true });
 document.addEventListener('visibilitychange', () => {
   audio.setBackground?.(document.hidden);           // no engine noise from a tab or app in the background
-  if (document.hidden) return;
+  if (document.hidden) { mp?.setDriving(!!raceMode?.holding); return; }   // (no frames run in a hidden tab to tell the server)
   keepAwake();
   clock.reset?.();
   settle = 1.5;
@@ -1381,8 +1381,9 @@ function frame(ts) {
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
-  // counted for race votes by the same rule as the online list: on the map (not the menu or garage), page in view
-  mp.setDriving(mode === 'drive' && !document.hidden);
+  // counted for race votes by the same rule as the online list: on the map, page in view (off the map
+  // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
+  mp.setDriving((mode === 'drive' && !document.hidden) || !!raceMode?.holding);
   raceMode?.update(car, dt);
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }

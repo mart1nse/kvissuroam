@@ -291,7 +291,6 @@ export const CARS = {
       stallRpm: 3600,
       rollStallRpm: 4200,       // floored on the move it bites like a dropped clutch: higher revs, and the rears go up in smoke once the boost arrives
       converterGain: 1.7,
-      manualLaunch: true,       // ?launch=1: pulls away like a manual from idle, no converter (src/cars/physics.js)
     },
     // the 5-speed transaxle's ratios; the final figure includes the drop gears
     gears: [2.77, 1.71, 1.23, 0.96, 0.77],

@@ -23,6 +23,7 @@ import { areaKit } from './handbuilt.js';
 import { createTrack } from '../race/race.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
+import { breakableFence } from './breakfence.js';
 
 const DEBUG = typeof location !== 'undefined' && /veskidebug/.test(location.search);
 const SEC = { '2_5': [480, 2400], '2_6': [480, 3040] };
@@ -219,6 +220,15 @@ const KINDS = {
   // a low black rail round the park ("36 Veski", "40 Veski")
   rail: [0.95, 1.0, (P) => { for (let x = 0.03; x < 1; x += 0.14) P.r(x, 0, x + 0.025, 0.9, '#2a2a2e'); P.r(0, 0.85, 1, 0.92, '#2a2a2e'); P.r(0, 0.15, 1, 0.2, '#2a2a2e'); }],
 };
+// the kinds a car can knock down panel by panel (src/world/breakfence.js; Martin, 22 Nov: the white pickets
+// in front of Veski 20, with a light sound of snapping wood): one panel between two posts, `panel` metres wide
+const BREAKS = {
+  green: (P, panel, hh) => {
+    for (let x = 0.07; x < panel - 0.08; x += 0.12) P.poly([[x, 0.1], [x + 0.07, 0.1], [x + 0.07, hh - 0.05], [x + 0.035, hh], [x, hh - 0.05]], '#e4ecdc');
+    P.r(0, 0, panel, 0.12, '#8e9a8c'); P.r(0, 0.3, panel, 0.36, '#cfdac8'); P.r(0, 0.9, panel, 0.96, '#cfdac8');
+    P.r(0, 0.05, 0.06, hh - 0.02, '#c4ceba');
+  },
+};
 // [side (1 right, -1 left in the lap's direction), from, to (track points), metres beyond the road edge, kind, pillars { every, w, h, c }]
 const PILLAR = { brick: { w: 0.55, h: 2.0, c: 0x9a5a44, cap: 0x8a8a86 }, white: { w: 0.45, h: 1.45, c: 0xece8e2, cap: 0xe0dcd6 }, stone: { w: 0.45, h: 1.5, c: 0x8e8a86, cap: 0x7a7672 } };
 const FENCES = {
@@ -249,6 +259,7 @@ function fenceTextures() {
   if (textures) return textures;
   textures = {};
   for (const [k, [hh, tw, draw]] of Object.entries(KINDS)) {
+    if (BREAKS[k]) continue;                 // (its own panel picture: src/world/breakfence.js)
     const t = paintTexture(tw, 0, hh, 96, (P) => draw(P, tw, hh), { repeat: true, alpha: true });
     textures[k] = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide });
   }
@@ -320,6 +331,7 @@ export function createVeskiFronts(scene, world, { shadows = true } = {}) {
     for (const [side, i0, i1, off, kind, pil] of FENCES[key]) {
       const [hh, tw] = KINDS[kind], B = (buckets[kind] ||= { pos: [], uv: [] });
       for (const pts of runs(side, i0, i1, off)) {
+        if (BREAKS[kind]) { breakableFence(world, group, pts, { h: hh, draw: BREAKS[kind], label: 'veski fence ' + kind }); continue; }
         let u = 0;
         for (let k = 0; k < pts.length - 1; k++) {
           const a = pts[k], b = pts[k + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);

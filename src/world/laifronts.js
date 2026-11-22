@@ -24,6 +24,7 @@ import { Parts } from '../race/landmarks.js';
 import { createTrack } from '../race/race.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
+import { breakableFence } from './breakfence.js';
 
 const S25 = ['2_5', 480, 2400], S35 = ['3_5', 1120, 2400], S34 = ['3_4', 1120, 1760];
 const CENTRE = [1190, 2520];
@@ -246,7 +247,7 @@ const FENCES = [
 // 10 m out in front of the tree, ending flush with the white house's front). Panel corners of about 1.6 m along a curve
 // from the timber house's corner, bending out by the pavement to the white house's corner on Lai; each panel is its own
 // piece that flies off when hit.
-const CORNER = { h: 0.9, panel: 1.6, pts: [[1056.3, 2627.4], [1057.87, 2627.3], [1059.43, 2627.1], [1060.97, 2626.8], [1062.49, 2626.37],
+const CORNER = { h: 0.9, pts: [[1056.3, 2627.4], [1057.87, 2627.3], [1059.43, 2627.1], [1060.97, 2626.8], [1062.49, 2626.37],
   [1063.96, 2625.82], [1065.38, 2625.15], [1066.79, 2624.44], [1068.17, 2623.69], [1069.52, 2622.89], [1070.81, 2621.98], [1072.0, 2620.96],
   [1073.08, 2619.81], [1074.04, 2618.57], [1074.9, 2617.25]] };
 const WALLS = { brick: [0xa65a48, 0x8e4c3e], white: [0xf1eee8, 0xb4604c], pink: [0xeab3a4, 0xd9a090] };   // [wall, cap]
@@ -347,82 +348,18 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
   }
 
 
-  // ---- the breakable picket fence round the corner (an InstancedMesh: a panel is one instance)
-  const corner = { mesh: null, panels: [], flying: 0, at: null };
+  // ---- the breakable picket fence round the corner (src/world/breakfence.js: a panel is one instance)
   function* cornerFence() {
-    const { h: H, panel, pts } = CORNER, n = pts.length - 1;
-    const tex = paintTexture(panel, 0, H, 128, (P) => {
+    const F = breakableFence(world, group, CORNER.pts, { h: CORNER.h, label: 'lai corner fence', draw: (P, panel, H) => {
       for (let x = 0.04; x < panel - 0.05; x += 0.13) { P.r(x, 0.04, x + 0.08, H - 0.07, '#a9a7a2'); P.poly([[x, H - 0.07], [x + 0.08, H - 0.07], [x + 0.04, H - 0.01]], '#a9a7a2'); }
       P.r(0, 0.17, panel, 0.24, '#8f8d88'); P.r(0, H - 0.3, panel, H - 0.23, '#8f8d88');
       P.r(0, 0, 0.08, H, '#7f7d78');
-    }, { alpha: true });
-    const geo = new THREE.PlaneGeometry(panel, H).translate(0, H / 2, 0);
-    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide }), n);
-    const m4 = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-    for (let k = 0; k < n; k++) {
-      const p0 = pts[k], p1 = pts[k + 1], l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-      const ux = (p1[0] - p0[0]) / l, uz = (p1[1] - p0[1]) / l, mx = (p0[0] + p1[0]) / 2, mz = (p0[1] + p1[1]) / 2;
-      const y = Math.min(world.heightAt(p0[0], p0[1]), world.heightAt(p1[0], p1[1]));
-      const yaw = Math.atan2(-uz, ux);
-      const pn = { p0, p1, mx, mz, y, yaw, sx: l / panel, down: false, rest: false, pos: [mx, y, mz], v: [0, 0, 0], ang: 0, spin: 0, tilt: 0 };
-      qt.setFromAxisAngle(up, yaw);
-      mesh.setMatrixAt(k, m4.compose(new THREE.Vector3(mx, y, mz), qt, new THREE.Vector3(pn.sx, 1, 1)));
-      corner.panels.push(pn);
-    }
-    mesh.computeBoundingSphere();
-    mesh.receiveShadow = true;
-    corner.mesh = mesh;
-    corner.at = pts[n >> 1];
-    if (typeof window !== 'undefined') window.__laiCorner = corner;      // (for tests: panels, which are down)
-    group.add(mesh);
+    } });
+    if (typeof window !== 'undefined') window.__laiCorner = F;      // (for tests: panels, which are down)
     yield;
-  }
-  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _ax = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-  function tick(car, dt) {
-    const C = corner;
-    if (!C.mesh || !car) return;
-    if (!C.flying && Math.hypot(car.x - C.at[0], car.z - C.at[1]) > 30) return;
-    dt = Math.min(dt || 0.016, 0.05);
-    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
-    const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz, speed = Math.hypot(wvx, wvz);
-    const inside = (x, z) => { const dx = x - car.x, dz = z - car.z, l = dx * fx + dz * fz, t = dx * rx + dz * rz; return Math.abs(l) < (car.halfLen || 2.2) + 0.15 && Math.abs(t) < (car.halfWid || 0.9) + 0.15; };
-    let moved = false;
-    for (let k = 0; k < C.panels.length; k++) {
-      const p = C.panels[k];
-      if (!p.down) {
-        if (speed < 0.8 || Math.abs((car.y ?? p.y) - p.y) > 2.5) continue;
-        if (!inside(p.p0[0], p.p0[1]) && !inside(p.p1[0], p.p1[1]) && !inside(p.mx, p.mz)) continue;
-        // knocked off its posts: thrown the way the car goes, tumbling
-        p.down = true; C.flying++;
-        const push = 0.55 + Math.random() * 0.25;
-        p.v = [wvx * push + (Math.random() - 0.5) * 1.5, 1.2 + Math.min(speed, 20) * 0.12 + Math.random(), wvz * push + (Math.random() - 0.5) * 1.5];
-        p.spin = (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 5); p.tilt = (Math.random() - 0.5) * 0.8;
-        car.hit = Math.max(car.hit || 0, Math.min(2.5, speed * 0.08));
-        car.vx *= 0.985;
-      }
-      if (p.rest) continue;
-      p.v[1] -= 9.81 * dt;
-      p.pos[0] += p.v[0] * dt; p.pos[1] += p.v[1] * dt; p.pos[2] += p.v[2] * dt;
-      p.ang += p.spin * dt;
-      p.yaw += p.tilt * dt;
-      const g = world.heightAt(p.pos[0], p.pos[2]) + 0.03;
-      if (p.pos[1] < g) {
-        p.pos[1] = g; p.v[1] *= -0.2; p.v[0] *= 0.5; p.v[2] *= 0.5; p.spin *= 0.5;
-        if (Math.abs(p.v[1]) < 0.5 && Math.hypot(p.v[0], p.v[2]) < 0.3) { p.rest = true; p.ang = Math.PI / 2 * Math.sign(Math.sin(p.ang) || 1); C.flying--; }
-      }
-      // turned to its heading, then tumbling round its own length
-      _q.setFromAxisAngle(_up, p.yaw);
-      _ax.set(1, 0, 0).applyQuaternion(_q);
-      _q2.setFromAxisAngle(_ax, p.ang);
-      _q2.multiply(_q);
-      C.mesh.setMatrixAt(k, _m.compose(_v.set(p.pos[0], p.pos[1], p.pos[2]), _q2, _s.set(p.sx, 1, 1)));
-      moved = true;
-    }
-    if (moved) { C.mesh.instanceMatrix.needsUpdate = true; C.mesh.frustumCulled = C.flying === 0; if (!C.flying) C.mesh.computeBoundingSphere(); }
   }
 
   return {
-    tick,
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 420) return;

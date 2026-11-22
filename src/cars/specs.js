@@ -280,9 +280,9 @@ export const CARS = {
         fullRpm: 4300,          // ...and can reach 1.1 bar from here
         spool: 1.6,             // spool-up rate (1/s) at the redline, slower at low revs: the famous lag
         dump: 9,                // the wastegate / blow-off dumps boost almost at once when you lift
-        // blow-off valves open to the air: a loud pssh that often chatters out in chunks, and a quick
-        // tsh-tsh on an upshift on boost (src/audio-turbo.js)
-        bov: { kind: 'vent', level: 1, chunks: 1, flutter: 0.15, shiftChirp: 0.45 },
+        // blow-off valves open to the air: a loud pssh that often chatters out in chunks, and a short
+        // one in the gap of an upshift on boost (src/audio-turbo.js)
+        bov: { kind: 'vent', level: 1, chunks: 1, flutter: 0.15, shift: 1.6 },
       },
       stallRpm: 3600,
       rollStallRpm: 4200,       // floored on the move it bites like a dropped clutch: higher revs, and the rears go up in smoke once the boost arrives
@@ -522,7 +522,7 @@ export const CARS = {
         spool: 2.4,
         dump: 6,
         whistle: 0.35,
-        bov: { kind: 'recirc', level: 0.5, flutter: 0 },
+        bov: { kind: 'recirc', level: 0.5, flutter: 0, shift: 0 },   // an automatic: no lift, so no blow-off on its upshifts
       },
       stallRpm: 1300,           // torque converter
       converterGain: 1.6,

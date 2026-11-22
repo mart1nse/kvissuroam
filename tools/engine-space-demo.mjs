@@ -10,13 +10,14 @@
 // Run: NODE_PATH=$(npm root -g) node tools/engine-space-demo.mjs <outdir> [carIds] [--worklet=<old worklet>] [--dry]
 //   writes <outdir>/<id>.wav (stereo). --dry leaves the space out (with --worklet: the "before" clip).
 //   --turbo: a run with lifts on boost (a long one, quick ones, a coast) and the turbo sounds as audio.js
-//   plays them: blow-off and upshift chirps from src/audio-turbo.js, the whistle in the synth.
+//   plays them: blow-off and the upshift blow-off from src/audio-turbo.js, the whistle in the synth.
 //   --turbo=old: the turbo sounds before that (a sine whistle and a single pssh), for the "before" clip
 //   (with --worklet= the synth from before the whistle moved into it).
 //   --shift: floored to 200 km/h, braked hard to 60 (the automatic coming down), pulled up again, then Z
 //   three times in a quick row off the throttle (the last one past the redline) and coasting on the engine,
 //   with the downshift sounds as audio.js plays them (src/audio-shift.js); --shift=old without them (for
 //   the "before" clip, with the old physics.js and --worklet= in place).
+//   --noshiftbov: no blow-off in the gap of an upshift on boost (shiftBlowOff), for a "before" clip.
 //   --drone: the camera where the drone view (C) puts it, 35-55 m up and back, and the space told how far
 //   off it is (setFar), as audio.js does.
 //   --donut: full lock and full throttle, the engine bouncing off its limiter, a lift, and again.
@@ -55,6 +56,7 @@ const { SPIN_LEVEL, spinAmount } = await import('../src/audio.js').catch(() => (
 const TYRES = flag('tyres') ? Number(val('tyres') || SPIN_LEVEL || 0.05) : 0;
 const TURBO = flag('turbo') ? val('turbo') || 'new' : flag('shift') ? 'new' : null;
 const DRONE = !!flag('drone');
+const NOSHIFTBOV = !!flag('noshiftbov');   // no blow-off on upshifts (the "before" clip for 22 Nov)
 const SHIFT = flag('shift') ? val('shift') || 'new' : null;
 const { createShiftSound } = SHIFT === 'new' || DONUT || BURNOUT ? await import('../src/audio-shift.js') : {};
 const { revRoom } = await import('../src/audio-space.js');
@@ -220,7 +222,7 @@ for (const id of ids) {
         tWh.push(t, 1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), 0.016 * b * b * (tb.whistle ?? 1));
         if (car.throttle > 0) {
           lastBoost = Math.max(lastBoost * 0.99, b);
-          if (TURBO !== 'old' && car.shiftCut && !wasShift && b > 0.5) tEv.push({ t, k: 'chirp', P: b });
+          if (TURBO !== 'old' && car.shiftCut && !wasShift && b >= 0.15 && !NOSHIFTBOV) { tEv.push({ t, k: 'shift', P: b }); if ((tb.bov?.shift ?? 1.4) > 0 && tb.bov?.kind !== 'diesel') lastPsh = t; }
         } else {
           if (TURBO === 'old' && lastBoost > 0.5 && t - lastPsh > 0.6) { tEv.push({ t, k: 'psh', P: lastBoost * (tb.whistle ?? 1) }); lastPsh = t; }
           if (TURBO !== 'old' && lastBoost > 0.3 && t - lastPsh > 0.4) { tEv.push({ t, k: 'bov', P: lastBoost }); lastPsh = t; }
@@ -338,8 +340,8 @@ for (const id of ids) {
           src.connect(f).connect(g2).connect(bus); src.start(t, rnd()); src.stop(t + 0.45);
         }
       } else {
-        const { blowOff, shiftChirp } = await import('/src/audio-turbo.js');
-        for (const e of TB.ev) (e.k === 'bov' ? blowOff : shiftChirp)(ctx, noise, bus, e.P, TB.bov, rnd, e.t + 0.005);
+        const { blowOff, shiftBlowOff } = await import('/src/audio-turbo.js');
+        for (const e of TB.ev) (e.k === 'bov' ? blowOff : shiftBlowOff)(ctx, noise, bus, e.P, TB.bov, rnd, e.t + 0.005);
       }
       log.push(`turbo events: ${TB.ev.map((e) => `${e.k} ${e.t.toFixed(2)} s P ${e.P.toFixed(2)}`).join(', ')}`);
     }

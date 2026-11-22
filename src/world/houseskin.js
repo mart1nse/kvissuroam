@@ -378,6 +378,7 @@ export function paintWall(P, W, spec, over = {}, H = {}) {
   const top = P.y1, low = P.y0;
   // cladding
   if (spec.kind === 'brick') P.brick(0, low, len, top, wall, seed);
+  else if (spec.kind === 'smooth') P.r(0, low, len, top, css(wall));          // fresh render: one fill (the plaster's hundreds of blotches made a 60 m wall one long painting step)
   else if (spec.kind === 'stone') P.rubble(0, low, len, top, seed);
   else if (spec.kind === 'plaster') {
     P.r(0, low, len, top, css(wall));

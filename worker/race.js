@@ -37,6 +37,23 @@ export class RaceDesk {
   }
   save() { this.lobby.setMeta('race', JSON.stringify(this.s)); }
 
+  // Race stats for /stats (Martin 2026-11-22): votes are counted here and sent to the stats object
+  // with each race as it closes, or with the votes that lapsed. One small message per race, no names.
+  count(k) { const vc = (this.s.vc ||= {}); vc[k] = (vc[k] || 0) + 1; }
+  report(race) {
+    const votes = this.s.vc || {};
+    this.s.vc = {};
+    try { this.lobby.raceStat?.({ v: 1, votes, ...race }); } catch { /* stats are never worth a race */ }
+  }
+  // start votes older than VOTE_MS are dropped (they no longer count) and counted as lapsed
+  lapse(now) {
+    let n = 0;
+    for (const [id, v] of Object.entries(this.s.votes)) if (now - v.t >= VOTE_MS) { delete this.s.votes[id]; if (v.k === 'start') n++; }
+    if (!n) return;
+    for (let i = 0; i < n; i++) this.count('lapsed');
+    if (this.s.phase !== 'on') this.report({});
+  }
+
   // a socket that has neither pinged nor said hello for 80 s is a page that went to sleep (see prune
   // in index.js, which only runs when someone joins): it must not be counted for a vote
   live(ws, a, now = Date.now()) {
@@ -121,6 +138,11 @@ export class RaceDesk {
   close(why, now = Date.now()) {
     const s = this.s;
     if (s.phase !== 'on') return;
+    // for /stats: how it went (called off before the lights: only that)
+    this.report(now >= s.tGreen ? {
+      ran: true, end: why, at: s.tGreen,
+      racers: s.racers.map((r) => ({ car: r.car, ms: r.ms ?? null, out: r.ms != null ? null : r.out || (why === 'restart' ? 'restart' : 'time'), late: r.late ? 1 : 0 })),
+    } : { ran: false });
     for (const r of s.racers) if (r.ms == null && !r.out) r.out = why === 'restart' ? 'quit' : 'time';
     const results = s.racers.filter((r) => s.tGreen && now >= s.tGreen);
     // (a race nobody finished, e.g. cancelled by its only driver, leaves the last results as they were)
@@ -143,6 +165,7 @@ export class RaceDesk {
   // online, two voted, one leaves: fine to race; but three online, only his vote in, one left and he was
   // racing alone): a lone voter sees START NOW and presses once more.
   tally(now, by) {
+    this.lapse(now);
     const b = this.ballot(now);
     if (b.kind === 'none' || !b.of) return false;
     const ids = Object.entries(this.s.votes).filter(([id, v]) => v.k === b.kind && b.voters.has(id) && now - v.t < VOTE_MS).map(([id]) => id);
@@ -172,6 +195,8 @@ export class RaceDesk {
         if (me.ghost) return true;
         const b = this.ballot(now);
         if (!b.voters.has(me.id)) { this.sendTo(ws); return true; }
+        this.lapse(now);
+        if (m.on && this.s.votes[me.id]?.k !== b.kind) this.count(b.kind);
         if (m.on) this.s.votes[me.id] = { k: b.kind, t: now }; else delete this.s.votes[me.id];
         if (m.on) this.tally(now, me.id);
         this.save(); this.send();

@@ -1378,7 +1378,8 @@ function frame(ts) {
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
-  mp.setDriving((mode === 'drive' || drivenOnce) && !document.hidden);
+  // counted for race votes by the same rule as the online list: on the map (not the menu or garage), page in view
+  mp.setDriving(mode === 'drive' && !document.hidden);
   raceMode?.update(car, dt);
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }

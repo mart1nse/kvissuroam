@@ -672,6 +672,7 @@ async function boot() {
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
     hotlap: () => (!!race?.running && mode === 'drive') || !!raceMode?.ghost,
+    racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
   });
@@ -1681,7 +1682,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

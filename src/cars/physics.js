@@ -344,6 +344,9 @@ function engineForce(car, throttle, dt, hb = 0) {
     // way from the drop revs up to the shift point; 22B 0.15, 200 Avant 0.3, Martin 2026-11-23)
     const slipTo = clutchSlip || e.clutchSlip === true ? Lslip : e.clutchSlip > 0 ? Math.max(Lslip, L + (e.shiftRpm - L) * e.clutchSlip) : 0;
     if (slipTo > 0 && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (slipTo - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
+    // (reversing every car slips its clutch at up to the drop revs as the throttle opens, or it crawled back off
+    // idle, Martin 2026-11-23)
+    if (car.reversing && throttle > 0) stall = Math.max(stall, e.idle + (L - e.idle) * throttle);
   }
   // The handbrake with the clutch (engine.hbRevs, a rally car's handbrake turn): pulling the handbrake
   // takes the drive off, as the driver's left foot would, so the engine no longer falls with the road

@@ -18,6 +18,7 @@ import { createSetup } from './controls/setup.js';
 import { createAudio } from './audio.js';
 import { createTrackKerbs } from './race/trackkerbs.js';
 import { updateShelters } from './world/shelter.js';
+import { updateFences } from './world/breakfence.js';
 import { createHud } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
@@ -1412,7 +1413,7 @@ function frame(ts) {
     if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
     vabadusLights.update(performance.now() / 1000);          // clock time: the lights fade at their own pace
     discgolf.update(car, dt);
-    laiFronts.tick(car, dt);                                  // (the breakable picket fence at the Jakobi to Lai turn)
+    updateFences(car, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
     // The hand-made places build themselves when the car comes near. One at a time while driving: after one
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.

@@ -181,6 +181,43 @@ export function createAudio() {
     }
   }
 
+  // a wooden picket fence knocked down (src/world/breakfence.js; Martin 2026-11-22: a slight breaking sound):
+  // 'snap' the dry crack of the panel tearing off its posts, a few splinters and the hollow knock of the
+  // boards; 'land' the soft clack of a panel hitting the pavement. level 0..1.3 from the speed.
+  function wood(kind, level = 1) {
+    if (!ctx || ctx.state !== 'running' || !noiseBuf) return;
+    const t = ctx.currentTime + 0.005, L = Math.max(0.15, Math.min(1.3, level));
+    const burst = (at, dur, type, freq, q, gain) => {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = noiseBuf; f.type = type; f.frequency.value = freq; f.Q.value = q;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(gain, at + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      src.connect(f).connect(g).connect(bus);
+      src.start(at, Math.random()); src.stop(at + dur + 0.02);
+    };
+    const knockAt = (at, f0, f1, dur, gain) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f0, at);
+      o.frequency.exponentialRampToValueAtTime(f1, at + dur);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(gain, at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g).connect(bus);
+      o.start(at); o.stop(at + dur + 0.02);
+    };
+    if (kind === 'snap') {
+      burst(t, 0.07, 'bandpass', 2100 + Math.random() * 500, 1.3, 0.2 * L);          // the crack
+      knockAt(t, 260 + Math.random() * 60, 150, 0.09, 0.09 * L);                      // the boards
+      const n = 3 + Math.round(2 * L);
+      for (let k = 0; k < n; k++) burst(t + 0.015 + Math.random() ** 1.5 * 0.16, 0.012 + Math.random() * 0.012, 'bandpass', 2800 + Math.random() * 2600, 3, (0.04 + Math.random() * 0.05) * L);
+    } else {
+      burst(t, 0.04, 'bandpass', 900 + Math.random() * 300, 2, 0.06 * L);
+      knockAt(t, 330 + Math.random() * 80, 210, 0.06, 0.04 * L);
+    }
+  }
+
   // air brakes: the long, low hiss of the valves venting once a bus has braked to a stop
   function airPsh() {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -476,7 +513,7 @@ export function createAudio() {
   }
 
   return {
-    start, update, updateRemotes, updateSpace, chime, putt, smash,
+    start, update, updateRemotes, updateSpace, chime, putt, smash, wood,
     setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {

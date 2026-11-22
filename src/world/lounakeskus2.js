@@ -197,7 +197,7 @@ export function createLounakeskus2(scene, world, { shadows = true } = {}) {
     const { p, h } = A;
     const houses = HOUSES.map(([name, S, base, at0, r]) => ({ name, sec: S[0], base, at: at0, r, spec: { wall: [200, 200, 200], floors: [], attic: null, eaves: false } }));
     for (const H of houses) { const paint = PAINT[H.name]; H.walls = [{ near: [0, 0], within: 1e9, only: (P, W) => paint(P, W) }]; }
-    skinHouses(world, group, houses, { shadows, ppm: 9, far: 5, faces: (W) => W.foot < 2 && W.len > 15, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'lounakeskus2 fronts', shadows, ppm: 9, far: 5, faces: (W) => W.foot < 2 && W.len > 15, debug: DEBUG });
 
     const dark = new THREE.MeshLambertMaterial({ color: 0x2b2c30 });
     const tall = (x, z, w, hh, d, tex, yaw) => {

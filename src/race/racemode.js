@@ -204,7 +204,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (ph === 'race' && !isTouch) line += ' · RACE STILL ON';
       // drivers on the map the server does not count: a page from before race mode (it cannot vote
       // until it is reloaded)
-      const old = mp.players().length + (isDriving() && !mp.stealth ? 1 : 0) - v.of;
+      const old = mp.drivers().length + (mp.counted ? 1 : 0) - v.of;
       if (old > 0) line += isTouch ? ` · ${old} OLD PAGE${old > 1 ? 'S' : ''}` : ` · ${old} ON AN OLD PAGE`;
     } else {
       label = 'RACE ON'; cls = 'dim';
@@ -240,6 +240,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
 
     // the list: live during the race for racers, results after
     const live = ph === 'race' && mine;
+    // still racing: the live order, never an older race's results (Martin 2026-11-22: a LAST RACE list opened
+    // before the vote stayed up through his race)
+    if (live && active(mine) && finishedMs == null) showLast = false;
     if (live && !listOpen && finishedMs == null && !showLast && hidFor !== r.id) { listOpen = true; listUntil = Infinity; }
     if (listOpen && t > listUntil) { listOpen = false; showLast = false; }
     let rows = null, head = '', foot = '', compact = false;
@@ -273,7 +276,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     message(m) {
       const prevId = r?.id, prevLast = r?.last?.id, prevN = r?.vote?.ids?.length || 0;
       r = m;
-      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; }
+      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // someone started a vote: tell the others
       const v = r.vote, n = v?.ids?.length || 0;
       if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count') {
@@ -289,6 +292,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     act,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
+    // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
+    get holding() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
     get pin() { return pin; },
     // our lap timer finished a lap

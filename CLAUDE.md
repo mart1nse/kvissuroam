@@ -10,12 +10,19 @@ enough to make that happen at DRIVE.
   budget figure only with a reason in the commit. It measures a phone's memory (the iPhone 13 crashes)
   and drives 4.5 km through the centre counting how often and how long the game stands still (the
   freeze frames), and counts what the lowest graphics level draws at the Riia and Turu junction (old
-  laptops at 10 to 18 FPS, 21 Nov).
-  It takes about 6 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
+  laptops at 10 to 18 FPS, 21 Nov). It also drives a lap of the race track and counts the short hitches
+  (the page busy for over 25 ms, frames over 33 ms) and the pictures sent to the graphics card (the slight
+  microfreezes on a MacBook Pro M3 after a night of new house fronts along the track, 22 Nov).
+  It takes about 9 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
   it only prints that result (the last run is noted in the project's shared folder). Use `--force` when
   Martin asks, or when the change is likely to weigh a lot (a new painted street, a car model, hundreds
   of objects, a new place that builds itself on approach). Put the figures in the PR when you ran it.
   When a player meets a new kind of slowness, add a part to the check that would have caught it.
+- Short hitches count too (22 Nov: a fast computer notices a step of 15 ms). In a queued job, `yield 'frame'`
+  before a step that is long by its nature (a big wall to paint) gives it a frame of its own, and a step
+  that sends a picture with `jobs.upload` is that frame's last. House fronts along the track are painted at
+  18 pixels a metre, not the default 26 (`ppm` in the `skinHouses` options), and get a `label` there so the
+  test drive can say which place painted how much.
 - Painted canvases (house fronts, signs, walls, adverts): size them with `paintScale()` from
   `src/world/paintscale.js` (0.6 on phones and weak desktops), and share atlases instead of one canvas
   per wall. A 2048x2048 canvas is 16 MB in the browser and again on the graphics card.
@@ -68,7 +75,8 @@ The check also runs at night when main changed in the last 24 h; results go to t
 For the nightly run (and anyone reading its result):
 - The JSON's `checks` list has every figure with its budget, in order: the history table is that list.
   Worth a line in the summary: the phone total at DRIVE, and for both drives the times the game was busy
-  for over 0.1 s and the longest such stretch. A figure with no budget ("not judged") is only shown.
+  for over 0.1 s and the longest such stretch, and for the lap the times over 25 ms and the megapixels sent
+  to the graphics card. A figure with no budget ("not judged") is only shown.
 - A memory figure over: the script lists the biggest canvas makers. A drive figure over: it lists what
   the page was busy with in those stretches, with file and function names (`node tools/freeze-profile.cjs
   route=centre` on a dev server gives the whole list). The drive figures vary from run to run (the

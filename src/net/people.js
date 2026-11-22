@@ -38,7 +38,7 @@ export function createPeople({ mp, onFocus }) {
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}${myRec ? ` · ${myRec}` : ''}` : '';
     if (elMe.textContent !== nm) elMe.textContent = nm;
-    const drivers = mp.online ? mp.players() : [];
+    const drivers = mp.online ? mp.drivers() : [];
     const n = mp.online ? drivers.length + 1 : 0;
     const key = `${n}|${mp.name}|${drivers.map((p) => p.name + p.colour + mp.recordOf(p.name)).join('|')}`;
     if (key === last) return;

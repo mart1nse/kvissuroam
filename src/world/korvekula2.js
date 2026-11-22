@@ -155,7 +155,7 @@ export function createKorvekula2(scene, world, { shadows = true } = {}) {
     const debug = /kdebug/.test(location.search);
     // the school's spec `only: true` means: every wall is painted by its wall entry
     const list = houses().map((H) => (H.spec.only ? { ...H, spec: { kind: 'plaster', wall: [200, 200, 200] } } : H));
-    skinHouses(world, group, list, { shadows, ppm: 22, far: 12, debug });
+    skinHouses(world, group, list, { label: 'korvekula2 fronts', shadows, ppm: 22, far: 12, debug });
 
     // the flag poles by the track
     for (const [x, z] of [[3600.0, -2186.0], [3604.0, -2186.5], [3608.0, -2187.0]]) {

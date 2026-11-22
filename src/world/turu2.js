@@ -157,7 +157,7 @@ export function createTuru2(scene, world, { shadows = true } = {}) {
     built = true;
     const A = areaKit(world, group, { shadows });
     const houses = HOUSES.map(([name, S, base, at, r, , , pick]) => ({ name, sec: S[0], base, at, r, pick, spec: { wall: [200, 200, 200], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 13, far: 6, faces: (W) => W.foot < 2 && W.len > 8, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'turu2 fronts', shadows, ppm: 13, far: 6, faces: (W) => W.foot < 2 && W.len > 8, debug: DEBUG });
     const { p, h } = A;
     // the canopy over the car park's ground floor on Soola
     A.bar([1979.4, 3083.3], [2006, 3057], 1.6, 4.1, 4.4, 0xeeeeec);

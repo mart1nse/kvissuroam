@@ -241,7 +241,7 @@ export function createTuru3(scene, world, { shadows = true } = {}) {
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;
     const houses = HOUSES.map(([name, S, base, at, r, , , ppm]) => ({ name, sec: S[0], base, at, r, spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false, ppm }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 12, far: 6, faces: (W) => W.len > 5 && (W.foot < 2 || W.peak > 30 || W.len > 30), debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'turu3 fronts', shadows, ppm: 12, far: 6, faces: (W) => W.len > 5 && (W.foot < 2 || W.peak > 30 || W.len > 30), debug: DEBUG });
 
     // ---- the AHHAA plaza: the rocket on its red ring
     const R = [2108.5, 3191.5], gr = h(R[0], R[1]);

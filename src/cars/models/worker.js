@@ -17,8 +17,17 @@ const ready = import('./index.js').then(async (m) => ({ build: m.buildCarModel, 
 let bake = null;
 
 self.onmessage = async (e) => {
-  const { id, key, opts, parked } = e.data;
+  const { id, key, opts, parked, thin } = e.data;
   try {
+    if (thin) {
+      // a triangle list to thin for the page: a scanned body's far version (bakeLodSteps in src/world/parkedbake.js)
+      bake ||= import('../../world/parkedbake.js');
+      const B = await bake;
+      await B.simplifierReady();
+      const idx = B.thin(thin.index, thin.vp, thin.target);
+      self.postMessage({ id, key, data: idx }, idx.buffer === thin.index.buffer ? [] : [idx.buffer]);
+      return;
+    }
     const { build, serializeCar } = await ready;
     if (parked) {
       // a parked car: its near and far versions, finished (src/world/parkedbake.js)

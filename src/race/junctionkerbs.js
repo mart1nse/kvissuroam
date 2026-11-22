@@ -152,9 +152,12 @@ export function junctionOverPaint() {
 }
 
 // the kerb's height at (x, z): 0 past the ends of its line
+// (nothing is made on the way: every wheel asks this of every corner several times a frame, and the box taken
+// apart into four names plus a small function per call were 80 MB of garbage a lap, 22 Nov 2026)
+const sm = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 export function cornerAt(k, x, z) {
-  const [bx0, bz0, bx1, bz1] = k.box;
-  if (x < bx0 || x > bx1 || z < bz0 || z > bz1) return 0;
+  const box = k.box;
+  if (x < box[0] || x > box[2] || z < box[1] || z > box[3]) return 0;
   let best = Infinity, bj = -1, bt = 0;
   for (let j = 0; j < k.pts.length - 1; j++) {
     const a = k.pts[j], b = k.pts[j + 1], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1e-9;
@@ -168,7 +171,6 @@ export function cornerAt(k, x, z) {
   const s = k.acc[bj] + k.segL[bj] * tc;
   const w = k.w, b = k.b, e = k.edge;
   if (d <= 0 || d >= w + b) return 0;
-  const sm = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
   const taper = (k.taperA ? sm(s / 2) : 1) * (k.taperB ? sm((k.S - s) / 2) : 1);
   return k.hAt(s) * taper * sm(d / e) * (d > w ? sm((w + b - d) / b) : 1);
 }

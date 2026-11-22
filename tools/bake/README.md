@@ -52,6 +52,15 @@ scanned ground and rises to it), and its land ends get an earth bank.
 It can be run again on its own output (start from the committed data: a second run on top of a first one
 lets the banks near the water creep up a little). Check with `node tools/overpass-test.mjs --drive`, which walks every
 road near a deck for steps, ditches and obstacles and drives a car over and under each span.
+Roads over streams and ditches (`stream_crossings.py`, last, after `reheight.py` and `lidar_decks.py`): the
+terrain model has culverts and small bridges taken out, so a road dipped into every ditch it crossed (up to
+1.9 m, Vasula peakraav under road 210, 22 Nov 2026). Unzip `E_203_vooluveekogu_j.*` from
+`ETAK_Eesti_SHP_veekogud.zip` (same download as above) into a folder and run
+`python3 tools/bake/stream_crossings.py FOLDER public/data --write`: a short steep hole at a crossing is
+filled up to a straight line as a road over a culvert, or, over a brook, river or main ditch 0.8 m deep or
+more, gets an embankment with the channel left open under a small bridge (`b: 'small'`). It never digs, and
+can be run again on its own output. It also writes `stream_crossings.json`, which
+`node tools/road-dip-test.mjs` walks for holes and steps (`--roads` walks every road of the map instead).
 World frame: x = east − E0, z = −(north − N0), y = height − H0, in L-EST97 metres.
 
 Detail area: `detail_area.json` outlines a zone (Kvissentali) that gets extra-sharp orthophoto

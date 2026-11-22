@@ -212,7 +212,7 @@ export function createTuru4(scene, world, { shadows = true } = {}) {
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;
     const houses = HOUSES.map(([name, S, base, at, r]) => ({ name, sec: S[0], base, at, r, spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
-    skinHouses(world, group, houses, { shadows, ppm: 11, far: 6, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'turu4 fronts', shadows, ppm: 11, far: 6, faces: (W) => W.len > 6 && W.foot < 2, debug: DEBUG });
 
     // the row of Aura's flags by Turu, south of the building
     const pole = new THREE.CylinderGeometry(0.06, 0.08, 10, 6), flag = new THREE.BoxGeometry(0.03, 2.2, 1.0), ring = new THREE.CylinderGeometry(0.32, 0.32, 0.05, 16).rotateZ(Math.PI / 2);

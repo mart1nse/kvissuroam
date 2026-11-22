@@ -170,8 +170,23 @@ const at = (p) => (u, v, out) => {
 // (Typed arrays sized up front and a numeric weld table: building it with growing number lists and a
 // text key per vertex made about a gigabyte of garbage per car park, and an iPhone gave up on the page.)
 // (in steps for the page's work queue, src/jobs.js: `yield` is where it may wait for the next frame)
+// (In two halves, with the thinning between them: `bakeLodFront` gathers and welds, `thin` takes triangles
+// away, `bakeLodBack` packs what is left. On the page the thinning of a scanned body, 100 thousand triangles,
+// was one step of 30 to 70 ms, a pause at the start of a first lap: there it is handed to the car worker,
+// see src/world/parked.js.)
 export function bakeLod(parts, id, tris) { return jobs.run(bakeLodSteps(parts, id, tris)); }
 export function* bakeLodSteps(parts, id, tris) {
+  const st = yield* bakeLodFront(parts, id, tris);
+  yield;
+  const idx = thin(st.index, st.vp, st.target);
+  yield;
+  return bakeLodBack(st, idx);
+}
+// the triangle list thinned to `target` corners (as it was where the simplifier is missing)
+export function thin(index, vp, target) {
+  return MeshoptSimplifier.supported && vp ? MeshoptSimplifier.simplify(index, vp, 3, target, 0.03, ['ErrorAbsolute'])[0] : index;
+}
+export function* bakeLodFront(parts, id, tris) {
   let cap = 0;
   for (const { geo } of parts) cap += geo.attributes.position.count;
   const pos = new Float64Array(cap * 3), nrm = new Float64Array(cap * 3), col = new Float64Array(cap * 3), mat = new Float64Array(cap * 3);
@@ -238,14 +253,15 @@ export function* bakeLodSteps(parts, id, tris) {
     if ((i & 4095) === 4095) yield;
   }
   yield;
-  let idx = index;
+  const target = Math.round(tris * (id === 'bus' ? 0.85 : 1)) * 3;
+  let vp = null;
   if (MeshoptSimplifier.supported) {
-    const target = Math.round(tris * (id === 'bus' ? 0.85 : 1)) * 3;
-    const vp = new Float32Array(u * 3);
+    vp = new Float32Array(u * 3);
     for (let v = 0; v < u; v++) { const a = first[v] * 3; vp[v * 3] = pos[a]; vp[v * 3 + 1] = pos[a + 1]; vp[v * 3 + 2] = pos[a + 2]; }
-    idx = MeshoptSimplifier.simplify(index, vp, 3, target, 0.03, ['ErrorAbsolute'])[0];
   }
-  yield;
+  return { index, vp, target, first, pos, nrm, col, mat, u };
+}
+export function bakeLodBack({ first, pos, nrm, col, mat, u }, idx) {
   // keep only the vertices still in use
   const remap = new Int32Array(u).fill(-1), oi = new Uint32Array(idx.length), keep = [];
   for (let i = 0; i < idx.length; i++) {

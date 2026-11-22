@@ -215,7 +215,7 @@ export function createRiia3(scene, world, { shadows = true } = {}) {
       if (PAINT[name]) H.walls = [{ near: [0, 0], within: 1e9, only: (P, W, spec) => PAINT[name](P, W, spec) }];
       return H;
     });
-    skinHouses(world, group, houses, { shadows, ppm: 14, far: 6, faces, debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'riia3 fronts', shadows, ppm: 14, far: 6, faces, debug: DEBUG });
 
     const CK = cellKit(group, { shadows });
     bridgeCells(CK);

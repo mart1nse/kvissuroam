@@ -122,6 +122,8 @@ function ask(msg) {
 }
 // a parked car's model, near and far versions and all, as data (src/world/parkedbake.js)
 export const buildParkedInWorker = (id, opts, parked) => ask({ id, opts, parked });
+// a triangle list thinned in the worker (src/world/parkedbake.js: thin); null where the page has to do it
+export const thinInWorker = (id, index, vp, target) => ask({ id, thin: { index, vp, target } });
 
 // The pixels of a picture that the worker sent as a file (serial.js: userData.packed), as a Uint8Array.
 // In a small worker of its own where the browser can, else here on the page.

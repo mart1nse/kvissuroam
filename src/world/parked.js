@@ -8,8 +8,8 @@
 //  - further away with a simplified copy of it (a few thousand triangles, one material, one draw call)
 //    whose paint colour is a uniform, so every colour shares the same geometry.
 import * as THREE from 'three';
-import { buildCarModel, buildParkedInWorker, buildCarInWorker, unpackPicture } from '../cars/models/index.js';
-import { takeParts, takePartsSteps, mergeNear, bakeLodSteps, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
+import { buildCarModel, buildParkedInWorker, buildCarInWorker, unpackPicture, thinInWorker } from '../cars/models/index.js';
+import { takeParts, takePartsSteps, mergeNear, bakeLodFront, bakeLodBack, thin, lowLod, unpackParked, simplifierReady } from './parkedbake.js';
 import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
 import { CEED_GREEN } from '../cars/models/ceed.js';
@@ -400,8 +400,19 @@ export function createParked(scene, world, opts = {}) {
       const fail = (e) => { console.warn('parked', id, e); templates.set(id, false); next(); };
       // the far versions, a step a frame (src/jobs.js)
       const bake = (T) => setTimeout(() => jobs.add(function* () {
-        try { T.lod = yield* bakeLodSteps(T.parts, id, tris); yield; T.low = lowLod(T.lod, lowTris); templates.set(id, T); } catch (e) { fail(e); return; }
-        next();
+        let st;
+        try { st = yield* bakeLodFront(T.parts, id, tris); } catch (e) { fail(e); return; }
+        const finish = (idx) => jobs.add(function* () {
+          try {
+            if (!idx) { yield 'frame'; idx = thin(st.index, st.vp, st.target); yield; }
+            T.lod = bakeLodBack(st, idx); yield; T.low = lowLod(T.lod, lowTris); templates.set(id, T);
+          } catch (e) { fail(e); return; }
+          next();
+        }, 'parked');
+        // (a long triangle list, a scanned body's, is thinned in the car worker while somebody drives: on the
+        // page it was one step of 30 to 70 ms, the longest pause at the start of a first lap, 22 Nov 2026)
+        if (st.vp && st.index.length > 30000 && jobs.live) thinInWorker(id, st.index, st.vp, st.target).then(finish, () => finish(null));
+        else finish(null);
       }, 'parked'), touch ? 300 : 120);
       // all of it on the page, where there is no worker
       const here = () => {

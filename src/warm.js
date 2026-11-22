@@ -135,6 +135,9 @@ export const warm = {
     if (S.k < S.tex.length) {                              // pictures: about 1.5 megapixels a frame
       // (and no further picture once this frame's sending has taken 4 ms, times k: on a slow computer one
       // 1024 px picture takes 40 ms, and six in a frame, as the pixel count alone allowed, were a 0.2 s stop)
+      // (nor on top of a picture the work queue has sent in this frame: a house-front page and a warmed
+      // picture together were 1.5 to 2.5 megapixels in one frame)
+      if (jobs.sentPx > 3e5 && k < 4) return;
       const f0 = now();
       for (let px = 0; S.k < S.tex.length && px < 1.5e6 * k && (px === 0 || now() - f0 < 4 * k); S.k++) {
         const t = S.tex[S.k];

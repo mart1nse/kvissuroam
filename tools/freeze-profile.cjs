@@ -3,12 +3,13 @@
 // Needs the dev server (npx vite --port 5198). Drawing is switched off, so frames run at 60 a second even
 // without a graphics card, and the car is moved along a line of map points (no physics), `step` metres a
 // frame. A CPU profile runs meanwhile. Printed: the gaps between frames, and every stretch of over 25 ms in
-// which the page was busy, by what ran in it. What the graphics card does (pictures sent, shaders compiled)
-// is not seen here: tools/gpu-burst.cjs counts that.
+// which the page was busy, by what ran in it, the short hitches (over 16, 25 and 33 ms), and what was sent
+// to the graphics card on the way: megapixels of pictures frame by frame and new shader programs (how long
+// a real card takes over them is not seen: the counts are), with the house fronts each place painted.
 //   routes: tools/freeze-routes.cjs, and `lap` (the race track). touch: as a phone (light mode, small pictures).
 //   slow=5: as an old computer: the processor five times slower, 15 frames a second, light mode and extra low.
 //           Then the thing to read is how long queued building work had to wait (the city standing empty).
-// tools/perf-budget.cjs drives the centre route with this as part of the budget check (drive, summarise, report).
+// tools/perf-budget.cjs drives the centre route and the lap with this as part of the budget check (drive, summarise, report).
 const { chromium, devices } = require('playwright');
 const fs = require('fs');
 const os = require('os');
@@ -37,10 +38,25 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
         const run = (ts) => {
           if (f.name === 'frame' && window.__every > 1 && ++tick % window.__every) return raf(run);
           const t0 = performance.now(); f(ts); const d = performance.now() - t0;
-          if (window.__rec && f.name === 'frame') { const g = __game; __fr.push([t0, d, g.car?.x | 0, g.car?.z | 0, g.jobs?.pending | 0, g.warmer?.waiting | 0, Math.round(Math.max(g.jobs?.waited || 0, g.warmer?.waited || 0))]); }
+          if (window.__rec && f.name === 'frame') { const g = __game; __fr.push([t0, d, g.car?.x | 0, g.car?.z | 0, g.jobs?.pending | 0, g.warmer?.waiting | 0, Math.round(Math.max(g.jobs?.waited || 0, g.warmer?.waited || 0)), Math.round(sent.px / 1e4) / 100, sent.link, Math.round(sent.ms * 10) / 10]); }
+          sent.px = sent.link = sent.ms = 0;
         };
         return raf(run);
       };
+      // what goes to the graphics card in each frame: megapixels of pictures and new shader programs. Drawing is
+      // off, but the game still sends its pictures and has its shaders compiled ahead of showing a thing
+      // (src/warm.js, jobs.upload), so these counts are the real ones, whatever the card. The time is the
+      // software card's and means little; the counts are what a real card has to take in that frame.
+      const sent = (window.__sent = { px: 0, link: 0, ms: 0 });
+      const GL = WebGL2RenderingContext.prototype;
+      const wrap = (name, fn) => { const o = GL[name]; GL[name] = function (...a) { const t0 = performance.now(); const r = o.apply(this, a); sent.ms += performance.now() - t0; fn(a); return r; }; };
+      const area = (a, k) => { const s = a[a.length - 1]; return typeof a[k] === 'number' && typeof a[k + 1] === 'number' && a.length >= 9 ? a[k] * a[k + 1] : s && s.width ? (s.videoWidth || s.width) * (s.videoHeight || s.height) : 0; };
+      // (pictures of a fifth of a megapixel and up are listed too: [frame, megapixels, what it was sent from])
+      window.__pics = [];
+      const note = (a, k) => { if (a[1] !== 0) return; const n = area(a, k); sent.px += n; if (n >= 2e5 && window.__rec) { const s = a[a.length - 1]; __pics.push([__fr.length, Math.round(n / 1e4) / 100, s && s.constructor ? s.constructor.name : 'data']); } };
+      wrap('texImage2D', (a) => note(a, 3));
+      wrap('texSubImage2D', (a) => note(a, 4));
+      wrap('linkProgram', () => { sent.link++; });
     });
     await p.goto(`http://localhost:${port}/${slowBy ? '?lite&xlow' : ''}`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
@@ -60,8 +76,8 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
     await p.waitForFunction(() => __flyStat.done, null, { timeout: 1800000, polling: 1000 });
     await p.waitForTimeout(3000);
     const { profile } = await cdp.send('Profiler.stop');
-    const { fr, stat, slow, doubles } = await p.evaluate(() => ({ fr: __fr, stat: __flyStat, slow: __game.jobs?.slow || [], doubles: __game.jobs?.doubles || 0 }));
-    return { errs, slow, doubles, profile, fr, tStart, stat };
+    const { fr, stat, slow, doubles, skins, pics } = await p.evaluate(() => ({ fr: __fr, pics: window.__pics || [], stat: __flyStat, slow: __game.jobs?.slow || [], doubles: __game.jobs?.doubles || 0, skins: __game.skins?.() || [] }));
+    return { errs, slow, doubles, profile, fr, tStart, stat, skins, pics };
   } finally { await b.close(); }
 }
 
@@ -101,7 +117,7 @@ function stretches(profile) {
 //   pauses.. gaps between two frames, whatever the reason. In a browser without a graphics card these also
 //            hold stalls of the software drawing process while the page sat idle (about one drive in four
 //            has one of 0.2 to 0.5 s), so they are reported and not judged.
-function summarise({ fr, stat, profile, runs }) {
+function summarise({ fr, stat, profile, runs, skins }) {
   const d = fr.map((f) => f[1]).sort((a, c) => a - c), q = (x) => +d[Math.floor(d.length * x)].toFixed(1);
   const iv = []; for (let i = 1; i < fr.length; i++) iv.push(fr[i][0] - fr[i - 1][0]);
   const over = (n) => iv.filter((x) => x > n).length;
@@ -113,6 +129,7 @@ function summarise({ fr, stat, profile, runs }) {
     km: +(stat.dist / 1000).toFixed(2), seconds: Math.round((fr[fr.length - 1][0] - fr[0][0]) / 1000), frames: fr.length,
     jsMedian: q(0.5), jsP95: q(0.95), jsP99: q(0.99), jsMax: Math.round(d[d.length - 1]),
     js17: d.filter((x) => x > 16.7).length, js33: d.filter((x) => x > 33).length, js50: d.filter((x) => x > 50).length, js100: d.filter((x) => x > 100).length,
+    busy16: bover(16), busy25: bover(25), busy33: bover(33),
     busy50: bover(50), busy100: bover(100), busy200: bover(200), busyLongest: Math.round(Math.max(0, ...b)),
     busyS: +(b.filter((x) => x > 50).reduce((a, c) => a + c, 0) / 1000).toFixed(2), busyFrom: usable ? 'profile' : 'frames',
     pauses50: over(50), pauses100: over(100), pauses200: over(200), longest: Math.round(Math.max(...iv)),
@@ -122,6 +139,12 @@ function summarise({ fr, stat, profile, runs }) {
     heldMean: +(fr.reduce((a, f) => a + (f[5] || 0), 0) / fr.length).toFixed(1), heldMax: Math.max(...fr.map((f) => f[5] || 0)),
     waitedMax: +(Math.max(...fr.map((f) => f[6] || 0)) / 1000).toFixed(1),
     waitedOver4S: +(fr.reduce((a, f, i) => a + (i && (f[6] || 0) > 4000 ? f[0] - fr[i - 1][0] : 0), 0) / 1000).toFixed(1),
+    // what went to the graphics card: megapixels of pictures in all, the frames that sent over 1.1 megapixels
+    // (one 1024 px picture is 1.05) and over 2.2, the most in one frame, and the frames that linked shaders
+    sentMP: Math.round(fr.reduce((a, f) => a + (f[7] || 0), 0)), sent11: fr.filter((f) => f[7] > 1.1).length, sent22: fr.filter((f) => f[7] > 2.2).length,
+    sentMax: +Math.max(0, ...fr.map((f) => f[7] || 0)).toFixed(2), linkFrames: fr.filter((f) => f[8] > 0).length,
+    // house fronts painted on the way (megapixels): the same on every drive of a build, unlike the timings
+    frontsMP: skins ? +(skins.reduce((a, k) => a + k.px, 0) / 1e6).toFixed(1) : null,
   };
 }
 
@@ -129,7 +152,7 @@ if (require.main === module) (async () => {
   const step = +arg('step', 0.8), touch = process.argv.includes('touch'), port = arg('port', 5198), name = arg('route', 'centre'), slow = +arg('slow', 0);
   const out = arg('out', path.join(os.tmpdir(), `freeze-${name}${touch ? '-phone' : ''}.json`));
   const r = await drive({ port, route: name, step, touch, slow });
-  fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat }));
+  fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat, skins: r.skins, slow: r.slow, pics: r.pics }));
   console.log(`${touch ? 'phone' : 'desktop'}, route ${name}: ${(r.stat.dist / 1000).toFixed(2)} km, errors ${r.errs.length} ${r.errs.slice(0, 3).join(' | ')}`);
   console.log('queued steps over 20 ms [label, step, ms]: ' + JSON.stringify(r.slow));
   if (r.doubles) console.log(`building work queued again while it was still waiting: ${r.doubles} times (set the place's built flag before jobs.add)`);
@@ -141,12 +164,24 @@ module.exports = { drive, summarise, report, stretches };
 
 // The report of a drive as lines of text: three lines of figures, then every stretch of over 25 ms in which the page
 // was busy, by what ran in it.
-function report({ profile, fr, tStart, stat }, topN = 30) {
-  const L = [], runs = stretches(profile), S = summarise({ fr, stat: stat || { dist: 0 }, runs });
+function report({ profile, fr, tStart, stat, pics, skins }, topN = 30) {
+  const L = [], runs = stretches(profile), S = summarise({ fr, stat: stat || { dist: 0 }, runs, skins });
   L.push(`frames ${S.frames}: game code median ${S.jsMedian} ms, p95 ${S.jsP95}, p99 ${S.jsP99}, max ${S.jsMax}; over 16.7 ms: ${S.js17}, over 33: ${S.js33}, over 50: ${S.js50}, over 100: ${S.js100}`);
   L.push(`the page busy without a break for over 50 ms: ${S.busy50}, over 100 ms: ${S.busy100}, over 200: ${S.busy200}, longest ${S.busyLongest} ms; ${S.busyS} s in stretches over 50 ms`);
   L.push(`gaps between frames over 50 ms: ${S.pauses50}, over 100 ms: ${S.pauses100}, over 200: ${S.pauses200}, longest ${S.longest} ms; frozen time over 50 ms gaps: ${S.frozen} s of ${S.seconds} s`);
   if (S.queueMax || S.heldMax) L.push(`queued building work: ${S.queueMean} pieces on average, ${S.queueMax} at most; held back from the picture: ${S.heldMean} on average, ${S.heldMax} at most; longest wait ${S.waitedMax} s, ${S.waitedOver4S} s of the drive with something waiting over 4 s`);
+  // (kept after the first three lines: tools/perf-budget.cjs prints the report from its fourth line on)
+  L.push(`short hitches: the page busy without a break for over 16 ms: ${S.busy16}, over 25 ms: ${S.busy25}, over 33 ms: ${S.busy33}`);
+  L.push(`sent to the graphics card: ${S.sentMP} megapixels of pictures; frames with over 1.1 megapixels: ${S.sent11}, over 2.2: ${S.sent22}, most in one frame ${S.sentMax}; frames that linked new shaders: ${S.linkFrames}`);
+  const heavy = fr.map((f, i) => [i, f[7] || 0, f[2], f[3]]).filter((f) => f[1] > 1.1).sort((a, c) => c[1] - a[1]).slice(0, 6);
+  for (const [i, mp, x, z] of heavy) L.push(`   ${mp} megapixels in one frame at (${x}, ${z}): ${(pics || []).filter((q) => q[0] === i).map((q) => `${q[1]} ${q[2]}`).join(', ')}`);
+  if (skins && skins.length) {
+    // house fronts painted on the way (src/world/houseskin.js keeps the list): the places that painted most
+    const by = new Map();
+    for (const k of skins) { const o = by.get(k.label) || { px: 0, ms: 0, walls: 0, longest: 0 }; o.px += k.px; o.ms += k.ms; o.walls += k.walls; o.longest = Math.max(o.longest, k.longest); by.set(k.label, o); }
+    const all = [...by.values()].reduce((a, o) => ({ px: a.px + o.px, ms: a.ms + o.ms, walls: a.walls + o.walls }), { px: 0, ms: 0, walls: 0 });
+    L.push(`house fronts painted: ${all.walls} walls, ${(all.px / 1e6).toFixed(1)} megapixels, ${Math.round(all.ms)} ms; most: ${[...by].sort((a, c) => c[1].px - a[1].px).slice(0, 6).map(([k, o]) => `${k || 'unnamed'} ${(o.px / 1e6).toFixed(1)} MP (longest wall ${Math.round(o.longest)} ms)`).join(', ')}`);
+  }
   if (!runs.ok) { L[1] += ' (from the frames\' game code only)'; L.push('\nthe profile of this drive has no idle samples, so what ran in the busy stretches cannot be told: drive again'); return L; }
   const long = runs.filter((r) => r.dur > 25000).sort((a, c) => c.dur - a.dur);
   L.push(`\nbusy stretches of the main thread over 25 ms: ${long.length} (over 50: ${long.filter((r) => r.dur > 50000).length}, over 100: ${long.filter((r) => r.dur > 100000).length}, over 200: ${long.filter((r) => r.dur > 200000).length}); total ${(long.reduce((a, r) => a + r.dur, 0) / 1e6).toFixed(1)} s`);

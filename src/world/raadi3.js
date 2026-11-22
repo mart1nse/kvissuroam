@@ -101,7 +101,7 @@ export function createRaadi3(scene, world, { shadows = true } = {}) {
   function build() {
     built = true;
     const A = areaKit(world, group, { shadows });
-    skinHouses(world, group, HOUSES.map((H) => house(world, H)), { shadows, ppm: 14, far: 7, debug: DEBUG });
+    skinHouses(world, group, HOUSES.map((H) => house(world, H)), { label: 'raadi3 fronts', shadows, ppm: 14, far: 7, debug: DEBUG });
     for (const pts of HEDGES) A.hedge(pts, 3.2, 1.2, [0.42, 0.66, 0.5]);
     for (const [x, z] of TRAMPOLINES) A.trampoline(x, z, 1.8);
     // the glass-roofed pool on the street side of Mõisahärra 1

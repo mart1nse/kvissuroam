@@ -5,6 +5,7 @@ import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
 import { jobs } from './jobs.js';
+import { skinLog } from './world/houseskin.js';
 import { warm as warmer } from './warm.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
@@ -695,14 +696,16 @@ async function boot() {
     place: (pose) => place(pose), isDriving: () => mode === 'drive',
     halo: (on) => race.finishHalo(on),
   });
-  const trackPath = (ctx) => {
-    ctx.beginPath();
-    race.track.P.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
-    ctx.closePath();
+  // (the lap's line is put together once: its 2,400 points were walked again each time the small map was
+  // drawn, sixteen times a second)
+  let lapLine = null;
+  const strokeLap = (ctx) => {
+    if (!lapLine) { lapLine = new Path2D(); race.track.P.forEach(([x, z], i) => (i ? lapLine.lineTo(x, z) : lapLine.moveTo(x, z))); lapLine.closePath(); }
+    ctx.stroke(lapLine);
   };
   hud.setOverlay((ctx, scale, car) => {
     ctx.strokeStyle = 'rgba(255,43,214,.5)'; ctx.lineWidth = 16;
-    trackPath(ctx); ctx.stroke();
+    strokeLap(ctx);
     // other players: arrows pointing the way they drive; anyone outside the minimap
     // gets a pointer on its rim showing which way they are from us
     const players = mp.players();
@@ -733,7 +736,7 @@ async function boot() {
   });
   bigmap = createBigMap(world, {
     onPick: dropAt, onClose: closeMap,
-    drawUnder: (ctx, k) => { ctx.strokeStyle = 'rgba(255,43,214,.6)'; ctx.lineWidth = Math.max(5, 3 / k); trackPath(ctx); ctx.stroke(); },
+    drawUnder: (ctx, k) => { ctx.strokeStyle = 'rgba(255,43,214,.6)'; ctx.lineWidth = Math.max(5, 3 / k); strokeLap(ctx); },
     drawOver: (ctx, mark) => {
       const st = race.track.P[0], tg = race.track.tan[0];
       mark(st[0], st[1], () => {
@@ -1290,7 +1293,7 @@ keepAwake();
 for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, keepAwake, { passive: true });
 document.addEventListener('visibilitychange', () => {
   audio.setBackground?.(document.hidden);           // no engine noise from a tab or app in the background
-  if (document.hidden) return;
+  if (document.hidden) { mp?.setDriving(!!raceMode?.holding); return; }   // (no frames run in a hidden tab to tell the server)
   keepAwake();
   clock.reset?.();
   settle = 1.5;
@@ -1386,8 +1389,9 @@ function frame(ts) {
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
   mp.update(car, dt, mode === 'drive');
-  // counted for race votes by the same rule as the online list: on the map (not the menu or garage), page in view
-  mp.setDriving(mode === 'drive' && !document.hidden);
+  // counted for race votes by the same rule as the online list: on the map, page in view (off the map
+  // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
+  mp.setDriving((mode === 'drive' && !document.hidden) || !!raceMode?.holding);
   raceMode?.update(car, dt);
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
@@ -1679,7 +1683,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
+  skins: () => skinLog, race: () => race, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

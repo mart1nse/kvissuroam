@@ -138,7 +138,7 @@ export function createArukula(scene, world, { shadows = true } = {}) {
   function* build() {
     const houses = HOUSES.map(([name, S, base, at, r, , , pick]) => ({ name, sec: S[0], base, at, r, pick, spec: { wall: [220, 220, 218], floors: [], attic: null, eaves: false }, walls: [{ near: [0, 0], within: 1e9, only: (P, W) => PAINT[name](P, W) }] }));
     // (the factory's long back and side walls are seen from afar only)
-    skinHouses(world, group, houses, { shadows, ppm: 10, far: 4, faces: (W) => W.len > 5 && W.foot < 2 && (W.nx < -0.7 || W.len < 40), debug: DEBUG });
+    skinHouses(world, group, houses, { label: 'arukula fronts', shadows, ppm: 10, far: 4, faces: (W) => W.len > 5 && W.foot < 2 && (W.nx < -0.7 || W.len < 40), debug: DEBUG });
     yield;
     const A = areaKit(world, group, { shadows });
     const { p, h } = A;

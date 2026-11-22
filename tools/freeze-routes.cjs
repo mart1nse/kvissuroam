@@ -23,6 +23,8 @@ const ROUTES = {
   narva: [[1905, 3060], [1893, 2950], [1897, 2887], [1877, 2764], [1825, 2693], [1716, 2522], [1646, 2376], [1635, 2255], [1640, 2140], [1667, 1975], [1734, 1774], [1831, 1583], [1874, 1504]],
   // from Narva mnt at Raadi out to ERM, round its car park and along the museum to its east end (22 Nov)
   erm: [[1874, 1504], [2100, 1350], [2300, 1160], [2384, 990], [2470, 960], [2600, 975], [2760, 1000], [2930, 1000], [3080, 1060]],
+  // Vaksali: from Kuperjanovi past the railway station, the hotel and the water tower and back (22 Nov)
+  vaksali: [[900, 3300], [760, 3420], [640, 3520], [570, 3555], [520, 3525], [470, 3490], [560, 3560], [600, 3600], [640, 3660], [700, 3760], [760, 3860]],
   // the first kilometre of centre (for gpu-burst.cjs, which is slow)
   short: [[2420, 3760], [2300, 3640], [2120, 3380], [1990, 3180], [1900, 3130], [1840, 3080], [1724, 3085], [1600, 3010]],
 };

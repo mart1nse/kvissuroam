@@ -204,6 +204,13 @@ export class RaceDesk {
     this.skip = ws;
     try { this.left(me); } finally { this.skip = null; }
   }
+  // a racer's page came back after its connection dropped (same id): still in the race
+  back(me) {
+    const r = this.s.phase === 'on' && this.phase() === 'race' && this.s.racers.find((x) => x.id === me.id);
+    if (!r || r.out !== 'left') return;
+    delete r.out;
+    this.save(); this.send();
+  }
   left(me) {
     const s = this.s, now = Date.now();
     delete s.votes[me.id];

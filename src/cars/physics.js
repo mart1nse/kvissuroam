@@ -352,6 +352,11 @@ function engineForce(car, throttle, dt, hb = 0) {
   if (free) return 0;
   if (throttle <= 0) {
     // engine braking through the converter
+    // (engine.brakeTorque [Nm, Nm per rpm]: the engine's own drag with the throttle shut, friction and
+    // pumping, sent through the gear it is in like the drive is. In the low gears it is several times the
+    // gentle figure below: a lift slows the car as a real one does, moves weight onto the nose and takes
+    // grip from the driven wheels, so lifting mid corner eases the tail out; Martin 2026-11-22)
+    if (e.brakeTorque) return vAbs > 0.3 ? -Math.sign(v) * (e.brakeTorque[0] + e.brakeTorque[1] * wheelRpm) * ratioOf(car.gear) / s.wheelRadius : 0;
     return vAbs > 0.3 ? -Math.sign(v) * (180 + 0.045 * wheelRpm) * (ratioOf(car.gear) / 8) : 0;
   }
   if (car.revCut > 0 || (car.reversing && vAbs > 11)) return 0;

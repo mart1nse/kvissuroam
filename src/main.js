@@ -10,7 +10,7 @@ import { warm as warmer } from './warm.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
 import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
 import { createGarage } from './garage.js';
-import { createCar, stepCar, resetCar, speedKmh, shiftGear, setDonutHelp, setTurnIn, setInward } from './cars/physics.js';
+import { createCar, stepCar, resetCar, speedKmh, shiftGear, setDonutHelp, setTurnIn, setInward, setLaunch } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
 import { createPads, buttonName } from './controls/pads.js';
@@ -166,6 +166,7 @@ quality.realTrees = params.get('trees') !== 'old';
 if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helper on (?donut=1)'); }
 if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old fixed steering into a slide (?turnin=normal)'); }
 if (params.get('inward') === '1') { setInward(true); console.info('held steering turns in past the grip limit (?inward=1)'); }
+if (params.get('launch') === '1') { setLaunch(true); console.info('F40 pulls away like a manual, no converter (?launch=1)'); }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };
 const lockedLow = params.get('q') === 'low';

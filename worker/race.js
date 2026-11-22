@@ -135,14 +135,15 @@ export class RaceDesk {
     if (!s.racers.length || (now >= s.tGrid && !this.active().length)) { this.close('empty', now); return; }
     if (now >= s.tGreen && s.racers.every((r) => r.ms != null || r.out)) this.close('done', now);
   }
-  // A race starts (or restarts) only at the moment somebody votes (by: who). When drivers leave and the
-  // votes already in would now be enough, nothing starts by itself (Martin 2026-11-22: three online, only
-  // his vote in, one left and he was racing alone): those voters see START NOW and press once more.
+  // A vote (by: who voted) starts the race once enough are in. When drivers leave (by: none) and the
+  // votes already in become enough, it starts only if two or more want it (Martin 2026-11-22: five
+  // online, two voted, one leaves: fine to race; but three online, only his vote in, one left and he was
+  // racing alone): a lone voter sees START NOW and presses once more.
   tally(now, by) {
     const b = this.ballot(now);
-    if (!by || b.kind === 'none' || !b.of) return false;
+    if (b.kind === 'none' || !b.of) return false;
     const ids = Object.entries(this.s.votes).filter(([id, v]) => v.k === b.kind && b.voters.has(id) && now - v.t < VOTE_MS).map(([id]) => id);
-    if (ids.length < b.need || !ids.includes(by)) return false;
+    if (ids.length < b.need || (by ? !ids.includes(by) : ids.length < 2)) return false;
     this.start(ids, now);
     return true;
   }
@@ -161,7 +162,7 @@ export class RaceDesk {
         me.drv = on; ws.serializeAttachment(me);
         // (off the map for good, after the page's 30 s grace: a start vote goes with the driver)
         if (!on && this.s.votes[me.id]?.k === 'start') delete this.s.votes[me.id];
-        this.check(now); this.save(); this.send();
+        this.check(now); this.tally(now); this.save(); this.send();
         return true;
       }
       case 'rv': {          // vote (start or restart, whichever is open), or take it back
@@ -234,6 +235,7 @@ export class RaceDesk {
       if (i >= 0) { if (this.phase(now) === 'race') { if (s.racers[i].ms == null && !s.racers[i].out) s.racers[i].out = 'left'; } else s.racers.splice(i, 1); }
       this.check(now);
     }
+    this.tally(now);
     this.save(); this.send();
   }
   alarm() {

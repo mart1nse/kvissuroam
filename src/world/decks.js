@@ -10,6 +10,7 @@ const MATS = {
   lamp: mat(0xfff2c4, { emissive: 0xffd9a0, emissiveIntensity: 1.6 }),
   arch: mat(0x9c97a6),          // Vabadussild's arch, a touch darker than white so its coloured LEDs stand out (Martin, 20 Nov)
   red: mat(0xc8323c),
+  stone: mat(0x8e8986),         // Võidu sild's grey granite obelisks
 };
 
 // left and right edge of station i: [xl, zl, xr, zr]
@@ -59,7 +60,8 @@ export function deckTopGeometry(world, x0, z0, size) {
 
 // ---- how each kind of bridge is built (the "b" of a deck over water, set by tools/bake/terrain.py)
 //   girder     piers under a beam that is deeper over the piers (Kroonuaia sild, Sõpruse sild)
-//   victory    the same on two river piers, with lamp posts on the parapet (Võidu sild)
+//   victory    the same on two river piers, a granite obelisk with four lamp globes at each corner and dark
+//              iron railings with crossed bars (Võidu sild)
 //   arch       a white concrete arch high over a narrow footbridge (Kaarsild)
 //   steelarch  steel arches through the deck of a road bridge (Vabadussild)
 //   cable      a footbridge hung by seven pairs of cables from one pylon (Turusild)
@@ -181,6 +183,42 @@ function vabadusArch(d, out) {
   }
 }
 
+// an upright square frustum: half size a at y0 narrowing to b at y1 (b = 0: a pyramid)
+function taper(out, x, y0, z, dx, dz, a, b, y1) {
+  const c = (u, v, h, y) => [x + dx * u * h - dz * v * h, y, z + dz * u * h + dx * v * h];
+  for (const [u1, v1, u2, v2] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) quad(out, c(u1, v1, a, y0), c(u2, v2, a, y0), c(u1, v1, b, y1), c(u2, v2, b, y1));
+  if (b > 0) quad(out, c(-1, -1, b, y1), c(1, -1, b, y1), c(-1, 1, b, y1), c(1, 1, b, y1));
+}
+// Võidu sild's obelisks (Martin, 22 Nov, street views of Jul 2024 and the orthophoto): one at each corner of
+// the bridge, in line with the railing, on a plain pedestal beside the pavement. Grey granite, a stepped
+// plinth, the tapering shaft with its little pyramid, and up on the shaft four glass globes on iron arms: a
+// pair along the bridge and a pair a little lower across it. They give the bridge its light (there are no
+// lamp posts on the span).
+function obelisks(d, out) {
+  const o = [0, 0, 0, 0, 0];
+  for (const t of [0.8, d.len - 0.8]) {
+    for (const side of [-1, 1]) {
+      at(d, t, side * (d.hw - 0.5), o);
+      const [x, y, z, ux, uz] = o, S = out.stone;
+      block(S, x, y - 1.2, z, ux, uz, 0.95, 0.95, y + 2.1);              // the pedestal, down past the bank
+      block(S, x, y + 2.1, z, ux, uz, 1.05, 1.05, y + 2.3);
+      block(S, x, y + 2.3, z, ux, uz, 0.8, 0.8, y + 3.1);                 // the plinth and its cap
+      taper(S, x, y + 3.1, z, ux, uz, 0.88, 0.8, y + 3.35);
+      taper(S, x, y + 3.35, z, ux, uz, 0.6, 0.38, y + 12.3);             // the shaft
+      taper(S, x, y + 12.3, z, ux, uz, 0.41, 0, y + 13.2);
+      for (const [ax, az, h] of [[ux, uz, 9.4], [-ux, -uz, 9.4], [-uz, ux, 8.75], [uz, -ux, 8.75]]) {
+        const r = 0.44 + 0.95;                                            // from the shaft's middle to the globe
+        bar(out.dark, [x + ax * 0.4, y + h, z + az * 0.4], [x + ax * r, y + h, z + az * r], 0.08, 0.08);
+        bar(out.dark, [x + ax * 0.4, y + h - 0.45, z + az * 0.4], [x + ax * (r - 0.1), y + h - 0.02, z + az * (r - 0.1)], 0.05, 0.05);
+        const gx = x + ax * r, gz = z + az * r;
+        block(out.dark, gx, y + h, gz, ux, uz, 0.09, 0.09, y + h + 0.1);
+        taper(out.lamp, gx, y + h + 0.1, gz, ux, uz, 0.12, 0.2, y + h + 0.3);
+        taper(out.lamp, gx, y + h + 0.3, gz, ux, uz, 0.2, 0.05, y + h + 0.55);
+      }
+    }
+  }
+}
+
 // Everything of a bridge that is not its deck: piers, arches, pylon and cables, lamp posts.
 function structure(world, d, out) {
   const o = [0, 0, 0, 0, 0], q = [0, 0, 0, 0, 0];
@@ -250,18 +288,16 @@ function structure(world, d, out) {
     }
     bar(out.white, top, [top[0], top[1] + 3.5, top[2]], 0.12, 0.12);        // the wind vane mast
   }
-  if (d.b === 'victory' || d.b === 'steelarch' || (d.b === 'girder' && d.hw > 4)) {
-    const step = d.b === 'victory' ? 16 : 28, h = d.b === 'victory' ? 6.5 : 9;
+  if (d.b === 'victory') obelisks(d, out);
+  if (d.b === 'steelarch' || (d.b === 'girder' && d.hw > 4)) {
+    const step = 28, h = 9;
     for (let t = step / 2; t < d.len; t += step) {
       for (const side of [-1, 1]) {
         at(d, t, side * (d.hw - 0.25), o);
         bar(out.dark, [o[0], o[1], o[2]], [o[0], o[1] + h, o[2]], 0.16, 0.16);
-        if (d.b === 'victory') block(out.lamp, o[0], o[1] + h, o[2], 1, 0, 0.28, 0.28, o[1] + h + 0.55);
-        else {
-          at(d, t, side * (d.hw - 1.6), q);
-          bar(out.dark, [o[0], o[1] + h, o[2]], [q[0], o[1] + h + 0.15, q[2]], 0.12, 0.12);
-          block(out.lamp, q[0], o[1] + h - 0.02, q[2], 1, 0, 0.3, 0.14, o[1] + h + 0.1);
-        }
+        at(d, t, side * (d.hw - 1.6), q);
+        bar(out.dark, [o[0], o[1] + h, o[2]], [q[0], o[1] + h + 0.15, q[2]], 0.12, 0.12);
+        block(out.lamp, q[0], o[1] + h - 0.02, q[2], 1, 0, 0.3, 0.14, o[1] + h + 0.1);
       }
     }
   }
@@ -270,14 +306,14 @@ function structure(world, d, out) {
 // Slab, portal beams, railings and structure of the decks inside one sector: a group, or null.
 export function buildDeckBodies(world, s) {
   const S = world.meta.sector.size;
-  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [], arch: [], red: [] };
+  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [], arch: [], red: [], stone: [] };
   const body = out.concrete, e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
     if (d.own) continue;
     if (d.x1 < s.x0 || d.x0 > s.x0 + S || d.z1 < s.z0 || d.z0 > s.z0 + S) continue;
     measure(d);
     const P = d.pts, last = P.length - 1;
-    const rail = d.b === 'arch' || d.b === 'cable' ? out.white : out.rail;
+    const rail = d.b === 'arch' || d.b === 'cable' ? out.white : d.b === 'victory' ? out.dark : out.rail;
     const beam = (i) => {                                // across the end of a deck
       edges(d, i, e0);
       const q = P[i], r = q.length - 1, h = depth(d, i);
@@ -325,6 +361,14 @@ export function buildDeckBodies(world, s) {
           for (const [lo, hi] of [[0, 0.22], [0.5, 0.58], [RAIL - 0.1, RAIL]]) quad(rail, [xa, ya + lo, za], [xb, yb + lo, zb], [xa, ya + hi, za], [xb, yb + hi, zb]);
           const k = 0.1 / (Math.hypot(xb - xa, zb - za) || 1);
           quad(rail, [xa, ya, za], [xa + (xb - xa) * k, ya, za + (zb - za) * k], [xa, ya + RAIL, za], [xa + (xb - xa) * k, ya + RAIL, za + (zb - za) * k]);
+          if (d.b === 'victory') {                         // Võidu sild: crossed iron bars between the rails
+            const n = Math.max(1, Math.round(Math.hypot(xb - xa, zb - za) / 1.1));
+            for (let j = 0; j < n; j++) {
+              const p = (u, lo) => [xa + (xb - xa) * u, ya + (yb - ya) * u + lo, za + (zb - za) * u];
+              bar(rail, p(j / n, 0.22), p((j + 1) / n, RAIL - 0.1), 0.035, 0.035);
+              bar(rail, p((j + 1) / n, 0.22), p(j / n, RAIL - 0.1), 0.035, 0.035);
+            }
+          }
         }
       }
     }

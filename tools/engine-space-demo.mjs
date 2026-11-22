@@ -185,7 +185,7 @@ for (const id of ids) {
   let dist = 0, camDist = 6.4, camYaw = null, nextPose = 0, droneYaw = null;
   // the turbo as audio.js hears it, at the game's 60 Hz: the whistle (for the old oscillator) and events
   const tb = spec.engine.turbo, tWh = [], tEv = [];
-  let lastBoost = 0, lastPsh = -9, wasShift = false;
+  let lastBoost = 0, lastPsh = -9, wasShift = false, boostSince = -1;
   // the tyres as audio.js hears them, at 60 Hz: time, scrub band, scrub gain, spin band, spin gain
   const TY = [];
   let skid = 0, spinS = 0;
@@ -220,9 +220,10 @@ for (const id of ids) {
       if (TURBO && tb) {
         const b = car.boost || 0;
         tWh.push(t, 1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), 0.016 * b * b * (tb.whistle ?? 1));
+        if (b > 0.6) { if (boostSince < 0) boostSince = t; } else boostSince = -1;
         if (car.throttle > 0) {
           lastBoost = Math.max(lastBoost * 0.99, b);
-          if (TURBO !== 'old' && car.shiftCut && !wasShift && b >= 0.15 && !NOSHIFTBOV) { tEv.push({ t, k: 'shift', P: b }); if ((tb.bov?.shift ?? 1.4) > 0 && tb.bov?.kind !== 'diesel') lastPsh = t; }
+          if (TURBO !== 'old' && car.shiftCut && !wasShift && b >= 0.15 && !NOSHIFTBOV) { tEv.push({ t, k: 'shift', P: b, o: { held: boostSince < 0 ? 0 : t - boostSince, rev: car.rpm / spec.engine.redline } }); if ((tb.bov?.shift ?? 1.4) > 0 && tb.bov?.kind !== 'diesel') lastPsh = t; }
         } else {
           if (TURBO === 'old' && lastBoost > 0.5 && t - lastPsh > 0.6) { tEv.push({ t, k: 'psh', P: lastBoost * (tb.whistle ?? 1) }); lastPsh = t; }
           if (TURBO !== 'old' && lastBoost > 0.3 && t - lastPsh > 0.4) { tEv.push({ t, k: 'bov', P: lastBoost }); lastPsh = t; }
@@ -341,9 +342,9 @@ for (const id of ids) {
         }
       } else {
         const { blowOff, shiftBlowOff } = await import('/src/audio-turbo.js');
-        for (const e of TB.ev) (e.k === 'bov' ? blowOff : shiftBlowOff)(ctx, noise, bus, e.P, TB.bov, rnd, e.t + 0.005);
+        for (const e of TB.ev) e.k === 'bov' ? blowOff(ctx, noise, bus, e.P, TB.bov, rnd, e.t + 0.005) : shiftBlowOff(ctx, noise, bus, e.P, TB.bov, e.o, rnd, e.t + 0.005);
       }
-      log.push(`turbo events: ${TB.ev.map((e) => `${e.k} ${e.t.toFixed(2)} s P ${e.P.toFixed(2)}`).join(', ')}`);
+      log.push(`turbo events: ${TB.ev.map((e) => `${e.k} ${e.t.toFixed(2)} s P ${e.P.toFixed(2)}${e.o ? ` held ${e.o.held.toFixed(2)} rev ${e.o.rev.toFixed(2)}` : ''}`).join(', ')}`);
     }
     if (SEV.length) {
       // the downshift clunks, into the car bus as in audio.js

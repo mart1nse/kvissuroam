@@ -22,6 +22,7 @@ import { streetKit, setHouseColours } from './streetkit.js';
 import { skinHouses } from './houseskin.js';
 import { BOX } from '../race/landmarks.js';
 import { frontCut } from './kontserdimaja.js';
+import { jobs } from '../jobs.js';
 
 // the street frame: s metres along Vanemuise from the Akadeemia junction towards Ülikooli (north-east), v metres
 // across it towards the theatre side (south-east)
@@ -36,7 +37,7 @@ const CENTRE = L(120, 20);
 export function vanemuiseWalls(walls) {
   setHouseColours(walls, '3_6', 1120, 3040, [
     { base: 2472, x: 1356.5, z: 3385.0, wall: 0xeeede8, roof: 0x464953 },     // Kunstimaja
-    { base: 2437, x: 1377.0, z: 3350.5, wall: 0xeeedea, roof: 0xa2a9b3 },     // Akadeemia 5
+    { base: 2437, x: 1377.0, z: 3350.5, wall: 0xe4bf7c, roof: 0x7a6f68 },     // Akadeemia 5 (ochre in the street views of Aug 2023)
     { base: 2431, x: 1407.0, z: 3316.5, wall: 0xefebe6, roof: 0x8e9299 },     // Vanemuise 12
     { base: 2508, x: 1398.5, z: 3339.5, wall: 0xe8e5de, roof: 0x5c4a42 },     // its sheds
     { base: 2504, x: 1404.0, z: 3349.0, wall: 0xe8e5de, roof: 0x9a9ca2 },
@@ -44,7 +45,7 @@ export function vanemuiseWalls(walls) {
     { base: 2076, x: 1463.5, z: 3276.0, wall: 0xebe5d6, roof: 0x99a1ad },     // Vanemuise 8
     { base: 1627, x: 1534.5, z: 3263.0, wall: 0xc4c3bf, roof: 0x5d5e63 },     // the theatre
     { base: 2422, x: 1382.0, z: 3289.5, wall: 0xe9e7e1, roof: 0xa3a7ae },     // Vanemuise 19
-    { base: 2515, x: 1355.5, z: 3323.0, wall: 0xe6dcc2, roof: 0x5b5e66 },     // Vanemuise 21
+    { base: 2515, x: 1355.5, z: 3323.0, wall: 0xc9ccc3, roof: 0x8f949b },     // Vanemuise 21 (grey green, ditto)
   ]);
 }
 
@@ -60,7 +61,7 @@ export const VANEMUISE_CARS = [
 const C = {
   white: [238, 237, 232], trim: '#f6f5f1', glass: '#4f5c6d', dark: '#3b3c41',
   cream: [235, 229, 214], beige: [217, 204, 174], villa: [239, 235, 230], grey: [196, 195, 191],
-  brick: [150, 72, 58], c21: [230, 220, 194],
+  brick: [150, 72, 58], c21: [201, 204, 195], ochre: [228, 191, 124],
 };
 const plaster = (wall, o = {}) => ({ kind: 'plaster', wall, trim: C.trim, weather: 0.5, ...o });
 const sq = (o = {}) => ({ T: false, bars: 1, rails: 0, surround: 0.06, frame: '#f3f2ee', glass: C.glass, ...o });
@@ -126,9 +127,10 @@ function houses(later) {
       spec: plaster(C.white, { storey: 4.2, maxFloors: 3, plinth: { h: 0.75, col: '#a8a6a2' }, win: sq({ w: 1.5, pitch: 2.6, rails: 1 }), attic: { w: 0.9, h: 1.1 } }),
       walls: [{ near: [1342.8, 3372.3], doors: [{ x: 11.2, w: 2.0, h: 2.7, col: '#3a3a3e', light: 0.7, panels: 1 }],
         draw: (P, W) => { mural(P, 1.6, 3.7, 5.6, 8.3); later.push(() => canopy(W, 9.8, 12.6, 3.05, 1.7)); } }] },
+    // (ochre, three storeys and a strip of dark stair windows in Martin's street views of Aug 2023)
     { name: 'akadeemia5', sec: '3_6', base: 2437, at: [1377, 3350.5], r: 20,
-      spec: plaster(C.white, { storey: 3.0, maxFloors: 4, plinth: { h: 0.6, col: '#a39f99' }, win: sq({ w: 1.3, pitch: 2.5 }) }),
-      walls: [{ near: [1369.5, 3341.9], doors: [{ x: 7.7, w: 1.4, h: 2.4, col: '#5d544c', steps: 2 }] }] },
+      spec: plaster(C.ochre, { storey: 3.3, maxFloors: 3, plinth: { h: 0.7, col: '#a39a8c' }, win: sq({ w: 1.3, pitch: 2.6, frame: '#f6f3ec' }), attic: null }),
+      walls: [{ near: [1369.5, 3341.9], doors: [{ x: 7.7, w: 1.4, h: 2.4, col: '#5d544c', steps: 2 }], draw: (P, W) => { for (let y = 1.2; y < W.eaves - 0.8; y += 0.62) P.r(W.len * 0.7 - 0.45, y, W.len * 0.7 + 0.45, y + 0.5, '#3e4451'); } }] },
     // ---- Vanemuise 12 and its sheds
     { name: 'v12', sec: '3_6', base: 2431, at: [1407, 3316.5], r: 16,
       spec: plaster(C.villa, { storey: 3.4, maxFloors: 2, plinth: { h: 0.7, col: '#9d9893' }, win: { w: 1.0, pitch: 2.4, T: true, surround: 0.12, sc: '#f7f5f0' }, belts: [3.75] }),
@@ -139,7 +141,11 @@ function houses(later) {
     // ---- W. Struve 3: the narrow end on Vanemuise, the long sides down Struve
     { name: 'struve3', sec: '3_6', base: 2303, at: [1442.5, 3318], r: 32,
       spec: plaster(C.beige, { storey: 3.0, maxFloors: 4, plinth: { h: 0.8, col: '#9e968a', vents: 3.4 }, win: sq({ w: 1.3, pitch: 2.9, frame: '#f1ede4' }) }),
-      walls: [{ near: [1428.9, 3296.6], n: 2 }] },
+      walls: [{ near: [1428.9, 3296.6], n: 2,
+        draw: (P, W) => {                                                // the KOOPIAKESKUS and REISID signs over the door (Street View, 12 Vanemuise)
+          P.r(W.len * 0.35, 3.0, W.len * 0.95, 3.7, '#2e6fd0'); P.text('KOOPIAKESKUS', W.len * 0.65, 3.35, 0.42, '#f4e9a8', '800 %px Georgia, serif');
+          P.r(W.len * 0.38, 3.75, W.len * 0.92, 4.55, '#e9edf2'); P.text('REISID', W.len * 0.65, 4.15, 0.5, '#8fa3c0', '800 %px Georgia, serif');
+        } }] },
     // ---- Vanemuise 8: thirteen windows a floor on the front, the door in the middle
     { name: 'v8', sec: '3_6', base: 2076, at: [1463.5, 3276], r: 32,
       spec: plaster(C.cream, { storey: 3.3, maxFloors: 3, plinth: { h: 0.95, col: '#a29b8f', vents: 2.5 }, win: sq({ w: 1.25, pitch: 2.45, rails: 1 }), belts: [] }),
@@ -164,8 +170,9 @@ function houses(later) {
       spec: plaster([233, 231, 225], { storey: 3.2, maxFloors: 2, plinth: { h: 0.6, col: '#8f8e8c' }, win: { w: 1.0, pitch: 2.3, T: true, surround: 0.1, sc: '#f6f5f0' } }),
       walls: [{ near: [1392.8, 3297.5], doors: [{ x: 8.0, w: 1.2, h: 2.5, col: '#5b4b40', steps: 2 }] }] },
     { name: 'v21', sec: '3_6', base: 2515, at: [1355.5, 3323], r: 30,
-      spec: plaster(C.c21, { storey: 3.0, maxFloors: 4, plinth: { h: 0.8, col: '#9b958a' }, win: sq({ w: 1.25, pitch: 2.5 }), belts: [] }),
-      walls: [{ near: [1365.1, 3328.4], doors: [{ x: 13.0, w: 1.4, h: 2.5, col: '#5f5246', steps: 2 }] }] },
+      spec: plaster(C.c21, { storey: 3.3, maxFloors: 3, plinth: { h: 0.8, col: '#9b958a' }, win: { w: 1.3, pitch: 2.6, T: true, surround: 0.14, sc: '#f2f1ec', frame: '#f4f3ef', glass: '#4d5868' }, belts: [] }),
+      walls: [{ near: [1365.1, 3328.4], doors: [{ x: 13.0, w: 1.4, h: 2.5, col: '#5f5246', steps: 2 }],
+        draw: (P, W) => { P.r(0, W.eaves - 0.5, W.len, W.eaves, '#eeede8'); P.text('aurora', W.len * 0.78, 3.15, 0.42, '#2f62c9', '700 %px Arial, sans-serif'); } }] },
   ];
   // a flat dark canopy sticking out of a wall from x0 to x1, at height y, `depth` deep
   function canopy(W, x0, x1, y, depth) {
@@ -179,8 +186,10 @@ export function createVanemuise(scene, world, { shadows = true } = {}) {
   scene.add(group);
   let built = false;
 
+  // (through the work queue, ../jobs.js: the fronts are painted by skinHouses' own queued job, and the boxes
+  // their draw callbacks ask for are laid by the job after it, once the walls are measured. Built in one go
+  // the canopies were laid before any wall had asked for them, and were missing.)
   function build() {
-    built = true;
     const K = streetKit(world, group, { shadows });
     const { p } = K;
     const h = (x, z) => world.heightAt(x, z);
@@ -192,22 +201,27 @@ export function createVanemuise(scene, world, { shadows = true } = {}) {
     });
     const faces = (W) => { const [, v] = SV(W.mid[0], W.mid[1]); return Math.abs(v) < 62; };
     skinHouses(world, group, houses(later), { faces, shadows, ppm: 24, far: 10 });
-    for (let k = 0; k < later.length; k++) later[k]();        // (draw callbacks queue boxes that queue more)
-
+    jobs.add(function* () {
+      for (let k = 0; k < later.length; k++) { later[k](); if (jobs.late()) yield; }        // (draw callbacks queue boxes that queue more)
+      flags();
+      yield;
+      K.finish();
+    }, 'vanemuise boxes');
     // the three flags on the theatre's forecourt by the front entrance
-    for (const [k, v] of [36, 39, 42].entries()) {
-      const [x, z] = L(244.5, v), y = h(x, z);
-      p.add(new THREE.CylinderGeometry(0.05, 0.07, 9, 10), 0xe9e9e6, x, y + 4.5, z);
-      p.box(0.02, 1.0, 1.6, [0x2a62b8, 0xb1282e, 0xf1f1ee][k], x + D[0] * 0.8, y + 8.3, z + D[1] * 0.8, Math.atan2(D[0], D[1]));
+    function flags() {
+      for (const [k, v] of [36, 39, 42].entries()) {
+        const [x, z] = L(244.5, v), y = h(x, z);
+        p.add(new THREE.CylinderGeometry(0.05, 0.07, 9, 10), 0xe9e9e6, x, y + 4.5, z);
+        p.box(0.02, 1.0, 1.6, [0x2a62b8, 0xb1282e, 0xf1f1ee][k], x + D[0] * 0.8, y + 8.3, z + D[1] * 0.8, Math.atan2(D[0], D[1]));
+      }
     }
-    K.finish();
   }
 
   return {
     update(car) {
       if (built || !car) return;
       if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 450) return;
-      if ([L(-36, 50), L(-10, -30), L(240, 80), L(200, 0)].every((q) => world.ready(q[0], q[1]))) build();
+      if ([L(-36, 50), L(-10, -30), L(240, 80), L(200, 0)].every((q) => world.ready(q[0], q[1]))) { built = true; jobs.add(build, 'vanemuise'); }
     },
   };
 }

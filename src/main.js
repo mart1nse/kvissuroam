@@ -50,6 +50,7 @@ import { createJaneseMaja, janeseVectors, janeseWalls } from './world/janesemaja
 import { createArhitekti, arhitektiWalls, arhitektiProps, arhitektiVectors } from './world/arhitekti.js';
 import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
 import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
+import { createPepleriVanemuise, pepleriVanemuiseWalls } from './world/peplerivanemuise.js';
 import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
@@ -60,6 +61,7 @@ import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
 import { createKatoliku, katolikuWalls, katolikuVectors } from './world/katoliku.js';
 import { createKatoliku2, katoliku2Walls } from './world/katoliku2.js';
+import { createVeskiFronts, veskiFrontsWalls } from './world/veskifronts.js';
 import { createNoela, noelaWalls } from './world/noela.js';
 import { createRaadi, raadiWalls } from './world/raadi.js';
 import { createRaadi2, raadi2Walls } from './world/raadi2.js';
@@ -77,7 +79,10 @@ import { createTuru4, turu4Walls, turu4SignSkip } from './world/turu4.js';
 import { createTuru5, turu5Walls } from './world/turu5.js';
 import { createUlikooli, ulikooliWalls, ulikooliClear, ulikooliProps, ulikooliSignSkip } from './world/ulikooli.js';
 import { createTuru6, turu6Walls } from './world/turu6.js';
+import { createAstelpaju, astelpajuWalls } from './world/astelpaju.js';
+import { createLaiFronts, laiFrontsWalls } from './world/laifronts.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
+import { createIsaJaPoeg } from './world/isapoeg.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { skipHidden, onePass } from './still.js';
 import { createRiia3, riia3Walls, riia3Clear } from './world/riia3.js';
@@ -85,6 +90,7 @@ import { createRiia4, riia4Walls } from './world/riia4.js';
 import { createRiia5, riia5Walls } from './world/riia5.js';
 import { createRiia6, riia6Walls } from './world/riia6.js';
 import { createRiia7 } from './world/riia7.js';
+import { createKuperjanovi2, kuperjanovi2Walls } from './world/kuperjanovi2.js';
 import { createRavila, ravilaWalls, ravilaClear } from './world/ravila.js';
 import { createRavila2, ravila2Walls } from './world/ravila2.js';
 import { createRavila3, ravila3Walls } from './world/ravila3.js';
@@ -256,9 +262,9 @@ const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '
 addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === 'KeyA' && input.wasd)) pads.keyUsed(); }, true);
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
-let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, orident, delta, kuuni, vabadusLights;
+let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, ulikooli, parked;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -397,6 +403,7 @@ async function boot() {
   arhitektiWalls(world.walls);                  // Arhitekti 24, 26 and 28 are built by hand
   elvaWalls(world.walls);                       // and Elva 35b, 35c and 37
   vanemuiseWalls(world.walls);                  // and Vanemuise from Akadeemia to the theatre
+  pepleriVanemuiseWalls(world.walls);           // and the lap's fronts from Tiigi down Pepleri and up Vanemuise to Akadeemia
   kontserdimajaWalls(world.walls);              // the concert house's front block over the terrace is built by hand
   korveWalls(world.walls);                      // and Kõrveküla's south approach (Rähni, road 210, the centre)
   korve2Walls(world.walls);                     // and Kõrveküla's school, Kooli tn and the Hariduse tn corner
@@ -406,6 +413,7 @@ async function boot() {
   haridus10Walls(world.walls);                  // and Hariduse 10 by the pond, built by hand
   katolikuWalls(world.walls);                   // and the Catholic school on Oru, with its yard
   katoliku2Walls(world.walls);                  // and the Catholic church opposite it and the villa at Veski 5
+  veskiFrontsWalls(world.walls);                // Veski's house fronts along the lap, Oru to Kuperjanovi
   noelaWalls(world.walls);                      // and the farms along the village road in Nõela
   raadiWalls(world.walls);                      // and Foxway and the terraces at the west end of Keskuse tee, Raadi
   raadi2Walls(world.walls);                     // and the east end of Keskuse tee with the Mõisapiiri houses
@@ -423,6 +431,8 @@ async function boot() {
   ulikooliWalls(world.walls);                   // Ülikooli by the town hall: the von Bock house, Werner, Draakon, Lossi 3
   turu5Walls(world.walls);                      // Turu south to the Sõpruse bridge
   turu6Walls(world.walls);                      // Aleksandri 8-12, Dorpat hotel
+  astelpajuWalls(world.walls);                  // Mööbliait, Circle K and the corner house by road 3
+  laiFrontsWalls(world.walls);                  // Jakobi and Lai fronts along the lap
   riia2Walls(world.walls);                      // Riia tänav: Riia Kvartal, Riia 24, Pauluse church
   riia3Walls(world.walls);                      // Riia tänav: Aparaaditehas, Hektor, the railway bridge
   riia4Walls(world.walls);                      // Riia tänav: Lembitu to Väike kaar, Oskar Luts's house
@@ -441,6 +451,7 @@ async function boot() {
   jakobiLaiWalls(world.walls);                  // house colours along Jakobi and Lai
   oridentWalls(world.walls);                    // the Orident house on the Baeri/Jakobi corner is built by hand
   deltaWalls(world.walls);                      // the Delta centre across the river from Lai is built by hand
+  kuperjanovi2Walls(world.walls);               // Kuperjanovi from Veski to Vallikraavi: painted fronts
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
   quality.coarseStep = coarseStep();
@@ -501,6 +512,7 @@ async function boot() {
   arhitekti = createArhitekti(scene, world, { shadows: !isTouch });
   elva = createElva(scene, world, { shadows: !isTouch });
   vanemuise = createVanemuise(scene, world, { shadows: !isTouch });
+  pepVan = createPepleriVanemuise(scene, world, { shadows: !isTouch });
   korve = createKorvekula(scene, world, { shadows: !isTouch });
   korve2 = createKorvekula2(scene, world, { shadows: !isTouch });
   riia = createRiia(scene, world, { shadows: !isTouch });
@@ -511,6 +523,7 @@ async function boot() {
   haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
   katoliku = createKatoliku(scene, world, { shadows: !isTouch });
   katoliku2 = createKatoliku2(scene, world, { shadows: !isTouch });
+  veskiFronts = createVeskiFronts(scene, world, { shadows: !isTouch });
   noela = createNoela(scene, world, { shadows: !isTouch });
   raadi = createRaadi(scene, world, { shadows: !isTouch });
   raadi2 = createRaadi2(scene, world, { shadows: !isTouch });
@@ -528,13 +541,17 @@ async function boot() {
   turu5 = createTuru5(scene, world, { shadows: !isTouch });
   ulikooli = createUlikooli(scene, world, { shadows: !isTouch });
   turu6 = createTuru6(scene, world, { shadows: !isTouch });
+  astelpaju = createAstelpaju(scene, world, { shadows: !isTouch });
+  laiFronts = createLaiFronts(scene, world, { shadows: !isTouch });
   kaluri = createKaluri(scene, world, { shadows: !isTouch });
+  isaJaPoeg = createIsaJaPoeg(scene, world, { shadows: !isTouch });   // the Isa ja poeg bronze at the first corner
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
   riia4 = createRiia4(scene, world, { shadows: !isTouch });
   riia5 = createRiia5(scene, world, { shadows: !isTouch });
   riia6 = createRiia6(scene, world, { shadows: !isTouch });
   riia7 = createRiia7(scene, world, { shadows: !isTouch });
+  kuperjanovi2 = createKuperjanovi2(scene, world, { shadows: !isTouch });
   ravila = createRavila(scene, world, { shadows: !isTouch });
   ravila2 = createRavila2(scene, world, { shadows: !isTouch });
   ravila3 = createRavila3(scene, world, { shadows: !isTouch });
@@ -1322,7 +1339,7 @@ function frame(ts) {
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.
     if (!jobs.resting) {
-      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, ulikooli];
+      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];

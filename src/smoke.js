@@ -5,6 +5,8 @@
 // whenever the throttle goes down: only a wisp at first, building over a couple of seconds into a thick
 // cloud that keeps rolling out while the pedal is held. A gear change cuts it and it builds up again,
 // and at speed the wind thins it out.
+// A car with spec.exhaust.flame also spits a small flame from its tailpipe when a downshift crackles (the
+// unburnt fuel of the blip going off in the hot exhaust): a quick lick or two, drawn with the same points.
 import * as THREE from 'three';
 
 const MAX = 700;           // puffs alive at once
@@ -17,6 +19,8 @@ const SOOT_BUILD = 1.8;    // seconds of held throttle for a diesel's soot to co
 const SOOT_FADE = 0.2;     // ... and to die away on a lift or a gear change
 const FAR = 350;           // metres: other players' cars further off than this make no smoke here
 const THIN0 = 8, THIN = 35; // m/s: where the wind starts thinning the soot, and how fast (0.64 at 100 km/h)
+const POP0 = 0.18;         // how loud the crackle (car.exhaustPop, set by audio.js) must be before a flame shows
+const POP_RATE = 34;       // flame licks per second at the loudest crackle
 
 // One car's soot state (the player's own, or another player's car rebuilt from what it sends).
 export const sootState = () => ({ sootOwed: 0, build: 0 });
@@ -42,7 +46,8 @@ export function createSmoke(world) {
   geo.setAttribute('position', aPos); geo.setAttribute('aSize', aSize); geo.setAttribute('aAlpha', aAlpha); geo.setAttribute('aShade', aShade);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { uHalfH: { value: 400 }, uColor: { value: new THREE.Color(0xdcd9e6) }, uSoot: { value: new THREE.Color(0x1b1a19) } },
+    uniforms: { uHalfH: { value: 400 }, uColor: { value: new THREE.Color(0xdcd9e6) }, uSoot: { value: new THREE.Color(0x1b1a19) },
+      uFire: { value: new THREE.Color(0xff5a12) }, uCore: { value: new THREE.Color(0xfff0b8) } },
     vertexShader: `
       attribute float aSize; attribute float aAlpha; attribute float aShade;
       uniform float uHalfH; varying float vAlpha; varying float vShade;
@@ -55,14 +60,19 @@ export function createSmoke(world) {
         vShade = aShade;
       }`,
     fragmentShader: `
-      uniform vec3 uColor; uniform vec3 uSoot; varying float vAlpha; varying float vShade;
+      uniform vec3 uColor; uniform vec3 uSoot; uniform vec3 uFire; uniform vec3 uCore; varying float vAlpha; varying float vShade;
       void main() {
         vec2 p = gl_PointCoord * 2.0 - 1.0;
         float r2 = dot(p, p);
         if (r2 > 1.0) discard;
         // soft ball, a little denser low down so it reads as a rolling cloud rather than a disc
         float a = (1.0 - r2) * (1.0 - r2) * (0.85 + 0.15 * p.y) * vAlpha;
-        gl_FragColor = vec4(mix(uColor, uSoot, vShade) * (0.92 - 0.1 * p.y), a);
+        gl_FragColor = vec4(mix(uColor, uSoot, min(vShade, 1.0)) * (0.92 - 0.1 * p.y), a);
+        // (shade 2..3 is a flame, 3 the hottest: a pale core in an orange ball, with a harder edge than smoke)
+        if (vShade > 1.5) {
+          float core = (1.0 - r2) * (1.0 - r2);
+          gl_FragColor = vec4(mix(uFire, uCore, clamp(core * (0.35 + 0.9 * (vShade - 2.0)), 0.0, 1.0)), sqrt(1.0 - r2) * vAlpha);
+        }
         #include <colorspace_fragment>
       }`,
   });
@@ -126,6 +136,42 @@ export function createSmoke(world) {
     }
   }
 
+  // a downshift's crackle seen: licks of flame at the tailpipe, more of them the louder it crackles, and one
+  // bigger burp as it starts. Each lick is a few small hot balls blown back out of the pipe that shrink and
+  // cool within a tenth of a second. Only the player's own car (the crackle is not sent to other players).
+  let popOwed = 0, popWas = 0;
+  function flames(car, dt) {
+    const ex = car.spec.exhaust, pop = car.exhaustPop || 0;
+    const start = pop >= POP0 && popWas < POP0;
+    popWas = pop;
+    if (pop < POP0 || car.reversing) { popOwed = 0; return; }
+    popOwed += POP_RATE * (pop - POP0) / (1 - POP0) * Math.max(0.5, thinK) * dt + (start ? 1 : 0);
+    if (popOwed < 1) return;
+    // the pipe's end in the world: the model stands on the middle of the wheelbase, pitched with the body
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
+    const cp = Math.cos(car.pitch || 0), sp = Math.sin(car.pitch || 0), lz = car.spec.wheelbase / 2 + ex.back;
+    const along = car.a - car.spec.wheelbase / 2 - (ex.y * sp + lz * cp);
+    const x = car.x + fx * along + sx * ex.x, z = car.z + fz * along + sz * ex.x, y = car.y + ex.y * cp - lz * sp;
+    const wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy;
+    while (popOwed >= 1) {
+      popOwed -= 1;
+      const big = start ? 1.5 : 0.75 + 0.5 * Math.random(), n = start ? 4 : 2, jet = 1.5 + 1.5 * Math.random();
+      for (let k = 0; k < n; k++) {
+        const i = next; next = (next + 1) % MAX; fresh = true;
+        const r = () => (Math.random() - 0.5) * 0.02, back = 0.02 + k * 0.03 * big;
+        shade[i] = 3 - 0.3 * k; rise[i] = 0; gy[i] = -1e9;
+        pos[i * 3] = x - fx * back + r(); pos[i * 3 + 1] = y + r(); pos[i * 3 + 2] = z - fz * back + r();
+        // (it has to keep up with the car: the car's own speed, and blown back out of the pipe)
+        vel[i * 3] = wvx - fx * jet; vel[i * 3 + 1] = 0.25; vel[i * 3 + 2] = wvz - fz * jet;
+        // (update() below moves it a step in this same frame: start it the car's own step back, or at
+        // speed its first frame is drawn half a metre ahead of the pipe, inside the car)
+        pos[i * 3] -= wvx * dt; pos[i * 3 + 2] -= wvz * dt;
+        age[i] = 0; life[i] = (0.05 + 0.04 * Math.random()) * (start ? 1.3 : 1);
+        s0[i] = (0.13 - 0.022 * k) * big; s1[i] = s0[i] * 0.45; a0[i] = 0.92 - 0.12 * k;
+      }
+    }
+  }
+
   // tyre smoke from one car (ours, or another player's rebuilt from what it sends)
   function tyres(car, dt, st) {
     const { heat, owed } = st;
@@ -163,6 +209,7 @@ export function createSmoke(world) {
   // others: other players' cars, [car-like] (multiplayer.js remotes()); only the ones near enough to see
   function update(car, dt, active, others = []) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
+    if (active && car && !car.inWater && car.spec.exhaust?.flame) flames(car, dt);
     for (const o of others) {
       if (o.inWater || (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > far * far)) continue;
       let st = theirs.get(o.id);
@@ -182,6 +229,12 @@ export function createSmoke(world) {
       const t = (age[i] += dt) / life[i];
       if (t >= 1) { life[i] = -1; size[i] = 0; alpha[i] = 0; continue; }
       alive++;
+      if (shade[i] > 1.5) {
+        // a flame: carried straight on, shrinking and cooling from pale yellow to orange as it goes out
+        pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+        size[i] = s0[i] + (s1[i] - s0[i]) * t; alpha[i] = a0[i] * (1 - t * t * t); shade[i] = Math.max(2, shade[i] - dt * 9);
+        continue;
+      }
       vel[i * 3] = vel[i * 3] * drag + 0.25 * dt; vel[i * 3 + 2] *= drag;
       vel[i * 3 + 1] += (rise[i] - vel[i * 3 + 1]) * Math.min(1, dt * 1.2);
       pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;

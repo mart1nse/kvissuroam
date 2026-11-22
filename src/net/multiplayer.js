@@ -66,7 +66,7 @@ function haloMesh() {
   return m;
 }
 
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false }) {
   const others = new Map();      // id -> remote player
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -349,6 +349,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const o of others.values()) {
       const p = o.pose;
       if (!p || (p[20] & HOT)) continue;                         // they are on a lap: we pass through them
+      if (racing(o.id)) continue;                                // in the race from the grid on, even before their flag arrives
       const dx = car.x - p[0], dz = car.z - p[1];
       if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) continue;
       const gx = Math.sin(p[3]), gz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);

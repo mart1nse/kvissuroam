@@ -728,6 +728,7 @@ body.touch #ctlbtn { display: none; }
 #rcount .names span.wait { opacity: .5; font-style: italic; }
 #rcount .btns { display: flex; gap: 10px; justify-content: center; }
 #rcount .btns { gap: 14px; }
+#rcount .btns button small { font-size: .55em; opacity: .6; letter-spacing: .1em; margin-left: .4em; vertical-align: .15em; }
 #rcount .btns button { white-space: nowrap; border: none; border-radius: 999px; padding: .6em 1.5em; font: 400 2em 'Russo One', var(--font); letter-spacing: .06em; }
 #rcount .btns .go { background: linear-gradient(180deg, #ffe58a, #ffb52e); color: var(--ink); }
 #rcount .btns .in { background: rgba(20, 60, 20, .5); color: #7dff5a; }

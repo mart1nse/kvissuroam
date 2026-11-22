@@ -1,19 +1,21 @@
 // "Isa ja poeg" (Father and son, Ülo Õun), the bronze of two small naked boys holding hands on the park side
 // of the first corner of the lap, where Küüni turns into Vallikraavi (Martin, 21 Nov, from his Street View
 // shots of July 2014). They stand on the pavement beyond the start straight's lamps and lindens, looking
-// down Vallikraavi past the glass hotel: the taller, slimmer boy on their left, the chubby one with the big
+// up Küüni towards Poe (Martin: twice the first size): the taller, slimmer boy on their left, the chubby one with the big
 // head on their right.
 //
 // Light on purpose (Martin: the racetrack beside it is not to change, and no freeze frames): one merged mesh
 // of about 3,500 triangles in one colour, no pictures; built through the work queue in three small steps
-// when the car comes within 400 m, drawn only within 250 m. It stands 4.7 m or more beyond the lap's edge
+// when the car comes within 400 m, drawn only within 250 m. It stands 5 m or more beyond the lap's edge
 // (outside the start straight's row of lamps and lindens) and is solid like a lamp post.
 import * as THREE from 'three';
 import { Parts } from '../race/landmarks.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
 
-export const ISA_JA_POEG = { x: 1541.6, z: 2969.8, face: [-0.73, 0.68] };     // face: the way they look (down Vallikraavi)
+// (Martin, 22 Nov: turned a quarter round to look up Küüni towards Poe, moved a little right and back as seen
+// from the corner, and twice the size)
+export const ISA_JA_POEG = { x: 1543.7, z: 2969.9, face: [-0.668, -0.744], size: 2 };   // face: the way they look (towards Poe)
 const BRONZE = 0x6a5847, PLATE = 0x75685c;
 const BUILD_AT = 400, DRAW_TO = 250;
 
@@ -48,7 +50,7 @@ function boy(p, ox, chub, inner) {
 }
 
 export function createIsaJaPoeg(scene, world, { shadows = true } = {}) {
-  const { x: X, z: Z, face } = ISA_JA_POEG;
+  const { x: X, z: Z, face, size } = ISA_JA_POEG;
   const yaw = Math.atan2(face[0], face[1]);                 // turns local +z (where they look) to `face`
   const group = still(new THREE.Group());
   group.visible = false;
@@ -68,10 +70,11 @@ export function createIsaJaPoeg(scene, world, { shadows = true } = {}) {
     mesh.castShadow = shadows; mesh.receiveShadow = shadows;
     mesh.position.set(X, world.heightAt(X, Z), Z);
     mesh.rotation.y = yaw;
+    mesh.scale.setScalar(size);
     mesh.updateMatrix();
     group.add(mesh);
     group.updateMatrixWorld(true);
-    world.addSolids([{ x: X, z: Z, yaw, hx: 0.5, hz: 0.3 }]);
+    world.addSolids([{ x: X, z: Z, yaw, hx: 0.5 * size, hz: 0.3 * size }]);
   }
 
   return {

@@ -428,16 +428,16 @@ export const CARS = {
     name: 'Subaru Impreza 22B STi',
     short: '22B STi',
     year: 1998,
-    blurb: 'GC8 · 2.2 flat-four turbo · 206 kW (280 PS) · 5 speeds, driven as an automatic · all-wheel drive',
+    blurb: 'GC8 · 2.2 flat-four turbo · 280 PS on paper, about 305 hp for real · 5 speeds, driven as an automatic · all-wheel drive',
     mass: 1345,                 // kerb 1270 kg + driver
     wheelbase: 2.52,
     track: 1.49,                // 1480 front / 1500 rear: the wide body of the rally car
     cgFront: 0.43,              // the flat four sits ahead of the front axle: about 57 % front with the driver in
     cgHeight: 0.48,             // ...but low: a boxer's crank is at hub height
     wheelRadius: 0.31,          // 235/40 ZR17 on 8.5J BBS wheels
-    cdA: 0.36 * 2.05,
+    cdA: 0.38 * 2.05,           // wide arches, 235 tyres and the tall wing: with the real power this gives the real 248 km/h
     drive: 'awd',
-    rearShare: 0.6,             // DCCD centre differential: 35 : 65 open, closing toward 50 : 50 as it locks
+    rearShare: 0.65,            // DCCD centre differential left open: 35 : 65, the tail-happy setting (Martin's notes, 22 Nov)
     grip: 1.08,                 // Pirelli P Zero 235s under 1270 kg
     abs: 0.85,                  // four-channel ABS
     engine: {
@@ -449,8 +449,10 @@ export const CARS = {
       pulses: 2,                // four cylinders: two firing pulses per revolution
       revDrop: 4200,
       revCut: 0.045, revCutDrop: 400,
-      // EJ22G on full boost: 363 Nm @ 3200, 206 kW @ 6000 (the figure Subaru put on paper)
-      torque: [[850, 150], [1500, 200], [2000, 255], [2600, 325], [3200, 363], [4000, 361], [5000, 349], [6000, 328], [6500, 305], [7000, 275], [7900, 225], [8300, 150]],
+      // EJ22G on full boost as stock cars measure, not as Subaru put it on paper (280 PS, 363 Nm, the
+      // Japanese makers' agreed cap): about 385 Nm @ 3200 and 227 kW (305 hp) @ 6000 at the crank,
+      // which is some 240 hp at the wheels (Martin's notes, 22 Nov)
+      torque: [[850, 150], [1500, 205], [2000, 265], [2600, 342], [3200, 385], [4000, 385], [5000, 376], [6000, 361], [6500, 334], [7000, 300], [7900, 240], [8300, 150]],
       // ...and off boost: 2.2 litres at 8.0 : 1 compression
       turbo: {
         torqueOff: [[850, 125], [2000, 160], [3500, 182], [5000, 178], [6500, 160], [7900, 132], [8300, 100]],
@@ -469,10 +471,10 @@ export const CARS = {
     gears: [3.083, 2.062, 1.545, 1.151, 0.825],
     reverse: 3.416,
     finalDrive: 3.9,
-    efficiency: 0.8,               // (three differentials to turn)
+    efficiency: 0.78,              // three differentials to turn: 305 hp at the crank is about 240 at the wheels
     shiftTime: 0.3,
     limiter: null,              // no 180 km/h home-market cap: drag sets the top speed in 5th
-    ref: { zeroTo100: 4.9, top: 248, powerKw: 206 },   // road tests: 4.7 to 5.3 s; about 248 km/h unrestricted
+    ref: { zeroTo100: 4.7, top: 248, powerKw: 227 },   // the quickest road tests (they run 4.7 to 5.3 s); about 248 km/h unrestricted; power as measured, not the 206 kW on paper
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

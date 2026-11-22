@@ -215,7 +215,7 @@ export function createNarva(scene, world, { shadows = true } = {}) {
   return {
     update(car) {
       if (built || !car) return;
-      if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 320) return;
+      if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 280) return;          // (not from the centre test drive past Tasku: phones are near their limit there)
       if (![[1878, 2720], [1939, 2779], [1846, 2690], [1737, 2805]].every((q) => world.ready(q[0], q[1]))) return;
       built = true;
       jobs.add(build, 'narva');

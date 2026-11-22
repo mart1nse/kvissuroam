@@ -31,8 +31,9 @@ let turnInHigh = true;
 // scrubs the nose round instead of stopping at the limit. A steering wheel is not affected.
 const INWARD_WAIT = 0.6, INWARD_T = 1.2;
 // ...up to no more than this lock at this speed (km/h, deg), never below the grip lock: drawn by Martin over the bZ4X
-// plot (2026-11-22, third drawing): easing from full lock at 15 km/h to 28 deg at 60, 20 at 80, 7 at 100, 1.5 at 131
-const INWARD_CAP = [[0, 34.4], [15, 34.4], [25, 34], [30, 33.7], [38, 32.5], [42, 31.8], [50, 31], [55, 30], [60, 28], [64, 27], [68, 25], [76, 22], [80, 20], [86, 17], [90, 14], [92, 12], [95, 10], [97, 9], [100, 7], [103, 6.2], [107, 5], [110, 4], [116, 3], [124, 2], [131, 1.5], [400, 0.5]];
+// plot (2026-11-23: the middle of his second and third drawings): full lock at 15 km/h, 29 deg at 60, 22.5 at 80,
+// 12.5 at 100, 1.5 at 131
+const INWARD_CAP = [[0, 34.4], [15, 34.4], [25, 34], [30, 33.7], [40, 32.8], [50, 31.5], [55, 30.6], [60, 29.2], [65, 27.9], [70, 26.1], [75, 24.4], [80, 22.5], [85, 20.6], [90, 18.2], [95, 15.4], [100, 12.5], [105, 9.4], [110, 6.6], [115, 4.8], [120, 3.5], [125, 2.6], [131, 1.5], [400, 0.5]];
 const INWARD_BACK = 2;     // ...and the wheels come back from it this many times faster than from a crawl's full lock
 const inwardCap = (kmh) => { for (let i = 1; i < INWARD_CAP.length; i++) { const [v1, a1] = INWARD_CAP[i]; if (kmh <= v1) { const [v0, a0] = INWARD_CAP[i - 1]; return (a0 + (a1 - a0) * (kmh - v0) / (v1 - v0)) * Math.PI / 180; } } return 0; };
 let inwardOn = false;

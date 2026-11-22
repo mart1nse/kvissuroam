@@ -28,18 +28,20 @@ const TILE = 1.4;          // metres of mark per repeat of the texture
 const GRID = [LOOK.GRASS, LOOK.PAVED, LOOK.GRAVEL, LOOK.DIRT, 0];
 // per look: the pattern weights [setts, turf, groove, print] (rubber is what is left), colour, strength, width
 const LOOKS = [];
-LOOKS[LOOK.PAVED] = { w: [0, 0, 0, 0], c: [0.03, 0.03, 0.04], s: 0.74, k: 1 };
-LOOKS[LOOK.SETTS] = { w: [1, 0, 0, 0], c: [0.03, 0.03, 0.04], s: 0.72, k: 1 };
-LOOKS[LOOK.GRASS] = { w: [0, 1, 0, 0], c: [0.035, 0.02, 0.009], s: 0.9, k: 1.4 };
-LOOKS[LOOK.GRAVEL] = { w: [0, 0, 1, 0], c: [0.09, 0.068, 0.042], s: 0.85, k: 1.8 };
-LOOKS[LOOK.DIRT] = { w: [0, 0, 1, 0], c: [0.055, 0.035, 0.018], s: 0.85, k: 1.7 };
-const MUD = [0.06, 0.036, 0.018];        // mud carried onto hard ground
+// (the colour is what the ground under the mark is multiplied by where the mark is full: see the shader)
+const RUBBER = [0.07, 0.07, 0.08];
+LOOKS[LOOK.PAVED] = { w: [0, 0, 0, 0], c: RUBBER, s: 0.74, k: 1 };
+LOOKS[LOOK.SETTS] = { w: [1, 0, 0, 0], c: RUBBER, s: 0.72, k: 1 };
+LOOKS[LOOK.GRASS] = { w: [0, 1, 0, 0], c: [0.42, 0.3, 0.19], s: 0.9, k: 2.1 };
+LOOKS[LOOK.GRAVEL] = { w: [0, 0, 1, 0], c: [0.6, 0.52, 0.42], s: 0.85, k: 1.8 };
+LOOKS[LOOK.DIRT] = { w: [0, 0, 1, 0], c: [0.5, 0.4, 0.3], s: 0.85, k: 1.7 };
+const MUD = [0.45, 0.34, 0.24];        // mud carried onto hard ground
 const soft = (l) => l === LOOK.GRASS || l === LOOK.DIRT;
 const hard = (l) => l === LOOK.PAVED || l === LOOK.SETTS;
 
 // One small picture with a pattern in each channel (64 across the mark, 256 along it, wrapping along):
 //  R rubber laid by a tyre: soft edges, heavier under the shoulders, faint tread lines, streaky along its length;
-//  G turf torn up: ragged edges, clods and tufts left standing;
+//  G soil where turf is torn up: soft clods and crumbs (the shape of the tear is worked out in the shader);
 //  B a groove pressed into loose stones: speckled;
 //  A the stones pushed up either side of it.
 function markTexture() {
@@ -58,12 +60,11 @@ function markTexture() {
     const at = (x, y) => g[((y % ny) + ny) % ny * nx + ((x % nx) + nx) % nx];
     return (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy;
   };
-  const edgeL = lattice(1, 24), edgeR = lattice(1, 24), clods = lattice(6, 40), fine = lattice(16, 96), stones = lattice(24, 120);
+  const edgeL = lattice(1, 24), clods = lattice(6, 40), fine = lattice(16, 96), stones = lattice(24, 120);
   for (let y = 0; y < H; y++) {
     const v = (y + 0.5) / H;
     // slow variation along the mark (wraps, so the tile repeats without a seam)
     const along = 0.84 + 0.1 * Math.sin(v * Math.PI * 2) + 0.06 * Math.sin(v * Math.PI * 6 + 1.3) + 0.05 * (rows[y] - 0.5);
-    const eL = 0.04 + 0.16 * noise(edgeL, 0, v), eR = 0.04 + 0.16 * noise(edgeR, 0, v);
     for (let x = 0; x < W; x++) {
       const u = (x + 0.5) / W, o = (y * W + x) * 4;
       // rubber
@@ -72,11 +73,9 @@ function markTexture() {
       const groove = 1 - 0.16 * Math.max(Math.exp(-(((u - 0.37) / 0.022) ** 2)), Math.exp(-(((u - 0.5) / 0.022) ** 2)), Math.exp(-(((u - 0.63) / 0.022) ** 2)));
       const streak = 0.9 + 0.1 * cols[x];
       d[o] = Math.round(255 * Math.min(1, edge * shoulder * groove * streak * along * (0.94 + 0.06 * rnd())));
-      // turf: a ragged band of soil, clods in it, a few tufts left
-      const band = ss(eL, eL + 0.1, u) * ss(eR, eR + 0.1, 1 - u);
+      // soil: clods and finer crumbs, soft
       const clod = noise(clods, u, v), grain = noise(fine, u, v);
-      const tuft = ss(0.7, 0.82, noise(fine, u + 0.37, v + 0.21)) * 0.8;
-      d[o + 1] = Math.round(255 * Math.min(1, band * (0.5 + 0.6 * clod) * (0.75 + 0.35 * grain) * (1 - tuft)));
+      d[o + 1] = Math.round(255 * Math.min(1, 0.55 * clod + 0.45 * grain));
       // gravel: the groove under the tyre, speckled with stones, and the ridges pushed up beside it
       const st = noise(stones, u, v), sp = rnd();
       // (a broad trough, deepest under the tyre's middle, its edges wandering a little; the ridges outside it)
@@ -94,42 +93,92 @@ function markTexture() {
   return t;
 }
 
-// the patterns mixed by the look weights; the depth lift in the vertex shader
-function dress(shader) {
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute vec4 look;\nvarying vec4 vLook;')
-    .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')      // flat on the ground (no normals to keep)
-    .replace('#include <project_vertex>', `#include <project_vertex>
-      vLook = look;
-      {
-        vec3 ray = normalize(mvPosition.xyz);
-        float s = max(abs(dot(ray, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz))), 0.04);
-        mvPosition.xyz -= ray * (${LIFT_DEPTH.toFixed(3)} / s);      // ${LIFT_DEPTH} m higher, as far as depth goes
-        gl_Position = projectionMatrix * mvPosition;
-      }`);
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec4 vLook;')
-    .replace('#include <map_fragment>', '')
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      {
-        vec4 sk = texture2D(map, vMapUv);
-        float wR = max(0.0, 1.0 - vLook.x - vLook.y - vLook.z - vLook.w);
-        // setts and block paving: rubber on the stones' tops, none in the joints, each stone its own share
-        vec2 g = vec2(vMapUv.x * 2.6, vMapUv.y * 13.0);
-        g.y += 0.5 * mod(floor(g.x), 2.0);
-        vec2 f = fract(g), id = floor(g);
-        float joint = smoothstep(0.0, 0.16, f.x) * smoothstep(0.0, 0.16, 1.0 - f.x) * smoothstep(0.0, 0.12, f.y) * smoothstep(0.0, 0.12, 1.0 - f.y);
-        float stone = 0.55 + 0.45 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
-        // a muddy tread: lugs across the tyre, angled out from its middle
-        float lug = smoothstep(0.35, 0.5, fract(vMapUv.y * 36.0 + abs(vMapUv.x - 0.5) * 1.6)) * smoothstep(0.95, 0.8, fract(vMapUv.y * 36.0 + abs(vMapUv.x - 0.5) * 1.6));
-        float groove = sk.b, ridge = sk.a;
-        float a = wR * sk.r + vLook.x * sk.r * joint * stone + vLook.y * sk.g + vLook.z * max(groove, ridge) + vLook.w * sk.r * (0.35 + 0.65 * lug);
-        // the ridges are the loose stones turned up: lighter than the groove
-        float up = vLook.z * ridge / max(groove + ridge, 0.001);
-        diffuseColor.rgb = mix(diffuseColor.rgb, min(vec3(1.0), diffuseColor.rgb * 5.5 + 0.12), clamp(up, 0.0, 1.0));
-        diffuseColor.a *= a;
-      }`);
-}
+// How a mark is drawn. It does not paint a colour over the ground: it multiplies what is already there (the
+// blending below), so a rut keeps the grass photo's own light, shade and texture under it, and the ground darkens
+// or browns rather than being covered. The factor per look, at full strength:
+//  - rubber (tarmac, setts, a muddy print): towards the tint where the pattern is;
+//  - turf: a wide soft band of grass pressed flat (a little darker and yellower, streaked along the way the tyre
+//    went), and inside it, once the slide is hard enough, soil where the turf tore: the harder the slide, the
+//    wider the tear, with wandering edges, a slightly lighter lip of turf thrown up along them, and crumbs;
+//  - groove (gravel, dirt): darker in the trough, lighter where the stones were pushed up.
+// Factors over 1 lighten. The blend is out = src * dst + dst * (1 - srcAlpha), so a factor f is sent as
+// alpha = largest of 1 - f, and colour = f - 1 + alpha.
+const VERT = /* glsl */ `
+#include <common>
+#include <fog_pars_vertex>
+attribute vec4 tint;
+attribute vec4 look;
+varying vec2 vUv;
+varying vec4 vTint;
+varying vec4 vLook;
+void main() {
+  vUv = uv; vTint = tint; vLook = look;
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  #include <fog_vertex>
+  vec3 ray = normalize(mvPosition.xyz);
+  float s = max(abs(dot(ray, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz))), 0.04);
+  mvPosition.xyz -= ray * (${LIFT_DEPTH.toFixed(3)} / s);      // ${LIFT_DEPTH} m higher, as far as depth goes
+  gl_Position = projectionMatrix * mvPosition;
+}`;
+const FRAG = /* glsl */ `
+#include <common>
+#include <fog_pars_fragment>
+uniform sampler2D map;
+varying vec2 vUv;
+varying vec4 vTint;
+varying vec4 vLook;
+float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+float n1(float x) { float i = floor(x), f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
+void main() {
+  vec4 sk = texture2D(map, vUv);
+  vec3 tint = vTint.rgb;
+  float a = vTint.a;
+  float wR = max(0.0, 1.0 - vLook.x - vLook.y - vLook.z - vLook.w);
+  vec3 one = vec3(1.0);
+  vec3 f = one * (wR + vLook.y + vLook.z + vLook.x + vLook.w);
+  // rubber
+  f -= wR * (one - mix(one, tint, a * sk.r));
+  // setts and block paving: rubber on the stones' tops, none in the joints, each stone its own share
+  if (vLook.x > 0.001) {
+    vec2 g = vec2(vUv.x * 2.6, vUv.y * 13.0);
+    g.y += 0.5 * mod(floor(g.x), 2.0);
+    vec2 q = fract(g), id = floor(g);
+    float joint = smoothstep(0.0, 0.16, q.x) * smoothstep(0.0, 0.16, 1.0 - q.x) * smoothstep(0.0, 0.12, q.y) * smoothstep(0.0, 0.12, 1.0 - q.y);
+    float stone = 0.55 + 0.45 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
+    f -= vLook.x * (one - mix(one, tint, a * sk.r * joint * stone));
+  }
+  // turf
+  if (vLook.y > 0.001) {
+    float d = clamp(a / 0.9, 0.0, 1.0);
+    float x = abs(vUv.x - 0.5) * 2.0;                              // 0 in the middle, 1 at the edge
+    float side = step(0.5, vUv.x);
+    float wob = (n1(vUv.y * 9.0 + side * 17.0) - 0.5) * 0.18 + (n1(vUv.y * 31.0 + side * 5.0) - 0.5) * 0.06;
+    float pressed = (1.0 - smoothstep(0.45, 1.0, x + wob * 0.5)) * (0.78 + 0.44 * h1(floor(vUv.x * 19.0) + 3.0));
+    float tear = 0.5 * smoothstep(0.3, 0.95, d * (0.6 + 0.7 * n1(vUv.y * 2.3 + 7.0)));
+    float soil = (1.0 - smoothstep(tear - 0.16, tear + 0.02, x + wob)) * step(0.02, tear);
+    float lip = exp(-pow((x + wob - tear - 0.1) / 0.1, 2.0)) * smoothstep(0.08, 0.3, tear);
+    vec3 fT = mix(one, vec3(0.78, 0.8, 0.6), clamp(pressed * (0.3 + 0.5 * d), 0.0, 1.0))
+      * mix(one, tint * (0.55 + 0.9 * sk.g), soil * (0.35 + 0.4 * d))
+      * (1.0 + 0.08 * lip);
+    f -= vLook.y * (one - fT);
+  }
+  // groove in loose ground, the ridges lighter
+  if (vLook.z > 0.001) {
+    vec3 fG = mix(one, tint, a * sk.b) * (1.0 + 0.45 * a * sk.a * (1.0 - sk.b));
+    f -= vLook.z * (one - fG);
+  }
+  // a muddy tread: lugs across the tyre, angled out from its middle
+  if (vLook.w > 0.001) {
+    float t = fract(vUv.y * 36.0 + abs(vUv.x - 0.5) * 1.6);
+    float lug = smoothstep(0.35, 0.5, t) * smoothstep(0.95, 0.8, t);
+    f -= vLook.w * (one - mix(one, tint, a * sk.r * (0.35 + 0.65 * lug)));
+  }
+  #ifdef USE_FOG
+    f = mix(f, one, smoothstep(fogNear, fogFar, vFogDepth));
+  #endif
+  float al = clamp(max(max(1.0 - f.r, 1.0 - f.g), 1.0 - f.b), 0.0, 1.0);
+  gl_FragColor = vec4(max(f - 1.0 + al, 0.0), al);
+}`;
 
 export function createSkidMarks(world) {
   const pos = new Float32Array(MAX * 4 * 3);
@@ -143,30 +192,31 @@ export function createSkidMarks(world) {
   const attrs = [aPos, aCol, aUv, aLook];
   for (const a of attrs) a.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('position', aPos);
-  geo.setAttribute('color', aCol);
+  geo.setAttribute('tint', aCol);
   geo.setAttribute('uv', aUv);
   geo.setAttribute('look', aLook);
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
-  // (lit like the ground, shadows included: a soil-brown rut drawn unlit was lighter than the grass beside it in a
-  // tree's shade)
-  const mat = new THREE.MeshLambertMaterial({
-    map: markTexture(), vertexColors: true, transparent: true, depthWrite: false,
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: VERT, fragmentShader: FRAG, fog: true,
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null } }]),
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+    blendSrc: THREE.DstColorFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
     // (pulled nearer by the slope at least as much as any ground layer is: streetKit's go to -6, groundLayer's -4 and
     // down by half a step per texture)
     polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -8,
   });
-  mat.onBeforeCompile = dress;
-  mat.customProgramCacheKey = () => 'skidmarks2';
+  mat.uniforms.map.value = markTexture();
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 2;
-  mesh.receiveShadow = true;
 
   let next = 0;
   // per wheel: the last ribbon point (centre, its two edges, strength, distance along the mark, heading), the
   // look there (pattern weights L, colour C), and the mud the tyre carries
   const wheelSet = () => [0, 1, 2, 3].map(() => ({ on: false, x: 0, z: 0, lx: 0, ly: 0, lz: 0, rx: 0, ry: 0, rz: 0, a: 0, v: 0, tx: 0, tz: 0, hw: TYRE / 2,
-    L: [0, 0, 0, 0], C: [0.03, 0.03, 0.04], mud: 0, mx: 0, mz: 0, look: LOOK.PAVED }));
+    L: [0, 0, 0, 0], C: RUBBER, mud: 0, mx: 0, mz: 0, look: LOOK.PAVED }));
   const mine = wheelSet(), theirs = new Map();
 
   // the look under a point: what a hand-built place laid there, else the map's surface (0 on water)

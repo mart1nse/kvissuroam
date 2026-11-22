@@ -1,7 +1,7 @@
 // Pictures of tyre marks on different ground (src/skidmarks.js, Martin 22 Nov 2026: marks on hand-laid paving,
 // grass and gravel). Lays marks with a made-up sliding car along a line, then looks at them.
 //   node tools/skid-shots.mjs <out dir> <name:x,z,heading-deg,length[,mode]> ...
-// mode: slide (default, the rear sliding, the front a little), roll (no slide: only a muddy tyre leaves prints),
+// mode: slide (default, the rear sliding, the front a little), vary (the rear's slide builds and eases), roll (no slide: only a muddy tyre leaves prints),
 // mud (slides over the first third, rolls after). Needs the vite dev server on :5173 and Playwright.
 import { createRequire } from 'module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -33,8 +33,9 @@ for (const spot of spots) {
       car.yaw = yaw + wig;
       car.x = x + fx * d + Math.cos(yaw) * Math.sin(d / 5) * 1.2; car.z = z + fz * d + Math.sin(yaw) * Math.sin(d / 5) * 1.2;
       car.y = g.world.heightAt(car.x, car.z);
-      const slide = mode === 'slide' || (mode === 'mud' && d < len / 3);
-      car.skidR = slide ? 0.75 : 0; car.rubR = slide ? 8 : 0; car.skidF = slide ? 0.3 : 0; car.rubF = slide ? 4 : 0;
+      const slide = mode === 'slide' || mode === 'vary' || (mode === 'mud' && d < len / 3);
+      // vary: the slide builds and eases off again along the way
+      car.skidR = mode === 'vary' ? 0.12 + 0.7 * Math.abs(Math.sin(d / 9)) : slide ? 0.75 : 0; car.rubR = slide ? 8 : 0; car.skidF = slide ? 0.3 : 0; car.rubF = slide ? 4 : 0;
       sk.update(car);
       if (Math.abs(d % 2) < 0.08) seen.push(sk.lookAt ? sk.lookAt(car.x, car.z) : '?');
     }

@@ -251,7 +251,22 @@ body:not(.touch) .touch-only { display: none; }
 body.still #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)),
   url('/menu-still.jpg') center / cover no-repeat, #12062b; }
 .pad button.held { background: rgba(255, 255, 255, .28); transform: scale(.96); }
-body.touch #dash { right: 50%; bottom: auto; top: max(4px, env(safe-area-inset-top)); transform: translateX(50%); --d: clamp(104px, 31vh, 150px); }
+/* phones, as Martin drew it (22 Nov 2026): the rev counter bottom left over the steering buttons, the lap
+   timer top centre next to the top buttons, the race button under the top buttons on the right. The sizes
+   of the minimap, the top bar and the pedals as their own rules give them, for the places worked out here. */
+body.touch {
+  --mm: clamp(96px, 15vw, 170px);                                  /* minimap */
+  --tbw: calc(6 * clamp(44px, 6vw, 60px) + 40px);                  /* top bar: six buttons, five gaps */
+  --tbr: max(10px, env(safe-area-inset-right));
+  --tbh: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px));
+  --padh: calc(max(14px, env(safe-area-inset-bottom)) + clamp(72px, 24vh, 118px));   /* steering buttons, from the bottom */
+  --padw: clamp(72px, 13vw, 118px);
+  --lapw: clamp(170px, 24vw, 230px);
+  --lapr: calc(var(--tbr) + var(--tbw) + 12px);                    /* lap timer's right edge, from the right */
+}
+/* the rev counter centred over the left steering button, as big as fits between the street name and the buttons */
+body.touch #dash { right: auto; top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2); bottom: calc(var(--padh) + 6px); transform: translateX(-50%);
+  --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px); }
 body.touch #toast { top: 34%; }
 body:not(.touch) #touch { display: none !important; }
 body.touch .desktop-only { display: none; }
@@ -308,9 +323,11 @@ body:not(.touch) #lapsplit { top: calc(max(8px, env(safe-area-inset-top)) + 170p
 body:not(.touch) #lapsplit span { font-size: clamp(13px, 1.4vw, 17px); font-weight: 800; }
 body:not(.touch) #lapsplit b { font-size: clamp(26px, 3.2vw, 40px); }
 body:not(.touch) #lapsplit i { font-size: clamp(24px, 3vw, 38px); }
-body.touch #lap { left: max(10px, env(safe-area-inset-left)); top: calc(max(8px, env(safe-area-inset-top)) + clamp(96px, 15vw, 170px) + 30px); transform: none; min-width: 0; padding: 4px 8px; }
+body.touch #lap { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); transform: none; min-width: 0; width: var(--lapw); }
 body.touch #lap ol { display: none; }
-body.touch #lap { background: none; border: none; box-shadow: none; padding: 0; text-align: left; }
+body.touch #lap { background: none; border: none; box-shadow: none; padding: 0; text-align: center; }
+body.touch #lap .lbl { margin-right: 4px; }
+body.touch #lap .lb small { display: block; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.touch #lap .lt b { font-size: clamp(26px, 4.6vw, 40px); }
 body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 
@@ -483,7 +500,7 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #lapsplit.behind i { color: #ff5a6e; text-shadow: 0 0 10px rgba(255, 90, 110, .7); }
 #lapsplit.cut span { color: #ff5a6e; }
 #lapsplit.cut b { color: #ff5a6e; font-style: normal; text-shadow: 1px 1px 0 var(--ink), 0 0 12px rgba(255, 90, 110, .8); }
-body.touch #lapsplit { top: 22%; }
+body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: max(22%, calc(max(6px, env(safe-area-inset-top)) + 92px)); }   /* under the lap timer */
 @keyframes splitin { from { opacity: 0; transform: translateX(-50%) scale(.9); } }
 
 #lapmsg i { font-style: normal; font-weight: 900; }
@@ -493,10 +510,11 @@ body.touch #lapsplit { top: 22%; }
 #people .who { display: none; }
 body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 5px; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
 /* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
-   rev counter (which is centred, half of its width clamp(104px, 31vh, 150px) to the left) */
+   lap timer (top centre, var(--lapw) wide, its right edge at var(--lapr)) */
 body.touch #people { display: flex; flex-direction: column; align-items: flex-start;
-  max-width: calc(50vw - clamp(52px, 15.5vh, 75px) - max(10px, env(safe-area-inset-left)) - clamp(96px, 15vw, 170px) - 18px); }
+  max-width: calc(100vw - var(--lapr) - var(--lapw) - 10px - max(10px, env(safe-area-inset-left)) - var(--mm) - 10px); }
 body.touch #people > * { max-width: 100%; }
+body.touch #people .me { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.touch #people .who { order: 1; }
 body.touch #people .feed { order: 2; }
 body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 0; font-size: .9em; line-height: 1.25; }
@@ -740,15 +758,28 @@ body.touch #ctlbtn { display: none; }
 body.touch #rsplash { top: 22%; font-size: 12px; }
 body.racesplash #lapsplit { visibility: hidden; }
 #rlights .sub { font-size: max(9.5px, .45em); font-weight: 700; letter-spacing: .1em; opacity: .85; }
-body.touch #racebox { left: auto; right: calc(50% + clamp(52px, 15.5vh, 75px) + 8px); top: max(5px, env(safe-area-inset-top)); gap: 4px; align-items: center; }
+/* phones: right, under the top buttons: the button, and beside it the votes over the LAST RACE chip */
+body.touch #racebox { left: auto; right: var(--tbr); top: calc(var(--tbh) + 8px); display: grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 3px;
+  align-items: center; justify-items: start; }
+body.touch #rbtn { grid-row: 1 / 3; }
+body.touch #racebox:has(#rchip.hidden) #rsub { grid-row: 1 / 3; }
 body.touch #rbtn { width: clamp(77px, 10.4vw, 104px); height: clamp(35px, 9.6vh, 45px); white-space: normal; font-size: clamp(13px, 1.9vw, 19px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }
 body.touch #rsub { margin: 0; font-size: clamp(9px, 1.15vw, 11.5px); }
 body.touch #rchip { font-size: 9.5px; }
-body.touch #rlist { left: calc(max(10px, env(safe-area-inset-left)) + 46px); top: clamp(70px, 19vh, 90px); width: min(380px, 40vw); max-height: 70vh; padding: 8px 12px; font-size: 10px; border-radius: 14px; }
+/* phones: the race list in the lap timer's place (the lap timer hides while it shows), growing to the left */
+body.touch #rlist { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); width: min(380px, 40vw); max-height: 70vh; padding: 8px 12px; font-size: 10px; border-radius: 14px; }
 body.touch #rlist td.w { display: none; }
-body.touch #rlist.live { width: min(230px, 28vw); padding: 6px 10px; }
+body.touch #rlist.live { width: var(--lapw); padding: 6px 10px; }
+/* the wide results list lies over the online list for its few seconds: that one steps aside meanwhile */
+body.touch:has(#rlist:not(.hidden):not(.live)) #people { visibility: hidden; }
 body.touch #rcount { top: 20%; gap: 6px; }
 body.touch #rcount .rcard { max-width: 92vw; padding: 8px 14px; }
 body.touch #rcount .btns button { font-size: 1.7em; } body.touch #rcount .btns [data-r="no"] { font-size: 1.35em; }
 body.racegrid #lap, body.touch.racelist #lap, body.touch.racelist #lapmsg { visibility: hidden; }
 body.touch #rlights { top: 30%; font-size: 13px; }
+/* a phone with its address bar still on screen: no room for the street name under the minimap, so it goes
+   above the right steering button, and the rev counter takes the room up to the minimap */
+@media (max-height: 340px) {
+  body.touch #street { top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) + clamp(10px, 2vw, 20px)); bottom: calc(var(--padh) + 6px); }
+  body.touch #dash { --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - var(--padh) - 14px), 150px); }
+}

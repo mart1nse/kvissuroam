@@ -61,6 +61,7 @@ export const CARS = {
       torque: [[750, 130], [1500, 160], [2500, 176], [3500, 187], [4200, 192], [5000, 187], [6200, 169.4], [6800, 150], [7200, 110]],
       stallRpm: 2400,
       converterGain: 1.9,
+      hbRevs: 0,                // no handbrake clutch: an automatic SUV driven mostly through its front wheels, where the clutch drop's spin only pushes the nose wide (Martin 2026-11-22)
     },
     gears: [2.785, 1.682, 1.129, 0.773, 0.566],
     reverse: 2.0,
@@ -126,6 +127,7 @@ export const CARS = {
       torque: [[750, 140], [1500, 170], [2500, 190], [3500, 202], [4300, 208], [5200, 208], [6000, 198], [6600, 186.6], [6900, 172], [7300, 120]],
       stallRpm: 2500,
       converterGain: 1.8,
+      hbRevs: 0,                // no handbrake clutch: an automatic SUV driven mostly through its front wheels, where the clutch drop's spin only pushes the nose wide (Martin 2026-11-22)
     },
     // the CVT with its launch gear, driven as six stepped ratios
     gears: [3.38, 2.24, 1.62, 1.22, 0.93, 0.70],
@@ -442,6 +444,8 @@ export const CARS = {
     rearShare: 0.65,            // DCCD centre differential left open: 35 : 65, the tail-happy setting (Martin's notes, 22 Nov)
     grip: 1.08,                 // Pirelli P Zero 235s under 1270 kg
     abs: 0.25,                  // the real car has none; a tad is left so a full stop still steers a little (Martin 2026-11-22)
+    // one big tailpipe on the left; a downshift's crackle shows as a lick of flame there (smoke.js)
+    exhaust: { x: -0.454, y: 0.255, back: 0.885, flame: true },
     engine: {
       type: 'ice',
       idle: 850,

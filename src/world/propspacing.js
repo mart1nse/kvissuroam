@@ -50,6 +50,7 @@ export const HAND_PLACES = [
   { name: 'ERM, its car park and the distillery ruin', x: 2690, z: 1040, r: 260 },
   { name: 'Tartu Airport: terminal, car park, hangars', x: -170, z: 10680, r: 230 },
   { name: 'Lennuakadeemia and Lennu 42', x: 20, z: 10600, r: 150 },
+  { name: 'Ülenurme Konsum, Võru mnt 2', x: 1690, z: 10085, r: 90 },
 ];
 
 // segments of the road centre lines in a coarse grid

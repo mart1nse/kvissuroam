@@ -1,7 +1,8 @@
 // Subaru Impreza 22B STi (GC8, 1998): the wide-body two-door built for Subaru's 40th year and its third
 // WRC makes' title. Sonic Blue, gold 17-inch BBS wheels, the tall rear wing.
 // The body is Martin's scanned model (public/models/impreza.glb, cleaned with glb-tools/generic/build2.py:
-// rear wiper and the pockets under the wing removed, paint evened, glass darkened, side panes fitted).
+// rear wiper and the pockets under the wing removed, paint evened, glass darkened, side panes fitted, the
+// tail lamps redrawn as 1990s lenses, one big tailpipe on the left in place of the model's two small ones).
 // What is built here is the light stand-in that shows until the scan has loaded, plus the wheels.
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
 import { useGlbBody } from './glbbody.js';
@@ -119,6 +120,8 @@ export function buildImpreza({ scan = true } = {}) {
   const car = assembleCar({ id: 'impreza', dims: D, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
   tintPaint(car, 'impreza', PAINT, { metalness: 0.35, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
   if (!scan) return car;
-  // the scan has its own closed, dark wheel wells: no liners needed
-  return useGlbBody(car, 'impreza.glb', { liner: false, wheelOut: { front: 0.02, rear: 0.012 } });
+  // the scan has its own closed, dark wheel wells: no liners needed. Its tail lamps are drawn anew in a
+  // picture of their own (the model came with them painted lit: flat bright red even at rest) and glow
+  // round the bulb; with the lights on they only glow softly.
+  return useGlbBody(car, 'impreza.glb', { liner: false, wheelOut: { front: 0.02, rear: 0.012 }, tail: 0.16, brake: 2.2 });
 }

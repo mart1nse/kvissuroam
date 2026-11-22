@@ -91,7 +91,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
 
   // ---- the one action (the button, key 1)
   function act() {
-    if (!r || !mp.online) return;
+    if (!r || !mp.online || mp.stealth) return;
     const ph = phaseOf(), mine = me();
     const voteOpen = r.vote.kind !== 'none';
     if (ph === 'count') { mp.raceSend({ t: 'rj', on: mine ? 0 : 1 }); dismissed = 0; return; }
@@ -211,12 +211,19 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const on = r.racers.filter(active).length;
       line = `${on} RACING · ${clock(t - r.tGreen)} / 7:00`;
     }
+    // ?off=100 (Martin 2026-11-22): never in the vote pool or a race; the button only tells what the others do
+    if (mp.stealth) {
+      label = 'HIDDEN'; cls = 'dim';
+      line = ph === 'count' || ph === 'grid' ? `${r.racers.length} ON THE GRID` : ph === 'race' ? `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00`
+        : `<b>${n} / ${v.need}</b> VOTES`;
+      line += isTouch ? '' : ' · NOT IN THE VOTE';
+    }
     const lab = isTouch ? label.replace(' ', '<br>') : label;
     if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = lab; btn.className = cls; }
     setText(sub, line);
 
     // TO RACE START (the countdown)
-    const cnt = ph === 'count' && dismissed !== r.id;
+    const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth;
     show(count, cnt);
     if (cnt) {
       setText(count.querySelector('.t2'), String(Math.max(1, Math.ceil((r.tGrid - t) / 1000))));
@@ -279,7 +286,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // someone started a vote: tell the others
       const v = r.vote, n = v?.ids?.length || 0;
-      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count') {
+      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count' && !mp.stealth) {
         const who = mp.nameOf(v.ids[v.ids.length - 1]);
         if (who && prevN === 0) { toast(`${who.toUpperCase()} WANTS TO ${v.kind === 'restart' ? 'RESTART' : 'RACE'} · ${isTouch ? 'TAP' : 'PRESS 1'}`, 4000); chime?.('join'); }
       }
@@ -292,6 +299,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     act,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
+    // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
+    // (Martin, 2026-11-22: from lights out, not only from the start line)
+    racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
     get holding() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null

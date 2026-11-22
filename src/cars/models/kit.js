@@ -812,8 +812,12 @@ export function applyLights(car, o = {}) {
   L.chmsl.emissiveIntensity = s.brake ? 1.2 : 0;
   L.reverse.emissiveIntensity = s.reverse ? 2.2 : 0;
   L.head.emissiveIntensity = s.headlights ? 2.4 : 0;
-  // the scanned body's own lamps (its emissive texture): { tail, brake } intensities from useGlbBody
-  if (L.glb && car.glbGlow) L.glb.emissiveIntensity = s.brake ? car.glbGlow.brake : s.headlights ? car.glbGlow.tail : 0;
+  // the scanned body's own lamps (its emissive texture): { tail, brake } intensities from useGlbBody.
+  // A scan whose tail lamps have a picture of their own (glbLamps) glows there with the lights on, and the
+  // body's own glow is then only its high stop lamp: on the brakes alone.
+  const g = car.glbGlow;
+  if (L.glb && g) L.glb.emissiveIntensity = s.brake ? g.brake : s.headlights && !L.glbLamps ? g.tail : 0;
+  if (L.glbLamps && g) L.glbLamps.emissiveIntensity = s.brake ? g.brake : s.headlights ? g.tail : 0;
 }
 
 // ---------------------------------------------------------------- small shared helpers

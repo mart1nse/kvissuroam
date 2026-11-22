@@ -61,6 +61,7 @@ import { createKorvekula4, korve4Walls } from './world/korvekula4.js';
 import { createHariduse10, haridus10Walls, haridus10Props } from './world/hariduse10.js';
 import { createKatoliku, katolikuWalls, katolikuVectors } from './world/katoliku.js';
 import { createKatoliku2, katoliku2Walls } from './world/katoliku2.js';
+import { createVeskiFronts, veskiFrontsWalls } from './world/veskifronts.js';
 import { createNoela, noelaWalls } from './world/noela.js';
 import { createRaadi, raadiWalls } from './world/raadi.js';
 import { createRaadi2, raadi2Walls } from './world/raadi2.js';
@@ -262,7 +263,7 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -411,6 +412,7 @@ async function boot() {
   haridus10Walls(world.walls);                  // and Hariduse 10 by the pond, built by hand
   katolikuWalls(world.walls);                   // and the Catholic school on Oru, with its yard
   katoliku2Walls(world.walls);                  // and the Catholic church opposite it and the villa at Veski 5
+  veskiFrontsWalls(world.walls);                // Veski's house fronts along the lap, Oru to Kuperjanovi
   noelaWalls(world.walls);                      // and the farms along the village road in Nõela
   raadiWalls(world.walls);                      // and Foxway and the terraces at the west end of Keskuse tee, Raadi
   raadi2Walls(world.walls);                     // and the east end of Keskuse tee with the Mõisapiiri houses
@@ -518,6 +520,7 @@ async function boot() {
   haridus10 = createHariduse10(scene, world, { shadows: !isTouch });
   katoliku = createKatoliku(scene, world, { shadows: !isTouch });
   katoliku2 = createKatoliku2(scene, world, { shadows: !isTouch });
+  veskiFronts = createVeskiFronts(scene, world, { shadows: !isTouch });
   noela = createNoela(scene, world, { shadows: !isTouch });
   raadi = createRaadi(scene, world, { shadows: !isTouch });
   raadi2 = createRaadi2(scene, world, { shadows: !isTouch });
@@ -1332,7 +1335,7 @@ function frame(ts) {
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.
     if (!jobs.resting) {
-      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju];
+      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];

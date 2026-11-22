@@ -10,6 +10,8 @@ const STEP = 100;                 // metres between the timing points the gaps a
 const LIST_MS = 10000;            // results shown this long, then tucked into the LAST RACE chip
 const ROW = 5;                    // cars side by side on the grid
 const MAX_MS = 7 * 60000;
+const LATE_MS = 150000;           // a late joiner may come in up to this long after the lights (worker/race.js)
+const MAX_RACERS = 30;
 
 const hash = (seed, id) => {
   let h = seed >>> 0;
@@ -83,6 +85,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
 
   const now = () => mp.serverNow();
   const phaseOf = (t = now()) => (!r?.on ? 'idle' : t < r.tGrid ? 'count' : t < r.tGreen ? 'grid' : 'race');
+  // A late joiner (Martin 2026-11-22: missed the countdown, or came along during the race) gets a start of
+  // their own: g on the grid, go lights out, their race time counted from there. Others race the race's clock.
+  const gridT = (x) => x?.g ?? r.tGrid, greenT = (x) => x?.go ?? r.tGreen;
+  const phaseFor = (x, t = now()) => (!x ? phaseOf(t) : !r?.on ? 'idle' : t < gridT(x) ? 'count' : t < greenT(x) ? 'grid' : 'race');
+  // the race can still be joined: on the grid, or up to LATE_MS after the lights (time left for a lap)
+  const lateOk = (t = now()) => !!r?.on && t >= r.tGrid && t < r.tGreen + LATE_MS && r.racers.length < MAX_RACERS;
   const me = () => r?.racers?.find((x) => x.id === mp.id) || null;
   const active = (x) => x && !x.out && x.ms == null;
 
@@ -92,10 +100,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   // ---- the one action (the button, key 1)
   function act() {
     if (!r || !mp.online || mp.stealth) return;
-    const ph = phaseOf(), mine = me();
+    const mine = me(), ph = phaseFor(mine);
     const voteOpen = r.vote.kind !== 'none';
     if (ph === 'count') { mp.raceSend({ t: 'rj', on: mine ? 0 : 1 }); dismissed = 0; return; }
-    if (ph === 'grid') { if (mine) { mp.raceSend({ t: 'rj', on: 0 }); pin = null; } return; }
+    if (ph === 'grid') { if (mine) { mp.raceSend({ t: 'rj', on: 0 }); pin = null; } else if (lateOk()) mp.raceSend({ t: 'rj', on: 1 }); return; }
+    if (ph === 'race' && !mine && lateOk() && r.vote.kind !== 'start') { mp.raceSend({ t: 'rj', on: 1 }); return; }
     // (the lights just went out and the server's word on the restart vote is still on its way: it judges by the clock)
     if (ph === 'race' && !voteOpen && mine && active(mine)) { mp.raceSend({ t: 'rv', on: 1 }); return; }
     if (voteOpen && r.vote.kind === 'restart' && !(mine && !mine.out)) return;
@@ -108,7 +117,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   chip.addEventListener('click', () => { showLast = true; listOpen = true; listUntil = Infinity; render(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
   // otherwise it tucks the list away
-  const racingNow = () => { const m = me(); return phaseOf() === 'race' && !!m && active(m) && finishedMs == null; };
+  const racingNow = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null; };
   list.addEventListener('click', (e) => {
     if (!e.target.closest('[data-r="x"]')) return;
     if (racingNow()) {
@@ -182,7 +191,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
 
   // ---- drawn four times a second (and at once after a click or a message)
   function render() {
-    const t = now(), ph = phaseOf(t), mine = me();
+    const t = now(), mine = me(), ph = phaseOf(t), mph = phaseFor(mine, t);
     show(btn, !!r && mp.online);
     // the finish glows for everyone once the racers are away from the start (not at their first pass)
     halo?.(!!r && mp.online && r.on && ph === 'race' && t - r.tGreen > 25000);
@@ -191,12 +200,18 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     const pips = (k, of) => `<span class="pips">${Array.from({ length: Math.min(of, 8) }, (_, i) => `<i class="${i < k ? 'on' : ''}"></i>`).join('')}</span>`;
     const key = isTouch ? 'TAP' : 'PRESS 1';
     let label, cls = '', line;
-    if (ph === 'count') {
+    const late = !mine && lateOk(t) && v.kind !== 'start';
+    if (mph === 'count') {
       if (mine) { label = "YOU'RE IN"; cls = 'voted'; line = isTouch ? 'TAP TO LEAVE' : 'PRESS 1 TO LEAVE'; }
       else { label = 'JOIN RACE'; cls = 'lit'; line = `${r.racers.length} IN · ${key} TO JOIN`; }
-    } else if (ph === 'grid') {
+    } else if (mph === 'grid') {
       if (mine) { label = isTouch ? 'ON GRID' : 'ON THE GRID'; cls = 'voted'; line = isTouch ? 'TAP TO LEAVE' : 'PRESS 1 TO LEAVE'; }
+      else if (late) { label = 'JOIN RACE'; cls = 'lit'; line = `${r.racers.length} ON THE GRID · ${key} TO JOIN`; }
       else { label = 'RACE ON'; cls = 'dim'; line = `${r.racers.length} ON THE GRID`; }
+    } else if (late) {
+      // (the race is on: join with a start of your own from the grid, your time from your lights)
+      label = 'JOIN RACE'; cls = 'lit';
+      line = `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00 · ${key} TO JOIN`;
     } else if (v.kind === 'restart' && mine && !mine.out) {
       label = 'RESTART'; cls = voted ? 'pink on' : 'pink';
       line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> ${isTouch ? 'RACERS' : `RACER VOTES TO RESTART${voted ? ' · YOU VOTED' : ''}`}`;
@@ -237,19 +252,19 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     }
 
     // the lights, for racers on the grid
-    const lit = mine && (ph === 'grid' || (ph === 'race' && t - r.tGreen < 1500));
+    const lit = mine && (mph === 'grid' || (mph === 'race' && t - greenT(mine) < 1500));
     show(lights, !!lit);
     document.body.classList.toggle('racegrid', !!lit);
     if (lit) {
       // (one light a second from five seconds on the grid; all five stay lit through the random hold, then out)
-      const e = t - r.tGrid, n5 = ph === 'race' ? 0 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
+      const e = t - gridT(mine), n5 = mph === 'race' ? 0 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
       lamps.forEach((l, i) => l.classList.toggle('on', i < n5));
-      setText(lCap, ph === 'race' ? 'GO!' : n5 ? 'WAIT FOR LIGHTS OUT' : `LIGHTS IN ${Math.max(1, Math.ceil((5000 - e) / 1000))}`);
-      lights.classList.toggle('go', ph === 'race');
+      setText(lCap, mph === 'race' ? 'GO!' : n5 ? 'WAIT FOR LIGHTS OUT' : `LIGHTS IN ${Math.max(1, Math.ceil((5000 - e) / 1000))}`);
+      lights.classList.toggle('go', mph === 'race');
     }
 
     // the list: live during the race for racers, results after
-    const live = ph === 'race' && mine;
+    const live = mph === 'race' && mine;
     // still racing: the live order, never an older race's results (Martin 2026-11-22: a LAST RACE list opened
     // before the vote stayed up through his race)
     if (live && active(mine) && finishedMs == null) showLast = false;
@@ -261,7 +276,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const myRow = rows.findIndex((x) => x.id === mp.id);
       const done = r.racers.filter((x) => x.ms != null).length;
       compact = finishedMs == null;
-      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
+      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - greenT(mine)) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = compact ? '' : `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
     } else if (listOpen && r.last) {
       rows = standings(r.last.racers, false);
@@ -301,12 +316,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     },
     act,
     // racing: other cars pass through ours (and ours through theirs)
-    get ghost() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
+    get ghost() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
     // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
     // (Martin, 2026-11-22: from lights out, not only from the start line)
     racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
-    get holding() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
+    get holding() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
     get pin() { return pin; },
     // our lap timer finished a lap
@@ -314,11 +329,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     lap(lap, info) {
       const rec = info?.rec ? recLine(lap, info.prev) : null;
       const m = me();
-      if (!r || !m || !active(m) || phaseOf() !== 'race' || finishedMs != null) {
+      if (!r || !m || !active(m) || phaseFor(m) !== 'race' || finishedMs != null) {
         if (rec) showSplash(`<div class="k">NEW LAP RECORD</div><div class="p tm">${fmtTime(lap.ms / 1000)}</div><div class="t">${rec.car} <em>${rec.gain}</em></div>`, 3600, 'rec');
         return;
       }
-      finishedMs = Math.round(now() - r.tGreen);
+      finishedMs = Math.round(now() - greenT(m));
       mp.raceSend({ t: 'rf', ms: finishedMs });
       listOpen = true; showLast = false; listUntil = now() + LIST_MS;
       // place: those already through with a better time, plus one (nobody still out there can beat it)
@@ -330,7 +345,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     },
     // out of the race: kind 'off' (off the track), 'cut' (a short cut), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {
-      const ph = phaseOf(), m = me();
+      const m = me(), ph = phaseFor(m);
       if (!m) return;
       if (ph === 'count' || ph === 'grid') {
         if (kind === 'start' || kind === 'map') { mp.raceSend({ t: 'rj', on: 0 }); pin = null; toast('LEFT THE RACE', 2000); }
@@ -343,24 +358,25 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     },
     update(car, dt) {
       if (!r) return;
-      const t = now(), ph = phaseOf(t), m = me();
-      // onto the grid when the countdown runs out
-      if (ph === 'grid' && m && placedFor !== r.id) {
+      const t = now(), ph = phaseOf(t), m = me(), mph = phaseFor(m, t);
+      // onto the grid when the countdown runs out (in a random order; a late joiner at the back, by the order of joining)
+      if (mph === 'grid' && m && placedFor !== r.id) {
         placedFor = r.id;
-        const order = r.racers.map((x) => x.id).sort((p, q) => hash(r.seed, p) - hash(r.seed, q));
-        pin = gridPose(Math.max(0, order.indexOf(mp.id)), car.spec);
+        const order = r.racers.filter((x) => !x.late).map((x) => x.id).sort((p, q) => hash(r.seed, p) - hash(r.seed, q));
+        pin = gridPose(Math.max(0, m.late ? r.racers.indexOf(m) : order.indexOf(mp.id)), car.spec);
         place(pin);
       }
-      if (ph !== 'grid' || !m) pin = null;
+      if (mph !== 'grid' || !m) pin = null;
+      if (!m) placedFor = 0;                                  // (left on the grid, then back in late: placed again)
       // the race closed by the clock without a word from the server yet
       if (ph === 'race' && t > r.tGreen + MAX_MS + 3000) r.on = false;
       // live order: positions ten times a second
       sample -= dt;
       if (ph === 'race' && m && sample <= 0) {
         sample = 0.1;
-        const rt = t - r.tGreen;
         for (const x of r.racers) {
           if (!active(x)) continue;
+          const rt = t - greenT(x);                           // (each by their own lights: a late joiner's gaps are fair too)
           if (x.id === mp.id) { progress(x.id, car.x, car.z, rt); continue; }
           const p = mp.poseOf(x.id);
           if (p) progress(x.id, p[0], p[1], rt);

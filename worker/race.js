@@ -14,6 +14,8 @@
 
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
+const LATE_MS = 150000;          // join after the lights up to this long (Martin 2026-11-22), with a start of one's own
+const LATE_GRID = 10600;         // a late joiner's own grid: lights on in its last five seconds, then out
 const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (random, the same for all)
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const VOTE_MS = 120000;          // a vote lapses after two minutes
@@ -168,8 +170,13 @@ export class RaceDesk {
       case 'rj': {          // join or leave before the lights
         if (me.ghost || this.s.phase !== 'on') return true;
         const ph = this.phase(now), i = this.s.racers.findIndex((r) => r.id === me.id);
-        if (m.on && ph === 'count' && i < 0 && this.s.racers.length < MAX_RACERS && me.drv) this.s.racers.push({ id: me.id, name: me.name, car: me.car });
-        else if (!m.on && i >= 0 && ph !== 'race') this.s.racers.splice(i, 1);
+        const room = i < 0 && this.s.racers.length < MAX_RACERS && me.drv;
+        if (m.on && ph === 'count' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car });
+        // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
+        // (g on the grid, go lights out: the race time is counted from go)
+        else if (m.on && ph === 'grid' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1 });
+        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now, go: now + LATE_GRID });
+        else if (!m.on && i >= 0 && (ph !== 'race' || now < (this.s.racers[i].go || 0))) this.s.racers.splice(i, 1);
         else if (!m.on && i >= 0 && !this.s.racers[i].out && this.s.racers[i].ms == null) this.s.racers[i].out = 'quit';
         this.check(now); this.save(); this.send();
         return true;
@@ -177,7 +184,7 @@ export class RaceDesk {
       case 'rf': {          // finished: ms from lights out, by the browser's (synced) clock
         const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
         const ms = Math.round(Number(m.ms));
-        if (!r || r.ms != null || r.out || !(ms >= 30000 && ms <= MAX_RACE_MS) || now < this.s.tGreen + 25000) return true;
+        if (!r || r.ms != null || r.out || !(ms >= 30000 && ms <= MAX_RACE_MS) || now < (r.go || this.s.tGreen) + 25000) return true;
         r.ms = ms;
         this.check(now); this.save(); this.send();
         return true;

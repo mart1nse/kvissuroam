@@ -439,7 +439,7 @@ export const CARS = {
     drive: 'awd',
     rearShare: 0.65,            // DCCD centre differential left open: 35 : 65, the tail-happy setting (Martin's notes, 22 Nov)
     grip: 1.08,                 // Pirelli P Zero 235s under 1270 kg
-    abs: 0.85,                  // four-channel ABS
+    abs: 0.2,                   // the real car has none; a tad is left so a full stop still steers a little (Martin 2026-11-22)
     engine: {
       type: 'ice',
       idle: 850,
@@ -464,6 +464,7 @@ export const CARS = {
         bov: { kind: 'recirc', level: 0.85, flutter: 0.5 },   // the factory valve feeds the air back in: a whoosh, and a flutter when it is caught out
       },
       stallRpm: 3900,           // a launch slips the clutch high, all four wheels biting
+      hbRevs: 6000,             // the handbrake takes the drive off (a rally handbrake turn): the engine is kept up here at its power peak, or revs on up with the throttle
       rollStallRpm: 5200,
       converterGain: 1.6,
     },

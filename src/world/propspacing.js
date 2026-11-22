@@ -46,6 +46,7 @@ export const HAND_PLACES = [
   { name: 'Ravila tänav, Riia to Nooruse', x: -6, z: 4577, r: 150 },
   { name: 'Ravila tänav, Tulika to Viljandi mnt', x: -333, z: 4130, r: 130 },
   { name: 'Astelpaju: Mööbliait, Circle K, Magaziin', x: 535, z: -60, r: 120 },
+  { name: 'Kvissentali tee, Lootsi to road 3', x: 330, z: -45, r: 150 },
 ];
 
 // segments of the road centre lines in a coarse grid

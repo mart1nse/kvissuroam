@@ -29,6 +29,7 @@ import { thinProps, handZones } from './world/propspacing.js';
 import { createJanese } from './world/janese.js';
 import { createParked } from './world/parked.js';
 import { createBusStops, busStopProps, busStopClear, STOPS } from './world/busstops.js';
+import { adsReady } from './world/adverts.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createAngerja, angerjaWalls } from './world/angerja.js';
@@ -507,6 +508,7 @@ async function boot() {
   scene.add(terrain.group);
   bar.style.width = '88%';
   await new Promise((r) => setTimeout(r));
+  await Promise.race([adsReady, new Promise((r) => setTimeout(r, 3000))]);   // the TOREPOOD poster, before the advert atlas is painted
   const buildBuildings = createBuildings(world.walls);
   const buildTrees = createTrees(quality, renderer, world);
   if (buildTrees.near) scene.add(buildTrees.near);
@@ -544,6 +546,7 @@ async function boot() {
   raekoda = createRaekoda(scene, world, { shadows: !isTouch });
   kuuni = createKuuni(scene, world, { shadows: !isTouch });
   kuuni.holo.bindClicks(camera, canvas);         // the Anderson's hologram opens the taproom's site
+  busStops?.bindClicks(camera, canvas, () => (mode === 'drive' ? car : null));   // the TOREPOOD poster opens the shop (after the hologram: its hover clears the hand)
   kuperjanovi = createKuperjanovi(scene, world, { shadows: !isTouch });
   pepleri = createPepleri(scene, world, { shadows: !isTouch });
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
@@ -1721,7 +1724,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, camera: () => camera, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

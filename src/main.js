@@ -85,6 +85,7 @@ import { createUlikooli4, ulikooli4Walls } from './world/ulikooli4.js';
 import { createUlikooli5, ulikooli5Walls } from './world/ulikooli5.js';
 import { createNarva, narvaWalls, narvaClear } from './world/narva.js';
 import { createNarva2, narva2Walls } from './world/narva2.js';
+import { createNarva3, narva3Walls } from './world/narva3.js';
 import { createUlikooliPaint, ulikooliPaintVectors } from './world/ulikoolipaint.js';
 import { createUlenurmePaint, ulenurmePaintVectors } from './world/ulenurmepaint.js';
 import { createTuru6, turu6Walls } from './world/turu6.js';
@@ -281,7 +282,7 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, narva3;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -454,6 +455,7 @@ async function boot() {
   ulikooli4Walls(world.walls);                  // Rüütli from Gildi to the square, Küütri, the Gildi corners
   ulikooli5Walls(world.walls);                  // Ülikooli from the town hall to Poe, Lossi up to Inglisild
   narvaWalls(world.walls);                      // Narva mnt by Võidu sild: Spark Hub, the Fortuuna tower, Narva 9
+  narva3Walls(world.walls);                     // Narva mnt 27 to 69: the dormitory, Lemon Gym, Neste, the salmon house
   narva2Walls(world.walls);                     // Narva mnt at Kivi: Linnamuuseum, Circle K, Coop, the cat dormitory, Selver
   turu5Walls(world.walls);                      // Turu south to the Sõpruse bridge
   turu6Walls(world.walls);                      // Aleksandri 8-12, Dorpat hotel
@@ -579,6 +581,7 @@ async function boot() {
   ulikooli5 = createUlikooli5(scene, world, { shadows: !isTouch });
   narva = createNarva(scene, world, { shadows: !isTouch });
   narva2 = createNarva2(scene, world, { shadows: !isTouch });
+  narva3 = createNarva3(scene, world, { shadows: !isTouch });
   ulikooliPaint = createUlikooliPaint(scene, world);
   ulenurmePaint = createUlenurmePaint(scene, world);
   turu6 = createTuru6(scene, world, { shadows: !isTouch });
@@ -1392,7 +1395,7 @@ function frame(ts) {
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.
     if (!jobs.resting) {
-      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2];
+      PLACES ||= [pootsmani, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, narva3];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];

@@ -194,7 +194,8 @@ export function createVaksali(scene, world, { shadows = true } = {}) {
   return {
     update(car) {
       if (built || !car) return;
-      if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 600) return;
+      // (within 380 m: the race lap passes 470 m away on Kuperjanovi, and the station is hidden from there)
+      if (Math.hypot(car.x - CENTRE[0], car.z - CENTRE[1]) > 380) return;
       if (![[533, 3590], [480, 3567], [660, 3700], [586, 3622], [506, 3534]].every((q) => world.ready(q[0], q[1]))) return;
       built = true;
       jobs.add(build, 'vaksali');

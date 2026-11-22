@@ -1392,6 +1392,8 @@ function frame(ts) {
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
+    // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
+    car.gridHold = !!raceMode?.pin;
     if (mode === 'drive') stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away

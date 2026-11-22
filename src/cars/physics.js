@@ -200,6 +200,9 @@ function engineForce(car, throttle, dt, hb = 0) {
     if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
     const lim = car.reversing ? 30 : s.limiter;
     if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
+    // (held on the race grid: a four-wheel-drive EV has no clutch to slip, so it waits with its power held
+    // back, launch mode, and goes at the lights)
+    if (car.gridHold && s.drive === 'awd') return 0;
     // one-pedal style regeneration when lifting off
     if (throttle <= 0) return vAbs > 0.5 ? -Math.sign(v) * Math.min(1800, 0.09 * s.mass * G * 0.35) : 0;
     return dir * f * throttle;
@@ -292,8 +295,19 @@ function engineForce(car, throttle, dt, hb = 0) {
   // flick: a car stopped or parked on its handbrake lets its engine fall to idle.)
   // (Every four-wheel-drive car with an engine has it: specs.js fills in hbRevs at the power peak when a
   // car gives none, Martin 2026-11-22.)
-  const free = e.hbRevs && hb > 0.5 && !car.reversing && !car.airborne;
-  if (free) {
+  // Launch control on the race grid (Martin 2026-11-22): a four-wheel-drive car with an engine waits on the
+  // line with the clutch in, the throttle revving it against the limiter with the wheels still, and when
+  // the lights go out (main.js lets go of car.gridHold) the clutch drops: the same kick as letting the
+  // handbrake go, below. Rear- and front-driven cars keep their burnouts on the grid.
+  const launch = car.gridHold && s.drive === 'awd' && !car.reversing;
+  const free = launch || (e.hbRevs && hb > 0.5 && !car.reversing && !car.airborne);
+  if (launch) {
+    // (towards a little past the redline, so the limiter cuts it and it bounces; falling while cut)
+    const from = car.free ?? car.rpm, idle = e.idle ?? 750;
+    const to = car.revCut > 0 ? idle : idle + (e.redline + 300 - idle) * throttle;
+    car.freeT = 0;
+    car.free = from < to ? Math.min(to, from + HB_REV_UP * throttle * dt) : Math.max(to, from - (e.revDrop ?? 3200) * dt);
+  } else if (free) {
     const from = car.free ?? car.rpm;
     car.freeT = throttle > 0 || car.free === undefined ? 0 : car.freeT + dt;
     const to = throttle > 0 ? e.hbRevs + (e.shiftRpm - e.hbRevs) * throttle : vAbs > 2 && car.freeT < HB_HOLD_T ? Math.min(from, e.hbRevs) : e.idle;
@@ -344,8 +358,8 @@ function engineForce(car, throttle, dt, hb = 0) {
   if (throttle <= 0) car.revCut = 0;
   else if (car.revCut > 0) {
     car.revCut -= dt;
-    if (car.revCut <= 0) car.revCut = wheelRpm > e.redline - car.cutDrop ? 1e-4 : 0;
-  } else if (wheelRpm >= e.redline) {
+    if (car.revCut <= 0) car.revCut = (launch ? car.free : wheelRpm) > e.redline - car.cutDrop ? 1e-4 : 0;
+  } else if ((launch ? car.free : wheelRpm) >= e.redline) {
     // No two bounces are alike: each cut lasts a little longer or shorter and lets the revs fall a
     // different way before the engine fires again, so the limiter stutters rather than buzzes.
     const r1 = hash(car.time * 7.31 + car.x * 0.13), r2 = hash(car.time * 3.17 + car.z * 0.11 + 5.2);

@@ -31,7 +31,7 @@ export function spinAmount(c) {
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
-  let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, airArmed = false, wasShift = false;
+  let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
@@ -227,10 +227,13 @@ export function createAudio() {
         whine.frequency.setTargetAtTime(1400 + car.rpm * 0.35 * (0.4 + 0.6 * b), t, 0.08);
         whineGain.gain.setTargetAtTime(dead || (synth && synthCfg) ? 0 : 0.016 * b * b * (tb.whistle ?? 1), t, 0.08);
         // (lastBoost: the boost built while the throttle was open, vented once it closes)
+        // (boostSince: when it last came on boost, so an upshift knows how long it pulled)
+        if (b > 0.6) { if (boostSince < 0) boostSince = t; } else boostSince = -1;
         if (car.throttle > 0) {
           lastBoost = Math.max(lastBoost * 0.99, b);
           // (an upshift: the driver lifts for the change and the valve vents, in the gap before the gear bites)
-          if (car.shiftCut && !wasShift && !dead && shiftBlowOff(ctx, noiseBuf, space.burst, b, tb.bov)) lastPsh = t;
+          if (car.shiftCut && !wasShift && !dead && shiftBlowOff(ctx, noiseBuf, space.burst, b, tb.bov,
+            { held: boostSince < 0 ? 0 : t - boostSince, rev: car.rpm / car.spec.engine.redline })) lastPsh = t;
         } else {
           if (!dead && lastBoost > 0.3 && t - lastPsh > 0.4) { blowOff(ctx, noiseBuf, space.burst, lastBoost, tb.bov); lastPsh = t; }
           lastBoost = 0;

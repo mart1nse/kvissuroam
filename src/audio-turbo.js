@@ -152,39 +152,62 @@ export function blowOff(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ct
 
 // An upshift on boost. The gearbox works like a quick manual change, and a driver lifts for every one:
 // the throttle plate shuts and the valve vents the boost (Martin 2026-11-22). It plays only in the gap of
-// the change. The first blast comes as the ignition cuts, then a few quick pulses, and the whole sound is
-// pulled down to a whisper by the time the gear is heard biting (SHIFT_BITE, audio-shift.js BITE_HEARD).
-// That way the bark, the clunk, the tyre chirp and the rev swing of the upshift kick land as they did
-// before. It is gone soon after, as in a real car where the valve shuts once the throttle opens again.
-// There is no low chuff, because the bite's thump lives down there. P is the boost at the start of the
-// change: a full pssh after a hard pull, a breath on a gentle short shift, nothing off boost.
-// cfg.shift scales it (0: none, e.g. the bus, an automatic with a torque converter); diesels have no
-// valve. Returns whether anything was played.
+// the change: a first blast, then a few quick pulses. The whole sound is pulled down to a whisper by the
+// time the gear is heard biting (SHIFT_BITE, audio-shift.js BITE_HEARD), so the bark, the clunk, the tyre
+// chirp and the rev swing of the upshift kick land as they did before, and it fades out under them, as in
+// a real car where the valve shuts once the throttle opens again. There is no low chuff, because the
+// bite's thump lives down there. cfg.shift scales it (0: none, e.g. the bus, an automatic with a torque
+// converter); diesels have no valve.
+//
+// No two are alike (Martin 2026-11-22: not repetitive). How much air there is to let out depends on:
+// - P, the boost at the change: a full pssh after a hard pull, a breath on a gentle short shift;
+// - o.held, how long it pulled on boost: a quick dab has not filled the pipes and the intercooler yet;
+// - o.rev, the revs at the change as a share of the redline: the turbo moves more air high up, and a
+//   short shift at 60 % lets out less;
+// - the change itself (rnd): how fast the foot comes off, how the valve seats, so the size of the puff,
+//   its length, its pulses and its pitch all wander a little from one shift to the next.
+// The valve opens a moment after the cut (Martin: it came too soon after the clutch on the 22B and the
+// Audi). A diverter valve (recirc) opens on the vacuum behind the shut throttle plate, 30 to 50 ms, a
+// touch sooner on high boost; a valve open to the air (vent) is quicker, 10 to 20 ms. The gap left before
+// the bite is shorter for it: the whoosh is cut off by the gear going in, as it is in a real car. A late
+// diverter on a hard shift sometimes lets the compressor surge first: a quick tu-tu in that delay.
+// Returns whether anything was played.
 const SHIFT_BITE = 0.12;
-export function shiftBlowOff(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ctx.currentTime + 0.005) {
+export function shiftBlowOff(ctx, noise, dest, P, cfg = {}, o = {}, rnd = Math.random, t0 = ctx.currentTime + 0.005) {
   const kind = cfg.kind || 'vent', k = cfg.shift ?? 1.4;
   P = clamp(P, 0, 1.3);
   if (kind === 'diesel' || !(k > 0) || P < 0.15) return false;
-  const L = Math.min(0.4, 0.36 * Math.pow(P, 1.5)) * (cfg.level ?? 1) * k;
-  // the duck: full through the cut, down to under a fifth as the gear bites, gone by a quarter second
+  const fill = clamp((o.held ?? 1) / 0.8, 0.25, 1);
+  const revs = 0.7 + 0.45 * clamp(((o.rev ?? 0.9) - 0.5) / 0.5, 0, 1);
+  const A = Math.pow(P, 1.5) * Math.pow(fill, 0.7) * revs * (0.72 + 0.48 * rnd());
+  const L = Math.min(0.45, 0.36 * A) * (cfg.level ?? 1) * k;
+  // the duck, timed from the cut: full until just before the bite, under a fifth as it bites, then gone
   const duck = ctx.createGain();
-  duck.gain.setValueAtTime(1, t);
-  duck.gain.setValueAtTime(1, t + SHIFT_BITE - 0.03);
-  duck.gain.linearRampToValueAtTime(0.18, t + SHIFT_BITE + 0.01);
-  duck.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  duck.gain.setValueAtTime(1, t0);
+  duck.gain.setValueAtTime(1, t0 + SHIFT_BITE - 0.03);
+  duck.gain.linearRampToValueAtTime(0.18, t0 + SHIFT_BITE + 0.01);
+  duck.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
   duck.connect(dest);
-  const dur = 0.2 + 0.08 * P;
+  const dur = (0.16 + 0.1 * A) * (0.85 + 0.3 * rnd()), wob = 0.92 + 0.16 * rnd();
   if (kind === 'vent') {
+    const t = t0 + (0.01 + 0.01 * rnd()) * (1.2 - 0.3 * clamp(A, 0, 1));
     knock(ctx, duck, t, L * 0.3);
-    const times = pulseTimes(t, dur, 17 + 7 * P, 0.9, rnd), peak = times.map(() => 0.8 + 0.4 * rnd());
-    const f0 = 2100 + 700 * P;
-    band(ctx, noise, duck, t, dur, times, { q: 1, f0, f1: 900, L, depth: 0.85, peak });
-    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: f0 * 2, f1: 2700, L: L * 0.32, depth: 0.85, peak });
+    const times = pulseTimes(t, dur, (15 + 8 * A) * (0.85 + 0.3 * rnd()), 0.88 + 0.05 * rnd(), rnd), peak = times.map(() => 0.75 + 0.5 * rnd());
+    const f0 = (2100 + 700 * P) * wob;
+    band(ctx, noise, duck, t, dur, times, { q: 1, f0, f1: 900 * wob, L, depth: 0.85, peak });
+    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: f0 * 2, f1: 2700 * wob, L: L * 0.32, depth: 0.85, peak });
   } else {
+    const t = t0 + (0.03 + 0.02 * rnd()) * (1.2 - 0.3 * clamp(A, 0, 1));
+    // the compressor surging while the valve is still shut (only the upper band: no low puffs)
+    if (A > 0.5 && rnd() < (cfg.flutter ?? 0) * 0.6 * Math.min(1, A)) {
+      const list = [], n = 2 + Math.floor(rnd() * 2);
+      for (let j = 0, at = t0 + 0.004; j < n; j++, at += 0.042 + 0.01 * rnd()) list.push({ t: at, len: 0.028, level: L * 0.42 * Math.pow(0.8, j), f: 1050 - 30 * j });
+      puffs(ctx, noise, duck, 1.5, list);
+    }
     // a diverter valve: the muffled whoosh, gently pulsing
-    const times = pulseTimes(t, dur, 13 + 5 * P, 0.9, rnd), peak = times.map(() => 0.8 + 0.4 * rnd());
-    band(ctx, noise, duck, t, dur, times, { q: 1, f0: 1100 + 300 * P, f1: 650, L: L * 0.6, depth: 0.45, peak });
-    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: 2400, f1: 1500, L: L * 0.08, depth: 0.45, peak });
+    const times = pulseTimes(t, dur, (11 + 6 * A) * (0.85 + 0.3 * rnd()), 0.88 + 0.05 * rnd(), rnd), peak = times.map(() => 0.75 + 0.5 * rnd());
+    band(ctx, noise, duck, t, dur, times, { q: 1, f0: (1100 + 300 * P) * wob, f1: 650 * wob, L: L * 0.6, depth: 0.45, peak });
+    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: 2400 * wob, f1: 1500 * wob, L: L * 0.08, depth: 0.45, peak });
   }
   return true;
 }

@@ -63,7 +63,9 @@ const C = {
   cream: [235, 229, 214], beige: [217, 204, 174], villa: [239, 235, 230], grey: [196, 195, 191],
   brick: [150, 72, 58], c21: [201, 204, 195], ochre: [228, 191, 124],
 };
-const plaster = (wall, o = {}) => ({ kind: 'plaster', wall, trim: C.trim, weather: 0.5, ...o });
+// (smooth and without rain streaks: the blotches and the streak gradients made each big wall one long painting
+// step, 15 ms and more, while driving up Vanemuise)
+const plaster = (wall, o = {}) => ({ kind: 'smooth', wall, trim: C.trim, ...o });
 const sq = (o = {}) => ({ T: false, bars: 1, rails: 0, surround: 0.06, frame: '#f3f2ee', glass: C.glass, ...o });
 
 // the big painting on the Kunstimaja front: a warm field with a figure, in a white frame
@@ -154,7 +156,7 @@ function houses(later) {
     // ---- the theatre
     // (its front block on columns over the terrace is built in kontserdimaja.js: its walls are left out here)
     { name: 'vanemuine', sec: '3_6', base: 1627, at: [1534.5, 3263], r: 70, pick: (x, z, top) => !frontCut(x, z, top),
-      spec: plaster(C.grey, { storey: 3.6, maxFloors: 4, plinth: { h: 0.6, col: '#8f8d89' }, win: sq({ w: 1.6, pitch: 2.5, frame: '#d9d9d6', glass: '#3f4a58' }), weather: 0.6, attic: null }),
+      spec: plaster(C.grey, { storey: 3.6, maxFloors: 4, plinth: { h: 0.6, col: '#8f8d89' }, win: sq({ w: 1.6, pitch: 2.5, frame: '#d9d9d6', glass: '#3f4a58' }), attic: null }),
       walls: [
         { near: [1548.9, 3241.7], within: 3, only: fins },                                          // the front block's fins
         { near: [1504.1, 3228.2], within: 0.6, only: concertFront },                                // the brick box over the street

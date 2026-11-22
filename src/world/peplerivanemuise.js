@@ -71,7 +71,7 @@ export function pepleriVanemuiseWalls(walls) {
 
 // ---------------------------------------------------------------- the painted fronts
 const sq = (o = {}) => ({ T: false, bars: 1, rails: 0, surround: 0.06, frame: '#f3f2ee', glass: '#55627a', ...o });
-const plaster = (wall, o = {}) => ({ kind: 'plaster', wall, trim: '#f6f5f1', weather: 0.35, ...o });
+const plaster = (wall, o = {}) => ({ kind: 'smooth', wall, trim: '#f6f5f1', weather: 0, ...o });     // (smooth, no rain streaks: blotches and streaks made a 60 m wall one painting step of 15 ms)
 // window places along a wall of `len` at `pitch`, kept clear of the stair strips at `stairs`
 const spaced = (len, pitch, stairs = [], clear = 1.7) => {
   const n = Math.max(1, Math.round((len - 0.6) / pitch)), out = [];
@@ -82,7 +82,7 @@ const spaced = (len, pitch, stairs = [], clear = 1.7) => {
 function stairStrip(P, W, x, { frame = '#f2f2ef', glass = '#56647a', door = '#4c4540' } = {}) {
   const w = 1.25, y0 = 3.0, y1 = W.eaves - 0.7;
   P.r(x - w / 2 - 0.14, y0 - 0.12, x + w / 2 + 0.14, y1 + 0.12, frame);
-  for (let y = y0; y < y1 - 0.2; y += 0.44) P.grad(x - w / 2, y, x + w / 2, Math.min(y1, y + 0.32), glass, '#3f4a5b');
+  for (let y = y0; y < y1 - 0.2; y += 0.44) P.r(x - w / 2, y, x + w / 2, Math.min(y1, y + 0.32), glass);      // (flat: a gradient a band was slow)
   P.door(x - 0.7, x + 0.7, 2.35, door, { frame, light: 0.45, panels: 1 });
 }
 const sheetOf = (stairs) => (len) => stairs.map((f) => f * len);
@@ -165,7 +165,7 @@ function poska(P, W) {
 // the yellow house's glazed stair bay: a tall window over the door, white bars
 function bay(P, W, x) {
   P.r(x - 0.95, 1.0, x + 0.95, W.eaves - 0.4, '#f6f4ee');
-  for (let y = 1.15; y < W.eaves - 0.6; y += 0.85) P.grad(x - 0.8, y, x + 0.8, Math.min(W.eaves - 0.55, y + 0.75), '#647490', '#46506a');
+  for (let y = 1.15; y < W.eaves - 0.6; y += 0.85) P.r(x - 0.8, y, x + 0.8, Math.min(W.eaves - 0.55, y + 0.75), '#56627e');
 }
 
 // ---------------------------------------------------------------- the build
@@ -187,7 +187,7 @@ export function createPepleriVanemuise(scene, world, { shadows = true } = {}) {
     const list = fronts().map((H) => ({ ...H, pick: near(H.segs) }));
     // the walls the lap passes close by are painted finer than the ones back on the forecourts
     const faces = (W) => { for (let i = 1985; i < 2215; i += 3) if (Math.hypot(TRACK.P[i][0] - W.mid[0], TRACK.P[i][1] - W.mid[1]) < 30) return true; return false; };
-    skinHouses(world, group, list, { faces, shadows, ppm: 22, far: 12 });
+    skinHouses(world, group, list, { faces, shadows, ppm: 20, far: 12 });
     yield;
 
     const p = new Parts(), leafy = leafyPlants(group, shadows);

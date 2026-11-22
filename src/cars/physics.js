@@ -750,6 +750,9 @@ function substep(car, input, world, dt) {
   let target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lockIn + align * follow * auto) * ease));
   // (unwinding is quick: in a slide the wheel spins back through your hands)
   let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * catchK);
+  // (?inward=1: the wheels wound in past the grip lock come back as quickly as from a normal full lock: the
+  // unwinding speed is that of full lock at a crawl, not the slower one of the speed's grip lock, Martin 2026-11-22)
+  if (inwardOn && Math.abs(target) < Math.abs(car.steer)) rate = Math.max(rate, ((2.6 - 0.9 * held) * maxLock + 0.25) * (1 + 2 * catchK));
   if (input.steerDirect) {
     // A steering wheel: the front wheels follow its angle (about 13:1 over a wheel calibrated stop to
     // stop), with a little of the slide's caster since the wheel cannot push back, and kept within a

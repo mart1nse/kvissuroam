@@ -9,6 +9,7 @@ const MATS = {
   concrete: mat(0x6f6a78), rail: mat(0x8d8799), white: mat(0xd9d4dc), steel: mat(0xb9c2d6), dark: mat(0x3a3846),
   lamp: mat(0xfff2c4, { emissive: 0xffd9a0, emissiveIntensity: 1.6 }),
   arch: mat(0x9c97a6),          // Vabadussild's arch, a touch darker than white so its coloured LEDs stand out (Martin, 20 Nov)
+  red: mat(0xc8323c),
 };
 
 // left and right edge of station i: [xl, zl, xr, zr]
@@ -62,6 +63,8 @@ export function deckTopGeometry(world, x0, z0, size) {
 //   arch       a white concrete arch high over a narrow footbridge (Kaarsild)
 //   steelarch  steel arches through the deck of a road bridge (Vabadussild)
 //   cable      a footbridge hung by seven pairs of cables from one pylon (Turusild)
+//   small      a short country bridge over a brook or a main ditch: a thin slab, guard rails, a red and white
+//              post at each corner (tools/bake/stream_crossings.py; the Vasula peakraav under road 210)
 const SPAN = { girder: 34, victory: 24 };
 
 function measure(d) {
@@ -74,7 +77,7 @@ function measure(d) {
   d.main = [(d.len - main) / 2, (d.len + main) / 2];
   d.piers = [];
   if (d.w) {
-    if (d.b === 'arch') d.piers = [];
+    if (d.b === 'arch' || d.b === 'small') d.piers = [];
     else if (d.b === 'steelarch') d.piers = [d.main[0], d.main[1]];
     else {
       const step = d.b === 'cable' ? 26 : SPAN[d.b] || 34;
@@ -93,6 +96,7 @@ function measure(d) {
 // depth of the beam under station i
 function depth(d, i) {
   if (!d.w) return SLAB;
+  if (d.b === 'small') return 0.55;
   if (d.b === 'arch' || d.b === 'cable') return 0.55;
   if (d.b === 'steelarch') return 1.0;
   let near = Infinity;
@@ -186,6 +190,19 @@ function structure(world, d, out) {
     const slim = d.b === 'cable' || d.b === 'steelarch';
     block(out.concrete, o[0], foot, o[2], o[3], o[4], slim ? 0.5 : 0.75, d.hw * (slim ? 0.45 : 0.82), o[1] - 0.5);
   }
+  if (d.b === 'small') {
+    // a striped marker post a little beyond each corner, facing the traffic (bands of red and white)
+    for (const [t, dir] of [[-0.9, 1], [d.len + 0.9, -1]]) {
+      for (const side of [-1, 1]) {
+        at(d, Math.max(0, Math.min(d.len, t)), side * (d.hw + 0.35), o);
+        const x = o[0] - o[3] * (t < 0 ? 0.9 : -0.9), z = o[2] - o[4] * (t < 0 ? 0.9 : -0.9);
+        const y = world.heightAt(x, z);
+        block(out.dark, x, y - 0.3, z, o[3], o[4], 0.04, 0.04, y + 0.35);
+        for (let k = 0; k < 5; k++) block(k % 2 ? out.white : out.red, x, y + 0.35 + k * 0.2, z, o[3] * dir, o[4] * dir, 0.03, 0.13, y + 0.55 + k * 0.2);
+      }
+    }
+    return;
+  }
   if (d.name === 'Vabadussild') vabadusArch(d, out);
   else if (d.b === 'arch' || d.b === 'steelarch') {
     // two ribs, one along each edge, with hangers down to the deck
@@ -253,7 +270,7 @@ function structure(world, d, out) {
 // Slab, portal beams, railings and structure of the decks inside one sector: a group, or null.
 export function buildDeckBodies(world, s) {
   const S = world.meta.sector.size;
-  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [], arch: [] };
+  const out = { concrete: [], rail: [], white: [], steel: [], dark: [], lamp: [], arch: [], red: [] };
   const body = out.concrete, e0 = [0, 0, 0, 0], e1 = [0, 0, 0, 0];
   for (const d of world.decks) {
     if (d.own) continue;

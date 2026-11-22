@@ -361,7 +361,10 @@ export function createTerrain(world, renderer, opts) {
     let a = indexCache.get(seg);
     if (!a) {
       const nv = seg + 1;
-      const idx = new Uint16Array(seg * seg * 6);
+      // (a whole sector as one tile at full detail is 321 x 321 points, more than a 16-bit index can
+      // count: the numbers wrapped round, one row of ground went missing and a sheet of long thin
+      // triangles hung across the tile, Martin 22 Nov at the Vasula crossroads)
+      const idx = nv * nv > 65535 ? new Uint32Array(seg * seg * 6) : new Uint16Array(seg * seg * 6);
       let q = 0;
       for (let j = 0; j < seg; j++) {
         for (let i = 0; i < seg; i++) {

@@ -240,6 +240,8 @@ export function createAudio() {
       // a downshift blips, crackles and clunks, an upshift barks as it bites; too far down by hand, the
       // engine is dragged over its limit
       const sh = shiftSound.step(car, t);
+      // (seen as well as heard: smoke.js lights a flame at the tailpipe of a car with spec.exhaust.flame)
+      car.exhaustPop = dead ? 0 : sh.crackle * Math.max(0, Math.min(1, (sh.rpm - 2500) / 3000));
       // (the room the revs add round the engine near its limiter, but not round a gear change: updateSpace)
       room = dead ? 0 : revRoom(sh.rpm, e.redline); roomGear = sh.gear; roomDown = sh.down;
       if (sh.clunk && !dead) clunk(ctx, noiseBuf, sh.clunk.up ? space.burst : bus, sh.clunk.k, t + 0.005 + sh.clunk.after, sh.clunk.up);

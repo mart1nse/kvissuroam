@@ -2,6 +2,8 @@
 // The procedural car is shown until then (and stays if loading fails), and its wheels are kept:
 // the GLB has its wheels cut out and is already in game axes (metres, front -z, ground y = 0).
 // The GLB's emissive texture holds the tail lamps; they follow setLights like the procedural lamps.
+// A scan may carry its tail lamps as a mesh of their own with a finer picture (material 'lamps', the
+// Impreza), and bare metal parts with their colour in the vertices (material 'pipe', its tailpipe).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -129,7 +131,7 @@ export function useGlbBody(car, file, opts = {}) {
   if (typeof window === 'undefined') { car.glbArgs = { file, opts }; return car; }
   const { tail = 0.3, brake = 2, liner = { r: 0.5, len: 0.42, inset: 0.12, gap: 0.035 }, wheelOut = null, lower = 0 } = opts;
   const onLoad = typeof opts.onLoad === 'string' ? glbHooks[opts.onLoad] : opts.onLoad;
-  // (setLights is applyLights in kit.js: it lights car.lit.glb, set below, with these intensities)
+  // (setLights is applyLights in kit.js: it lights car.lit.glb and car.lit.glbLamps, set below, with these intensities)
   car.glbGlow = { tail, brake };
   // resolves once the scanned body is on (or failed to load): instanceCarModel copies the car again then
   car.ready = load(`${import.meta.env.BASE_URL}models/${file}`).then((meshes) => {
@@ -141,7 +143,7 @@ export function useGlbBody(car, file, opts = {}) {
     for (const src of meshes) {
       const lit = !!src.material.emissiveMap;
       const m = new THREE.Mesh(src.geometry, lit ? src.material.clone() : src.material);
-      if (lit) car.lit.glb = m.material;
+      if (lit) car.lit[src.material.name === 'lamps' ? 'glbLamps' : 'glb'] = m.material;
       m.name = `${car.group.name}_glb`; m.position.y = -lower; m.castShadow = true; m.receiveShadow = true;
       car.group.add(m);
       car.triangles = (car.triangles || 0) + src.geometry.index.count / 3;

@@ -3,8 +3,8 @@
 // platforms, moved by tools/bake/busstops.py onto the pavement of the road the buses use, with room
 // for the shelter (src/world/busstops.json). Each stop gets:
 //  - a glass shelter: posts, roof with a fascia, bench, glass back and end, a lit advert panel at the end
-//    the buses come from (the TOREPOOD poster outside, Martin 22 Nov, and a made-up advert inside,
-//    src/world/adverts.js) and a timetable inside; clicking or tapping the poster opens the shop;
+//    the buses come from (the TOREPOOD poster on both faces, Martin 22 Nov, src/world/adverts.js) and a
+//    timetable inside; clicking or tapping the poster opens the shop;
 //  - the bus stop sign at the kerb and a bin beside the shelter (props, so they snap off when hit);
 //  - the yellow zigzag along the kerb where the bus pulls in.
 // All shelters of a piece of the map are merged into a few meshes. When the car comes within reach of one
@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import DATA from './busstops.json';
 import { breakableShelter, shelterSolids } from './shelter.js';
-import { adAtlas, adCell, AD_COUNT, TIMETABLE, POSTER, POSTER_URL } from './adverts.js';
+import { adAtlas, adCell, TIMETABLE, POSTER, POSTER_URL, extraPosters } from './adverts.js';
 
 const D = 1.55, H = 2.45;               // depth and height of a shelter
 const BUS_SIGN = 30, BIN = 4, ZEBRA = 7;
@@ -30,10 +30,9 @@ const STYLES = [
 export const STOPS = DATA.stops.map(([x, z, yaw, L, gap, side, hw, name, sign, bin], i) => {
   const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
   const h = ((i * 2654435761) >>> 0) / 4294967296;
-  const a = (i * 7 + 3) % AD_COUNT, b = (a + 4 + (i % 5)) % AD_COUNT;
   return {
     i, x, z, yaw, L, gap, hw, name: DATA.names[name] || '', sign, bin, ux, uz, nx, nz,
-    style: STYLES[Math.floor(h * STYLES.length)], ads: [POSTER, b],
+    style: STYLES[Math.floor(h * STYLES.length)], ads: [POSTER, POSTER],
     // local (along the road the way the buses go, away from the road) to world
     W: (s, n) => [x + ux * s + nx * n, z + uz * s + nz * n],
     box: { x, z, yaw, hx: L / 2 + 0.1, hz: D / 2 + 0.1 },
@@ -408,10 +407,12 @@ export function createBusStops(scene, world, opts = {}) {
   // The poster opens the shop (Martin, 22 Nov: "make it possible to click on the bus stop banners"): a short
   // press that does not move, on the 3D view, like the Anderson's hologram (hologram.js). The pedals and
   // the buttons are elements of their own, so driving never counts as a tap. Worked out by hand against
-  // the poster's rectangle of the stops within reach, nothing is ray-cast; the player's own car in front of
-  // the poster takes the tap.
+  // the poster's rectangle of the stops within reach (a crashed, bent shelter's own poster mesh is ray-cast);
+  // the player's own car in front of the poster takes the tap.
   const ray = new THREE.Ray(), ndc = new THREE.Vector2(), caster = new THREE.Raycaster();
   const REACH = 40, PH = 0.875, PW = D * 0.4;          // m: how far a poster answers; half its height and width
+  const PU = adCell(POSTER);
+  const shown = (o) => { for (; o; o = o.parent) { if (!o.visible) return false; if (o.isScene) return true; } return false; };
   function posterAt(camera, el, cx, cy, carNow) {
     const r = el.getBoundingClientRect();
     ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
@@ -423,16 +424,29 @@ export function createBusStops(scene, world, opts = {}) {
       if (st.y === undefined || !st.rec) continue;              // (its piece of the map is not built)
       const dx = st.x - o.x, dz = st.z - o.z;
       if (dx * dx + dz * dz > (REACH + 3) ** 2) continue;
-      if (st.br?.damaged()) continue;                          // a bent shelter: the poster is not where it was
+      if (st.br?.damaged()) {                                  // a bent shelter: its own bent poster mesh, ray-cast
+        const h = st.on && shown(st.on.ad) ? caster.intersectObject(st.on.ad, false).find((h) => h.uv && h.uv.x > PU[0] && h.uv.x < PU[2] && h.uv.y > PU[1] && h.uv.y < PU[3]) : null;
+        if (h && h.distance < bestT) { best = st; bestT = h.distance; }
+        continue;
+      }
       // into the shelter's own axes: s along the road, n away from it
       const os = -dx * st.ux - dz * st.uz, on = -dx * st.nx - dz * st.nz;
       const ds = d.x * st.ux + d.z * st.uz, dn = d.x * st.nx + d.z * st.nz;
-      const face = -st.L / 2 - 0.085;
-      if (ds <= 1e-4 || os > face) continue;                   // only from the side the poster faces
-      const t = (face - os) / ds;
-      if (t <= 0 || t >= bestT) continue;
-      const n = on + dn * t, y = o.y + d.y * t - st.y - 1.2;
-      if (Math.abs(n) < PW && Math.abs(y) < PH) { best = st; bestT = t; }
+      // the two faces of the advert box: outside (towards the buses that come) and inside, each seen from its side
+      for (const [face, dir] of [[-st.L / 2 - 0.085, 1], [-st.L / 2 + 0.085, -1]]) {
+        if (ds * dir <= 1e-4 || (os - face) * dir > 0) continue;
+        const t = (face - os) / ds;
+        if (t <= 0 || t >= bestT) continue;
+        const n = on + dn * t, y = o.y + d.y * t - st.y - 1.2;
+        if (Math.abs(n) < PW && Math.abs(y) < PH) { best = st; bestT = t; }
+      }
+    }
+    // and the posters of the hand-built shelters (clickablePoster in adverts.js): a plane or two each, ray-cast
+    // (shelter.js bakes their places into their corners, bent or not; only their fronts answer)
+    for (const q of extraPosters) {
+      if (!shown(q.mesh)) continue;
+      const h = caster.intersectObject(q.mesh, false)[0];
+      if (h && h.distance < bestT) { best = q; bestT = h.distance; }
     }
     if (best && carNow) {
       const vx = carNow.x - o.x, vy = (carNow.y ?? 0) + 0.7 - o.y, vz = carNow.z - o.z, tc = vx * d.x + vy * d.y + vz * d.z;
@@ -459,6 +473,7 @@ export function createBusStops(scene, world, opts = {}) {
     update,
     bindClicks,
     posterAt,
+    extraPosters,                    // (for tests)
     stops: STOPS,
     info: () => ({ stops: STOPS.length, loaded: [...live.values()].reduce((n, r) => n + r.stops.length, 0), active: active.size }),
   };

@@ -15,7 +15,7 @@ import { Parts, BOX } from './landmarks.js';
 import { drapeSteps } from '../world/drape.js';
 import { paverTex, GRASS } from '../world/streetkit.js';
 import { breakableShelter, shelterSolids } from '../world/shelter.js';
-import { adAtlas, adCell } from '../world/adverts.js';
+import { adAtlas, adCell, POSTER, clickablePoster } from '../world/adverts.js';
 import { jobs } from '../jobs.js';
 
 const E = { i0: 941, i1: 1032 };                         // the Emajõe stretch of the lap
@@ -576,8 +576,8 @@ export function createEmajoe(world, group) {
       glass.push([W(L / 2, 0), D, yaw + Math.PI / 2, y, H]);
       add(BOX(0.16, H - 0.25, D * 0.92), COL.frame, -L / 2, (H - 0.25) / 2 + 0.1, 0);
       for (const s of [-1, 1]) {
-        // one of the made-up adverts of all the bus shelters on each face (src/world/adverts.js)
-        const ad = new THREE.Mesh(adPlane(D * 0.8, 1.75, s < 0 ? 3 : 0), new THREE.MeshBasicMaterial({ map: adAtlas(), fog: true }));
+        // the TOREPOOD poster of all the bus shelters on both faces (Martin, 22 Nov; src/world/adverts.js)
+        const ad = new THREE.Mesh(adPlane(D * 0.8, 1.75, POSTER), new THREE.MeshBasicMaterial({ map: adAtlas(), fog: true }));
         const [x, z] = W(-L / 2 + s * 0.085, 0);
         ad.position.set(x, y + 1.2, z);
         ad.rotation.y = yaw + (s < 0 ? -Math.PI / 2 : Math.PI / 2);
@@ -665,6 +665,7 @@ export function createEmajoe(world, group) {
     if (frame) { frame.castShadow = frame.receiveShadow = true; group.add(frame); }
     for (const ad of adverts) group.add(ad);
     breakableShelter(world, group, { ...shelter, frame, bendAlso: adverts, panes, glass: 0xcfe6f2, opacity: 0.32 });
+    for (const ad of adverts) clickablePoster(ad);
     world.addSolids(solids);
   }
 

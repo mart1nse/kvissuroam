@@ -240,6 +240,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
 
     // the list: live during the race for racers, results after
     const live = ph === 'race' && mine;
+    // still racing: the live order, never an older race's results (Martin 2026-11-22: a LAST RACE list opened
+    // before the vote stayed up through his race)
+    if (live && active(mine) && finishedMs == null) showLast = false;
     if (live && !listOpen && finishedMs == null && !showLast && hidFor !== r.id) { listOpen = true; listUntil = Infinity; }
     if (listOpen && t > listUntil) { listOpen = false; showLast = false; }
     let rows = null, head = '', foot = '', compact = false;
@@ -273,7 +276,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     message(m) {
       const prevId = r?.id, prevLast = r?.last?.id, prevN = r?.vote?.ids?.length || 0;
       r = m;
-      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; }
+      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // someone started a vote: tell the others
       const v = r.vote, n = v?.ids?.length || 0;
       if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count') {

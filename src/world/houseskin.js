@@ -198,7 +198,7 @@ export function createAtlas(size = paintScale() < 1 ? 1024 : 2048) {
   // a rectangle of w x h pixels: { page index, x, y }. A rectangle too big for a page gets a page of its
   // own, just its size (pages have their size in .w and .h).
   function take(w, h) {
-    if (w + 4 > size || h + 4 > size) { const p = page(w + 4, h + 4); return { k: pages.indexOf(p), x: 2, y: 2 }; }
+    if (w + 4 > size || h + 4 > size) { const p = page(w + 4, h + 4); p.row = h; return { k: pages.indexOf(p), x: 2, y: 2 }; }
     let p = cur || (cur = page());
     if (p.x + w + 2 > size) { p.x = 2; p.y += p.row + 4; p.row = 0; }
     if (p.y + h + 2 > size) { p = cur = page(); }
@@ -330,6 +330,20 @@ export function skinHouses(world, group, houses, { faces = () => true, ppm = 26,
         yield;
       }
     }
+    // (a page is rarely full, the last one of a place least of all: each is cut down to the rows that were
+    // painted, so that a place with a few fronts does not hold a whole 1024 px page, in memory and on the
+    // graphics card. The phone's memory through the centre stood at 848 of its 870 MB, 22 Nov.)
+    for (const pg of atlas.pages) {
+      const used = Math.min(pg.h, pg.y + pg.row + 2);
+      if (used > pg.h * 0.85) continue;
+      const cv = document.createElement('canvas');
+      cv.width = pg.w; cv.height = used;
+      cv.getContext('2d').drawImage(pg.cv, 0, 0);
+      pg.cv.width = pg.cv.height = 0;
+      pg.cv = cv; pg.c = null; pg.h = used;
+      yield;
+    }
+    if (debug) console.log('fronts', label, done.length, 'walls,', atlas.pages.map((q) => q.w + 'x' + q.h).join(' '));
     // geometry: every wall's own triangles, pushed 7 cm out, one mesh per atlas page
     const OFF = 0.07;
     for (let pk = 0; pk < atlas.pages.length; pk++) {

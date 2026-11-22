@@ -199,6 +199,18 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     }).join('');
   }
 
+  // phones: the live standings sit over the gas pedal in a short box that scrolls (Martin 2026-11-22). The
+  // box is drawn anew with the list, so it keeps where a finger left it, and otherwise follows your own row.
+  let fingerAt = -1e9;
+  for (const ev of ['touchstart', 'wheel']) list.addEventListener(ev, () => { fingerAt = performance.now(); }, { passive: true });
+  function keepScroll(top) {
+    const tb = list.querySelector('.tb');
+    if (!tb || tb.scrollHeight <= tb.clientHeight + 1) return;
+    if (performance.now() - fingerAt < 4000) { tb.scrollTop = top; return; }
+    const meRow = tb.querySelector('tr.me');
+    tb.scrollTop = meRow ? meRow.offsetTop - (tb.clientHeight - meRow.offsetHeight) / 2 : top;
+  }
+
   // ---- drawn four times a second (and at once after a click or a message)
   function render() {
     const t = now(), mine = me(), ph = phaseOf(t), mph = phaseFor(mine, t);
@@ -301,7 +313,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     list.classList.toggle('live', compact);
     const asking = compact && t < askQuit;
     const xBtn = asking ? `<button data-r="x" class="ask">${r.racers.filter(active).length <= 1 ? 'END RACE?' : 'LEAVE RACE?'}</button>` : '<button data-r="x">✕</button>';
-    if (rows) setText(list, `<div class="hd">${head}${xBtn}</div><table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>${foot ? `<div class="ft">${foot}</div>` : ''}`);
+    if (rows) {
+      const top = list.querySelector('.tb')?.scrollTop || 0;
+      setText(list, `<div class="hd">${head}${xBtn}</div><div class="tb"><table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table></div>${foot ? `<div class="ft">${foot}</div>` : ''}`);
+      keepScroll(top);
+    }
     // the LAST RACE chip, when the list is tucked away
     const lastRows = r.last ? standings(r.last.racers, false) : null;
     const myPos = lastRows ? lastRows.findIndex((x) => x.id === mp.id) : -1;

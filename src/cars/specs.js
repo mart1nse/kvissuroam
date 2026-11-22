@@ -435,7 +435,7 @@ export const CARS = {
     cgFront: 0.43,              // the flat four sits ahead of the front axle: about 57 % front with the driver in
     cgHeight: 0.48,             // ...but low: a boxer's crank is at hub height
     wheelRadius: 0.31,          // 235/40 ZR17 on 8.5J BBS wheels
-    cdA: 0.38 * 2.05,           // wide arches, 235 tyres and the tall wing: with the real power this gives the real 248 km/h
+    cdA: 0.36 * 2.05,
     drive: 'awd',
     rearShare: 0.65,            // DCCD centre differential left open: 35 : 65, the tail-happy setting (Martin's notes, 22 Nov)
     grip: 1.08,                 // Pirelli P Zero 235s under 1270 kg
@@ -468,13 +468,14 @@ export const CARS = {
       rollStallRpm: 5200,
       converterGain: 1.6,
     },
-    // close-ratio 5-speed (TY752VB): the 22B's own long 3.9 final drive
+    // close-ratio 5-speed (the STi Type R's set) on a 4.444 final drive, as the Japanese catalogue lists the
+    // 22B: the gears top out at about 66, 99, 132 and 178 km/h, and 5th reaches the redline at 250
     gears: [3.083, 2.062, 1.545, 1.151, 0.825],
     reverse: 3.416,
-    finalDrive: 3.9,
+    finalDrive: 4.444,
     efficiency: 0.78,              // three differentials to turn: 305 hp at the crank is about 240 at the wheels
     shiftTime: 0.3,
-    limiter: null,              // no 180 km/h home-market cap: drag sets the top speed in 5th
+    limiter: null,              // no 180 km/h home-market cap: 5th runs out of revs at about 250
     ref: { zeroTo100: 4.7, top: 248, powerKw: 227 },   // the quickest road tests (they run 4.7 to 5.3 s); about 248 km/h unrestricted; power as measured, not the 206 kW on paper
   },
   bus: {

@@ -20,6 +20,7 @@ const SEND_HZ = 10;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
+const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running          // more players than the server lets in are not ours to draw
 // what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
 const cleanName = (s) => String(s || '').normalize('NFC')
@@ -71,7 +72,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
-  let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false;
+  let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
   // until the race state has come on this connection, each clock question also asks for it (r: 1):
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
@@ -430,6 +431,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     haloParts && (haloParts.mat.opacity = 0.7 + 0.3 * Math.sin(now * 4.5));
     for (const o of others.values()) {
       o.pose = sample(o, now);
+      if (o.pose && o.live) o.seen = now;                            // (its last news, not the coasting after it)
       if (o.pose && o.live && o.modelCar !== o.car && modelReady(o.car, true)) showModel(o);
       // (heard, and smoking, even while their car is still being built)
       if (o.pose && o.live) fxList.push(effects(o, o.pose, Math.sin(o.pose[3]), -Math.cos(o.pose[3])));
@@ -487,6 +489,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     roster() { return [...others.values()].map((o) => ({ name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
+    // everyone counted as online, as the server counts them for a race vote: on the map, or off it
+    // (garage, menu, another tab) for less than AWAY_S
+    drivers() { return [...others.values()].filter((o) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map((o) => ({ name: o.name, colour: o.colour })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
@@ -501,7 +506,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     serverNow: () => Date.now() + clockOff,
     raceSend(m) { if (!STEALTH) send(m); },
     // driving on the map (counts for the race votes), or in the garage / another tab
-    setDriving(on) { on = !!on; if (on === driving) return; driving = on; if (!STEALTH) send({ t: 'drv', on: on ? 1 : 0 }); },
+    // (leaving the map is told only after AWAY_S: a quick car change in the garage keeps your vote and place)
+    setDriving(on) {
+      if (on) { clearTimeout(drvOff); drvOff = 0; if (!driving) { driving = true; if (!STEALTH) send({ t: 'drv', on: 1 }); } return; }
+      if (!driving || drvOff) return;
+      drvOff = setTimeout(() => { drvOff = 0; driving = false; if (!STEALTH) send({ t: 'drv', on: 0 }); }, AWAY_S * 1000);
+    },
+    // counted for the race votes now (on the map, or away for less than AWAY_S)
+    get counted() { return driving && !STEALTH; },
     poseOf(id) { const o = others.get(id); return o?.pose || null; },
     nameOf(id) { return others.get(id)?.name; },
     // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''

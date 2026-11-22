@@ -242,9 +242,13 @@ const FENCES = [
   [846, 906, -1, 'pink', 2.3, 2.2],            // the botanical garden's pink wall (37 to 41 Tartu-Tiksoja)
 ];
 // The grey picket fence on the inside of the Jakobi to Lai turn (1 Tartu-Tiksoja; Martin, 22 Nov: from the corner of the
-// timber house to the white house in one curve, a touch lower, and it breaks when a car drives into it). A curve from
-// a through c to b; panels of about 1.6 m, each one its own piece that flies off when hit.
-const CORNER = { a: [1056.3, 2627.4], c: [1068.45, 2627.0], b: [1073.2, 2616.2], h: 0.9, panel: 1.6 };
+// timber house to the white house in one curve, a touch lower, and it breaks when a car drives into it; then: the last
+// 10 m out in front of the tree, ending flush with the white house's front). Panel corners of about 1.6 m along a curve
+// from the timber house's corner, bending out by the pavement to the white house's corner on Lai; each panel is its own
+// piece that flies off when hit.
+const CORNER = { h: 0.9, panel: 1.6, pts: [[1056.3, 2627.4], [1057.87, 2627.3], [1059.43, 2627.1], [1060.97, 2626.8], [1062.49, 2626.37],
+  [1063.96, 2625.82], [1065.38, 2625.15], [1066.79, 2624.44], [1068.17, 2623.69], [1069.52, 2622.89], [1070.81, 2621.98], [1072.0, 2620.96],
+  [1073.08, 2619.81], [1074.04, 2618.57], [1074.9, 2617.25]] };
 const WALLS = { brick: [0xa65a48, 0x8e4c3e], white: [0xf1eee8, 0xb4604c], pink: [0xeab3a4, 0xd9a090] };   // [wall, cap]
 
 function fenceTextures() {
@@ -346,12 +350,7 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
   // ---- the breakable picket fence round the corner (an InstancedMesh: a panel is one instance)
   const corner = { mesh: null, panels: [], flying: 0, at: null };
   function* cornerFence() {
-    const { a, b, c, h: H, panel } = CORNER, pts = [];
-    const bez = (t) => [(1 - t) ** 2 * a[0] + 2 * t * (1 - t) * c[0] + t * t * b[0], (1 - t) ** 2 * a[1] + 2 * t * (1 - t) * c[1] + t * t * b[1]];
-    let len = 0, q = bez(0);
-    for (let k = 1; k <= 40; k++) { const r = bez(k / 40); len += Math.hypot(r[0] - q[0], r[1] - q[1]); q = r; }
-    const n = Math.max(2, Math.round(len / panel));
-    for (let k = 0; k <= n; k++) pts.push(bez(k / n));          // (even enough spacing on this gentle curve)
+    const { h: H, panel, pts } = CORNER, n = pts.length - 1;
     const tex = paintTexture(panel, 0, H, 128, (P) => {
       for (let x = 0.04; x < panel - 0.05; x += 0.13) { P.r(x, 0.04, x + 0.08, H - 0.07, '#a9a7a2'); P.poly([[x, H - 0.07], [x + 0.08, H - 0.07], [x + 0.04, H - 0.01]], '#a9a7a2'); }
       P.r(0, 0.17, panel, 0.24, '#8f8d88'); P.r(0, H - 0.3, panel, H - 0.23, '#8f8d88');
@@ -373,7 +372,7 @@ export function createLaiFronts(scene, world, { shadows = true } = {}) {
     mesh.computeBoundingSphere();
     mesh.receiveShadow = true;
     corner.mesh = mesh;
-    corner.at = bez(0.5);
+    corner.at = pts[n >> 1];
     if (typeof window !== 'undefined') window.__laiCorner = corner;      // (for tests: panels, which are down)
     group.add(mesh);
     yield;

@@ -16,6 +16,8 @@ const ROUTES = {
   noela: [[-6300, -6500], [-7040, -7130], [-7650, -7600]],
   // the old town by the university: Ülikooli from Vanemuise past the town hall to Munga, round by Jakobi, out by Lossi
   ulikooli: [[1700, 3160], [1591, 3154], [1476, 3030], [1435, 2965], [1384, 2892], [1340, 2843], [1307, 2777], [1294, 2690], [1275, 2650], [1169, 2719], [1190, 2795], [1297, 2780], [1335, 2836], [1250, 2872], [1147, 2915]],
+  // Ülenurme: the Konsum on Võru mnt, the interchange, Lennu tn to the airport, along the runway and back (kaardista 22 Nov)
+  airport: [[1700, 10040], [1620, 10120], [1545, 10300], [1480, 10420], [1300, 10300], [900, 10480], [400, 10580], [-30, 10535], [-105, 10580], [-110, 10650], [-120, 10760], [-90, 10900], [-84, 11006], [400, 10973], [-84, 11006], [-900, 11063], [-84, 11006], [-120, 10760]],
   // the first kilometre of centre (for gpu-burst.cjs, which is slow)
   short: [[2420, 3760], [2300, 3640], [2120, 3380], [1990, 3180], [1900, 3130], [1840, 3080], [1724, 3085], [1600, 3010]],
 };

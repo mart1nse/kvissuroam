@@ -92,14 +92,16 @@ const PAINT = { moob, ck, corner: cream, annex: cream };
 const CAN = frame([532.4, -72.0], [546.8 - 532.4, -72.7 + 72.0]);
 // Magaziin: s along its south front to the east from the south-west corner, v + = south (out)
 const MAG = frame([542.7, -114.9], [578.9 - 542.7, -118.6 + 114.9]);
-const MAG_W = 36.4, MAG_D = 40.4, MAG_H = 6.9, MAG_TOP = 8.6;   // the wall, the raised west corner
+const MAG_W = 36.4, MAG_D = 40.4, MAG_H = 6.9, MAG_TOP = 8.6;   // the wall, the raised north corner
+// its front faces road 3: s from the north-west corner to the south, v + = west (out)
+const F = frame(MAG.at(0, -MAG_D), [MAG.V[0] * MAG_D, MAG.V[1] * MAG_D]), FL = MAG_D;
 const CENTRE = [540, -60];
 
 export function createAstelpaju(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
   // the new hall and its car park: no trees, and the hall is solid
-  world.addClearing({ test: (x, z) => { const [s, v] = MAG.sv(x, z); return s > -3 && s < MAG_W + 3 && v > -MAG_D - 3 && v < 15; } });
+  world.addClearing({ test: (x, z) => { const [s, v] = MAG.sv(x, z); return s > -21 && s < MAG_W + 3 && v > -MAG_D - 3 && v < 3; } });
   { const [x, z] = MAG.at(MAG_W / 2, -MAG_D / 2); world.addSolids([{ x, z, yaw: MAG.YAW, hx: MAG_W / 2, hz: MAG_D / 2 }]); }
   let built = false;
 
@@ -173,69 +175,70 @@ export function createAstelpaju(scene, world, { shadows = true } = {}) {
     }
     yield;
 
-    // ---- Magaziin (Martin's photos of 22 Nov), its south front seen from the car park, west end first
+    // ---- Magaziin (Martin's photos of 22 Nov), its front faces road 3 (Martin, 22 Nov), north end first
     const mg = Math.min(...[[0, 0], [MAG_W, 0], [MAG_W, -MAG_D], [0, -MAG_D]].map(([s, v]) => h(...MAG.at(s, v)))) - 0.15;
     A.box(MAG, MAG_W / 2, -MAG_D / 2, MAG_W, MAG_D, 0, MAG_H, 0x3a3c41, mg);
     A.box(MAG, MAG_W / 2, -MAG_D / 2, MAG_W - 0.6, MAG_D - 0.6, MAG_H, MAG_H + 0.05, 0x8d9096, mg);
-    const RED = '#d4202e', BLUE_S = 13.3;
+    const RED = '#d4202e', K = FL / 36.4, BLUE_S = 13.3 * K;
     const slats = (P, x0, x1, y0, y1, base, line, step = 0.3) => { P.r(x0, y0, x1, y1, base); for (let x = x0 + step / 2; x < x1; x += step) P.r(x, y0, x + 0.06, y1, line); };
     const topAt = (x) => (x < BLUE_S ? MAG_TOP - (MAG_TOP - 8.0) * x / BLUE_S : MAG_H);
-    const front = paintTexture(MAG_W, 0, MAG_TOP, 16, (P) => {
-      slats(P, BLUE_S, MAG_W, 0, MAG_H, '#2c2e33', '#43464d', 0.25);                 // dark slatted wall
-      P.grad(BLUE_S, 0.4, 16.2, MAG_H - 0.15, '#4b5866', '#252b33');                  // the glass curtain at the entrance
-      for (let x = BLUE_S + 0.95; x < 16.2; x += 0.95) P.r(x - 0.03, 0.4, x + 0.03, MAG_H - 0.15, '#1b1d21');
-      P.r(16.4, 0.4, 18.6, 2.6, '#1d2127'); P.grad(16.5, 0.45, 18.5, 2.5, '#6d8295', '#33404d');   // the doors
-      P.r(25.3, 3.2, MAG_W, MAG_H, '#b9bcc2'); P.r(25.3, 3.15, MAG_W, 3.25, '#9a9da3');            // the sign panel
-      P.text('MAGAZIIN', 30.85, 4.95, 2.0, '#e0202e', '900 italic %px Arial Black, Arial, sans-serif');
+    const front = paintTexture(FL, 0, MAG_TOP, 16, (P) => {
+      slats(P, BLUE_S, FL, 0, MAG_H, '#2c2e33', '#43464d', 0.25);                 // dark slatted wall
+      P.grad(BLUE_S, 0.4, 16.2 * K, MAG_H - 0.15, '#4b5866', '#252b33');                  // the glass curtain at the entrance
+      for (let x = BLUE_S + 0.95; x < 16.2 * K; x += 0.95) P.r(x - 0.03, 0.4, x + 0.03, MAG_H - 0.15, '#1b1d21');
+      P.r(18.2, 0.4, 20.6, 2.6, '#1d2127'); P.grad(18.3, 0.45, 20.5, 2.5, '#6d8295', '#33404d');   // the doors
+      P.r(28.1, 3.2, FL, MAG_H, '#b9bcc2'); P.r(28.1, 3.15, FL, 3.25, '#9a9da3');            // the sign panel
+      P.text('MAGAZIIN', 34.25, 4.95, 2.0, '#e0202e', '900 italic %px Arial Black, Arial, sans-serif');
       P.poly([[0, 0], [0, MAG_TOP], [BLUE_S, 8.0], [BLUE_S, 0]], '#9a9ca2');           // the grey wedge with its slats
       for (let x = 0.5; x < BLUE_S; x += 0.32) P.r(x, 0, x + 0.12, topAt(x), '#6d7076');
-      P.poly([[0, 0], [0, MAG_TOP], [1.3, 8.1], [7.6, 1.5], [7.6, 0]], RED);           // the red corner under its diagonal
-      for (let x = 1.1; x < 7.6; x += 1.1) P.r(x, 0.4, x + 0.03, Math.min(MAG_TOP - 0.1, 8.1 - (x - 1.3) * 1.05), '#b81a27');
-      P.text('E-R 9-19', 3.0, 5.25, 0.62, '#ffffff', SANS); P.text('L-P  9-17', 3.0, 4.35, 0.62, '#ffffff', SANS);
-      P.r(0, 0, MAG_W, 0.4, '#c9c9c6');                                                  // the concrete plinth
+      P.poly([[0, 0], [0, MAG_TOP], [1.45, 8.1], [8.4, 1.5], [8.4, 0]], RED);           // the red corner under its diagonal
+      for (let x = 1.2; x < 8.4; x += 1.2) P.r(x, 0.4, x + 0.03, Math.min(MAG_TOP - 0.1, 8.1 - (x - 1.45) * 0.95), '#b81a27');
+      P.text('E-R 9-19', 3.3, 5.25, 0.62, '#ffffff', SANS); P.text('L-P  9-17', 3.3, 4.35, 0.62, '#ffffff', SANS);
+      P.r(0, 0, FL, 0.4, '#c9c9c6');                                                     // the concrete plinth
     }, { alpha: true });
     const frontMat = new THREE.MeshLambertMaterial({ map: front, alphaTest: 0.5 });
-    { const [x, z] = MAG.at(MAG_W / 2, 0.03); const m = new THREE.Mesh(new THREE.PlaneGeometry(MAG_W, MAG_TOP), frontMat); m.position.set(x, mg + MAG_TOP / 2, z); m.rotation.y = MAG.YAW; group.add(m); }
+    { const [x, z] = F.at(FL / 2, 0.03); const m = new THREE.Mesh(new THREE.PlaneGeometry(FL, MAG_TOP), frontMat); m.position.set(x, mg + MAG_TOP / 2, z); m.rotation.y = F.YAW; group.add(m); }
     // the wedge's back and top above the roof, plain grey
     { const sh = new THREE.Shape([[0, MAG_H], [0, MAG_TOP], [BLUE_S, 8.0], [BLUE_S, MAG_H]].map(([a, b]) => new THREE.Vector2(a, b)));
       const g = new THREE.ExtrudeGeometry(sh, { depth: 0.5, bevelEnabled: false });
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x8d9096 }));
-      const [x, z] = MAG.at(0, -0.53); m.position.set(x, mg, z); m.rotation.y = MAG.YAW; group.add(m); }
+      const [x, z] = F.at(0, -0.53); m.position.set(x, mg, z); m.rotation.y = F.YAW; group.add(m); }
     // the blue perforated triangle standing 0.6 m before the wall
     { const dots = paintTexture(1, 0, 1, 24, (P) => { P.r(0, 0, 1, 1, '#2648c8'); for (let x = 0.1; x < 1; x += 0.2) for (let y = 0.1; y < 1; y += 0.2) P.r(x - 0.05, y - 0.05, x + 0.05, y + 0.05, '#7d2f8e'); }, { repeat: true });
       dots.wrapT = THREE.RepeatWrapping;
-      const sh = new THREE.Shape([[2.8, 0.3], [BLUE_S, 0.3], [BLUE_S, 8.15]].map(([a, b]) => new THREE.Vector2(a, b)));
+      const sh = new THREE.Shape([[3.1, 0.3], [BLUE_S, 0.3], [BLUE_S, 8.15]].map(([a, b]) => new THREE.Vector2(a, b)));
       const g = new THREE.ShapeGeometry(sh);
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: dots, transparent: true, opacity: 0.88, side: THREE.DoubleSide }));
-      const [x, z] = MAG.at(0, 0.65); m.position.set(x, mg, z); m.rotation.y = MAG.YAW; group.add(m);
-      A.box(MAG, (2.8 + BLUE_S) / 2 + 0.02, 0.65, Math.hypot(BLUE_S - 2.8, 7.85), 0.1, 0, 0.12, 0x1f3db0, mg + 0.3);   // (its edge, only a hint)
-      A.box(MAG, BLUE_S, 0.65, 0.12, 0.12, 0.3, 8.15, 0x1f3db0, mg); }
+      const [x, z] = F.at(0, 0.65); m.position.set(x, mg, z); m.rotation.y = F.YAW; group.add(m);
+      A.box(F, (3.1 + BLUE_S) / 2 + 0.02, 0.65, Math.hypot(BLUE_S - 3.1, 7.85), 0.1, 0, 0.12, 0x1f3db0, mg + 0.3);   // (its edge, only a hint)
+      A.box(F, BLUE_S, 0.65, 0.12, 0.12, 0.3, 8.15, 0x1f3db0, mg); }
     // the low wall, the grass bed with junipers before the triangle, the paving before the red corner
-    const bg = h(...MAG.at(8.6, 1.5));
-    A.box(MAG, 8.6, 2.0, 10.0, 0.3, -0.5, 0.45, 0xc9c9c6, bg);
-    A.box(MAG, 8.6, 1.0, 10.0, 1.7, -0.5, 0.35, 0x6f9a45, bg);
-    for (let s = 4.5; s < 13.5; s += 1.5) p.add(new THREE.ConeGeometry(0.3, 0.55, 6), 0x3f6b3a, ...((q) => [q[0], bg + 0.6, q[1]])(MAG.at(s, 1.0 + (s % 3 ? 0.3 : -0.3))));
+    const bg = h(...F.at(9.5, 1.5));
+    A.box(F, 9.5, 2.0, 11.0, 0.3, -0.5, 0.45, 0xc9c9c6, bg);
+    A.box(F, 9.5, 1.0, 11.0, 1.7, -0.5, 0.35, 0x6f9a45, bg);
+    for (let s = 5; s < 14.8; s += 1.5) p.add(new THREE.ConeGeometry(0.3, 0.55, 6), 0x3f6b3a, ...((q) => [q[0], bg + 0.6, q[1]])(F.at(s, 1.0 + (s % 3 ? 0.3 : -0.3))));
     // the steel canopy over the entrance: flat roof, crossed braces on its outer posts, a perforated end panel
-    { const c0 = 14.6, c1 = 21.4, d = 4.2, y = 3.3;
-      A.box(MAG, (c0 + c1) / 2, d / 2, c1 - c0, d, y, y + 0.22, 0x8b8e94, mg);
-      for (const s of [c0 + 0.1, (c0 + c1) / 2, c1 - 0.5]) A.box(MAG, s, d - 0.1, 0.1, 0.1, 0, y, 0x5c5f66, mg);
+    { const c0 = 16.2, c1 = 23.8, d = 4.2, y = 3.3;
+      A.box(F, (c0 + c1) / 2, d / 2, c1 - c0, d, y, y + 0.22, 0x8b8e94, mg);
+      for (const s of [c0 + 0.1, (c0 + c1) / 2, c1 - 0.5]) A.box(F, s, d - 0.1, 0.1, 0.1, 0, y, 0x5c5f66, mg);
       for (const [sa, sb] of [[c0 + 0.1, (c0 + c1) / 2], [(c0 + c1) / 2, c1 - 0.5]]) {
         for (const k of [1, -1]) {
-          const [x, z] = MAG.at((sa + sb) / 2, d - 0.1), ang = Math.atan2(y, (sb - sa) / 2) * k;
+          const [x, z] = F.at((sa + sb) / 2, d - 0.1), ang = Math.atan2(y, (sb - sa) / 2) * k;
           const m = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(sb - sa, y), 0.07, 0.07), new THREE.MeshLambertMaterial({ color: 0x5c5f66 }));
-          m.position.set(x, mg + y / 2, z); m.rotation.set(0, MAG.YAW, ang, 'YZX'); group.add(m);
+          m.position.set(x, mg + y / 2, z); m.rotation.set(0, F.YAW, ang, 'YZX'); group.add(m);
         }
       }
-      A.box(MAG, c1 - 0.2, d / 2, 0.12, d, 0, y, 0xa3a6ab, mg);
-      for (let s = c0 + 1.2; s < c1 - 1; s += 1.1) A.box(MAG, s, 1.7, 0.05, 0.9, 0, 0.8, 0x9fa2a8, mg);           // bike stands
+      A.box(F, c1 - 0.2, d / 2, 0.12, d, 0, y, 0xa3a6ab, mg);
+      for (let s = c0 + 1.2; s < c1 - 1; s += 1.1) A.box(F, s, 1.7, 0.05, 0.9, 0, 0.8, 0x9fa2a8, mg);           // bike stands
     }
-    // the side to road 3: dark grey, the red corner turning round
-    { const tex = paintTexture(MAG_D, 0, MAG_H, 8, (P) => { slats(P, 0, MAG_D, 0, MAG_H, '#3d4046', '#4f525a', 0.6); P.r(MAG_D - 0.5, 0, MAG_D, MAG_H, RED); P.r(0, 0, MAG_D, 0.4, '#c9c9c6'); });
-      const [x, z] = MAG.at(-0.03, -MAG_D / 2); const m = new THREE.Mesh(new THREE.PlaneGeometry(MAG_D, MAG_H), new THREE.MeshLambertMaterial({ map: tex }));
-      m.position.set(x, mg + MAG_H / 2, z); m.rotation.y = MAG.YAW - Math.PI / 2; group.add(m); }
+    // the side to Astelpaju and Circle K: dark slats; the red turns round the north-west corner
+    { const tex = paintTexture(MAG_W, 0, MAG_H, 8, (P) => { slats(P, 0, MAG_W, 0, MAG_H, '#3d4046', '#4f525a', 0.6); P.r(0, 0, MAG_W, 0.4, '#c9c9c6'); });
+      const [x, z] = MAG.at(MAG_W / 2, 0.03); const m = new THREE.Mesh(new THREE.PlaneGeometry(MAG_W, MAG_H), new THREE.MeshLambertMaterial({ map: tex }));
+      m.position.set(x, mg + MAG_H / 2, z); m.rotation.y = MAG.YAW; group.add(m); }
+    A.box(MAG, 0.3, -MAG_D - 0.03, 0.6, 0.06, 0, MAG_TOP - 0.05, 0xd4202e, mg);
     // the car park before it, with its bays
-    A.pave(MAG, -2, MAG_W + 2, 0.2, 16, 'asphalt');
-    for (let s = 1.5; s < MAG_W - 1; s += 2.6) A.box(MAG, s, 3.0, 0.1, 5.0, 0.07, 0.09, 0xf2f2f0);
+    A.pave(F, -2, FL + 2, 0.2, 18, 'asphalt');
+    for (let s = 6.0; s < FL - 1; s += 2.6) if (s < 15 || s > 25) A.box(F, s, 7.5, 0.1, 5.0, 0.07, 0.09, 0xf2f2f0);
     yield;
 
     // ---- across road 3: the Tartu city sign, the map board, three flags

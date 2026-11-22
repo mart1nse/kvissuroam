@@ -42,6 +42,8 @@ import { TURU4_CARS } from './turu4.js';
 import { RIIA2_CARS } from './riia2.js';
 import { ULIKOOLI_CARS } from './ulikooli.js';
 import { KALURI_CARS } from './kaluri.js';
+import { LENNUJAAM_CARS } from './lennujaam.js';
+import { LENNUAKADEEMIA_CARS } from './lennuakadeemia.js';
 import { still, stir } from '../still.js';
 
 // ---------------------------------------------------------------- what stands where
@@ -140,6 +142,8 @@ function allSpots() {
   ULIKOOLI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `uk${i}`, x, z, yaw, id, paint, lift }));
   RIIA2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `r2${i}`, x, z, yaw, id, paint, lift }));
   KALURI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ka${i}`, x, z, yaw, id, paint, lift }));
+  LENNUJAAM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `lj${i}`, x, z, yaw, id, paint, lift }));
+  LENNUAKADEEMIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `la${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

@@ -448,6 +448,7 @@ export const CARS = {
       brakeDown: 0.86,          // braking into a corner it comes down early and keeps the revs up
       pulses: 2,                // four cylinders: two firing pulses per revolution
       revDrop: 4200,
+      brakeTorque: [30, 0.004],    // off the throttle: 2.2 litres of friction and pumping plus three differentials, about 54 Nm at 6000 rpm (0.19 g at the top of 1st, 0.12 g in 2nd, 0.05 g in 5th)
       revCut: 0.045, revCutDrop: 400,
       // EJ22G on full boost as stock cars measure, not as Subaru put it on paper (280 PS, 363 Nm, the
       // Japanese makers' agreed cap): about 385 Nm @ 3200 and 227 kW (305 hp) @ 6000 at the crank,

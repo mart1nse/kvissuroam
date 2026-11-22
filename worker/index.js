@@ -420,14 +420,30 @@ export class Lobby extends DurableObject {
       let key = (await this.readTicket(m.k)) ? m.k : null;
       if (!key && !this.over(`t|${ip}`, 30, 600000)) key = await this.newTicket();
       me = ws.deserializeAttachment();
-      const id = me?.id || crypto.randomUUID().slice(0, 8);
+      // A page keeps its id for as long as it is open, through lost connections and server restarts (a
+      // deploy): the id comes from its lap ticket. Martin 2026-11-22: a reconnect in the middle of a race
+      // gave him a new id, so his finish was not his and the race ran on to 7:00 with "1 RACING".
+      const tk = key ? await this.readTicket(key) : null;
+      let id = me?.id;
+      if (!id && tk) {
+        id = (await this.sign(`id.${tk.sid}`)).slice(0, 8);
+        // the same page's old connection, not closed yet: it is this one now
+        for (const old of this.ctx.getWebSockets()) {
+          if (old === ws) continue;
+          const oa = old.deserializeAttachment();
+          if (oa?.id !== id) continue;
+          old.serializeAttachment({ at: oa.at, ip: oa.ip });
+          try { old.close(1000, 'reconnected'); } catch { /* already closed */ }
+        }
+      }
+      if (!id) id = crypto.randomUUID().slice(0, 8);
       const name = cleanName(m.name) || this.freshName();
       // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
       const ghost = !!m.ghost || !!me?.ghost;
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), board: this.board() }));
-      if (!me?.id && !ghost) this.broadcast({ t: 'join', id, name, car: a.car }, ws);
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car }, ws); this.race.back(a); }
       this.race.sendTo(ws);
       return;
     }

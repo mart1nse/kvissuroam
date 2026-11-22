@@ -21,7 +21,7 @@ const HEAR = 240;          // metres: further off than this a car is silent
 const REF = 7;             // metres: at this distance another car is as loud as our own
 const SOUND = 343;         // m/s: the sound arrives late by distance / SOUND, which is also what bends its pitch
 // wheelspin howl: its gain at full spin (tools/engine-space-demo.mjs --tyres renders it in a burnout and donuts)
-export const SPIN_LEVEL = 0.4;
+export const SPIN_LEVEL = 0.55;
 // how hard the tyres spin, 0..1: only the spin beyond the creep of a gripping tyre counts (the callers
 // leave out loose ground, the air and a dead engine)
 export function spinAmount(c) {

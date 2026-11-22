@@ -534,6 +534,18 @@ export const CARS = {
   },
 };
 
+// The handbrake clutch (engine.hbRevs, see engineForce in physics.js) is standard on every
+// four-wheel-drive car with an engine, these and any added later (Martin 2026-11-22): pulling the
+// handbrake takes the drive off, the revs stay up, and letting go lights the tyres. A car that does not
+// give its own hbRevs keeps the revs at its power peak (read off its torque curve below the redline);
+// hbRevs: 0 turns it off for one car. Electric cars have no clutch to drop and are left as they are.
+for (const s of Object.values(CARS)) {
+  const e = s.engine;
+  if (s.drive !== 'awd' || e.type !== 'ice' || e.hbRevs !== undefined) continue;
+  let best = 0;
+  for (const [rpm, nm] of e.torque) if (rpm <= e.redline && rpm * nm > best) { best = rpm * nm; e.hbRevs = rpm; }
+}
+
 export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'bus'];
 
 // The garage menu shows these side by side, each as a stack the player slides through.

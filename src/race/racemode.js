@@ -105,6 +105,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (ph === 'count') { mp.raceSend({ t: 'rj', on: mine ? 0 : 1 }); dismissed = 0; return; }
     if (ph === 'grid') { if (mine) { mp.raceSend({ t: 'rj', on: 0 }); pin = null; } else if (lateOk()) mp.raceSend({ t: 'rj', on: 1 }); return; }
     if (ph === 'race' && !mine && lateOk() && r.vote.kind !== 'start') { mp.raceSend({ t: 'rj', on: 1 }); return; }
+    // the last one still in, with others about: the button ends the race (no restart into a race of one)
+    if (ph === 'race' && loneRacer()) { mp.raceSend({ t: 'rj', on: 0 }); quitFor = r.id; toast('RACE ENDED', 2000); return; }
     // (the lights just went out and the server's word on the restart vote is still on its way: it judges by the clock)
     if (ph === 'race' && !voteOpen && mine && active(mine)) { mp.raceSend({ t: 'rv', on: 1 }); return; }
     if (voteOpen && r.vote.kind === 'restart' && !(mine && !mine.out)) return;
@@ -119,6 +121,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   chip.addEventListener('click', () => { showLast = true; listOpen = true; listUntil = Infinity; render(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
   // otherwise it tucks the list away
+  // racing and the only one still in the race (finished ones count as in), while others drive about
+  const loneRacer = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null && r.racers.filter((x) => !x.out).length === 1 && mp.drivers().length > 0; };
   const racingNow = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null; };
   list.addEventListener('click', (e) => {
     if (!e.target.closest('[data-r="x"]')) return;
@@ -234,6 +238,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       // (the race is on: join with a start of your own from the grid, your time from your lights)
       label = 'JOIN RACE'; cls = 'lit';
       line = `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00 · ${key} TO JOIN`;
+    } else if (mph === 'race' && loneRacer()) {
+      label = 'END RACE'; cls = '';
+      line = `LAST ONE IN THE RACE · ${key} TO END`;
     } else if (v.kind === 'restart' && mine && !mine.out) {
       label = 'RESTART'; cls = voted ? 'pink on' : 'pink';
       line = `${pips(n, v.need)}<b>${n} / ${v.need}</b> ${isTouch ? 'RACERS' : `RACER VOTES TO RESTART${voted ? ' · YOU VOTED' : ''}`}`;

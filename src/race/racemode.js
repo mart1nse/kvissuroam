@@ -204,7 +204,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (ph === 'race' && !isTouch) line += ' · RACE STILL ON';
       // drivers on the map the server does not count: a page from before race mode (it cannot vote
       // until it is reloaded)
-      const old = mp.players().length + (isDriving() && !mp.stealth ? 1 : 0) - v.of;
+      const old = mp.drivers().length + (mp.counted ? 1 : 0) - v.of;
       if (old > 0) line += isTouch ? ` · ${old} OLD PAGE${old > 1 ? 'S' : ''}` : ` · ${old} ON AN OLD PAGE`;
     } else {
       label = 'RACE ON'; cls = 'dim';
@@ -289,6 +289,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     act,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
+    // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
+    get holding() { const ph = phaseOf(), m = me(); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
     get pin() { return pin; },
     // our lap timer finished a lap

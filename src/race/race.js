@@ -308,7 +308,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
 
   const st = {
-    running: false, t0: 0, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
+    running: false, t0: 0, clk: 0, wall: null, carT: null, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null,
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
@@ -405,7 +405,17 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     // car: physics state; carId / carShort: which car is driving; inp: what is driving it
     // ('kb' keyboard, 'pad' gamepad, 'wheel', 'touch' phone or tablet)
     update(car, carId, carShort, inp = 'kb') {
-      const x = car.x, z = car.z, time = car.time;
+      const x = car.x, z = car.z;
+      // the lap clock: the car's own clock frame by frame, but a gap in the driving (the garage, the menu, the
+      // city map, another tab) counts at the wall clock's pace, so a stop on a lap costs its time (Martin,
+      // 2026-11-22: the timer stood still in the garage and went on from there). A new car's clock starts at 0.
+      const wall = performance.now() / 1000;
+      if (st.wall != null) {
+        const ds = car.time - (st.carT ?? car.time), dw = wall - st.wall;
+        st.clk += dw > 1 ? Math.max(dw, ds) : Math.max(0, ds);
+      }
+      st.wall = wall; st.carT = car.time;
+      const time = st.clk;
       // seconds of the lap driven with each kind of control (moving only); the lap is put down to the most used
       if (st.running && st.inpAt != null && Math.abs(car.vx) > 2) st.inpT[inp] = (st.inpT[inp] || 0) + Math.max(0, Math.min(0.1, time - st.inpAt));
       st.inpAt = time;

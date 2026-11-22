@@ -26,6 +26,12 @@ const HOLD_FOLLOW = 0.15;        // ...and how far it still does while the drive
 // slide from opposite lock or from a released wheel they wind in over TURNIN_SWAP_T.
 const TURNIN_HOLD_T = 1.0, TURNIN_SWAP_T = 0.5, TURNIN_END = 0.05;
 let turnInHigh = true;
+// ?inward=1 (Martin 2026-11-22, on trial): a key (or a stick pushed fully over) held into the turn (not against a slide) for longer than INWARD_WAIT
+// turns the wheels past the speed's grip lock, up to full lock over INWARD_T, so a stubborn hold in understeer
+// scrubs the nose round instead of stopping at the limit. A steering wheel is not affected.
+const INWARD_WAIT = 0.6, INWARD_T = 1.2;
+let inwardOn = false;
+export function setInward(on) { inwardOn = !!on; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -694,6 +700,16 @@ function substep(car, input, world, dt) {
     holdFollow = CASTER + (TURNIN_END - CASTER) * Math.min(1, (car.giveT || 0) / (car.giveDur || TURNIN_HOLD_T));
   }
   const follow = CASTER + ((steerIn * align < 0 ? holdFollow : 1) - CASTER) * held;
+  let lockIn = lock;
+  if (inwardOn && !input.steerDirect) {
+    // (held the same way and not countersteering: after INWARD_WAIT the lock grows from the grip limit to full)
+    const dirIn = Math.sign(steerIn);
+    // (a moment of the tail stepping the other way only eases it back, rather than starting the wait again)
+    if (Math.abs(steerIn) < 0.9 || dirIn !== car.inDir) car.inT = 0;
+    else car.inT = Math.max(0, (car.inT || 0) + (steerIn * align > 0 ? -2 * dt : dt));
+    car.inDir = dirIn;
+    lockIn = lock + (maxLock - lock) * Math.min(1, Math.max(0, (car.inT - INWARD_WAIT) / INWARD_T));
+  }
   // Catching a slide: held opposite lock points the wheels past the direction
   // of travel, and once the tail swings back that extra lock keeps rotating
   // the car, flinging it into a slide the other way (a tank-slapper). A driver
@@ -723,7 +739,7 @@ function substep(car, input, world, dt) {
   const back = sR * dsR < 0 && Math.abs(sR) > 0.04 ? Math.min(1, (-dsR * Math.sign(sR) - 0.1) / 0.5) : 0;
   car.recov = back > (car.recov || 0) ? car.recov + (back - car.recov) * Math.min(1, dt * 25) : Math.max(0, (car.recov || 0) - dt * 2.5);
   const auto = 1 - RECOVER * car.recov;
-  let target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lock + align * follow * auto) * ease));
+  let target = Math.max(-maxLock, Math.min(maxLock, (steerIn * lockIn + align * follow * auto) * ease));
   // (unwinding is quick: in a slide the wheel spins back through your hands)
   let rate = ((2.6 - 0.9 * held) * Math.max(lock, 0.08) + 0.25) * (1 + 2 * catchK);
   if (input.steerDirect) {
@@ -1362,7 +1378,7 @@ export function resetCar(car, pose) {
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
   car.rpm = car.spec.engine.idle ?? 0;

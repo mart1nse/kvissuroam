@@ -26,7 +26,9 @@ export const PARKING = [
   // those cars stand along the left of Ülikooli past Vabank instead
   { a: [1463.8, 3018.3], b: [1440.1, 2976.6], n: 8, seed: 31 },
   { a: [1505.7, 3009.1], b: [1492.1, 3021.6], n: 3, seed: 32 },
-  { a: [1426, 3102], b: [1440, 3102], n: 5, perp: true, seed: 33 },
+  // (drop: bays whose car is taken away afterwards, so the cars of every other row keep their model and paint;
+  // the BMW estate by the bins stood next to the racing line, Martin 22 Nov)
+  { a: [1426, 3102], b: [1440, 3102], n: 5, perp: true, seed: 33, drop: [0] },
 ];
 const TERRACE = [1586, 3046];       // café terrace by the start line (moved to the kerb at run time)
 const PLAY = [[1602, 3019, 5.2], [1616, 3031, 4.2]];      // playground rubber discs: x, z, radius

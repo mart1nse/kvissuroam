@@ -7,7 +7,7 @@
 // in src/engine-sounds.js); the old two-oscillator buzz stays as the fallback where worklets are missing.
 import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
-import { blowOff, shiftChirp } from './audio-turbo.js';
+import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
 
 const ENGINE_LEVEL = 0.4;
@@ -229,7 +229,8 @@ export function createAudio() {
         // (lastBoost: the boost built while the throttle was open, vented once it closes)
         if (car.throttle > 0) {
           lastBoost = Math.max(lastBoost * 0.99, b);
-          if (car.shiftCut && !wasShift && !dead && b > 0.5) shiftChirp(ctx, noiseBuf, space.burst, b, tb.bov);
+          // (an upshift: the driver lifts for the change and the valve vents, in the gap before the gear bites)
+          if (car.shiftCut && !wasShift && !dead && shiftBlowOff(ctx, noiseBuf, space.burst, b, tb.bov)) lastPsh = t;
         } else {
           if (!dead && lastBoost > 0.3 && t - lastPsh > 0.4) { blowOff(ctx, noiseBuf, space.burst, lastBoost, tb.bov); lastPsh = t; }
           lastBoost = 0;

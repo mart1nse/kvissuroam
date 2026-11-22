@@ -150,17 +150,41 @@ export function blowOff(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ct
   }
 }
 
-// a vent valve on an upshift on boost: two quick chuffs as the throttle plate flicks shut and open
-export function shiftChirp(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ctx.currentTime + 0.005) {
-  if ((cfg.kind || 'vent') !== 'vent' || !cfg.shiftChirp) return;
-  const L = Math.min(0.4, 0.36 * clamp(P, 0, 1.3)) * (cfg.level ?? 1) * cfg.shiftChirp;
-  const g1 = 0.06 + 0.02 * rnd();
-  puffs(ctx, noise, dest, 0.9, [
-    { t, len: 0.07, level: L, f: 2000 + 300 * rnd() },
-    { t: t + g1, len: 0.05, level: L * 0.6, f: 1500 + 200 * rnd() },
-  ]);
-  puffs(ctx, noise, dest, 1.4, [
-    { t, len: 0.06, level: L * 0.5, f: 330 },
-    { t: t + g1, len: 0.045, level: L * 0.3, f: 260 },
-  ]);
+// An upshift on boost. The gearbox works like a quick manual change, and a driver lifts for every one:
+// the throttle plate shuts and the valve vents the boost (Martin 2026-11-22). It plays only in the gap of
+// the change. The first blast comes as the ignition cuts, then a few quick pulses, and the whole sound is
+// pulled down to a whisper by the time the gear is heard biting (SHIFT_BITE, audio-shift.js BITE_HEARD).
+// That way the bark, the clunk, the tyre chirp and the rev swing of the upshift kick land as they did
+// before. It is gone soon after, as in a real car where the valve shuts once the throttle opens again.
+// There is no low chuff, because the bite's thump lives down there. P is the boost at the start of the
+// change: a full pssh after a hard pull, a breath on a gentle short shift, nothing off boost.
+// cfg.shift scales it (0: none, e.g. the bus, an automatic with a torque converter); diesels have no
+// valve. Returns whether anything was played.
+const SHIFT_BITE = 0.12;
+export function shiftBlowOff(ctx, noise, dest, P, cfg = {}, rnd = Math.random, t = ctx.currentTime + 0.005) {
+  const kind = cfg.kind || 'vent', k = cfg.shift ?? 1.4;
+  P = clamp(P, 0, 1.3);
+  if (kind === 'diesel' || !(k > 0) || P < 0.15) return false;
+  const L = Math.min(0.4, 0.36 * Math.pow(P, 1.5)) * (cfg.level ?? 1) * k;
+  // the duck: full through the cut, down to under a fifth as the gear bites, gone by a quarter second
+  const duck = ctx.createGain();
+  duck.gain.setValueAtTime(1, t);
+  duck.gain.setValueAtTime(1, t + SHIFT_BITE - 0.03);
+  duck.gain.linearRampToValueAtTime(0.18, t + SHIFT_BITE + 0.01);
+  duck.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  duck.connect(dest);
+  const dur = 0.2 + 0.08 * P;
+  if (kind === 'vent') {
+    knock(ctx, duck, t, L * 0.3);
+    const times = pulseTimes(t, dur, 17 + 7 * P, 0.9, rnd), peak = times.map(() => 0.8 + 0.4 * rnd());
+    const f0 = 2100 + 700 * P;
+    band(ctx, noise, duck, t, dur, times, { q: 1, f0, f1: 900, L, depth: 0.85, peak });
+    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: f0 * 2, f1: 2700, L: L * 0.32, depth: 0.85, peak });
+  } else {
+    // a diverter valve: the muffled whoosh, gently pulsing
+    const times = pulseTimes(t, dur, 13 + 5 * P, 0.9, rnd), peak = times.map(() => 0.8 + 0.4 * rnd());
+    band(ctx, noise, duck, t, dur, times, { q: 1, f0: 1100 + 300 * P, f1: 650, L: L * 0.6, depth: 0.45, peak });
+    band(ctx, noise, duck, t, dur * 0.8, times, { q: 1.2, f0: 2400, f1: 1500, L: L * 0.08, depth: 0.45, peak });
+  }
+  return true;
 }

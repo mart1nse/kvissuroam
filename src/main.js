@@ -119,6 +119,7 @@ import { createRavila2, ravila2Walls } from './world/ravila2.js';
 import { createRavila3, ravila3Walls } from './world/ravila3.js';
 import { lounaPaintVectors } from './world/lounapaint.js';
 import { turuPaintVectors } from './world/turupaint.js';
+import { narvaPaintVectors } from './world/narvapaint.js';
 import { createSigns } from './world/signs.js';
 import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
@@ -413,6 +414,7 @@ async function boot() {
   turuPaintVectors(world.vectors);              // Turu: the hatched island from Soola to Sadama, no centre lines on Sadama and the car park lanes
   road3PaintVectors(world.vectors);             // road 3 north of Kvissentali tee: two lanes, edge lines, the chevron island
   ulenurmePaintVectors(world.vectors);          // road 2 at the Lennu interchange: lines by the median rail, the hatched wedge and gore
+  narvaPaintVectors(world.vectors);             // Narva mnt from Jaama to Peetri: a double solid centre line
   ulikooliPaintVectors(world.vectors);          // Ülikooli, Jakobi, Rüütli, Küütri, Lossi: the old town has no centre lines
   lounaPaintVectors(world.vectors);             // Lõunakeskus to Sõinaste: no centre lines where the real roads have none, edge lines on the ring road
   kaluriVectors(world.vectors);                 // Kaluri lane and the car park behind McDonald's: bay lines only

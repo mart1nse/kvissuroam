@@ -530,7 +530,7 @@ export const CARS = {
     brakeG: 0.72,               // a bus stops at about 0.7 g at best
     airBrakes: true,            // (they hiss when it comes to a stop)
     halfLen: 6.0, halfWid: 1.3, // (12 m by 2.55 m: far bigger than the wheelbase and track suggest)
-    cam: { dist: 8.5, up: 2.0, look: 1.5, menu: 9.5, menuUp: 1.4, menuLook: 1.2 },   // chase and menu camera, further out
+    cam: { dist: 8.5, up: 3.8, look: 1.3, menu: 9.5, menuUp: 1.4, menuLook: 1.2 },   // chase and menu camera, further out; the chase eye 6 m up so the road shows over the roof (Martin, 2026-11-23)
     engine: {
       type: 'ice',
       idle: 600,

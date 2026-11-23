@@ -740,6 +740,7 @@ async function boot() {
       people?.event(kind, name, old);
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
+    stage: RAADI,
     hotlap: () => ((!!race?.running || !!stage?.running) && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
@@ -759,7 +760,17 @@ async function boot() {
     },
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
-  if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level) });
+  if (RAADI) stage = createStage({
+    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
+    // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
+    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }); if (info?.record) audio.chime?.('record'); } },
+    online: () => !!mp.board?.raadi,
+    bestFor: (id) => {
+      const net = mp.bestFor(id, 'raadi'), own = stage.best(id).car, mine = own && { ms: own.ms, name: mp.name };
+      return net && (!mine || net.ms <= mine.ms) ? net : mine;
+    },
+  });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
@@ -1680,7 +1691,7 @@ function frame(ts) {
     }
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
-    stage?.update(car, carId, s0Short(), dt);
+    stage?.update(car, carId, s0Short(), dt, inpNow());
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });

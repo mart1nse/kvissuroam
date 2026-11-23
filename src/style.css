@@ -1073,3 +1073,15 @@ body:not(.touch) #people .who li[data-id]:hover { background: rgba(47, 243, 255,
 body:not(.touch) #people .who li.on { background: rgba(47, 243, 255, .22); opacity: 1; box-shadow: 0 0 10px rgba(47, 243, 255, .25); }
 body:not(.touch) #people .me.back { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; opacity: .9; }
 body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
+
+/* thumbs up button in front of a player's colour dot (src/kudos.js, Martin 2026-11-23): a small neon thumb,
+   faint for 30 s after sending. Its own hit target, ahead of the click that follows a car as a spectator */
+#people .ku, #roster .ku { display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .3em .06em 0; vertical-align: middle; cursor: pointer; pointer-events: auto;
+  color: var(--hot); filter: drop-shadow(0 0 3px var(--hot)); transition: opacity .3s, transform .15s; }
+#people .ku svg, #roster .ku svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; }
+#people .ku:hover, #roster .ku:hover { transform: scale(1.2); color: #fff; }
+#people .ku.wait, #roster .ku.wait { opacity: .3; filter: none; cursor: default; }
+#people .ku.sent, #roster .ku.sent { animation: kusent .5s ease-out; }
+@keyframes kusent { 0% { transform: scale(1.7); color: #fff; } 100% { transform: scale(1); } }
+/* phones: a finger-sized target around the small thumb */
+body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: -7px .1em -7px -6px; box-sizing: content-box; }

@@ -457,12 +457,13 @@ export function createAudio() {
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
     if (!notify || !ctx || ctx.state !== 'running') return;
-    const join = kind === 'join' || kind === 'record';
-    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7
-    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : join ? [659.25, 987.77] : [783.99, 523.25];
-    const t0 = ctx.currentTime + 0.01, level = join ? 0.16 : 0.12;
+    const join = kind === 'join' || kind === 'record' || kind === 'kudos';
+    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7, kudos (a thumbs up for
+    // us, src/kudos.js): a quick D6 A6 D7 sparkle
+    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : kind === 'kudos' ? [1174.66, 1760, 2349.32] : join ? [659.25, 987.77] : [783.99, 523.25];
+    const t0 = ctx.currentTime + 0.01, level = kind === 'kudos' ? 0.13 : join ? 0.16 : 0.12;
     notes.forEach((f, i) => {
-      const t = t0 + i * (kind === 'record' ? 0.08 : 0.11);
+      const t = t0 + i * (kind === 'record' ? 0.08 : kind === 'kudos' ? 0.06 : 0.11);
       const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
       o.type = join ? 'sine' : 'triangle'; o.frequency.value = f;
       o2.type = 'sine'; o2.frequency.value = f * 2.005;           // a little shimmer an octave up

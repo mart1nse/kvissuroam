@@ -159,17 +159,22 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   });
 
   // ---- live order: each racer's distance along the lap, and when they passed each timing point
-  function progress(id, x, z, t) {
+  // t: the server's clock (the marks are in it, so a gap is the real gap on the road, Martin 2026-11-23: a late
+  // joiner a minute behind is a minute behind); rt: this racer's own time from their lights
+  function progress(id, x, z, t, rt) {
     let p = track_.get(id);
-    if (!p) track_.set(id, (p = { hint: -1, prog: null, crossed: false, marks: [], t: 0 }));
+    if (!p) track_.set(id, (p = { hint: -1, prog: null, crossed: false, first: true, marks: [], t: 0 }));
     const n = track.nearest(x, z, p.hint, 80);
     if (n.i < 0 || n.d > 80) return p;
     p.hint = n.d < 30 ? n.i : -1;
     const j = (n.i + 1) % N, seg = j ? S[j] - S[n.i] : LEN - S[n.i];
     const s = S[n.i] + seg * n.t;
+    // (first seen well after their lights, e.g. by a late joiner: over the line long ago, unless still about the
+    // grid behind it, or near the end of a lap only after two minutes)
+    if (p.first) { p.first = false; p.crossed = rt > 15000 && (s < LEN - 250 || rt > 120000); }
     let prog;
     if (!p.crossed) {
-      if (s < LEN / 2 && p.prog != null && p.prog > -250 && t > 0) { p.crossed = true; prog = s; } else prog = s > LEN / 2 ? s - LEN : (p.prog ?? -100);
+      if (s < LEN / 2 && p.prog != null && p.prog > -250 && rt > 0) { p.crossed = true; prog = s; } else prog = s > LEN / 2 ? s - LEN : (p.prog ?? -100);
     } else prog = s;
     if (p.prog != null && p.crossed && (prog - p.prog > 400 || prog < p.prog - 400)) return p;     // a jump (the lap crosses itself at Jakobi)
     if (p.crossed && p.prog != null && prog > p.prog) {
@@ -180,6 +185,17 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     p.prog = prog; p.t = t;
     return p;
   }
+  // when the leader passed timing point k (server clock): their own mark, or, for a point they passed before
+  // we saw them (we joined late), from their average pace since their lights
+  function leadAt(lead, k) {
+    const p = lead.p;
+    if (!p || k <= 0) return null;
+    if (p.marks[k] != null) return p.marks[k];
+    if (p.prog == null || p.prog < k * STEP) return null;
+    const run = p.t - greenT(lead);
+    return run > 0 ? greenT(lead) + (run * k * STEP) / p.prog : null;
+  }
+  const gapText = (ms) => (ms < 60000 ? `+${(ms / 1000).toFixed(2)}` : `+${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`);
   // the racers in order: finished by time, then on the road by distance, then those out
   function standings(rs, live) {
     const rows = rs.map((x) => ({ ...x, p: live ? track_.get(x.id) : null }));
@@ -191,9 +207,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; continue; }
       x.where = x.p?.prog != null ? (x.p.prog < 0 ? 'START' : `${(x.p.prog / 1000).toFixed(1)} KM`) : '';
       if (x === lead) { x.gap = isTouch ? '' : 'LEADER'; continue; }
-      const k = x.p?.marks?.length - 1, lm = lead.p?.marks;
+      const k = x.p?.marks?.length - 1, at = leadAt(lead, k);
       // (never below zero: one who led at that mark and has just been passed is level, not -0.86 behind)
-      x.gap = k > 0 && lm?.[k] != null && x.p.marks[k] != null ? `+${(Math.max(0, x.p.marks[k] - lm[k]) / 1000).toFixed(2)}` : '';
+      x.gap = k > 0 && at != null && x.p.marks[k] != null ? gapText(Math.max(0, x.p.marks[k] - at)) : '';
     }
     return rows;
   }
@@ -302,7 +318,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       // (one light a second from five seconds on the grid; all five stay lit through the random hold, then out)
       const e = t - gridT(mine), n5 = mph === 'race' ? 0 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
       lamps.forEach((l, i) => l.classList.toggle('on', i < n5));
-      setText(lCap, mph === 'race' ? 'GO!' : n5 ? 'WAIT FOR LIGHTS OUT' : `LIGHTS IN ${Math.max(1, Math.ceil((5000 - e) / 1000))}`);
+      // (a late joiner, Martin 2026-11-23: told it is the race that is on, not a new one starting)
+      const wait = mine.go ? (isTouch ? 'JOINING · WAIT FOR LIGHTS OUT' : 'JOINING THE RACE · WAIT FOR LIGHTS OUT') : 'WAIT FOR LIGHTS OUT';
+      setText(lCap, mph === 'race' ? 'GO!' : n5 ? wait : `LIGHTS IN ${Math.max(1, Math.ceil((5000 - e) / 1000))}`);
       lights.classList.toggle('go', mph === 'race');
     }
 
@@ -319,7 +337,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const myRow = rows.findIndex((x) => x.id === mp.id);
       const done = r.racers.filter((x) => x.ms != null).length;
       compact = finishedMs == null;
-      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - greenT(mine)) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
+      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = compact ? '' : `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
     } else if (listOpen && r.last) {
       rows = standings(r.last.racers, false);
@@ -390,8 +408,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         if (rec) showSplash(`<div class="k">NEW LAP RECORD</div><div class="p tm">${fmtTime(lap.ms / 1000)}</div><div class="t">${rec.car} <em>${rec.gain}</em></div>`, 3600, 'rec');
         return;
       }
-      finishedMs = Math.round(now() - greenT(m));
-      mp.raceSend({ t: 'rf', ms: finishedMs });
+      // (sent from our own lights; the server adds how late those went out, so the results, the splash and the
+      // place are all by the race's clock: a late joiner places where they crossed the line)
+      const own = Math.round(now() - greenT(m));
+      mp.raceSend({ t: 'rf', ms: own });
+      finishedMs = own + Math.max(0, greenT(m) - r.tGreen);
       listOpen = true; showLast = false; listUntil = now() + LIST_MS;
       // place: those already through with a better time, plus one (nobody still out there can beat it)
       const ahead = r.racers.filter((x) => x.id !== mp.id && x.ms != null && x.ms < finishedMs).length;
@@ -433,10 +454,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         sample = 0.1;
         for (const x of r.racers) {
           if (!active(x)) continue;
-          const rt = t - greenT(x);                           // (each by their own lights: a late joiner's gaps are fair too)
-          if (x.id === mp.id) { progress(x.id, car.x, car.z, rt); continue; }
+          const rt = t - greenT(x);                           // (each from their own lights, for the start line)
+          if (x.id === mp.id) { progress(x.id, car.x, car.z, t, rt); continue; }
           const p = mp.poseOf(x.id);
-          if (p) progress(x.id, p[0], p[1], rt);
+          if (p) progress(x.id, p[0], p[1], t, rt);
         }
       }
       tick -= dt;

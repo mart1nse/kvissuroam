@@ -15,7 +15,9 @@
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
 const LATE_MS = 150000;          // join after the lights up to this long (Martin 2026-11-22), with a start of one's own
-const LATE_GRID = 10600;         // a late joiner's own grid: lights on in its last five seconds, then out
+// a late joiner's own start (Martin 2026-11-23: straight to the lights, no count first): their grid time is set
+// five seconds back, so the first light is on as they land on the grid, the fifth at 4 s, out at LATE_GO
+const LATE_GO = 5600;
 const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (random, the same for all)
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const VOTE_MS = 120000;          // a vote lapses after two minutes
@@ -210,7 +212,7 @@ export class RaceDesk {
         // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
         // (g on the grid, go lights out: the race time is counted from go)
         else if (m.on && ph === 'grid' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1 });
-        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now, go: now + LATE_GRID });
+        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now - 5000, go: now + LATE_GO });
         else if (!m.on && i >= 0 && (ph !== 'race' || now < (this.s.racers[i].go || 0))) this.s.racers.splice(i, 1);
         else if (!m.on && i >= 0 && !this.s.racers[i].out && this.s.racers[i].ms == null) this.s.racers[i].out = 'quit';
         this.check(now); this.save(); this.send();
@@ -220,7 +222,9 @@ export class RaceDesk {
         const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
         const ms = Math.round(Number(m.ms));
         if (!r || r.ms != null || r.out || !(ms >= 30000 && ms <= MAX_RACE_MS) || now < (r.go || this.s.tGreen) + 25000) return true;
-        r.ms = ms;
+        // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
+        // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
+        r.ms = ms + (r.go ? Math.max(0, r.go - this.s.tGreen) : 0);
         this.check(now); this.save(); this.send();
         return true;
       }

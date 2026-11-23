@@ -1006,8 +1006,13 @@ function startDriving() {
   // car is at Raadi already (the line under DRIVE says RAADI; Martin 23 Nov: H, then the menu, then DRIVE stayed
   // at Toomemägi). With Toomemägi picked the car is only fetched from Raadi, and only after a pick.
   if (stage) {
-    if (board.track === 'raadi' && !atRaadi()) stage.goStart();
+    // (a circuit picked here is an explicit pick too: its tyres go on once the car is down, as with the
+    // in-game buttons; Martin 23 Nov: a fresh game, RAADI picked, dropped there on road tyres)
+    const toRaadi = board.track === 'raadi' && !atRaadi();
+    if (toRaadi) stage.goStart();
     else if (board.track === 'toome' && trackPicked && atRaadi()) goHome();
+    if (board.track === 'raadi' && (toRaadi || trackPicked)) tyrePending = { k: 'gravel', t: performance.now() };
+    else if (board.track === 'toome' && trackPicked) tyrePending = { k: 'road', t: performance.now() };
     trackPicked = false;
   }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts

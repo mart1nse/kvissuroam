@@ -37,6 +37,9 @@ const ROUTES = {
   // Raadi manor park along the rally stage's paths: the park's stones set on the ground as the car comes, its
   // planted trees and the widened gravel in the map squares that load (23 Nov)
   raadipark: [[2382, 490], [2398, 468], [2418, 451], [2441, 468], [2464, 484], [2487, 499], [2506, 495], [2522, 472], [2544, 465], [2566, 467], [2568, 444], [2551, 422], [2553, 394], [2568, 370], [2563, 343], [2571, 318], [2596, 313], [2622, 322], [2648, 333], [2673, 345], [2697, 358], [2725, 362], [2751, 373], [2756, 395], [2762, 423], [2763, 450], [2762, 478], [2785, 491], [2809, 507], [2828, 502], [2836, 475], [2856, 464], [2878, 449], [2897, 439], [2910, 416], [2919, 389], [2907, 366], [2881, 367], [2872, 394], [2853, 416], [2826, 415], [2817, 390], [2798, 371], [2769, 375], [2756, 395], [2762, 423], [2763, 450], [2762, 478], [2785, 491], [2809, 507], [2834, 517], [2856, 532], [2867, 556], [2861, 585], [2841, 606], [2827, 630], [2817, 657], [2795, 674], [2769, 680], [2745, 672], [2733, 647], [2715, 633], [2717, 660]],
+  // the way in to the Raadi rally stage (route `stage` in freeze-profile.cjs): Narva mnt from 740 m out of the park
+  // (beyond the 600 m at which the stage builds itself) down to the stage's own lane, short of its start line
+  stageIn: [[2107, 963], [2144, 881], [2176, 804], [2196, 760], [2219, 707], [2237, 667], [2265, 611], [2300, 553], [2327, 514], [2341, 494], [2349, 484], [2362, 490], [2374.7, 500.4]],
   // Soinaste: Rehepapi tee from Meremäe tee south past Rattasepa tee 5, Miridon and the halls to Rehetare tee 1 and
   // the roundabout (kaardista 23 Nov)
   soinaste: [[224, 6885], [296, 7033], [346, 7235], [392, 7462], [469, 7703], [493, 7776], [558, 7927], [564, 7938], [636, 8043]],

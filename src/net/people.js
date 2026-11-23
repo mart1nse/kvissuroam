@@ -51,8 +51,10 @@ export function createPeople({ mp, onFocus, votes }) {
     const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
     const drivers = mp.online ? mp.drivers() : [];
-    const n = mp.online ? drivers.length + 1 : 0;
-    const key = `${n}|${mp.name}|${vm?.key || ''}|${drivers.map((p) => p.name + p.colour + p.car + mp.recordOf(p.name)).join('|')}`;
+    const n = mp.online ? drivers.filter((p) => p.w !== 'garage').length + 1 : 0;   // (the garage ones are listed, not counted)
+    // (Martin, 2026-11-23) those in the garage are listed too, greyed, after the drivers on the map
+    const inGarage = mp.online ? mp.roster().filter((p) => p.w === 'garage') : [];
+    const key = `${n}|${mp.name}|${vm?.key || ''}|${drivers.map((p) => p.name + p.colour + p.car + p.w + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id).join(',')}`;
     if (key === last) return;
     last = key;
     // the city map's list follows the connection (lost, back) and the vote while the map is open
@@ -61,11 +63,13 @@ export function createPeople({ mp, onFocus, votes }) {
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
-    if (n < 2) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
+    if (n < 2 && !inGarage.length) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
-    const sorted = drivers.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const ids = new Set(drivers.map((p) => p.id));
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    const sorted = [...drivers.filter((p) => p.w !== 'garage').sort(byName), ...drivers.filter((p) => p.w === 'garage').sort(byName), ...inGarage.filter((p) => !ids.has(p.id)).sort(byName)];
     const more = sorted.length > listMax ? sorted.length - listMax + 1 : 0;
-    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => { const r = mp.recordOf(p.name); return `<li>${mark(vm, p.id)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
+    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => { const r = mp.recordOf(p.name); const g = p.w === 'garage'; return `<li${g ? ' class="gar"' : ''}>${mark(vm, p.id)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ' <small class="at">(garage)</small>' : ''}${r && !g ? ` <small class="rec">${r}</small>` : ''}</li>`; });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');
@@ -103,9 +107,10 @@ export function createPeople({ mp, onFocus, votes }) {
       // as if he had dropped out); with the connection down it says so instead of a count
       const others = mp.online ? mp.roster() : [];
       const vm = mp.online ? votes?.() : null;
-      const driving = others.filter((p) => p.x !== undefined), away = others.filter((p) => p.x === undefined);
+      const onMap = (p) => p.x !== undefined && p.w !== 'garage';
+      const driving = others.filter(onMap), away = others.filter((p) => !onMap(p));
       shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || p.w === 'garage' ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
       const head = mp.online ? `${driving.length + 1} ONLINE` : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');

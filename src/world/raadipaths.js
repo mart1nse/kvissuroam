@@ -12,13 +12,16 @@
 //    the park road (`aprons`: 39 outlines, the photo's pale gravel that lies outside the drawn paths within 14 m
 //    of the rally stage, tools/race/raadi-gravel.py). Painted at the value a gravel path has at its edge, so no
 //    wheel track is laid on them.
+//  - the second corner's inside is rounded on the ground as well (Martin 23 Nov 20:15, a blue curve on the air
+//    photo: "the second corner is actually more round on the gravel parts as well"): `fillets`, by hand, the 4 m
+//    arc the stage's glow takes there (ROUND in src/race/raadi.js).
 // The same list is read by tools/race/build-raadi.py, which routes the stage over these paths.
 import PATHS from './raadipaths.json';
 import { surfaceStrip, surfaceArea, SURFACE } from './data.js';
 
 for (const r of PATHS.add) surfaceStrip(r.pts, r.w / 2, SURFACE.GRAVEL);
 for (const g of PATHS.gravel) surfaceStrip(g.line, g.w / 2, SURFACE.GRAVEL);
-const APRONS = PATHS.aprons.map((a) => { const q = []; for (let i = 0; i < a.length; i += 2) q.push([a[i], a[i + 1]]); return q; });
+const APRONS = [...PATHS.aprons, ...(PATHS.fillets || [])].map((a) => { const q = []; for (let i = 0; i < a.length; i += 2) q.push([a[i], a[i + 1]]); return q; });
 for (const q of APRONS) surfaceArea(q, SURFACE.GRAVEL);
 for (const p of PATHS.paved) surfaceStrip(p.pts, p.hw, SURFACE.PAVED);
 

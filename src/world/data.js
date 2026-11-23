@@ -202,6 +202,8 @@ export async function loadWorldData(onProgress = () => {}) {
   // a bucket grid of 8 m cells; a box is in every cell its outline's bounding square touches.
   const EXACT_MAX = 1.0;                             // m: boxes no thicker than twice this collide exactly
   const XC = 8, exGrid = new Map();
+  const stoneGrid = new Map(), STONE_MAX = 1.8;      // (stones: by the cell their middle is in; none wider than this)
+  let stoneCount = 0;
   const xkey = (c, r) => (c + 32768) * 65536 + (r + 32768);
   function exCells(b, fn) {
     const c = Math.abs(Math.cos(b.yaw)), sn = Math.abs(Math.sin(b.yaw));
@@ -522,6 +524,31 @@ export async function loadWorldData(onProgress = () => {}) {
       solids.push(...list);
       for (const b of list) exAdd(b);
       for (const s of sectors.values()) if (s.state === 'ready') for (const b of list) stamp(s, b);
+    },
+    // Stones the cars feel as shapes (src/cars/stones.js): each { x, z, a, b, cs, sn, h, gy }, a dome on an
+    // ellipse of half axes a, b turned by (cs, sn), h high at its rim's top scale, on ground at height gy.
+    addStones(list) {
+      for (const st of list) {
+        const k = xkey(Math.floor(st.x / XC), Math.floor(st.z / XC));
+        let a = stoneGrid.get(k);
+        if (!a) stoneGrid.set(k, (a = []));
+        a.push(st);
+      }
+      stoneCount += list.length;
+    },
+    get stoneCount() { return stoneCount; },
+    // The stones that come within reach of (x, z), into out.
+    stonesNear(x, z, reach, out) {
+      out.length = 0;
+      if (stoneCount === 0) return out;
+      const R = reach + STONE_MAX;
+      const c0 = Math.floor((x - R) / XC), c1 = Math.floor((x + R) / XC), r0 = Math.floor((z - R) / XC), r1 = Math.floor((z + R) / XC);
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        const a = stoneGrid.get(xkey(c, r));
+        if (a === undefined) continue;
+        for (let i = 0; i < a.length; i++) { const st = a[i]; if (Math.abs(st.x - x) <= R && Math.abs(st.z - z) <= R) out.push(st); }
+      }
+      return out;
     },
     // Walls that only stop cars below their top (see ledgePush).
     // Make obstacles in a rectangle reach out by metres further (a house that cars should keep a little

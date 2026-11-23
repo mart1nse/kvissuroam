@@ -359,10 +359,12 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
   text-shadow: none; animation: hotpulse 1.4s ease-in-out infinite;
 }
 @keyframes hotpulse { 50% { opacity: .6; } }
-/* a lap record set lately (multiplayer.js recordOf): a gold line under the name over the car */
+/* a lap record set lately (multiplayer.js recordOf): a plain line under the name over the car, white
+   race font on a pink glow like the online list's (no filled pill: it covered the road, Martin 2026-11-23) */
 .pname[data-rec]::after {
-  content: attr(data-rec); position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; padding: 1px 7px; border-radius: 999px;
-  font-size: 10px; letter-spacing: .14em; line-height: 1.3; white-space: nowrap; color: #2a1600; background: linear-gradient(100deg, #ffe58a, #ffb52e); text-shadow: none;
+  content: attr(data-rec); position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 2px;
+  font: 400 10px/1.3 'Russo One', var(--font); letter-spacing: .08em; white-space: nowrap; color: #fff;
+  text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot);
 }
 #people .who small.rec { margin-left: .5em; font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* like the race placement (Martin, 2026-11-23) */
 #menu.hidden ~ #names { display: block; }

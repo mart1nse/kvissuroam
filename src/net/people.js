@@ -8,7 +8,8 @@
 // front: a lit tick when voted, a faint ring when not. Gone again when the vote is over.
 // On desktop (Martin, 2026-11-23) a name in the list is a button: it follows that player's car as a spectator
 // (src/spectate.js); your own line takes you back to your car. Spectators are listed like those in the garage,
-// with whom they watch, and a player being watched sees "N WATCHING" on their own line.
+// as "(watching)", never whom (Martin, 2026-11-23: anonymous); a player being watched sees "BEING WATCHED · N"
+// on their own line, without names, and a spectator sees "WATCHING" on theirs.
 // In front of each colour dot of a player on the map (Martin, 2026-11-23) a small thumb: a thumbs up for them,
 // shown as a neon sign in their back window (src/kudos.js); faint for 30 s after sending.
 import { escapeHtml } from '../race/race.js';
@@ -68,7 +69,6 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   });
   // not on the map: in the garage, or watching somebody else's car
   const idle = (p) => p.w === 'garage' || p.w === 'watch';
-  const nameOf = (id) => (id === mp.id ? 'YOU' : mp.nameOf(id) || '');
 
   const elMe = box.querySelector('.me');
   let last = '', meLast = '';
@@ -76,9 +76,8 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
-    const wn = mp.online ? mp.watchers() : 0;
-    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}${wn ? ` · ${wn} WATCHING` : ''}`;
-    const sp = watching();
+    const wn = mp.online ? mp.watchers() : 0, sp = watching();
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}${wn ? ` · BEING WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
     const vm = mp.online ? votes?.() : null;
     const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
@@ -105,7 +104,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const more = sorted.length > listMax ? sorted.length - listMax + 1 : 0;
     const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
-      const at = p.w === 'watch' ? `(watching${p.on && nameOf(p.on) ? ` ${escapeHtml(nameOf(p.on))}` : ''})` : '(garage)';
+      const at = p.w === 'watch' ? '(watching)' : '(garage)';
       return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${r && !g ? ` <small class="rec">${r}</small>` : ''}</li>`;
     });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);

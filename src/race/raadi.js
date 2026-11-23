@@ -3,12 +3,13 @@
 // Point to point, one car at a time, from a standing start (Martin, 23 Nov 2026).
 //
 // Drive up to the start (or use the RAADI button) and the car is put on the start line and held there while
-// the start lights count down: five red lights go out one a second, then green. The clock runs to the
-// flying finish; the STOP board is a little further on.
+// the start clock counts down: red, yellow for the last five seconds, then green (src/race/startkit.js: the
+// clock on its stand past the line and the start line camera). The clock runs to the flying finish; the STOP
+// board is a little further on.
 //
 // The stage passes some junctions twice going another way each time, and the stretch on the west side of
 // the ponds twice: red and white barriers across the side paths show the way, and slide aside when the
-// stage needs that path later. An arrow under the clock points along the stage. At each corner a straw
+// stage needs that path later. At each corner a straw
 // bale stands a metre inside the apex (src/race/bales.js; back in place for the next run), and going more
 // than 3 m inside the edge there, or joining the stage further on from anywhere else, cancels the run.
 // Running wide on the outside is fine.
@@ -22,12 +23,18 @@ import STAGE from './raadi.json';
 import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
-import { chevronTex } from './decor.js';
+import { chevronTex, haloTex } from './decor.js';
+import { createStartKit } from './startkit.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
-const COUNT_S = 2;                         // seconds before the first red light
+// The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). A rally's start
+// unit shows red from 10 s to go, yellow for the last 5 s and green at zero, which stays on for 5 s; here the
+// count joins it at 7 s so a new try does not wait longer than before.
+const COUNT_S = 2;                         // seconds of red before the last five
+const LAST_S = 5;                          // the last seconds, yellow, counted one by one
+const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
 // an apex cut costs time (Martin 23 Nov: a small penalty for a small cut, a large one for a large cut): how far
 // inside the path's edge the middle of the car went at the apex, in metres, and the seconds it adds
@@ -35,6 +42,12 @@ const APEX_PEN = [[6, 10], [3, 5], [1.2, 2]];
 // and so does swinging out wide before a corner to open it up (Martin 23 Nov: "two car widths of room and then
 // penalize"): how far outside the path's edge on the way in, from 50 m to 12 m before the apex
 const WIDE_PEN = [[7.2, 5], [3.6, 2]];
+// Hidden checks, one across the stage at each bale (Martin 23 Nov: "mini-checks on each bale ... to track the
+// completion", after he cut from before the last corner straight onto the finish straight and got a time): the car
+// has to cross each in turn, going the stage's way, no further than GATE_IN m inside the path's edge (a cut up to
+// there costs seconds, see APEX_PEN) or GATE_OUT m outside it. On the stage GATE_MISS points past one it did not
+// cross, the run is over.
+const GATE_IN = 15, GATE_OUT = 25, GATE_MISS = 15, GATE_FROM = 30;
 
 const P = STAGE.pts, HW = STAGE.hw, N = P.length, START = STAGE.start, FIN = STAGE.finish;
 const TAN = P.map((_, i) => {
@@ -47,6 +60,18 @@ for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], 
 const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
 // the way in to each corner: [first index, last index, side of the turn], clear of the corner before it
 const ENTRY = STAGE.apex.map(([k, sd], n) => [Math.max(START + 2, k - 25, n ? STAGE.apex[n - 1][0] + 8 : 0), k - 6, sd]).filter(([a, b]) => b - a >= 4);
+// The inside of the bends that have no bale is out of bounds as well (Martin 23 Nov: "needs outside banned areas",
+// after he straightened the gentle bends over the grass). BEND[i]: the side the stage turns to at point i (1 right,
+// -1 left, 0 straight, or at a bale where the apex rules judge). Stage covered while the middle of the car is more
+// than CUT_IN m inside the path's edge there adds seconds: CUT_PEN is [metres covered, seconds], counted for each
+// trip off the path, so a spin that goes nowhere is free.
+const CUT_IN = 1.2, CUT_PEN = [[50, 10], [25, 5], [10, 2]];
+const BEND = (() => {
+  const b = P.map((_, i) => { const p = TAN[Math.max(0, i - 8)], q = TAN[Math.min(N - 1, i + 8)], c = p[0] * q[1] - p[1] * q[0]; return Math.abs(c) > 0.1 ? Math.sign(c) : 0; });
+  for (const [k] of STAGE.apex) for (let i = Math.max(0, k - 6); i <= Math.min(N - 1, k + 6); i++) b[i] = 0;
+  for (let i = 0; i < N; i++) if (i < START + 8 || i > FIN) b[i] = 0;
+  return b;
+})();
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
 
 // nearest point of the stage between indices lo and hi: { i, d, lat } (lat: sideways, + right of travel)
@@ -170,14 +195,14 @@ function streakTex() {
 }
 
 // ---------------------------------------------------------------- the stage
-export function createStage({ world, scene, toast, place, onRun }) {
+export function createStage({ world, scene, toast, place, onRun, wood }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
   const runs = loadRuns();
   let built = false, asked = false;
 
-  // ---- HUD: the clock (the lap timer's look), the start lights, the arrow, BACK TO STAGE START
+  // ---- HUD: the clock (the lap timer's look), the start lights, BACK TO STAGE START
   const hudEl = document.querySelector('#hud');
   const panel = document.createElement('div');
   panel.id = 'stage';
@@ -189,14 +214,9 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const lights = document.createElement('div');
   lights.id = 'rallylights';
   lights.className = 'hidden';
-  lights.innerHTML = `<div class="lamps">${'<i></i>'.repeat(5)}<i class="g"></i></div><div class="cap"></div>`;
+  lights.innerHTML = '<div class="lamps"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="cap"></div>';
   hudEl.appendChild(lights);
   const lamps = [...lights.querySelectorAll('i')], lCap = lights.querySelector('.cap');
-  const arrow = document.createElement('div');
-  arrow.id = 'stagearrow';
-  arrow.className = 'hidden';
-  arrow.innerHTML = '<svg viewBox="-50 -50 100 100"><path d="M0 -40 L30 0 L12 0 L12 38 L-12 38 L-12 0 L-30 0 Z"/></svg>';
-  hudEl.appendChild(arrow);
   const again = document.createElement('button');
   again.id = 'stageagain';
   again.className = 'hidden';
@@ -207,7 +227,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const st = {
     phase: 'idle',          // idle, count (on the start line, lights), run, done
     t0: 0, clk: 0, wall: null, carT: null, prog: START, off: 0, prev: null, cool: false, againUntil: 0,
-    pin: null, countAt: 0, cut: '', pen: 0, apexPen: new Map(), widePen: new Map(),
+    pin: null, countAt: 0, clockOff: 0, goAt: 0, gate: 0, cutM: 0, cutPen: 0, cutI: null, cut: '', pen: 0, apexPen: new Map(), widePen: new Map(),
   };
 
   // ---- the stage's things (built near)
@@ -215,13 +235,9 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const signMat = new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide });
   const postMat = new THREE.MeshLambertMaterial({ color: 0x8a8d92 });
   const barriers = [];
-  let barMesh = null, startLamps = null;
+  let barMesh = null, kit = null, halo = null;
   // a bale 1.1 m inside the path's edge at each apex, its banner towards the cars coming
   const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] })) });
-  const lampOff = new THREE.MeshBasicMaterial({ color: 0x2a0d10 });
-  const lampRed = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
-  const lampGreen = new THREE.MeshBasicMaterial({ color: 0x29ff6a });
-  const lampGreenOff = new THREE.MeshBasicMaterial({ color: 0x0b2a14 });
   const groundY = (x, z) => world.heightAt(x, z);
 
   function sign(kind, i, d, h = 1.7) {
@@ -241,24 +257,17 @@ export function createStage({ world, scene, toast, place, onRun }) {
     group.add(g);
   }
 
-  // the start clock beside the line: five red lamps over a green one, facing the driver
-  function startTower(i, d) {
-    const [x, z] = side(i, d), y = groundY(x, z);
-    const g = new THREE.Group();
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), postMat);
-    leg.position.y = 0.6; g.add(leg);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.5, 0.22), new THREE.MeshLambertMaterial({ color: 0x15151a }));
-    box.position.y = 1.95; g.add(box);
-    const disc = new THREE.CircleGeometry(0.085, 16);
-    startLamps = [];
-    for (let k = 0; k < 6; k++) {
-      const m = new THREE.Mesh(disc, k < 5 ? lampOff : lampGreenOff);
-      m.position.set(0, 2.55 - k * 0.22, 0.115);
-      g.add(m); startLamps.push(m);
-    }
-    g.position.set(x, y, z);
-    g.rotation.y = Math.atan2(-TAN[i][0], -TAN[i][1]) + (d > 0 ? -0.5 : 0.5);   // turned towards the car on the line
-    group.add(g);
+  // the start clock on its stand on the right, 8 m past the line and turned to the car waiting on it, and the
+  // start line camera on the left, 40 cm past the line (where the rules put the jump start photocell)
+  function startKit() {
+    const pose = startPose();
+    const [cx, cz] = side(START + 4, HW[START + 4] + 0.9);
+    const [mx, mz] = side(START, -(HW[START] + 1.1)), ax = mx + TAN[START][0] * 0.4, az = mz + TAN[START][1] * 0.4;
+    kit = createStartKit({
+      group,
+      clock: { x: cx, y: groundY(cx, cz), z: cz, yaw: Math.atan2(pose.x - cx, pose.z - cz) },
+      cam: { x: ax, y: groundY(ax, az), z: az, yaw: Math.atan2(-TAN[START][1], TAN[START][0]) },
+    });
   }
 
   // a white line across the path
@@ -281,8 +290,9 @@ export function createStage({ world, scene, toast, place, onRun }) {
 
   // a barrier that shows the way (Martin 23 Nov: "use some arrow barriers"): a white board on two pairs of legs
   // with red chevrons on both faces pointing to its +x, 1 m wide (scaled to the path's width; mirrored where
-  // the stage goes the other way)
-  function barrierGeometry() {
+  // the stage goes the other way). 'piece' is a fifth of the board with its one chevron and 'legs' one pair of
+  // legs, both about their own middles: what flies when a car breaks it.
+  function barrierGeometry(part = 'whole') {
     const pos = [], col = [], nor = [];
     const add = (geo, hex) => {
       geo = geo.toNonIndexed(); geo.computeVertexNormals();
@@ -290,20 +300,23 @@ export function createStage({ world, scene, toast, place, onRun }) {
       pos.push(...geo.attributes.position.array); nor.push(...geo.attributes.normal.array);
       for (let k = 0; k < geo.attributes.position.count; k++) col.push(c.r, c.g, c.b);
     };
-    add(new THREE.BoxGeometry(1, 0.46, 0.04).translate(0, 0.8, 0), 0xf4f4f4);
-    const red = new THREE.Color(0xd8121b), T = 0.085, D = 0.06, y0 = 0.61, ym = 0.8, y1 = 0.99;
-    for (let k = 0; k < 5; k++) {
-      const x = -0.5 + 0.05 + k * 0.19;
-      // (a chevron: two slanted bars meeting at the point)
+    const red = new THREE.Color(0xd8121b), T = 0.085, D = 0.06;
+    // (a chevron: two slanted bars meeting at the point)
+    const chevron = (x, ym) => {
+      const y0 = ym - 0.19, y1 = ym + 0.19;
       const quads = [[[x, y0], [x + T, y0], [x + T + D, ym], [x + D, ym]], [[x + D, ym], [x + T + D, ym], [x + T, y1], [x, y1]]];
       for (const z of [0.024, -0.024]) for (const q of quads) for (const i of [0, 1, 2, 0, 2, 3]) {
         pos.push(q[i][0], q[i][1], z); nor.push(0, 0, Math.sign(z)); col.push(red.r, red.g, red.b);
       }
-    }
-    for (const sx of [-0.5, 0.5]) {
-      add(new THREE.BoxGeometry(0.04, 0.95, 0.04).translate(sx, 0.47, 0.12).rotateX(0), 0xd8d8d8);
-      add(new THREE.BoxGeometry(0.04, 0.95, 0.04).translate(sx, 0.47, -0.12), 0xd8d8d8);
-    }
+    };
+    if (part === 'whole') {
+      add(new THREE.BoxGeometry(1, 0.46, 0.04).translate(0, 0.8, 0), 0xf4f4f4);
+      for (let k = 0; k < 5; k++) chevron(-0.5 + 0.05 + k * 0.19, 0.8);
+      for (const sx of [-0.5, 0.5]) for (const lz of [0.12, -0.12]) add(new THREE.BoxGeometry(0.04, 0.95, 0.04).translate(sx, 0.47, lz), 0xd8d8d8);
+    } else if (part === 'piece') {
+      add(new THREE.BoxGeometry(0.2, 0.46, 0.04), 0xf4f4f4);
+      chevron(-0.07, 0);
+    } else for (const lz of [0.12, -0.12]) add(new THREE.BoxGeometry(0.04, 0.95, 0.04).translate(0, 0, lz), 0xd8d8d8);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
@@ -356,9 +369,18 @@ export function createStage({ world, scene, toast, place, onRun }) {
         }
       }
     };
-    for (const [k, sd] of STAGE.apex) limit(Math.max(START, k - 6), Math.min(N - 1, k + 6), (i, d) => sd * (HW[i] + APEX_PEN.at(-1)[0] + d));
+    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + APEX_PEN.at(-1)[0] + d));
     yield;
     for (const [e0, e1, sd] of ENTRY) limit(e0, e1, (i, d) => -sd * (HW[i] + WIDE_PEN.at(-1)[0] + d));
+    yield;
+    // (and along the inside of the bends without a bale)
+    for (let i = START; i < FIN; i++) {
+      if (!BEND[i]) continue;
+      let j = i;
+      while (j + 1 < FIN && BEND[j + 1] === BEND[i]) j++;
+      if (j - i >= 3) { const sd = BEND[i]; limit(i, j, (q, d) => sd * (HW[q] + CUT_IN + d)); }
+      i = j;
+    }
     yield;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -453,13 +475,23 @@ export function createStage({ world, scene, toast, place, onRun }) {
     // signs: yellow time control and the red start flag; the start clock; the line
     sign('tc', 1, HW[1] + 1.4);
     sign('start', START, HW[START] + 1.4);
-    startTower(START + 1, -(HW[START + 1] + 1.3));
+    startKit();
     line(START);
     const warnAt = (() => { let i = FIN; while (i > 0 && S[FIN] - S[i] < 100) i--; return i; })();
     sign('warn', warnAt, HW[warnAt] + 1.4);
     sign('finish', FIN, HW[FIN] + 1.4);
     sign('finish', FIN, -(HW[FIN] + 1.4));
     line(FIN, 0.2);
+    // the finish halo, like the lap's (Martin 23 Nov: "finish line rectangle halo"): a glowing frame across the
+    // flying finish, pulsing while a run is on
+    {
+      const w = HW[FIN] * 2 + 1.2, hh = 3.6, [fx, fz] = P[FIN];
+      halo = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ map: haloTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true }));
+      halo.rotation.y = Math.atan2(TAN[FIN][0], TAN[FIN][1]);
+      halo.position.set(fx, groundY(fx, fz) + hh / 2 + 0.05, fz);
+      halo.renderOrder = 4;
+      group.add(halo);
+    }
     sign('stop', N - 1, HW[N - 1] + 1.4);
     yield;
     // the straw bales at the apexes (src/race/bales.js)
@@ -467,10 +499,19 @@ export function createStage({ world, scene, toast, place, onRun }) {
     yield;
     // barriers: one at each side path the stage passes
     for (const j of STAGE.junctions) for (const b of j.b) barriers.push({ ...b, t: 1, want: 1 });
-    barMesh = new THREE.InstancedMesh(barrierGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), barriers.length);
+    const barMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    barMesh = new THREE.InstancedMesh(barrierGeometry(), barMat, barriers.length);
     barMesh.castShadow = true;
     barMesh.frustumCulled = false;
     group.add(barMesh);
+    // (and what each breaks into, away until a car drives through one: five pieces of board and two pairs of legs)
+    for (const [key, per] of [['piece', 5], ['legs', 2]]) {
+      const m = new THREE.InstancedMesh(barrierGeometry(key), barMat, barriers.length * per);
+      m.frustumCulled = false;
+      for (let n = 0; n < m.count; n++) { m.setMatrixAt(n, m4.makeScale(0, 0, 0)); bits.push({ m, n, of: Math.floor(n / per), k: n % per, legs: key === 'legs', live: false, rest: true, p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(), ax: new THREE.Vector3(), spin: 0, sx: 1 }); }
+      bitMesh.push(m);
+      group.add(m);
+    }
     setBarriers(st.phase === 'run' ? st.prog : START, true);
     yield;
     yield* buildGlow();
@@ -479,12 +520,17 @@ export function createStage({ world, scene, toast, place, onRun }) {
     // in the city circuit", in place of the yellow arrows): over the outside of each corner, facing the car
     // coming up, pointing the way it turns. Shown for the corners coming up on this pass only, since the stage
     // goes through some junctions twice, another way each time.
+    // They hang over the way out of the corner, 12 m past the apex (Martin 23 Nov: "more into the corner"), so the
+    // board itself sits where the road goes.
+    const same = (a, b2) => TAN[a][0] * TAN[b2][0] + TAN[a][1] * TAN[b2][1] > 0.9;
+    const clip = (i) => Math.max(0, Math.min(N - 1, i));
     for (const [k, sd] of STAGE.apex) {
-      const tin = TAN[Math.max(0, k - 12)], ox = tin[1] * sd, oz = -tin[0] * sd;        // outside of the turn
-      const x = P[k][0] + tin[0] * HW[k] * 0.6 + ox * HW[k] * 0.55, z = P[k][1] + tin[1] * HW[k] * 0.6 + oz * HW[k] * 0.55;
-      // (and the same corner taken again on the stretch the stage drives twice)
+      const tin = TAN[Math.max(0, k - 12)], e = clip(k + 6);
+      const x = P[e][0], z = P[e][1];
+      // (and the same corner taken again on the stretch the stage drives twice: only where that pass turns the
+      // same way too, not where it comes up the same road and goes straight on)
       const at = [k];
-      for (let j = START; j < FIN; j++) if (Math.abs(j - k) > 30 && Math.hypot(P[j][0] - P[k][0], P[j][1] - P[k][1]) < 2 && TAN[j][0] * TAN[k][0] + TAN[j][1] * TAN[k][1] > 0.9 && !at.some((q) => Math.abs(q - j) < 30)) at.push(j);
+      for (let j = START; j < FIN; j++) if (Math.abs(j - k) > 30 && Math.hypot(P[j][0] - P[k][0], P[j][1] - P[k][1]) < 2 && same(j, k) && same(clip(j + 8), clip(k + 8)) && same(clip(j - 8), clip(k - 8)) && !at.some((q) => Math.abs(q - j) < 30)) at.push(j);
       boards.push({ at, x, z, y: groundY(x, z) + 3.4, q: new THREE.Quaternion().setFromAxisAngle(up, Math.atan2(-tin[0], -tin[1])), sd, n: 0, on: -1 });
     }
     const chev = chevronTex();
@@ -530,11 +576,86 @@ export function createStage({ world, scene, toast, place, onRun }) {
       const ux = Math.sin(b.yaw), uz = -Math.cos(b.yaw), rx = -uz, rz = ux;       // along the side path, across it
       const e = 1 - b.t, off = e * (b.side || 1) * (b.away || b.w + 1.4);
       const x = b.x + rx * off, z = b.z + rz * off;
-      qy.setFromAxisAngle(up, -b.yaw + e * Math.PI / 2);
-      m4.compose(new THREE.Vector3(x, groundY(x, z), z), qy, new THREE.Vector3((b.w + 0.6) * (b.point || 1), 1, 1));
+      b.px = x; b.pz = z; b.rot = -b.yaw + e * Math.PI / 2; b.sx = (b.w + 0.6) * (b.point || 1);
+      qy.setFromAxisAngle(up, b.rot);
+      m4.compose(av.set(x, groundY(x, z), z), qy, b.broken ? as.set(0, 0, 0) : as.set(b.sx, 1, 1));
       barMesh.setMatrixAt(n, m4);
     });
     barMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // ---- a car drives through a barrier (Martin 23 Nov: "make the white/red barriers break, with sound"): the board
+  // snaps into its five pieces and the legs go flying, the way the car goes and harder near where it hit; they
+  // tumble, land and lie there until the next run stands every barrier up again. Light boards: the car hardly
+  // feels it. Costs nothing unless the car is at a barrier or pieces are in the air.
+  const bits = [], bitMesh = [], bq = new THREE.Quaternion(), bv = new THREE.Vector3();
+  let flying = 0, snapT = -1, landT = -1, bitT = 0;
+  function breakBarriers(car, dt) {
+    if (!barMesh) return;
+    bitT += dt;
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz, speed = Math.hypot(wvx, wvz);
+    const hl = (car.halfLen || 2.2) + 0.1, hw = (car.halfWid || 0.9) + 0.1;
+    let knocked = 0, landed = 0;
+    if (speed > 1) barriers.forEach((b, n) => {
+      if (b.broken || b.px == null) return;
+      const half = Math.abs(b.sx) / 2, dx = b.px - car.x, dz = b.pz - car.z;
+      if (dx * dx + dz * dz > (half + hl + 1) ** 2) return;
+      const ax = Math.cos(b.rot), az = -Math.sin(b.rot);                    // along the board
+      let hit = null;
+      for (let k = -4; k <= 4 && hit == null; k++) {
+        const ex = dx + ax * half * k / 4, ez = dz + az * half * k / 4;
+        if (Math.abs(ex * fx + ez * fz) < hl && Math.abs(ex * rx + ez * rz) < hw) hit = k / 4;
+      }
+      if (hit == null) return;
+      b.broken = true; knocked++;
+      const y = groundY(b.px, b.pz);
+      for (const f of bits) {
+        if (f.of !== n) continue;
+        const u = f.legs ? (f.k ? 0.5 : -0.5) : -0.4 + 0.2 * f.k;          // where along the board it was
+        const near = Math.max(0.15, 1 - Math.abs(u - hit * 0.5) * Math.abs(b.sx) / 3.5);
+        f.live = true; f.rest = false; f.sx = f.legs ? 1 : b.sx; flying++;
+        f.p.set(b.px + ax * u * Math.abs(b.sx), y + (f.legs ? 0.48 : 0.8), b.pz + az * u * Math.abs(b.sx));
+        f.q.setFromAxisAngle(up, b.rot);
+        const push = (0.45 + Math.random() * 0.4) * near;
+        f.v.set(wvx * push + (Math.random() - 0.5) * 2, 1 + Math.min(speed, 22) * 0.16 * near + Math.random() * 1.5, wvz * push + (Math.random() - 0.5) * 2);
+        f.ax.set(Math.random() - 0.5, (Math.random() - 0.5) * 0.6, Math.random() - 0.5).normalize();
+        f.spin = (3 + Math.random() * 7) * near + 1;
+      }
+      car.hit = Math.max(car.hit || 0, Math.min(2, speed * 0.06));
+      car.vx *= 0.98;
+      drawBarriers();
+    });
+    if (flying) {
+      for (const f of bits) {
+        if (!f.live || f.rest) continue;
+        f.v.y -= 9.81 * dt;
+        f.p.addScaledVector(f.v, dt);
+        f.q.premultiply(bq.setFromAxisAngle(f.ax, f.spin * dt));
+        const g = groundY(f.p.x, f.p.z) + 0.04;
+        if (f.p.y < g) {
+          if (f.v.y < -2) landed = Math.max(landed, -f.v.y);
+          f.p.y = g; f.v.y *= -0.25; f.v.x *= 0.55; f.v.z *= 0.55; f.spin *= 0.5;
+          if (Math.abs(f.v.y) < 0.6 && Math.hypot(f.v.x, f.v.z) < 0.4) {
+            // lying flat where it stopped, turned as it came down
+            f.rest = true; flying--;
+            const turn = Math.atan2(2 * (f.q.w * f.q.y + f.q.x * f.q.z), 1 - 2 * (f.q.y * f.q.y + f.q.x * f.q.x));
+            f.q.setFromAxisAngle(up, turn).multiply(bq.setFromAxisAngle(f.legs ? bv.set(0, 0, 1) : bv.set(1, 0, 0), Math.PI / 2));
+          }
+        }
+        f.m.setMatrixAt(f.n, m4.compose(f.p, f.q, as.set(f.sx, 1, 1)));
+        f.m.instanceMatrix.needsUpdate = true;
+      }
+    }
+    if (knocked && bitT - snapT > 0.07) { snapT = bitT; wood?.('snap', Math.min(1.3, 0.45 + speed / 20)); }
+    if (landed && bitT - landT > 0.05) { landT = bitT; wood?.('land', Math.min(1, landed / 6)); }
+  }
+  function standBarriers() {
+    let any = false;
+    for (const b of barriers) if (b.broken) { b.broken = false; any = true; }
+    if (!any) return;
+    for (const f of bits) if (f.live) { f.live = false; f.rest = true; f.m.setMatrixAt(f.n, m4.makeScale(0, 0, 0)); f.m.instanceMatrix.needsUpdate = true; }
+    flying = 0;
   }
 
   // ---- runs
@@ -549,9 +670,13 @@ export function createStage({ world, scene, toast, place, onRun }) {
     elBest.innerHTML = b ? fmtTime(b.ms / 1000) : '<small>NO TIME YET</small>';
   }
 
-  function setLamps(n, green) {
-    lamps.forEach((l, k) => l.classList.toggle('on', k < 5 ? k < n : green));
-    if (startLamps) startLamps.forEach((m, k) => { m.material = k < 5 ? (k < n ? lampRed : lampOff) : green ? lampGreen : lampGreenOff; });
+  // the lamps on the screen and on the clock at the line: 0 off, 1 red, 2 yellow, 3 green; n: the seconds to go
+  function setLamps(lamp, n = null) {
+    lamps.forEach((l, k) => l.classList.toggle('on', k + 1 === lamp));
+    if (!kit) return;
+    // (the rally time of day: a car starts on the full minute, so the clock is set to reach one at green)
+    const d = new Date(Date.now() + st.clockOff), two = (v) => String(v).padStart(2, '0');
+    kit.show(lamp, n, `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`);
   }
 
   function startPose() { return { x: P[START][0] - TAN[START][0] * 1.6, z: P[START][1] - TAN[START][1] * 1.6, yaw: yawAt(START) }; }
@@ -567,10 +692,11 @@ export function createStage({ world, scene, toast, place, onRun }) {
     st.phase = 'count';
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null;
+    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null;
     bales.reset();
+    standBarriers();
     setBarriers(START, true);
-    setLamps(0, false);
+    setLamps(0);
     elMsg.textContent = '';
     st.prev = null;
   }
@@ -591,7 +717,11 @@ export function createStage({ world, scene, toast, place, onRun }) {
     get running() { return st.phase === 'run'; },
     get phase() { return st.phase; },
     get runs() { return runs; },
+    get gate() { return st.gate; },
+    get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
+    // the seconds to green (the test drive holds the clock with it to take its pictures)
+    set countLeft(v) { st.countAt = performance.now() - (COUNT_S + LAST_S - v) * 1000; },
     data: STAGE,
     get bales() { return bales; },
     best,
@@ -643,19 +773,23 @@ export function createStage({ world, scene, toast, place, onRun }) {
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)
         if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
-        const e = (performance.now() - st.countAt) / 1000;
-        // (lights from COUNT_S on: all five red, one goes out a second, green when the last one does)
-        const n = e < COUNT_S ? 0 : Math.max(0, 5 - Math.floor(e - COUNT_S));
-        const green = e >= COUNT_S + 5;
-        setLamps(e < COUNT_S ? 0 : n, green);
-        lCap.textContent = e < COUNT_S ? `SS16 RAADI · ${STAGE_KM} KM` : green ? 'GO!' : `${n}`;
+        const e = (performance.now() - st.countAt) / 1000, left = COUNT_S + LAST_S - e, green = left <= 0;
+        const n = Math.max(0, Math.ceil(left));
+        if (st.goFor !== st.countAt) { st.goFor = st.countAt; const go = Date.now() + left * 1000; st.clockOff = Math.ceil(go / 60000) * 60000 - go; }
+        st.goAt = green ? performance.now() : 0;
+        setLamps(green ? 3 : left <= LAST_S ? 2 : 1, green ? null : n);
+        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0;
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
-      } else if (st.phase !== 'run') lights.classList.add('hidden');
+      } else {
+        if (st.phase !== 'run') lights.classList.add('hidden');
+        // (the clock at the line: green for a few seconds after the start, then dark; the time runs on)
+        if (kit && near && dStart < 200) setLamps(st.phase === 'run' && st.goAt && performance.now() - st.goAt < GREEN_S * 1000 ? 3 : 0);
+      }
 
       if (st.phase === 'run') {
         // progress along the stage: only forwards from where the car is, in a short window
@@ -674,14 +808,32 @@ export function createStage({ world, scene, toast, place, onRun }) {
         }
         if (st.off > OFF_LIMIT) cancel('OFF THE STAGE · CANCELLED');
         // apexes: cutting inside the edge adds seconds, more for a deeper cut (once per apex: the deepest counts)
-        for (const [k, sd] of STAGE.apex) {
-          if (Math.abs(st.prog - k) > 6 || st.phase !== 'run') continue;
-          const a = nearestIn(x, z, k - 6, k + 6), deep = a.lat * sd - HW[a.i];
+        const apexCut = (k, deep) => {
           const pen = APEX_PEN.find(([m]) => deep > m)?.[1] || 0, had = st.apexPen.get(k) || 0;
-          if (pen > had) {
-            st.apexPen.set(k, pen); st.pen += pen - had;
-            toast(`APEX CUT · +${pen} S`, 2600);
-          }
+          if (pen <= had) return;
+          st.apexPen.set(k, pen); st.pen += pen - had;
+          toast(`APEX CUT · +${pen} S`, 2600);
+        };
+        // the hidden check at each bale, in turn: where the car crosses the line across the stage at the apex
+        while (st.gate < STAGE.apex.length && st.prev && st.phase === 'run') {
+          const [k, sd] = STAGE.apex[st.gate], [gx, gz] = P[k], [tx, tz] = TAN[k];
+          if (st.prog < k - GATE_FROM) break;
+          const a0 = (st.prev.x - gx) * tx + (st.prev.z - gz) * tz, a1 = (x - gx) * tx + (z - gz) * tz;
+          if (!(a0 < 0 && a1 >= 0)) break;
+          const f = a0 / (a0 - a1), cx = st.prev.x + (x - st.prev.x) * f - gx, cz = st.prev.z + (z - st.prev.z) * f - gz;
+          const deep = (-cx * tz + cz * tx) * sd - HW[k];                    // inside the path's edge (+), outside it (-)
+          if (deep > GATE_IN || deep < -2 * HW[k] - GATE_OUT) break;
+          apexCut(k, deep);
+          st.gate++;
+        }
+        if (st.phase === 'run' && onIt && st.gate < STAGE.apex.length && w.i > STAGE.apex[st.gate][0] + GATE_MISS) cancel('MISSED A CORNER · STAGE CANCELLED');
+        // And for the 10 m after the apex (Martin 23 Nov: only at the apex or after it; a spin to the inside before
+        // the corner costs nothing when the car is back on the path by the bale and drives the corner).
+        for (const [k, sd] of STAGE.apex) {
+          if (st.prog < k - 25 || st.prog > k + 8 || st.phase !== 'run') continue;
+          const a = nearestIn(x, z, k - 8, k + 5);
+          if (a.i < k || a.d * a.d - a.lat * a.lat > 2.25) continue;       // before the apex, or past the end of it
+          apexCut(k, a.lat * sd - HW[a.i]);
         }
         // and too wide on the way in
         for (const [e0, e1, sd] of ENTRY) {
@@ -693,12 +845,24 @@ export function createStage({ world, scene, toast, place, onRun }) {
             toast(`WIDE ENTRY · +${pen} S`, 2600);
           }
         }
+        // and the inside of the other bends
+        {
+          const i = w.i, sd = BEND[i], deep = sd ? w.lat * sd - HW[i] : 0;
+          if (Math.abs(w.lat) < HW[i]) { st.cutM = 0; st.cutPen = 0; st.cutI = null; }       // back on the path
+          else if (deep > CUT_IN) {
+            if (st.cutI != null && i > st.cutI) st.cutM += S[i] - S[st.cutI];
+            st.cutI = Math.max(st.cutI ?? i, i);
+            const pen = CUT_PEN.find(([m]) => st.cutM > m)?.[1] || 0;
+            if (pen > st.cutPen && st.phase === 'run') { st.pen += pen - st.cutPen; st.cutPen = pen; toast(`OFF THE PATH · +${pen} S`, 2600); }
+          } else st.cutI = Math.max(st.cutI ?? i, i);
+        }
         setBarriers(st.prog);
         // the flying finish
         if (st.phase === 'run' && st.prog >= FIN - 12 && st.prev) {
           const [fx, fz] = P[FIN], [tx, tz] = TAN[FIN];
           const a = (st.prev.x - fx) * tx + (st.prev.z - fz) * tz, b = (x - fx) * tx + (z - fz) * tz;
-          if (a < 0 && b >= 0) {
+          if (a < 0 && b >= 0 && st.gate < STAGE.apex.length) cancel('MISSED A CORNER · STAGE CANCELLED');
+          else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const { car: pb } = best(carId);
             const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString() };
@@ -722,6 +886,8 @@ export function createStage({ world, scene, toast, place, onRun }) {
         if (moving) drawBarriers();
       }
       bales.update(car, dt);
+      if (halo && near) halo.material.opacity = st.phase === 'run' ? 0.75 + 0.25 * Math.sin(time * 5) : 0.6;
+      breakBarriers(car, Math.min(dt || 0.016, 0.05));
       drawBoards(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);
       st.prev = { x, z }; st.prevTime = time;
 
@@ -736,17 +902,6 @@ export function createStage({ world, scene, toast, place, onRun }) {
         if (st.phase === 'run') elMsg.textContent = st.offNow && st.off > 40 ? `OFF THE STAGE ${Math.round(st.off)} / ${OFF_LIMIT} M` : st.pen ? `PENALTY +${st.pen} S` : '';
       }
       if (st.phase === 'done' && st.againUntil && performance.now() > st.againUntil) hideAgain();
-      // the arrow: where the stage goes, 25 m on from here, against where the car points
-      if (st.phase === 'run') {
-        let j = st.prog;
-        while (j < N - 1 && S[j] - S[st.prog] < 25) j++;
-        const bx = P[j][0] - x, bz = P[j][1] - z;
-        const ang = Math.atan2(bx, -bz) - car.yaw;
-        const a = Math.atan2(Math.sin(ang), Math.cos(ang));
-        arrow.classList.remove('hidden');
-        arrow.style.setProperty('--rot', `${(a * 180 / Math.PI).toFixed(1)}deg`);
-        arrow.style.opacity = Math.min(1, 0.25 + Math.abs(a) * 1.5).toFixed(2);
-      } else arrow.classList.add('hidden');
     },
     // the start screen's and the HUD's names
     name: 'RAADI',

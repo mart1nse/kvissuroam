@@ -1010,3 +1010,17 @@ body.touch #tyre::before { inset: -9px -10px -6px -8px; }
 #tyretoast b { text-transform: uppercase; letter-spacing: .1em; }
 #tyretoast.road .t, #tyretoast.road .g { stroke: var(--cyan); fill: none; } #tyretoast.road .g { stroke-width: 1.5; } #tyretoast.road b { color: var(--cyan); }
 #tyretoast.gravel .t { stroke: #f0b860; } #tyretoast.gravel .b { fill: #f0b860; } #tyretoast.gravel b { color: #f0b860; }
+/* a taller phone, as when the browser goes full screen (Martin 23 Nov, Xiaomi: the layout fit with the address bar
+   and left a gap under the circuit pills without it): the pills, the cards and the bottom row grow with the height
+   that is left, from their sizes at 390 px up to about 430 px, so the room is used and not left between them */
+@media (min-height: 391px) and (max-height: 430px) {
+  #cards { font-size: clamp(10px, min(calc(10px + (100vh - 390px) * .05), 1.25vw), 12px); }
+  #menurow { --bh: clamp(36px, calc(36px + (100vh - 390px) * .25), 44px); }
+  #menu .logo { font-size: min(9vw, 14vh); }
+}
+/* (a touch screen a little taller, up to 520 px, keeps the phone's logo size: the desktop one pushed DRIVE off at 960x435) */
+@media (min-height: 431px) and (max-height: 520px) { body.touch #menu .logo { font-size: min(9vw, 14vh); } }
+@media (min-height: 391px) {
+  body.touch #trackpick .tcard, body.touch #trackpick .tcard.on { font-size: clamp(9px, calc(9px + (100vh - 390px) * .09), 12px); padding: 4px 13px 4px 6px; }
+  body.touch #trackpick { gap: 10px; margin-top: 4px; }
+}

@@ -1422,6 +1422,26 @@ if (gpu.software) {
   el.classList.remove('hidden');
 }
 const toggleOptions = () => showOverlay('options');
+// A tap or click anywhere outside the open OPTIONS panel closes it, like CLOSE (Martin 2026-11-23). That tap
+// does nothing else: it is stopped here, before the pedals, the HUD buttons or the map see it, and the click
+// that follows it is eaten too. The OPTIONS button itself still toggles the panel shut as before.
+let eatClickUntil = 0;
+window.addEventListener('pointerdown', (e) => {
+  eatClickUntil = 0; // a new tap is never eaten for the one before
+  if (optEl.classList.contains('hidden') || optEl.contains(e.target) || e.target.closest?.('[data-act="options"]')) return;
+  optEl.classList.add('hidden');
+  eatClickUntil = performance.now() + 700;
+  e.preventDefault();
+  e.stopPropagation();
+}, { capture: true });
+for (const ev of ['click', 'touchstart']) {
+  window.addEventListener(ev, (e) => {
+    if (performance.now() > eatClickUntil) return;
+    if (ev === 'click') eatClickUntil = 0;
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
+}
 input.on('KeyO', toggleOptions);
 input.on('Digit1', () => raceMode?.act());
 input.on('Numpad1', () => raceMode?.act());

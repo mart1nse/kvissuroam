@@ -138,8 +138,9 @@ function canvasTex(w, h, draw) {
 }
 
 // The FIA control area signs (WRC sporting regulations, the signs of a stage): a yellow clock (time
-// control ahead), the red flag of the start, the yellow chequered flag of the finish ahead, the red
-// chequered flag of the flying finish, and the red STOP board. One small picture of five squares.
+// control ahead), the red flag of the start, the red chequered flag of the flying finish, and the red
+// STOP board. One small picture of five squares (the third, the yellow chequered flag of the finish ahead,
+// is not put up).
 const SIGNS = { tc: 0, start: 1, warn: 2, finish: 3, stop: 4 };
 function signAtlas() {
   return canvasTex(640, 128, (g) => {
@@ -216,7 +217,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
   const lights = document.createElement('div');
   lights.id = 'rallylights';
   lights.className = 'hidden';
-  lights.innerHTML = '<div class="lamps"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="cap"></div>';
+  lights.innerHTML = '<div class="lamps"><i class="y"></i><i class="g"></i></div><div class="cap"></div>';   // (two bulbs: the count is yellow from its start)
   hudEl.appendChild(lights);
   const lamps = [...lights.querySelectorAll('i')], lCap = lights.querySelector('.cap');
   const again = document.createElement('button');
@@ -479,8 +480,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     sign('start', START, HW[START] + 1.4);
     startKit();
     line(START);
-    const warnAt = (() => { let i = FIN; while (i > 0 && S[FIN] - S[i] < 100) i--; return i; })();
-    sign('warn', warnAt, HW[warnAt] + 1.4);
+    // (no yellow flag 100 m before the finish: before the last corner it read as the finish itself, Martin 23 Nov)
     sign('finish', FIN, HW[FIN] + 1.4);
     sign('finish', FIN, -(HW[FIN] + 1.4));
     line(FIN, 0.2);
@@ -674,7 +674,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
 
   // the lamps on the screen and on the clock at the line: 0 off, 1 red, 2 yellow, 3 green; n: the seconds to go
   function setLamps(lamp, n = null) {
-    lamps.forEach((l, k) => l.classList.toggle('on', k + 1 === lamp));
+    lamps.forEach((l, k) => l.classList.toggle('on', k + 2 === lamp));
     if (!kit) return;
     // (the rally time of day: a car starts on the full minute, so the clock is set to reach one at green)
     const d = new Date(Date.now() + st.clockOff), two = (v) => String(v).padStart(2, '0');

@@ -886,15 +886,21 @@ body.touch #stageagain { top: calc(34% + 40px); }
 #trackpills button:active { transform: scale(.96); }
 #trackpills button.here { background: rgba(26, 84, 120, .7); color: #fff; }
 @media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
-body.touch #trackpills { right: auto; top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 4px); left: 50%; transform: translateX(-50%); }
+/* phones: right under the top buttons, the race button and its chip one row lower (Martin 23 Nov: "move the raadi
+   start and other track buttons upward to the right, maybe above the race button": they sat at the bottom between
+   the pedals). Away while a race's lights or its standings show: those need the room, and nobody leaves then. */
+body.touch #trackpills { right: var(--tbr); top: calc(var(--tbh) + 6px); }
+body.touch:has(#trackpills):not(.racelist):not(.racegrid) #racebox { top: calc(var(--tbh) + 34px); }
+body.touch.racelist #trackpills, body.touch.racegrid #trackpills { display: none; }
 body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 
 /* the start screen's track picker (?raadi=1), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
    of cards under the tag line in the room above the cars, the picked one 520 x 210 at a 900 px high window
    with the outline at full height, name, length and surface, mode chips, record, your best and LAP TIMES;
    the others 300 x 132 and plainer. Everything is sized from the row's own height, so a lower window gets
-   the same cards smaller. */
-#trackpick { z-index: 2; flex: 1 1 0; min-height: 128px; max-height: 214px; width: 100%; container-type: size; display: flex; gap: 1.1em; align-items: flex-end; justify-content: center; margin: 0 0 6px; }
+   the same cards smaller, and a high and wide one bigger (up to 310 px: "can you even make larger the track
+   options on desktop?"). The outlines are the old track map's: thin neon tube, start line, a dot lapping. */
+#trackpick { z-index: 2; flex: 1 1 0; min-height: 128px; max-height: min(310px, 21vw); width: 100%; container-type: size; display: flex; gap: 1.1em; align-items: flex-end; justify-content: center; margin: 0 0 6px; }
 #trackpick .tcard { box-sizing: border-box; display: flex; align-items: center; gap: 1em; height: 61.7cqh; aspect-ratio: 300 / 132; padding: .75em 1.1em .75em .75em; border: none; border-radius: 1em;
   background: rgba(18, 6, 43, .55); backdrop-filter: blur(6px); color: #fff; font: 400 max(7px, calc(100cqh / 13.4)) var(--font); text-align: left; opacity: .82; touch-action: manipulation; transition: opacity .2s, background .2s; cursor: pointer; }
 #trackpick .tcard svg { height: 100%; width: auto; max-width: 42%; flex: none; overflow: visible; }
@@ -903,7 +909,9 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .tube { stroke: #c79ad8; stroke-width: 34; }
 #trackpick .core { stroke: #f3e6ff; stroke-width: 10; opacity: .6; }
 #trackpick .sf { stroke: #fff; stroke-width: 16; }
-#trackpick .tail { stroke: var(--cyan); stroke-width: 34; filter: drop-shadow(0 0 12px var(--cyan)); }
+#trackpick .tail { stroke: var(--cyan); stroke-width: 34; opacity: .85; }
+#trackpick .dot circle { fill: #fff; }
+#trackpick .dot .glow { display: none; fill: var(--cyan); opacity: .55; filter: blur(9px); }
 #trackpick .tx { display: flex; flex-direction: column; gap: .31em; min-width: 0; }
 #trackpick .nm { font: 400 1.31em 'Russo One', var(--font); letter-spacing: .05em; white-space: nowrap; }
 #trackpick .meta { font-size: .66em; letter-spacing: .2em; color: #e8d9ff; opacity: .85; white-space: nowrap; }
@@ -922,23 +930,27 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .tcard.on { overflow: visible; height: 98cqh; aspect-ratio: 520 / 210; opacity: 1; padding: .88em 1.5em .88em .88em; gap: 1.4em;
   background: linear-gradient(135deg, rgba(47, 243, 255, .2), rgba(90, 40, 170, .45)); box-shadow: 0 0 26px rgba(47, 243, 255, .35); }
 #trackpick .tcard.on .nm { font-size: 2.12em; text-shadow: 2px 2px 0 var(--hot); }
+#trackpick .tcard.on .meta { letter-spacing: .16em; }
 #trackpick .tcard.on .halo { display: inline; }
-#trackpick .tcard.on .tube { stroke: var(--pink); filter: drop-shadow(0 0 9px var(--hot)); }
-#trackpick .tcard.on .core { stroke: #ffe3f4; opacity: 1; }
+#trackpick .tcard.on .tube { stroke: var(--pink); stroke-width: 24; filter: drop-shadow(0 0 9px var(--hot)); }
+#trackpick .tcard.on .core { stroke: #ffe3f4; stroke-width: 7; opacity: 1; }
+#trackpick .tcard.on .sf { stroke-width: 13; filter: drop-shadow(0 0 8px var(--cyan)); }
+#trackpick .tcard.on .tail { stroke-width: 24; opacity: 1; filter: drop-shadow(0 0 12px var(--cyan)); }
+#trackpick .tcard.on .dot .glow { display: inline; }
 @media (hover: hover) and (pointer: fine) { #trackpick .tcard:hover { opacity: 1; } }
 #trackpick .tcard:focus-visible { outline: 2px solid var(--sun); outline-offset: 4px; }
 /* phones, and a window too low for the row: pills (under the logo on phones, in the corner on a low desktop window) */
 @media (max-height: 520px) {
-  #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); width: auto; flex: none; max-height: none; container-type: normal; flex-direction: column; align-items: flex-end; gap: 6px; margin: 0; }
+  #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); width: auto; flex: none; min-height: 0; max-height: none; container-type: normal; flex-direction: column; align-items: flex-end; gap: 6px; margin: 0; }
 }
-body.touch #trackpick { position: static; flex: none; width: auto; max-height: none; container-type: normal; flex-direction: row; align-items: center; gap: 6px; margin: 2px 0 0; }
+body.touch #trackpick { position: static; flex: none; width: auto; min-height: 0; max-height: none; container-type: normal; flex-direction: row; align-items: center; gap: 6px; margin: 2px 0 0; }
 @media (max-height: 520px) {
   #trackpick .tcard, #trackpick .tcard.on { height: auto; aspect-ratio: auto; padding: 4px 12px 4px 6px; font-size: 10px; gap: .5em; border-radius: 999px; box-shadow: none; backdrop-filter: none; }
   #trackpick .tcard svg { height: 2.4em; max-width: none; }
   #trackpick .tx { flex-direction: row; align-items: baseline; gap: .7em; }
   #trackpick .nm, #trackpick .tcard.on .nm { font: 800 1em var(--font); letter-spacing: .18em; color: var(--pink); text-shadow: none; }
   #trackpick .meta { font-size: .85em; letter-spacing: .14em; }
-  #trackpick .meta u, #trackpick .modes, #trackpick .dl, #trackpick .lt, #trackpick .halo, #trackpick .tail { display: none !important; }
+  #trackpick .meta u, #trackpick .modes, #trackpick .dl, #trackpick .lt, #trackpick .halo, #trackpick .tail, #trackpick .dot { display: none !important; }
   #trackpick .tube { stroke-width: 60; } #trackpick .core { stroke-width: 20; }
 }
 body.touch #trackpick .tcard, body.touch #trackpick .tcard.on { height: auto; aspect-ratio: auto; padding: 3px 10px 3px 5px; font-size: 9px; gap: .5em; border-radius: 999px; box-shadow: none; backdrop-filter: none; }
@@ -946,7 +958,7 @@ body.touch #trackpick .tcard svg { height: 2.4em; max-width: none; }
 body.touch #trackpick .tx { flex-direction: row; align-items: baseline; gap: .7em; }
 body.touch #trackpick .nm, body.touch #trackpick .tcard.on .nm { font: 800 1em var(--font); letter-spacing: .18em; color: var(--pink); text-shadow: none; }
 body.touch #trackpick .meta { font-size: .85em; letter-spacing: .14em; }
-body.touch #trackpick .meta u, body.touch #trackpick .modes, body.touch #trackpick .dl, body.touch #trackpick .lt, body.touch #trackpick .halo, body.touch #trackpick .tail { display: none !important; }
+body.touch #trackpick .meta u, body.touch #trackpick .modes, body.touch #trackpick .dl, body.touch #trackpick .lt, body.touch #trackpick .halo, body.touch #trackpick .tail, body.touch #trackpick .dot { display: none !important; }
 body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { stroke-width: 20; }
 
 /* the lap times board with both circuits side by side, and the circuits' small marks in the lists */

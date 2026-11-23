@@ -3,8 +3,9 @@
 // Point to point, one car at a time, from a standing start (Martin, 23 Nov 2026).
 //
 // Drive up to the start (or use the RAADI button) and the car is put on the start line and held there while
-// the start lights count down: five red lights go out one a second, then green. The clock runs to the
-// flying finish; the STOP board is a little further on.
+// the start clock counts down: red, yellow for the last five seconds, then green (src/race/startkit.js: the
+// clock on its stand past the line and the start line camera). The clock runs to the flying finish; the STOP
+// board is a little further on.
 //
 // The stage passes some junctions twice going another way each time, and the stretch on the west side of
 // the ponds twice: red and white barriers across the side paths show the way, and slide aside when the
@@ -23,11 +24,17 @@ import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
 import { chevronTex } from './decor.js';
+import { createStartKit } from './startkit.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
-const COUNT_S = 2;                         // seconds before the first red light
+// The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). A rally's start
+// unit shows red from 10 s to go, yellow for the last 5 s and green at zero, which stays on for 5 s; here the
+// count joins it at 7 s so a new try does not wait longer than before.
+const COUNT_S = 2;                         // seconds of red before the last five
+const LAST_S = 5;                          // the last seconds, yellow, counted one by one
+const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
 // an apex cut costs time (Martin 23 Nov: a small penalty for a small cut, a large one for a large cut): how far
 // inside the path's edge the middle of the car went at the apex, in metres, and the seconds it adds
@@ -189,7 +196,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const lights = document.createElement('div');
   lights.id = 'rallylights';
   lights.className = 'hidden';
-  lights.innerHTML = `<div class="lamps">${'<i></i>'.repeat(5)}<i class="g"></i></div><div class="cap"></div>`;
+  lights.innerHTML = '<div class="lamps"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="cap"></div>';
   hudEl.appendChild(lights);
   const lamps = [...lights.querySelectorAll('i')], lCap = lights.querySelector('.cap');
   const arrow = document.createElement('div');
@@ -207,7 +214,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const st = {
     phase: 'idle',          // idle, count (on the start line, lights), run, done
     t0: 0, clk: 0, wall: null, carT: null, prog: START, off: 0, prev: null, cool: false, againUntil: 0,
-    pin: null, countAt: 0, cut: '', pen: 0, apexPen: new Map(), widePen: new Map(),
+    pin: null, countAt: 0, clockOff: 0, goAt: 0, cut: '', pen: 0, apexPen: new Map(), widePen: new Map(),
   };
 
   // ---- the stage's things (built near)
@@ -215,13 +222,9 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const signMat = new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide });
   const postMat = new THREE.MeshLambertMaterial({ color: 0x8a8d92 });
   const barriers = [];
-  let barMesh = null, startLamps = null;
+  let barMesh = null, kit = null;
   // a bale 1.1 m inside the path's edge at each apex, its banner towards the cars coming
   const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] })) });
-  const lampOff = new THREE.MeshBasicMaterial({ color: 0x2a0d10 });
-  const lampRed = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
-  const lampGreen = new THREE.MeshBasicMaterial({ color: 0x29ff6a });
-  const lampGreenOff = new THREE.MeshBasicMaterial({ color: 0x0b2a14 });
   const groundY = (x, z) => world.heightAt(x, z);
 
   function sign(kind, i, d, h = 1.7) {
@@ -241,24 +244,17 @@ export function createStage({ world, scene, toast, place, onRun }) {
     group.add(g);
   }
 
-  // the start clock beside the line: five red lamps over a green one, facing the driver
-  function startTower(i, d) {
-    const [x, z] = side(i, d), y = groundY(x, z);
-    const g = new THREE.Group();
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), postMat);
-    leg.position.y = 0.6; g.add(leg);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.5, 0.22), new THREE.MeshLambertMaterial({ color: 0x15151a }));
-    box.position.y = 1.95; g.add(box);
-    const disc = new THREE.CircleGeometry(0.085, 16);
-    startLamps = [];
-    for (let k = 0; k < 6; k++) {
-      const m = new THREE.Mesh(disc, k < 5 ? lampOff : lampGreenOff);
-      m.position.set(0, 2.55 - k * 0.22, 0.115);
-      g.add(m); startLamps.push(m);
-    }
-    g.position.set(x, y, z);
-    g.rotation.y = Math.atan2(-TAN[i][0], -TAN[i][1]) + (d > 0 ? -0.5 : 0.5);   // turned towards the car on the line
-    group.add(g);
+  // the start clock on its stand on the right, 8 m past the line and turned to the car waiting on it, and the
+  // start line camera on the left, 40 cm past the line (where the rules put the jump start photocell)
+  function startKit() {
+    const pose = startPose();
+    const [cx, cz] = side(START + 4, HW[START + 4] + 0.9);
+    const [mx, mz] = side(START, -(HW[START] + 1.1)), ax = mx + TAN[START][0] * 0.4, az = mz + TAN[START][1] * 0.4;
+    kit = createStartKit({
+      group,
+      clock: { x: cx, y: groundY(cx, cz), z: cz, yaw: Math.atan2(pose.x - cx, pose.z - cz) },
+      cam: { x: ax, y: groundY(ax, az), z: az, yaw: Math.atan2(-TAN[START][1], TAN[START][0]) },
+    });
   }
 
   // a white line across the path
@@ -453,7 +449,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
     // signs: yellow time control and the red start flag; the start clock; the line
     sign('tc', 1, HW[1] + 1.4);
     sign('start', START, HW[START] + 1.4);
-    startTower(START + 1, -(HW[START + 1] + 1.3));
+    startKit();
     line(START);
     const warnAt = (() => { let i = FIN; while (i > 0 && S[FIN] - S[i] < 100) i--; return i; })();
     sign('warn', warnAt, HW[warnAt] + 1.4);
@@ -549,9 +545,13 @@ export function createStage({ world, scene, toast, place, onRun }) {
     elBest.innerHTML = b ? fmtTime(b.ms / 1000) : '<small>NO TIME YET</small>';
   }
 
-  function setLamps(n, green) {
-    lamps.forEach((l, k) => l.classList.toggle('on', k < 5 ? k < n : green));
-    if (startLamps) startLamps.forEach((m, k) => { m.material = k < 5 ? (k < n ? lampRed : lampOff) : green ? lampGreen : lampGreenOff; });
+  // the lamps on the screen and on the clock at the line: 0 off, 1 red, 2 yellow, 3 green; n: the seconds to go
+  function setLamps(lamp, n = null) {
+    lamps.forEach((l, k) => l.classList.toggle('on', k + 1 === lamp));
+    if (!kit) return;
+    // (the rally time of day: a car starts on the full minute, so the clock is set to reach one at green)
+    const d = new Date(Date.now() + st.clockOff), two = (v) => String(v).padStart(2, '0');
+    kit.show(lamp, n, `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`);
   }
 
   function startPose() { return { x: P[START][0] - TAN[START][0] * 1.6, z: P[START][1] - TAN[START][1] * 1.6, yaw: yawAt(START) }; }
@@ -570,7 +570,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
     st.prog = START; st.off = 0; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null;
     bales.reset();
     setBarriers(START, true);
-    setLamps(0, false);
+    setLamps(0);
     elMsg.textContent = '';
     st.prev = null;
   }
@@ -592,6 +592,8 @@ export function createStage({ world, scene, toast, place, onRun }) {
     get phase() { return st.phase; },
     get runs() { return runs; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
+    // the seconds to green (the test drive holds the clock with it to take its pictures)
+    set countLeft(v) { st.countAt = performance.now() - (COUNT_S + LAST_S - v) * 1000; },
     data: STAGE,
     get bales() { return bales; },
     best,
@@ -643,19 +645,23 @@ export function createStage({ world, scene, toast, place, onRun }) {
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)
         if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
-        const e = (performance.now() - st.countAt) / 1000;
-        // (lights from COUNT_S on: all five red, one goes out a second, green when the last one does)
-        const n = e < COUNT_S ? 0 : Math.max(0, 5 - Math.floor(e - COUNT_S));
-        const green = e >= COUNT_S + 5;
-        setLamps(e < COUNT_S ? 0 : n, green);
-        lCap.textContent = e < COUNT_S ? `SS16 RAADI · ${STAGE_KM} KM` : green ? 'GO!' : `${n}`;
+        const e = (performance.now() - st.countAt) / 1000, left = COUNT_S + LAST_S - e, green = left <= 0;
+        const n = Math.max(0, Math.ceil(left));
+        if (st.goFor !== st.countAt) { st.goFor = st.countAt; const go = Date.now() + left * 1000; st.clockOff = Math.ceil(go / 60000) * 60000 - go; }
+        st.goAt = green ? performance.now() : 0;
+        setLamps(green ? 3 : left <= LAST_S ? 2 : 1, green ? null : n);
+        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0;
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
-      } else if (st.phase !== 'run') lights.classList.add('hidden');
+      } else {
+        if (st.phase !== 'run') lights.classList.add('hidden');
+        // (the clock at the line: green for a few seconds after the start, then dark; the time runs on)
+        if (kit && near && dStart < 200) setLamps(st.phase === 'run' && st.goAt && performance.now() - st.goAt < GREEN_S * 1000 ? 3 : 0);
+      }
 
       if (st.phase === 'run') {
         // progress along the stage: only forwards from where the car is, in a short window

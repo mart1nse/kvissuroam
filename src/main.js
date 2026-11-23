@@ -989,8 +989,7 @@ function startDriving() {
 // again from a tap, so any tap while not in full screen asks for it again. That starts with the first
 // tap in the opening menu, where the browser's own bars leave the garage little room.
 // The FULL button in the top bar turns that off and on (and full screen on a computer). An iPhone has no
-// full screen for pages in any browser: there the button tells how to add the game to the Home Screen,
-// which opens it with no browser bars. Started from the Home Screen the button is not needed and hides.
+// full screen for pages, so it gets no button (Martin 23 Nov); nor does the game started from a Home Screen.
 let wantFull = isTouch, fullAsked = false;
 const fullOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
 function goFull() {
@@ -1004,10 +1003,8 @@ function goFull() {
 for (const ev of ['pointerup', 'touchend']) addEventListener(ev, () => { if (wantFull && !document.hidden) goFull(); }, { passive: true, capture: true });
 const canFull = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 const installed = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
-const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
-const fullBtn = $('#fullbtn'), fullHint = $('#fullhint');
-document.body.append(fullHint);            // over the pedals (the HUD's own layer is under them)
-if (!installed && (canFull || isIPhone)) {
+const fullBtn = $('#fullbtn');
+if (!installed && canFull) {
   fullBtn.classList.remove('hidden');
   document.body.classList.add('fullbtn');
   const mark = () => fullBtn.classList.toggle('on', fullOn());
@@ -1015,7 +1012,6 @@ if (!installed && (canFull || isIPhone)) {
   document.addEventListener('webkitfullscreenchange', mark);
 }
 function toggleFull() {
-  if (!canFull) { fullHint.classList.toggle('hidden'); return; }
   if (fullOn()) {
     wantFull = false;                       // a phone stops asking again on every tap until FULL is pressed again
     (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
@@ -1024,8 +1020,6 @@ function toggleFull() {
     goFull();
   }
 }
-// any tap closes the iPhone hint (the tap on FULL that opened it is the button's own)
-addEventListener('pointerdown', (e) => { if (!fullHint.classList.contains('hidden') && !e.target.closest?.('#fullbtn')) fullHint.classList.add('hidden'); }, true);
 
 let drivenOnce = false;
 // (in the garage Esc goes back to the car, once there is a drive to go back to; the lap times board

@@ -1148,15 +1148,17 @@ optKeys.addEventListener('click', (e) => {
 // src/audio-tyres.js, REAL the modelled squeal of public/tyre-worklet.js. Remembered per browser; ?squeal=real
 // or ?squeal=note sets it on a phone (no V key there).
 const optSqueal = $('#opt-squeal');
-let squealSaved = 'note';
-try { squealSaved = localStorage.getItem('kvissuroam.squeal') || 'note'; } catch {}
+// B (REAL) is the default since Martin 2026-11-23 ("sounds very good, move to prod as default"). The choice is
+// saved under a new key, so a NOTE picked while comparing (kvissuroam.squeal) does not keep anyone on A.
+let squealSaved = 'real';
+try { squealSaved = localStorage.getItem('kvissuroam.squeal2') || 'real'; } catch {}
 if (params.get('squeal') === 'real' || params.get('squeal') === 'note') squealSaved = params.get('squeal');
 audio.setSquealKind(squealSaved);
 const showSqueal = () => { if (optSqueal) for (const b of optSqueal.children) b.classList.toggle('on', b.dataset.squeal === audio.squealKind); };
 showSqueal();
 function setSqueal(k) {
   audio.setSquealKind(k);
-  try { localStorage.setItem('kvissuroam.squeal', audio.squealKind); } catch {}
+  try { localStorage.setItem('kvissuroam.squeal2', audio.squealKind); } catch {}
   showSqueal();
   hud.toast(audio.squealKind === 'real' ? 'TYRE SQUEAL B · REAL (MODELLED)' : 'TYRE SQUEAL A · HELD NOTE', 1800);
 }

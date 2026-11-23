@@ -80,23 +80,25 @@ export function createSquealer(ctx, noise, out, { voices = 2 } = {}) {
 }
 
 // ---- the two squeals behind one switch (V in the game, Martin 2026-11-23: to A/B them)
-// 'note' is the held note above; 'real' is the modelled squeal of public/tyre-worklet.js (stick-slip of the
-// tread, the tyre's resonances, the tear of rubber). The worklet is loaded once per audio context and its
-// node made only the first time the real squeal is wanted, so a player who never switches pays nothing.
+// 'note' is the held note above; 'real' (the default) is the modelled squeal of public/tyre-worklet.js
+// (stick-slip of the tread, the tyre's resonances, the tear of rubber). The worklet is loaded once per audio
+// context; its node is made when the worklet is in (or the first time the real squeal is wanted), and it
+// does no work while the tyres grip.
 const loaded = new WeakMap();
 export function loadTyreWorklet(ctx, url) {
   if (!ctx.audioWorklet || typeof AudioWorkletNode !== 'function') return Promise.resolve(false);
   if (!loaded.has(ctx)) loaded.set(ctx, ctx.audioWorklet.addModule(url).then(() => true, () => false));
   return loaded.get(ctx);
 }
-let kind = 'note';
+let kind = 'real';          // (B is the default since 2026-11-23; A plays until the worklet has loaded)
 export function setSquealKind(k) { kind = k === 'real' ? 'real' : 'note'; }
 export function squealKind() { return kind; }
 
 export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
   const note = createSquealer(ctx, noise, out, { voices });
   let node = null, P = null, ready = false, live = false;
-  loaded.get(ctx)?.then((ok) => { ready = ok; });
+  // (made as soon as the worklet is in, while B is the choice, so the first squeal of a drive costs nothing)
+  loaded.get(ctx)?.then((ok) => { ready = ok; if (ok && kind === 'real' && !node) make(); });
   function make() {
     try {
       node = new AudioWorkletNode(ctx, 'tyre-squeal', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { tyres: voices } });

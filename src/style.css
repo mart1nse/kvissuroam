@@ -1030,3 +1030,6 @@ body.touch #tyre::before { inset: -9px -10px -6px -8px; }
   body.touch #trackpick .tcard.on .tube { stroke-width: 26; } body.touch #trackpick .tcard.on .core { stroke-width: 8; }
   body.touch #trackpick .tcard.on .tail, body.touch #trackpick .tcard.on .dot { display: inline !important; }
 }
+/* your own best per car, beside the records (board.js) */
+#board th.you { color: var(--cyan); }
+#board td.you b { color: var(--cyan); }

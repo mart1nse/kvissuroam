@@ -1172,8 +1172,13 @@ async function dropAt(x, z) {
 
 function toggleSound() {
   audio.setMuted(!audio.muted);
-  $('#soundbtn').classList.toggle('off', audio.muted);
+  showSound();
 }
+// sound on / off sits in the options panel (Martin 23 Nov: no top button needed for it)
+const optSound = $('#opt-sound');
+function showSound() { for (const b of optSound.children) b.classList.toggle('on', (b.dataset.sound === 'off') === audio.muted); }
+showSound();
+optSound.addEventListener('click', (e) => { const b = e.target.closest('[data-sound]'); if (b && (b.dataset.sound === 'off') !== audio.muted) toggleSound(); });
 
 // ---- screens over the drive: the city map, the lap times and the options. Only one is open at a time.
 // Their keys work from any of them: M / L / O jump straight to that screen (the same key again closes it),
@@ -1412,7 +1417,6 @@ document.addEventListener('click', (e) => {
   else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
-  else if (act === 'sound') toggleSound();
   else if (act === 'options') toggleOptions();
   else if (act === 'full') toggleFull();
   else if (act === 'options-close') optEl.classList.add('hidden');

@@ -259,7 +259,7 @@ body.still #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), 
    of the minimap, the top bar and the pedals as their own rules give them, for the places worked out here. */
 body.touch {
   --mm: clamp(96px, 15vw, 170px);                                  /* minimap */
-  --tbw: calc(6 * clamp(44px, 6vw, 60px) + 40px);                  /* top bar: six buttons, five gaps */
+  --tbw: calc(6 * clamp(44px, 6vw, 60px) + 40px);                  /* top bar: six buttons (FULL in place of SOUND since 23 Nov), five gaps */
   --tbr: max(10px, env(safe-area-inset-right));
   --tbh: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px));
   --padh: calc(max(14px, env(safe-area-inset-bottom)) + clamp(72px, 24vh, 118px));   /* steering buttons, from the bottom */
@@ -267,9 +267,6 @@ body.touch {
   --lapw: clamp(170px, 24vw, 230px);
   --lapr: calc(var(--tbr) + var(--tbw) + 12px);                    /* lap timer's right edge, from the right */
 }
-/* with the FULL button: seven buttons, six closer gaps */
-body.touch.fullbtn { --tbw: calc(7 * clamp(44px, 6vw, 60px) + 36px); }
-body.touch.fullbtn #topbar { gap: 6px; }
 /* the rev counter centred over the left steering button, as big as fits between the street name and the buttons */
 body.touch #dash { right: auto; top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2); bottom: calc(var(--padh) + 6px); transform: translateX(-50%);
   --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px); }

@@ -92,7 +92,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .reel, .reel * { touch-action: none; }
 .card {
   position: absolute; left: 0; right: 0; top: 0; height: var(--T); padding: 0; overflow: hidden; text-align: left; font-size: 1em;
-  background: linear-gradient(165deg, rgba(52, 18, 104, .86), rgba(18, 6, 43, .9) 62%); border: none; border-radius: 1.2em;   /* no border, round (Martin 22 Nov) */
+  background: linear-gradient(165deg, rgba(52, 18, 104, .86), rgba(18, 6, 43, .9) 62%); border: none; border-radius: 1em;   /* no border, round (Martin 22 Nov; a touch less round 23 Nov) */
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   --f: 0; --two: 0; --rest: 0; transition: background .2s, box-shadow .2s;
 }
@@ -131,7 +131,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 /* the arrows: each lies over a tab and takes the tap for all of it */
 .step {
   position: absolute; left: 0; right: 0; z-index: 5; height: var(--T); padding: 0 0 0 .95em; display: flex; align-items: center; font-size: 1em;
-  background: none; border: 0; border-radius: 1.2em; color: var(--pink); transition: background .15s;
+  background: none; border: 0; border-radius: 1em; color: var(--pink); transition: background .15s;
 }
 .step.up { top: 0; }
 .step.dn { bottom: 0; }
@@ -165,7 +165,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 #topbar { top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); display: flex; gap: 8px; pointer-events: auto; }
 #topbar button {
   width: clamp(44px, 6vw, 60px); height: clamp(44px, 6vw, 60px); font-size: clamp(17px, 2.4vw, 24px); line-height: 1; padding: 0;
-  background: rgba(18, 6, 43, .55); border: none; border-radius: 38%; color: var(--cyan);   /* no border, round corners like START RACE, a bit rounder (Martin 22 Nov) */
+  background: rgba(18, 6, 43, .55); border: none; border-radius: 30%; color: var(--cyan);   /* no border, round corners like START RACE (Martin 22 Nov; 38 % was too round, 23 Nov) */
   text-shadow: 0 0 8px var(--cyan); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
 }
 #topbar button small { font-size: 7px; letter-spacing: .08em; color: #fff; opacity: .8; text-shadow: none; }
@@ -218,7 +218,7 @@ body.touch #getready { top: 46%; }
 .mapbtns { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); display: flex; gap: 8px; }
 .mapbtns button {
   width: clamp(44px, 6vw, 60px); height: clamp(44px, 6vw, 60px); font-size: clamp(20px, 2.8vw, 28px); line-height: 1; padding: 0;
-  background: rgba(18, 6, 43, .8); border: none; border-radius: 38%; color: var(--cyan); text-shadow: 0 0 8px var(--cyan);
+  background: rgba(18, 6, 43, .8); border: none; border-radius: 30%; color: var(--cyan); text-shadow: 0 0 8px var(--cyan);
 }
 /* north is always up on the city map: a thin white needle over an N, top left */
 .mapnorth {
@@ -445,7 +445,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #board > * { flex-shrink: 0; }
 #board .bclose, #ctlsetup .bclose { position: fixed; z-index: 13; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
   width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-style: normal; letter-spacing: 0;
-  color: var(--cyan); background: rgba(18, 6, 43, .9); border: none; border-radius: 38%; text-shadow: 0 0 8px var(--cyan); }
+  color: var(--cyan); background: rgba(18, 6, 43, .9); border: none; border-radius: 30%; text-shadow: 0 0 8px var(--cyan); }
 body.touch #board { padding-top: max(16px, env(safe-area-inset-top)); }
 
 /* desktop: a bigger map in the bottom left corner, the street name above it, a bigger lap panel */

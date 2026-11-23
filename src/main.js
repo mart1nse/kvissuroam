@@ -1144,6 +1144,29 @@ optKeys.addEventListener('click', (e) => {
   showKeys();
   hud.toast(on ? 'WASD DRIVING · AUTOMATIC GEARBOX' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
 });
+// Tyre squeal (V, or OPTIONS > SOUND; Martin 2026-11-23: two squeals to A/B): NOTE is the held note of
+// src/audio-tyres.js, REAL the modelled squeal of public/tyre-worklet.js. Remembered per browser; ?squeal=real
+// or ?squeal=note sets it on a phone (no V key there).
+const optSqueal = $('#opt-squeal');
+let squealSaved = 'note';
+try { squealSaved = localStorage.getItem('kvissuroam.squeal') || 'note'; } catch {}
+if (params.get('squeal') === 'real' || params.get('squeal') === 'note') squealSaved = params.get('squeal');
+audio.setSquealKind(squealSaved);
+const showSqueal = () => { if (optSqueal) for (const b of optSqueal.children) b.classList.toggle('on', b.dataset.squeal === audio.squealKind); };
+showSqueal();
+function setSqueal(k) {
+  audio.setSquealKind(k);
+  try { localStorage.setItem('kvissuroam.squeal', audio.squealKind); } catch {}
+  showSqueal();
+  hud.toast(audio.squealKind === 'real' ? 'TYRE SQUEAL B · REAL (MODELLED)' : 'TYRE SQUEAL A · HELD NOTE', 1800);
+}
+optSqueal?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-squeal]');
+  if (!b) return;
+  b.blur();
+  setSqueal(b.dataset.squeal);
+});
+input.on('KeyV', () => setSqueal(audio.squealKind === 'real' ? 'note' : 'real'));
 // Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
 const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);
 let gfxShown = 0;

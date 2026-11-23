@@ -16,6 +16,9 @@
 // automation laid on it (a few numbers a frame on the page, nothing when the tyres grip).
 
 export const SQUEAL_LEVEL = 0.035;
+// the modelled squeal's output gain (public/tyre-worklet.js, V in the game), set so it is as loud to the ear as
+// the held note (A-weighted, in a 190E burnout and donut: tools/engine-space-demo.mjs --tyres --real)
+export const TYRE_REAL_LEVEL = 0.096;
 
 // the squeal's pitch in Hz for a tread sliding at s m/s (tools: engine-space-demo.mjs prints it)
 export function squealPitch(s, mass = 1400) {
@@ -74,4 +77,48 @@ export function createSquealer(ctx, noise, out, { voices = 2 } = {}) {
     }
   }
   return { step, pitch: () => hz, level: () => lv };
+}
+
+// ---- the two squeals behind one switch (V in the game, Martin 2026-11-23: to A/B them)
+// 'note' is the held note above; 'real' is the modelled squeal of public/tyre-worklet.js (stick-slip of the
+// tread, the tyre's resonances, the tear of rubber). The worklet is loaded once per audio context and its
+// node made only the first time the real squeal is wanted, so a player who never switches pays nothing.
+const loaded = new WeakMap();
+export function loadTyreWorklet(ctx, url) {
+  if (!ctx.audioWorklet || typeof AudioWorkletNode !== 'function') return Promise.resolve(false);
+  if (!loaded.has(ctx)) loaded.set(ctx, ctx.audioWorklet.addModule(url).then(() => true, () => false));
+  return loaded.get(ctx);
+}
+let kind = 'note';
+export function setSquealKind(k) { kind = k === 'real' ? 'real' : 'note'; }
+export function squealKind() { return kind; }
+
+export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
+  const note = createSquealer(ctx, noise, out, { voices });
+  let node = null, P = null, ready = false, live = false;
+  loaded.get(ctx)?.then((ok) => { ready = ok; });
+  function make() {
+    try {
+      node = new AudioWorkletNode(ctx, 'tyre-squeal', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { tyres: voices } });
+      node.connect(out);
+      P = { slip: node.parameters.get('slip'), amount: node.parameters.get('amount'), side: node.parameters.get('side'), speed: node.parameters.get('speed'), mass: node.parameters.get('mass') };
+      node.parameters.get('level').value = TYRE_REAL_LEVEL;
+    } catch { node = null; ready = false; }
+  }
+  // every frame: the same inputs as createSquealer's step
+  function step(t, spin, slip, slide, speed, mass = 1400) {
+    const real = kind === 'real' && ready;
+    if (real && !node) make();
+    const useReal = real && node;
+    note.step(t, useReal ? 0 : spin, slip, useReal ? 0 : slide, speed, mass);
+    if (!node) return;
+    // (the worklet sleeps while its amount and side stay 0: nothing to send then)
+    const a = useReal ? spin : 0, s = useReal ? slide : 0;
+    if (!live && a <= 0.02 && s <= 0.3) return;
+    live = a > 0.02 || s > 0.3;
+    P.amount.setTargetAtTime(a, t, 0.02); P.side.setTargetAtTime(s, t, 0.02);
+    P.slip.setTargetAtTime(slip, t, 0.02); P.speed.setTargetAtTime(speed, t, 0.02);
+    P.mass.value = mass;
+  }
+  return { step, note };
 }

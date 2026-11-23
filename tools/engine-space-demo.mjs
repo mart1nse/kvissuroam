@@ -28,7 +28,8 @@
 //   --tyres[=<spin level>]: the tyre sounds as audio.js plays them (scrub and wheelspin howl, into the car
 //   bus); the level is the wheelspin gain at full spin (default the game's SPIN_LEVEL, 0.05 before 21 Nov).
 //   With them comes the squeal of src/audio-tyres.js; --squeal=<x> scales it (0: none, for a "before" clip),
-//   --mass=<kg> sings as a car of that weight.
+//   --mass=<kg> sings as a car of that weight. --real: the modelled squeal of public/tyre-worklet.js instead
+//   (V in the game), --real=<x> scales it.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -322,7 +323,21 @@ for (const id of ids) {
         sf.frequency.setTargetAtTime(TY[k + 1], TY[k], 0.08); sg.gain.setTargetAtTime(TY[k + 2], TY[k], 0.07);
         pf.frequency.setTargetAtTime(TY[k + 3], TY[k], 0.1); pg.gain.setTargetAtTime(TY[k + 4], TY[k], 0.08);
       }
-      if (SQ.squeal > 0) {
+      if (SQ.real > 0) {
+        // the modelled squeal (public/tyre-worklet.js), its params set at the game's 60 Hz as audio.js does
+        await ctx.audioWorklet.addModule('/public/tyre-worklet.js');
+        const { TYRE_REAL_LEVEL } = await import('/src/audio-tyres.js');
+        const node = new AudioWorkletNode(ctx, 'tyre-squeal', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { tyres: 2, seed: 7 } });
+        const wg = ctx.createGain(); wg.gain.value = SQ.real; node.connect(wg).connect(space.input);
+        const P = (k) => node.parameters.get(k);
+        P('mass').value = SQ.mass; P('level').value = TYRE_REAL_LEVEL;
+        for (let k = 0; k < TY.length; k += 10) {
+          const t = TY[k];
+          P('amount').setValueAtTime(TY[k + 5], t); P('slip').setValueAtTime(TY[k + 8], t);
+          P('side').setValueAtTime(TY[k + 6], t); P('speed').setValueAtTime(TY[k + 7], t);
+        }
+        log.push('squeal: modelled (tyre-worklet.js)');
+      } else if (SQ.squeal > 0) {
         // the squeal: one long note at the speed the tread slides at (src/audio-tyres.js)
         const { createSquealer } = await import('/src/audio-tyres.js');
         const wg = ctx.createGain(); wg.gain.value = SQ.squeal; wg.connect(space.input);
@@ -398,7 +413,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { squeal: Number(val('squeal') ?? 1), mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { squeal: Number(val('squeal') ?? 1), real: flag('real') ? Number(val('real') || 1) : 0, mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

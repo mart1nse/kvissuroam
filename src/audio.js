@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createSquealer } from './audio-tyres.js';
+import { createSqueal, loadTyreWorklet, setSquealKind, squealKind } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -83,8 +83,10 @@ export function createAudio() {
     spinFilt = ctx.createBiquadFilter(); spinFilt.type = 'bandpass'; spinFilt.frequency.value = 800; spinFilt.Q.value = 6;
     spinGain = ctx.createGain(); spinGain.gain.value = 0;
     noise.connect(spinFilt).connect(spinGain).connect(bus);
-    // and over it the tyres sing: one long squeal that follows the wheel spin (src/audio-tyres.js)
-    squeal = createSquealer(ctx, noise, bus);
+    // and over it the tyres sing: one long squeal that follows the wheel spin (src/audio-tyres.js; V switches
+    // between the held note and the modelled squeal of public/tyre-worklet.js)
+    loadTyreWorklet(ctx, `${import.meta.env.BASE_URL}tyre-worklet.js`);
+    squeal = createSqueal(ctx, noise, bus);
     noise.start();
     noiseSrc = noise;
   }
@@ -318,7 +320,7 @@ export function createAudio() {
     spinS += ((dead || flying || car.surface !== 1 ? 0 : spinAmount(car)) - spinS) * 0.15;
     spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
     spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
-    // the squeal: one long note at the speed the tread slides over the road (wheel speed less ground speed)
+    // the squeal, at the speed the tread slides over the road (wheel speed less ground speed)
     squeal.step(t, spinS, car.slipV || 0, skid, v, car.spec.mass);
   }
 
@@ -348,7 +350,7 @@ export function createAudio() {
     v.spinFilt = ctx.createBiquadFilter(); v.spinFilt.type = 'bandpass'; v.spinFilt.frequency.value = 800; v.spinFilt.Q.value = 6;
     v.spinGain = ctx.createGain(); v.spinGain.gain.value = 0;
     noiseSrc.connect(v.spinFilt).connect(v.spinGain).connect(v.mix);
-    v.squeal = createSquealer(ctx, noiseSrc, v.mix, { voices: 1 });
+    v.squeal = createSqueal(ctx, noiseSrc, v.mix, { voices: 1 });
     voices.push(v);
     return v;
   }
@@ -538,6 +540,8 @@ export function createAudio() {
       if (master) master.gain.setTargetAtTime(muted || b ? 0 : 0.5, ctx.currentTime, 0.05);
     },
     get muted() { return muted; },
+    // the tyre squeal: 'note' (the held note) or 'real' (modelled, public/tyre-worklet.js)
+    setSquealKind, get squealKind() { return squealKind(); },
     // (for tests: which other cars have a voice, how far off they are and how loud)
     get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, node: v.out })); },
   };

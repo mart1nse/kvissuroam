@@ -1,7 +1,7 @@
 // Online race mode (Martin, 2026-11-21): one race at a time for everyone in the lobby.
 //
 // Anyone driving on the map can vote to START a race (key 1 or the button). When half of the drivers
-// have voted (both of two, one when alone) the race is on: five seconds of RACE STARTS IN, in which
+// have voted (both of two, one when alone; at most 5 to 8 with many on the map, see needStart) the race is on: five seconds of RACE STARTS IN, in which
 // anyone can join or leave, then ten seconds on the grid behind the line on Küüni, five red lights
 // one a second, and lights out after a short random hold. One lap from there; the first over the
 // line wins. While it runs only racers still in it can vote to RESTART (half of them plus one). Once
@@ -24,8 +24,14 @@ const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
 
-// votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one
-export const needStart = (n) => (n <= 1 ? 1 : Math.max(2, Math.ceil(n / 2)));
+// votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one.
+// With many on the map half was too many to get a race going (Martin 2026-11-23): never more than 5 up to
+// 15 drivers, 6 for 16 to 20, 7 for 21 to 25, 8 from 26. The restart vote keeps its half plus one.
+export const needStart = (n) => {
+  if (n <= 1) return 1;
+  const half = Math.max(2, Math.ceil(n / 2));
+  return Math.min(half, n <= 15 ? 5 : n <= 20 ? 6 : n <= 25 ? 7 : 8);
+};
 export const needRestart = (n) => Math.floor(n / 2) + 1;
 
 export class RaceDesk {

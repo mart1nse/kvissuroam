@@ -815,14 +815,19 @@ body.touch #rlist.live .hd { position: absolute; right: var(--lapr); top: max(6p
 body.touch #rlist.live .pos { font-size: 1.9em; }
 body.touch #rlist.live .rt { font-size: 1.3em; }
 body.touch #rlist.live .hd button { width: 1.8em; height: 1.8em; }
-body.touch #rlist.live .tb { position: absolute; right: max(18px, env(safe-area-inset-right)); width: min(230px, 2 * var(--padw) + clamp(10px, 2vw, 20px));
+body.touch #rlist.live .tb { position: absolute; right: max(18px, env(safe-area-inset-right)); width: var(--padw);   /* one pedal wide, right over it (Martin 23 Nov) */
   bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(96px, 34vh, 160px) + 6px);
-  max-height: max(40px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 8px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(96px, 34vh, 160px) - 6px);
+  --tbroom: max(40px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 8px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(96px, 34vh, 160px) - 6px);
+  max-height: var(--tbroom); max-height: calc(round(down, var(--tbroom) - 4px, 18px) + 4px);   /* whole rows only */
   box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 2px 4px; border-radius: 10px; background: rgba(18, 6, 43, .55);
   font-size: 10px; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .6) transparent; }
 body.touch #rlist.live .tb::-webkit-scrollbar { width: 3px; }
 body.touch #rlist.live .tb::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(47, 243, 255, .6); }
-body.touch #rlist.live td { padding: .2em .4em; }
+body.touch #rlist.live td { padding: 2px .25em; line-height: 13px; }   /* 18 px rows with the line between */
+/* phones (Martin 2026-11-23: simpler and narrower): place, name and gap only, the car and the word LEADER left out */
+body.touch #rlist.live td.c { display: none; }
+body.touch #rlist.live td.p { width: 1.3em; text-align: center; }
+body.touch #rlist.live td.n { max-width: 0; width: 100%; }
 /* the start lights take the middle for their few seconds: the standings wait (the lap timer already does) */
 body.touch.racegrid #rlist .tb { visibility: hidden; }
 /* the wide results list lies over the online list for its few seconds: that one steps aside meanwhile */
@@ -840,7 +845,8 @@ body.touch #rlights { top: 30%; font-size: 13px; }
   /* no room over the gas pedal under the race button: the standings go over the brake pedal (it stands lower) */
   body.touch #rlist.live .tb { right: calc(max(18px, env(safe-area-inset-right)) + var(--padw) + clamp(10px, 2vw, 20px));
     bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + 6px);
-    max-height: max(36px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 6px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(72px, 24vh, 118px) - 6px); }
+    --tbroom: max(36px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 6px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(72px, 24vh, 118px) - 6px);
+    max-height: var(--tbroom); max-height: calc(round(down, var(--tbroom) - 4px, 18px) + 4px); }
 }
 
 /* race vote marks in the player lists (Martin, 2026-11-23): a lit tick for voted, a faint ring for not yet;

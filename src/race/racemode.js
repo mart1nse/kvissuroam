@@ -190,7 +190,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (x.out) { x.gap = 'OUT'; x.where = OUT_TEXT[x.out] || 'out'; continue; }
       if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; continue; }
       x.where = x.p?.prog != null ? (x.p.prog < 0 ? 'START' : `${(x.p.prog / 1000).toFixed(1)} KM`) : '';
-      if (x === lead) { x.gap = 'LEADER'; continue; }
+      if (x === lead) { x.gap = isTouch ? '' : 'LEADER'; continue; }
       const k = x.p?.marks?.length - 1, lm = lead.p?.marks;
       // (never below zero: one who led at that mark and has just been passed is level, not -0.86 behind)
       x.gap = k > 0 && lm?.[k] != null && x.p.marks[k] != null ? `+${(Math.max(0, x.p.marks[k] - lm[k]) / 1000).toFixed(2)}` : '';

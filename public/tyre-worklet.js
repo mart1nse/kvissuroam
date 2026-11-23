@@ -31,14 +31,17 @@ const TAU = Math.PI * 2;
 
 class Bq {
   constructor() { this.b0 = 1; this.b1 = 0; this.b2 = 0; this.a1 = 0; this.a2 = 0; this.z1 = 0; this.z2 = 0; }
-  set(type, f, Q, sr) {
+  set(type, f, Q, sr, dB = 0) {
     const w = TAU * clamp(f, 10, sr * 0.45) / sr, c = Math.cos(w), s = Math.sin(w), al = s / (2 * Q);
-    let b0, b1, b2;
+    let b0, b1, b2, a0 = 1 + al, a2 = 1 - al;
     if (type === 'lp') { b0 = (1 - c) / 2; b1 = 1 - c; b2 = b0; }
     else if (type === 'hp') { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = b0; }
+    else if (type === 'pk') {                   // peaking, dB at f
+      const A = Math.pow(10, dB / 40);
+      b0 = 1 + al * A; b1 = -2 * c; b2 = 1 - al * A; a0 = 1 + al / A; a2 = 1 - al / A;
+    }
     else { b0 = al; b1 = 0; b2 = -al; }        // band-pass, 0 dB at the peak
-    const a0 = 1 + al;
-    this.b0 = b0 / a0; this.b1 = b1 / a0; this.b2 = b2 / a0; this.a1 = -2 * c / a0; this.a2 = (1 - al) / a0;
+    this.b0 = b0 / a0; this.b1 = b1 / a0; this.b2 = b2 / a0; this.a1 = -2 * c / a0; this.a2 = a2 / a0;
     return this;
   }
   run(x) {
@@ -178,10 +181,12 @@ const GROUND = {
   // stones a second at full spin; their sizes in mm (smallest, largest, and the slope of the sieve curve:
   // higher is more grit); the share that are clods of earth (soft: long contact, no crack); crackle grains a
   // second, crackle colour, spray band and loudness (sand roars more), the fine shower, and the whole (soft
-  // ground is quieter by nature, and was lost under the engine in a park: Martin 2026-11-23)
-  2: { stones: 70, dMin: 2, dMax: 30, slope: 2.6, clods: 0, grains: 2600, dig: 1900, digQ: 0.8, dull: 5200, spray: 900, sprayQ: 0.55, sprayG: 1, churn: 0.35, fine: 1, gain: 1 },
-  3: { stones: 28, dMin: 1.5, dMax: 16, slope: 2.9, clods: 0.35, grains: 1500, dig: 1100, digQ: 0.6, dull: 2400, spray: 420, sprayQ: 0.5, sprayG: 1.8, churn: 0.6, fine: 0.4, gain: 1.25 },
-  0: { stones: 16, dMin: 3, dMax: 25, slope: 2.4, clods: 0.85, grains: 900, dig: 800, digQ: 0.6, dull: 1800, spray: 520, sprayQ: 0.6, sprayG: 1.1, churn: 0.5, fine: 0.1, gain: 1.6 },
+  // ground is quieter by nature, and was lost under the engine in a park: Martin 2026-11-23), then the tone:
+  // dB more of the bottom mids (round 300 Hz) and where the top rolls off (Martin 2026-11-23: "add more
+  // bottom-mids to the gravel sounds and perhaps just a tad reduce the highs. Grass part does not need changing")
+  2: { stones: 70, dMin: 2, dMax: 30, slope: 2.6, clods: 0, grains: 2600, dig: 1900, digQ: 0.8, dull: 5200, spray: 900, sprayQ: 0.55, sprayG: 1, churn: 0.35, fine: 1, gain: 1, body: 5, top: 6000 },
+  3: { stones: 28, dMin: 1.5, dMax: 16, slope: 2.9, clods: 0.35, grains: 1500, dig: 1100, digQ: 0.6, dull: 2400, spray: 420, sprayQ: 0.5, sprayG: 1.8, churn: 0.6, fine: 0.4, gain: 1.25, body: 5, top: 6000 },
+  0: { stones: 16, dMin: 3, dMax: 25, slope: 2.4, clods: 0.85, grains: 900, dig: 800, digQ: 0.6, dull: 1800, spray: 520, sprayQ: 0.6, sprayG: 1.1, churn: 0.5, fine: 0.1, gain: 1.6, body: 0, top: 9000 },
 };
 
 export class GravelCore {
@@ -194,7 +199,7 @@ export class GravelCore {
     this.queue = [];                       // the grit that comes with a stone: [samples to wait, size mm]
     this.dig = new Bq(); this.dull = new Bq(); this.spray = new Bq(); this.sprayLp = new Bq();
     this.fine = ring(780, 0.004, sr); this.fine2 = ring(1350, 0.003, sr);
-    this.hp = new Bq().set('hp', 90, 0.6, sr); this.top = new Bq().set('lp', 9000, 0.7, sr);
+    this.hp = new Bq().set('hp', 90, 0.6, sr); this.top = new Bq().set('lp', 9000, 0.7, sr); this.body = new Bq();
     this.churn = 0; this.kChurn = 1 - Math.exp(-TAU * 7 / sr);
     this.scrab = 0; this.kScrab = 1 - Math.exp(-TAU * 18 / sr);
     this.env = 0; this.kAtt = 1 - Math.exp(-1 / (0.05 * sr)); this.kRel = 1 - Math.exp(-1 / (0.15 * sr));
@@ -254,6 +259,7 @@ export class GravelCore {
     if (target === 0 && this.env < 1e-5 && !this.hits.some((h) => h.left > 0)) { out.fill(0); this.env = 0; return; }
     if (G && p.ground !== this.ground) {
       this.ground = p.ground;
+      this.body.set('pk', 300, 0.7, sr, G.body); this.top.set('lp', G.top, 0.7, sr);
       this.dig.set('bp', G.dig, G.digQ, sr); this.dull.set('lp', G.dull, 0.7, sr);
       this.spray.set('bp', G.spray, G.sprayQ, sr); this.sprayLp.set('lp', G.spray * 3, 0.7, sr);
     }
@@ -305,7 +311,7 @@ export class GravelCore {
       const fine = (y1 + y2 * 0.7) * g.fine;
       const e = this.env;
       const M = this.mix;
-      out[i] = this.top.run(this.hp.run(st * M[0] * Math.min(1, 0.3 + e * 1.5) + (dig * M[1] + sp * M[2] * g.sprayG + fine * M[3]) * e)) * 0.5 * g.gain * p.level;
+      out[i] = this.top.run(this.body.run(this.hp.run(st * M[0] * Math.min(1, 0.3 + e * 1.5) + (dig * M[1] + sp * M[2] * g.sprayG + fine * M[3]) * e))) * 0.5 * g.gain * p.level;
     }
   }
 }

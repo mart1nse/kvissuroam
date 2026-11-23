@@ -70,6 +70,15 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const idle = (p) => p.w === 'garage' || p.w === 'watch';
   const nameOf = (id) => (id === mp.id ? 'YOU' : mp.nameOf(id) || '');
 
+  // "22B STI LAP RECORD 1:23.45" in the list, the time in its own colour; phones' rows are narrow, so
+  // there it goes on a line of its own under the name, "LAP RECORD 1:23.45" (the row shows the car
+  // already), and the time is not cut off (Martin, 2026-11-23)
+  const recTag = (r, tm) => {
+    const words = tm && r.endsWith(` ${tm}`) ? r.slice(0, -tm.length - 1) : r;
+    const i = words.lastIndexOf('LAP RECORD');
+    const car = i > 0 ? words.slice(0, i) : '';
+    return `<small class="rec">${car ? `<span class="rc">${escapeHtml(car)}</span>` : ''}${escapeHtml(words.slice(car.length))}${tm ? ` <b>${tm}</b>` : ''}</small>`;
+  };
   const elMe = box.querySelector('.me');
   let last = '', meLast = '';
   function refresh() {
@@ -77,10 +86,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
     const wn = mp.online ? mp.watchers() : 0;
-    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}${wn ? ` · ${wn} WATCHING` : ''}`;
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${wn ? ` · ${wn} WATCHING` : ''}`;
     const sp = watching();
     const vm = mp.online ? votes?.() : null;
-    const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}` : '';
+    const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}${myRec ? ` ${recTag(myRec, mp.recordTime(mp.name))}` : ''}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
     elMe.classList.toggle('back', !!sp);
     const drivers = mp.online ? mp.drivers() : [];
@@ -106,7 +115,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? `(watching${p.on && nameOf(p.on) ? ` ${escapeHtml(nameOf(p.on))}` : ''})` : '(garage)';
-      return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${r && !g ? ` <small class="rec">${r}</small>` : ''}</li>`;
+      return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : ''}</li>`;
     });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');

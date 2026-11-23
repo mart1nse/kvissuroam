@@ -48,6 +48,8 @@ import { ERM_CARS } from './erm.js';
 import { AOVERE_CARS } from './aovere.js';
 import { AOVERE2_CARS } from './aovere2.js';
 import { AOVERE3_CARS } from './aovere3.js';
+import { REHETARE_CARS } from './rehetare.js';
+import { RATTASEPA_CARS } from './rattasepa.js';
 import { VAKSALI_CARS } from './vaksali.js';
 import { LENNUAKADEEMIA_CARS } from './lennuakadeemia.js';
 import { ULENURME_KONSUM_CARS } from './ulenurmekonsum.js';
@@ -155,6 +157,8 @@ function allSpots() {
   AOVERE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ao${i}`, x, z, yaw, id, paint, lift }));
   AOVERE3_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ak${i}`, x, z, yaw, id, paint, lift }));
   AOVERE2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `aj${i}`, x, z, yaw, id, paint, lift }));
+  REHETARE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `rt${i}`, x, z, yaw, id, paint, lift }));
+  RATTASEPA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `rs${i}`, x, z, yaw, id, paint, lift }));
   VAKSALI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `vk${i}`, x, z, yaw, id, paint, lift }));
   LENNUAKADEEMIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `la${i}`, x, z, yaw, id, paint, lift }));
   ULENURME_KONSUM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `uk${i}`, x, z, yaw, id, paint, lift }));

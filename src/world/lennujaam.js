@@ -1,7 +1,7 @@
 // Kaardista "Tartu Airport at Ülenurme" (Martin, 22 Nov), batch 1: the airport, from his Street View shots of
 // June 2023 and the Land Board's oblique air photos (May 2023, April 2024).
-//  - the runway 08/26 (1800 x 31 m; the map cuts off its west end, about 1600 m are in): grey asphalt with
-//    the white edge lines, the centre line, the threshold bars, the 26, the touchdown and aiming marks at both
+//  - the runway 08/26 (1800 x 31 m, all of it in the map since the 23 Nov extension): grey asphalt with
+//    the white edge lines, the centre line, the threshold bars, the 08 and the 26, the touchdown and aiming marks at both
 //    ends, edge lights every 60 m, the green threshold lights, the PAPI boxes, a windsock. The ground under it
 //    was already smooth (bumps under 4 cm), so nothing there changes for the car: it is a place for fast runs;
 //  - the terminal (Lennu 44): the dark glass hall with LENNUJAAM on its roof, the entrance canopy with the
@@ -153,7 +153,7 @@ const PAINT = { term, termw: term, vest, hangar, lhall, garage };
 // s along the runway from the west threshold to the east, v across it (+ = south)
 const RW = frame([-1231.9, 11083.2], [558.3 + 1231.9, 10962.2 - 11083.2]);
 const RL = 1794.3, RH = 15.5;
-const S_IN = 196;                     // the map's edge crosses the runway's middle here
+const S_IN = 0;                       // (196 while the map's edge crossed the runway, before 23 Nov)
 // draped strips: quads s0..s1 x v0..v1 cut every ds and dv metres, onto the ground
 function strip(out, s0, s1, v0, v1, ds, dv, lift, h, uv = null) {
   const V0 = typeof v0 === 'function' ? v0 : () => v0, V1 = typeof v1 === 'function' ? v1 : () => v1;      // (either side may follow s)
@@ -174,6 +174,17 @@ function mesh(out, mat) {
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   const m = new THREE.Mesh(g, mat); m.receiveShadow = true;
   return m;
+}
+// the two figures of a runway end, 9 m tall, each squeezed into its own half (a bold Arial figure is as wide
+// as it is tall here, and two of them did not fit the 9.2 m: the outer sides were cut off)
+function runwayFigures(P, str) {
+  const c = P.c, k = P.ppm;
+  c.fillStyle = '#e9e9e4'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = `700 ${Math.round(12.2 * k)}px "Arial Narrow", Arial, sans-serif`;
+  for (let i = 0; i < 2; i++) {
+    const w = c.measureText(str[i]).width, sx = Math.min(1, (3.9 * k) / w);
+    c.save(); c.translate((i ? 6.9 : 2.3) * k, 4.75 * k); c.scale(sx, 1); c.fillText(str[i], 0, 0); c.restore();
+  }
 }
 let RTEX = null;
 function runwayTex() {
@@ -213,7 +224,7 @@ export function createLennujaam(scene, world, { shadows = true } = {}) {
 
   // ---- the runway, in two halves, each when its ground is in
   function* runway(sa, sb, tag) {
-    const surf = { pos: [], uv: [] }, white = { pos: [], uv: [] }, nums = { pos: [], uv: [] };
+    const surf = { pos: [], uv: [] }, white = { pos: [], uv: [] }, nums = { pos: [], uv: [] }, nums08 = { pos: [], uv: [] };
     // (the 4 m cut along it follows the 2 m ground closely enough: the ground there bends by 2 cm at most)
     for (let s = sa; s < sb; s += 100) { strip(surf, s, Math.min(sb, s + 100), -RH, RH, 4, RH / 3, 0.05, h, (S, V) => [V / 16, S / 16]); if (jobs.late()) yield; }
     if (sb >= RL) {                                                    // the turning bay on the north side of the east end, and the end strip
@@ -226,7 +237,7 @@ export function createLennujaam(scene, world, { shadows = true } = {}) {
     W(sa, sb, -RH, -RH + 0.9); W(sa, sb, RH - 0.9, RH);
     // the centre line: 30 m stripes, 20 m gaps, from past the numbers at one end to the numbers at the other
     for (let s = 62; s + 30 < RL - 62; s += 50) W(s, s + 30, -0.45, 0.45);
-    // both ends: the threshold bars, aiming points and touchdown marks (the west end's bars and 08 are off the map)
+    // both ends: the threshold bars, aiming points and touchdown marks
     for (const [dir, s0] of [[1, 0], [-1, RL]]) {
       const S = (d0, d1) => (dir > 0 ? [s0 + d0, s0 + d1] : [s0 - d1, s0 - d0]);
       for (const v of [2.7, 6.3, 9.9, 13.5]) for (const k of [-1, 1]) W(...S(1.5, 31.5), k * v - 0.9, k * v + 0.9);
@@ -241,13 +252,24 @@ export function createLennujaam(scene, world, { shadows = true } = {}) {
       const pt = ([s, v]) => { const [x, z] = RW.at(s, v); return [x, h(x, z) + 0.075, z]; };
       for (const k of [0, 2, 1, 1, 2, 3]) { nums.pos.push(...pt(corners[k])); nums.uv.push(1 - corners[k][2], corners[k][3]); }
     }
+    // the 08 at the west end, read by a plane landing eastward: its foot to the west threshold
+    if (sa < 60) {
+      const s0 = 36.5, s1 = 46.5;
+      const corners = [[s0, -4.6, 0, 1], [s1, -4.6, 0, 0], [s0, 4.6, 1, 1], [s1, 4.6, 1, 0]];
+      const pt = ([s, v]) => { const [x, z] = RW.at(s, v); return [x, h(x, z) + 0.075, z]; };
+      for (const k of [0, 2, 1, 1, 2, 3]) { nums08.pos.push(...pt(corners[k])); nums08.uv.push(corners[k][2], corners[k][3]); }
+    }
     const asphalt = new THREE.MeshLambertMaterial({ map: runwayTex(), polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     group.add(mesh(surf, asphalt));
     yield;
     group.add(mesh(white, new THREE.MeshLambertMaterial({ color: 0xe9e9e4, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })));
     if (nums.pos.length) {
-      const tex = paintTexture(9.2, 0, 9.5, 14, (P) => P.text('26', 4.6, 4.75, 12.2, '#e9e9e4', '700 %px "Arial Narrow", Arial, sans-serif'), { alpha: true });
+      const tex = paintTexture(9.2, 0, 9.5, 14, (P) => runwayFigures(P, '26'), { alpha: true });
       group.add(mesh(nums, new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })));
+    }
+    if (nums08.pos.length) {
+      const tex = paintTexture(9.2, 0, 9.5, 14, (P) => runwayFigures(P, '08'), { alpha: true });
+      group.add(mesh(nums08, new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })));
     }
     yield;
     // lights: white edge lights every 60 m, green ones across the east threshold, the PAPI at both aiming points

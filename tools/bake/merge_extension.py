@@ -10,7 +10,9 @@ everything keyed to them (walls.json, signs.json) stay as they were.
 meta.json gets the new sectors, the new boundary and a taller coarse grid (the rows the extension
 added at the north are prepended to coarse.bin); vectors.json gets the roads, areas, walls, decks and
 water of the extension that it did not already have.
-Used for the northern extension to Äksi and Kukulinna (2026-11-17).
+Used for the northern extension to Äksi and Kukulinna (2026-11-17) and the southern one round the
+airport (2026-11-23). Lines and shapes that lie wholly within 150 m of the old edge were in the old
+bake already (it keeps everything near its boundary), so a changed copy of them is not added twice.
 """
 import gzip
 import json
@@ -63,22 +65,33 @@ if add > 0:
     mo['coarse'] = dict(co, z0=cn['z0'], nz=co['nz'] + add)
 
 # ---- meta
+mo_boundary_old = mo['boundary']
 have = {(s[0], s[1]) for s in mo['sector']['list']}
 mo['sector']['list'] += [s for s in mn['sector']['list'] if (s[0], s[1]) not in have]
 mo['boundary'] = mn['boundary']
 json.dump(mo, open(f'{OUT}/meta.json', 'w'), ensure_ascii=False)
 
 # ---- vectors
+from shapely.geometry import Point, Polygon
+old_near = Polygon(mo_boundary_old).buffer(150)
+
+
+def baked_before(r):
+    pts = r['pts'] if isinstance(r, dict) and 'pts' in r else r['outer'] if isinstance(r, dict) else r
+    return all(old_near.contains(Point(p[:2])) for p in pts)
+
+
 vo = json.load(open(f'{OUT}/vectors.json'))
 vn = json.load(open(f'{NEW}/vectors.json'))
 key = lambda r: json.dumps(r, sort_keys=True)
 for k in ('roads', 'areas', 'walls', 'decks'):
     seen = {key(r.get('pts', r.get('outer')) if isinstance(r, dict) else r) for r in vo[k]}
-    add_k = [r for r in vn[k] if key(r.get('pts', r.get('outer')) if isinstance(r, dict) else r) not in seen]
+    add_k = [r for r in vn[k] if key(r.get('pts', r.get('outer')) if isinstance(r, dict) else r) not in seen and not baked_before(r)]
     vo[k] += add_k
     print(k, 'added', len(add_k))
 seen = {key(w['polys']) for w in vo['water']}
-add_w = [w for w in vn['water'] if not w['river'] and w['polys'] and key(w['polys']) not in seen]
+add_w = [w for w in vn['water'] if not w['river'] and w['polys'] and key(w['polys']) not in seen
+         and not all(baked_before(q) for q in w['polys'])]
 vo['water'] += add_w
 print('water added', len(add_w))
 json.dump(vo, open(f'{OUT}/vectors.json', 'w'), ensure_ascii=False, separators=(',', ':'))

@@ -111,8 +111,9 @@ attribute vec4 look;
 varying vec2 vUv;
 varying vec4 vTint;
 varying vec4 vLook;
+varying vec3 vW;
 void main() {
-  vUv = uv; vTint = tint; vLook = look;
+  vUv = uv; vTint = tint; vLook = look; vW = position;
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
   #include <fog_vertex>
   vec3 ray = normalize(mvPosition.xyz);
@@ -124,9 +125,11 @@ const FRAG = /* glsl */ `
 #include <common>
 #include <fog_pars_fragment>
 uniform sampler2D map;
+uniform float grassB;
 varying vec2 vUv;
 varying vec4 vTint;
 varying vec4 vLook;
+varying vec3 vW;
 float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 float n1(float x) { float i = floor(x), f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
 void main() {
@@ -148,7 +151,49 @@ void main() {
     f -= vLook.x * (one - mix(one, tint, a * sk.r * joint * stone));
   }
   // turf
-  if (vLook.y > 0.001) {
+  if (vLook.y > 0.001 && grassB > 0.5) {
+    // grass B (Martin 23 Nov 2026, to compare): mostly grass laid flat, which shows by its sheen rather than as a
+    // rut. Blades combed over the way the tyre went are lighter seen along that way and darker seen against it (as
+    // mown stripes in a lawn), so a slide reads pale from behind and a donut shows light and dark arcs. Only a hard
+    // slide or wheelspin tears the turf, in chunks, not one ribbon: dark wet soil with the tread printed in it and
+    // clods thrown out beside it.
+    float d = clamp(a / 0.9, 0.0, 1.0);
+    float x = abs(vUv.x - 0.5) * 2.0;
+    float side = step(0.5, vUv.x);
+    // the way the tyre went: how far along the mark changes across the screen, turned into metres on the ground
+    vec2 px = dFdx(vW.xz), py = dFdy(vW.xz);
+    float vx = dFdx(vUv.y), vy = dFdy(vUv.y), det = px.x * py.y - px.y * py.x;
+    vec2 g = vec2(py.y * vx - px.y * vy, px.x * vy - py.x * vx) * sign(det);
+    vec2 dir = g / max(length(g), 1e-6);
+    vec2 eye = vW.xz - cameraPosition.xz;
+    float sh = dot(eye / max(length(eye), 1e-3), dir) * step(1e-6, length(g));
+    float wob = (n1(vUv.y * 7.0 + side * 17.0) - 0.5) * 0.12 + (n1(vUv.y * 40.0 + side * 5.0) - 0.5) * 0.05;
+    float band = 1.0 - smoothstep(0.5, 0.64, x + wob);
+    float line = floor(vUv.x * 46.0);
+    float comb = 0.6 + 0.6 * h1(line + 1.0) * (0.6 + 0.4 * n1(vUv.y * 21.0 + line * 3.7));
+    float press = clamp(band * comb * (0.3 + 0.7 * smoothstep(0.0, 0.55, d)), 0.0, 1.0);
+    vec3 fP = (one + sh * vec3(0.28, 0.27, 0.32)) * vec3(0.95, 0.97, 0.9);
+    vec3 fT = mix(one, fP, press);
+    // torn turf in chunks along the way, wider the harder the slide
+    float chunk = 0.6 * n1(vUv.y * 3.3 + side * 3.0 + 11.0) + 0.4 * n1(vUv.y * 13.0 + side * 9.0);
+    float tearW = 0.4 * smoothstep(0.8, 1.1, d * (0.4 + 0.9 * chunk));
+    float rag = (sk.g - 0.5) * 0.24 + wob;
+    float soil = (1.0 - smoothstep(tearW - 0.12, tearW, x + rag)) * step(0.03, tearW);
+    float rim = exp(-pow((x + rag - tearW - 0.05) / 0.06, 2.0)) * step(0.03, tearW);
+    float t = fract(vUv.y * 30.0 + x * 0.8);
+    float lug = smoothstep(0.4, 0.55, t) * smoothstep(0.95, 0.8, t);
+    vec3 wet = tint * (0.72 + 0.5 * sk.g) * (0.86 + 0.24 * lug);
+    fT = mix(fT * (1.0 - 0.18 * rim), wet, soil);
+    // clods: bits of soil and turf thrown out, more and further the harder the slide
+    vec2 cg = vec2(vUv.x * 6.0, vUv.y * 14.0), ci = floor(cg), cf = fract(cg) - 0.5;
+    float ha = fract(sin(dot(ci, vec2(41.3, 289.1))) * 43758.5453), hb = fract(sin(dot(ci, vec2(17.7, 113.9))) * 23421.631);
+    float p = 0.3 * smoothstep(0.6, 1.0, d) * smoothstep(0.25, 0.75, x) * smoothstep(0.3, 0.7, chunk);
+    vec2 cq = (cf - (vec2(ha, hb) - 0.5) * 0.5) * vec2(7.0, 10.0);
+    float r = 1.5 + 2.5 * fract(ha * 7.13);
+    float clod = (1.0 - smoothstep(r * 0.55, r, length(cq))) * step(hb, p);
+    fT = mix(fT, tint * (fract(hb * 13.7) > 0.4 ? 0.85 : 1.25) * (0.85 + 0.4 * sk.g), clod * (1.0 - soil) * (0.6 + 0.4 * fract(ha * 3.1)));
+    f -= vLook.y * (one - fT);
+  } else if (vLook.y > 0.001) {
     float d = clamp(a / 0.9, 0.0, 1.0);
     float x = abs(vUv.x - 0.5) * 2.0;                              // 0 in the middle, 1 at the edge
     float side = step(0.5, vUv.x);
@@ -198,7 +243,7 @@ export function createSkidMarks(world) {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG, fog: true,
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null }, grassB: { value: 0 } }]),
     transparent: true, depthWrite: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
     blendSrc: THREE.DstColorFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -338,5 +383,8 @@ export function createSkidMarks(world) {
     }
   }
 
-  return { mesh, update: (car) => update(car), updateOthers, get count() { return next; }, lookAt };
+    // grass marks A (torn soil ruts, #513) or B (grass laid flat with its sheen, turf torn in chunks): both are in the
+  // one shader, so switching costs nothing and changes the marks already laid too
+  const setGrass = (k) => { mat.uniforms.grassB.value = k === 'b' ? 1 : 0; };
+  return { mesh, update: (car) => update(car), updateOthers, get count() { return next; }, lookAt, setGrass, get grass() { return mat.uniforms.grassB.value ? 'b' : 'a'; } };
 }

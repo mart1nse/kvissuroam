@@ -55,6 +55,7 @@ export const HAND_PLACES = [
   { name: 'Aovere: Alrey farm on road 43', x: 6195, z: -5220, r: 60 },
   { name: 'Aovere: the farm on Kiigi tee', x: 6935, z: -4645, r: 70 },
   { name: 'Aovere: the farm at the end of Aasa tee', x: 6850, z: -5095, r: 70 },
+  { name: 'Aovere: Tõumesila bee farm, Kiigi tee', x: 7290, z: -4765, r: 75 },
 ];
 
 // segments of the road centre lines in a coarse grid

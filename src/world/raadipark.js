@@ -8,7 +8,8 @@
 //    world.addTrees, so they are ordinary map trees (levels of detail, trunks solid).
 //  - stones: the boulder field west of the middle pond, the boulders along the ponds and the ones beside the
 //    paths, each [x, z, radius]. One InstancedMesh of one rock shape, turned, squashed and tinted per stone; a
-//    stone is set on the ground when the ground under it has loaded. Stones of 0.4 m and up are solid; none
+//    stone is set on the ground when the ground under it has loaded, and from then the cars feel its shape
+//    (world.addStones, src/cars/stones.js): wheels ride up it, the floor and the bumpers meet it; none
 //    reaches nearer than 0.3 m to the stage's gravel.
 // Round the south loop (the pond in the wood) the photo is harder to read (sunlit leaves, a rough mound): there
 // only the stones in the open are taken, and three boulders at the path corners set by hand.
@@ -39,7 +40,7 @@ function rockGeometry(lite) {
 
 export function createRaadiPark(scene, world, { lite = false } = {}) {
   const S = PARK.stones, n = S.length;
-  let mesh = null, todo = null, solid = false, wait = 0;
+  let mesh = null, todo = null, wait = 0;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
   const rnd = (k, j) => { const v = Math.sin(k * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
   return {
@@ -63,21 +64,22 @@ export function createRaadiPark(scene, world, { lite = false } = {}) {
         scene.add(mesh);
         todo = S.map((_, k) => k);
       }
-      if (!solid) {
-        solid = true;
-        world.addSolids(S.filter((t) => t[2] >= 0.4).map(([x, z, r]) => ({ x, z, yaw: 0, hx: r * 0.72, hz: r * 0.72 })));
-      }
       if (!todo.length || (wait > 0 && wait--)) return;
       // a few each frame, where the ground has loaded
       let set = 0;
+      const felt = [];
       for (let i = todo.length - 1; i >= 0 && set < 48; i--) {
         const k = todo[i], [x, z, r] = S[k];
         if (!world.ready(x, z)) continue;
         todo.splice(i, 1); set++;
         q.setFromEuler(e.set((rnd(k, 3) - 0.5) * 0.5, rnd(k, 4) * Math.PI * 2, (rnd(k, 5) - 0.5) * 0.5));
-        const tall = 0.6 + 0.35 * rnd(k, 6);
-        mesh.setMatrixAt(k, m4.compose(p.set(x, world.heightAt(x, z) + r * tall * 0.3, z), q, s.set(r * (1 + 0.25 * rnd(k, 7)), r * tall, r * (0.85 + 0.25 * rnd(k, 8)))));
+        const tall = 0.6 + 0.35 * rnd(k, 6), gy = world.heightAt(x, z), yaw = rnd(k, 4) * Math.PI * 2;
+        s.set(r * (1 + 0.25 * rnd(k, 7)), r * tall, r * (0.85 + 0.25 * rnd(k, 8)));
+        mesh.setMatrixAt(k, m4.compose(p.set(x, gy + r * tall * 0.3, z), q, s));
+        // (what the cars feel: the same shape as a dome, a little inside the drawn one's corners)
+        felt.push({ x, z, a: s.x * 0.95, b: s.z * 0.95, cs: Math.cos(yaw), sn: Math.sin(yaw), h: r * tall, gy });
       }
+      if (felt.length) world.addStones(felt);
       if (set) mesh.instanceMatrix.needsUpdate = true; else wait = 20;
     },
   };

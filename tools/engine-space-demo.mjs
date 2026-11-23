@@ -27,9 +27,8 @@
 //   --burnout: brake and throttle together at a standstill (a standing burnout), a lift, then a donut.
 //   --tyres[=<spin level>]: the tyre sounds as audio.js plays them (scrub and wheelspin howl, into the car
 //   bus); the level is the wheelspin gain at full spin (default the game's SPIN_LEVEL, 0.05 before 21 Nov).
-//   With them come the squeal and the squeaks of src/audio-tyres.js; --squeal=<x> and --squeak=<x> scale
-//   them (0: none, for a "before" clip),
-//   --seed=<n> gives another run of them, --mass=<kg> sings as a car of that weight.
+//   With them comes the squeal of src/audio-tyres.js; --squeal=<x> scales it (0: none, for a "before" clip),
+//   --mass=<kg> sings as a car of that weight.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gunzipSync } from 'node:zlib';
@@ -334,18 +333,6 @@ for (const id of ids) {
         }
         log.push(`squeal: ${row.join(', ')}`);
       }
-      if (SQ.k > 0) {
-        // and the squeaks, stepped at the game's 60 Hz with a seeded dice so a clip can be made again
-        const { createSqueaker } = await import('/src/audio-tyres.js');
-        let seed = SQ.seed;
-        const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-        const qg = ctx.createGain(); qg.gain.value = SQ.k; qg.connect(space.input);
-        const sq = createSqueaker(ctx, ns, qg, { rnd }), list = sq.keep();
-        for (let k = 0; k < TY.length; k += 10) sq.step(TY[k], TY[k + 5], TY[k + 6], TY[k + 7], SQ.mass);
-        const row = [];
-        for (let k = 0; k < list.length; k += 5) row.push(`${list[k].toFixed(1)}s ${'LMH'[list[k + 1]]}${list[k + 2].toFixed(0)}Hz ${(list[k + 3] * 1000).toFixed(0)}ms`);
-        log.push(`squeaks (${sq.count()}): ${row.join(', ')}`);
-      }
     }
     if (TB) {
       // the turbo sounds straight into the car bus, as in audio.js
@@ -411,7 +398,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { k: Number(val('squeak') ?? 1), squeal: Number(val('squeal') ?? 1), seed: Number(val('seed') || 20261123), mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { squeal: Number(val('squeal') ?? 1), mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

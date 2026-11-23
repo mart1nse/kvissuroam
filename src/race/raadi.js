@@ -29,6 +29,7 @@ import { createStartKit } from './startkit.js';
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
+const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
 // Appendix VII has the unit red from 30 s to go, yellow and counting for the last 5 s, green at zero. Here the
 // count is short so that a new try does not wait: "shorten the 5 sec countdown to 3 sec and let it be yellow
@@ -764,6 +765,10 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
       // a jump (map, H, R): the run ends
       if (st.prev && Math.hypot(x - st.prev.x, z - st.prev.z) > 40 && (st.phase === 'run' || st.phase === 'count')) cancel('STAGE CANCELLED');
       if (st.cool && dStart > 60) st.cool = false;
+      // gone from the park after a run (the garage's or the button's Toomemägi, the map, or driven off): the
+      // stage's time comes down. (Martin 23 Nov: "finished raadi, then from the garage chose toomemäe, and the
+      // raadi number stayed up", over the lap's clock.)
+      if (st.phase === 'done' && dMid > GONE_R) { st.phase = 'idle'; st.doneT = null; elMsg.textContent = ''; hideAgain(); }
 
       if (st.phase === 'idle' || st.phase === 'done') {
         // up to the start: onto the line

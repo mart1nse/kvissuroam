@@ -27,7 +27,8 @@
 //   --burnout: brake and throttle together at a standstill (a standing burnout), a lift, then a donut.
 //   --tyres[=<spin level>]: the tyre sounds as audio.js plays them (scrub and wheelspin howl, into the car
 //   bus); the level is the wheelspin gain at full spin (default the game's SPIN_LEVEL, 0.05 before 21 Nov).
-//   With them come the squeaks of src/audio-tyres.js; --squeak=<x> scales them (0: none, the "before" clip),
+//   With them come the squeal and the squeaks of src/audio-tyres.js; --squeal=<x> and --squeak=<x> scale
+//   them (0: none, for a "before" clip),
 //   --seed=<n> gives another run of them, --mass=<kg> sings as a car of that weight.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -237,7 +238,7 @@ for (const id of ids) {
         const k = Math.max(car.skidF || 0, car.skidR || 0);
         skid += (k - skid) * 0.2;
         spinS += (spinAmount(car) - spinS) * 0.15;
-        TY.push(t, 1050 + Math.min(v, 35) * 16, Math.max(0, skid - 0.15) * 0.07, 680 + 420 * spinS, spinS * TYRES, spinS, skid, v);
+        TY.push(t, 1050 + Math.min(v, 35) * 16, Math.max(0, skid - 0.15) * 0.07, 680 + 420 * spinS, spinS * TYRES, spinS, skid, v, car.slipV || 0, car.gear || 0);
       }
       const p = along(dist + 2);
       if (camYaw === null) camYaw = p.yaw;
@@ -262,7 +263,7 @@ for (const id of ids) {
   }
   // the obstacle field round the route, as a raster for the browser
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-  for (let k = 0; k < poses.length; k += 8) { x0 = Math.min(x0, poses[k]); x1 = Math.max(x1, poses[k]); z0 = Math.min(z0, poses[k + 1]); z1 = Math.max(z1, poses[k + 1]); }
+  for (let k = 0; k < poses.length; k += 10) { x0 = Math.min(x0, poses[k]); x1 = Math.max(x1, poses[k]); z0 = Math.min(z0, poses[k + 1]); z1 = Math.max(z1, poses[k + 1]); }
   x0 -= 60; z0 -= 60; x1 += 60; z1 += 60;
   const nx = Math.ceil((x1 - x0) / 0.5) + 1, nz = Math.ceil((z1 - z0) / 0.5) + 1, grid = new Float32Array(nx * nz);
   for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) grid[r * nx + c] = sdfAt(x0 + c * 0.5, z0 + r * 0.5);
@@ -276,7 +277,7 @@ for (const id of ids) {
   if (gLog.length) console.log(`  gears: ${gLog.join(', ')}`);
   if (TY.length) {
     let pk = 0, on = 0;
-    for (let k = 0; k < TY.length; k += 8) { pk = Math.max(pk, TY[k + 4]); if (TY[k + 4] > TYRES * 0.5) on++; }
+    for (let k = 0; k < TY.length; k += 10) { pk = Math.max(pk, TY[k + 4]); if (TY[k + 4] > TYRES * 0.5) on++; }
     console.log(`  wheelspin: peak gain ${pk.toFixed(3)}, over half for ${(on / FPS).toFixed(1)} s`);
   }
   const stats = await page.evaluate(async ({ SR, T, FPS, x0, z0, nx, nz, MIX, TB, SEV, SP, RM, TY, SQ }) => {
@@ -318,9 +319,20 @@ for (const id of ids) {
       const sf = band(1300, 5), sg = ctx.createGain(), pf = band(800, 6), pg = ctx.createGain();
       sg.gain.value = pg.gain.value = 0;
       ns.connect(sf).connect(sg).connect(space.input); ns.connect(pf).connect(pg).connect(space.input);
-      for (let k = 0; k < TY.length; k += 8) {
+      for (let k = 0; k < TY.length; k += 10) {
         sf.frequency.setTargetAtTime(TY[k + 1], TY[k], 0.08); sg.gain.setTargetAtTime(TY[k + 2], TY[k], 0.07);
         pf.frequency.setTargetAtTime(TY[k + 3], TY[k], 0.1); pg.gain.setTargetAtTime(TY[k + 4], TY[k], 0.08);
+      }
+      if (SQ.squeal > 0) {
+        // the squeal: one long note at the speed the tread slides at (src/audio-tyres.js)
+        const { createSquealer } = await import('/src/audio-tyres.js');
+        const wg = ctx.createGain(); wg.gain.value = SQ.squeal; wg.connect(space.input);
+        const sq = createSquealer(ctx, ns, wg), row = [];
+        for (let k = 0; k < TY.length; k += 10) {
+          sq.step(TY[k], TY[k + 5], TY[k + 8], TY[k + 6], TY[k + 7], SQ.mass);
+          if ((k / 10) % 60 === 30) row.push(`${TY[k].toFixed(0)}s g${TY[k + 9]} ${(TY[k + 7] * 3.6).toFixed(0)}km/h slip ${(TY[k + 8] * 3.6).toFixed(0)}: ${sq.level() > 0 ? sq.pitch().toFixed(0) + 'Hz' : '-'}`);
+        }
+        log.push(`squeal: ${row.join(', ')}`);
       }
       if (SQ.k > 0) {
         // and the squeaks, stepped at the game's 60 Hz with a seeded dice so a clip can be made again
@@ -329,7 +341,7 @@ for (const id of ids) {
         const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
         const qg = ctx.createGain(); qg.gain.value = SQ.k; qg.connect(space.input);
         const sq = createSqueaker(ctx, ns, qg, { rnd }), list = sq.keep();
-        for (let k = 0; k < TY.length; k += 8) sq.step(TY[k], TY[k + 5], TY[k + 6], TY[k + 7], SQ.mass);
+        for (let k = 0; k < TY.length; k += 10) sq.step(TY[k], TY[k + 5], TY[k + 6], TY[k + 7], SQ.mass);
         const row = [];
         for (let k = 0; k < list.length; k += 5) row.push(`${list[k].toFixed(1)}s ${'LMH'[list[k + 1]]}${list[k + 2].toFixed(0)}Hz ${(list[k + 3] * 1000).toFixed(0)}ms`);
         log.push(`squeaks (${sq.count()}): ${row.join(', ')}`);
@@ -399,7 +411,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { k: Number(val('squeak') ?? 1), seed: Number(val('seed') || 20261123), mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { k: Number(val('squeak') ?? 1), squeal: Number(val('squeal') ?? 1), seed: Number(val('seed') || 20261123), mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

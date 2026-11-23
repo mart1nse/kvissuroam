@@ -1,7 +1,7 @@
 // Spectator mode with two browsers in the same lobby (src/spectate.js). Needs the game and its server on
 // :8787 (npx wrangler dev --port 8787) and Playwright. Usage: node tools/spectate-test.mjs [picture dir]
 // A (desktop) clicks B in the online list: the camera must follow B's car across the map, A's own car stays
-// put and stops sending, B's list shows A as "(watching)" (not whom) and B's own line "BEING WATCHED · 1"; then B goes to the
+// put and stops sending, B's list shows A as "(watching)" (not whom) and everyone sees "WATCHED · 1" by B's name; then B goes to the
 // garage and comes back, Esc returns A, and a click on B's arrow on the minimap watches again.
 import { createRequire } from 'module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -55,7 +55,8 @@ ok(dist(a.cam, bpos) < 40, `A's camera follows B (${dist(a.cam, bpos).toFixed(0)
 ok(dist(a.car, [P[100][0], P[100][1]]) < 3 && +a.speed < 0.1, "A's own car parked where it was");
 const b = await state(B);
 console.log('B', JSON.stringify(b));
-ok(/BEING WATCHED · 1/.test(b.me), 'B sees BEING WATCHED · 1');
+ok(/WATCHED · 1/.test(b.me), 'B sees WATCHED · 1 on its own line');
+ok(a.list.some((l) => /Driver.*WATCHED · 1/.test(l)), "A's list shows Driver WATCHED · 1 (everyone sees the count)");
 ok(b.list.some((l) => /\(watching\)/.test(l)) && !b.list.some((l) => /watching (YOU|Driver)/i.test(l)), "B's list shows A watching, not whom (anonymous)");
 ok(/· WATCHING/.test(a.me), "A's own line says WATCHING");
 await shot(A, 'spectate-a.png');

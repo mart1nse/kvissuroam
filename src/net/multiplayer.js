@@ -116,6 +116,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
   const mine = new Set();
+  let myWn = 0;                  // spectators watching our car (the server's count)
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
@@ -227,7 +228,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.textContent = p.name;
     el.style.display = 'none';
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', on: typeof p.on === 'string' ? p.on : '' };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0 };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -271,7 +272,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (on && tf !== o.tf) { o.tf = tf; o.el.style.transform = tf; }
   }
   // somebody is watching our car as a spectator (src/spectate.js)
-  function watchedNow() { if (myId) for (const o of others.values()) if (o.w === 'watch' && o.on === myId) return true; return false; }
+  // (the server tells everyone each player's spectator count, never who watches whom)
+  function watchedNow() { return myWn > 0; }
   function drop(id) {
     const o = others.get(id);
     if (!o) return;
@@ -293,6 +295,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'welcome':
         myId = m.id;
+        myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
         // the lap ticket: proof of when this browser came online, sent along with every lap (see
         // "Lap tickets" in worker/index.js); kept across reconnects
@@ -327,7 +330,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
-        if (o) { o.w = typeof m.w === 'string' ? m.w : ''; o.on = typeof m.on === 'string' ? m.on : ''; }
+        if (o) o.w = typeof m.w === 'string' ? m.w : '';
+        break;
+      }
+      case 'wn': {          // how many spectators watch a player (us too)
+        const n = Number.isInteger(m.n) && m.n >= 0 ? Math.min(m.n, 999) : 0;
+        if (m.id === myId) myWn = n;
+        else { const o = others.get(m.id); if (o) o.wn = n; }
         break;
       }
       case 'clock': {
@@ -637,12 +646,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
@@ -664,7 +673,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     remote(id) { return others.get(id) || null; },
     // somebody is watching our car as a spectator
     get watched() { return watchedNow(); },
-    watchers() { let n = 0; for (const o of others.values()) if (o.w === 'watch' && o.on === myId && myId) n++; return n; },
+    watchers() { return myWn; },
     lastLap(n) { const l = lastLaps.get(n); return l && Date.now() - l.t < 10 * 60000 ? l : null; },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race

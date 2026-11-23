@@ -122,17 +122,107 @@ void main() {
   gl_Position = projectionMatrix * mvPosition;
 }`;
 const FRAG = /* glsl */ `
+#define TILE ${TILE.toFixed(2)}
 #include <common>
 #include <fog_pars_fragment>
 uniform sampler2D map;
-uniform float grassB;
+uniform float grassMode;
+uniform vec3 sunDir;
 varying vec2 vUv;
 varying vec4 vTint;
 varying vec4 vLook;
 varying vec3 vW;
 float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 float n1(float x) { float i = floor(x), f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
+// C (Martin 23 Nov 2026, "something very real"): the mark as a shape in the ground, lit by the sun. The height
+// across and along the mark (metres): a trough as wide as the tyre, the ground it pushed aside heaped beside it, and
+// the tread pressed into the bottom: blocks when the tyre rolls, combed lines when it slides.
+// q: x across the mark (-1 to 1), y along it in metres; D: depth; tH: half the tyre's share of the mark's width.
+float rutH(vec2 q, float D, float tH, float smear, float wv) {
+  float ax = abs(q.x), side = step(0.0, q.x);
+  float e = ax + ((n1(q.y * 5.0 + side * 17.0) - 0.5) * 0.08 + (n1(q.y * 23.0 + side * 5.0) - 0.5) * 0.04) * wv;
+  float trough = 1.0 - smoothstep(tH - 0.16, tH + 0.02, e);
+  float berm = exp(-pow((e - tH - 0.1) / 0.09, 2.0));
+  float t = fract(q.y * 14.0 + ax * 0.7);
+  float lug = smoothstep(0.3, 0.42, t) * smoothstep(0.9, 0.78, t) * smoothstep(0.02, 0.06, fract(ax * 2.6 + 0.3)) * smoothstep(0.02, 0.06, 1.0 - fract(ax * 2.6 + 0.3));
+  float ln = floor(q.x * 34.0);
+  float comb = h1(ln + 7.0) * (0.6 + 0.4 * n1(q.y * 9.0 + ln));
+  return D * (0.45 * berm - trough) + 0.004 * mix(lug, comb, smear) * trough;
+}
+// C: the factor for a mark in grass (grass 1) or loose earth (grass 0), with its relief lit by the sun
+vec3 realMark(float a, vec3 tint, vec4 sk, float grass, vec2 gu, vec2 gv) {
+  vec3 one = vec3(1.0);
+  float d = clamp(a / 0.9, 0.0, 1.0);
+  vec2 q = vec2(vUv.x * 2.0 - 1.0, vUv.y * TILE);
+  float tH = mix(0.58, 0.48, grass);
+  // grass tears open only in a hard slide, in patches; earth is dug all along
+  // grass (Martin 23 Nov 2026 evening: "more consistent, not a lot of variance"): one even rut whose depth and torn
+  // core follow the slide's strength alone, edges nearly straight; earth and gravel keep their wander
+  float torn = grass > 0.5 ? smoothstep(0.55, 0.95, d) : 1.0;
+  float D = grass > 0.5 ? 0.004 + 0.022 * d : 0.008 + 0.035 * d;
+  float wv = grass > 0.5 ? 0.3 : 1.0;
+  float smear = smoothstep(0.25, 0.7, d);
+  float h0 = rutH(q, D, tH, smear, wv);
+  float hx = (rutH(q + vec2(0.02, 0.0), D, tH, smear, wv) - rutH(q - vec2(0.02, 0.0), D, tH, smear, wv)) / 0.04;
+  float hv = (rutH(q + vec2(0.0, 0.01), D, tH, smear, wv) - rutH(q - vec2(0.0, 0.01), D, tH, smear, wv)) / 0.02;
+  vec2 eye = vW.xz - cameraPosition.xz;
+  float dist = length(eye);
+  // the slope on the ground (fades out far away, where it would only shimmer)
+  vec2 gh = (2.0 * hx * gu + TILE * hv * gv) * (1.0 - smoothstep(30.0, 80.0, dist));
+  gh *= 1.0 / max(1.0, length(gh) / 1.2);
+  vec3 n = normalize(vec3(-gh.x, 1.0, -gh.y));
+  float lit = (0.55 + max(dot(n, sunDir), 0.0)) / (0.55 + max(sunDir.y, 0.05));
+  float ao = 1.0 - 0.3 * clamp(-h0 / 0.04, 0.0, 1.0);
+  // what the ground is made of where it is
+  float ax = abs(q.x);
+  float trough = 1.0 - smoothstep(tH - 0.12, tH + 0.04, ax + (sk.g - 0.5) * 0.12 * wv);
+  float berm = exp(-pow((ax - tH - 0.1) / 0.1, 2.0));
+  vec3 base; float wet;
+  if (grass > 0.5) {
+    // crushed blades the width of the tyre, evenly a shade darker; in a harder slide a steady core of soil down the
+    // middle of it, wet and dark, as even as the slide
+    vec3 crushed = mix(one, vec3(0.88, 0.9, 0.8), trough * (0.35 + 0.65 * smoothstep(0.0, 0.6, d)));
+    float core = 1.0 - smoothstep(tH * 0.5, tH * 0.72, ax + (sk.g - 0.5) * 0.04);
+    float soil = 0.85 * torn * core;
+    vec3 earth = tint * (1.0 + 0.2 * sk.g);
+    base = mix(crushed, earth, soil);
+    wet = soil;
+  } else {
+    // earth and gravel: the bottom pressed smooth and a shade darker, the loose stuff pushed up lighter, stones in it
+    base = mix(one, tint * (0.9 + 0.25 * sk.b), trough * (0.3 + 0.4 * d)) * (1.0 + 0.18 * berm * (0.6 + 0.8 * sk.a));
+    wet = 0.4 * trough * d;
+  }
+  vec3 V = normalize(cameraPosition - vW);
+  float spec = pow(max(dot(n, normalize(sunDir + V)), 0.0), 60.0) * 0.4 * wet;
+  vec3 fC = base * lit * ao + spec;
+  // clods thrown out in a hard slide: little lumps lit on the sun's side, each with its shadow
+  vec2 cg = vec2(vUv.x * 6.0, vUv.y * 14.0), ci = floor(cg), cf = fract(cg) - 0.5;
+  float ha = fract(sin(dot(ci, vec2(41.3, 289.1))) * 43758.5453), hb = fract(sin(dot(ci, vec2(17.7, 113.9))) * 23421.631);
+  float p = grass > 0.5 ? 0.0 : 0.35 * smoothstep(0.6, 1.0, d) * smoothstep(0.3, 0.8, ax);   // (none on grass: kept even)
+  if (hb < p) {
+    vec2 cq = (cf - (vec2(ha, hb) - 0.5) * 0.4) * vec2(7.0, 10.0);
+    float r = 1.2 + 2.2 * fract(ha * 7.13);
+    vec2 du = gu / max(length(gu), 1e-6), dv = gv / max(length(gv), 1e-6);
+    vec2 sm = vec2(dot(sunDir.xz, du), dot(sunDir.xz, dv));       // the sun's way in the mark's own directions
+    float shadow = 1.0 - smoothstep(r * 0.5, r, length(cq + sm * r * 1.2));
+    float body = 1.0 - smoothstep(r * 0.75, r, length(cq));
+    vec2 l = cq / r;
+    vec3 nc = normalize(vec3(l.x * du.x + l.y * dv.x, 0.9, l.x * du.y + l.y * dv.y));
+    float cl = (0.55 + max(dot(nc, sunDir), 0.0)) / (0.55 + max(sunDir.y, 0.05));
+    fC *= 1.0 - 0.35 * shadow * (1.0 - body);
+    fC = mix(fC, tint * (0.8 + 0.35 * fract(hb * 13.7)) * cl, body);
+  }
+  return fC;
+}
 void main() {
+  // how the mark's u (across) and v (along) change per metre on the ground, from how they and the ground position
+  // change across the screen (worked out here, before any branch, where screen derivatives are well defined)
+  vec2 px = dFdx(vW.xz), py = dFdy(vW.xz);
+  float det = px.x * py.y - px.y * py.x;
+  det = abs(det) < 1e-12 ? 1e-12 : det;
+  vec2 ux = vec2(dFdx(vUv.x), dFdy(vUv.x)), vx = vec2(dFdx(vUv.y), dFdy(vUv.y));
+  vec2 gu = vec2(py.y * ux.x - px.y * ux.y, px.x * ux.y - py.x * ux.x) / det;
+  vec2 gv = vec2(py.y * vx.x - px.y * vx.y, px.x * vx.y - py.x * vx.x) / det;
   vec4 sk = texture2D(map, vUv);
   vec3 tint = vTint.rgb;
   float a = vTint.a;
@@ -151,7 +241,7 @@ void main() {
     f -= vLook.x * (one - mix(one, tint, a * sk.r * joint * stone));
   }
   // turf
-  if (vLook.y > 0.001 && grassB > 0.5) {
+  if (vLook.y > 0.001 && abs(grassMode - 1.0) < 0.5) {
     // grass B (Martin 23 Nov 2026, to compare): mostly grass laid flat, which shows by its sheen rather than as a
     // rut. Blades combed over the way the tyre went are lighter seen along that way and darker seen against it (as
     // mown stripes in a lawn), so a slide reads pale from behind and a donut shows light and dark arcs. Only a hard
@@ -161,9 +251,7 @@ void main() {
     float x = abs(vUv.x - 0.5) * 2.0;
     float side = step(0.5, vUv.x);
     // the way the tyre went: how far along the mark changes across the screen, turned into metres on the ground
-    vec2 px = dFdx(vW.xz), py = dFdy(vW.xz);
-    float vx = dFdx(vUv.y), vy = dFdy(vUv.y), det = px.x * py.y - px.y * py.x;
-    vec2 g = vec2(py.y * vx - px.y * vy, px.x * vy - py.x * vx) * sign(det);
+    vec2 g = gv;
     vec2 dir = g / max(length(g), 1e-6);
     vec2 eye = vW.xz - cameraPosition.xz;
     float sh = dot(eye / max(length(eye), 1e-3), dir) * step(1e-6, length(g));
@@ -193,6 +281,8 @@ void main() {
     float clod = (1.0 - smoothstep(r * 0.55, r, length(cq))) * step(hb, p);
     fT = mix(fT, tint * (fract(hb * 13.7) > 0.4 ? 0.85 : 1.25) * (0.85 + 0.4 * sk.g), clod * (1.0 - soil) * (0.6 + 0.4 * fract(ha * 3.1)));
     f -= vLook.y * (one - fT);
+  } else if (vLook.y > 0.001 && grassMode > 1.5) {
+    f -= vLook.y * (one - realMark(a, tint, sk, 1.0, gu, gv));
   } else if (vLook.y > 0.001) {
     float d = clamp(a / 0.9, 0.0, 1.0);
     float x = abs(vUv.x - 0.5) * 2.0;                              // 0 in the middle, 1 at the edge
@@ -209,7 +299,7 @@ void main() {
   }
   // groove in loose ground, the ridges lighter
   if (vLook.z > 0.001) {
-    vec3 fG = mix(one, tint, a * sk.b) * (1.0 + 0.45 * a * sk.a * (1.0 - sk.b));
+    vec3 fG = grassMode > 1.5 ? realMark(a, tint, sk, 0.0, gu, gv) : mix(one, tint, a * sk.b) * (1.0 + 0.45 * a * sk.a * (1.0 - sk.b));
     f -= vLook.z * (one - fG);
   }
   // a muddy tread: lugs across the tyre, angled out from its middle
@@ -243,7 +333,7 @@ export function createSkidMarks(world) {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG, fog: true,
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null }, grassB: { value: 0 } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null }, grassMode: { value: 0 }, sunDir: { value: new THREE.Vector3(0.5, 0.44, -0.75).normalize() } }]),
     transparent: true, depthWrite: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
     blendSrc: THREE.DstColorFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -383,8 +473,11 @@ export function createSkidMarks(world) {
     }
   }
 
-    // grass marks A (torn soil ruts, #513) or B (grass laid flat with its sheen, turf torn in chunks): both are in the
-  // one shader, so switching costs nothing and changes the marks already laid too
-  const setGrass = (k) => { mat.uniforms.grassB.value = k === 'b' ? 1 : 0; };
-  return { mesh, update: (car) => update(car), updateOthers, get count() { return next; }, lookAt, setGrass, get grass() { return mat.uniforms.grassB.value ? 'b' : 'a'; } };
+    // grass marks A (torn soil ruts, #513), B (grass laid flat with its sheen, #537) or C (the mark as a shape in the
+  // ground lit by the sun, also on gravel and dirt): all in the one shader, so switching costs nothing and changes the
+  // marks already laid too. setSun: the way to the sun (sky.js createLights' sunOffset).
+  const MODES = { a: 0, b: 1, c: 2 };
+  const setGrass = (k) => { mat.uniforms.grassMode.value = MODES[k] ?? 0; };
+  const setSun = (v) => { mat.uniforms.sunDir.value.copy(v).normalize(); };
+  return { mesh, update: (car) => update(car), updateOthers, get count() { return next; }, lookAt, setGrass, setSun, get grass() { return 'abc'[mat.uniforms.grassMode.value]; } };
 }

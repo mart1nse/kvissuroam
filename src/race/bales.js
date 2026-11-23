@@ -13,6 +13,12 @@ import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
 
 const R = 0.6, H = 1.2, MASS = 260, MU = 0.75, REST = 0, G = 9.81;   // (straw does not bounce; its rim digs into the turf as it slides)
+// How heavy a bale is to the car depends on how squarely it is met (Martin 23 Nov: "If I hit a bale full on with
+// throttle on, it hardly slows my pace, maybe add a bit of weight. Just brushing it and like halfway hits do not
+// penalize that much"): square on the nose or tail, within SQUARE of the bumper's half width from its middle, the
+// whole bale has to be shoved off and it digs in (HEAVY kg); out by the corners and along the sides it rolls off
+// round its own axis and only LIGHT kg of it are in the way; in between, in between.
+const HEAVY = 480, LIGHT = 230, SQUARE = 0.3, SQUARE_END = 0.8;
 const IY = 0.5 * MASS * R * R;                 // turning about its own axis
 const TIP = Math.atan2(R, H / 2);              // lean past which it falls over (45 degrees for this shape)
 const CORNER = 0.45;                           // how round the car's corners are taken to be (m)
@@ -164,6 +170,9 @@ export function createBales({ world, group, spots }) {
           }
         }
         if (pen > 0) {
+          const onEnd = Math.abs(lf) > hl - CORNER;
+          const sq = onEnd ? Math.max(0, Math.min(1, 1 - (Math.abs(ll) / hw - SQUARE) / (SQUARE_END - SQUARE))) : 0;
+          const Mb = LIGHT + (HEAVY - LIGHT) * sq * sq * (3 - 2 * sq);
           // where they touch, from the car's middle and from the bale's
           const ax = dx - nx * rad, az = dz - nz * rad, bx = -nx * rad, bz = -nz * rad;
           const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
@@ -172,17 +181,17 @@ export function createBales({ world, group, spots }) {
           const vn = (cvx - bvx) * nx + (cvz - bvz) * nz;           // closing speed along the push
           const ca = ax * nz - az * nx, cb = bx * nz - bz * nx;
           if (vn > 0) {
-            const J = (1 + REST) * vn / (1 / Mc + 1 / MASS + (ca * ca) / Iz + (cb * cb) / IY);
+            const J = (1 + REST) * vn / (1 / Mc + 1 / Mb + (ca * ca) / Iz + (cb * cb) / IY);
             // the bale: off it goes, turning if it was caught off its middle; straw rubs along the bodywork too
             const tx = -nz, tz = nx, vt = (cvx - bvx) * tx + (cvz - bvz) * tz;
-            const Jt = Math.max(-RUB * J, Math.min(RUB * J, vt * MASS * 0.5));
-            b.vx += (J * nx + Jt * tx) / MASS; b.vz += (J * nz + Jt * tz) / MASS;
+            const Jt = Math.max(-RUB * J, Math.min(RUB * J, vt * Mb * 0.5));
+            b.vx += (J * nx + Jt * tx) / Mb; b.vz += (J * nz + Jt * tz) / Mb;
             b.wy += (cb * J + (bx * tz - bz * tx) * Jt) / IY;
             // caught by a corner of the car, off the car's middle: its near side is carried along and it spins round
             b.wy += Math.max(-1, Math.min(1, ll / hw)) * J * 0.3 * R / IY;
             // the bumper is below the bale's middle and the ground holds its foot: a hard knock lifts the near
             // edge and it leans away from the car
-            const kick = J / MASS;
+            const kick = J / Mb;
             if (!b.down && kick > 1.2) { b.tdx = nx; b.tdz = nz; b.tv = Math.max(b.tv, Math.min(4.5, (kick - 1.2) * 0.42)); }
             // the dent
             if (kick > 1.5) { const add = Math.min(0.14 - b.sq, (kick - 1.5) * 0.012); if (add > 0) { b.sq += add; b.sqa = Math.atan2(-nx, -nz) - b.ry; } }
@@ -195,7 +204,7 @@ export function createBales({ world, group, spots }) {
           }
           // apart again, each by the other's share of the weight (a bale standing still holds its ground against a gentle lean)
           const still = !b.awake || Math.hypot(b.vx, b.vz) < 0.05;
-          const share = still && vn <= 0.3 ? 0 : Mc / (Mc + MASS);
+          const share = still && vn <= 0.3 ? 0 : Mc / (Mc + Mb);
           b.x += nx * pen * share; b.z += nz * pen * share;
           car.x -= nx * pen * (1 - share); car.z -= nz * pen * (1 - share);
           if (share) b.awake = true;

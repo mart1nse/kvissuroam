@@ -215,7 +215,9 @@ function groundMaterial(map, detail, overview, mask) {
           float lanes = smoothstep(5.0, 5.4, gw);
           float fromMid = (1.0 - rd.b) * gw + 0.06 * (dB - 0.5);
           float fromRut = mix(abs(fromMid - 0.8), abs(abs(fromMid - gw * 0.25) - 0.8), lanes);
-          float rut = rutted * mix(1.0, 0.6, lanes) * (1.0 - smoothstep(0.17, 0.36, fromRut)) * (1.0 - smoothstep(60.0, 140.0, dist));
+          float rut = 0.55 * rutted * mix(1.0, 0.6, lanes) * (1.0 - smoothstep(0.17, 0.36, fromRut)) * (1.0 - smoothstep(60.0, 140.0, dist));
+          // (0.55: the tracks on gravel and earth half as strong as they were, Martin 23 Nov 20:15 "reduce the effect
+          // of tyre marks on gravel")
           vec4 gA = texture2D(uGravel, vWxz / ${GRAVEL_TILE.toFixed(2)});
           vec4 gB = texture2D(uGravel, mat2(0.8, 0.6, -0.6, 0.8) * vWxz / 3.13 + 0.37);
           float gGrain = mix(gA.r, gB.r, 0.45);

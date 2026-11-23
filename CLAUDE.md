@@ -12,8 +12,11 @@ enough to make that happen at DRIVE.
   freeze frames), and counts what the lowest graphics level draws at the Riia and Turu junction (old
   laptops at 10 to 18 FPS, 21 Nov). It also drives a lap of the race track and counts the short hitches
   (the page busy for over 25 ms, frames over 33 ms) and the pictures sent to the graphics card (the slight
-  microfreezes on a MacBook Pro M3 after a night of new house fronts along the track, 22 Nov).
-  It takes about 9 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
+  microfreezes on a MacBook Pro M3 after a night of new house fronts along the track, 22 Nov), and a full run
+  of the Raadi rally stage (`?raadi=1`: in as the stage builds itself, the start clock, the stage to past the
+  finish) with the lap's budgets for short hitches; that run fails if the stage cancels it, so a new stage rule
+  that the straight drive along the stage's line breaks needs `route=stage` in `tools/freeze-profile.cjs` updated.
+  It takes about 11 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
   it only prints that result (the last run is noted in the project's shared folder). Use `--force` when
   Martin asks, or when the change is likely to weigh a lot (a new painted street, a car model, hundreds
   of objects, a new place that builds itself on approach). Put the figures in the PR when you ran it.
@@ -75,8 +78,8 @@ The check also runs at night when main changed in the last 24 h; results go to t
 For the nightly run (and anyone reading its result):
 - The JSON's `checks` list has every figure with its budget, in order: the history table is that list.
   Worth a line in the summary: the phone total at DRIVE, and for both drives the times the game was busy
-  for over 0.1 s and the longest such stretch, and for the lap the times over 25 ms and the megapixels sent
-  to the graphics card. A figure with no budget ("not judged") is only shown.
+  for over 0.1 s and the longest such stretch, for the lap and the Raadi stage the times over 25 ms and the
+  longest, and for the lap the megapixels sent to the graphics card. A figure with no budget ("not judged") is only shown.
 - A memory figure over: the script lists the biggest canvas makers. A drive figure over: it lists what
   the page was busy with in those stretches, with file and function names (`node tools/freeze-profile.cjs
   route=centre` on a dev server gives the whole list). The drive figures vary from run to run (the

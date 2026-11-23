@@ -66,7 +66,8 @@ function haloMesh() {
   return m;
 }
 
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false }) {
+// stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false, stage = false }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -277,6 +278,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
           }
         }
+        // a time of the Raadi stage that is now the car's best there
+        if (stage && m.run && typeof m.run.name === 'string' && m.run.name !== name) {
+          const best = m.board[m.run.track]?.allTime?.find((b) => b.car === m.run.car);
+          const short = Object.hasOwn(CARS, m.run.car) ? CARS[m.run.car].short.toUpperCase() : '';
+          if (best && best.ms === m.run.ms && best.name === m.run.name) { toast(`${m.run.name.toUpperCase()} SET A ${short} RAADI STAGE RECORD`, 3500); onRecord?.(m.run.name, m.run.car); }
+        }
         break;
       default:
     }
@@ -287,13 +294,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // confirms them, so a lap lost to a dropped connection or a closed tab still reaches the board
   // the next time the game is opened: the server ignores ones it already has. Each lap carries
   // the lap ticket this browser held when it was driven; the server stores no lap without one.
-  const lapKey = (l) => `${l.car}|${l.ms}`;
+  const lapKey = (l) => `${l.track ? `${l.track}|` : ''}${l.car}|${l.ms}`;
   function readJson(k) { try { const v = JSON.parse(lsGet(k)); return Array.isArray(v) ? v : []; } catch { return []; } }
   const sent = new Set(readJson(SENT_KEY));
   const queue = [];
   function enqueue(l) {
     if (!l?.car || !(l.ms > 0) || sent.has(lapKey(l)) || queue.some((q) => lapKey(q) === lapKey(l))) return;
-    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp, k: l.k, inp: l.inp });
+    // (track: 'raadi' on a time of the Raadi stage, none on a lap of Toomemägi; pen: its penalty seconds)
+    queue.push({ name: l.name || name, car: l.car, ms: l.ms, at: l.at, splits: l.splits, cp: l.cp, k: l.k, inp: l.inp, ty: l.ty, track: l.track, pen: l.pen });
   }
   function saveQueue() { lsSet(PENDING_KEY, JSON.stringify(queue.slice(-200))); }
   function markSent(list) {
@@ -487,14 +495,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       o.model.setLights?.({ brake: !!p[9], reverse: !!p[10], headlights: true });
       if (o.model.setSoot && p[11] !== undefined) o.model.setSoot(p[11]);
-      // floating name
-      v3.set(p[0], p[2] + 2.2, p[1]);
+      // floating name: held well above the roof (and lifted a little more on screen, past the record
+      // line that hangs under it), so a player ahead does not hide the racing line (Martin 2026-11-23)
+      v3.set(p[0], p[2] + 3.0, p[1]);
       const dist = v3.distanceTo(camera.position);
       v3.project(camera);
       if (v3.z > 1 || dist > 600 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { o.el.style.display = 'none'; continue; }
       o.el.style.display = '';
       const sc = Math.max(0.55, Math.min(1.2, 28 / dist));
-      o.el.style.transform = `translate(${((v3.x + 1) / 2) * W}px, ${((1 - v3.y) / 2) * H}px) translate(-50%, -100%) scale(${sc.toFixed(2)})`;
+      o.el.style.transform = `translate(${((v3.x + 1) / 2) * W}px, ${((1 - v3.y) / 2) * H}px) translate(-50%, calc(-100% - ${(24 * sc).toFixed(1)}px)) scale(${sc.toFixed(2)})`;
     }
   }
 
@@ -549,7 +558,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     recordOf,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty });
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen });
       saveQueue();
       flushLaps();
     },
@@ -557,8 +566,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
     },
     get board() { return board; },
-    bestFor(id) {
-      const b = board?.allTime?.find((r) => r.car === id);
+    // the record in this car: of Toomemägi's lap, or of a stage (track 'raadi')
+    bestFor(id, track) {
+      const b = (track ? board?.[track] : board)?.allTime?.find((r) => r.car === id);
       return b ? { ms: b.ms, name: b.name } : null;
     },
     // the fastest lap anyone drove in this car with split times for these checkpoints

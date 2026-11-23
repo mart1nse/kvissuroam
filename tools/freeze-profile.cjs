@@ -6,7 +6,10 @@
 // which the page was busy, by what ran in it, the short hitches (over 16, 25 and 33 ms), and what was sent
 // to the graphics card on the way: megapixels of pictures frame by frame and new shader programs (how long
 // a real card takes over them is not seen: the counts are), with the house fronts each place painted.
-//   routes: tools/freeze-routes.cjs, and `lap` (the race track). touch: as a phone (light mode, small pictures).
+//   routes: tools/freeze-routes.cjs, `lap` (the race track) and `stage` (a run of the Raadi rally stage with
+//           ?raadi=1: in along Narva mnt from 740 m out as the stage builds itself, its start clock, the run from
+//           the line past the finish, with its bales, barriers, tape, start kit and the park's stones; the drive
+//           fails if the stage does not count the run as finished). touch: as a phone (light mode, small pictures).
 //   slow=5: as an old computer: the processor five times slower, 15 frames a second, light mode and extra low.
 //           Then the thing to read is how long queued building work had to wait (the city standing empty).
 // tools/perf-budget.cjs drives the centre route and the lap with this as part of the budget check (drive, summarise, report).
@@ -26,7 +29,11 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: 640, height: 360 } });
     const p = await ctx.newPage();
-    const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error' && !/WebSocket/.test(m.text())) errs.push('console: ' + m.text().slice(0, 200)); });
+    const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => {
+      // (the game's own server, /api/..., is not behind the dev server: a stage run's time posted to it comes back 404)
+      const at = m.location()?.url || '';
+      if (m.type() === 'error' && !/WebSocket/.test(m.text()) && !(/\/api\//.test(at) && /404/.test(m.text()))) errs.push('console: ' + m.text().slice(0, 200) + (at ? ' ' + at : ''));
+    });
     await p.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); });
     await p.addInitScript(FLY);
     await p.addInitScript(() => {
@@ -58,10 +65,12 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
       wrap('texSubImage2D', (a) => note(a, 4));
       wrap('linkProgram', () => { sent.link++; });
     });
-    await p.goto(`http://localhost:${port}/${slowBy ? '?lite&xlow' : ''}`, { timeout: 180000 });
+    const STAGE = name === 'stage', q = [slowBy && 'lite&xlow', STAGE && 'raadi=1'].filter(Boolean).join('&');
+    await p.goto(`http://localhost:${port}/${q ? '?' + q : ''}`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     await p.waitForTimeout(2000);
-    const ROUTE = name === 'lap' ? await p.evaluate(() => __game.race().track.P.filter((_, i) => i % 4 === 0).map((q) => [q[0], q[1]])) : ROUTES[name];
+    if (STAGE && !(await p.evaluate(() => !!__game.stage?.()))) throw new Error('no Raadi stage in the game (?raadi=1)');
+    const ROUTE = name === 'lap' ? await p.evaluate(() => __game.race().track.P.filter((_, i) => i % 4 === 0).map((q) => [q[0], q[1]])) : STAGE ? ROUTES.stageIn : ROUTES[name];
     if (!ROUTE) throw new Error(`no route "${name}": ${Object.keys(ROUTES).join(', ')}, lap`);
     const cdp = await ctx.newCDPSession(p);
     await cdp.send('Profiler.enable');
@@ -72,12 +81,27 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
     await p.waitForTimeout(touch ? 14000 : 6000);
     await cdp.send('Profiler.start');
     const tStart = await p.evaluate(() => performance.now());
+    const builtBefore = STAGE ? await p.evaluate(() => __game.stage().bales.built) : null;
     await p.evaluate(({ r, step }) => { window.__rec = true; __fly(r, step); }, { r: ROUTE, step });
     await p.waitForFunction(() => __flyStat.done, null, { timeout: 1800000, polling: 1000 });
+    let run = null;
+    if (STAGE) {
+      // the stage: onto its start line (as the RAADI button does), the start clock (it waits for the stage's things
+      // to be built), and at green along the stage from the line to its last point, past the finish and the STOP board
+      const inKm = await p.evaluate(() => { const s = __game.stage(); window.__inDist = __flyStat.dist; s.goStart(); return +(__flyStat.dist / 1000).toFixed(2); });
+      await p.waitForFunction(() => __game.stage().phase === 'run', null, { timeout: 60000, polling: 100 });
+      const atGreen = await p.evaluate(() => { const s = __game.stage(); return { bales: s.bales.built, tape: s.tape.built }; });
+      await p.evaluate((step) => { const d = __game.stage().data; __fly(d.pts.slice(d.start), step); }, step);
+      await p.waitForFunction(() => __flyStat.done, null, { timeout: 1800000, polling: 1000 });
+      await p.waitForTimeout(1000);
+      // (finished: the stage took the run as a time. If it cancelled the run on the way, its message says why)
+      run = await p.evaluate(() => { const s = __game.stage(), last = s.runs?.[s.runs.length - 1]; __flyStat.dist += __inDist; return { finished: !!last, ms: last?.ms ?? null, pen: s.pen, msg: last ? '' : document.querySelector('#stage .msg')?.textContent || s.phase }; });
+      Object.assign(run, { inKm, builtBefore, atGreen });
+    }
     await p.waitForTimeout(3000);
     const { profile } = await cdp.send('Profiler.stop');
     const { fr, stat, slow, doubles, skins, pics } = await p.evaluate(() => ({ fr: __fr, pics: window.__pics || [], stat: __flyStat, slow: __game.jobs?.slow || [], doubles: __game.jobs?.doubles || 0, skins: __game.skins?.() || [] }));
-    return { errs, slow, doubles, profile, fr, tStart, stat, skins, pics };
+    return { errs, slow, doubles, profile, fr, tStart, stat, skins, pics, run };
   } finally { await b.close(); }
 }
 
@@ -153,6 +177,7 @@ if (require.main === module) (async () => {
   const out = arg('out', path.join(os.tmpdir(), `freeze-${name}${touch ? '-phone' : ''}.json`));
   const r = await drive({ port, route: name, step, touch, slow });
   fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat, skins: r.skins, slow: r.slow, pics: r.pics }));
+  if (r.run) console.log(`the stage run: ${JSON.stringify(r.run)}`);
   console.log(`${touch ? 'phone' : 'desktop'}, route ${name}: ${(r.stat.dist / 1000).toFixed(2)} km, errors ${r.errs.length} ${r.errs.slice(0, 3).join(' | ')}`);
   console.log('queued steps over 20 ms [label, step, ms]: ' + JSON.stringify(r.slow));
   if (r.doubles) console.log(`building work queued again while it was still waiting: ${r.doubles} times (set the place's built flag before jobs.add)`);

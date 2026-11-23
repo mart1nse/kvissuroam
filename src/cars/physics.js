@@ -5,6 +5,8 @@
 // Frames: world x = east, z = south, y = up. Heading `yaw` is clockwise from
 // north. Body frame: vx forward, vy to the right, yawRate clockwise positive.
 
+import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
+
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
 const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
@@ -112,6 +114,7 @@ const DAMP = 2 * 0.5 * Math.sqrt(SPRING);
 const STATIC = G / SPRING;
 const BUMP = STATIC + 0.09;      // travel where the bump stops start
 const FLOOR = 0.13;              // the body never sits lower than this below its ride height
+const SUSP = { SPRING, DAMP, STATIC, BUMP };
 // Raised kerbs (world.kerbAt): a wheel whose kerb height jumps by more than KERB_STEP in one step has met
 // a kerb face. Climbing it takes up to KERB_KNOCK m/s of the wheel's speed into the kerb (per 15 cm above
 // 5 cm) and jolts the body; met at less than KERB_GLANCE rad (per 15 cm) the tyre rubs along the face
@@ -495,6 +498,7 @@ const tmpG = [0, 0];
 const tmpA = [0, 0];
 const tmpR = [0, 0, 0];
 const tmpT = [];
+const tmpW = [0, 0, 0, 0, 0, 0, 0, 0], tmpH = [0, 0, 0, 0];
 // is (x, z) close enough to a trunk that the distance field there is the trunk's?
 function nearTrunk(t, x, z) {
   for (let i = 0; i < t.length; i += 3) {
@@ -676,10 +680,17 @@ function substep(car, input, world, dt) {
   const pRRx = car.x - fx * car.b + rx * hw, pRRz = car.z - fz * car.b + rz * hw;
   // (groundAt knows about bridge decks; a plain test world only needs heightAt)
   const gy = car.hy + 0.4;
-  const hFL = world.groundAt ? world.groundAt(pFLx, pFLz, gy) : world.heightAt(pFLx, pFLz);
-  const hFR = world.groundAt ? world.groundAt(pFRx, pFRz, gy) : world.heightAt(pFRx, pFRz);
-  const hRL = world.groundAt ? world.groundAt(pRLx, pRLz, gy) : world.heightAt(pRLx, pRLz);
-  const hRR = world.groundAt ? world.groundAt(pRRx, pRRz, gy) : world.heightAt(pRRx, pRRz);
+  let hFL = world.groundAt ? world.groundAt(pFLx, pFLz, gy) : world.heightAt(pFLx, pFLz);
+  let hFR = world.groundAt ? world.groundAt(pFRx, pFRz, gy) : world.heightAt(pFRx, pFRz);
+  let hRL = world.groundAt ? world.groundAt(pRLx, pRLz, gy) : world.heightAt(pRLx, pRLz);
+  let hRR = world.groundAt ? world.groundAt(pRRx, pRRz, gy) : world.heightAt(pRRx, pRRz);
+  // stones under the wheels (src/cars/stones.js): each wheel stands as high as a tyre rolls up them
+  let stn = null;
+  if (world.stonesNear && (car.stone || world.stoneCount)) {
+    tmpW[0] = pFLx; tmpW[1] = pFLz; tmpW[2] = pFRx; tmpW[3] = pFRz; tmpW[4] = pRLx; tmpW[5] = pRLz; tmpW[6] = pRRx; tmpW[7] = pRRz;
+    stn = stoneWheels(car, world, s, fx, fz, rx, rz, tmpW, dt);
+    if (stn) { hFL += stn.lift[0]; hFR += stn.lift[1]; hRL += stn.lift[2]; hRR += stn.lift[3]; }
+  }
   const groundY = (hFL + hFR + hRL + hRR) / 4;
   car.groundPitch = Math.atan2((hFL + hFR - hRL - hRR) / 2, L);       // nose-up positive
   car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
@@ -1352,8 +1363,16 @@ function substep(car, input, world, dt) {
     }
   }
 
+  // stones: the wheels on them and the floor over them push the car about, and each is a circle for the body's
+  // outline as wide as it is at the height of the bumper or sill that would meet it
+  if (stn) {
+    tmpH[0] = hFL; tmpH[1] = hFR; tmpH[2] = hRL; tmpH[3] = hRR;
+    stoneForces(car, stn, s, dt, fx, fz, rx, rz, hl, hwid, tmpH, SUSP, wvx, wvz);
+    if (stn.dvx !== 0 || stn.dvz !== 0) { wvx += stn.dvx; wvz += stn.dvz; car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz; }
+  }
   // tree trunks: exact circles against the body rectangle
-  const trunks = world.trunksNear ? world.trunksNear(car.x, car.z, Math.hypot(hl, hwid) + 1.2, tmpT) : null;
+  const trunks = world.trunksNear ? world.trunksNear(car.x, car.z, Math.hypot(hl, hwid) + 1.2, tmpT) : stn ? (tmpT.length = 0, tmpT) : null;
+  if (stn) stoneEdges(car, stn, s, fx, fz, rx, rz, hl, hwid, trunks);
   if (trunks && trunks.length) {
     for (let pass = 0; pass < 2; pass++) {
       for (let t = 0; t < trunks.length; t += 3) {
@@ -1457,8 +1476,10 @@ function substep(car, input, world, dt) {
   // (an upshift biting snaps the body back on its springs a little harder than the pull alone, and it
   // shudders as the driveline winds up and springs back: bite)
   const shud = car.bite ? 0.6 + 0.4 * Math.cos((car.time - (car.biteAt ?? car.time)) * 53) : 0;
-  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud;
-  const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3);
+  // (and after a knock from a stone the body rocks on its springs: stoneKick)
+  if (car.stone) stoneKick(car, dt);
+  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
+  const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with
     car.pitch += car.pitchRate * dt;
@@ -1486,6 +1507,6 @@ export function resetCar(car, pose) {
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
-  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null;
+  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
   car.rpm = car.spec.engine.idle ?? 0;
 }

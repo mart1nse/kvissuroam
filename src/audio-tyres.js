@@ -15,7 +15,7 @@
 // No nodes are made while driving: each voice is one oscillator that stays, and the sound is only
 // automation laid on it (a few numbers a frame on the page, nothing when the tyres grip).
 
-export const SQUEAL_LEVEL = 0.028;
+export const SQUEAL_LEVEL = 0.035;
 
 // the squeal's pitch in Hz for a tread sliding at s m/s (tools: engine-space-demo.mjs prints it)
 export function squealPitch(s, mass = 1400) {
@@ -25,10 +25,11 @@ export function squealPitch(s, mass = 1400) {
 // noise: a looping white noise source that is already running; out: where the car's sounds go.
 // voices: 2 for our own car (the two driven tyres), 1 for another player's.
 export function createSquealer(ctx, noise, out, { voices = 2 } = {}) {
-  // the note with its partials let out up to about 6 kHz, so it is bright and open rather than a dull
-  // whistle (Martin 2026-11-23: "bring the filter out")
+  // the note with its partials let out up to about 6 kHz, so it is open rather than a dull whistle
+  // (Martin 2026-11-23: "bring the filter out"), falling as k^-1.5 (k^-1.05 in #521 was "too much" top:
+  // "reduce the boost you added to the highs")
   const n = 11, re = new Float32Array(n), im = new Float32Array(n);
-  for (let k = 1; k < n; k++) im[k] = Math.pow(k, -1.05) * (k === 2 ? 1.15 : 1);
+  for (let k = 1; k < n; k++) im[k] = Math.pow(k, -1.5) * (k === 2 ? 1.2 : 1);
   const wave = ctx.createPeriodicWave(re, im);
   const V = [];
   for (let i = 0; i < voices; i++) {

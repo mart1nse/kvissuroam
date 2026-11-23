@@ -76,6 +76,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
+  let where = '';                // map | garage | away (another tab): shown to the others (Martin, 2026-11-23)
   // until the race state has come on this connection, each clock question also asks for it (r: 1):
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
@@ -123,7 +124,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let ping = 0;
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined });
+      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -174,7 +175,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.className = 'pname';
     el.textContent = p.name;
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, buf: [], pose: null, wheel: 0 };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '' };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -250,6 +251,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'car': {
         const o = others.get(m.id);
         if (o) setRemoteCar(o, m.car);
+        break;
+      }
+      case 'at': {          // where they are: map, garage or away
+        const o = others.get(m.id);
+        if (o) o.w = typeof m.w === 'string' ? m.w : '';
         break;
       }
       case 'clock': {
@@ -503,12 +509,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.entries()].map(([id, o]) => ({ id, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, name: o.name, colour: o.colour, car: o.car })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
@@ -518,6 +524,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       return name;
     },
     get car() { return carId; },
+    // where we are (map, garage, away), told to the others when it changes
+    setWhere(w) { if (w === where) return; where = w; if (!STEALTH) send({ t: 'at', w }); },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race
     get id() { return myId; },

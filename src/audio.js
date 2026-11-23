@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind } from './audio-tyres.js';
+import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -324,6 +324,7 @@ export function createAudio() {
     spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
     spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
     // the squeal, at the speed the tread slides over the road (wheel speed less ground speed)
+    squeal.setTrim(ev ? EV_SQUEAL_TRIM : 1);
     squeal.step(t, spinS, car.slipV || 0, skid, v, car.spec.mass);
     // wheelspin on gravel, dirt and grass: the same spin, on loose ground and with the wheels down
     looseS += ((dead || flying || car.surface === 1 || car.surface === 4 ? 0 : spinAmount(car)) - looseS) * 0.15;
@@ -419,6 +420,7 @@ export function createAudio() {
     v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.15;
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
     v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
+    v.squeal.setTrim(v.ev ? EV_SQUEAL_TRIM : 1);
     v.squeal.step(t, v.spin, r.slipV || 0, v.skid, speed, s.mass);
     v.loose += ((r.paved || r.ground == null ? 0 : spinAmount(r)) - v.loose) * 0.15;
     v.gravel.step(t, v.loose, r.slipV || 0, speed, r.ground ?? 1);

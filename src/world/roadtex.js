@@ -12,6 +12,10 @@ const KERBED = new Set(['Tänav', 'Põhimaantee', 'Tugimaantee', 'Kõrvalmaantee
 const TONE0 = [183, 136];                    // typical Tartu street in the photo: brightness, 128 + (red - blue)
 const RUTTED = 8.6;                          // gravel roads up to this wide (ETAK) get wheel tracks (one car wide: up to 4.6)
 
+// gravel roads that keep no painted wheel tracks of their own (the Raadi rally stage lays its own along the racing line)
+let unrutted = () => false;
+export function setUnrutted(fn) { unrutted = fn; }
+
 export function createRoadPainter(world, size) {
   const S = world.meta.sector.size, G0 = world.meta.sector.grid0;
   const bySector = new Map();
@@ -112,7 +116,7 @@ export function createRoadPainter(world, size) {
     for (const r of e.roads) {
       if (r.s !== 2 && r.s !== 3) continue;
       line(ctx, r.pts);
-      if (r.w > RUTTED) { ctx.strokeStyle = '#00f'; ctx.lineWidth = r.w; ctx.stroke(); if (due(ctx)) yield; continue; }
+      if (r.w > RUTTED || unrutted(r)) { ctx.strokeStyle = '#00f'; ctx.lineWidth = r.w; ctx.stroke(); if (due(ctx)) yield; continue; }
       // the slope, in bands about 0.35 m apart (narrowest last), each the value at its middle: across the
       // road, and two bands outside it so that the edge (0.5) falls in the right place
       const h = r.w / 2, n = Math.max(2, Math.round(h / 0.35)), step = h / n;
@@ -133,7 +137,7 @@ export function createRoadPainter(world, size) {
     tctx.fillStyle = toneOf(null, false);
     tctx.fillRect(s.x0, s.z0, S, S);
     for (const r of e.roads) {
-      if ((r.s !== 2 && r.s !== 3) || r.w > RUTTED) continue;
+      if ((r.s !== 2 && r.s !== 3) || r.w > RUTTED || unrutted(r)) continue;
       tctx.strokeStyle = `rgb(${TONE0[0]},${TONE0[1]},${Math.round(r.w * 2)})`;
       tctx.lineWidth = r.w + 6;
       line(tctx, r.pts);

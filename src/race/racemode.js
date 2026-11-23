@@ -21,7 +21,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -102,6 +102,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (!r || !mp.online || mp.stealth) return;
     const mine = me(), ph = phaseFor(mine);
     const voteOpen = r.vote.kind !== 'none';
+    // on a Raadi stage run (Martin, 2026-11-23): left out of the vote, the button only joins a race that is starting
+    if (busy()) {
+      if (!mine && joinable(ph)) { unbusy?.(); mp.raceSend({ t: 'rj', on: 1 }); dismissed = 0; }
+      return;
+    }
     if (ph === 'count') { mp.raceSend({ t: 'rj', on: mine ? 0 : 1 }); dismissed = 0; return; }
     if (ph === 'grid') { if (mine) { mp.raceSend({ t: 'rj', on: 0 }); pin = null; } else if (lateOk()) mp.raceSend({ t: 'rj', on: 1 }); return; }
     if (ph === 'race' && !mine && lateOk() && r.vote.kind !== 'start') { mp.raceSend({ t: 'rj', on: 1 }); return; }
@@ -117,6 +122,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       mp.raceSend({ t: 'rv', on: voted && !enough ? 0 : 1 });
     }
   }
+  const joinable = (ph) => ph === 'count' || (ph === 'grid' && lateOk()) || (ph === 'race' && lateOk() && r.vote.kind !== 'start');
   btn.addEventListener('click', act);
   chip.addEventListener('click', () => { showLast = true; listOpen = true; listUntil = Infinity; render(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
@@ -262,6 +268,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       line = `${on} RACING · ${clock(t - r.tGreen)} / 7:00`;
     }
     // ?off=100 (Martin 2026-11-22): never in the vote pool or a race; the button only tells what the others do
+    // on a Raadi stage run: nothing but a small JOIN while a race starts or can still be joined
+    const away = busy() && !mine;
+    if (away) { label = ph === 'count' ? 'RACE STARTING' : 'RACE ON'; cls = 'lit'; line = `${r.racers.length} IN · JOIN?`; }
     if (mp.stealth) {
       label = 'HIDDEN'; cls = 'dim';
       line = ph === 'count' || ph === 'grid' ? `${r.racers.length} ON THE GRID` : ph === 'race' ? `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00`
@@ -270,10 +279,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     }
     const lab = isTouch ? label.replace(' ', '<br>') : label;
     if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = lab; btn.className = cls; }
-    setText(sub, line);
+    btn.classList.toggle('away', away);
+    show(btn, !away || joinable(ph));
+    setText(sub, away && !joinable(ph) ? '' : line);
 
     // TO RACE START (the countdown)
-    const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth;
+    const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth && !(busy() && !mine);
     show(count, cnt);
     if (cnt) {
       setText(count.querySelector('.t2'), String(Math.max(1, Math.ceil((r.tGrid - t) / 1000))));
@@ -340,7 +351,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // someone started a vote: tell the others
       const v = r.vote, n = v?.ids?.length || 0;
-      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count' && !mp.stealth) {
+      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count' && !mp.stealth && !busy()) {
         const who = mp.nameOf(v.ids[v.ids.length - 1]);
         if (who && prevN === 0) { toast(`${who.toUpperCase()} WANTS TO ${v.kind === 'restart' ? 'RESTART' : 'RACE'} · ${isTouch ? 'TAP' : 'PRESS 1'}`, 4000); chime?.('join'); }
       }

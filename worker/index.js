@@ -6,7 +6,9 @@
 // changes. The sockets use the hibernation API, so an idle lobby costs nothing.
 //
 // Lap times live in the lobby's SQLite storage (table `laps`). GET /api/laps.csv downloads all
-// of them; GET /api/board gives the best lap per car, all time and today (Tartu time).
+// of them; GET /api/board gives the best lap per car, all time and today (Tartu time). The times of
+// the Raadi rally stage are kept in the same table (track 'raadi', Martin 23 Nov 2026) and go out in
+// the same board, under `raadi`.
 //
 // Nobody logs in, so everything a browser sends is treated as hostile: see "Limits" and "Lap
 // tickets" below for what keeps one visitor from spoiling the board, freezing the other players'
@@ -18,6 +20,10 @@ import { CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
 
 const TRACK = 'toomemagi';
+// The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
+// 1.73 km of gravel: 45 s would be 138 km/h on average (the lap of Toomemägi, 4.9 km, has 60 s).
+const STAGES = { raadi: 45000 };
+const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
 const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital', 'Synth', 'Vapor', 'Electric', 'Midnight', 'Magenta', 'Cyber'];
 const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo', 'Tiger', 'Wave', 'Fox', 'Moose', 'Heron', 'Beaver', 'Hedgehog', 'Stork', 'Badger'];
 
@@ -40,7 +46,7 @@ const MAX_SOCKETS = 150;          // everyone with the game open
 const MAX_SOCKETS_IP = 12;        // from one address (a household, a LAN party)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
-const BOARD_V = 2;                // raise when the stored lap board gets a new shape, so it is worked out afresh
+const BOARD_V = 3;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
 const INPUTS = ['kb', 'pad', 'wheel', 'touch'];
@@ -117,6 +123,8 @@ export class Lobby extends DurableObject {
     if (!cols.includes('inp')) this.sql.exec('ALTER TABLE laps ADD COLUMN inp TEXT');
     // the tyres the lap was driven on: 'gravel', or null for road tyres (and every lap from before 23 Nov 2026)
     if (!cols.includes('ty')) this.sql.exec('ALTER TABLE laps ADD COLUMN ty TEXT');
+    // penalty seconds that are part of a stage time (Raadi: apex cut, wide entry, off the path); null without
+    if (!cols.includes('pen')) this.sql.exec('ALTER TABLE laps ADD COLUMN pen INTEGER');
     // small values kept between wake-ups: the signing secret and the finished lap board
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
     // keep-alive pings are answered without waking the object
@@ -232,21 +240,29 @@ export class Lobby extends DurableObject {
   // Worked out from the whole table once (and again after laps are deleted), then kept: each new
   // lap only updates it. It used to be worked out from every lap on every page load, which read
   // the table four times over and would have run into the daily allowance as the laps piled up.
+  // one circuit's part of the board: the best per car of all time and of today, how many were driven, the
+  // latest by anyone (newest first: the desktop board lists them) and every kind of control any was driven
+  // with (the board only marks laps once there is more than one)
+  boardOf(track, day) {
+    const best = (where, ...args) => this.sql.exec(
+      `SELECT car, name, MIN(ms) AS ms, at, inp, ty, pen FROM laps WHERE track = ? ${where} GROUP BY car`, track, ...args).toArray();
+    const count = this.sql.exec('SELECT COUNT(*) AS n FROM laps WHERE track = ?', track).one().n;
+    const recent = this.sql.exec('SELECT name, car, ms, at, inp, ty, pen FROM laps WHERE track = ? ORDER BY at DESC, id DESC LIMIT 20', track).toArray();
+    const inputs = this.sql.exec("SELECT DISTINCT COALESCE(inp, 'kb') AS k FROM laps WHERE track = ?", track).toArray().map((r) => r.k);
+    return { allTime: best(''), today: best('AND day = ?', day), laps: count, recent, inputs };
+  }
+  // Toomemägi's part is the board itself, as it always was (a page opened before a deploy still reads it);
+  // each stage's part hangs under its name.
   rebuildBoard() {
     const day = tartuDay();
-    const best = (where, ...args) => this.sql.exec(
-      `SELECT car, name, MIN(ms) AS ms, at, inp, ty FROM laps WHERE track = ? ${where} GROUP BY car`, TRACK, ...args).toArray();
-    const count = this.sql.exec('SELECT COUNT(*) AS n FROM laps WHERE track = ?', TRACK).one().n;
-    // the latest laps by anyone, newest first (the desktop board lists them)
-    const recent = this.sql.exec('SELECT name, car, ms, at, inp, ty FROM laps WHERE track = ? ORDER BY at DESC, id DESC LIMIT 20', TRACK).toArray();
-    // every kind of control any lap has been driven with (the board only marks laps once there is more than one)
-    const inputs = this.sql.exec("SELECT DISTINCT COALESCE(inp, 'kb') AS k FROM laps WHERE track = ?", TRACK).toArray().map((r) => r.k);
     // the fastest lap with split times per car and checkpoint layout: what a driver with no lap of
     // their own in that car compares their checkpoint times with
     const refs = this.sql.exec(
       `SELECT car, cp, name, MIN(ms) AS ms, splits FROM laps WHERE track = ? AND splits IS NOT NULL AND cp IS NOT NULL GROUP BY car, cp`, TRACK)
       .toArray().map((r) => ({ ...r, splits: JSON.parse(r.splits) }));
-    return { v: BOARD_V, track: TRACK, day, allTime: best(''), today: best('AND day = ?', day), laps: count, recent, refs, inputs };
+    const b = { v: BOARD_V, track: TRACK, day, ...this.boardOf(TRACK, day), refs };
+    for (const t of Object.keys(STAGES)) b[t] = this.boardOf(t, day);
+    return b;
   }
   saveBoard() { this.setMeta('board', JSON.stringify(this.cache)); }
   board() {
@@ -255,12 +271,16 @@ export class Lobby extends DurableObject {
       if (this.cache?.v !== BOARD_V || this.cache.track !== TRACK) { this.cache = this.rebuildBoard(); this.saveBoard(); }
     }
     const day = tartuDay();
-    if (this.cache.day !== day) { this.cache.day = day; this.cache.today = []; this.saveBoard(); }   // past midnight in Tartu
+    if (this.cache.day !== day) {                                 // past midnight in Tartu
+      this.cache.day = day; this.cache.today = [];
+      for (const t of Object.keys(STAGES)) this.cache[t].today = [];
+      this.saveBoard();
+    }
     return this.cache;
   }
   // a lap that has just been stored
   addToBoard(l) {
-    const b = this.board();
+    const day = this.board().day, b = l.track === TRACK ? this.cache : this.cache[l.track];
     const faster = (list, same) => {
       const i = list.findIndex(same);
       if (i < 0) list.push(null);
@@ -268,16 +288,16 @@ export class Lobby extends DurableObject {
       return i < 0 ? list.length - 1 : i;
     };
     b.laps++;
-    b.recent.push({ name: l.name, car: l.car, ms: l.ms, at: l.at, inp: l.inp, ty: l.ty });
+    const row = { car: l.car, name: l.name, ms: l.ms, at: l.at, inp: l.inp, ty: l.ty, ...(l.pen ? { pen: l.pen } : {}) };
+    b.recent.push(row);
     const k = l.inp || 'kb';
     if (!b.inputs.includes(k)) b.inputs.push(k);
     b.recent.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
     b.recent.length = Math.min(b.recent.length, 20);
-    const row = { car: l.car, name: l.name, ms: l.ms, at: l.at, inp: l.inp, ty: l.ty };
     let i = faster(b.allTime, (r) => r.car === l.car);
     if (i !== null) b.allTime[i] = row;
-    if (l.day === b.day) { i = faster(b.today, (r) => r.car === l.car); if (i !== null) b.today[i] = row; }
-    if (l.splits && l.cp) {
+    if (l.day === day) { i = faster(b.today, (r) => r.car === l.car); if (i !== null) b.today[i] = row; }
+    if (l.track === TRACK && l.splits && l.cp) {
       i = faster(b.refs, (r) => r.car === l.car && r.cp === l.cp);
       if (i !== null) b.refs[i] = { car: l.car, cp: l.cp, name: l.name, ms: l.ms, splits: l.splits };
     }
@@ -337,8 +357,9 @@ export class Lobby extends DurableObject {
     }
 
     if (path === '/api/lap' && req.method === 'POST') {
-      // one lap {name, car, ms, k, ago, splits?, cp?, inp?}, or a batch {laps: [...]} of laps a browser kept
-      // and resends. k is the browser's lap ticket and ago how many ms ago the lap ended, by the
+      // one lap {name, car, ms, k, ago, splits?, cp?, inp?, ty?, track?, pen?}, or a batch {laps: [...]} of laps a
+      // browser kept and resends. track: 'raadi' for a time of the Raadi stage (none: a lap of Toomemägi), pen: the
+      // penalty seconds in that time. k is the browser's lap ticket and ago how many ms ago the lap ended, by the
       // browser's own clock (so a wrong clock does not matter). A lap already stored (same ticket,
       // car and time) is not stored twice, so a browser can safely send again everything it has no
       // confirmation for.
@@ -349,16 +370,18 @@ export class Lobby extends DurableObject {
       const now = Date.now();
       const added = [], ok = [], tickets = new Map();
       for (const l of list) {
-        const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms));
-        if (!name || !car || !(ms >= 60000 && ms <= 3600000)) continue;
+        const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms)), track = cleanTrack(l?.track);
+        // (penalty seconds: whole, and the driving itself must still be a believable time)
+        const pen = track !== TRACK && Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
+        if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || 60000) && ms <= 3600000)) continue;
         if (!tickets.has(l.k)) tickets.set(l.k, await this.readTicket(l.k));
         const tk = tickets.get(l.k);
         if (!tk) continue;
-        if (this.sql.exec('SELECT 1 FROM laps WHERE sid = ? AND car = ? AND ms = ? LIMIT 1', tk.sid, car, ms).toArray().length) { ok.push(ms); continue; }
+        if (this.sql.exec('SELECT 1 FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, track).toArray().length) { ok.push(ms); continue; }
         // when it was driven: it has to fit between the ticket being issued (or the ticket's last
-        // lap ending) and now. 5 s of slack for the trip here.
+        // lap ending) and now. 5 s of slack for the trip here. (Penalty seconds were not driven.)
         const ago = Number(l?.ago);
-        const end = now - (ago > 0 ? ago : 0), start = end - ms;
+        const end = now - (ago > 0 ? ago : 0), start = end - (ms - pen * 1000);
         const last = this.sql.exec('SELECT at FROM laps WHERE sid = ? ORDER BY id DESC LIMIT 1', tk.sid).toArray()[0];
         if (!(ago <= 30 * DAY || !(ago > 0)) || start < tk.t0 - 5000 || (last && start < Date.parse(last.at) - 5000)) continue;
         ok.push(ms);
@@ -366,29 +389,35 @@ export class Lobby extends DurableObject {
         // split times: rising whole milliseconds inside the lap, with the checkpoint list they are for
         const sp = Array.isArray(l?.splits) && l.splits.length && l.splits.length <= 12 ? l.splits.map((v) => Math.round(Number(v))) : null;
         const cp = typeof l?.cp === 'string' && /^[0-9,]{1,80}$/.test(l.cp) ? l.cp : null;
-        const good = sp && cp && sp.length === cp.split(',').length && sp.every((v, k) => v > (k ? sp[k - 1] : 0) && v < ms);
-        const row = { name, car, ms, at: at.toISOString(), day: tartuDay(at), splits: good ? sp : null, cp: good ? cp : null, inp: cleanInp(l?.inp), ty: l?.ty === 'gravel' ? 'gravel' : null };
-        this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, cp, sid, inp, ty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          TRACK, name, car, ms, row.at, row.day, good ? JSON.stringify(sp) : null, row.cp, tk.sid, row.inp, row.ty);
+        const good = track === TRACK && sp && cp && sp.length === cp.split(',').length && sp.every((v, k) => v > (k ? sp[k - 1] : 0) && v < ms);
+        const row = { track, name, car, ms, at: at.toISOString(), day: tartuDay(at), splits: good ? sp : null, cp: good ? cp : null, inp: cleanInp(l?.inp), ty: l?.ty === 'gravel' ? 'gravel' : null, pen: pen || null };
+        this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, cp, sid, inp, ty, pen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          track, name, car, ms, row.at, row.day, good ? JSON.stringify(sp) : null, row.cp, tk.sid, row.inp, row.ty, row.pen);
         this.addToBoard(row);
-        added.push({ name, car, ms });
+        added.push({ name, car, ms, track });
       }
       if (!ok.length) return json({ error: 'invalid lap' }, 400);
       const board = this.board();
-      if (added.length) { this.saveBoard(); this.broadcast({ t: 'board', board, lap: added[added.length - 1] }); }
+      if (added.length) {
+        this.saveBoard();
+        // (a stage time goes out as `run`, not `lap`: a page opened before stage times were kept would
+        // announce it as a lap record of Toomemägi)
+        const lap = added.findLast((a) => a.track === TRACK), run = added.findLast((a) => a.track !== TRACK);
+        this.broadcast({ t: 'board', board, ...(lap ? { lap: { name: lap.name, car: lap.car, ms: lap.ms } } : {}), ...(run ? { run } : {}) });
+      }
       return json({ ok: true, saved: ok, board });
     }
 
     if (path === '/api/laps.csv' || path === '/api/laps.json') {
       if (this.over(`d|${ip}`, 6, 60000)) return busy();
       // the .json is the complete record (the nightly backup saves it, see .github/workflows/backup-laps.yml)
-      if (path.endsWith('.json')) return json(this.sql.exec('SELECT id, track, name, car, ms, at, day, splits, cp, inp, ty FROM laps ORDER BY id').toArray());
-      const rows = this.sql.exec("SELECT id, track, name, car, ms, at, COALESCE(inp, 'kb') AS input, COALESCE(ty, 'road') AS tyres FROM laps ORDER BY id").toArray();
+      if (path.endsWith('.json')) return json(this.sql.exec('SELECT id, track, name, car, ms, at, day, splits, cp, inp, ty, pen FROM laps ORDER BY id').toArray());
+      const rows = this.sql.exec("SELECT id, track, name, car, ms, at, COALESCE(inp, 'kb') AS input, COALESCE(ty, 'road') AS tyres, COALESCE(pen, 0) AS pen FROM laps ORDER BY id").toArray();
       // (a name that starts like a formula gets an apostrophe, so a spreadsheet shows it as text
       // instead of running it)
       const q = (v) => `"${String(v).replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`;
-      const csv = ['track,driver,car,lap_ms,lap_time,date_utc,id,input,tyres']
-        .concat(rows.map((r) => [r.track, q(r.name), r.car, r.ms, `${Math.floor(r.ms / 60000)}:${((r.ms % 60000) / 1000).toFixed(2).padStart(5, '0')}`, r.at, r.id, r.input, r.tyres].join(',')))
+      const csv = ['track,driver,car,lap_ms,lap_time,date_utc,id,input,tyres,penalty_s']
+        .concat(rows.map((r) => [r.track, q(r.name), r.car, r.ms, `${Math.floor(r.ms / 60000)}:${((r.ms % 60000) / 1000).toFixed(2).padStart(5, '0')}`, r.at, r.id, r.input, r.tyres, r.pen].join(',')))
         .join('\n');
       return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'inline; filename="linnaring-laps.csv"', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
     }

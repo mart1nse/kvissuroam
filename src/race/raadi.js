@@ -203,7 +203,9 @@ function streakTex() {
 }
 
 // ---------------------------------------------------------------- the stage
-export function createStage({ world, scene, toast, place, onRun, wood }) {
+// bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
+// own) or null; online(): the server's board is known, so a time under that best is the stage record
+export function createStage({ world, scene, toast, place, onRun, wood, bestFor, online }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -666,15 +668,22 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
   }
 
   // ---- runs
+  // This browser's best: in the car, and in any. Only runs the server was sent count (they carry `inp`, since
+  // 23 Nov 2026 when it began to keep stage times): the ones from before were driven while the penalties were
+  // still being shaped and are on nobody's board, so they stay in the list of last runs and are no best.
   function best(carId) {
     let b = null, any = null;
-    for (const r of runs) { if (!any || r.ms < any.ms) any = r; if (r.car === carId && (!b || r.ms < b.ms)) b = r; }
+    for (const r of runs) { if (!r.inp) continue; if (!any || r.ms < any.ms) any = r; if (r.car === carId && (!b || r.ms < b.ms)) b = r; }
     return { car: b, any };
   }
+  const top = (carId) => (bestFor ? bestFor(carId) : best(carId).car);
+  let bestKey = '';
   function renderBest(carId, carShort) {
-    const { car: b } = best(carId);
+    const b = top(carId), key = `${carShort}|${b?.ms}|${b?.name}`;
+    if (key === bestKey) return;
+    bestKey = key;
     elCar.textContent = carShort;
-    elBest.innerHTML = b ? fmtTime(b.ms / 1000) : '<small>NO TIME YET</small>';
+    elBest.innerHTML = b ? `${fmtTime(b.ms / 1000)}${b.name ? ` <small>${escapeHtml(b.name)}</small>` : ''}` : '<small>NO TIME YET</small>';
   }
 
   // the lamps on the screen and on the clock at the line: 0 off, 1 red, 2 yellow, 3 green; n: the seconds to go
@@ -699,7 +708,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     st.phase = 'count';
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null;
+    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
     bales.reset();
     standBarriers();
     setBarriers(START, true);
@@ -736,7 +745,8 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     // the car was moved by the player (map, H, R, garage): a run in progress ends
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
-    update(car, carId, carShort, dt) {
+    // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
+    update(car, carId, carShort, dt, inp = 'kb') {
       const x = car.x, z = car.z;
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
@@ -803,6 +813,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
       }
 
       if (st.phase === 'run') {
+        st.inpT[inp] = (st.inpT[inp] || 0) + (dt || 0);
         // progress along the stage: only forwards from where the car is, in a short window
         const w = nearestIn(x, z, st.prog - 6, st.prog + 40);
         const onIt = w.d < HW[w.i] + 6;
@@ -875,18 +886,22 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           if (a < 0 && b >= 0 && st.gate < STAGE.apex.length) cancel('MISSED A CORNER · STAGE CANCELLED');
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
-            const { car: pb } = best(carId);
-            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road' };
+            // (the bests before this run: this browser's own in the car, and anyone's)
+            const { car: pb } = best(carId), all = top(carId);
+            const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
+            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road', inp: used };
             if (st.pen) run.pen = st.pen;
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);
             try { localStorage.setItem(KEY, JSON.stringify(runs)); } catch { /* private mode */ }
             const rec = !pb || run.ms < pb.ms;
+            // the car's stage record: under everyone's best there, when the server's board is at hand
+            const word = online?.() && (!all || run.ms < all.ms) ? 'STAGE RECORD' : 'YOUR BEST';
             st.phase = 'done'; st.cool = true; st.doneT = t;
-            elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}YOUR BEST</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
-            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ' · YOUR BEST' : ''}`, 4500);
+            elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}${word}</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
+            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ` · ${word}` : ''}`, 4500);
             showAgain();
-            onRun?.('finish', run);
+            onRun?.('finish', run, { rec, record: word === 'STAGE RECORD' });
           }
         }
       }

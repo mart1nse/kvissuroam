@@ -32,6 +32,19 @@ export function surfaceStrip(pts, hw, code) {
   for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
   strips.push({ pts, hw, code, x0: x0 - hw, x1: x1 + hw, z0: z0 - hw, z1: z1 + hw });
 }
+// the same for a patch of ground given by its outline (the widenings of a gravel path at a junction)
+export function surfaceArea(outer, code) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of outer) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  strips.push({ outer, code, x0, x1, z0, z1 });
+}
+function within(q, x, z) {
+  let c = false;
+  for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
+    if ((q[i][1] > z) !== (q[j][1] > z) && x < ((q[j][0] - q[i][0]) * (z - q[i][1])) / (q[j][1] - q[i][1]) + q[i][0]) c = !c;
+  }
+  return c;
+}
 function stampStrips(s, sn, sres) {
   for (const t of strips) {
     if (t.x1 < s.x0 || t.x0 > s.x1 || t.z1 < s.z0 || t.z0 > s.z1) continue;
@@ -40,6 +53,7 @@ function stampStrips(s, sn, sres) {
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
       if (s.S[r * sn + c] === SURFACE.WATER) continue;
       const x = s.x0 + (c + 0.5) * sres, z = s.z0 + (r + 0.5) * sres;
+      if (t.outer) { if (within(t.outer, x, z)) s.S[r * sn + c] = t.code; continue; }
       for (let i = 0; i < t.pts.length - 1; i++) {
         const a = t.pts[i], b = t.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1];
         const k = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));

@@ -75,6 +75,10 @@ const BEND = (() => {
   return b;
 })();
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
+// How much wider than the path the gravel is inside each corner, m. The bale stands a metre off all the gravel
+// there (tools/race/build-raadi.py: off the corner's other arm, and off the wide gravel where paths meet), so
+// where it stands further in than a metre off this path's edge, the inside is judged from that much further in.
+const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k])]));
 
 // nearest point of the stage between indices lo and hi: { i, d, lat } (lat: sideways, + right of travel)
 function nearestIn(x, z, lo, hi) {
@@ -372,7 +376,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
         }
       }
     };
-    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + APEX_PEN.at(-1)[0] + d));
+    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + ROOM.get(k) + APEX_PEN.at(-1)[0] + d));
     yield;
     for (const [e0, e1, sd] of ENTRY) limit(e0, e1, (i, d) => -sd * (HW[i] + WIDE_PEN.at(-1)[0] + d));
     yield;
@@ -823,7 +827,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           const a0 = (st.prev.x - gx) * tx + (st.prev.z - gz) * tz, a1 = (x - gx) * tx + (z - gz) * tz;
           if (!(a0 < 0 && a1 >= 0)) break;
           const f = a0 / (a0 - a1), cx = st.prev.x + (x - st.prev.x) * f - gx, cz = st.prev.z + (z - st.prev.z) * f - gz;
-          const deep = (-cx * tz + cz * tx) * sd - HW[k];                    // inside the path's edge (+), outside it (-)
+          const deep = (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);       // inside the gravel's edge (+), outside it (-)
           if (deep > GATE_IN || deep < -2 * HW[k] - GATE_OUT) break;
           apexCut(k, deep);
           st.gate++;
@@ -835,7 +839,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           if (st.prog < k - 25 || st.prog > k + 8 || st.phase !== 'run') continue;
           const a = nearestIn(x, z, k - 8, k + 5);
           if (a.i < k || a.d * a.d - a.lat * a.lat > 2.25) continue;       // before the apex, or past the end of it
-          apexCut(k, a.lat * sd - HW[a.i]);
+          apexCut(k, a.lat * sd - HW[a.i] - ROOM.get(k));
         }
         // and too wide on the way in
         for (const [e0, e1, sd] of ENTRY) {

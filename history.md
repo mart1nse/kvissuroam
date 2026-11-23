@@ -164,3 +164,109 @@ Commits merged to main in the 24 h before the run:
 - 7e7c1d6 Standing burnouts for rear-driven cars, calmer low-speed tail flicks (#374)
 - 2c7db62 Perf check: test drives that catch freeze frames; smaller house-front pages; three places built in steps (#373)
 - 18fb913 Freeze frames while driving: work queue, warmer, lighter builds (#372)
+
+## 2026-11-23 (main cbd4016, runs 01:18 and 01:30 UTC)
+
+The first run had one figure over; the second run (`--force`, same commit) was all inside.
+
+| Check | Run 1 | Run 2 | Budget | Run 1 | Run 2 |
+|---|---|---|---|---|---|
+| Phone canvases at DRIVE | 139 | 139 | 230 | OK | OK |
+| Phone graphics card at DRIVE | 187 | 187 | 250 | OK | OK |
+| Phone JS heap at DRIVE | 266 | 267 | 420 | OK | OK |
+| Phone total at DRIVE | 592 | 593 | 820 | OK | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 637 | 634 | 740 | OK | OK |
+| Phone graphics card peak in a map jump | 188 | 188 | 280 | OK | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 1 | 20 | OK | OK |
+| Phone graphics card peak during the car changes | 204 | 204 | 250 | OK | OK |
+| Phone total after 2 km through the centre | 947 | 834 | 870 | OVER | OK |
+| Phone graphics card peak through the centre | 424 | 422 | 445 | OK | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | 0 | OK | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 338 | 357 | 460 | OK | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 546 | 576 | 760 | OK | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 0 | 2 | OK | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 35 | 66 | 150 | OK | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0 | 0.12 | 1.2 | OK | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 0 | 3 | OK | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 6.7 | 6.2 | 12 | OK | OK |
+| Desktop drive: page errors | 0 | 0 | 0 | OK | OK |
+| Desktop drive: building work queued twice | 0 | 0 | 0 | OK | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 64 | 73 | - | not judged | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 0 | 2 | OK | OK |
+| Phone drive: longest the game was busy without a break (ms) | 57 | 46 | 150 | OK | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.06 | 0 | 1.2 | OK | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 0 | 3 | OK | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 5.7 | 5.8 | 10 | OK | OK |
+| Phone drive: page errors | 0 | 0 | 0 | OK | OK |
+| Phone drive: building work queued twice | 0 | 0 | 0 | OK | OK |
+| Phone drive: longest gap between frames (ms), not judged | 59 | 59 | - | not judged | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 4 | 3 | 8 | OK | OK |
+| Lap drive: times the game was busy for over 33 ms | 1 | 1 | 4 | OK | OK |
+| Lap drive: longest the game was busy without a break (ms) | 37 | 40 | 100 | OK | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 | 0 | 2 | OK | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 31.2 | 36 | OK | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 141 | 141 | 165 | OK | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 4 | 4 | 10 | OK | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.76 | 1.39 | 2 | OK | OK |
+| Lap drive: page errors | 0 | 0 | 0 | OK | OK |
+| Lap drive: building work queued twice | 0 | 0 | 0 | OK | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 20 | 19 | - | not judged | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 8 | 2 | - | not judged | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 23 | 19 | - | not judged | not judged |
+
+Run 1 OVER: phone total after 2 km through the centre 947 MB (budget 870). Run 2: 834. The whole difference is painted canvases still held at the moment of measuring (165 MB in run 1, 58 in run 2; graphics card 416 vs 412, heap 366 vs 364): in run 1 the house-front pages (houseskin.js 57 MB, plus 22 MB being painted at houseskin.js:410), sector signs (signs.js 22 MB) and road paint (roadtex.js 13 MB) of places just passed had not yet been cut down or let go. So it is timing of the reading, not a commit; no fix made. The check itself reads canvases at one instant, which makes this figure jump by about 100 MB between runs: left for Martin to decide whether to measure it differently.
+
+Against the 22 Nov 02:02 run: phone total at DRIVE 547 -> 592 MB (canvases at DRIVE 99 -> 139, +40 %: biggest makers houseskin pages 23, signs.js 11, keskus letters 11 MB). Centre total 810 -> 834 (run 2). Both 4.5 km drives: no busy stretch over 0.1 s, longest 35/66 ms desktop, 57/46 ms phone. Lap (first time in this log): 4 and 3 stretches over 25 ms, 141 MP sent to the card, most in one frame 1.76/1.39 MP.
+
+Commits merged to main in the 24 h before the run:
+
+- cbd4016 Tyres squeak now and then on paving: low groans, squeals and chirps, never the same pitch twice (#517)
+- c3781ad Round borderless buttons and choices everywhere: garage cards, menu row, options, lap times, city map, controller setup (#516)
+- d0b215b Reverse: a slipping clutch at up to the drop revs, so it no longer bogs (#515)
+- 09c4119 Inward steering is the default; ?inward=0 turns it off (#514)
+- b78e65b Smoother grass and dirt tyre marks: pressed grass, soil tear that grows with the slide (#513)
+- f9adbef A touch of the slipping clutch on the 22B (0.15) and a bit more on the 200 Avant (0.3) (#512)
+- 3d255a6 ?inward=1: ceiling halfway between Martin's second and third drawings (#511)
+- 655f93b ?inward=1: Martin's third ceiling drawing, and the wheels stay on the line (#510)
+- b573fc6 Manual starts by default: clutch drop for every car with an engine, slipping clutch on the F40 (#509)
+- 561612e ?inward=1: Martin's second ceiling drawing, and wheels come back twice as fast (#508)
+- cb4b3de ?inward=1: inward lock follows Martin's drawn ceiling (full to 60 km/h, easing to 1.5 deg at 170) (#507)
+- 7f57c01 ?launch=1&slip=1: a turbo engine is held where its boost is full (F40 4300 rpm) (#506)
+- 29d2e9b ?slip=1 with ?launch=1: floored in first the clutch keeps slipping at the drop revs (trial) (#505)
+- 6b31cee ?inward=1: judge countersteering by the rotation, not the slide angle (#504)
+- ceeefc5 Tyre marks on every ground: hand-laid paving and cobbles, grass, gravel, mud onto tarmac (#503)
+- cb46703 TOREPOOD poster on both faces, on the Emajõe shelter, and clickable after a crash (#502)
+- ea4b1ac ?launch=1: every car with an engine pulls away like a manual, clutch dropped at a third of the redline (trial) (#501)
+- 7a2bc1c ?inward=1: wheels wound in past the grip lock come back quickly when let go (#500)
+- d95cec7 ?launch=1: the F40 pulls away like a manual from idle, no torque converter (trial) (#499)
+- 65ee879 A touch of ABS (0.2) for the 190E, CR-V, Enyaq and bZ4X: every car now has some (#498)
+- 207affb A touch of ABS (0.2) for the F40, M3 and Carrera GT (#497)
+- ad82d1f ?inward=1: a held key turns the wheels in past the speed's grip lock (trial) (#496)
+- 3fad1d4 Race grid: 4WD cars rev on the limiter with the clutch in, clutch drop at the lights (#495)
+- d6cf243 Vallikraavi: take away the parked BMW estate by the bins (racing line) (#494)
+- 1bd2767 Wheelspin howl a touch louder (gain 0.4 -> 0.55, about +3 dB) (#493)
+- ab6a4ac /stats: Online now list (#492)
+- d38f81c Veski 20 picket fence breaks; light wood-snap sound for it and the Lai corner fence (#491)
+- 3b7908b Turn-in give-way is the default steering; ?turnin=normal brings back the old (#490)
+- 2ed7a26 Bus stops: clickable TOREPOOD poster (Yaga shop) on every shelter (#489)
+- e1e6511 /stats: online race stats (#488)
+- 20b286f Phones: race results list no longer covers the minimap (#487)
+- 8c10d4d iPhone Chrome: GAS and top buttons back on screen; standings wait for the lights; round lap timer and buttons (#486)
+- bd0444a Race: the last racer left in gets END RACE, not a restart into a race of one (#485)
+- 901c35c Phone race HUD: place + time top centre, standings over the gas pedal; borderless lap timer and top buttons; START HOTLAP text (#484)
+- de39124 Race votes: two or more votes may start when a driver leaves; a lone vote asks START NOW (#483)
+- 5774646 Race: Esc on the TO RACE START screen opts out (#482)
+- 9a450cd Race votes: a race starts only when somebody votes, never because drivers left (#481)
+- b2e982c Race: join late, from the grid or during the race, with a start of your own (#480)
+- 6a3c0ff Phone HUD as Martin drew it: race button right under the top buttons, lap timer top centre, rev counter bottom left (#479)
+- 365a28b ?turnin=high: wheels held into a slide give way to the driver gradually (trial) (#478)
+- 826d076 Narva mnt road paint: double solid centre line from Jaama to Peetri (#477)
+- 9c24c76 Donut helper off for every car by default; ?donut=1 brings it back (#476)
+- 15ce8bb Race: restart vote opens for everyone at the lights; gaps never read +- (#475)
+- e2e404a Narva mnt map-load stall: freed ground in the work queue, Jänese 1 too (#474)
+- 1aeccc5 Narva mnt kaardista batch 7: Peetri kirik to Raadi Maxima (#473)
+- aded94d Upshift blow-off: different every change, valve opens a moment late (#472)
+- 07f02ab ?donut=0 switches the donut helper off to feel the bare tyres (#471)
+- 570747a Blow-off on turbo upshifts, in the gap before the gear bites (#470)
+- c436531 Narva mnt kaardista batch 6: Narva 86 to 149 up towards Peetri (#469)
+- 90407f8 Narva mnt kaardista batch 5: Narva 89 to 107 and the Jüri church (#468)

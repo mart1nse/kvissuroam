@@ -412,6 +412,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     r.slipV = r.slipVF = r.slipVR = has ? p[15] : 0;
     r.skidF = has ? p[16] : 0; r.skidR = has ? p[17] : 0; r.rubF = has ? p[18] : 0; r.rubR = has ? p[19] : 0;
     r.revCut = flags & 1; r.inWater = !!(flags & 2); r.paved = !!(flags & 4);
+    // (the ground under it, for the sound of its wheels spinning on loose ground: 1 paved, 2 gravel, 3 dirt, 0 grass)
+    r.ground = r.paved ? 1 : flags & 16 ? 2 : flags & 32 ? 3 : r.inWater ? 4 : 0;
     return r;
   }
 
@@ -436,9 +438,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0),
         // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
         // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
-        // 4 on paving, 8 on a hotlap: the lap timer is running)
+        // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
+        // the water is grass)
         Math.round(car.rpm || 0), r1(car.slipV), r1(car.skidF), r1(car.skidR), r1(car.rubF), r1(car.rubR),
-        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0)] });
+        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0)] });
     }
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;

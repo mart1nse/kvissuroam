@@ -124,3 +124,33 @@ export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
   }
   return { step, note };
 }
+
+// ---- wheelspin on loose ground: stones in the arches, the tread digging, the spray, the grit shower
+// (public/tyre-worklet.js 'gravel-spin'; Martin 2026-11-23). ground: the physics surface class (0 grass,
+// 2 gravel, 3 dirt; anything else is silent). The node is made when the worklet is in and does no work
+// while nothing spins on loose ground.
+export const GRAVEL_LEVEL = 0.08;
+export function createGravel(ctx, out) {
+  let node = null, P = null, live = false;
+  function make() {
+    try {
+      node = new AudioWorkletNode(ctx, 'gravel-spin', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+      node.connect(out);
+      P = { amount: node.parameters.get('amount'), slip: node.parameters.get('slip'), speed: node.parameters.get('speed'), ground: node.parameters.get('ground') };
+      node.parameters.get('level').value = GRAVEL_LEVEL;
+    } catch { node = null; }
+  }
+  loaded.get(ctx)?.then((ok) => { if (ok && !node) make(); });
+  // every frame. spin 0..1 (smoothed, 0 in the air), slip and speed in m/s, ground the surface class
+  function step(t, spin, slip, speed, ground) {
+    if (!node) return;
+    const loose = ground === 0 || ground === 2 || ground === 3;
+    const a = loose ? spin : 0, v = loose ? speed : 0;
+    const on = a > 0.01 || (ground === 2 && v > 3);
+    if (!on && !live) return;
+    live = on;
+    P.amount.setTargetAtTime(a, t, 0.03); P.slip.setTargetAtTime(slip, t, 0.03); P.speed.setTargetAtTime(v, t, 0.05);
+    if (loose) P.ground.value = ground;
+  }
+  return { step };
+}

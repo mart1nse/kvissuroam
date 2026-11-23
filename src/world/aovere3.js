@@ -54,12 +54,13 @@ export function aovere3Walls(walls) {
   }
 }
 
-// cars by the Kiigi tee farm's drive: [x, z, yaw, id, paint, lift] (forward = (sin yaw, -cos yaw))
+// cars by the Kiigi tee farm's drive, at Alrey and in the Aasa tee farm's yard: [x, z, yaw, id, paint, lift] (forward = (sin yaw, -cos yaw))
 export const AOVERE3_CARS = [
   [6960.0, -4628.5, 1.57, 'mazda6', 'red', 0.03],
   [6960.3, -4624.5, 1.57, 'ceedsw', 'red', 0.03],
   [6960.6, -4620.5, 1.57, 'passat', 'black', 0.03],
   [6203.5, -5212.0, 0.6, 'rav4', 'grey', 0.03],
+  [6857.0, -5102.0, 1.57, 'f31', 'white', 0.03],                                   // the farm at the end of Aasa tee: a BMW too (Martin)
 ];
 
 // Tõumesila's bee hive rows, each from one end to the other

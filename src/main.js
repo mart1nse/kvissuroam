@@ -319,6 +319,9 @@ let raceMode = null;               // the online race (src/race/racemode.js)
 // the Raadi rally stage (src/race/raadi.js), while it is tried out only with ?raadi=1
 const RAADI = params.get('raadi') === '1';
 let stage = null;
+let droveOnce = false;                  // DRIVE pressed since the page opened: the first puts the car at a circuit,
+                                        // so that circuit's tyres go on (the stored choice of a last visit, gravel, had
+                                        // started Toomemägi on gravel; Martin 23 Nov: "any other cases ... both circuits")
 let trackPicked = false;                // a track was picked on the start screen since the last DRIVE
 if (RAADI) setUnrutted(onStage);
 const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
@@ -819,7 +822,9 @@ async function boot() {
   showTyres();
   raceMode = createRaceMode({
     mp, track: race.track, cars: CARS, isTouch, toast: (t, ms) => hud.toast(t, ms), chime: (k) => audio.chime?.(k),
-    place: (pose) => place(pose), isDriving: () => mode === 'drive',
+    // (put on Toomemägi's grid from the Raadi stage: the circuit's road tyres, as the TOOMEMÄGI button would)
+    place: (pose) => { const from = atRaadi(); place(pose); if (from && !atRaadi()) tyrePending = { k: 'road', t: performance.now() }; },
+    isDriving: () => mode === 'drive',
     halo: (on) => race.finishHalo(on),
     // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
     busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
@@ -1012,8 +1017,9 @@ function startDriving() {
     if (toRaadi) stage.goStart();
     else if (board.track === 'toome' && trackPicked && atRaadi()) goHome();
     if (board.track === 'raadi' && (toRaadi || trackPicked)) tyrePending = { k: 'gravel', t: performance.now() };
-    else if (board.track === 'toome' && trackPicked) tyrePending = { k: 'road', t: performance.now() };
+    else if (board.track === 'toome' && (trackPicked || !droveOnce)) tyrePending = { k: 'road', t: performance.now() };
     trackPicked = false;
+    droveOnce = true;
   }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
@@ -1093,7 +1099,7 @@ function openGarage() {
   $('#hud').classList.add('hidden');
   $('#touch').classList.add('hidden');
   $('#sunk').classList.add('hidden');
-  if (car.inWater) goHome();
+  if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
   car.vx = car.vy = car.yawRate = 0;
 }
 
@@ -1149,7 +1155,7 @@ async function goLastSpot() {
     }
     if (pick?.wait) pick = null;
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
-    if (!pick) return goHome();
+    if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
     race?.hopped(pick.x, pick.z);
   } finally {

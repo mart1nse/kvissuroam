@@ -495,14 +495,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       o.model.setLights?.({ brake: !!p[9], reverse: !!p[10], headlights: true });
       if (o.model.setSoot && p[11] !== undefined) o.model.setSoot(p[11]);
-      // floating name
-      v3.set(p[0], p[2] + 2.2, p[1]);
+      // floating name: held well above the roof (and lifted a little more on screen, past the record
+      // line that hangs under it), so a player ahead does not hide the racing line (Martin 2026-11-23)
+      v3.set(p[0], p[2] + 3.0, p[1]);
       const dist = v3.distanceTo(camera.position);
       v3.project(camera);
       if (v3.z > 1 || dist > 600 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { o.el.style.display = 'none'; continue; }
       o.el.style.display = '';
       const sc = Math.max(0.55, Math.min(1.2, 28 / dist));
-      o.el.style.transform = `translate(${((v3.x + 1) / 2) * W}px, ${((1 - v3.y) / 2) * H}px) translate(-50%, -100%) scale(${sc.toFixed(2)})`;
+      o.el.style.transform = `translate(${((v3.x + 1) / 2) * W}px, ${((1 - v3.y) / 2) * H}px) translate(-50%, calc(-100% - ${(24 * sc).toFixed(1)}px)) scale(${sc.toFixed(2)})`;
     }
   }
 

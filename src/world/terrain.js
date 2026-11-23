@@ -224,7 +224,12 @@ function groundMaterial(map, detail, overview, mask) {
           vec3 gravel = vec3(0.37, 0.32, 0.155) * mix(0.86, 1.1, dB) * (0.72 + 0.56 * mix(gGrain, 0.5, rut * 0.6));
           gravel *= mix(1.0, gLit, k);
           gravel = mix(gravel, vec3(0.27, 0.235, 0.13) * (0.9 + 0.2 * gGrain), rut * 0.7);
-          diffuseColor.rgb = mix(diffuseColor.rgb, gravel, 0.88 * loose);
+          // bare earth roads (roadtex.js marks them in the tone's red): darker brown soil, hardly a stone, the
+          // wheel tracks darker still (very little blue: the violet sky light adds plenty)
+          float dirt = 1.0 - smoothstep(0.06, 0.12, tn.r);
+          vec3 earth = vec3(0.2, 0.135, 0.03) * mix(0.86, 1.1, dB) * (0.76 + 0.48 * gGrain) * mix(1.0, gLit, k * 0.25);
+          earth = mix(earth, vec3(0.12, 0.08, 0.018) * (0.9 + 0.2 * gGrain), rut * 0.75);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(gravel, earth, dirt), 0.88 * loose);
           // grass: blades and clumps on whatever is left
           float soft = (1.0 - smoothstep(0.3, 0.5, max(rd.r, mk.r))) * (1.0 - smoothstep(0.38, 0.5, rd.b));
           float blades = texture2D(uDetail, vWxz * vec2(4.3, 1.1)).r * texture2D(uDetail, vWxz.yx * vec2(3.7, 0.9) + 0.37).r;

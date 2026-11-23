@@ -549,7 +549,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     recordOf,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp });
+      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty });
       saveQueue();
       flushLaps();
     },

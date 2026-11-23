@@ -18,6 +18,9 @@ import PARK from './raadipark.json';
 import { still } from '../still.js';
 
 const CENTRE = [2650, 440], NEAR = 620;
+// and stones set by hand where Martin asked for one: [x, z, radius] (24 Nov, "perhaps add a small stone here":
+// on the inside of the S before the bale at point 187, between the road and the way-in tape, at point 175)
+const HAND = [[2557.0, 393.4, 0.32]];
 
 export function raadiParkTrees(world) { world.addTrees(PARK.trees); }
 
@@ -39,7 +42,7 @@ function rockGeometry(lite) {
 }
 
 export function createRaadiPark(scene, world, { lite = false } = {}) {
-  const S = PARK.stones, n = S.length;
+  const S = PARK.stones.concat(HAND), n = S.length;
   let mesh = null, todo = null, wait = 0;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
   const rnd = (k, j) => { const v = Math.sin(k * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };

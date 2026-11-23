@@ -172,6 +172,12 @@ export function createHud(world) {
     },
     setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); buildDial(s.engine); },
     toast(text, ms = 3200) {
+      // (clear below the Raadi stage's time panel at the top middle: it grows a line for its messages, and the
+      // penalty note sat over it; Martin 23 Nov: "leaving off the track a touch lower")
+      const panel = !document.body.classList.contains('touch') && document.querySelector('#stage:not(.hidden)');
+      // (and room for that line when it is not there yet: a penalty puts it up in the same moment)
+      const below = panel?.offsetParent ? panel.getBoundingClientRect().bottom + 12 + (panel.querySelector('.msg')?.textContent ? 0 : 28) : 0;
+      elToast.style.top = below > innerHeight * 0.16 ? `${Math.round(below)}px` : '';
       elToast.textContent = text;
       elToast.classList.add('show');
       clearTimeout(toastTimer);

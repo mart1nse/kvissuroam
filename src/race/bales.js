@@ -18,7 +18,9 @@ const R = 0.6, H = 1.2, MASS = 260, MU = 0.75, REST = 0, G = 9.81;   // (straw d
 // penalize that much"): square on the nose or tail, within SQUARE of the bumper's half width from its middle, the
 // whole bale has to be shoved off and it digs in (HEAVY kg); out by the corners and along the sides it rolls off
 // round its own axis and only LIGHT kg of it are in the way; in between, in between.
-const HEAVY = 480, LIGHT = 230, SQUARE = 0.3, SQUARE_END = 0.8;
+// (Martin 23 Nov 23:56, more: "a bit more weight ... more of a penalty when hitting them, still edges less hit, middle
+// full hit impact": square on 480 to 680 kg, the edges 230 to 260)
+const HEAVY = 680, LIGHT = 260, SQUARE = 0.3, SQUARE_END = 0.8;
 const IY = 0.5 * MASS * R * R;                 // turning about its own axis
 const TIP = Math.atan2(R, H / 2);              // lean past which it falls over (45 degrees for this shape)
 const CORNER = 0.45;                           // how round the car's corners are taken to be (m)
@@ -78,12 +80,31 @@ function baleTexture() {
   return t;
 }
 
+// A round bale is rounded off at its rims, more at the top than where it sits (Martin 23 Nov 23:54: "round the
+// hay bales a touch from the top, and a little from the bottom"): turned from a profile, bottom middle out round
+// the lower rim, up the side, round the upper rim and in to the top middle. The side keeps the picture (the banner
+// on its straight part, plain straw going over the rims); the ends a patch of plain straw from the far side of it.
+const RIM_TOP = 0.13, RIM_BOT = 0.05;
 function baleGeometry() {
-  const seg = 20, geo = new THREE.CylinderGeometry(R, R, H, seg, 1, false);
-  // the ends: a patch of plain straw from the far side of the picture (not the whole picture squeezed into a circle)
-  const uv = geo.attributes.uv, side = (seg + 1) * 2;
-  for (let i = side; i < uv.count; i++) { uv.setXY(i, 0.82 + uv.getX(i) * 0.14, 0.04 + uv.getY(i) * 0.1); }
-  // (turned so the picture's seam is not where u = 0 would put it: nothing to do, the straw wraps)
+  const seg = 20, pts = [], h = H / 2, side = H - RIM_TOP - RIM_BOT;
+  const rim = (cx, cy, r, a0, a1, n) => {
+    for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push(new THREE.Vector2(cx + Math.cos(a) * r, cy + Math.sin(a) * r)); }
+  };
+  pts.push(new THREE.Vector2(0, -h));
+  rim(R - RIM_BOT, -h + RIM_BOT, RIM_BOT, -Math.PI / 2, 0, 2);
+  rim(R - RIM_TOP, h - RIM_TOP, RIM_TOP, 0, Math.PI / 2, 4);
+  pts.push(new THREE.Vector2(0, h));
+  const geo = new THREE.LatheGeometry(pts, seg);
+  // (picture height: the straight side 0..1, the rims past its ends, where the picture's edge rows are plain straw)
+  const uv = geo.attributes.uv, pos = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), r = Math.hypot(x, z);
+    if (Math.abs(y) > h - 1e-4 || (r < R - RIM_TOP - 1e-4 && Math.abs(y) > h - RIM_TOP)) {
+      uv.setXY(i, 0.82 + (0.5 + 0.5 * x / R) * 0.14, 0.04 + (0.5 + 0.5 * z / R) * 0.1);       // an end
+    } else {
+      uv.setY(i, (y + h - RIM_BOT) / side);
+    }
+  }
   return geo;
 }
 

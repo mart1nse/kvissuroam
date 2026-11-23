@@ -363,7 +363,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #drive {
   grid-column: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .28em;
   min-width: clamp(180px, 25vw, 330px); height: calc(var(--bh) * 1.38); padding: 0 1.4em; font-size: clamp(19px, 2.7vw, 31px); letter-spacing: 0;
-  background: linear-gradient(100deg, var(--hot), var(--violet)); border: none; border-radius: 999px;
+  background: linear-gradient(100deg, var(--hot), var(--violet)); border: none; border-radius: calc(var(--bh) * .55);   /* a touch less than a full pill (Martin 23 Nov) */
   box-shadow: 0 0 28px rgba(255, 43, 214, .7), inset 0 0 16px rgba(255, 255, 255, .28); text-shadow: 0 2px 0 rgba(43, 10, 92, .55);
   transition: transform .12s, box-shadow .2s;
 }
@@ -371,7 +371,7 @@ body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0
 #drive small { font-size: .36em; line-height: 1; font-style: normal; font-weight: 700; letter-spacing: .26em; margin-right: -.26em; text-transform: uppercase; opacity: .92; }
 #drive small:empty { display: none; }
 #driver, #boardbtn, #ctlbtn {
-  height: var(--bh); display: flex; align-items: center; gap: .7em; border-radius: 999px; max-width: 100%; min-width: 0;
+  height: var(--bh); display: flex; align-items: center; gap: .7em; border-radius: calc(var(--bh) * .4); max-width: 100%; min-width: 0;
   font-size: clamp(12px, 1.4vw, 18px); background: rgba(18, 6, 43, .72);
 }
 #driver { justify-self: end; padding: 0 1.1em 0 1.3em; border: none; cursor: text; transition: background .15s, box-shadow .15s; }

@@ -815,14 +815,19 @@ body.touch #rlist.live .hd { position: absolute; right: var(--lapr); top: max(6p
 body.touch #rlist.live .pos { font-size: 1.9em; }
 body.touch #rlist.live .rt { font-size: 1.3em; }
 body.touch #rlist.live .hd button { width: 1.8em; height: 1.8em; }
-body.touch #rlist.live .tb { position: absolute; right: max(18px, env(safe-area-inset-right)); width: min(230px, 2 * var(--padw) + clamp(10px, 2vw, 20px));
+body.touch #rlist.live .tb { position: absolute; right: max(18px, env(safe-area-inset-right)); width: var(--padw);   /* one pedal wide, right over it (Martin 23 Nov) */
   bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(96px, 34vh, 160px) + 6px);
-  max-height: max(40px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 8px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(96px, 34vh, 160px) - 6px);
+  --tbroom: max(40px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 8px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(96px, 34vh, 160px) - 6px);
+  max-height: var(--tbroom); max-height: calc(round(down, var(--tbroom) - 4px, 18px) + 4px);   /* whole rows only */
   box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 2px 4px; border-radius: 10px; background: rgba(18, 6, 43, .55);
   font-size: 10px; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .6) transparent; }
 body.touch #rlist.live .tb::-webkit-scrollbar { width: 3px; }
 body.touch #rlist.live .tb::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(47, 243, 255, .6); }
-body.touch #rlist.live td { padding: .2em .4em; }
+body.touch #rlist.live td { padding: 2px .25em; line-height: 13px; }   /* 18 px rows with the line between */
+/* phones (Martin 2026-11-23: simpler and narrower): place, name and gap only, the car and the word LEADER left out */
+body.touch #rlist.live td.c { display: none; }
+body.touch #rlist.live td.p { width: 1.3em; text-align: center; }
+body.touch #rlist.live td.n { max-width: 0; width: 100%; }
 /* the start lights take the middle for their few seconds: the standings wait (the lap timer already does) */
 body.touch.racegrid #rlist .tb { visibility: hidden; }
 /* the wide results list lies over the online list for its few seconds: that one steps aside meanwhile */
@@ -840,7 +845,8 @@ body.touch #rlights { top: 30%; font-size: 13px; }
   /* no room over the gas pedal under the race button: the standings go over the brake pedal (it stands lower) */
   body.touch #rlist.live .tb { right: calc(max(18px, env(safe-area-inset-right)) + var(--padw) + clamp(10px, 2vw, 20px));
     bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + 6px);
-    max-height: max(36px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 6px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(72px, 24vh, 118px) - 6px); }
+    --tbroom: max(36px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 6px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(72px, 24vh, 118px) - 6px);
+    max-height: var(--tbroom); max-height: calc(round(down, var(--tbroom) - 4px, 18px) + 4px); }
 }
 
 /* race vote marks in the player lists (Martin, 2026-11-23): a lit tick for voted, a faint ring for not yet;
@@ -1004,3 +1010,80 @@ body.touch #tyre::before { inset: -9px -10px -6px -8px; }
 #tyretoast b { text-transform: uppercase; letter-spacing: .1em; }
 #tyretoast.road .t, #tyretoast.road .g { stroke: var(--cyan); fill: none; } #tyretoast.road .g { stroke-width: 1.5; } #tyretoast.road b { color: var(--cyan); }
 #tyretoast.gravel .t { stroke: #f0b860; } #tyretoast.gravel .b { fill: #f0b860; } #tyretoast.gravel b { color: #f0b860; }
+/* a taller phone, as when the browser goes full screen (Martin 23 Nov, Xiaomi: the layout fit with the address bar
+   and left a gap under the circuit pills without it; "enlarge the circuit selector to fill the gap"): from 391 px
+   high the two pills become tiles that take the room left between the logo and the cars, the outline big on the
+   left (the picked one with its dot lapping, as on desktop), the name, length and surface beside it */
+/* (a touch screen a little taller, up to 520 px, keeps the phone's logo size: the desktop one pushed DRIVE off at 960x435) */
+@media (min-height: 431px) and (max-height: 520px) { body.touch #menu .logo { font-size: min(9vw, 14vh); } body.touch #menu .tag { display: none; } }
+@media (min-height: 391px) {
+  body.touch #trackpick { flex: 1 1 0; min-height: 30px; max-height: 30vh; width: 100%; container-type: size; justify-content: center; align-items: stretch; gap: clamp(10px, 1.6vw, 18px); margin: 6px 0 4px; }
+  body.touch #trackpick .tcard, body.touch #trackpick .tcard.on { height: auto; max-height: 100%; width: min(38vw, 400px, 100cqh * 4.6); padding: .5em 1.4em .5em .7em; gap: 1.1em;
+    font-size: clamp(7px, 100cqh / 4.4, 15px); border-radius: 1em; }
+  body.touch #trackpick .tcard.on { background: linear-gradient(135deg, rgba(47, 243, 255, .3), rgba(90, 40, 170, .62)); box-shadow: 0 0 18px rgba(47, 243, 255, .3); }
+  body.touch #trackpick .tcard svg { height: 100%; max-width: 40%; }
+  body.touch #trackpick .tx { flex-direction: column; align-items: flex-start; gap: .35em; }
+  body.touch #trackpick .nm, body.touch #trackpick .tcard.on .nm { font: 400 1.55em 'Russo One', var(--font); letter-spacing: .05em; color: #fff; }
+  body.touch #trackpick .tcard.on .nm { text-shadow: 2px 2px 0 var(--hot); }
+  body.touch #trackpick .meta { font-size: .8em; letter-spacing: .18em; }
+  body.touch #trackpick .tube { stroke-width: 34; } body.touch #trackpick .core { stroke-width: 10; }
+  body.touch #trackpick .tcard.on .tube { stroke-width: 26; } body.touch #trackpick .tcard.on .core { stroke-width: 8; }
+  body.touch #trackpick .tcard.on .tail, body.touch #trackpick .tcard.on .dot { display: inline !important; }
+}
+/* your own best per car, beside the records (board.js) */
+#board th.you { color: var(--cyan); }
+#board td.you b { color: var(--cyan); }
+
+/* ---- spectator mode (desktop only, src/spectate.js; Martin 2026-11-23): who is watched, and a soft pill back
+   to your own car, bottom centre between the minimap and the rev counter. Borderless, like the race HUD. */
+#watch { left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
+  gap: 8px; white-space: nowrap; animation: watchin .45s cubic-bezier(.2, .9, .3, 1.15); }
+#watch.hidden { display: none; }
+@keyframes watchin { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } }
+#watch .who { display: flex; align-items: baseline; gap: .55em; padding: .5em 1.15em .55em; border-radius: 999px; background: rgba(18, 6, 43, .58);
+  font-size: clamp(12px, 1.05vw, 17px); font-weight: 800; letter-spacing: .12em; color: #fff; text-shadow: 1px 1px 0 var(--ink); }
+#watch .who .eye { font-size: .78em; letter-spacing: .22em; color: var(--cyan); opacity: .85; }
+#watch .who .eye::before { content: 'WATCHING'; }
+#watch .who i { align-self: center; width: .7em; height: .7em; border-radius: 50%; background: var(--c, var(--cyan)); box-shadow: 0 0 7px var(--c, var(--cyan)); }
+#watch .who b { font: 400 1.12em 'Russo One', var(--font); letter-spacing: .06em; }
+#watch .who .car { font-size: .85em; font-weight: 400; font-style: italic; letter-spacing: .04em; opacity: .85; }
+#watch .who .st:empty { display: none; }
+#watch .who .st { font-size: .78em; letter-spacing: .16em; color: var(--sun); }
+#watch .who .st.hot { color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }
+#watch .back { pointer-events: auto; cursor: pointer; border: none; border-radius: 999px; padding: .62em 1.5em .66em;
+  font: 800 clamp(12px, 1.05vw, 17px) var(--font); letter-spacing: .14em; color: var(--ink);
+  background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot)); box-shadow: 0 0 18px rgba(47, 243, 255, .45), 0 0 26px rgba(255, 43, 214, .3);
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
+#watch .back::before { content: '↩'; margin-right: .55em; font-weight: 900; }
+#watch .back:hover { transform: scale(1.05); filter: brightness(1.08); box-shadow: 0 0 24px rgba(47, 243, 255, .7), 0 0 34px rgba(255, 43, 214, .45); }
+#watch .back:active { transform: scale(.97); }
+#watch kbd, #watch .hint kbd { margin-left: .5em; padding: .1em .45em; border-radius: .45em; font: 800 .72em var(--font); letter-spacing: .08em; background: rgba(18, 6, 43, .22); }
+#watch .hint { font-size: clamp(9px, .75vw, 12px); font-weight: 800; letter-spacing: .2em; color: #fff; opacity: .6; text-shadow: 1px 1px 0 var(--ink); }
+#watch .hint kbd { margin: 0 .35em 0 0; background: rgba(18, 6, 43, .55); color: #fff; }
+#watch .hint.hidden { display: none; }
+/* the watched player's own name tag is in the pill */
+.pname.watched { display: none !important; }
+/* your own car waits: its tyre button, lap timer and stage panel are not for the watched car */
+body.watching #tyre, body.watching #lap, body.watching #lapsplit, body.watching #lapback, body.watching #trackpills,
+body.watching #stage, body.watching #stageagain { visibility: hidden; }
+/* the online list on desktop: a name is a button that watches that car, your own line brings you back */
+body:not(.touch) #people .who li[data-id] { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; margin-left: -.1em;
+  transition: background .15s ease, opacity .15s ease; }
+body:not(.touch) #people .who li[data-id]:hover { background: rgba(47, 243, 255, .16); opacity: 1; }
+body:not(.touch) #people .who li.on { background: rgba(47, 243, 255, .22); opacity: 1; box-shadow: 0 0 10px rgba(47, 243, 255, .25); }
+body:not(.touch) #people .me.back { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; opacity: .9; }
+body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
+
+/* thumbs up button in front of a player's colour dot (src/kudos.js, Martin 2026-11-23): a small neon thumb,
+   faint for 30 s after sending. Its own hit target, ahead of the click that follows a car as a spectator */
+#people .ku, #roster .ku { display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .3em .06em 0; vertical-align: middle; cursor: pointer; pointer-events: auto;
+  color: var(--hot); filter: drop-shadow(0 0 3px var(--hot)); transition: opacity .3s, transform .15s; }
+#people .ku svg, #roster .ku svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; }
+#people .ku:hover, #roster .ku:hover { transform: scale(1.2); color: #fff; }
+#people .ku.wait, #roster .ku.wait { opacity: .3; filter: none; cursor: default; }
+#people .ku.sent, #roster .ku.sent { animation: kusent .5s ease-out; }
+@keyframes kusent { 0% { transform: scale(1.7); color: #fff; } 100% { transform: scale(1); } }
+/* phones: a finger-sized target around the small thumb */
+body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: -7px .1em -7px -6px; box-sizing: content-box; }
+/* a player someone is watching: the count after their name, for everyone (no names: Martin 2026-11-23) */
+#people small.wn, #roster small.wn { margin-left: .5em; font-size: .78em; font-weight: 800; font-style: normal; letter-spacing: .14em; color: var(--cyan); text-shadow: 0 0 6px rgba(47, 243, 255, .6); }

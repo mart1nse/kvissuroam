@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind } from './audio-tyres.js';
+import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -34,6 +34,7 @@ export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
+  let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
   let noiseSrc = null, workletReady = false, squeal = null, gravel = null, looseS = 0;
@@ -323,6 +324,7 @@ export function createAudio() {
     spinFilt.frequency.setTargetAtTime(680 + 420 * spinS, t, 0.1);
     spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
     // the squeal, at the speed the tread slides over the road (wheel speed less ground speed)
+    squeal.setTrim(ev ? EV_SQUEAL_TRIM : 1);
     squeal.step(t, spinS, car.slipV || 0, skid, v, car.spec.mass);
     // wheelspin on gravel, dirt and grass: the same spin, on loose ground and with the wheels down
     looseS += ((dead || flying || car.surface === 1 || car.surface === 4 ? 0 : spinAmount(car)) - looseS) * 0.15;
@@ -418,6 +420,7 @@ export function createAudio() {
     v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.15;
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
     v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
+    v.squeal.setTrim(v.ev ? EV_SQUEAL_TRIM : 1);
     v.squeal.step(t, v.spin, r.slipV || 0, v.skid, speed, s.mass);
     v.loose += ((r.paved || r.ground == null ? 0 : spinAmount(r)) - v.loose) * 0.15;
     v.gravel.step(t, v.loose, r.slipV || 0, speed, r.ground ?? 1);
@@ -453,13 +456,14 @@ export function createAudio() {
 
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
-    if (!ctx || ctx.state !== 'running') return;
-    const join = kind === 'join' || kind === 'record';
-    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7
-    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : join ? [659.25, 987.77] : [783.99, 523.25];
-    const t0 = ctx.currentTime + 0.01, level = join ? 0.16 : 0.12;
+    if (!notify || !ctx || ctx.state !== 'running') return;
+    const join = kind === 'join' || kind === 'record' || kind === 'kudos';
+    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7, kudos (a thumbs up for
+    // us, src/kudos.js): a quick D6 A6 D7 sparkle
+    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : kind === 'kudos' ? [1174.66, 1760, 2349.32] : join ? [659.25, 987.77] : [783.99, 523.25];
+    const t0 = ctx.currentTime + 0.01, level = kind === 'kudos' ? 0.13 : join ? 0.16 : 0.12;
     notes.forEach((f, i) => {
-      const t = t0 + i * (kind === 'record' ? 0.08 : 0.11);
+      const t = t0 + i * (kind === 'record' ? 0.08 : kind === 'kudos' ? 0.06 : 0.11);
       const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
       o.type = join ? 'sine' : 'triangle'; o.frequency.value = f;
       o2.type = 'sine'; o2.frequency.value = f * 2.005;           // a little shimmer an octave up
@@ -548,6 +552,7 @@ export function createAudio() {
       if (master) master.gain.setTargetAtTime(muted || b ? 0 : 0.5, ctx.currentTime, 0.05);
     },
     get muted() { return muted; },
+    setNotify(on) { notify = !!on; }, get notify() { return notify; },
     // the tyre squeal: 'note' (the held note) or 'real' (modelled, public/tyre-worklet.js)
     setSquealKind, get squealKind() { return squealKind(); },
     // (for tests: which other cars have a voice, how far off they are and how loud)

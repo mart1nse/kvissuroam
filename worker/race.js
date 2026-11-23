@@ -1,7 +1,7 @@
 // Online race mode (Martin, 2026-11-21): one race at a time for everyone in the lobby.
 //
 // Anyone driving on the map can vote to START a race (key 1 or the button). When half of the drivers
-// have voted (both of two, one when alone) the race is on: five seconds of RACE STARTS IN, in which
+// have voted (both of two, one when alone; at most 5 to 8 with many on the map, see needStart) the race is on: five seconds of RACE STARTS IN, in which
 // anyone can join or leave, then ten seconds on the grid behind the line on Küüni, five red lights
 // one a second, and lights out after a short random hold. One lap from there; the first over the
 // line wins. While it runs only racers still in it can vote to RESTART (half of them plus one). Once
@@ -15,15 +15,23 @@
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
 const LATE_MS = 150000;          // join after the lights up to this long (Martin 2026-11-22), with a start of one's own
-const LATE_GRID = 10600;         // a late joiner's own grid: lights on in its last five seconds, then out
+// a late joiner's own start (Martin 2026-11-23: straight to the lights, no count first): their grid time is set
+// five seconds back, so the first light is on as they land on the grid, the fifth at 4 s, out at LATE_GO
+const LATE_GO = 5600;
 const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (random, the same for all)
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
 
-// votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one
-export const needStart = (n) => (n <= 1 ? 1 : Math.max(2, Math.ceil(n / 2)));
+// votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one.
+// With many on the map half was too many to get a race going (Martin 2026-11-23): never more than 5 up to
+// 15 drivers, 6 for 16 to 20, 7 for 21 to 25, 8 from 26. The restart vote keeps its half plus one.
+export const needStart = (n) => {
+  if (n <= 1) return 1;
+  const half = Math.max(2, Math.ceil(n / 2));
+  return Math.min(half, n <= 15 ? 5 : n <= 20 ? 6 : n <= 25 ? 7 : 8);
+};
 export const needRestart = (n) => Math.floor(n / 2) + 1;
 
 export class RaceDesk {
@@ -210,7 +218,7 @@ export class RaceDesk {
         // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
         // (g on the grid, go lights out: the race time is counted from go)
         else if (m.on && ph === 'grid' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1 });
-        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now, go: now + LATE_GRID });
+        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now - 5000, go: now + LATE_GO });
         else if (!m.on && i >= 0 && (ph !== 'race' || now < (this.s.racers[i].go || 0))) this.s.racers.splice(i, 1);
         else if (!m.on && i >= 0 && !this.s.racers[i].out && this.s.racers[i].ms == null) this.s.racers[i].out = 'quit';
         this.check(now); this.save(); this.send();
@@ -220,7 +228,9 @@ export class RaceDesk {
         const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
         const ms = Math.round(Number(m.ms));
         if (!r || r.ms != null || r.out || !(ms >= 30000 && ms <= MAX_RACE_MS) || now < (r.go || this.s.tGreen) + 25000) return true;
-        r.ms = ms;
+        // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
+        // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
+        r.ms = ms + (r.go ? Math.max(0, r.go - this.s.tGreen) : 0);
         this.check(now); this.save(); this.send();
         return true;
       }

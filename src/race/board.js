@@ -94,6 +94,15 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
   panel.className = 'screen hidden';
   document.body.appendChild(panel);
 
+  // Your own best in each car, beside the records (Martin, 23 Nov 2026: when others were faster his times
+  // were nowhere on the board). From this browser's laps, with the day it was set.
+  function own(list, id, ic) {
+    const r = list.reduce((m, l) => (l.car === id && (!m || l.ms < m.ms) ? l : m), null);
+    if (!r) return '<small class="none">–</small>';
+    const d = r.at ? new Date(r.at).toLocaleDateString([], { day: 'numeric', month: 'short' }) : '';
+    return `${ic(r)}<b>${fmtTime(r.ms / 1000)}</b>${d ? `<small class="date">${d}</small>` : ''}`;
+  }
+
   function render() {
     if (panel.classList.contains('hidden')) return;
     const b = mp.board;
@@ -107,7 +116,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     const ic = (r) => (kinds.size > 1 ? inpIcon(r?.inp || 'kb') : '') + ty(r);
     // (the best ever also says the day the record was set)
     const cell = (r, dated) => (r ? `${ic(r)}<b>${fmtTime(r.ms / 1000)}</b><small>${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
-    const rows = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');
+    const rows = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td><td class="you">${own(race.laps, id, ic)}</td></tr>`).join('');
     const todayBest = (b?.today || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const when = (at) => new Date(at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const mine = race.laps.slice(-5).reverse()
@@ -120,7 +129,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
       ${todayBest ? `<p class="today">FASTEST TODAY ${ic(todayBest)}<b>${fmtTime(todayBest.ms / 1000)}</b> ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
-      <div class="tablelaps"><table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="tablelaps"><table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead><tbody>${rows}</tbody></table>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}</div>
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
@@ -137,11 +146,11 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     const bestOf = (list, id) => list.filter((r) => r.car === id).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const kept = runs.filter((r) => r.inp);                      // (the ones that count: see best() in raadi.js)
     const everR = R0 ? net(R0.allTime) : kept, todayR = R0 ? net(R0.today) : kept.filter((r) => new Date(r.at).toDateString() === today);
-    const rowsT = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');
-    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(everR, id), true)}</td><td>${cell(bestOf(todayR, id))}</td></tr>`).join('');
+    const rowsT = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td><td class="you">${own(race.laps, id, ic)}</td></tr>`).join('');
+    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(everR, id), true)}</td><td>${cell(bestOf(todayR, id))}</td><td class="you">${own(kept, id, ic)}</td></tr>`).join('');
     const [T, R] = TRACKS;
     const head = (t, sub) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small></h3>`;
-    const table = (rows) => `<table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const table = (rows) => `<table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead><tbody>${rows}</tbody></table>`;
     const tag = (l) => TRACK_ICON[l.track || 'toome'];
     const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
       .map((l) => `<li>${tag(l)}${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');

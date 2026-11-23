@@ -28,7 +28,7 @@ export function createPeople({ mp, onFocus }) {
     const p = shown[+li.dataset.i];
     if (p && p.x !== undefined) onFocus(p.x, p.z);
   });
-  let shown = [], myCar = null;
+  let shown = [], myCar = null, rosterKey = '';
   const listMax = document.body.classList.contains('touch') ? LIST_MAX_PHONE : LIST_MAX;
 
   const elMe = box.querySelector('.me');
@@ -36,13 +36,15 @@ export function createPeople({ mp, onFocus }) {
   function refresh() {
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
-    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}${myRec ? ` · ${myRec}` : ''}` : '';
+    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}` : '';
     if (elMe.textContent !== nm) elMe.textContent = nm;
     const drivers = mp.online ? mp.drivers() : [];
     const n = mp.online ? drivers.length + 1 : 0;
     const key = `${n}|${mp.name}|${drivers.map((p) => p.name + p.colour + mp.recordOf(p.name)).join('|')}`;
     if (key === last) return;
     last = key;
+    // the city map's list follows the connection (lost, back) while the map is open
+    if (myCar && rosterKey && rosterKey !== `${mp.online}|${mp.online ? mp.roster().length : 0}` && !list.classList.contains('hidden')) api.showRoster();
     elCount.classList.toggle('hidden', n === 0);
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
@@ -66,11 +68,13 @@ export function createPeople({ mp, onFocus }) {
     setTimeout(() => { li.classList.add('out'); setTimeout(() => li.remove(), 600); }, NOTE_MS);
   }
 
-  return {
+  const api = {
     // multiplayer events
     event(kind, name, old) {
-      if (kind === 'join') note(`${name} joined`, 'join');
-      else if (kind === 'leave') note(`${name} left`, 'leave');
+      // the same name as ours: the game open in another tab or on another device (not us leaving)
+      const twin = name === mp.name ? ' (other tab)' : '';
+      if (kind === 'join') note(`${name}${twin} joined`, 'join');
+      else if (kind === 'leave') note(`${name}${twin} left`, 'leave');
       else if (kind === 'rename') note(`${old} is now ${name}`, 'rename');
       // the player list changes right after this event; look once it has
       queueMicrotask(() => {
@@ -83,14 +87,18 @@ export function createPeople({ mp, onFocus }) {
     // background tab), greyed out and not counted
     showRoster(car = myCar) {
       myCar = car;
-      const others = mp.roster();
-      if (!mp.online || !others.length) { list.classList.add('hidden'); return; }
+      // always listed, alone too (Martin, 2026-11-23: alone on the map the list was hidden, so it looked
+      // as if he had dropped out); with the connection down it says so instead of a count
+      const others = mp.online ? mp.roster() : [];
       const driving = others.filter((p) => p.x !== undefined), away = others.filter((p) => p.x === undefined);
-      shown = [{ name: `${mp.name} (you)`, me: true, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}</li>`;
-      list.innerHTML = `<h4>${driving.length + 1} ONLINE</h4><ul>${shown.map(row).join('')}</ul>`;
+      shown = [{ name: `${mp.name || 'YOU'} (you)`, me: true, x: car?.x, z: car?.z }, ...driving, ...away];
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
+      const head = mp.online ? `${driving.length + 1} ONLINE` : 'OFFLINE · RECONNECTING';
+      list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
+      rosterKey = `${mp.online}|${others.length}`;
     },
     hideRoster() { list.classList.add('hidden'); },
   };
+  return api;
 }

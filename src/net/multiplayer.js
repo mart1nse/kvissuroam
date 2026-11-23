@@ -68,6 +68,9 @@ function haloMesh() {
 
 export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false }) {
   const others = new Map();      // id -> remote player
+  // every id this page has had: after a reconnect the server may still hold our old connection for a
+  // while, and must not show up as another driver (or later as "left", with the chime)
+  const mine = new Set();
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
@@ -144,10 +147,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     };
     sock.onerror = () => {};
   }
+  // back again soon after a lost connection (a deploy cuts everyone off for a few seconds): waits of 2,
+  // 4, 8 and then 15 s, and at once when the network or the tab comes back (Martin, 2026-11-23: offline
+  // for up to a minute after a deploy, while the game looked as if nothing was wrong)
+  let wsRetry = 0;
   function schedule() {
-    retry = Math.min(retry * 2, 60);
-    setTimeout(connect, retry * 1000);
+    retry = Math.min(retry * 2, 15);
+    clearTimeout(wsRetry);
+    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, retry * 1000);
   }
+  const soon = () => { if (wsRetry && !document.hidden) { clearTimeout(wsRetry); wsRetry = 0; connect(); } };
+  addEventListener('online', soon);
+  document.addEventListener('visibilitychange', soon);
 
   // each player's own map arrow colour: the first one nobody online has, kept while they stay
   // (no yellow: our own car; no pink: the race track; no blue: water; no white: the north needle)
@@ -157,7 +168,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     return COLOURS.find((c) => !used.has(c)) || COLOURS[others.size % COLOURS.length];
   };
   function add(p) {
-    if (others.has(p.id) || p.id === myId) return others.get(p.id);
+    if (others.has(p.id) || p.id === myId || mine.has(p.id)) return others.get(p.id);
     if (typeof p.id !== 'string' || typeof p.name !== 'string' || others.size >= MAX_OTHERS) return null;
     const el = document.createElement('div');
     el.className = 'pname';
@@ -212,6 +223,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'welcome':
         myId = m.id;
+        if (typeof m.id === 'string') mine.add(m.id);
         // the lap ticket: proof of when this browser came online, sent along with every lap (see
         // "Lap tickets" in worker/index.js); kept across reconnects
         if (typeof m.key === 'string') ticket = m.key;
@@ -224,6 +236,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (onPeople) onPeople('join', m.name); else toast(`${m.name.toUpperCase()} JOINED`, 2600);
         break;
       case 'leave': {
+        if (mine.has(m.id)) break;                 // our own old connection, closed by the server
         const o = others.get(m.id);
         if (o) { if (onPeople) onPeople('leave', o.name); else toast(`${o.name.toUpperCase()} LEFT`, 1800); }
         drop(m.id);

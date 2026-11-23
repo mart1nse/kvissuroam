@@ -783,6 +783,8 @@ async function boot() {
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
+    // phones, old computers and the low graphics levels draw other cars whole only nearer
+    low: () => isTouch || !!xlow || lowRung(),
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onWatch: isTouch ? null : (id) => (id ? watch?.start(id) : watch?.stop()), watching: () => watch?.id || null });

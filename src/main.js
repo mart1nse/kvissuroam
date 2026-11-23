@@ -643,7 +643,7 @@ async function boot() {
   ulenurmeKonsum = createUlenurmeKonsum(scene, world, { shadows: !isTouch });
   road3 = createRoad3(scene, world);
   kaluri = createKaluri(scene, world, { shadows: !isTouch });
-  raadiPark = createRaadiPark(scene, world, { lite: isTouch });   // the park's stones (its young trees: raadiParkTrees)
+  raadiPark = createRaadiPark(scene, world, { lite: isTouch || !!xlow });   // the park's stones (its young trees: raadiParkTrees)
   isaJaPoeg = createIsaJaPoeg(scene, world, { shadows: !isTouch });   // the Isa ja poeg bronze at the first corner
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });

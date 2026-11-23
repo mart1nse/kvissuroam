@@ -100,7 +100,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     const pick = (list, id) => list?.find((r) => r.car === id);
     const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
     // which controller drove each lap shows only once laps exist with more than one kind
-    const kinds = new Set([...(b?.inputs || []), ...race.laps.map((l) => l.inp || 'kb')]);
+    const kinds = new Set([...(b?.inputs || []), ...(b?.raadi?.inputs || []), ...race.laps.map((l) => l.inp || 'kb'), ...(stage?.runs || []).map((l) => l.inp || 'kb')]);
     // the tyres, marked where they are not the circuit's usual ones: gravel on Toomemägi, road at Raadi
     // (Raadi runs from before tyres were kept carry none and get no mark)
     const ty = (r) => (r?.track === 'raadi' ? r.ty === 'road' : r?.ty === 'gravel') ? tyreMark(r.ty) : '';
@@ -126,25 +126,29 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
   }
 
   // Toomemägi and Raadi side by side (Martin, 23 Nov 2026), and one list of the latest laps on both, each
-  // with the circuit's small outline. Raadi times are this browser's own for now (not sent to the server yet).
+  // with the circuit's small outline. Raadi's times come from the server like Toomemägi's (its part of the
+  // board, `raadi`); while the server cannot be reached the table shows this browser's own runs.
   function renderBoth({ b, pick, day, ic, cell, when }) {
-    const me = mp.name;
+    const me = mp.name, R0 = b?.raadi;
     const runs = stage.runs.map((r) => ({ ...r, name: me, track: 'raadi' }));
+    // (the server keeps the tyres as gravel or nothing: nothing is road tyres there)
+    const net = (list) => (list || []).map((r) => ({ ...r, track: 'raadi', ty: r.ty || 'road' }));
     const today = new Date().toDateString();
     const bestOf = (list, id) => list.filter((r) => r.car === id).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
-    const todayRuns = runs.filter((r) => new Date(r.at).toDateString() === today);
+    const kept = runs.filter((r) => r.inp);                      // (the ones that count: see best() in raadi.js)
+    const everR = R0 ? net(R0.allTime) : kept, todayR = R0 ? net(R0.today) : kept.filter((r) => new Date(r.at).toDateString() === today);
     const rowsT = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');
-    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(runs, id), true)}</td><td>${cell(bestOf(todayRuns, id))}</td></tr>`).join('');
+    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(everR, id), true)}</td><td>${cell(bestOf(todayR, id))}</td></tr>`).join('');
     const [T, R] = TRACKS;
     const head = (t, sub) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small></h3>`;
     const table = (rows) => `<table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>`;
     const tag = (l) => TRACK_ICON[l.track || 'toome'];
     const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
       .map((l) => `<li>${tag(l)}${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
-    const recent = [...(b?.recent || []).map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 20)
+    const recent = [...(b?.recent || []).map((l) => ({ ...l, track: 'toome' })), ...(R0 ? net(R0.recent) : runs)].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 20)
       .map((l) => `<li>${tag(l)}${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TARTU · LAP TIMES</h2>
-      <p class="small">${b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi driven` : 'lap times are offline'} · Raadi times are this browser's own for now</p>
+      <p class="small">${b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi${R0 ? ` and ${R0.laps} run${R0.laps === 1 ? '' : 's'} of the Raadi stage` : ''} driven` : 'lap times are offline'}</p>
       <div class="boards"><div class="bcol">${head(T, 'LAP')}${table(rowsT)}</div><div class="bcol">${head(R, 'STAGE')}${table(rowsR)}</div></div>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
@@ -158,11 +162,16 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
   btn.addEventListener('click', show);
   const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
   const record = (id) => {
-    if (id === 'raadi') { const r = stage.best().any; return r ? { ms: r.ms, name: mp.name, car: cars[r.car]?.short } : null; }
+    if (id === 'raadi') {
+      // (the server's, or this browser's own best while a run of its is still on the way there)
+      const own = stage.best().any, net = least(mp.board?.raadi?.allTime || []);
+      const r = net && (!own || net.ms <= own.ms) ? net : own && { ...own, name: mp.name };
+      return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
+    }
     const r = least(mp.board?.allTime || []);
     return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
   };
-  const mine = (id) => least(id === 'raadi' ? stage.runs : race.laps);
+  const mine = (id) => (id === 'raadi' ? stage.best().any : least(race.laps));
   const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack }) : null;
   if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });

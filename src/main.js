@@ -145,7 +145,8 @@ import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
-import { createPeople } from './net/people.js';
+import { createPeople, ME_COLOUR } from './net/people.js';
+import { createKudos } from './kudos.js';
 import { createBoard } from './race/board.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches, cornerOverPaint } from './race/corners.js';
@@ -317,6 +318,7 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
+const kudos = createKudos();        // thumbs up between players: a neon sign in the receiver's back window
 let watch = null;                  // spectator mode, desktop only: the camera follows another player's car (src/spectate.js)
 let watchSpec = null;              // the car the HUD shows while watching
 const mapHits = [];                // the players' arrows on the minimap as last drawn (canvas pixels), to click
@@ -783,10 +785,18 @@ async function boot() {
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
+    // a thumbs up (src/kudos.js): the sign on the receiver's car wherever it is in view, ours or another's
+    onKudos: (from, to) => {
+      const who = from === mp.id ? { name: mp.name, colour: ME_COLOUR } : { name: mp.nameOf(from), colour: mp.colourOf(from) };
+      const on = to === mp.id ? (model ? { group: model.group, car: carId } : null) : mp.carOf(to);
+      if (on && who.name) kudos.show(on.group, on.car, who);
+      if (to === mp.id && who.name) { audio.chime?.('kudos'); people?.event('kudos', who.name); }
+    },
     // phones, old computers and the low graphics levels draw other cars whole only nearer
     low: () => isTouch || !!xlow || lowRung(),
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
+    onKudos: () => {},
     onWatch: isTouch ? null : (id) => (id ? watch?.start(id) : watch?.stop()), watching: () => watch?.id || null });
   if (!isTouch) watch = createSpectate({
     mp, world, toast: (t, ms) => hud.toast(t, ms), racing: (id) => !!raceMode?.racing(id),
@@ -1401,7 +1411,8 @@ function setTyres(k) {
   if (car) car.tyres = tyres;
   try { localStorage.setItem('kvissuroam.tyres', tyres); } catch {}
   showTyres();
-  if (!changed) return;
+  // (not in the garage: its TYRES button already says it, and the note sat over DRIVE; Martin 23 Nov)
+  if (!changed || mode !== 'drive') return;
   tyreToast.innerHTML = `${tyreIcon(tyres)}<span>Tyres changed to: <b>${tyres}</b></span>`;
   tyreToast.className = `show ${tyres}`;
   clearTimeout(tyreToastT);
@@ -1759,6 +1770,7 @@ function frame(ts) {
   } else smoke.update(null, dt, false, mp.remotes());
   // (a spectator sends no position: the others do not see the parked car meanwhile)
   mp.update(car, dt, mode === 'drive' && !watch?.active);
+  if (kudos.showing) kudos.update(dt);
   watch?.frame(dt);
   // counted for race votes by the same rule as the online list: on the map, page in view (off the map
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
@@ -2065,7 +2077,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

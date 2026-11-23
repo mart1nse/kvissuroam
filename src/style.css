@@ -366,7 +366,11 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
   font: 400 10px/1.3 'Russo One', var(--font); letter-spacing: .08em; white-space: nowrap; color: #fff;
   text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot);
 }
-#people .who small.rec { margin-left: .5em; font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* like the race placement (Martin, 2026-11-23) */
+#people :is(.who, .me) small.rec { margin-left: .5em; font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* like the race placement (Martin, 2026-11-23) */
+#people :is(.who, .me) small.rec b { font-weight: 400; color: #ffe46b; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* the record's time */
+body.touch #people :is(.who, .me) small.rec { display: block; margin: 0 0 1px; }   /* (under the name's dot, after the thumb when there is one) */
+body.touch #people .who li:has(> .ku) small.rec { margin-left: calc(1.3em / .8 + .1em / .8 + 6px); }
+body.touch #people :is(.who, .me) small.rec .rc { display: none; }
 #menu.hidden ~ #names { display: block; }
 
 /* The row under the cars. DRIVE is the one thing to press, so it is the big filled button in the
@@ -1073,3 +1077,17 @@ body:not(.touch) #people .who li[data-id]:hover { background: rgba(47, 243, 255,
 body:not(.touch) #people .who li.on { background: rgba(47, 243, 255, .22); opacity: 1; box-shadow: 0 0 10px rgba(47, 243, 255, .25); }
 body:not(.touch) #people .me.back { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; opacity: .9; }
 body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
+
+/* thumbs up button in front of a player's colour dot (src/kudos.js, Martin 2026-11-23): a small neon thumb,
+   faint for 30 s after sending. Its own hit target, ahead of the click that follows a car as a spectator */
+#people .ku, #roster .ku { display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .3em .06em 0; vertical-align: middle; cursor: pointer; pointer-events: auto;
+  color: var(--hot); filter: drop-shadow(0 0 3px var(--hot)); transition: opacity .3s, transform .15s; }
+#people .ku svg, #roster .ku svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; }
+#people .ku:hover, #roster .ku:hover { transform: scale(1.2); color: #fff; }
+#people .ku.wait, #roster .ku.wait { opacity: .3; filter: none; cursor: default; }
+#people .ku.sent, #roster .ku.sent { animation: kusent .5s ease-out; }
+@keyframes kusent { 0% { transform: scale(1.7); color: #fff; } 100% { transform: scale(1); } }
+/* phones: a finger-sized target around the small thumb */
+body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: -7px .1em -7px -6px; box-sizing: content-box; }
+/* a player someone is watching: the count after their name, for everyone (no names: Martin 2026-11-23) */
+#people small.wn, #roster small.wn { margin-left: .5em; font-size: .78em; font-weight: 800; font-style: normal; letter-spacing: .14em; color: var(--cyan); text-shadow: 0 0 6px rgba(47, 243, 255, .6); }

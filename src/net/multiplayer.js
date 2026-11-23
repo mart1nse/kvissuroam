@@ -10,8 +10,9 @@
 // bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress.
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
-import { escapeHtml } from '../race/race.js';
+import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
+import { KUDOS_GAP_S } from '../kudos.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -113,12 +114,13 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false, stage = false, low = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
   const mine = new Set();
   let bundled = false;           // this connection's server sends positions in bundles
+  let myWn = 0;                  // spectators watching our car (the server's count)
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
@@ -129,6 +131,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // until the race state has come on this connection, each clock question also asks for it (r: 1):
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
+  const kudosAt = new Map();     // id -> when we last sent them a thumbs up (seconds)
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
   const far = farCars(scene, MAX_OTHERS);
@@ -158,11 +161,22 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
     onBoard?.(b);
   }
-  function recordOf(n) {
+  // with the lap's time after it (Martin 2026-11-23): "22B STI LAP RECORD 1:23.45"
+  function recOf(n) {
     const r = recs.get(n);
+    if (!r) return null;
+    if (Date.now() - r.t > REC_MS) { recs.delete(n); return null; }
+    return r;
+  }
+  function recordOf(n) {
+    const r = recOf(n);
     if (!r) return '';
-    if (Date.now() - r.t > REC_MS) { recs.delete(n); return ''; }
-    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD`;
+    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD${Number.isFinite(r.ms) ? ` ${fmtTime(r.ms / 1000)}` : ''}`;
+  }
+  // the record's time alone ('' for none), for the phone's narrow list
+  function recordTime(n) {
+    const r = recOf(n);
+    return r && Number.isFinite(r.ms) ? fmtTime(r.ms / 1000) : '';
   }
 
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
@@ -230,7 +244,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.textContent = p.name;
     el.style.display = 'none';
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', on: typeof p.on === 'string' ? p.on : '' };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0 };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -274,7 +288,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (on && tf !== o.tf) { o.tf = tf; o.el.style.transform = tf; }
   }
   // somebody is watching our car as a spectator (src/spectate.js)
-  function watchedNow() { if (myId) for (const o of others.values()) if (o.w === 'watch' && o.on === myId) return true; return false; }
+  // (the server tells everyone each player's spectator count, never who watches whom)
+  function watchedNow() { return myWn > 0; }
   function drop(id) {
     const o = others.get(id);
     if (!o) return;
@@ -311,6 +326,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'welcome':
         myId = m.id;
+        myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
         // the lap ticket: proof of when this browser came online, sent along with every lap (see
         // "Lap tickets" in worker/index.js); kept across reconnects
@@ -340,9 +356,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (o) setRemoteCar(o, m.car);
         break;
       }
+      case 'ku':            // a thumbs up, from id to `to` (either may be us): see src/kudos.js
+        if (typeof m.id === 'string' && typeof m.to === 'string') onKudos?.(m.id, m.to);
+        break;
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
-        if (o) { o.w = typeof m.w === 'string' ? m.w : ''; o.on = typeof m.on === 'string' ? m.on : ''; }
+        if (o) o.w = typeof m.w === 'string' ? m.w : '';
+        break;
+      }
+      case 'wn': {          // how many spectators watch a player (us too)
+        const n = Number.isInteger(m.n) && m.n >= 0 ? Math.min(m.n, 999) : 0;
+        if (m.id === myId) myWn = n;
+        else { const o = others.get(m.id); if (o) o.wn = n; }
         break;
       }
       case 'clock': {
@@ -361,7 +386,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
           if (Number.isFinite(m.lap.ms)) lastLaps.set(m.lap.name, { ms: m.lap.ms, car: m.lap.car, t: Date.now() });
           if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
-            recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
+            recs.set(m.lap.name, { car: m.lap.car, ms: m.lap.ms, t: Date.now() });
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
           }
         }
@@ -652,12 +677,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
@@ -679,7 +704,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     remote(id) { return others.get(id) || null; },
     // somebody is watching our car as a spectator
     get watched() { return watchedNow(); },
-    watchers() { let n = 0; for (const o of others.values()) if (o.w === 'watch' && o.on === myId && myId) n++; return n; },
+    watchers() { return myWn; },
     lastLap(n) { const l = lastLaps.get(n); return l && Date.now() - l.t < 10 * 60000 ? l : null; },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race
@@ -700,8 +725,24 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get counted() { return driving && !STEALTH; },
     poseOf(id) { const o = others.get(id); return o?.pose || null; },
     nameOf(id) { return others.get(id)?.name; },
-    // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''
+    colourOf(id) { return others.get(id)?.colour; },
+    // another player's car as drawn now (null when far: then nobody sees a sign on it), and its kind
+    carOf(id) { const o = others.get(id); return o?.model && o.near ? { group: o.model.group, car: o.modelCar } : null; },
+    // a thumbs up for another player (src/kudos.js): false while the last one to them is under KUDOS_GAP_S old
+    // (the server holds to the same), or in stealth
+    kudos(id) {
+      if (STEALTH || !online || !others.has(id)) return false;
+      const t = performance.now() / 1000;
+      if (t - (kudosAt.get(id) ?? -1e9) < KUDOS_GAP_S) return false;
+      kudosAt.set(id, t);
+      send({ t: 'ku', to: id });
+      return true;
+    },
+    // seconds until another thumbs up may go to this player (0: now)
+    kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
+    // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
+    recordTime,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen });

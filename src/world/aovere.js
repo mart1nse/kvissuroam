@@ -37,12 +37,12 @@ export function aovereWalls(walls) {
   ]);
 }
 
-// cars on the drives: [x, z, yaw, id, paint, lift] (forward = (sin yaw, -cos yaw))
+// cars on the drives, all BMWs (Martin, 23 Nov): [x, z, yaw, id, paint, lift] (forward = (sin yaw, -cos yaw))
 export const AOVERE_CARS = [
-  [6601.5, -4995.5, -2.47, 'passat', 'black', 0.03],
-  [6597.0, -4992.0, -2.47, 'rav4', 'grey', 0.03],
-  [6645.5, -5016.5, 0.67, 'mazda6', 'blue', 0.03],
-  [6567.0, -5023.5, -1.57, 'ceedsw', 'white', 0.03],
+  [6601.5, -4995.5, -2.47, 'f31', 'black', 0.03],
+  [6597.0, -4992.0, -2.47, 'f31', 'white', 0.03],
+  [6645.5, -5016.5, 0.67, 'f31', 'cyan', 0.03],
+  [6567.0, -5023.5, -1.57, 'f31', 'black', 0.03],
 ];
 
 // ---------------------------------------------------------------- the painters

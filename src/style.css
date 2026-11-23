@@ -472,7 +472,6 @@ body.touch #lapback { top: calc(34% + 40px); }
   font-size: clamp(9px, 1.2vw, 12px); letter-spacing: .1em; text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 body:not(.touch) #people { top: auto; left: max(14px, env(safe-area-inset-left)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(170px, 24vw, 280px) + 34px); }
 #people .count { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: var(--cyan); }
-#people .count i { width: 7px; height: 7px; border-radius: 50%; background: #5dff9b; box-shadow: 0 0 8px #5dff9b; }
 #people .count.solo { opacity: .6; }
 #people .feed { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 #people .feed li { color: #fff; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: notein .35s ease-out; transition: opacity .6s; }
@@ -512,7 +511,7 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i.behind { color: #ff5a6e; }
 #lap ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 5px; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
 /* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
    lap timer (top centre, var(--lapw) wide, its right edge at var(--lapr)) */
 body.touch #people { display: flex; flex-direction: column; align-items: flex-start;
@@ -523,7 +522,7 @@ body.touch #people .who { order: 1; }
 body.touch #people .feed { order: 2; }
 body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 0; font-size: .9em; line-height: 1.25; }
 #people .who li { color: #fff; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .08em; }
-#people .who li > i { display: inline-block; width: max(7px, .7em); height: max(7px, .7em); margin: 0 .45em .06em .05em; border-radius: 50%; vertical-align: middle; background: var(--c, var(--cyan)); box-shadow: 0 0 5px var(--c, var(--cyan)); }
+#people .who li > i, #people .me > i { display: inline-block; width: max(7px, .7em); height: max(7px, .7em); margin: 0 .45em .06em .05em; border-radius: 50%; vertical-align: middle; background: var(--c, var(--cyan)); box-shadow: 0 0 5px var(--c, var(--cyan)); }
 #people .who li.more { opacity: .6; }
 #roster li small { font-size: 9px; letter-spacing: .15em; margin-left: 4px; }
 #people .me { margin-top: 2px; font-size: .9em; color: #fff; opacity: .75; letter-spacing: .12em; }
@@ -819,3 +818,6 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 .vt.on { background: #5dff9b; box-shadow: 0 0 6px rgba(93, 255, 155, .7); }
 .vt.on::after { content: ''; position: absolute; left: 34%; top: 16%; width: 24%; height: 46%; border: solid #06301a; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 #roster li .vt { margin-right: 6px; }
+/* the car each player drives, short, after the name (Martin, 2026-11-23) */
+#people small.car, #roster small.car { margin-left: .35em; font-size: .78em; font-weight: 700; letter-spacing: .06em; color: var(--cyan); opacity: .8; }
+#roster li small.car { font-size: 10px; letter-spacing: .06em; margin-left: 5px; }

@@ -505,7 +505,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, name: o.name, colour: o.colour })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
@@ -514,6 +514,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       send({ t: 'name', name: n });
       return name;
     },
+    get car() { return carId; },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race
     get id() { return myId; },

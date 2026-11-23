@@ -853,42 +853,75 @@ body.touch #stagearrow { left: auto; right: calc(var(--lapr) + var(--lapw) / 2);
   background: rgba(18, 6, 43, .7); border: none; border-radius: 999px; text-shadow: 0 0 8px rgba(47, 243, 255, .8); }
 body.touch #stageagain { top: calc(34% + 40px); }
 #rbtn.away { font-size: .8em; animation: none; opacity: .9; }
-#trackpills { left: max(14px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); display: flex; gap: 6px; pointer-events: auto; }
+/* (desktop: on the right under the top buttons, clear of the race button at the top left: Martin 23 Nov) */
+#trackpills { right: max(10px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 68px); display: flex; gap: 6px; pointer-events: auto; }
 #trackpills button { padding: 6px 12px; border: none; border-radius: 999px; background: rgba(18, 6, 43, .55); color: var(--cyan);
   font: 800 clamp(10px, 1vw, 12px) var(--font); letter-spacing: .16em; touch-action: manipulation; }
 #trackpills button:active { transform: scale(.96); }
+#trackpills button.here { background: rgba(26, 84, 120, .7); color: #fff; }
 @media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
-body.touch #trackpills { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 4px); left: 50%; transform: translateX(-50%); }
+body.touch #trackpills { right: auto; top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 4px); left: 50%; transform: translateX(-50%); }
 body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 
-/* the start screen's track picker (?raadi=1): a card per circuit, the picked one bigger with its record */
-#trackpick { z-index: 1; display: flex; gap: clamp(8px, 1.4vw, 18px); align-items: flex-end; justify-content: center; }
-#trackpick .tcard { display: flex; align-items: center; gap: .7em; padding: .5em 1em .5em .6em; border: none; border-radius: 22px;
-  background: rgba(18, 6, 43, .45); color: #fff; font: 700 clamp(10px, 1vw, 13px) var(--font); letter-spacing: .14em; text-align: left; opacity: .72; touch-action: manipulation; transition: opacity .15s, background .15s; }
-#trackpick .tcard svg { width: 3.6em; height: 3.6em; flex: none; overflow: visible; }
-#trackpick .tcard path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
-#trackpick .tcard .tube { stroke: var(--pink); stroke-width: 60; opacity: .8; }
-#trackpick .tcard .core { stroke: #ffe3f4; stroke-width: 20; }
-#trackpick .tx { display: flex; flex-direction: column; gap: .2em; }
-#trackpick .tx b { color: var(--pink); font-size: 1.15em; letter-spacing: .2em; }
-#trackpick .tx small { font-size: .82em; opacity: .9; }
-#trackpick .tx .rec { color: var(--sun); }
-#trackpick .tx .rec i { font-style: normal; color: #fff; opacity: .8; }
-#trackpick .tx .lt { color: var(--cyan); font-size: .82em; text-shadow: 0 0 8px rgba(47, 243, 255, .7); }
-#trackpick .tcard.on { opacity: 1; background: rgba(18, 6, 43, .7); font-size: clamp(12px, 1.25vw, 16px); }
-#trackpick .tcard.on svg { width: 5.2em; height: 5.2em; }
-#trackpick .tcard.on .tube { stroke-width: 44; filter: drop-shadow(0 0 9px var(--hot)); }
+/* the start screen's track picker (?raadi=1), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
+   of cards under the tag line in the room above the cars, the picked one 520 x 210 at a 900 px high window
+   with the outline at full height, name, length and surface, mode chips, record, your best and LAP TIMES;
+   the others 300 x 132 and plainer. Everything is sized from the row's own height, so a lower window gets
+   the same cards smaller. */
+#trackpick { z-index: 2; flex: 1 1 0; min-height: 128px; max-height: 214px; width: 100%; container-type: size; display: flex; gap: 1.1em; align-items: flex-end; justify-content: center; margin: 0 0 6px; }
+#trackpick .tcard { box-sizing: border-box; display: flex; align-items: center; gap: 1em; height: 61.7cqh; aspect-ratio: 300 / 132; padding: .75em 1.1em .75em .75em; border: none; border-radius: 1em;
+  background: rgba(18, 6, 43, .55); backdrop-filter: blur(6px); color: #fff; font: 400 max(7px, calc(100cqh / 13.4)) var(--font); text-align: left; opacity: .82; touch-action: manipulation; transition: opacity .2s, background .2s; cursor: pointer; }
+#trackpick .tcard svg { height: 100%; width: auto; max-width: 42%; flex: none; overflow: visible; }
+#trackpick .tcard path, #trackpick .tcard line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+#trackpick .halo { display: none; stroke: var(--hot); stroke-width: 70; opacity: .35; filter: blur(18px); }
+#trackpick .tube { stroke: #c79ad8; stroke-width: 34; }
+#trackpick .core { stroke: #f3e6ff; stroke-width: 10; opacity: .6; }
+#trackpick .sf { stroke: #fff; stroke-width: 16; }
+#trackpick .tail { stroke: var(--cyan); stroke-width: 34; filter: drop-shadow(0 0 12px var(--cyan)); }
+#trackpick .tx { display: flex; flex-direction: column; gap: .31em; min-width: 0; }
+#trackpick .nm { font: 400 1.31em 'Russo One', var(--font); letter-spacing: .05em; white-space: nowrap; }
+#trackpick .meta { font-size: .66em; letter-spacing: .2em; color: #e8d9ff; opacity: .85; white-space: nowrap; }
+#trackpick .meta i { font-style: normal; color: var(--sun); }
+#trackpick .modes { display: flex; gap: .4em; margin: .1em 0; }
+#trackpick .modes i { font-style: normal; font-size: .6em; letter-spacing: .2em; font-weight: 800; padding: .42em .95em; border-radius: 999px; white-space: nowrap; background: rgba(47, 243, 255, .16); color: var(--cyan); }
+#trackpick .modes i.race { background: rgba(255, 43, 214, .28); color: #ffd0f1; }
+#trackpick .dl { display: grid; grid-template-columns: auto auto; justify-content: start; gap: .19em .75em; font-size: .81em; align-items: baseline; margin-top: .1em; }
+#trackpick .dl em { font-style: normal; font-size: .7em; letter-spacing: .2em; color: var(--pink); }
+#trackpick .dl span { white-space: nowrap; }
+#trackpick .dl b { font-variant-numeric: tabular-nums; margin-right: .45em; }
+#trackpick .dl small { opacity: .7; font-size: .85em; }
+#trackpick .lt { font-size: .63em; letter-spacing: .24em; color: var(--cyan); margin-top: .2em; text-shadow: 0 0 8px rgba(47, 243, 255, .7); }
+#trackpick .tcard:not(.on) .modes i:nth-child(n+2) { display: none; }
+#trackpick .tcard { overflow: hidden; }
+#trackpick .tcard.on { overflow: visible; height: 98cqh; aspect-ratio: 520 / 210; opacity: 1; padding: .88em 1.5em .88em .88em; gap: 1.4em;
+  background: linear-gradient(135deg, rgba(47, 243, 255, .2), rgba(90, 40, 170, .45)); box-shadow: 0 0 26px rgba(47, 243, 255, .35); }
+#trackpick .tcard.on .nm { font-size: 2.12em; text-shadow: 2px 2px 0 var(--hot); }
+#trackpick .tcard.on .halo { display: inline; }
+#trackpick .tcard.on .tube { stroke: var(--pink); filter: drop-shadow(0 0 9px var(--hot)); }
+#trackpick .tcard.on .core { stroke: #ffe3f4; opacity: 1; }
 @media (hover: hover) and (pointer: fine) { #trackpick .tcard:hover { opacity: 1; } }
-@media (max-height: 560px) {
-  #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); flex-direction: column; align-items: flex-end; }
+#trackpick .tcard:focus-visible { outline: 2px solid var(--sun); outline-offset: 4px; }
+/* phones, and a window too low for the row: pills (under the logo on phones, in the corner on a low desktop window) */
+@media (max-height: 520px) {
+  #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); width: auto; flex: none; max-height: none; container-type: normal; flex-direction: column; align-items: flex-end; gap: 6px; margin: 0; }
 }
-/* phones: a row of pills under the logo */
-body.touch #trackpick { position: static; flex-direction: row; align-items: center; gap: 6px; margin-top: 2px; }
-body.touch #trackpick .tcard { padding: 3px 10px 3px 5px; font-size: 9px; gap: .5em; }
-body.touch #trackpick .tcard svg { width: 2.2em; height: 2.2em; }
-body.touch #trackpick .tcard.on svg { width: 2.6em; height: 2.6em; }
+body.touch #trackpick { position: static; flex: none; width: auto; max-height: none; container-type: normal; flex-direction: row; align-items: center; gap: 6px; margin: 2px 0 0; }
+@media (max-height: 520px) {
+  #trackpick .tcard, #trackpick .tcard.on { height: auto; aspect-ratio: auto; padding: 4px 12px 4px 6px; font-size: 10px; gap: .5em; border-radius: 999px; box-shadow: none; backdrop-filter: none; }
+  #trackpick .tcard svg { height: 2.4em; max-width: none; }
+  #trackpick .tx { flex-direction: row; align-items: baseline; gap: .7em; }
+  #trackpick .nm, #trackpick .tcard.on .nm { font: 800 1em var(--font); letter-spacing: .18em; color: var(--pink); text-shadow: none; }
+  #trackpick .meta { font-size: .85em; letter-spacing: .14em; }
+  #trackpick .meta u, #trackpick .modes, #trackpick .dl, #trackpick .lt, #trackpick .halo, #trackpick .tail { display: none !important; }
+  #trackpick .tube { stroke-width: 60; } #trackpick .core { stroke-width: 20; }
+}
+body.touch #trackpick .tcard, body.touch #trackpick .tcard.on { height: auto; aspect-ratio: auto; padding: 3px 10px 3px 5px; font-size: 9px; gap: .5em; border-radius: 999px; box-shadow: none; backdrop-filter: none; }
+body.touch #trackpick .tcard svg { height: 2.4em; max-width: none; }
 body.touch #trackpick .tx { flex-direction: row; align-items: baseline; gap: .7em; }
-body.touch #trackpick .tx .rec, body.touch #trackpick .tx .lt { display: none; }
+body.touch #trackpick .nm, body.touch #trackpick .tcard.on .nm { font: 800 1em var(--font); letter-spacing: .18em; color: var(--pink); text-shadow: none; }
+body.touch #trackpick .meta { font-size: .85em; letter-spacing: .14em; }
+body.touch #trackpick .meta u, body.touch #trackpick .modes, body.touch #trackpick .dl, body.touch #trackpick .lt, body.touch #trackpick .halo, body.touch #trackpick .tail { display: none !important; }
+body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { stroke-width: 20; }
 
 /* the lap times board with both circuits side by side, and the circuits' small marks in the lists */
 #board .boards { display: flex; gap: clamp(14px, 3vw, 40px); justify-content: center; align-items: flex-start; flex-wrap: wrap; }

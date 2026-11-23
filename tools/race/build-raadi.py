@@ -6,13 +6,14 @@ the Land Board's aerial photo (world x, z). Here it is laid onto the game's own 
 public/data/vectors.json: the route goes through the traced line's points and the hand-placed points
 below, joined by shortest paths on the path network.
 
-The game's map has no path for the stage's short cut between the two loops east of the ponds, so the
-route there runs round by the pond instead (about 60 m longer).
+The game's map has no path for the stage's cut-through from the stem of the east loop to the road east of
+the pond: it is in src/world/raadipaths.json (drawn from the air photo; the game adds it to its map too).
 
 Writes, for src/race/raadi.js:
   pts    centre line every 2 m (world x, z), from the start line to the stop board
   hw     half-width of the path at each point
   start  index of the start line, finish: index of the flying finish (the stop board is the last point)
+  gravelFrom: the first straight up to this index is old tarmac (no wheel tracks worn into it)
   line   the racing line: sideways offset from the centre line at each point (+ is right of travel)
   apex   corners: [index, side (1 right, -1 left), cone x, cone z]
   junctions: where other paths meet the route; per side path the point of a barrier across it and the
@@ -26,6 +27,24 @@ ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
 d = json.load(open(os.path.join(ROOT, 'public/data/vectors.json')))
 traced = json.load(open(os.path.join(os.path.dirname(__file__), 'raadi-traced.json')))
 BOX = (2300, 250, 3000, 800)
+# paths the map lacks: each end is also put into the path it meets, so that the two join
+PATHS = json.load(open(os.path.join(ROOT, 'src/world/raadipaths.json')))
+for g in PATHS['gravel']:                            # (the first straight: narrower than the map's street)
+    for q in d['roads']:
+        if len(q['pts']) == g['n'] and {tuple(q['pts'][0]), tuple(q['pts'][-1])} == {tuple(g['pts'][0]), tuple(g['pts'][1])}: q['w'] = g['w']
+for r in PATHS['add']:
+    for e in (r['pts'][0], r['pts'][-1]):
+        best = None
+        for q in d['roads']:
+            for i in range(len(q['pts']) - 1):
+                a, b = q['pts'][i], q['pts'][i + 1]
+                dx, dz = b[0] - a[0], b[1] - a[1]
+                t = max(0, min(1, ((e[0] - a[0]) * dx + (e[1] - a[1]) * dz) / (dx * dx + dz * dz or 1)))
+                dd = math.dist(e, (a[0] + dx * t, a[1] + dz * t))
+                if best is None or dd < best[0]: best = (dd, q, i)
+        assert best[0] < 1, best[0]
+        best[1]['pts'].insert(best[2] + 1, list(e))
+    d['roads'].append(r)
 
 nodes, coords, adj, width = {}, [], [], {}
 def nid(p):
@@ -60,12 +79,13 @@ def path(a, b):
     while out[-1] != a: out.append(P[out[-1]])
     return out[::-1]
 
-# in driving order: the traced line from Narva mnt round the west loop and down the west side of the
+# in driving order: up the old tarmac lane beside the manor wall and right at the park road's mouth (the
+# stage's first straight and corner), the traced line round the west loop and down the west side of the
 # ponds, then by hand (the game's paths) round the east loop, back over the top of the ponds, down the
 # west side again, and the traced line to the finish; then on down the path to the stop board
-WP = [traced[i] for i in range(2, 45, 2)] + [
+WP = [(2374.7, 500.4), (2416.5, 449.6)] + [traced[i] for i in range(4, 45, 2)] + [
     (2790, 495), (2820, 512), (2836, 472), (2858, 461), (2870, 449), (2895, 446), (2912, 410), (2918, 382),
-    (2895, 362), (2874, 372), (2868, 420), (2870, 449), (2840, 468), (2822, 440), (2818, 400), (2808, 375),
+    (2895, 362), (2874, 372), (2871, 392), (2857, 415), (2841, 419), (2826, 415), (2817, 395), (2808, 375),
     (2780, 370), (2762, 382), (2760, 440), (2761, 480), (2790, 495), (2820, 512), (2840, 540), (2856, 572),
     (2830, 618), (2806, 672), (2760, 680), (2738, 652), (2718, 633), (2716, 660), (2712, 700), (2706, 724)]
 S = [snap(p) for p in WP]
@@ -112,7 +132,8 @@ s = [0.0]
 for i in range(1, N): s.append(s[-1] + math.dist(c[i - 1], c[i]))
 
 def at(dist): return min(range(N), key=lambda i: abs(s[i] - dist))
-START = at(14.0)                                     # in from Narva mnt, on the park's own path
+START = at(13.0)                                     # on the lane, 50 m before the corner
+GRAVEL = min(range(N), key=lambda i: math.dist(c[i], (2416.5, 449.6))) + 2     # tarmac up to here
 # the flying finish: on the path south of the hairpin, where rally-maps puts the finish flag
 FIN = min(range(N), key=lambda i: math.dist(c[i], (2716, 662)) if s[i] > s[-1] - 120 else 1e9)
 print(f'{N} points, {s[-1]:.0f} m in all, stage {s[FIN] - s[START]:.0f} m (official 1760), start {START}, finish {FIN}')
@@ -208,7 +229,7 @@ print('junctions', len(junctions), 'moving', sum(1 for j in junctions for b in j
 
 out = {
     'name': 'Raadi', 'stage': 'SSS16 Tartu vald', 'length': round(s[FIN] - s[START], 1),
-    'start': START, 'finish': FIN,
+    'start': START, 'finish': FIN, 'gravelFrom': GRAVEL,
     'pts': [[round(x, 2), round(z, 2)] for x, z in c], 'hw': [round(h, 2) for h in hw],
     'line': [round(o, 2) for o in off], 'apex': apex, 'junctions': junctions,
 }

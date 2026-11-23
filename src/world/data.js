@@ -24,6 +24,31 @@ async function fetchJson(name) {
 
 export const SURFACE = { GRASS: 0, PAVED: 1, GRAVEL: 2, DIRT: 3, WATER: 4 };
 
+// Strips of ground whose surface differs from the baked grid (a path the map lacks): stamped into each
+// sector's grid as it loads. Call before the world is loaded.
+const strips = [];
+export function surfaceStrip(pts, hw, code) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  strips.push({ pts, hw, code, x0: x0 - hw, x1: x1 + hw, z0: z0 - hw, z1: z1 + hw });
+}
+function stampStrips(s, sn, sres) {
+  for (const t of strips) {
+    if (t.x1 < s.x0 || t.x0 > s.x1 || t.z1 < s.z0 || t.z0 > s.z1) continue;
+    const c0 = Math.max(0, Math.floor((t.x0 - s.x0) / sres)), c1 = Math.min(sn - 1, Math.floor((t.x1 - s.x0) / sres));
+    const r0 = Math.max(0, Math.floor((t.z0 - s.z0) / sres)), r1 = Math.min(sn - 1, Math.floor((t.z1 - s.z0) / sres));
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      if (s.S[r * sn + c] === SURFACE.WATER) continue;
+      const x = s.x0 + (c + 0.5) * sres, z = s.z0 + (r + 0.5) * sres;
+      for (let i = 0; i < t.pts.length - 1; i++) {
+        const a = t.pts[i], b = t.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1];
+        const k = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+        if (Math.hypot(x - a[0] - dx * k, z - a[1] - dz * k) <= t.hw) { s.S[r * sn + c] = t.code; break; }
+      }
+    }
+  }
+}
+
 export async function loadWorldData(onProgress = () => {}) {
   let done = 0;
   const tick = (p) => p.then((v) => { onProgress(++done / 4); return v; });
@@ -80,6 +105,7 @@ export async function loadWorldData(onProgress = () => {}) {
       let o = 32;
       s.H = new Uint16Array(buf.slice(o, o + hn * hn * 2)); o += hn * hn * 2;
       s.S = new Uint8Array(buf, o, sn * sn); o += sn * sn;
+      if (strips.length) stampStrips(s, sn, sres);
       s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;

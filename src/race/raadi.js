@@ -8,8 +8,8 @@
 //
 // The stage passes some junctions twice going another way each time, and the stretch on the west side of
 // the ponds twice: red and white barriers across the side paths show the way, and slide aside when the
-// stage needs that path later. An arrow under the clock points along the stage. At each corner a cone
-// stands a metre inside the apex: knocking it flies it off (it is back for the next run), but going more
+// stage needs that path later. An arrow under the clock points along the stage. At each corner a straw
+// bale stands a metre inside the apex (src/race/bales.js; back in place for the next run), and going more
 // than 3 m inside the edge there, or joining the stage further on from anywhere else, cancels the run.
 // Running wide on the outside is fine.
 //
@@ -21,13 +21,16 @@ import * as THREE from 'three';
 import STAGE from './raadi.json';
 import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
+import { createBales } from './bales.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const COUNT_S = 2;                         // seconds before the first red light
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
-const APEX_CUT = 3;                        // metres inside the edge at an apex before the run is cancelled
+// an apex cut costs time (Martin 23 Nov: a small penalty for a small cut, a large one for a large cut): how far
+// inside the path's edge the middle of the car went at the apex, in metres, and the seconds it adds
+const APEX_PEN = [[6, 10], [3, 5], [1.2, 2]];
 
 const P = STAGE.pts, HW = STAGE.hw, N = P.length, START = STAGE.start, FIN = STAGE.finish;
 const TAN = P.map((_, i) => {
@@ -166,7 +169,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
   group.visible = false;
   scene.add(group);
   const runs = loadRuns();
-  let built = false;
+  let built = false, asked = false;
 
   // ---- HUD: the clock (the lap timer's look), the start lights, the arrow, BACK TO STAGE START
   const hudEl = document.querySelector('#hud');
@@ -198,15 +201,17 @@ export function createStage({ world, scene, toast, place, onRun }) {
   const st = {
     phase: 'idle',          // idle, count (on the start line, lights), run, done
     t0: 0, clk: 0, wall: null, carT: null, prog: START, off: 0, prev: null, cool: false, againUntil: 0,
-    pin: null, countAt: 0, cut: '',
+    pin: null, countAt: 0, cut: '', pen: 0, apexPen: new Map(),
   };
 
   // ---- the stage's things (built near)
   const atlas = signAtlas();
   const signMat = new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide });
   const postMat = new THREE.MeshLambertMaterial({ color: 0x8a8d92 });
-  const cones = [], barriers = [];
-  let coneMesh = null, barMesh = null, startLamps = null;
+  const barriers = [];
+  let barMesh = null, startLamps = null;
+  // a bale 1.1 m inside the path's edge at each apex, its banner towards the cars coming
+  const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] })) });
   const lampOff = new THREE.MeshBasicMaterial({ color: 0x2a0d10 });
   const lampRed = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
   const lampGreen = new THREE.MeshBasicMaterial({ color: 0x29ff6a });
@@ -268,35 +273,6 @@ export function createStage({ world, scene, toast, place, onRun }) {
     group.add(m);
   }
 
-  // cones: an orange cone with a white band on a dark square foot, all in one mesh
-  function coneGeometry() {
-    const parts = [];
-    const paint = (geo, hex) => {
-      const c = new THREE.Color(hex), n = geo.attributes.position.count, col = new Float32Array(n * 3);
-      for (let k = 0; k < n; k++) { col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b; }
-      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      return geo.index ? geo.toNonIndexed() : geo;
-    };
-    parts.push(paint(new THREE.BoxGeometry(0.38, 0.04, 0.38).translate(0, 0.02, 0), 0x202022));
-    parts.push(paint(new THREE.CylinderGeometry(0.035, 0.155, 0.2, 12, 1, true).translate(0, 0.14, 0), 0xff5a0a));
-    parts.push(paint(new THREE.CylinderGeometry(0.0, 0.035, 0.05, 12, 1, true).translate(0, 0.265, 0), 0xff5a0a));
-    parts.push(paint(new THREE.CylinderGeometry(0.155, 0.17, 0.1, 12, 1, true).translate(0, 0.09, 0), 0xff5a0a));
-    // (the white band: a ring just over the cone's middle)
-    parts.push(paint(new THREE.CylinderGeometry(0.075, 0.105, 0.07, 12, 1, true).translate(0, 0.17, 0).scale(1.04, 1, 1.04), 0xf2f2f2));
-    const pos = [], col = [], nor = [];
-    for (const g of parts) {
-      g.computeVertexNormals();
-      pos.push(...g.attributes.position.array); col.push(...g.attributes.color.array); nor.push(...g.attributes.normal.array);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    // twice the size of a road cone: a stage's apex marker (a hay bale or tyre stack would be the real thing)
-    geo.scale(1.6, 1.8, 1.6);
-    return geo;
-  }
-
   // a red and white barrier plank on two legs, 1 m wide (scaled to the path's width)
   function barrierGeometry() {
     const pos = [], col = [], nor = [];
@@ -317,6 +293,53 @@ export function createStage({ world, scene, toast, place, onRun }) {
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     return geo;
+  }
+
+  // ---- the stage's edges glow faintly like the lap's (Martin 23 Nov; src/race/race.js): magenta on the left,
+  // cyan on the right, a band lying on the gravel just inside each edge and a low see-through fence on it. One
+  // mesh. Left out where the edge would run across the stage's own road on another pass (the junctions it
+  // takes twice).
+  function* buildGlow() {
+    const pos = [], col = [], idx = [];
+    const C = [new THREE.Color(0xff2bd6), new THREE.Color(0x2ff3ff)];
+    const i0 = Math.max(0, START - 3), n = N - i0;
+    for (let k = 0; k < 2; k++) {
+      const sg = k ? 1 : -1, c = C[k];
+      const edge = [], vis = [];
+      for (let i = i0; i < N; i++) {
+        const [x, z] = side(i, sg * HW[i]);
+        let v = 1;
+        for (let j = i0; j < N && v; j += 2) if (Math.abs(j - i) > 25 && Math.hypot(P[j][0] - x, P[j][1] - z) < HW[j] - 0.4) v = 0;
+        edge.push([x, groundY(x, z) + 0.07, z]); vis.push(v);
+        if ((i & 31) === 0 && jobs.late()) yield;
+      }
+      for (const [inner, h, a0] of [[1.0, 0, 0.4], [0, 0.5, 0.48]]) {
+        const base = pos.length / 3;
+        for (let q = 0; q < n; q++) {
+          const i = i0 + q, [x, y, z] = edge[q];
+          const [ix, iz] = inner ? side(i, sg * (HW[i] - inner)) : [x, z];
+          pos.push(x, y, z, ix, inner ? groundY(ix, iz) + 0.07 : y + h, iz);
+          col.push(c.r, c.g, c.b, a0 * vis[q], c.r, c.g, c.b, 0);
+          if (q) { const a = base + (q - 1) * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
+        }
+        yield;
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    geo.setIndex(idx);
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+    // (drawn half a metre nearer in depth, so the ground's grid does not bite notches out of the band)
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+        mvPosition.xyz *= max(0.05, 1.0 - 0.5 / max(length(mvPosition.xyz), 0.6));
+        gl_Position = projectionMatrix * mvPosition;`);
+    };
+    const m = new THREE.Mesh(geo, mat);
+    m.frustumCulled = false;
+    m.renderOrder = 3;
+    group.add(m);
   }
 
   // ---- the wheel tracks and scuffs, one mesh multiplied over the ground
@@ -348,7 +371,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
         work[i] = Math.max(work[i], Math.max(0, Math.min(1, t)));
       }
     }
-    const i0 = Math.max(0, START - 3), i1 = N - 1;
+    const i0 = Math.max(START - 3, STAGE.gravelFrom || 0), i1 = N - 1;       // (the first straight is tarmac)
     const GRAV = [0.62, 0.55, 0.47];
     for (const wo of [-0.78, 0.78]) {
       yield* ribbon(i0, i1, (i) => L[i] + wo, (i) => 0.24 + 0.08 * work[i], (i) => 0.42 + 0.4 * work[i], GRAV);
@@ -404,14 +427,9 @@ export function createStage({ world, scene, toast, place, onRun }) {
     line(FIN, 0.2);
     sign('stop', N - 1, HW[N - 1] + 1.4);
     yield;
-    // cones
-    const cg = coneGeometry();
-    coneMesh = new THREE.InstancedMesh(cg, new THREE.MeshLambertMaterial({ vertexColors: true }), STAGE.apex.length);
-    coneMesh.castShadow = true;
-    coneMesh.frustumCulled = false;
-    for (const [k, sd, x, z] of STAGE.apex) cones.push({ k, sd, home: [x, z], p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(), w: new THREE.Vector3(), flying: false, out: false });
-    resetCones();
-    group.add(coneMesh);
+    // the straw bales at the apexes (src/race/bales.js)
+    bales.build();
+    yield;
     // barriers: one at each side path the stage passes
     for (const j of STAGE.junctions) for (const b of j.b) barriers.push({ ...b, t: 1, want: 1 });
     barMesh = new THREE.InstancedMesh(barrierGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), barriers.length);
@@ -419,18 +437,47 @@ export function createStage({ world, scene, toast, place, onRun }) {
     barMesh.frustumCulled = false;
     group.add(barMesh);
     setBarriers(st.phase === 'run' ? st.prog : START, true);
+    yield;
+    yield* buildGlow();
+    yield;
+    // arrows hovering over every junction, one for each time the stage passes it (Martin 23 Nov): leant back
+    // towards the car coming up, so straight on reads as an arrow up and a turn as an arrow to that side
+    for (const j of STAGE.junctions) for (const i of j.passes) {
+      if (i <= START + 2 || i >= FIN - 2) continue;
+      const a = Math.max(0, i - 5), e = Math.min(N - 1, i + 7);
+      const yawA = Math.atan2(P[i][0] - P[a][0], -(P[i][1] - P[a][1])), yawE = Math.atan2(P[e][0] - P[i][0], -(P[e][1] - P[i][1]));
+      const x = P[i][0] + Math.sin(yawA) * 2, z = P[i][1] - Math.cos(yawA) * 2;
+      const q = new THREE.Quaternion().setFromAxisAngle(up, -yawA)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 1.1))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(up, -Math.atan2(Math.sin(yawE - yawA), Math.cos(yawE - yawA))));
+      wayArrows.push({ i, x, z, y: groundY(x, z) + 3.6, q, on: -1 });
+    }
+    const sh = new THREE.Shape([[0, 1.7], [1.25, 0.15], [0.48, 0.15], [0.48, -1.5], [-0.48, -1.5], [-0.48, 0.15], [-1.25, 0.15]].map(([u, v]) => new THREE.Vector2(u, v)));
+    const ag = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: false });
+    ag.translate(0, 0, -0.11); ag.rotateX(-Math.PI / 2);
+    arrowMesh = new THREE.InstancedMesh(ag, new THREE.MeshBasicMaterial({ color: 0xffd426, toneMapped: false }), wayArrows.length);
+    arrowMesh.frustumCulled = false;
+    group.add(arrowMesh);
+    drawArrows(st.phase === 'run' ? st.prog : START, 0, true);
+  }
+  // the arrows of the junctions coming up (within 110 m along the stage) show, bobbing; the rest are away
+  const wayArrows = [], av = new THREE.Vector3(), as = new THREE.Vector3();
+  let arrowMesh = null;
+  function drawArrows(prog, t, all = false) {
+    if (!arrowMesh) return;
+    let ch = false;
+    for (let n = 0; n < wayArrows.length; n++) {
+      const w = wayArrows[n], on = prog >= w.i - 55 && prog <= w.i + 2 ? 1 : 0;
+      if (!on && !w.on && !all) continue;
+      const k = on * (1 + 0.06 * Math.sin(t * 5));
+      m4.compose(av.set(w.x, w.y + 0.25 * Math.sin(t * 2.4 + n), w.z), w.q, as.set(k, k, k));
+      arrowMesh.setMatrixAt(n, m4);
+      w.on = on; ch = true;
+    }
+    if (ch) arrowMesh.instanceMatrix.needsUpdate = true;
   }
 
   const m4 = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1), qy = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-  function resetCones() {
-    if (!coneMesh) return;
-    cones.forEach((c, n) => {
-      c.p.set(c.home[0], groundY(c.home[0], c.home[1]), c.home[1]);
-      c.v.set(0, 0, 0); c.w.set(0, 0, 0); c.q.identity(); c.flying = false; c.out = false;
-      coneMesh.setMatrixAt(n, m4.compose(c.p, c.q, one));
-    });
-    coneMesh.instanceMatrix.needsUpdate = true;
-  }
   // which side paths are shut when the car is at index `prog`; t: 1 shut across the path, 0 slid aside
   function setBarriers(prog, snap = false) {
     for (const b of barriers) b.want = b.always || b.shut.some(([a, c]) => prog >= a && prog <= c) ? 1 : 0;
@@ -449,49 +496,6 @@ export function createStage({ world, scene, toast, place, onRun }) {
       barMesh.setMatrixAt(n, m4);
     });
     barMesh.instanceMatrix.needsUpdate = true;
-  }
-
-  // ---- the cones against the car
-  const prevPos = { x: 0, z: 0, ok: false };
-  const tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3();
-  function updateCones(car, dt) {
-    if (!coneMesh || dt <= 0) return;
-    const vx = prevPos.ok ? (car.x - prevPos.x) / dt : 0, vz = prevPos.ok ? (car.z - prevPos.z) / dt : 0;
-    prevPos.x = car.x; prevPos.z = car.z; prevPos.ok = true;
-    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), off = (car.a ?? car.spec.wheelbase / 2) - car.spec.wheelbase / 2;
-    const cx = car.x + fx * off, cz = car.z + fz * off;
-    const hl = car.spec.wheelbase / 2 + 1.0, hw = (car.spec.track || 1.5) / 2 + 0.35;
-    let moved = false;
-    cones.forEach((c, n) => {
-      if (!c.flying && !c.out) {
-        const dx = c.p.x - cx, dz = c.p.z - cz;
-        if (dx * dx + dz * dz > 36) return;
-        const f = dx * fx + dz * fz, l = -dx * fz + dz * fx;
-        if (Math.abs(f) > hl + 0.25 || Math.abs(l) > hw + 0.25) return;
-        const sp = Math.hypot(vx, vz);
-        if (sp < 0.8) return;
-        // off it goes: with the car's speed and a bit more, away from the car's side it was hit by, and up
-        const sgn = Math.sign(l) || 1;
-        c.v.set(vx * 1.15 + (-fz) * sgn * sp * 0.25, 2 + sp * 0.16, vz * 1.15 + fx * sgn * sp * 0.25);
-        c.w.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 18);
-        c.flying = true;
-      }
-      if (!c.flying) return;
-      c.v.y -= 9.8 * dt;
-      c.p.addScaledVector(c.v, dt);
-      tmpV.copy(c.w).multiplyScalar(dt);
-      const ang = tmpV.length();
-      if (ang > 0) { tmpQ.setFromAxisAngle(tmpV.normalize(), ang); c.q.premultiply(tmpQ); }
-      const gy = groundY(c.p.x, c.p.z);
-      if (c.p.y < gy) {
-        c.p.y = gy;
-        c.v.y = -c.v.y * 0.3; c.v.x *= 0.55; c.v.z *= 0.55; c.w.multiplyScalar(0.55);
-        if (Math.hypot(c.v.x, c.v.y, c.v.z) < 0.6) { c.flying = false; c.out = true; }
-      }
-      coneMesh.setMatrixAt(n, m4.compose(c.p, c.q, one));
-      moved = true;
-    });
-    if (moved) coneMesh.instanceMatrix.needsUpdate = true;
   }
 
   // ---- runs
@@ -524,8 +528,8 @@ export function createStage({ world, scene, toast, place, onRun }) {
     st.phase = 'count';
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.cut = '';
-    resetCones();
+    st.prog = START; st.off = 0; st.cut = ''; st.pen = 0; st.apexPen.clear();
+    bales.reset();
     setBarriers(START, true);
     setLamps(0, false);
     elMsg.textContent = '';
@@ -550,6 +554,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
     get runs() { return runs; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
     data: STAGE,
+    get bales() { return bales; },
     best,
     goStart,
     // the car was moved by the player (map, H, R, garage): a run in progress ends
@@ -560,9 +565,16 @@ export function createStage({ world, scene, toast, place, onRun }) {
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
       const near = dMid < BUILD_R;
-      if (near && !built && world.ready(P[START][0], P[START][1]) && world.ready(...P[FIN]) && world.ready(2840, 450)) {
-        built = true;
-        jobs.add(build, 'raadi stage');
+      // (the whole stage's ground is fetched first: it is 560 m across, and the weakest setups only keep 420 m
+      // of ground round the car, so from the start line the east loop would have no heights to stand things on)
+      if (near && !built) {
+        if (!asked) { asked = true; world.loadAround(2650, 490, 360); }
+        let ok = true;
+        for (let i = 0; i < N && ok; i += 60) ok = world.ready(P[i][0], P[i][1]);
+        if (ok && world.ready(...P[N - 1])) {
+          built = true;
+          jobs.add(build, 'raadi stage');
+        }
       }
       group.visible = near;
       // the stage clock: the car's own clock, but a stop (garage, map, another tab) counts at the wall clock's pace
@@ -581,7 +593,8 @@ export function createStage({ world, scene, toast, place, onRun }) {
       if (st.phase === 'idle' || st.phase === 'done') {
         // up to the start: onto the line
         const kmh = Math.abs(car.vx) * 3.6;
-        if (!st.cool && dStart < NEAR_START && kmh < 70) {
+        // (on the stage's own lane: Narva mnt and its cycle path run close by)
+        if (!st.cool && dStart < NEAR_START && kmh < 70 && nearestIn(x, z, 0, START + 14).d < HW[START] + 1.5) {
           hideAgain();
           const pose = startPose();
           place(pose);
@@ -590,7 +603,7 @@ export function createStage({ world, scene, toast, place, onRun }) {
       }
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)
-        if (!world.ready(x, z) || (!coneMesh && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
+        if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
         const e = (performance.now() - st.countAt) / 1000;
         // (lights from COUNT_S on: all five red, one goes out a second, green when the last one does)
         const n = e < COUNT_S ? 0 : Math.max(0, 5 - Math.floor(e - COUNT_S));
@@ -617,11 +630,15 @@ export function createStage({ world, scene, toast, place, onRun }) {
           if (g.d < HW[g.i] + 1.5) cancel('SHORT CUT · STAGE CANCELLED');
         }
         if (st.off > OFF_LIMIT) cancel('OFF THE STAGE · CANCELLED');
-        // apexes: no more than APEX_CUT inside the edge
+        // apexes: cutting inside the edge adds seconds, more for a deeper cut (once per apex: the deepest counts)
         for (const [k, sd] of STAGE.apex) {
           if (Math.abs(st.prog - k) > 6 || st.phase !== 'run') continue;
-          const a = nearestIn(x, z, k - 6, k + 6);
-          if (a.lat * sd > HW[a.i] + APEX_CUT) cancel('APEX CUT · STAGE CANCELLED');
+          const a = nearestIn(x, z, k - 6, k + 6), deep = a.lat * sd - HW[a.i];
+          const pen = APEX_PEN.find(([m]) => deep > m)?.[1] || 0, had = st.apexPen.get(k) || 0;
+          if (pen > had) {
+            st.apexPen.set(k, pen); st.pen += pen - had;
+            toast(`APEX CUT · +${pen} S`, 2600);
+          }
         }
         setBarriers(st.prog);
         // the flying finish
@@ -629,16 +646,17 @@ export function createStage({ world, scene, toast, place, onRun }) {
           const [fx, fz] = P[FIN], [tx, tz] = TAN[FIN];
           const a = (st.prev.x - fx) * tx + (st.prev.z - fz) * tz, b = (x - fx) * tx + (z - fz) * tz;
           if (a < 0 && b >= 0) {
-            const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0;
+            const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const { car: pb } = best(carId);
             const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString() };
+            if (st.pen) run.pen = st.pen;
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);
             try { localStorage.setItem(KEY, JSON.stringify(runs)); } catch { /* private mode */ }
             const rec = !pb || run.ms < pb.ms;
             st.phase = 'done'; st.cool = true; st.doneT = t;
             elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}YOUR BEST</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
-            toast(`STAGE TIME · ${fmtTime(t)}${rec ? ' · YOUR BEST' : ''}`, 4500);
+            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ' · YOUR BEST' : ''}`, 4500);
             showAgain();
             onRun?.('finish', run);
           }
@@ -650,18 +668,19 @@ export function createStage({ world, scene, toast, place, onRun }) {
         for (const b of barriers) if (b.t !== b.want) { b.t += Math.sign(b.want - b.t) * Math.min(Math.abs(b.want - b.t), dt * 1.2); moving = true; }
         if (moving) drawBarriers();
       }
-      updateCones(car, dt);
+      bales.update(car, dt);
+      drawArrows(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);
       st.prev = { x, z }; st.prevTime = time;
 
       // HUD
       const show = st.phase !== 'idle' || dStart < 120;
       panel.classList.toggle('hidden', !show);
       if (show) {
-        elTime.textContent = fmtTime(st.phase === 'run' ? time - st.t0 : st.phase === 'done' && st.doneT != null ? st.doneT : 0);
+        elTime.textContent = fmtTime(st.phase === 'run' ? time - st.t0 + st.pen : st.phase === 'done' && st.doneT != null ? st.doneT : 0);
         panel.classList.toggle('idle', st.phase !== 'run' && st.phase !== 'done');
         renderBest(carId, carShort);
         if (st.phase === 'idle' && !elMsg.textContent) elMsg.textContent = 'DRIVE TO THE START LINE';
-        if (st.phase === 'run') elMsg.textContent = st.off > 40 ? `OFF THE STAGE ${Math.round(st.off)} / ${OFF_LIMIT} M` : '';
+        if (st.phase === 'run') elMsg.textContent = st.off > 40 ? `OFF THE STAGE ${Math.round(st.off)} / ${OFF_LIMIT} M` : st.pen ? `PENALTY +${st.pen} S` : '';
       }
       if (st.phase === 'done' && st.againUntil && performance.now() > st.againUntil) hideAgain();
       // the arrow: where the stage goes, 25 m on from here, against where the car points

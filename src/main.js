@@ -55,6 +55,7 @@ import { createElva, elvaWalls, elvaVectors } from './world/elva.js';
 import { createVanemuise, vanemuiseWalls } from './world/vanemuise.js';
 import { createPepleriVanemuise, pepleriVanemuiseWalls } from './world/peplerivanemuise.js';
 import { createKorvekula, korveWalls, korveRoads } from './world/korvekula.js';
+import { raadiRoads, raadiClear, raadiClearing } from './world/raadipaths.js';
 import { createKorvekula2, korve2Walls } from './world/korvekula2.js';
 import { createRiia, riiaWalls, riiaVectors } from './world/riia.js';
 import { createTeatripark, teatriparkVectors } from './world/teatripark.js';
@@ -308,6 +309,7 @@ const RAADI = params.get('raadi') === '1';
 let stage = null;
 let trackPicked = false;                // a track was picked on the start screen since the last DRIVE
 if (RAADI) setUnrutted(onStage);
+const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
@@ -417,6 +419,8 @@ async function boot() {
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
   kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
+  raadiClearing(world);
+  raadiRoads(world.vectors);                    // Raadi park: the gravel cut-through the map lacks, gravel at the park road's mouth
   korveRoads(world.vectors);                    // road 210's fork and sweep where it meets the highway at Kõrveküla
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
@@ -548,7 +552,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   ulikooliSignSkip(world);                      // Werner's name is painted on its own front
@@ -755,7 +759,7 @@ async function boot() {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
     tp.id = 'trackpills';
-    tp.innerHTML = '<button data-act="home" title="Toomemägi lap start (H)">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
+    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); } });
@@ -932,12 +936,12 @@ function startDriving() {
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
-  // the track picked on the start screen (?raadi=1): DRIVE starts there, once per pick (back from the
-  // garage the car stays where it was)
-  if (stage && (trackPicked || !drivenOnce)) {
-    const atRaadi = Math.hypot(car.x - 2660, car.z - 470) < 600;
-    if (board.track === 'raadi' && !atRaadi) stage.goStart();
-    else if (board.track === 'toome' && trackPicked && atRaadi) goHome();
+  // the track picked on the start screen (?raadi=1): DRIVE starts there. With Raadi picked always, unless the
+  // car is at Raadi already (the line under DRIVE says RAADI; Martin 23 Nov: H, then the menu, then DRIVE stayed
+  // at Toomemägi). With Toomemägi picked the car is only fetched from Raadi, and only after a pick.
+  if (stage) {
+    if (board.track === 'raadi' && !atRaadi()) stage.goStart();
+    else if (board.track === 'toome' && trackPicked && atRaadi()) goHome();
     trackPicked = false;
   }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
@@ -1007,6 +1011,20 @@ function place(pose) {
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
+}
+
+// H and the home button: back to the start of the circuit the car is at (Raadi's stage start when out at
+// Raadi, Martin 23 Nov; the TOOMEMÄGI button still goes to Küüni from there)
+function homeHere() {
+  if (stage && mode === 'drive' && atRaadi()) { raceMode?.out('map'); stage.goStart(); } else goHome();
+}
+let pillAt = null;
+function trackPills() {
+  const at = atRaadi();
+  if (at === pillAt) return;
+  pillAt = at;
+  const b = document.querySelector('#trackpills [data-act="track-raadi"]');
+  if (b) { b.textContent = at ? '↺ RAADI START' : 'RAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Raadi rally stage start'; }
 }
 
 function goHome() {
@@ -1145,7 +1163,7 @@ function showOverlay(name) {
 const unlessMap = (fn) => () => { if (!overlayOpen()) fn(); };
 const closingFirst = (fn) => () => { closeOverlays(); fn(); };
 input.on('KeyR', closingFirst(goLastSpot));
-input.on('KeyH', closingFirst(goHome));
+input.on('KeyH', closingFirst(homeHere));
 input.on('Home', closingFirst(goHome));
 input.on('KeyG', closingFirst(openGarage));
 const toggleMap = () => showOverlay('map');
@@ -1358,7 +1376,8 @@ document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;
   if (act === 'reset') goLastSpot();
-  else if (act === 'home') goHome();
+  else if (act === 'home') homeHere();
+  else if (act === 'track-toome') goHome();
   else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
@@ -1572,6 +1591,7 @@ function frame(ts) {
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
     stage?.update(car, carId, s0Short(), dt);
+    if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
 

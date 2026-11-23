@@ -1,6 +1,6 @@
 // The start screen's track picker (?raadi=1 while Raadi is tried out; Martin's plan of 23 Nov 2026): a card
 // per circuit in place of the Toomemägi outline. Each shows the circuit's outline, its length and surface in
-// one word; the picked one is bigger and shows the record and LAP TIMES. On phones a row of pills under the
+// one word; the picked one is bigger and shows the record and your best. On phones a row of pills under the
 // logo. DRIVE then starts at the picked circuit (main.js); the line under DRIVE says which.
 import TRACK from './track.json';
 import { stagePath, STAGE_KM } from './raadi.js';
@@ -27,36 +27,45 @@ export const TRACK_ICON = {
 };
 
 export const TRACKS = [
-  { id: 'toome', name: 'TOOMEMÄGI', km: (TRACK.length / 1000).toFixed(1), surface: 'ASPHALT', kind: 'CIRCUIT', path: toome },
-  { id: 'raadi', name: 'RAADI', km: STAGE_KM, surface: 'GRAVEL', kind: 'RALLY STAGE', path: raadi },
+  { id: 'toome', name: 'TOOMEMÄGI', km: (TRACK.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'OLD TOWN · START ON KÜÜNI', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: toome, loop: true },
+  { id: 'raadi', name: 'RAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi },
 ];
 
 export function pickedTrack() {
   try { const t = localStorage.getItem(KEY); return TRACKS.some((x) => x.id === t) ? t : 'toome'; } catch { return 'toome'; }
 }
 
-// record(id): { ms, name } or null
-export function createTrackPicker({ after, record, onOpenBoard, onPick }) {
+// record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null
+export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) {
   let picked = pickedTrack();
   const el = document.createElement('div');
   el.id = 'trackpick';
   el.setAttribute('role', 'radiogroup');
   el.setAttribute('aria-label', 'Track');
   after.after(el);
+  let shown = '';
   function render() {
-    el.innerHTML = TRACKS.map((t) => {
-      const on = t.id === picked, r = on ? record(t.id) : null;
+    const html = TRACKS.map((t) => {
+      const on = t.id === picked, r = record(t.id), m = on ? mine?.(t.id) : null, p = t.path;
+      // (the picked one: a bright stretch standing on its line; a start mark across a point to point stage's first metres)
+      const tail = on ? `<path d="${p.d}" class="tail" pathLength="1000" stroke-dasharray="70 930" stroke-dashoffset="-430"/>` : '';
+      const sf = p.start ? `<circle class="sf" cx="${p.start[0]}" cy="${p.start[1]}" r="9"/>` : '';
       return `<button class="tcard${on ? ' on' : ''}" data-track="${t.id}" role="radio" aria-checked="${on}">
-        <svg viewBox="0 0 ${t.path.w} ${t.path.h}" aria-hidden="true"><path class="tube" d="${t.path.d}"/><path class="core" d="${t.path.d}"/></svg>
-        <span class="tx"><b>${t.name}</b><small>${t.km} KM · ${t.surface}</small>${on ? `<small class="rec">${r ? `RECORD ${fmtTime(r.ms / 1000)} <i>${escapeHtml(r.name || '')}</i>` : 'NO TIME YET'}</small><span class="lt" data-lt="1">LAP TIMES ›</span>` : ''}</span>
+        <svg viewBox="0 0 ${p.w} ${p.h}" aria-hidden="true"><path class="halo" d="${p.d}"/><path class="tube" d="${p.d}"/><path class="core" d="${p.d}"/>${tail}${sf}</svg>
+        <span class="tx"><b class="nm">${t.name}</b><small class="meta">${t.km} KM · <i>${t.surface}</i>${on ? `<u style="text-decoration:none"> · ${t.meta}</u>` : ''}</small>
+        <span class="modes">${t.modes.map(([c, w]) => `<i class="${c}">${w}</i>`).join('')}</span>
+        <span class="dl"><em>RECORD</em><span>${r ? `<b>${fmtTime(r.ms / 1000)}</b>${on ? `<small>${escapeHtml(r.name || '')}${r.car ? ` · ${escapeHtml(r.car)}` : ''}</small>` : ''}` : '<small>NO TIME YET</small>'}</span>
+        ${on ? `<em>YOUR BEST</em><span>${m ? `<b>${fmtTime(m.ms / 1000)}</b>` : '<small>–</small>'}</span>` : ''}</span>
+        </span>
       </button>`;
     }).join('');
+    if (html !== shown) { shown = html; el.innerHTML = html; }
   }
   el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-track]');
     if (!b) return;
     b.blur();
-    if (e.target.closest('[data-lt]') || b.dataset.track === picked) { onOpenBoard(); return; }
+    if (b.dataset.track === picked) return;          // (a click only picks: the lap times are on their own button, Martin 23 Nov)
     picked = b.dataset.track;
     try { localStorage.setItem(KEY, picked); } catch { /* private mode */ }
     render();

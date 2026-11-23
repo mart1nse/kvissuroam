@@ -153,6 +153,7 @@ import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from 
 import { stats } from './stats.js';
 import { createRaceMode } from './race/racemode.js';
 import { createStage, onStage } from './race/raadi.js';
+import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 
@@ -755,6 +756,7 @@ async function boot() {
       return net && (!mine || net.ms <= mine.ms) ? net : mine;
     },
   });
+  if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose) });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen

@@ -132,6 +132,16 @@ const SURF = [
   { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
+// the grip of a point on a soft gravel edge: the gravel eased into the surface beside it (tarmac and water kept)
+const EDGE_F = { ...SURF[2] }, EDGE_R = { ...SURF[2] };
+function gravelEdge(world, x, z, cls, own, o) {
+  if (cls === 1 || cls === WATER) return own;
+  const t = world.gravelAt(x, z);
+  if (t <= 0) return own;
+  const g = SURF[2];
+  for (const k in g) o[k] = own[k] + (g[k] - own[k]) * t;
+  return o;
+}
 
 function lerpTable(table, x) {
   if (x <= table[0][0]) return table[0][1];
@@ -659,8 +669,14 @@ function substep(car, input, world, dt) {
   car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
   const surfF = world.surfaceAt(car.x + fx * car.a, car.z + fz * car.a, gy);
   const surfR = world.surfaceAt(car.x - fx * car.b, car.z - fz * car.b, gy);
-  const sf = SURF[surfF] || SURF[0], sr = SURF[surfR] || SURF[0];
+  let sf = SURF[surfF] || SURF[0], sr = SURF[surfR] || SURF[0];
   car.surface = world.surfaceAt(car.x, car.z, gy);
+  // a softer edge between gravel and what is beside it, where the world gives one (the Raadi stage)
+  if (world.gravelAt) {
+    sf = gravelEdge(world, car.x + fx * car.a, car.z + fz * car.a, surfF, sf, EDGE_F);
+    sr = gravelEdge(world, car.x - fx * car.b, car.z - fz * car.b, surfR, sr, EDGE_R);
+    if (car.surface !== 1 && car.surface !== WATER && world.gravelAt(car.x, car.z) > 0.5) car.surface = 2;
+  }
 
   // ---- water
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;

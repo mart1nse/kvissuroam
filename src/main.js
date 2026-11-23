@@ -153,11 +153,13 @@ import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from 
 import { stats } from './stats.js';
 import { createRaceMode } from './race/racemode.js';
 import { createStage, onStage } from './race/raadi.js';
+import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (/[?&]vp=/.test(location.search)) import('./vpcheck.js').then((m) => m.vpCheck());   // rulers to see what a phone cuts off
 document.body.classList.toggle('touch', isTouch);
 const params = new URLSearchParams(location.search);
 
@@ -754,6 +756,7 @@ async function boot() {
       return net && (!mine || net.ms <= mine.ms) ? net : mine;
     },
   });
+  if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose) });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
@@ -972,15 +975,44 @@ function startDriving() {
 // Full screen on phones. The browser drops it when you switch to another app and only lets a page ask
 // again from a tap, so any tap while not in full screen asks for it again. That starts with the first
 // tap in the opening menu, where the browser's own bars leave the garage little room.
+// The FULL button in the top bar turns that off and on (and full screen on a computer). An iPhone has no
+// full screen for pages in any browser: there the button tells how to add the game to the Home Screen,
+// which opens it with no browser bars. Started from the Home Screen the button is not needed and hides.
 let wantFull = isTouch, fullAsked = false;
+const fullOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
 function goFull() {
   const el = document.documentElement;
-  if (document.fullscreenElement || fullAsked || !el.requestFullscreen) return;
+  const ask = el.requestFullscreen ? () => el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen && (() => el.webkitRequestFullscreen());
+  if (fullOn() || fullAsked || !ask) return;
   fullAsked = true;
-  el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {})
+  Promise.resolve().then(ask).then(() => screen.orientation?.lock?.('landscape')).catch(() => {})
     .finally(() => { fullAsked = false; });
 }
 for (const ev of ['pointerup', 'touchend']) addEventListener(ev, () => { if (wantFull && !document.hidden) goFull(); }, { passive: true, capture: true });
+const canFull = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const installed = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+const fullBtn = $('#fullbtn'), fullHint = $('#fullhint');
+document.body.append(fullHint);            // over the pedals (the HUD's own layer is under them)
+if (!installed && (canFull || isIPhone)) {
+  fullBtn.classList.remove('hidden');
+  document.body.classList.add('fullbtn');
+  const mark = () => fullBtn.classList.toggle('on', fullOn());
+  document.addEventListener('fullscreenchange', mark);
+  document.addEventListener('webkitfullscreenchange', mark);
+}
+function toggleFull() {
+  if (!canFull) { fullHint.classList.toggle('hidden'); return; }
+  if (fullOn()) {
+    wantFull = false;                       // a phone stops asking again on every tap until FULL is pressed again
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+  } else {
+    wantFull = isTouch;
+    goFull();
+  }
+}
+// any tap closes the iPhone hint (the tap on FULL that opened it is the button's own)
+addEventListener('pointerdown', (e) => { if (!fullHint.classList.contains('hidden') && !e.target.closest?.('#fullbtn')) fullHint.classList.add('hidden'); }, true);
 
 let drivenOnce = false;
 // (in the garage Esc goes back to the car, once there is a drive to go back to; the lap times board
@@ -1142,8 +1174,13 @@ async function dropAt(x, z) {
 
 function toggleSound() {
   audio.setMuted(!audio.muted);
-  $('#soundbtn').classList.toggle('off', audio.muted);
+  showSound();
 }
+// sound on / off sits in the options panel (Martin 23 Nov: no top button needed for it)
+const optSound = $('#opt-sound');
+function showSound() { for (const b of optSound.children) b.classList.toggle('on', (b.dataset.sound === 'off') === audio.muted); }
+showSound();
+optSound.addEventListener('click', (e) => { const b = e.target.closest('[data-sound]'); if (b && (b.dataset.sound === 'off') !== audio.muted) toggleSound(); });
 
 // ---- screens over the drive: the city map, the lap times and the options. Only one is open at a time.
 // Their keys work from any of them: M / L / O jump straight to that screen (the same key again closes it),
@@ -1171,6 +1208,7 @@ input.on('KeyM', toggleMap);
 input.on('KeyT', toggleMap);
 input.on('Escape', () => (overlayOpen() ? closeOverlays() : openGarage()));
 input.on('KeyN', toggleSound);
+input.on('KeyF', () => { if (canFull) toggleFull(); });
 input.on('KeyL', () => showOverlay('laps'));
 // A / Z: one gear up / down by hand; the automatic takes over again at the shift point
 const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open && !input.wasd) shiftGear(car, dir); });
@@ -1381,8 +1419,8 @@ document.addEventListener('click', (e) => {
   else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
-  else if (act === 'sound') toggleSound();
   else if (act === 'options') toggleOptions();
+  else if (act === 'full') toggleFull();
   else if (act === 'options-close') optEl.classList.add('hidden');
   else if (act === 'controls') { if (mode === 'drive') showOverlay('controls'); else setup.open(); }
 });

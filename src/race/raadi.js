@@ -3,7 +3,7 @@
 // Point to point, one car at a time, from a standing start (Martin, 23 Nov 2026).
 //
 // Drive up to the start (or use the RAADI button) and the car is put on the start line and held there while
-// the start clock counts down: red, yellow for the last five seconds, then green (src/race/startkit.js: the
+// the start clock counts down: yellow for three seconds, then green (src/race/startkit.js: the
 // clock on its stand past the line and the start line camera). The clock runs to the flying finish; the STOP
 // board is a little further on.
 //
@@ -29,11 +29,12 @@ import { createStartKit } from './startkit.js';
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
-// The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). A rally's start
-// unit shows red from 10 s to go, yellow for the last 5 s and green at zero, which stays on for 5 s; here the
-// count joins it at 7 s so a new try does not wait longer than before.
-const COUNT_S = 2;                         // seconds of red before the last five
-const LAST_S = 5;                          // the last seconds, yellow, counted one by one
+// The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
+// Appendix VII has the unit red from 30 s to go, yellow and counting for the last 5 s, green at zero. Here the
+// count is short so that a new try does not wait: "shorten the 5 sec countdown to 3 sec and let it be yellow
+// from the beginning" (he had read the appendix and kept this screen). Red is still there for a longer count.
+const COUNT_S = 0;                         // seconds of red before the counted ones
+const LAST_S = 3;                          // the last seconds, yellow, counted one by one
 const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
 // an apex cut costs time (Martin 23 Nov: a small penalty for a small cut, a large one for a large cut): how far
@@ -60,16 +61,17 @@ for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], 
 const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
 // the way in to each corner: [first index, last index, side of the turn], clear of the corner before it
 const ENTRY = STAGE.apex.map(([k, sd], n) => [Math.max(START + 2, k - 25, n ? STAGE.apex[n - 1][0] + 8 : 0), k - 6, sd]).filter(([a, b]) => b - a >= 4);
-// The inside of the bends that have no bale is out of bounds as well (Martin 23 Nov: "needs outside banned areas",
-// after he straightened the gentle bends over the grass). BEND[i]: the side the stage turns to at point i (1 right,
-// -1 left, 0 straight, or at a bale where the apex rules judge). Stage covered while the middle of the car is more
-// than CUT_IN m inside the path's edge there adds seconds: CUT_PEN is [metres covered, seconds], counted for each
-// trip off the path, so a spin that goes nowhere is free.
+// The inside of two bends that have no bale is out of bounds as well (Martin 23 Nov: "needs outside banned areas",
+// with the lines he drove over the grass drawn on two pictures; every bend had it for an hour, then "there are a
+// lot more red lines around the track. Just add the ones I added on the two pics"). BENDS: [first point, last
+// point, side the stage turns to (1 right, -1 left)]; BEND[i] is that side at point i, 0 elsewhere. Stage covered
+// while the middle of the car is more than CUT_IN m inside the path's edge there adds seconds: CUT_PEN is [metres
+// covered, seconds], counted for each trip off the path, so a spin that goes nowhere is free.
 const CUT_IN = 1.2, CUT_PEN = [[50, 10], [25, 5], [10, 2]];
+const BENDS = [[277, 292, -1], [436, 449, -1]];         // north of the boulder field; after the bale east of the middle pond
 const BEND = (() => {
-  const b = P.map((_, i) => { const p = TAN[Math.max(0, i - 8)], q = TAN[Math.min(N - 1, i + 8)], c = p[0] * q[1] - p[1] * q[0]; return Math.abs(c) > 0.1 ? Math.sign(c) : 0; });
-  for (const [k] of STAGE.apex) for (let i = Math.max(0, k - 6); i <= Math.min(N - 1, k + 6); i++) b[i] = 0;
-  for (let i = 0; i < N; i++) if (i < START + 8 || i > FIN) b[i] = 0;
+  const b = new Int8Array(N);
+  for (const [i0, i1, sd] of BENDS) b.fill(sd, i0, i1 + 1);
   return b;
 })();
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
@@ -373,7 +375,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     yield;
     for (const [e0, e1, sd] of ENTRY) limit(e0, e1, (i, d) => -sd * (HW[i] + WIDE_PEN.at(-1)[0] + d));
     yield;
-    // (and along the inside of the bends without a bale)
+    // (and along the inside of the two bends of BENDS)
     for (let i = START; i < FIN; i++) {
       if (!BEND[i]) continue;
       let j = i;
@@ -845,7 +847,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
             toast(`WIDE ENTRY · +${pen} S`, 2600);
           }
         }
-        // and the inside of the other bends
+        // and the inside of the two bends of BENDS
         {
           const i = w.i, sd = BEND[i], deep = sd ? w.lat * sd - HW[i] : 0;
           if (Math.abs(w.lat) < HW[i]) { st.cutM = 0; st.cutPen = 0; st.cutI = null; }       // back on the path

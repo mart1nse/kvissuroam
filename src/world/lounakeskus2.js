@@ -215,7 +215,7 @@ export function createLounakeskus2(scene, world, { shadows = true } = {}) {
     }
     tall(-1146, 5128, 1.6, 9, 0.5, paintTexture(1.6, 0, 9, 24, (P) => {
       P.r(0, 0, 1.6, 9, '#e3262e'); P.r(0, 0, 1.6, 2.2, '#2b2c30'); P.arc(0.8, 7.8, 0.62, '#ffffff'); P.text('K', 0.8, 7.8, 0.8, '#e3262e', SANS);
-      [['95', '1.779'], ['98', '1.829'], ['D', '1.629']].forEach(([a, b], k) => { P.r(0.1, 5.8 - k * 1.1, 1.5, 6.6 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.8, 6.2 - k * 1.1, 0.42, '#ffd23f', SANS); });
+      [['95', '1.759'], ['98', '1.820'], ['D', '2.026']].forEach(([a, b], k) => { P.r(0.1, 5.8 - k * 1.1, 1.5, 6.6 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.8, 6.2 - k * 1.1, 0.42, '#ffd23f', SANS); });
     }), 0.4);
     // the tall M by McDonald's, on the grass corner north of the drive-through road
     tall(-1185, 5141, 2.2, 12, 0.5, paintTexture(2.2, 0, 12, 22, (P) => {

@@ -276,7 +276,7 @@ export function createTuru(scene, world, { shadows = true } = {}) {
     };
     tall(1953.5, 3151.5, 1.7, 9, 0.5, paintTexture(1.7, 0, 9, 24, (P) => {
       P.r(0, 0, 1.7, 9, '#e3262e'); P.r(0, 0, 1.7, 2.0, '#2b2c30'); P.arc(0.85, 7.8, 0.64, '#ffffff'); P.text('K', 0.85, 7.8, 0.82, '#e3262e', SANS);
-      [['95', '1.749'], ['98', '1.809'], ['D', '1.629'], ['AUTOPESU', '']].forEach(([a, b], k) => { P.r(0.1, 5.9 - k * 1.05, 1.6, 6.7 - k * 1.05, '#1d1e21'); P.text(b ? a + ' ' + b : a, 0.85, 6.3 - k * 1.05, b ? 0.42 : 0.3, '#ffd23f', SANS); });
+      [['95', '1.759'], ['98', '1.820'], ['D', '2.026'], ['AUTOPESU', '']].forEach(([a, b], k) => { P.r(0.1, 5.9 - k * 1.05, 1.6, 6.7 - k * 1.05, '#1d1e21'); P.text(b ? a + ' ' + b : a, 0.85, 6.3 - k * 1.05, b ? 0.42 : 0.3, '#ffd23f', SANS); });
     }), Math.atan2(-0.94, 0.33));                                             // the prices face the junction
     const pole = new THREE.CylinderGeometry(0.05, 0.07, 8, 6), flag = new THREE.BoxGeometry(0.03, 2.4, 0.9);
     for (let s = 34; s <= 64; s += 6) {

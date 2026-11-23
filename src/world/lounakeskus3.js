@@ -241,7 +241,7 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
     }
     tall(-919, 5462, 1.8, 8.5, 0.5, paintTexture(1.8, 0, 8.5, 24, (P) => {
       P.r(0, 0, 1.8, 8.5, '#005eb8'); P.r(0, 0, 1.8, 1.6, '#2b2c30'); P.r(0.1, 6.6, 1.7, 8.2, '#ffffff'); P.text('alexela', 0.9, 7.4, 0.36, '#005eb8', BOLD);
-      [['95', '1.769'], ['98', '1.819'], ['D', '1.619']].forEach(([a, b], k) => { P.r(0.1, 5.1 - k * 1.1, 1.7, 5.9 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.9, 5.5 - k * 1.1, 0.42, '#ffffff', SANS); });
+      [['95', '1.652'], ['98', '1.711'], ['D', '1.960']].forEach(([a, b], k) => { P.r(0.1, 5.1 - k * 1.1, 1.7, 5.9 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.9, 5.5 - k * 1.1, 0.42, '#ffffff', SANS); });
     }), 1.1, new THREE.MeshLambertMaterial({ color: 0x005eb8 }));
     // Olerex: the yellow band round the canopy, the pumps, the yellow and black sign
     const ol = paintTexture(20, 0, 1.0, 24, (P) => { P.r(0, 0, 20, 1.0, '#ffd100'); P.r(0, 0, 20, 0.14, '#1d1e21'); P.text('OLEREX', 10, 0.58, 0.62, '#1d1e21', BOLD); });
@@ -254,7 +254,7 @@ export function createLounakeskus3(scene, world, { shadows = true } = {}) {
     }
     tall(-559, 5846, 1.7, 8, 0.5, paintTexture(1.7, 0, 8, 24, (P) => {
       P.r(0, 0, 1.7, 8, '#ffd100'); P.r(0, 0, 1.7, 1.4, '#1d1e21'); P.text('OLEREX', 0.85, 7.1, 0.36, '#1d1e21', BOLD);
-      [['95', '1.749'], ['98', '1.799'], ['D', '1.599']].forEach(([a, b], k) => { P.r(0.1, 5.0 - k * 1.1, 1.6, 5.8 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.85, 5.4 - k * 1.1, 0.4, '#ffd100', SANS); });
+      [['95', '1.680'], ['98', '1.738'], ['D', '1.954']].forEach(([a, b], k) => { P.r(0.1, 5.0 - k * 1.1, 1.6, 5.8 - k * 1.1, '#1d1e21'); P.text(a + ' ' + b, 0.85, 5.4 - k * 1.1, 0.4, '#ffd100', SANS); });
     }), Math.PI / 2, new THREE.MeshLambertMaterial({ color: 0xffd100 }));
     // Stokker's red sign at the north end, Decora's on the grass inside the cycle path
     tall(-796, 5606, 1.8, 8, 0.6, paintTexture(1.8, 0, 8, 24, (P) => { P.r(0, 0, 1.8, 8, '#d2232a'); P.r(0.1, 5.6, 1.7, 7.8, '#ffffff'); P.text('STOKKER', 0.9, 6.7, 0.34, '#0d6fb8', BOLD); }), 0.57, new THREE.MeshLambertMaterial({ color: 0xd2232a }));

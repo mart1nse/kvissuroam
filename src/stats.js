@@ -14,7 +14,7 @@ const EVERY = 300000;
 
 const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', shownAt = 0;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0;
 const once = new Set();
 const errSeen = new Set();
 
@@ -94,7 +94,6 @@ export const stats = {
     first = { ...device(isTouch), ret, crash, lite: !!lite, sw: !!software };
     dev = first.dev;
     this.phase('load');
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) shownAt = performance.now(); });
     addEventListener('error', (e) => this.error(`${e.message || 'error'}${e.filename ? ` @ ${e.filename}:${e.lineno}` : ''}`));
     addEventListener('unhandledrejection', (e) => this.error(`promise: ${e.reason?.message || e.reason}`));
     addEventListener('pagehide', () => { try { sessionStorage.removeItem('kvissuroam.alive'); } catch {} send(true, true); });
@@ -111,7 +110,7 @@ export const stats = {
     drove = true;
     this.phase('drive');
   },
-  // something went wrong: glLost (the browser took the 3D picture away), stall (the game froze 3 s or more)
+  // something went wrong: glLost (the browser took the 3D picture away), frz1 and frz3 (froze 1 or 3 s while driving)
   trouble(k) { if (on) inc(b.trouble, k); },
   count(k, n = 1) { if (on) inc(b.misc, k, n); },
   smash(k, n = 1) { if (on && n > 0) inc(b.smash, k, n); },
@@ -129,15 +128,24 @@ export const stats = {
     errSeen.add(m);
     b.err.push(m);
   },
-  // every frame. s: { mode, dt, raw, car, x, z, kmh, inp, view, gfx, others, lapCp }
+  // every frame. s: { mode, dt, raw, felt, car, x, z, kmh, inp, view, gfx, others, lapCp }
   // (lapCp: checkpoints passed on the running lap, -1 when no lap is running)
   frame(s) {
     if (!on || document.hidden) return;
     lapCp = s.lapCp ?? -1;
     // (the frame's real length: the game's own step is capped, which would undercount slow devices)
     const dt = Math.min(s.raw, 1);
-    // a frame of 3 s or more while the page was in view (not the first after coming back to it)
-    if (s.raw >= 3 && s.mode !== 'loading' && performance.now() - shownAt > s.raw * 1000 + 500) inc(b.trouble, 'stall');
+    // A freeze a player feels: one picture took 1 s (3 s) or more while driving, the window in front and
+    // nothing else going on (felt: see quietAt in main.js; not the garage, GETTING READY, a map jump, the
+    // map or options open). Counted once a visit: the page shows visits that drove with such a freeze.
+    // (Until 23 Nov 2026 every frame of 3 s anywhere but the loading screen was counted, as "stall": the
+    // garage's first pictures, GETTING READY and other windows in front made most of them.)
+    // The game's clock and the wall clock drifting apart over a frame: a computer that slept, not a freeze.
+    const wall = Date.now(), now = performance.now(), drift = Math.abs((wall - wallAt) - (now - perfAt));
+    wallAt = wall; perfAt = now;
+    if (s.felt && s.raw >= 1 && s.raw < 60 && drift < 500) {
+      for (const [k, t] of [['frz1', 1], ['frz3', 3]]) if (s.raw >= t && !once.has(k)) { once.add(k); inc(b.trouble, k); }
+    }
     if (s.mode === 'menu') { b.menu += dt; return; }
     if (s.mode !== 'drive') return;
     b.drive += dt;

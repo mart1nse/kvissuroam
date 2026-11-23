@@ -267,6 +267,9 @@ body.touch {
   --lapw: clamp(170px, 24vw, 230px);
   --lapr: calc(var(--tbr) + var(--tbw) + 12px);                    /* lap timer's right edge, from the right */
 }
+/* with the FULL button: seven buttons, six closer gaps */
+body.touch.fullbtn { --tbw: calc(7 * clamp(44px, 6vw, 60px) + 36px); }
+body.touch.fullbtn #topbar { gap: 6px; }
 /* the rev counter centred over the left steering button, as big as fits between the street name and the buttons */
 body.touch #dash { right: auto; top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2); bottom: calc(var(--padh) + 6px); transform: translateX(-50%);
   --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px); }
@@ -932,3 +935,17 @@ body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { 
 svg.trk { width: 1.25em; height: 1.25em; vertical-align: -.25em; margin-right: 5px; overflow: visible; }
 svg.trk path { fill: none; stroke: var(--pink); stroke-width: 90; stroke-linejoin: round; stroke-linecap: round; }
 #board .bcol h3 svg.trk { width: 1.6em; height: 1.6em; margin: 0; }
+
+/* FULL: full screen on and off (an iPhone gets the Home Screen hint instead) */
+#topbar button svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px var(--cyan)); }
+#fullbtn .out, #fullbtn.on .in { display: none; }
+#fullbtn.on .out { display: inline; }
+#fullhint { position: fixed; z-index: 20; top: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px) + 8px); right: max(10px, env(safe-area-inset-right));
+  width: min(300px, 70vw); padding: 10px 14px 9px; border-radius: 14px; background: rgba(18, 6, 43, .9); box-shadow: 0 0 18px rgba(47, 243, 255, .25);
+  font-size: 12px; line-height: 1.35; pointer-events: none; }
+#fullhint b { color: var(--cyan); letter-spacing: .08em; font-size: 11px; }
+#fullhint p { margin: 5px 0; }
+#fullhint .how { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 700; }
+#fullhint .how span { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: rgba(47, 243, 255, .16); }
+#fullhint .how svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#fullhint small { opacity: .7; font-size: 10px; }

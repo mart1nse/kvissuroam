@@ -7,7 +7,11 @@
     // Chrome, Firefox and Edge on an iPhone keep the page out of the notch side in landscape, but with viewport-fit=cover
     // they still lay it out as wide as the whole screen: the right edge (GAS, the top buttons) ran off the screen
     // (Martin's iPhone 13 in Chrome, 22 Nov 2026). They get the plain viewport, as wide as what they show.
-    if (/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent)) document.querySelector('meta[name="viewport"]').content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    // ?vp=cover or ?vp=plain picks either one on any browser, and ?vp=1 (or either) shows rulers and the measured sizes (src/vpcheck.js).
+    (function () {
+      var q = /[?&]vp=(\w+)/.exec(location.search), m = q && q[1];
+      if (m === 'plain' || (m !== 'cover' && /CriOS|FxiOS|EdgiOS/.test(navigator.userAgent))) document.querySelector('meta[name="viewport"]').content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    })();
   </script>
   <meta name="theme-color" content="#1a0b3b" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -159,6 +163,13 @@
       <button data-act="garage" title="Change car (G)">⛍<small>GARAGE</small></button>
       <button data-act="sound" title="Sound (N)" id="soundbtn">♪<small>SOUND</small></button>
       <button data-act="options" title="Options (O)" class="desktop-only">⚙<small>OPTIONS</small></button>
+      <button data-act="full" title="Full screen (F)" id="fullbtn" class="hidden"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="in" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="out" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg><small>FULL</small></button>
+    </div>
+    <div id="fullhint" class="hidden">
+      <b>FULL SCREEN ON IPHONE</b>
+      <p>iPhone browsers always show their bars. Add the game to the Home Screen and start it from there: full screen, no bars.</p>
+      <p class="how"><span>Share <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M7 11H5v10h14V11h-2"/></svg></span> → <span>Add to Home Screen</span></p>
+      <small>In Safari Share can be behind ⋯ (More). Tap anywhere to close.</small>
     </div>
     <div id="options" class="hidden">
       <h3>OPTIONS</h3>

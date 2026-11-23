@@ -132,13 +132,27 @@ const SURF = [
   { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
+// Gravel tyres (Martin 2026-11-23: road or gravel, picked in the garage or by the tyre icon on the tach):
+// narrow, soft, deep blocks that dig into loose ground and squirm on tarmac. The same table with more
+// bite on gravel, dirt and grass and less on paving, a softer, later-peaking tread on tarmac, and the
+// wide performance rubber of spec.grip left in the garage (a gravel tyre is a gravel tyre on any car).
+// car.tyres = 'gravel' picks it; anything else is the road tyre.
+const GRAVEL_TYRE = [1.13, 0.85, 1.22, 1.2, 1.0];          // mu share per surface class
+const SURF_G = SURF.map((o, i) => ({
+  ...o,
+  mu: o.mu * GRAVEL_TYRE[i],
+  b: i === 1 ? o.b * 0.8 : o.b,                            // the blocks flex: a softer build-up of grip on tarmac
+  kp: i === 1 ? 0.16 : o.kp,
+  tail: i === 1 ? 0.83 : Math.min(0.98, o.tail + 0.01),    // a spinning block tread smears on tarmac, bites on gravel
+}));
+export const TYRE_GRIP = (tyres, cls) => (tyres === 'gravel' ? SURF_G : SURF)[cls]?.mu ?? 0;
 // the grip of a point on a soft gravel edge: the gravel eased into the surface beside it (tarmac and water kept)
 const EDGE_F = { ...SURF[2] }, EDGE_R = { ...SURF[2] };
-function gravelEdge(world, x, z, cls, own, o) {
+function gravelEdge(world, x, z, cls, own, o, table) {
   if (cls === 1 || cls === WATER) return own;
   const t = world.gravelAt(x, z);
   if (t <= 0) return own;
-  const g = SURF[2];
+  const g = table[2];
   for (const k in g) o[k] = own[k] + (g[k] - own[k]) * t;
   return o;
 }
@@ -669,12 +683,13 @@ function substep(car, input, world, dt) {
   car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
   const surfF = world.surfaceAt(car.x + fx * car.a, car.z + fz * car.a, gy);
   const surfR = world.surfaceAt(car.x - fx * car.b, car.z - fz * car.b, gy);
-  let sf = SURF[surfF] || SURF[0], sr = SURF[surfR] || SURF[0];
+  const table = car.tyres === 'gravel' ? SURF_G : SURF;
+  let sf = table[surfF] || table[0], sr = table[surfR] || table[0];
   car.surface = world.surfaceAt(car.x, car.z, gy);
   // a softer edge between gravel and what is beside it, where the world gives one (the Raadi stage)
   if (world.gravelAt) {
-    sf = gravelEdge(world, car.x + fx * car.a, car.z + fz * car.a, surfF, sf, EDGE_F);
-    sr = gravelEdge(world, car.x - fx * car.b, car.z - fz * car.b, surfR, sr, EDGE_R);
+    sf = gravelEdge(world, car.x + fx * car.a, car.z + fz * car.a, surfF, sf, EDGE_F, table);
+    sr = gravelEdge(world, car.x - fx * car.b, car.z - fz * car.b, surfR, sr, EDGE_R, table);
     if (car.surface !== 1 && car.surface !== WATER && world.gravelAt(car.x, car.z) > 0.5) car.surface = 2;
   }
 
@@ -857,8 +872,9 @@ function substep(car, input, world, dt) {
   const dir = car.reversing ? -1 : 1;
   const hb = +input.handbrake || 0;
   const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
-  // (wide performance tyres: spec.grip scales every surface)
-  const tyre = s.grip ?? 1;
+  // (wide performance tyres: spec.grip scales every surface; on gravel tyres only a lower figure stays,
+  // the bus's hard rubber, since every car gets the same kind of gravel tyre)
+  const tyre = car.tyres === 'gravel' ? Math.min(1, s.grip ?? 1) : s.grip ?? 1;
   // No surface grips the same everywhere: dust, damp, ruts and worn patches a few metres across
   // (more on loose ground than on paving), so a slide or a donut never repeats itself exactly.
   const patch = (x, z, k) => 1 + k * (0.55 * Math.sin(x * 0.83 + Math.sin(z * 0.31) * 2.1) * Math.sin(z * 0.71 + 1.3) + 0.45 * Math.sin((x + z) * 0.37 + Math.sin(x * 0.19) * 1.7));

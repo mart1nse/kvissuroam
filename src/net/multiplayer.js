@@ -23,6 +23,9 @@ const SEND_HZ = 10;
 // 100 000 a day), and the server passes every one on to everybody else.
 const SEND_HZ_FAR = 3, LONELY = 600;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
+// (in bundles, a position waits up to one bundle, 0.1 s, at the server before it is passed on, so the
+// cars are drawn a little further back: then there is nearly always a newer position to glide towards)
+const DELAY_BUNDLED = 0.21;
 const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
@@ -115,6 +118,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
   const mine = new Set();
+  let bundled = false;           // this connection's server sends positions in bundles
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
@@ -172,8 +176,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     ws = sock;
     let ping = 0;
     sock.onopen = () => {
-      retry = 1; online = true; raceSeen = false;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
+      retry = 1; online = true; raceSeen = false; bundled = false;
+      // b: 1, everyone's positions in one message ten times a second (see TICK in worker/index.js)
+      send({ t: 'hello', b: 1, name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -279,13 +284,28 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     others.delete(id);
   }
 
+  // a position into a car's list, at the moment the server got it (age ms before now), never before the last one
+  function addPose(o, p, age) {
+    const b = o.buf, last = b[b.length - 1];
+    let t = performance.now() / 1000 - age / 1000;
+    if (last && t <= last.t) t = last.t + 0.001;
+    b.push({ t, p });
+    if (b.length > 30) b.shift();
+  }
   function onMessage(m) {
     switch (m.t) {
       case 's': {
         const o = others.get(m.id);
-        if (o && poseOk(m.p)) {
-          o.buf.push({ t: performance.now() / 1000, p: m.p });
-          if (o.buf.length > 30) o.buf.shift();
+        if (o && poseOk(m.p)) addPose(o, m.p, 0);
+        break;
+      }
+      case 'S': {          // a bundle: [id, position, how many ms ago the server got it] for each car with news
+        if (!Array.isArray(m.b)) break;
+        bundled = true;
+        for (const e of m.b) {
+          if (!Array.isArray(e)) continue;
+          const o = others.get(e[0]);
+          if (o && poseOk(e[1])) addPose(o, e[1], Number.isFinite(e[2]) ? Math.max(0, Math.min(1000, e[2])) : 0);
         }
         break;
       }
@@ -408,7 +428,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function sample(o, now) {
     const b = o.buf;
     if (!b.length) return null;
-    const t = now - DELAY;
+    const t = now - (bundled ? DELAY_BUNDLED : DELAY);
     let i = b.length - 1;
     while (i > 0 && b[i - 1].t > t) i--;
     const B = b[i], A = b[i - 1];

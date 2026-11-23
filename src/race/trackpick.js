@@ -29,7 +29,7 @@ const raadi = stagePath();
 // the small marks used beside a lap in the lists (as big as the controller marks)
 export const TRACK_ICON = {
   toome: `<svg class="trk" viewBox="0 0 ${toome.w} ${toome.h}" role="img" aria-label="TOOMEMÄGI"><title>TOOMEMÄGI</title><path d="${toome.d}"/></svg>`,
-  raadi: `<svg class="trk" viewBox="0 0 ${raadi.w} ${raadi.h}" role="img" aria-label="RAADI"><title>RAADI</title><path d="${raadi.d}"/></svg>`,
+  raadi: `<svg class="trk rd" viewBox="0 0 ${raadi.w} ${raadi.h}" role="img" aria-label="RAADI"><title>RAADI</title><path d="${raadi.d}"/></svg>`,
 };
 
 export const TRACKS = [

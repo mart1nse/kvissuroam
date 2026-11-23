@@ -805,9 +805,19 @@ async function boot() {
     if (!lapLine) { lapLine = new Path2D(); race.track.P.forEach(([x, z], i) => (i ? lapLine.lineTo(x, z) : lapLine.moveTo(x, z))); lapLine.closePath(); }
     ctx.stroke(lapLine);
   };
+  // the Raadi stage's roads from its start to its finish, in neon orange on both maps (Martin 23 Nov: "On the
+  // map (any view) highlight the rallye stage roads aswell, make it neon orange")
+  let stageLine = null;
+  const strokeStage = (ctx, alpha, width) => {
+    if (!stage) return;
+    if (!stageLine) { const d = stage.data; stageLine = new Path2D(); for (let i = d.start; i <= d.finish; i++) { const [x, z] = d.pts[i]; if (i > d.start) stageLine.lineTo(x, z); else stageLine.moveTo(x, z); } }
+    ctx.strokeStyle = `rgba(255,128,20,${alpha})`; ctx.lineWidth = width; ctx.lineJoin = 'round';
+    ctx.stroke(stageLine);
+  };
   hud.setOverlay((ctx, scale, car) => {
     ctx.strokeStyle = 'rgba(255,43,214,.5)'; ctx.lineWidth = 16;
     strokeLap(ctx);
+    strokeStage(ctx, 0.62, 14);
     // other players: arrows pointing the way they drive; anyone outside the minimap
     // gets a pointer on its rim showing which way they are from us
     const players = mp.players();
@@ -838,7 +848,7 @@ async function boot() {
   });
   bigmap = createBigMap(world, {
     onPick: dropAt, onClose: closeMap,
-    drawUnder: (ctx, k) => { ctx.strokeStyle = 'rgba(255,43,214,.6)'; ctx.lineWidth = Math.max(5, 3 / k); strokeLap(ctx); },
+    drawUnder: (ctx, k) => { ctx.strokeStyle = 'rgba(255,43,214,.6)'; ctx.lineWidth = Math.max(5, 3 / k); strokeLap(ctx); strokeStage(ctx, 0.72, Math.max(5, 3 / k)); },
     drawOver: (ctx, mark) => {
       const st = race.track.P[0], tg = race.track.tan[0];
       mark(st[0], st[1], () => {

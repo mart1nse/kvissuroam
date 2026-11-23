@@ -969,6 +969,7 @@ body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { 
 #board .boards th, #board .boards td { padding: 4px 8px; }
 svg.trk { width: 1.25em; height: 1.25em; vertical-align: -.25em; margin-right: 5px; overflow: visible; }
 svg.trk path { fill: none; stroke: var(--pink); stroke-width: 90; stroke-linejoin: round; stroke-linecap: round; }
+svg.trk.rd path { stroke: #ff8014; }      /* the Raadi stage: neon orange, as on the maps */
 #board .bcol h3 svg.trk { width: 1.6em; height: 1.6em; margin: 0; }
 
 /* FULL: full screen on and off (not on an iPhone, which has no full screen for pages) */

@@ -32,9 +32,27 @@ const TYRE_CLIMB = 0.75;                   // of its radius: what a tyre's side 
 // and bumpers give, and the car sinks 2 cm onto a stone it sits on.
 const K_FLOOR = 450, C_FLOOR = 14;
 const FLOOR_UP = 1.6;                        // m/s: the fastest a stone lifts the floor
-const MU_FLOOR = 0.45, F_MAX = 45;         // steel on granite; the most the floor is pushed (m/s2 of the whole car)
+const F_MAX = 45;                          // the most the floor is pushed (m/s2 of the whole car)
 const SIT = 0.75;                          // of the car's weight: the most a stone carries of a car hardly moving
+const LIFT_RATE = 2.4;                     // m/s: the fastest a stone lifts a wheel
 const W_MAX = 35;                          // and the most one wheel passes on to the body
+// The bumpers meet a stone's rounded face, not a wall (Martin 23 Nov 20:09: "even larger stones ... if it is a
+// meter high, it is still not a wall, it has some sort of approach angle"): where a bumper's lower edge runs into
+// the dome, the face pushes it along its own slant, which takes some of the speed into it away and lifts that end.
+// Not every stone its own model (Martin 20:11: "smaller ones hitting head on already act as wallish, it should
+// fly over more easily with less resistance, do not go crazy on every stone modelling, have some brackets"): four
+// sizes by the stone's top over the ground. up: the least upward part of the face's push; keep: how much of the
+// speed into the face the car keeps (the rest is the crash); lift: how much of what the face turns upward lifts
+// the car; mu: the floor's drag on it; side: how hard the floor is pushed off its side; wall: solid to the body's
+// outline (bumpers, sills, tyre sides) as wide as it is at that height.
+const BRACKETS = [
+  { top: 0.4, up: 0.8, keep: 0.92, lift: 0.5, mu: 0.1, side: 0.15, pass: 0, wall: false },      // small: ridden over
+  { top: 0.75, up: 0.65, keep: 0.75, lift: 0.35, mu: 0.1, side: 0.35, pass: 2.5, wall: false },     // knee high: a ramp
+  { top: 1.15, up: 0.5, keep: 0.65, lift: 0.35, mu: 0.1, side: 0.5, pass: 5, wall: false },        // a metre: a steep ramp, a big hit
+  { top: Infinity, up: 0, keep: 0, lift: 0, mu: 0.45, side: 0.6, wall: true },          // bigger: a wall
+];
+const bracket = (s) => s.k ?? (s.k = BRACKETS.find((q) => s.h * (RIM + DOME) < q.top));
+const LIPS = [-1, -0.5, 0, 0.5, 1];          // across each bumper, of the car's half width
 const GIVE = 0.06;                         // a stone no more than this above a bumper's or sill's edge is ridden over, not hit
 // how the body rocks on its springs after a knock: pitch and roll, each a frequency (rad/s) and a damping ratio
 const WP = 2 * Math.PI * 1.5, ZP = 0.4, WR = 2 * Math.PI * 1.8, ZR = 0.38;
@@ -80,8 +98,10 @@ export function stoneWheels(car, world, spec, fx, fz, rx, rz, W, dt) {
       // (and the tyre's width, for a car going sideways onto it)
       for (let o = -0.1; o < 0.2; o += 0.2) { const y = domeAt(s, px + rx * o, pz + rz * o); if (y > best) { best = y; by = s; } }
     }
+    // (the tyre and its rim give: a wheel is lifted no faster than LIFT_RATE however fast it meets the stone)
+    best = Math.min(best, st.lift[k] + LIFT_RATE * dt);
     st.rate[k] = (best - st.lift[k]) / dt;
-    st.lift[k] = best; st.by[k] = by;
+    st.lift[k] = best; st.by[k] = best > 0 ? by : null;
   }
   return st;
 }
@@ -103,6 +123,9 @@ export function stoneEdges(car, st, spec, fx, fz, rx, rz, hl, hwid, out) {
     else e = Math.abs(cx - a) < 0.4 || Math.abs(cx + b) < 0.4 ? TYRE_CLIMB * rw : c0;      // a tyre's side, or the sill
     const t = (car.hy + cx * car.pitch - cy * car.roll + e + GIVE - s.gy) / s.h;
     if (t >= STONE_TOP) continue;
+    // (only the biggest are walls to the body: the bumpers meet the others' rounded faces in stoneForces, and the
+    // wheels and the floor ride them)
+    if (!bracket(s).wall) continue;
     const R = R0 * (t <= RIM ? 1 : Math.sqrt(1 - ((t - RIM) / DOME) ** 2)) - 0.06;
     if (R > 0.04) out.push(s.x, s.z, R);
   }
@@ -148,7 +171,7 @@ export function stoneForces(car, st, spec, dt, fx, fz, rx, rz, hl, hwid, H, K, w
   // ---- the floor
   const pr = car.pitchRate || 0, rr = car.rollRate || 0;
   for (let i = 0; i < st.list.length; i++) {
-    const s = st.list[i], dx = s.x - car.x, dz = s.z - car.z, R = Math.max(s.a, s.b);
+    const s = st.list[i], dx = s.x - car.x, dz = s.z - car.z, R = Math.max(s.a, s.b), B = bracket(s);
     if (Math.abs(dx * fx + dz * fz) > hl + R || Math.abs(dx * rx + dz * rz) > hwid + R) continue;
     let pen = 0, px = 0, py = 0, ox = 0, oz = 0, gx = 0, gz = 0;
     for (let q = 0; q < 5; q++) {
@@ -171,20 +194,82 @@ export function stoneForces(car, st, spec, dt, fx, fz, rx, rz, hl, hwid, H, K, w
     tqP += F * px / KP2; tqR -= F * py / KR2;
     // it drags on the floor, and where the floor is on the stone's side the stone pushes it away as well
     if (sp > 0.05) {
-      const f = Math.min(MU_FLOOR * F * Math.min(1, sp / 1.5), 0.5 * sp / dt);
+      const f = Math.min(B.mu * F * Math.min(1, sp / 1.5), 0.5 * sp / dt);
       ax -= pvx / sp * f; az -= pvz / sp * f; yawAcc += (oz * pvx - ox * pvz) / sp * f * mIz;
     }
     const gl = Math.hypot(gx, gz);
     if (gl > 1e-3) {
-      const Fh = F * 0.6, ex = gx / gl, ez = gz / gl;
+      const Fh = F * B.side, ex = gx / gl, ez = gz / gl;
       ax += ex * Fh; az += ez * Fh; yawAcc += (ox * ez - oz * ex) * Fh * mIz;
     }
     hard = Math.max(hard, F / 50);
   }
+  // ---- the bumpers' lower edges against the stones' faces. The first touch of a stone is the hit: the car keeps
+  // its bracket's share of its speed and is thrown up by the face's slant (no faster than it takes the floor to
+  // clear that stone's top), nose or tail first. After that the floor rides it; only a car slower than the bracket's
+  // `pass` (m/s) is held back by the face: at a crawl a big stone is still in the way.
+  const met = st.met || (st.met = []), now = [];
+  let dvx = 0, dvz = 0, dyaw = 0;
+  for (let i = 0; i < st.list.length; i++) {
+    const s = st.list[i], ddx = s.x - car.x, ddz = s.z - car.z, R = Math.max(s.a, s.b), B = bracket(s);
+    if (B.wall || Math.abs(ddx * fx + ddz * fz) > hl + R || Math.abs(ddx * rx + ddz * rz) > hwid + R) continue;
+    for (let end = -1; end <= 1; end += 2) {
+      const lx = end * hl, clr = c0 + (end > 0 ? LIP_F : LIP_R);
+      for (let j = 0; j < LIPS.length; j++) {
+        const ly = LIPS[j] * hwid, ox = fx * lx + rx * ly, oz = fz * lx + rz * ly;
+        const px = car.x + ox - s.x, pz = car.z + oz - s.z;
+        const u = (px * s.cs - pz * s.sn) / s.a, v = (px * s.sn + pz * s.cs) / s.b, q2 = u * u + v * v;
+        if (q2 >= 1) continue;
+        const y = car.hy + lx * pitch - ly * roll + clr - s.gy, w = (y / s.h - RIM) / DOME;
+        if (w * w + q2 >= 1) continue;                               // above the dome
+        // the face's outward slant there, rounded off to the bracket's least upward part
+        let nx = u * s.cs / s.a + v * s.sn / s.b, nz = -u * s.sn / s.a + v * s.cs / s.b, ny = Math.max(0, w) / (DOME * s.h);
+        const nh = Math.hypot(nx, nz);
+        if (nh < 1e-6) continue;
+        ny /= Math.hypot(nh, ny);
+        if (ny < B.up) ny = B.up;
+        const k = Math.sqrt(1 - ny * ny) / nh;
+        nx *= k; nz *= k;
+        // the edge's speed into it
+        const vx = wvx + dvx - car.yawRate * oz, vz = wvz + dvz + car.yawRate * ox;
+        const vin = -(vx * nx + vz * nz) / Math.max(0.2, Math.hypot(nx, nz));
+        if (vin <= 0) continue;
+        if (!now.includes(s)) now.push(s);
+        if (!met.includes(s)) {
+          // the hit
+          met.push(s);
+          const keep = B.keep + (1 - B.keep) * (1 - Math.min(1, vin / Math.max(0.5, Math.hypot(wvx, wvz))));     // (a glancing blow costs less)
+          dvx += (wvx + dvx) * (keep - 1); dvz += (wvz + dvz) * (keep - 1);
+          const vup = Math.sqrt(2 * G * Math.max(0.1, s.h * (RIM + DOME) - c0 - 0.1));
+          const vy = Math.min(vup, vin * ny * B.lift);
+          if (vy > car.vyUp) car.vyUp = vy;
+          st.vHit = Math.max(st.vHit || 0, vy);
+          // (the end that is thrown up rises first: the body pitches about its middle)
+          if (car.airborne) car.pitchRate = Math.max(-AIR_P, Math.min(AIR_P, (car.pitchRate || 0) + end * vy * 0.35));
+          else st.kPv += end * vy * 2.5;
+          hard = Math.max(hard, vin * (1.3 - keep) / 6);
+        } else if (Math.hypot(wvx, wvz) < B.pass) {
+          // still against it, too slowly to get over: it does not let the edge further in
+          const dn = vin * Math.hypot(nx, nz);
+          const hx = nx / Math.hypot(nx, nz), hz = nz / Math.hypot(nx, nz);
+          dvx += hx * dn; dvz += hz * dn;
+          dyaw += (ox * hz - oz * hx) * dn * mIz * 0.3;
+        }
+      }
+    }
+  }
+  // (a stone it has left behind can be hit again)
+  met.length = 0; for (const s of now) met.push(s);
+  if (dvx || dvz) {
+    ax += dvx / dt; az += dvz / dt;
+    car.yawRate += Math.max(-1.5, Math.min(1.5, dyaw));
+  }
   car.vyUp += up * dt;
   // (a floor ridden up a stone's dome rises with it, but the stone does not throw it higher than the dome would
   // lift it at a run: up to FLOOR_UP m/s; the rest of the hit goes into the scrape)
-  if (st.floor && car.vyUp > FLOOR_UP) car.vyUp = FLOOR_UP;
+  st.vHit = Math.max(0, (st.vHit || 0) - G * dt);
+  const cap = Math.max(FLOOR_UP, st.vHit);
+  if (st.floor && car.vyUp > cap) car.vyUp = cap;
   car.yawRate += Math.max(-6, Math.min(6, yawAcc)) * dt;
   st.dvx = ax * dt; st.dvz = az * dt;
   st.tqP = tqP; st.tqR = tqR;

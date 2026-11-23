@@ -46,6 +46,7 @@ for (const spec of Object.values(CARS).filter((c) => (pick ? c.id === pick : ['w
     run(spec, 'boulder (top 60 cm) head on', v, [[0, 12, 0.6, 0.79]]);
     run(spec, 'boulder (top 60 cm) at the right corner', v, [[hw + 0.3, 12, 0.6, 0.79]]);
     run(spec, 'stone (top 38 cm) in the middle alone', v, [[0, 13.2, 0.4, 0.75]]);
+    run(spec, 'big stone (top 1 m) head on', v, [[0, 12.5, 0.9, 0.87]]);
     run(spec, '  the same after 24 cm stones under both fronts', v, [[-hw, 12, 0.28, 0.68], [hw, 12, 0.28, 0.68], [0, 13.2, 0.4, 0.75]]);
   }
   run(spec, 'sliding sideways onto a low stone (20 cm)', 2, [[3, 2, 0.25, 0.63]], { side: 6 });

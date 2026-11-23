@@ -120,7 +120,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
-  let where = '';                // map | garage | away (another tab): shown to the others (Martin, 2026-11-23)
+  let where = '';                // map | garage | away (another tab) | watch: shown to the others (Martin, 2026-11-23)
+  let whereOn = '';              // with 'watch': the id of the player we follow as a spectator
   // until the race state has come on this connection, each clock question also asks for it (r: 1):
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
@@ -147,6 +148,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // "M3 LAP RECORD" tag in the online list and over the car for REC_MS, while the record stands
   const REC_MS = 15 * 60000;
   const recs = new Map();
+  const lastLaps = new Map();       // name -> { ms, car, t }: each player's newest lap on the board, for a spectator's view
   function setBoard(b) {
     board = b;
     for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
@@ -171,7 +173,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let ping = 0;
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined });
+      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -223,7 +225,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.textContent = p.name;
     el.style.display = 'none';
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '' };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', on: typeof p.on === 'string' ? p.on : '' };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -266,6 +268,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (o.tagOn !== on) { o.tagOn = on; o.el.style.display = on ? '' : 'none'; }
     if (on && tf !== o.tf) { o.tf = tf; o.el.style.transform = tf; }
   }
+  // somebody is watching our car as a spectator (src/spectate.js)
+  function watchedNow() { if (myId) for (const o of others.values()) if (o.w === 'watch' && o.on === myId) return true; return false; }
   function drop(id) {
     const o = others.get(id);
     if (!o) return;
@@ -318,7 +322,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
-        if (o) o.w = typeof m.w === 'string' ? m.w : '';
+        if (o) { o.w = typeof m.w === 'string' ? m.w : ''; o.on = typeof m.on === 'string' ? m.on : ''; }
         break;
       }
       case 'clock': {
@@ -335,6 +339,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (m.lap && typeof m.lap.name === 'string') {
           const best = m.board.allTime?.find((b) => b.car === m.lap.car);
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
+          if (Number.isFinite(m.lap.ms)) lastLaps.set(m.lap.name, { ms: m.lap.ms, car: m.lap.car, t: Date.now() });
           if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
             recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
@@ -502,7 +507,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
-      sendTimer = 1 / (nearest < LONELY || racing(myId) ? SEND_HZ : SEND_HZ_FAR);
+      // (a spectator follows our car: full rate for them, wherever the others are)
+      sendTimer = 1 / (nearest < LONELY || racing(myId) || watchedNow() ? SEND_HZ : SEND_HZ_FAR);
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
       const r2 = (v) => Math.round(v * 100) / 100;
       const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -626,13 +632,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car })); },
-    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car })); },
+    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
       if (!n || n === name) return name;
@@ -642,7 +648,19 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     get car() { return carId; },
     // where we are (map, garage, away), told to the others when it changes
-    setWhere(w) { if (w === where) return; where = w; if (!STEALTH) send({ t: 'at', w }); },
+    // (watch: following another player's car as a spectator, on: their id)
+    setWhere(w, on = '') {
+      if (w !== 'watch') on = '';
+      if (w === where && on === whereOn) return;
+      where = w; whereOn = on;
+      if (!STEALTH) send({ t: 'at', w, ...(on ? { on } : {}) });
+    },
+    // another player as this page holds them (pose, car, colour, name tag), for the spectator camera
+    remote(id) { return others.get(id) || null; },
+    // somebody is watching our car as a spectator
+    get watched() { return watchedNow(); },
+    watchers() { let n = 0; for (const o of others.values()) if (o.w === 'watch' && o.on === myId && myId) n++; return n; },
+    lastLap(n) { const l = lastLaps.get(n); return l && Date.now() - l.t < 10 * 60000 ? l : null; },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race
     get id() { return myId; },

@@ -166,6 +166,7 @@ import { createStage, onStage } from './race/raadi.js';
 import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
+import { createSpectate } from './spectate.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -316,6 +317,11 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
+let watch = null;                  // spectator mode, desktop only: the camera follows another player's car (src/spectate.js)
+let watchSpec = null;              // the car the HUD shows while watching
+const mapHits = [];                // the players' arrows on the minimap as last drawn (canvas pixels), to click
+const ownCar = () => car;          // (for the minimap's overlay, whose own "car" is the one the map follows)
+const spot = { x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, yawRate: 0, hit: 0, halfLen: 2.2, halfWid: 0.9, spec: null };    // where the places build around while watching (see PLACES)
 // the Raadi rally stage (src/race/raadi.js), while it is tried out only with ?raadi=1
 const RAADI = params.get('raadi') === '1';
 let stage = null;
@@ -780,7 +786,35 @@ async function boot() {
     // phones, old computers and the low graphics levels draw other cars whole only nearer
     low: () => isTouch || !!xlow || lowRung(),
   });
-  people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks() });
+  people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
+    onWatch: isTouch ? null : (id) => (id ? watch?.start(id) : watch?.stop()), watching: () => watch?.id || null });
+  if (!isTouch) watch = createSpectate({
+    mp, world, toast: (t, ms) => hud.toast(t, ms), racing: (id) => !!raceMode?.racing(id),
+    busy: () => mode !== 'drive' || !!overlayOpen(),
+    // (not in the middle of your own race, nor while the car is being put somewhere)
+    canStart: () => {
+      if (mode !== 'drive' || dropping || respawning) return false;
+      if (raceMode?.holding || raceMode?.ghost) { hud.toast('NOT DURING YOUR RACE', 1800); return false; }
+      return true;
+    },
+    onStart: (o, first) => {
+      if (first) {
+        // your own car waits where it is, stopped; a lap or a stage run in progress ends
+        car.vx = car.vy = car.yawRate = 0;
+        race?.cancel('LAP CANCELLED');
+        stage?.cancel('STAGE CANCELLED');
+        closeOverlays();
+      }
+      shrinker?.jump(scene, o.pose[0], o.pose[1]);
+    },
+    onStop: () => {
+      watchSpec = null;
+      hud.setCar(car.spec); hud.setTyres(tyres);
+      camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
+      shrinker?.jump(scene, car.x, car.z);
+      if (!world.ready(car.x, car.z)) getReady();
+    },
+  });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
@@ -853,7 +887,11 @@ async function boot() {
     strokeStage(ctx, 0.62, 14);
     // other players: arrows pointing the way they drive; anyone outside the minimap
     // gets a pointer on its rim showing which way they are from us
-    const players = mp.players();
+    // (spectating, the map is centred on the watched car, and our own parked car is a yellow arrow too)
+    mapHits.length = 0;
+    const own = ownCar();
+    const players = mp.players().filter((p) => p.id !== watch?.id);
+    if (watch?.view) players.push({ id: null, x: own.x, z: own.z, yaw: own.yaw, colour: '#ffd45e' });
     if (!players.length) return;
     const m = ctx.getTransform(), R = ctx.canvas.width / 2;
     const me = m.transformPoint(new DOMPoint(car.x, car.z));
@@ -865,12 +903,14 @@ async function boot() {
       if (ex * ex + ey * ey < (R - 7) * (R - 7)) {
         ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(p.yaw - car.yaw);
         playerArrow(ctx, 1, p.colour); ctx.restore();
+        mapHits.push({ x: q.x, y: q.y, id: p.id });
         continue;
       }
       // where the line from our car towards them crosses a circle just inside the rim
       const dx = q.x - me.x, dy = q.y - me.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
       const ox = me.x - R, oy = me.y - R, rr = R - 26;      // (pointers made bigger, Martin 2026-11-17)
       const b = ox * ux + oy * uy, t = -b + Math.sqrt(Math.max(0, b * b - (ox * ox + oy * oy - rr * rr)));
+      mapHits.push({ x: me.x + ux * t, y: me.y + uy * t, id: p.id });
       ctx.save(); ctx.translate(me.x + ux * t, me.y + uy * t); ctx.rotate(Math.atan2(ux, -uy));
       ctx.fillStyle = p.colour; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
       ctx.shadowColor = p.colour; ctx.shadowBlur = 8;
@@ -878,6 +918,18 @@ async function boot() {
       ctx.stroke(); ctx.fill(); ctx.restore();
     }
     ctx.restore();
+  });
+  // desktop: a click on a player's arrow on the minimap (or the pointer on its rim) watches that car; on
+  // your own yellow one, back to your car; anywhere else it opens the city map as before
+  if (watch) $('#minimap').addEventListener('click', (e) => {
+    if (mode !== 'drive' || !mapHits.length) return;
+    const c = e.currentTarget, r = c.getBoundingClientRect(), k = c.width / r.width;
+    const x = (e.clientX - r.left) * k, y = (e.clientY - r.top) * k;
+    let best = null, bd = 34 * 34;
+    for (const h of mapHits) { const d = (h.x - x) ** 2 + (h.y - y) ** 2; if (d < bd) { bd = d; best = h; } }
+    if (!best) return;
+    e.stopPropagation();
+    if (best.id) watch.start(best.id); else watch.stop();
   });
   bigmap = createBigMap(world, {
     onPick: dropAt, onClose: closeMap,
@@ -1095,6 +1147,7 @@ function openGarage() {
   stats.phase('menu');
   board?.hide(); optEl.classList.add('hidden');
   closeMap();
+  watch?.stop();
   mode = 'menu';
   input.enable(false);
   $('#menu').classList.remove('hidden');
@@ -1106,6 +1159,7 @@ function openGarage() {
 }
 
 function place(pose) {
+  watch?.stop();                                   // (put somewhere: back in your own car)
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
@@ -1650,14 +1704,17 @@ function frame(ts) {
   // (a freeze stands out from smooth driving: on a device crawling along at under 5 frames a second
   // every frame is slow, which the frame rate in the stats already shows)
   const felt = gapFrom > quietAt && crawl < 4;
-  jobs.setLive(mode === 'drive' && !dropping && !document.hidden && crawl < 4 && world.ready(car.x, car.z));
+  // spectating (desktop, src/spectate.js): WV the watched car once the camera is on it, WF where the world
+  // streams in (the watched car, even before that); our own car waits, stopped
+  const WV = watch?.view || null, WF = watch?.focus || car;
+  jobs.setLive(mode === 'drive' && !dropping && !document.hidden && crawl < 4 && world.ready(WF.x, WF.z));
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
     car.gridHold = !!(raceMode?.pin || stage?.pin);
-    if (mode === 'drive') stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
+    if (mode === 'drive' && !watch?.active) stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
       const x = car.x, z = car.z, yaw = car.yaw;
@@ -1667,39 +1724,46 @@ function frame(ts) {
     // on the race grid: held on the spot until the lights go out (the wheels may spin)
     const pin = raceMode?.pin || stage?.pin;
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
-    mp.collide(car);
-    trackside.collide(car);
-    props.update(car, dt);
-    updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames
-    janese.update(car, dt);
+    // (what our car knocks over and bumps into: not while it waits for a spectator)
+    if (!watch?.active) {
+      mp.collide(car);
+      trackside.collide(car);
+      props.update(car, dt);
+      updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames
+      janese.update(car, dt);
+      aksi.update(car, dt);
+      if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
+      discgolf.update(car, dt);
+      updateFences(car, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
+    }
     warmer.scope(() => parked.update(car, dt, camera.position));
-    busStops?.update(car);
-    aksi.update(car, dt);
-    if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
+    busStops?.update(WV || car);
     vabadusLights.update(performance.now() / 1000);          // clock time: the lights fade at their own pace
-    discgolf.update(car, dt);
-    updateFences(car, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
     // The hand-made places build themselves when the car comes near. One at a time while driving: after one
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.
+    // (the places build around the watched car while spectating: a copy, so nothing they do moves it)
+    const placeCar = watch?.active ? Object.assign(spot, WF, { y: WV?.y ?? car.y }) : car;
     if (!jobs.resting) {
       PLACES ||= [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];
-        warmer.scope(() => P.update(car));
+        warmer.scope(() => P.update(placeCar));
         if (jobs.live && performance.now() - b0 > 6) { placeAt = (placeAt + k + 1) % PLACES.length; jobs.rest(); break; }
       }
     }
     skids.update(car);
-    skids.updateOthers(mp.remotes(), car);
+    skids.updateOthers(mp.remotes(), WV || car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
-  mp.update(car, dt, mode === 'drive');
+  // (a spectator sends no position: the others do not see the parked car meanwhile)
+  mp.update(car, dt, mode === 'drive' && !watch?.active);
+  watch?.frame(dt);
   // counted for race votes by the same rule as the online list: on the map, page in view (off the map
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
-  mp.setDriving(((mode === 'drive' && !document.hidden) || !!raceMode?.holding) && !stageBusy(), stageBusy());
-  mp.setWhere(document.hidden ? 'away' : mode === 'drive' ? 'map' : 'garage');   // (the menu is the garage)
+  mp.setDriving(((mode === 'drive' && !document.hidden && !watch?.active) || !!raceMode?.holding) && !stageBusy(), stageBusy());
+  mp.setWhere(document.hidden ? 'away' : watch?.active ? 'watch' : mode === 'drive' ? 'map' : 'garage', watch?.id || '');   // (the menu is the garage)
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();
@@ -1755,27 +1819,29 @@ function frame(ts) {
     model.setSoot(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2)));
   }
 
-  // ---- camera
-  const speed = Math.hypot(car.vx, car.vy);
+  // ---- camera (tg: the car it follows, ours or, spectating, the watched one)
+  const tg = WV || car;
+  if (WV && watch.takeSnap()) { camYaw = tg.yaw; camSnap = true; droneYaw = tg.yaw; droneDir.set(Math.sin(tg.yaw), -Math.cos(tg.yaw)); camSwoop = 0; }
+  const speed = Math.hypot(tg.vx, tg.vy);
   if (mode === 'drive') {
     // Everything here eases a few rig numbers (heading, distance, height, slope) and then places the
     // camera exactly from them. Easing the camera's position instead leaves it trailing the car by a
     // length that depends on the frame time, so at speed every uneven frame nudged the view back or forth.
     const ease = (rate) => 1 - Math.exp(-rate * dt);
-    let d = car.yaw - camYaw;
+    let d = tg.yaw - camYaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     camYaw += d * ease(3 + speed * 0.08);
     const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
     // a street photo is narrower than the game's view, so over photos the camera backs off and zooms in
     const pm = photos?.mix ?? 0;
     // (a bus sets its own rig: further back and higher, so its 12 metres fit the view)
-    const cs = s.cam || {};
+    const cs = tg.spec.cam || {};
     const wantDist = (6.4 + (cs.dist ?? 0) + Math.min(speed, 55) * 0.035 + Math.min(speed, 70) * 0.075) * (1 + 0.45 * pm);
-    const top = car.y + (car.inWater ? Math.min(3, car.waterTime) : 0);
+    const top = tg.y + (tg.inWater ? Math.min(3, tg.waterTime) : 0);
     // how steeply the ground falls away ahead (positive downhill), read off the ground itself
-    if (!car.airborne && !car.inWater) {
-      const gy = car.y + 0.4;
-      const fall = (world.groundAt(car.x - cx * 4, car.z - cz * 4, gy) - world.groundAt(car.x + cx * 4, car.z + cz * 4, gy)) / 8;
+    if (!tg.airborne && !tg.inWater) {
+      const gy = tg.y + 0.4;
+      const fall = (world.groundAt(tg.x - cx * 4, tg.z - cz * 4, gy) - world.groundAt(tg.x + cx * 4, tg.z + cz * 4, gy)) / 8;
       camSlope += (Math.max(-0.3, Math.min(0.3, fall)) - camSlope) * ease(2.5);
     }
     if (camSnap) { camSnap = false; camDist = wantDist; camY = top; camSlope = 0; }
@@ -1786,23 +1852,23 @@ function frame(ts) {
     }
     // downhill the rig tips forward with the slope and a little past it, so the car does not hide the road
     const down = Math.max(0, camSlope);
-    camPos.set(car.x - cx * camDist, camY + 2.35 + (cs.up ?? 0) + camDist * down * 1.35, car.z - cz * camDist);
+    camPos.set(tg.x - cx * camDist, camY + 2.35 + (cs.up ?? 0) + camDist * down * 1.35, tg.z - cz * camDist);
     const floor = world.heightAt(camPos.x, camPos.z) + 0.9;
     if (camPos.y < floor) camPos.y = floor;
-    camLook.set(car.x + cx * 2, camY + 1.15 + (cs.look ?? 0) - down * 3, car.z + cz * 2);
+    camLook.set(tg.x + cx * 2, camY + 1.15 + (cs.look ?? 0) - down * 3, tg.z + cz * 2);
     // above 150 km/h the view stretches a touch more and the edges close in a little
     const fast = Math.min(1, Math.max(0, (speed - 41.7) / 33));
     let warp = fast * fast * (3 - 2 * fast);
     let wantFov = (58 + Math.min(speed, 60) * 0.22 + warp * 4) * (1 - 0.3 * pm);
-    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw);
+    const fx = Math.sin(tg.yaw), fz = -Math.cos(tg.yaw);
     if (ctl.look && !board?.open) {
       // B held: look back from just in front of the car's nose, over the roof down the road behind. The rig
       // swings on the chase camera's eased heading (camYaw), so in a turn it drags behind the car a little
       // instead of being bolted to it.
-      const half = car.halfLen;
-      camPos.set(car.x + cx * (half + 6.5), car.y + 2.7 + (cs.up ?? 0) * 0.5, car.z + cz * (half + 6.5));
+      const half = tg.halfLen;
+      camPos.set(tg.x + cx * (half + 6.5), tg.y + 2.7 + (cs.up ?? 0) * 0.5, tg.z + cz * (half + 6.5));
       camPos.y = Math.max(camPos.y, world.heightAt(camPos.x, camPos.z) + 0.9);
-      camLook.set(car.x - cx * 18, car.y + 0.9, car.z - cz * 18);
+      camLook.set(tg.x - cx * 18, tg.y + 0.9, tg.z - cz * 18);
       wantFov = 62; warp = 0; camSwoop = 0;
     } else {
       droneMix = Math.max(0, Math.min(1, droneMix + (camView === 'drone' ? dt : -dt) / VIEW_BLEND));
@@ -1815,8 +1881,8 @@ function frame(ts) {
       // round smoothly.
       if (speed > 1) {
         // (backing up, the way the car faces counts, so reversing out of a spot does not turn the view round)
-        const sg = car.vx < -0.5 ? -1 : 1;
-        const tx = sg * (Math.sin(car.yaw) * car.vx + Math.cos(car.yaw) * car.vy), tz = sg * (-Math.cos(car.yaw) * car.vx + Math.sin(car.yaw) * car.vy);
+        const sg = tg.vx < -0.5 ? -1 : 1;
+        const tx = sg * (Math.sin(tg.yaw) * tg.vx + Math.cos(tg.yaw) * tg.vy), tz = sg * (-Math.cos(tg.yaw) * tg.vx + Math.sin(tg.yaw) * tg.vy);
         const k = 1 - Math.exp(-dt / 2.2);
         droneDir.x += (tx / speed * Math.min(1, speed / 4) - droneDir.x) * k;
         droneDir.y += (tz / speed * Math.min(1, speed / 4) - droneDir.y) * k;
@@ -1829,8 +1895,8 @@ function frame(ts) {
       }
       const dx = Math.sin(droneYaw), dz = -Math.cos(droneYaw);
       const h = 30 + Math.min(speed, 60) * 0.3, ahead = 12 + Math.min(speed, 60) * 0.5;
-      camPos.lerp(dronePos.set(car.x - dx * h * 0.55, camY + h, car.z - dz * h * 0.55), dw);
-      camLook.lerp(droneLook.set(car.x + dx * ahead, camY, car.z + dz * ahead), dw);
+      camPos.lerp(dronePos.set(tg.x - dx * h * 0.55, camY + h, tg.z - dz * h * 0.55), dw);
+      camLook.lerp(droneLook.set(tg.x + dx * ahead, camY, tg.z + dz * ahead), dw);
       wantFov += (55 - wantFov) * dw; warp *= 1 - dw;
     }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
@@ -1873,7 +1939,7 @@ function frame(ts) {
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = elapsed;
   if (intro) lights.sun.target.position.copy(camLook);
-  else lights.sun.target.position.set(car.x, car.y, car.z);
+  else lights.sun.target.position.set(tg.x, tg.y, tg.z);
   lights.sun.position.copy(lights.sun.target.position).add(lights.sunOffset);
   water.update(elapsed);
   edge.mat.uniforms.uCam.value.copy(camera.position);
@@ -1885,7 +1951,7 @@ function frame(ts) {
     tileTimer = 0.25;
     if (++shrinkTick % 4 === 0) {
       // (once a second: what the city streamed in since)
-      if (shrinker) shrinker.scan(scene, jobs.live ? 3 : Infinity, car.x, car.z);
+      if (shrinker) shrinker.scan(scene, jobs.live ? 3 : Infinity, WF.x, WF.z);
       else if (liteLate && mode === 'drive' && gfx.auto && lowRung()) {
         // a desktop that auto graphics has kept below full sharpness for 20 s: small pictures from now on
         lowSince ||= performance.now();
@@ -1904,10 +1970,12 @@ function frame(ts) {
     }
     if (!jobs.resting) {
       const b0 = performance.now();
-      warmer.scope(() => { trackside.update(car.x, car.z); trackKerbs.update(car.x, car.z); });
+      warmer.scope(() => { trackside.update(WF.x, WF.z); trackKerbs.update(WF.x, WF.z); });
       if (jobs.live && performance.now() - b0 > 6) jobs.rest();
     }
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
+    // (spectating: around the watched car, and a little around our own, which is where we come back to)
+    else if (watch?.active) world.update(WF.x, WF.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
     terrain.update(camera.position);
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
@@ -1934,12 +2002,15 @@ function frame(ts) {
   }
   part.build += (performance.now() - q0 - part.build) * 0.05;
   hudTimer -= dt;
-  if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(car); }
-  if (mode === 'drive') hud.needle(car, dt);
+  // (spectating: the watched car's speed, revs, street and minimap)
+  const hc = watch?.view || car;
+  if (hc !== car && hc.spec !== watchSpec) { watchSpec = hc.spec; hud.setCar(hc.spec); }
+  if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(hc); }
+  if (mode === 'drive') hud.needle(hc, dt);
   showPedals();
-  audio.update(car, mode === 'drive' && !bigmap.isOpen);
+  audio.update(car, mode === 'drive' && !bigmap.isOpen && !watch?.active);
   audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
-  audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen);
+  audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen && !watch?.active);
 
   if (photos?.update(camera, dt)) {
     const hideTrees = photos.mix > 0.5 && params.get('phtrees') !== '1';   // the photo has the real trees in it
@@ -1994,7 +2065,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

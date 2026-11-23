@@ -144,7 +144,7 @@ export function createHud(world) {
     overlay?.(ctx, scale, car);
     ctx.restore();
     // car marker
-    ctx.fillStyle = '#ffd45e';
+    ctx.fillStyle = car.mark || '#ffd45e';      // (spectating: the watched player's colour)
     ctx.beginPath();
     ctx.moveTo(R, R * 1.25 - 13); ctx.lineTo(R + 8, R * 1.25 + 9); ctx.lineTo(R, R * 1.25 + 4); ctx.lineTo(R - 8, R * 1.25 + 9);
     ctx.closePath(); ctx.fill();

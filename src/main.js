@@ -1306,25 +1306,33 @@ const showTyres = () => {
   tyreBtn.className = tyres;
   hud?.setTyres(tyres);
 };
-function setTyres(k, why) {
+// every change shows a small, clean, borderless note (Martin 2026-11-23), over the drive and the garage alike
+const tyreToast = document.createElement('div');
+tyreToast.id = 'tyretoast';
+document.body.appendChild(tyreToast);
+let tyreToastT = 0;
+function setTyres(k) {
   k = k === 'gravel' ? 'gravel' : 'road';
   const changed = k !== tyres;
   tyres = k;
   if (car) car.tyres = tyres;
   try { localStorage.setItem('kvissuroam.tyres', tyres); } catch {}
   showTyres();
-  if (mode === 'drive' && (changed || !why)) hud.toast(`${tyres === 'gravel' ? 'GRAVEL' : 'ROAD'} TYRES${why ? ` · ${why}` : ''}`, 1800);
+  if (!changed) return;
+  tyreToast.innerHTML = `${tyreIcon(tyres)}<span>Tyres changed to: <b>${tyres}</b></span>`;
+  tyreToast.className = `show ${tyres}`;
+  clearTimeout(tyreToastT);
+  tyreToastT = setTimeout(() => tyreToast.classList.remove('show'), 1600);
 }
 input.on('KeyY', () => { if (mode === 'drive') setTyres(tyres === 'gravel' ? 'road' : 'gravel'); });
-// the race and the stage fit their tyres as they start (watched here, so neither needs to know about tyres)
-let tyreStage = 'idle', tyrePin = null;
+// Driving anywhere, onto a circuit too, keeps whatever is on. Only an explicit jump with the in-game
+// TOOMEMÄGI / RAADI buttons fits that circuit's tyres (road / gravel), once the car is down there and
+// GETTING READY is gone (Martin 2026-11-23).
+let tyrePending = null;
 function tyreDefaults() {
-  const ph = stage?.phase || 'idle';
-  if (ph === 'count' && tyreStage !== 'count') setTyres('gravel', 'RALLY STAGE');
-  tyreStage = ph;
-  const pin = raceMode?.pin || null;
-  if (pin && !tyrePin) setTyres('road', 'RACE');
-  tyrePin = pin;
+  if (!tyrePending || mode !== 'drive' || readyOn || performance.now() - tyrePending.t < 250) return;
+  setTyres(tyrePending.k);
+  tyrePending = null;
 }
 // Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
 const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);
@@ -1461,8 +1469,8 @@ document.addEventListener('click', (e) => {
   if (!act) return;
   if (act === 'reset') goLastSpot();
   else if (act === 'home') homeHere();
-  else if (act === 'track-toome') goHome();
-  else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); } }
+  else if (act === 'track-toome') { goHome(); if (mode === 'drive') tyrePending = { k: 'road', t: performance.now() }; }
+  else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); tyrePending = { k: 'gravel', t: performance.now() }; } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
   else if (act === 'options') toggleOptions();

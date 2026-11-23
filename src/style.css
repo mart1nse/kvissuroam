@@ -1000,3 +1000,13 @@ body.touch #tyre::before { inset: -9px -10px -6px -8px; }
 .tymark .t { fill: none; stroke-width: 1.8; }
 .tymark.gravel .t { stroke: #f0b860; } .tymark.gravel .b { fill: #f0b860; }
 .tymark.road .t, .tymark.road .g { stroke: var(--cyan); fill: none; } .tymark.road .g { stroke-width: 1.5; }
+/* "Tyres changed to: road / gravel": small, clean, borderless (Martin 2026-11-23) */
+#tyretoast { position: fixed; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 56px); z-index: 20; transform: translate(-50%, 6px); display: flex; align-items: center; gap: .55em;
+  padding: .5em 1.1em .5em .8em; border-radius: 999px; background: rgba(14, 5, 34, .72); color: #fff; pointer-events: none; white-space: nowrap;
+  font: 600 clamp(12px, 1.25vw, 17px) var(--font, system-ui), sans-serif; letter-spacing: .04em; opacity: 0; transition: opacity .2s, transform .2s; }
+#tyretoast.show { opacity: 1; transform: translate(-50%, 0); }
+#tyretoast svg { width: 1.3em; height: 1.3em; flex: none; }
+#tyretoast .t { fill: none; stroke-width: 1.8; }
+#tyretoast b { text-transform: uppercase; letter-spacing: .1em; }
+#tyretoast.road .t, #tyretoast.road .g { stroke: var(--cyan); fill: none; } #tyretoast.road .g { stroke-width: 1.5; } #tyretoast.road b { color: var(--cyan); }
+#tyretoast.gravel .t { stroke: #f0b860; } #tyretoast.gravel .b { fill: #f0b860; } #tyretoast.gravel b { color: #f0b860; }

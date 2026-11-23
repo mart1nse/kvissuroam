@@ -19,6 +19,7 @@ import { PARKING, rnd } from '../race/landmarks.js';
 import { uueturuParked } from '../race/uueturu.js';
 import { AKSI_CARS } from './aksi.js';
 import { SIRELI_CARS } from './sireli.js';
+import { POOTSMANI12_CARS } from './pootsmani12.js';
 import { COOP_CARS } from './coop.js';
 import { PEPLERI_CARS } from './pepleri.js';
 import { JAAAEG_CARS } from './jaaaeg.js';
@@ -46,6 +47,7 @@ import { LENNUJAAM_CARS } from './lennujaam.js';
 import { ERM_CARS } from './erm.js';
 import { AOVERE_CARS } from './aovere.js';
 import { AOVERE2_CARS } from './aovere2.js';
+import { AOVERE3_CARS } from './aovere3.js';
 import { VAKSALI_CARS } from './vaksali.js';
 import { LENNUAKADEEMIA_CARS } from './lennuakadeemia.js';
 import { ULENURME_KONSUM_CARS } from './ulenurmekonsum.js';
@@ -151,10 +153,12 @@ function allSpots() {
   LENNUJAAM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `lj${i}`, x, z, yaw, id, paint, lift }));
   ERM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `em${i}`, x, z, yaw, id, paint, lift }));
   AOVERE_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ao${i}`, x, z, yaw, id, paint, lift }));
+  AOVERE3_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `ak${i}`, x, z, yaw, id, paint, lift }));
   AOVERE2_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `aj${i}`, x, z, yaw, id, paint, lift }));
   VAKSALI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `vk${i}`, x, z, yaw, id, paint, lift }));
   LENNUAKADEEMIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `la${i}`, x, z, yaw, id, paint, lift }));
   ULENURME_KONSUM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `uk${i}`, x, z, yaw, id, paint, lift }));
+  POOTSMANI12_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `pt${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

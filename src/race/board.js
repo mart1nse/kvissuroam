@@ -2,6 +2,7 @@
 // best lap per car of all time and of today, plus this browser's last laps.
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
+import { createTrackPicker, TRACK_ICON, TRACKS } from './trackpick.js';
 
 // small marks for what drove a lap; laps from before this was kept count as keyboard
 const INP = {
@@ -12,7 +13,8 @@ const INP = {
 };
 const inpIcon = (k) => { const [name, d] = INP[k] || INP.kb; return `<svg class="inp" viewBox="0 0 24 20" role="img" aria-label="${name}"><title>${name}</title>${d}</svg>`; };
 
-export function createBoard({ mp, race, cars, order }) {
+// stage: the Raadi rally stage (?raadi=1): then a track picker in place of the outline, and both circuits' times
+export function createBoard({ mp, race, cars, order, stage, onTrack }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
 
@@ -108,6 +110,7 @@ export function createBoard({ mp, race, cars, order }) {
     // latest laps by anyone (20 on desktop, the 5 newest on phones: style.css)
     const recent = (b?.recent || []).slice(0, 20)
       .map((l) => `<li>${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
+    if (stage) { renderBoth({ b, pick, day, ic, cell, when }); return; }
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
@@ -117,15 +120,45 @@ export function createBoard({ mp, race, cars, order }) {
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
 
+  // Toomemägi and Raadi side by side (Martin, 23 Nov 2026), and one list of the latest laps on both, each
+  // with the circuit's small outline. Raadi times are this browser's own for now (not sent to the server yet).
+  function renderBoth({ b, pick, day, ic, cell, when }) {
+    const me = mp.name;
+    const runs = stage.runs.map((r) => ({ ...r, name: me, track: 'raadi' }));
+    const today = new Date().toDateString();
+    const bestOf = (list, id) => list.filter((r) => r.car === id).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
+    const todayRuns = runs.filter((r) => new Date(r.at).toDateString() === today);
+    const rowsT = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');
+    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(runs, id), true)}</td><td>${cell(bestOf(todayRuns, id))}</td></tr>`).join('');
+    const [T, R] = TRACKS;
+    const head = (t, sub) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small></h3>`;
+    const table = (rows) => `<table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const tag = (l) => TRACK_ICON[l.track || 'toome'];
+    const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
+      .map((l) => `<li>${tag(l)}${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
+    const recent = [...(b?.recent || []).map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 20)
+      .map((l) => `<li>${tag(l)}${ic(l)}<b>${fmtTime(l.ms / 1000)}</b> <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
+    panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TARTU · LAP TIMES</h2>
+      <p class="small">${b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi driven` : 'lap times are offline'} · Raadi times are this browser's own for now</p>
+      <div class="boards"><div class="bcol">${head(T, 'LAP')}${table(rowsT)}</div><div class="bcol">${head(R, 'STAGE')}${table(rowsR)}</div></div>
+      ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}
+      <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
+  }
+
   function show() {
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
   }
   btn.addEventListener('click', show);
-  createOutline({ after: menu.querySelector('.tag'), onOpen: show });
+  const record = (id) => {
+    if (id === 'raadi') { const r = stage.best().any; return r ? { ms: r.ms, name: mp.name } : null; }
+    return (mp.board?.allTime || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
+  };
+  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, onOpenBoard: show, onPick: onTrack }) : null;
+  if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 
-  return { render, show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
+  return { render: () => { render(); picker?.render(); }, get track() { return picker?.picked || 'toome'; }, show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
 }

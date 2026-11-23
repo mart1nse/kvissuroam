@@ -533,9 +533,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     raceSend(m) { if (!STEALTH) send(m); },
     // driving on the map (counts for the race votes), or in the garage / another tab
     // (leaving the map is told only after AWAY_S: a quick car change in the garage keeps your vote and place)
-    setDriving(on) {
+    // (now: told at once, as on a Raadi stage run, where a player is not counted for the race votes)
+    setDriving(on, now = false) {
       if (on) { clearTimeout(drvOff); drvOff = 0; if (!driving) { driving = true; if (!STEALTH) send({ t: 'drv', on: 1 }); } return; }
-      if (!driving || drvOff) return;
+      if (!driving) return;
+      if (now) { clearTimeout(drvOff); drvOff = 0; driving = false; if (!STEALTH) send({ t: 'drv', on: 0 }); return; }
+      if (drvOff) return;
       drvOff = setTimeout(() => { drvOff = 0; driving = false; if (!STEALTH) send({ t: 'drv', on: 0 }); }, AWAY_S * 1000);
     },
     // counted for the race votes now (on the map, or away for less than AWAY_S)

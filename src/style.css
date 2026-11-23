@@ -305,20 +305,20 @@ body.touch .desktop-only { display: none; }
 }
 
 /* ---- race: lap panel, names over other cars, driver name, lap times board */
-#lap {
+:is(#lap, #stage) {
   left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); min-width: 190px; padding: 6px 12px 7px;
   background: rgba(18, 6, 43, .55); border: none; border-radius: 26px;   /* no border or glow, round corners like START RACE (Martin 22 Nov) */
   font-variant-numeric: tabular-nums; text-align: center;
 }
-#lap .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
-#lap .lt b { font-size: clamp(36px, 5.6vw, 66px); line-height: 1; font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
-#lap.idle .lt b { opacity: .45; }
-#lap .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
-#lap .lb b { font-weight: 800; }
-#lap small { font-size: .8em; color: #fff; opacity: .85; margin-left: 4px; letter-spacing: .04em; }
-#lap ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 8px; justify-content: center; font-size: 10px; opacity: .85; }
-#lap ol li span { display: none; }
-#lap ol li:first-child b { color: var(--sun); }
+:is(#lap, #stage) .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
+:is(#lap, #stage) .lt b { font-size: clamp(36px, 5.6vw, 66px); line-height: 1; font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
+:is(#lap, #stage).idle .lt b { opacity: .45; }
+:is(#lap, #stage) .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
+:is(#lap, #stage) .lb b { font-weight: 800; }
+:is(#lap, #stage) small { font-size: .8em; color: #fff; opacity: .85; margin-left: 4px; letter-spacing: .04em; }
+:is(#lap, #stage) ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 8px; justify-content: center; font-size: 10px; opacity: .85; }
+:is(#lap, #stage) ol li span { display: none; }
+:is(#lap, #stage) ol li:first-child b { color: var(--sun); }
 #lapmsg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; }
 /* desktop: checkpoint splits large enough to read at a glance (Martin, 2026-11-17) */
 body:not(.touch) #lapmsg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
@@ -326,13 +326,13 @@ body:not(.touch) #lapsplit { top: calc(max(8px, env(safe-area-inset-top)) + 170p
 body:not(.touch) #lapsplit span { font-size: clamp(13px, 1.4vw, 17px); font-weight: 800; }
 body:not(.touch) #lapsplit b { font-size: clamp(26px, 3.2vw, 40px); }
 body:not(.touch) #lapsplit i { font-size: clamp(24px, 3vw, 38px); }
-body.touch #lap { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); transform: none; min-width: 0; width: var(--lapw); }
-body.touch #lap ol { display: none; }
-body.touch #lap { background: none; border: none; box-shadow: none; padding: 0; text-align: center; }
-body.touch #lap .lbl { margin-right: 4px; }
-body.touch #lap .lb small { display: block; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body.touch #lap .lt b { font-size: clamp(26px, 4.6vw, 40px); }
-body.touch #lap .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
+body.touch :is(#lap, #stage) { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); transform: none; min-width: 0; width: var(--lapw); }
+body.touch :is(#lap, #stage) ol { display: none; }
+body.touch :is(#lap, #stage) { background: none; border: none; box-shadow: none; padding: 0; text-align: center; }
+body.touch :is(#lap, #stage) .lbl { margin-right: 4px; }
+body.touch :is(#lap, #stage) .lb small { display: block; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch :is(#lap, #stage) .lt b { font-size: clamp(26px, 4.6vw, 40px); }
+body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 
 #names { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
 .pname {
@@ -453,10 +453,10 @@ body.touch #board { padding-top: max(16px, env(safe-area-inset-top)); }
 /* desktop: a bigger map in the bottom left corner, the street name above it, a bigger lap panel */
 body:not(.touch) #minimap { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: clamp(170px, 24vw, 280px); height: clamp(170px, 24vw, 280px); }
 body:not(.touch) #street { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(170px, 24vw, 280px) + 10px); left: max(14px, env(safe-area-inset-left)); }
-body:not(.touch) #lap { min-width: 260px; padding: 8px 28px 10px; }
-body:not(.touch) #lap .lb { font-size: clamp(13px, 1.6vw, 17px); }
-body:not(.touch) #lap ol { font-size: 12px; }
-#lap .lt .lbl { vertical-align: 60%; }
+body:not(.touch) :is(#lap, #stage) { min-width: 260px; padding: 8px 28px 10px; }
+body:not(.touch) :is(#lap, #stage) .lb { font-size: clamp(13px, 1.6vw, 17px); }
+body:not(.touch) :is(#lap, #stage) ol { font-size: 12px; }
+:is(#lap, #stage) .lt .lbl { vertical-align: 60%; }
 
 /* return-to-start offer after an off-track cancel, flies into the START button */
 #lapback { left: 50%; top: calc(16% + clamp(30px, 4.4vw, 44px)); transform: translateX(-50%); pointer-events: auto; z-index: 6; white-space: nowrap;
@@ -509,7 +509,7 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i { font-style: normal; font-weight: 900; }
 #lapmsg i.ahead { color: #5dff9b; }
 #lapmsg i.behind { color: #ff5a6e; }
-#lap ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
+:is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
 body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
 /* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
@@ -798,7 +798,7 @@ body.touch:has(#rlist:not(.hidden):not(.live)) #people { visibility: hidden; }
 body.touch #rcount { top: 20%; gap: 6px; }
 body.touch #rcount .rcard { max-width: 92vw; padding: 8px 14px; }
 body.touch #rcount .btns button { font-size: 1.7em; } body.touch #rcount .btns [data-r="no"] { font-size: 1.35em; }
-body.racegrid #lap, body.touch.racelist #lap, body.touch.racelist #lapmsg { visibility: hidden; }
+body.racegrid :is(#lap, #stage), body.touch.racelist :is(#lap, #stage), body.touch.racelist #lapmsg { visibility: hidden; }
 body.touch #rlights { top: 30%; font-size: 13px; }
 /* a phone with its address bar still on screen: no room for the street name under the minimap, so it goes
    above the right steering button, and the rev counter takes the room up to the minimap */
@@ -825,3 +825,77 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 #people .who li.gar { opacity: .45; }
 #people .who li.gar > i { box-shadow: none; }
 #people .who small.at { margin-left: .4em; font-size: .85em; font-style: italic; }
+
+/* ---- the Raadi rally stage (?raadi=1, src/race/raadi.js): the clock in the lap panel's look, the start
+   lights (five red going out one a second, then green), an arrow along the stage, BACK TO STAGE START */
+#stage .msg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; min-height: 1em; }
+body:not(.touch) #stage .msg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
+body.touch #stage .msg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
+#stage .msg .ahead { font-style: normal; color: #7dff5a; }
+#stage .msg .behind { font-style: normal; color: var(--pink); }
+#rallylights { left: 50%; top: 34%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: .35em;
+  padding: .55em 1.2em .65em; border-radius: 26px; background: rgba(10, 4, 24, .62); font-size: clamp(14px, 1.4vw, 24px); pointer-events: none; }
+#rallylights .lamps { display: flex; gap: .6em; padding: .4em .6em; border-radius: 99px; background: rgba(7, 2, 15, .85); }
+#rallylights .lamps i { width: 2.4em; height: 2.4em; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3348, #17121f 70%); }
+#rallylights .lamps i.on { background: radial-gradient(circle at 40% 35%, #ffd0d0, #ff2a2a 45%, #8a0000); box-shadow: 0 0 18px #ff2a2a, 0 0 40px rgba(255, 42, 42, .55); }
+#rallylights .lamps i.g { margin-left: .5em; }
+#rallylights .lamps i.g.on { background: radial-gradient(circle at 40% 35%, #e0ffe0, #29ff6a 45%, #00701e); box-shadow: 0 0 18px #29ff6a, 0 0 40px rgba(41, 255, 106, .55); }
+#rallylights .cap { font: 400 1.1em 'Russo One', var(--font); letter-spacing: .2em; color: var(--sun); }
+#rallylights.go .cap { color: #7dff5a; font-size: 2em; }
+body.touch #rallylights { top: 36%; font-size: 13px; }
+#stagearrow { left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + clamp(96px, 12vw, 130px)); width: clamp(34px, 3.6vw, 52px); height: clamp(34px, 3.6vw, 52px);
+  transform: translateX(-50%) rotate(var(--rot, 0deg)); pointer-events: none; transition: opacity .3s; }
+#stagearrow svg { width: 100%; height: 100%; display: block; overflow: visible; }
+#stagearrow path { fill: var(--sun); stroke: var(--ink); stroke-width: 5; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(255, 210, 58, .7)); }
+body.touch #stagearrow { left: auto; right: calc(var(--lapr) + var(--lapw) / 2); transform: translateX(50%) rotate(var(--rot, 0deg)); top: calc(max(6px, env(safe-area-inset-top)) + 70px); width: 30px; height: 30px; }
+#stageagain { left: 50%; top: calc(16% + clamp(30px, 4.4vw, 44px)); transform: translateX(-50%); pointer-events: auto; z-index: 6; white-space: nowrap;
+  padding: 10px 18px; font-size: clamp(12px, 1.6vw, 16px); font-weight: 800; letter-spacing: .14em; color: var(--cyan);
+  background: rgba(18, 6, 43, .7); border: none; border-radius: 999px; text-shadow: 0 0 8px rgba(47, 243, 255, .8); }
+body.touch #stageagain { top: calc(34% + 40px); }
+#rbtn.away { font-size: .8em; animation: none; opacity: .9; }
+#trackpills { left: max(14px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); display: flex; gap: 6px; pointer-events: auto; }
+#trackpills button { padding: 6px 12px; border: none; border-radius: 999px; background: rgba(18, 6, 43, .55); color: var(--cyan);
+  font: 800 clamp(10px, 1vw, 12px) var(--font); letter-spacing: .16em; touch-action: manipulation; }
+#trackpills button:active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
+body.touch #trackpills { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 4px); left: 50%; transform: translateX(-50%); }
+body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
+
+/* the start screen's track picker (?raadi=1): a card per circuit, the picked one bigger with its record */
+#trackpick { z-index: 1; display: flex; gap: clamp(8px, 1.4vw, 18px); align-items: flex-end; justify-content: center; }
+#trackpick .tcard { display: flex; align-items: center; gap: .7em; padding: .5em 1em .5em .6em; border: none; border-radius: 22px;
+  background: rgba(18, 6, 43, .45); color: #fff; font: 700 clamp(10px, 1vw, 13px) var(--font); letter-spacing: .14em; text-align: left; opacity: .72; touch-action: manipulation; transition: opacity .15s, background .15s; }
+#trackpick .tcard svg { width: 3.6em; height: 3.6em; flex: none; overflow: visible; }
+#trackpick .tcard path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+#trackpick .tcard .tube { stroke: var(--pink); stroke-width: 60; opacity: .8; }
+#trackpick .tcard .core { stroke: #ffe3f4; stroke-width: 20; }
+#trackpick .tx { display: flex; flex-direction: column; gap: .2em; }
+#trackpick .tx b { color: var(--pink); font-size: 1.15em; letter-spacing: .2em; }
+#trackpick .tx small { font-size: .82em; opacity: .9; }
+#trackpick .tx .rec { color: var(--sun); }
+#trackpick .tx .rec i { font-style: normal; color: #fff; opacity: .8; }
+#trackpick .tx .lt { color: var(--cyan); font-size: .82em; text-shadow: 0 0 8px rgba(47, 243, 255, .7); }
+#trackpick .tcard.on { opacity: 1; background: rgba(18, 6, 43, .7); font-size: clamp(12px, 1.25vw, 16px); }
+#trackpick .tcard.on svg { width: 5.2em; height: 5.2em; }
+#trackpick .tcard.on .tube { stroke-width: 44; filter: drop-shadow(0 0 9px var(--hot)); }
+@media (hover: hover) and (pointer: fine) { #trackpick .tcard:hover { opacity: 1; } }
+@media (max-height: 560px) {
+  #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); flex-direction: column; align-items: flex-end; }
+}
+/* phones: a row of pills under the logo */
+body.touch #trackpick { position: static; flex-direction: row; align-items: center; gap: 6px; margin-top: 2px; }
+body.touch #trackpick .tcard { padding: 3px 10px 3px 5px; font-size: 9px; gap: .5em; }
+body.touch #trackpick .tcard svg { width: 2.2em; height: 2.2em; }
+body.touch #trackpick .tcard.on svg { width: 2.6em; height: 2.6em; }
+body.touch #trackpick .tx { flex-direction: row; align-items: baseline; gap: .7em; }
+body.touch #trackpick .tx .rec, body.touch #trackpick .tx .lt { display: none; }
+
+/* the lap times board with both circuits side by side, and the circuits' small marks in the lists */
+#board .boards { display: flex; gap: clamp(14px, 3vw, 40px); justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+#board .boards table { min-width: 0; }
+#board .bcol h3 { margin: 0 0 4px; font-size: clamp(12px, 1.5vw, 16px); letter-spacing: .16em; color: var(--pink); display: flex; align-items: center; gap: .5em; }
+#board .bcol h3 small { color: #fff; opacity: .7; font-size: .7em; letter-spacing: .12em; }
+#board .boards th, #board .boards td { padding: 4px 8px; }
+svg.trk { width: 1.25em; height: 1.25em; vertical-align: -.25em; margin-right: 5px; overflow: visible; }
+svg.trk path { fill: none; stroke: var(--pink); stroke-width: 90; stroke-linejoin: round; stroke-linecap: round; }
+#board .bcol h3 svg.trk { width: 1.6em; height: 1.6em; margin: 0; }

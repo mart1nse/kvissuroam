@@ -151,6 +151,8 @@ import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
 import { createRaceMode } from './race/racemode.js';
+import { createStage, onStage } from './race/raadi.js';
+import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 
 const $ = (s) => document.querySelector(s);
@@ -301,6 +303,12 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
+// the Raadi rally stage (src/race/raadi.js), while it is tried out only with ?raadi=1
+const RAADI = params.get('raadi') === '1';
+let stage = null;
+let trackPicked = false;                // a track was picked on the start screen since the last DRIVE
+if (RAADI) setUnrutted(onStage);
+const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
@@ -723,7 +731,7 @@ async function boot() {
       people?.event(kind, name, old);
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
-    hotlap: () => (!!race?.running && mode === 'drive') || !!raceMode?.ghost,
+    hotlap: () => ((!!race?.running || !!stage?.running) && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
@@ -741,11 +749,21 @@ async function boot() {
       return net && (!mine || net.ms <= mine.ms) ? net : mine;
     },
   });
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER });
+  if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose) });
+  if (stage) {
+    // short buttons to either circuit's start, straight from the driving screen
+    const tp = document.createElement('div');
+    tp.id = 'trackpills';
+    tp.innerHTML = '<button data-act="home" title="Toomemägi lap start (H)">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
+    $('#hud').appendChild(tp);
+  }
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); } });
   raceMode = createRaceMode({
     mp, track: race.track, cars: CARS, isTouch, toast: (t, ms) => hud.toast(t, ms), chime: (k) => audio.chime?.(k),
     place: (pose) => place(pose), isDriving: () => mode === 'drive',
     halo: (on) => race.finishHalo(on),
+    // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
+    busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
   });
   // (the lap's line is put together once: its 2,400 points were walked again each time the small map was
   // drawn, sixteen times a second)
@@ -874,6 +892,7 @@ function setCar(id, now = false) {
   mp?.setCar(id);
   raceMode?.out('car');                            // after the lights another car means out of the race
   race?.cancel('LAP CANCELLED');
+  stage?.cancel('STAGE CANCELLED');
   layoutMenu();
 }
 
@@ -882,7 +901,7 @@ let garage = null;
 function layoutMenu() {
   garage?.sync(carId);
   const d = $('#drivecar');
-  if (d) d.textContent = CARS[carId].short;
+  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'RAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
 function buildMenu() {
@@ -912,6 +931,14 @@ function startDriving() {
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
+  // the track picked on the start screen (?raadi=1): DRIVE starts there, once per pick (back from the
+  // garage the car stays where it was)
+  if (stage && (trackPicked || !drivenOnce)) {
+    const atRaadi = Math.hypot(car.x - 2660, car.z - 470) < 600;
+    if (board.track === 'raadi' && !atRaadi) stage.goStart();
+    else if (board.track === 'toome' && trackPicked && atRaadi) goHome();
+    trackPicked = false;
+  }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
@@ -983,6 +1010,7 @@ function place(pose) {
 
 function goHome() {
   raceMode?.out('start');
+  stage?.teleported();
   history.length = 0;
   wetAt = null;
   place(startPose);
@@ -1046,6 +1074,7 @@ async function dropAt(x, z) {
   if (dropping || mode !== 'drive') return;
   if (!insideBoundary(x, z)) { hud.toast('OUTSIDE THE MAP', 1600); return; }
   raceMode?.out('map');
+  stage?.teleported();
   stats.count('mapjump');
   getReady();                                      // (at once: the click is answered before the map is read)
   parked.hold(8);
@@ -1304,6 +1333,7 @@ document.addEventListener('click', (e) => {
   if (!act) return;
   if (act === 'reset') goLastSpot();
   else if (act === 'home') goHome();
+  else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
   else if (act === 'sound') toggleSound();
@@ -1439,7 +1469,7 @@ function frame(ts) {
   // (and while the city map is open)
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
-    car.gridHold = !!raceMode?.pin;
+    car.gridHold = !!(raceMode?.pin || stage?.pin);
     if (mode === 'drive') stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
@@ -1448,7 +1478,7 @@ function frame(ts) {
       car.x = x; car.z = z; car.yaw = yaw; car.vx = car.vy = car.yawRate = 0;
     }
     // on the race grid: held on the spot until the lights go out (the wheels may spin)
-    const pin = raceMode?.pin;
+    const pin = raceMode?.pin || stage?.pin;
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     mp.collide(car);
     trackside.collide(car);
@@ -1481,7 +1511,7 @@ function frame(ts) {
   mp.update(car, dt, mode === 'drive');
   // counted for race votes by the same rule as the online list: on the map, page in view (off the map
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
-  mp.setDriving((mode === 'drive' && !document.hidden) || !!raceMode?.holding);
+  mp.setDriving(((mode === 'drive' && !document.hidden) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : mode === 'drive' ? 'map' : 'garage');   // (the menu is the garage)
   raceMode?.update(car, dt);
   people.update();
@@ -1515,6 +1545,7 @@ function frame(ts) {
     }
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
+    stage?.update(car, carId, s0Short(), dt);
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
 
@@ -1774,7 +1805,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

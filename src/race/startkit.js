@@ -44,11 +44,11 @@ export function createStartKit({ group, clock, cam }) {
   const STEEL = 0x9a9ea4, BLACK = 0x121216;
 
   // ---- the clock's frame: four legs, a rail low down and one under the box, and the box on top
-  const W = 1.2, H = 0.62, D = 0.18, TOP = 1.5;            // the box, and the height of its underside
+  const K = 1.25, W = 1.2 * K, H = 0.62 * K, D = 0.18, TOP = 1.45;            // the box, and the height of its underside
   {
     const { x, y, z, yaw } = clock, c = Math.cos(yaw), s = Math.sin(yaw);
     const at = (lx, lz) => [x + c * lx + s * lz, z - s * lx + c * lz];
-    const fw = 0.42, fd = 0.26;
+    const fw = 0.5, fd = 0.28;
     for (const lx of [-fw, fw]) for (const lz of [-fd, fd]) { const [ax, az] = at(lx, lz); p.box(0.035, TOP, 0.035, STEEL, ax, y + TOP / 2, az, yaw); }
     for (const hy of [0.22, TOP - 0.02]) {
       for (const lz of [-fd, fd]) { const [ax, az] = at(0, lz); p.box(fw * 2, 0.03, 0.03, STEEL, ax, y + hy, az, yaw); }
@@ -88,7 +88,7 @@ export function createStartKit({ group, clock, cam }) {
   quads.push([0.26, -0.25, 0.54, 0.25]);
   const nq = quads.length, pos = new Float32Array(nq * 12), uv = new Float32Array(nq * 8), col = new Float32Array(nq * 12), idx = [];
   quads.forEach(([x0, y0, x1, y1], q) => {
-    pos.set([x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0], q * 12);
+    pos.set([x0 * K, y0 * K, 0, x1 * K, y0 * K, 0, x1 * K, y1 * K, 0, x0 * K, y1 * K, 0], q * 12);
     idx.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
   });
   const geo = new THREE.BufferGeometry();

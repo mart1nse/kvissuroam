@@ -757,7 +757,7 @@ async function boot() {
     },
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
-  if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose) });
+  if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level) });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');

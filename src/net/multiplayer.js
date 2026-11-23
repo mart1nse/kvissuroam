@@ -10,7 +10,7 @@
 // bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress.
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
-import { escapeHtml } from '../race/race.js';
+import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 
@@ -157,11 +157,22 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
     onBoard?.(b);
   }
-  function recordOf(n) {
+  // with the lap's time after it (Martin 2026-11-23): "22B STI LAP RECORD 1:23.45"
+  function recOf(n) {
     const r = recs.get(n);
+    if (!r) return null;
+    if (Date.now() - r.t > REC_MS) { recs.delete(n); return null; }
+    return r;
+  }
+  function recordOf(n) {
+    const r = recOf(n);
     if (!r) return '';
-    if (Date.now() - r.t > REC_MS) { recs.delete(n); return ''; }
-    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD`;
+    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD${Number.isFinite(r.ms) ? ` ${fmtTime(r.ms / 1000)}` : ''}`;
+  }
+  // the record's time alone ('' for none), for the phone's narrow list
+  function recordTime(n) {
+    const r = recOf(n);
+    return r && Number.isFinite(r.ms) ? fmtTime(r.ms / 1000) : '';
   }
 
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
@@ -355,7 +366,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
           if (Number.isFinite(m.lap.ms)) lastLaps.set(m.lap.name, { ms: m.lap.ms, car: m.lap.car, t: Date.now() });
           if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
-            recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
+            recs.set(m.lap.name, { car: m.lap.car, ms: m.lap.ms, t: Date.now() });
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
           }
         }
@@ -709,8 +720,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     // seconds until another thumbs up may go to this player (0: now)
     kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
-    // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''
+    // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
+    recordTime,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen });

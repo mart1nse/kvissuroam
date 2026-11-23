@@ -366,7 +366,11 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
   font: 400 10px/1.3 'Russo One', var(--font); letter-spacing: .08em; white-space: nowrap; color: #fff;
   text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot);
 }
-#people .who small.rec { margin-left: .5em; font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* like the race placement (Martin, 2026-11-23) */
+#people :is(.who, .me) small.rec { margin-left: .5em; font: 400 .8em 'Russo One', var(--font); letter-spacing: .06em; color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* like the race placement (Martin, 2026-11-23) */
+#people :is(.who, .me) small.rec b { font-weight: 400; color: #ffe46b; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }   /* the record's time */
+body.touch #people :is(.who, .me) small.rec { display: block; margin: 0 0 1px; }   /* (under the name's dot, after the thumb when there is one) */
+body.touch #people .who li:has(> .ku) small.rec { margin-left: calc(1.3em / .8 + .1em / .8 + 6px); }
+body.touch #people :is(.who, .me) small.rec .rc { display: none; }
 #menu.hidden ~ #names { display: block; }
 
 /* The row under the cars. DRIVE is the one thing to press, so it is the big filled button in the

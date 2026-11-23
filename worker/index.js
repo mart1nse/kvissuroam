@@ -48,6 +48,16 @@ const MAX_SOCKETS = 150;          // everyone with the game open
 const MAX_SOCKETS_IP = 12;        // from one address (a household, a LAN party)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
+// Positions in bundles (Martin 2026-11-23, 22 online and more coming): a page that says so in its hello
+// (b: 1) gets every other car's newest position in ONE message ten times a second, instead of one
+// message per car per update. 22 players: 210 messages a second into each browser and 4,600 out of here
+// become 10 and 220. Cars far from the receiving one go less often (they are a block on its horizon or an
+// arrow on its map). Each entry carries how long ago its position came in, so the page puts it at its
+// true moment and the car glides as smoothly as before. Pages from before this get single messages at once.
+const TICK = 100;                                     // ms between bundles
+const POSE_FAR = 600, POSE_FAR_MS = 300;              // further than this from the receiver: about 3 a second
+const POSE_VFAR = 2000, POSE_VFAR_MS = 1000;          // and once a second this far
+const POSE_KEEP = 5000;                               // a car that has not sent for this long is left out
 const KUDOS_GAP = 30000, KUDOS_MAX = 8;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 3;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
@@ -137,6 +147,69 @@ export class Lobby extends DurableObject {
     this.cache = null;            // the lap board
     this.hmac = null;
     this.race = new RaceDesk(this);   // the online race (worker/race.js)
+    this.initPoses();
+  }
+
+  // ---- Positions (see TICK): kept in memory only, they are stale a moment later anyway
+  initPoses() {
+    this.poses = new Map();       // player id -> { p, j: p as JSON, t: when it came in, n: how many so far, ws }
+    this.bund = new WeakMap();    // socket -> takes bundles (from its hello; read from the attachment after a wake-up)
+    this.sentTo = new WeakMap();  // socket -> Map(player id -> { n, t }): what that page has had of each car
+    this.timer = 0;
+  }
+  takesBundles(ws) {
+    let b = this.bund.get(ws);
+    if (b === undefined) { b = !!ws.deserializeAttachment()?.b; this.bund.set(ws, b); }
+    return b;
+  }
+  // a car's new position: to older pages at once, to the others with the next bundle
+  pose(ws, id, p) {
+    const now = Date.now();
+    const j = JSON.stringify(p);
+    const e = this.poses.get(id);
+    if (e) { e.p = p; e.j = j; e.t = now; e.n++; e.ws = ws; } else this.poses.set(id, { p, j, t: now, n: 1, ws });
+    let one = null;
+    for (const o of this.ctx.getWebSockets()) {
+      if (o === ws || this.takesBundles(o)) continue;
+      one ??= `{"t":"s","id":"${id}","p":${j}}`;
+      try { o.send(one); } catch { /* closing */ }
+    }
+    if (!this.timer) this.timer = setInterval(() => { try { this.bundle(); } catch (err) { console.error('bundle', err); } }, TICK);
+  }
+  dropPose(ws, id) {
+    const e = id && this.poses.get(id);
+    if (e && e.ws === ws) this.poses.delete(id);
+  }
+  bundle() {
+    const now = Date.now();
+    for (const [id, e] of this.poses) if (now - e.t > POSE_KEEP) this.poses.delete(id);
+    if (!this.poses.size) { clearInterval(this.timer); this.timer = 0; return; }   // (nobody driving: the object may sleep)
+    const own = new Map();
+    for (const e of this.poses.values()) own.set(e.ws, e);
+    const frag = new Map();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (!this.takesBundles(ws)) continue;
+      let sent = this.sentTo.get(ws);
+      if (!sent) this.sentTo.set(ws, sent = new Map());
+      // where this page's own car is (none: in the menu, the garage or watching someone: it gets everything)
+      const me = own.get(ws), here = me && now - me.t < 2000 ? me.p : null;
+      let out = '';
+      for (const [id, e] of this.poses) {
+        if (e.ws === ws) continue;
+        const s = sent.get(id);
+        if (s && s.n === e.n) continue;                 // nothing new from that car
+        if (s && here) {
+          const d = Math.hypot(e.p[0] - here[0], e.p[1] - here[1]);
+          if (now - s.t < (d > POSE_VFAR ? POSE_VFAR_MS : d > POSE_FAR ? POSE_FAR_MS : 0)) continue;
+        }
+        if (s) { s.n = e.n; s.t = now; } else sent.set(id, { n: e.n, t: now });
+        let f = frag.get(id);
+        if (f === undefined) frag.set(id, f = `["${id}",${e.j},${now - e.t}]`);
+        out += out ? `,${f}` : f;
+      }
+      if (sent.size > this.poses.size + 32) for (const id of sent.keys()) if (!this.poses.has(id)) sent.delete(id);
+      if (out) try { ws.send(`{"t":"S","b":[${out}]}`); } catch { /* closing */ }
+    }
   }
 
   async alarm() { this.race.alarm(); }
@@ -232,6 +305,7 @@ export class Lobby extends DurableObject {
       const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
       if (Math.max(ping, a?.at || 0) > now - 80000) continue;
       try { ws.close(1001, 'stale'); } catch { /* already closed */ }
+      this.dropPose(ws, a?.id);
       if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
     }
   }
@@ -476,7 +550,7 @@ export class Lobby extends DurableObject {
       if (r.n === MSG_MAX + 1) {
         const a = ws.deserializeAttachment();
         try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
-        if (a?.id) { if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } ws.serializeAttachment({ at: a.at, ip: a.ip }); }
+        if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } ws.serializeAttachment({ at: a.at, ip: a.ip }); }
       }
       return;
     }
@@ -491,7 +565,7 @@ export class Lobby extends DurableObject {
       if (me.ghost) return;
       // position: checked, then passed on
       const p = cleanPose(m.p);
-      if (p) this.broadcast(`{"t":"s","id":"${me.id}","p":${JSON.stringify(p)}}`, ws);
+      if (p) this.pose(ws, me.id, p);
       return;
     }
     if (m.t === 'hello') {
@@ -513,6 +587,7 @@ export class Lobby extends DurableObject {
           if (old === ws) continue;
           const oa = old.deserializeAttachment();
           if (oa?.id !== id) continue;
+          this.dropPose(old, id);
           old.serializeAttachment({ at: oa.at, ip: oa.ip });
           try { old.close(1000, 'reconnected'); } catch { /* already closed */ }
         }
@@ -523,7 +598,9 @@ export class Lobby extends DurableObject {
       const ghost = !!m.ghost || !!me?.ghost;
       const w = cleanWhere(m.w) || me?.w;
       const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
+      const b = m.b === 1 || !!me?.b;              // takes positions in bundles (see TICK)
+      this.bund.set(ws, b);
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
@@ -566,6 +643,7 @@ export class Lobby extends DurableObject {
   async webSocketClose(ws) {
     const me = ws.deserializeAttachment();
     try { ws.close(); } catch { /* already closed */ }
+    this.dropPose(ws, me?.id);
     if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); if (me.on) this.watchTold([me.on], ws); }
   }
 

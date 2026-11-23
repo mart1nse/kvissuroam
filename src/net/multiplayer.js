@@ -10,7 +10,7 @@
 // bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress.
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
-import { escapeHtml } from '../race/race.js';
+import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 
@@ -24,6 +24,9 @@ const SEND_HZ = 10;
 // 100 000 a day), and the server passes every one on to everybody else.
 const SEND_HZ_FAR = 3, LONELY = 600;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
+// (in bundles, a position waits up to one bundle, 0.1 s, at the server before it is passed on, so the
+// cars are drawn a little further back: then there is nearly always a newer position to glide towards)
+const DELAY_BUNDLED = 0.21;
 const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
@@ -116,6 +119,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
   const mine = new Set();
+  let bundled = false;           // this connection's server sends positions in bundles
   let myWn = 0;                  // spectators watching our car (the server's count)
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
@@ -157,11 +161,22 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
     onBoard?.(b);
   }
-  function recordOf(n) {
+  // with the lap's time after it (Martin 2026-11-23): "22B STI LAP RECORD 1:23.45"
+  function recOf(n) {
     const r = recs.get(n);
+    if (!r) return null;
+    if (Date.now() - r.t > REC_MS) { recs.delete(n); return null; }
+    return r;
+  }
+  function recordOf(n) {
+    const r = recOf(n);
     if (!r) return '';
-    if (Date.now() - r.t > REC_MS) { recs.delete(n); return ''; }
-    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD`;
+    return `${Object.hasOwn(CARS, r.car) ? CARS[r.car].short.toUpperCase() : ''} LAP RECORD${Number.isFinite(r.ms) ? ` ${fmtTime(r.ms / 1000)}` : ''}`;
+  }
+  // the record's time alone ('' for none), for the phone's narrow list
+  function recordTime(n) {
+    const r = recOf(n);
+    return r && Number.isFinite(r.ms) ? fmtTime(r.ms / 1000) : '';
   }
 
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
@@ -175,8 +190,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     ws = sock;
     let ping = 0;
     sock.onopen = () => {
-      retry = 1; online = true; raceSeen = false;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
+      retry = 1; online = true; raceSeen = false; bundled = false;
+      // b: 1, everyone's positions in one message ten times a second (see TICK in worker/index.js)
+      send({ t: 'hello', b: 1, name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -283,13 +299,28 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     others.delete(id);
   }
 
+  // a position into a car's list, at the moment the server got it (age ms before now), never before the last one
+  function addPose(o, p, age) {
+    const b = o.buf, last = b[b.length - 1];
+    let t = performance.now() / 1000 - age / 1000;
+    if (last && t <= last.t) t = last.t + 0.001;
+    b.push({ t, p });
+    if (b.length > 30) b.shift();
+  }
   function onMessage(m) {
     switch (m.t) {
       case 's': {
         const o = others.get(m.id);
-        if (o && poseOk(m.p)) {
-          o.buf.push({ t: performance.now() / 1000, p: m.p });
-          if (o.buf.length > 30) o.buf.shift();
+        if (o && poseOk(m.p)) addPose(o, m.p, 0);
+        break;
+      }
+      case 'S': {          // a bundle: [id, position, how many ms ago the server got it] for each car with news
+        if (!Array.isArray(m.b)) break;
+        bundled = true;
+        for (const e of m.b) {
+          if (!Array.isArray(e)) continue;
+          const o = others.get(e[0]);
+          if (o && poseOk(e[1])) addPose(o, e[1], Number.isFinite(e[2]) ? Math.max(0, Math.min(1000, e[2])) : 0);
         }
         break;
       }
@@ -355,7 +386,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
           if (Number.isFinite(m.lap.ms)) lastLaps.set(m.lap.name, { ms: m.lap.ms, car: m.lap.car, t: Date.now() });
           if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
-            recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
+            recs.set(m.lap.name, { car: m.lap.car, ms: m.lap.ms, t: Date.now() });
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
           }
         }
@@ -422,7 +453,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function sample(o, now) {
     const b = o.buf;
     if (!b.length) return null;
-    const t = now - DELAY;
+    const t = now - (bundled ? DELAY_BUNDLED : DELAY);
     let i = b.length - 1;
     while (i > 0 && b[i - 1].t > t) i--;
     const B = b[i], A = b[i - 1];
@@ -709,8 +740,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     // seconds until another thumbs up may go to this player (0: now)
     kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
-    // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''
+    // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
+    recordTime,
     submitLap(lap) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
       enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen });

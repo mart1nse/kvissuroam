@@ -52,6 +52,9 @@ export const HAND_PLACES = [
   { name: 'Lennuakadeemia and Lennu 42', x: 20, z: 10600, r: 150 },
   { name: 'Ülenurme Konsum, Võru mnt 2', x: 1690, z: 10085, r: 90 },
   { name: 'Aovere: the three houses on Aasa tee', x: 6605, z: -5005, r: 110 },
+  { name: 'Aovere: Alrey farm on road 43', x: 6195, z: -5220, r: 60 },
+  { name: 'Aovere: the farm on Kiigi tee', x: 6935, z: -4645, r: 70 },
+  { name: 'Aovere: the farm at the end of Aasa tee', x: 6850, z: -5095, r: 70 },
 ];
 
 // segments of the road centre lines in a coarse grid

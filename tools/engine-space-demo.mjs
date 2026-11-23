@@ -28,7 +28,8 @@
 //   --tyres[=<spin level>]: the tyre sounds as audio.js plays them (scrub and wheelspin howl, into the car
 //   bus); the level is the wheelspin gain at full spin (default the game's SPIN_LEVEL, 0.05 before 21 Nov).
 //   With them comes the squeal of src/audio-tyres.js; --squeal=<x> scales it (0: none, for a "before" clip),
-//   --mass=<kg> sings as a car of that weight. --real: the modelled squeal of public/tyre-worklet.js instead
+//   --mass=<kg> sings as a car of that weight. With --surface=2 (gravel), 3 (dirt) or 0 (grass) it is the
+//   sound of loose ground instead (stones, dig, spray and the rumble; --gravel=0 for a "before" clip). --real: the modelled squeal of public/tyre-worklet.js instead
 //   (V in the game), --real=<x> scales it.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -66,7 +67,10 @@ const { revRoom } = await import('../src/audio-space.js');
 const { EngineCore, reviveConfig } = await import(pathToFileURL(wl).href);
 mkdirSync(out, { recursive: true });
 const SR = 48000, BLOCK = 128, FPS = 60, T = flag('shift') ? 27 : 22;
-const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
+// --surface=<n>: the ground the car drives on (1 paved, 2 gravel, 3 dirt, 0 grass); off paving the tyre sounds
+// are those of loose ground (stones, dig, spray: createGravel in src/audio-tyres.js) and the gravel rumble
+const SURF = Number(val('surface') ?? 1);
+const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => SURF, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
 
 // full lock and full throttle from a standstill: round and round on the limiter, a lift, and again
 function donutScript(t) {
@@ -190,7 +194,7 @@ for (const id of ids) {
   const tb = spec.engine.turbo, tWh = [], tEv = [];
   let lastBoost = 0, lastPsh = -9, wasShift = false, boostSince = -1;
   // the tyres as audio.js hears them, at 60 Hz: time, scrub band, scrub gain, spin band, spin gain
-  const TY = [];
+  const TY = [], GV = [];
   let skid = 0, spinS = 0;
   // the downshift sounds as audio.js has them, at the game's 60 Hz
   const drv = SHIFT ? shiftDriver() : null, shs = SHIFT === 'new' || DONUT || BURNOUT ? createShiftSound() : null, sEv = [], gLog = [], sPunch = [], RM = [];
@@ -238,7 +242,10 @@ for (const id of ids) {
         const k = Math.max(car.skidF || 0, car.skidR || 0);
         skid += (k - skid) * 0.2;
         spinS += (spinAmount(car) - spinS) * 0.15;
-        TY.push(t, 1050 + Math.min(v, 35) * 16, Math.max(0, skid - 0.15) * 0.07, 680 + 420 * spinS, spinS * TYRES, spinS, skid, v, car.slipV || 0, car.gear || 0);
+        // (as audio.js: scrub, howl and squeal only on paving; loose ground has its own sounds and the rumble)
+        const pv = SURF === 1 ? 1 : 0;
+        TY.push(t, 1050 + Math.min(v, 35) * 16, Math.max(0, skid - 0.15) * 0.07 * pv, 680 + 420 * spinS, spinS * TYRES * pv, spinS * pv, skid * pv, v, car.slipV || 0, car.gear || 0);
+        if (!pv) GV.push(t, SURF === 4 ? 0 : spinS, car.slipV || 0, v, Math.min(0.22, (v + (car.slipV || 0)) * 0.0081));
       }
       const p = along(dist + 2);
       if (camYaw === null) camYaw = p.yaw;
@@ -323,9 +330,28 @@ for (const id of ids) {
         sf.frequency.setTargetAtTime(TY[k + 1], TY[k], 0.08); sg.gain.setTargetAtTime(TY[k + 2], TY[k], 0.07);
         pf.frequency.setTargetAtTime(TY[k + 3], TY[k], 0.1); pg.gain.setTargetAtTime(TY[k + 4], TY[k], 0.08);
       }
+      if (SQ.gv.length) {
+        // wheelspin on loose ground (public/tyre-worklet.js 'gravel-spin'), and the game's gravel rumble, which
+        // goes to the ears round the space (master 0.5 in the game: x0.5 x the 1/0.4 back up here)
+        await ctx.audioWorklet.addModule('/public/tyre-worklet.js');
+        const { GRAVEL_LEVEL } = await import('/src/audio-tyres.js');
+        const node = new AudioWorkletNode(ctx, 'gravel-spin', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { seed: 11 } });
+        const gg = ctx.createGain(); gg.gain.value = SQ.gravel; node.connect(gg).connect(space.input);
+        const P = (k) => node.parameters.get(k), G = SQ.gv;
+        P('level').value = GRAVEL_LEVEL; P('ground').value = SQ.surf;
+        const wf = band(320, 0.5), wl = ctx.createBiquadFilter(), wg = ctx.createGain();
+        wl.type = 'lowpass'; wl.frequency.value = 1800; wl.Q.value = -3; wg.gain.value = 0;
+        ns.connect(wf).connect(wl).connect(wg).connect(back);
+        for (let k = 0; k < G.length; k += 5) {
+          const t = G[k];
+          P('amount').setTargetAtTime(G[k + 1], t, 0.03); P('slip').setTargetAtTime(G[k + 2], t, 0.03); P('speed').setTargetAtTime(G[k + 3], t, 0.05);
+          wg.gain.setTargetAtTime(G[k + 4] * 0.5 * SQ.rumble, t, 0.1);
+        }
+        log.push(`loose ground ${SQ.surf}: stones, dig, spray x${SQ.gravel}, rumble x${SQ.rumble}`);
+      }
       if (SQ.real > 0) {
         // the modelled squeal (public/tyre-worklet.js), its params set at the game's 60 Hz as audio.js does
-        await ctx.audioWorklet.addModule('/public/tyre-worklet.js');
+        if (!SQ.gv.length) await ctx.audioWorklet.addModule('/public/tyre-worklet.js');
         const { TYRE_REAL_LEVEL } = await import('/src/audio-tyres.js');
         const node = new AudioWorkletNode(ctx, 'tyre-squeal', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { tyres: 2, seed: 7 } });
         const wg = ctx.createGain(); wg.gain.value = SQ.real; node.connect(wg).connect(space.input);
@@ -413,7 +439,7 @@ for (const id of ids) {
     const outb = new Float32Array(L.length * 2); outb.set(L, 0); outb.set(R, L.length);
     await fetch('/__out', { method: 'POST', body: outb });
     return { ms, log };
-  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { squeal: Number(val('squeal') ?? 1), real: flag('real') ? Number(val('real') || 1) : 0, mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
+  }, { SR, T, FPS, x0, z0, nx, nz, MIX, TY, SQ: { gv: GV, surf: SURF, gravel: Number(val('gravel') ?? 1), rumble: Number(val('rumble') ?? 1), squeal: Number(val('squeal') ?? 1), real: flag('real') ? Number(val('real') || 1) : 0, mass: Number(val('mass') || spec.mass) }, TB: TURBO && tb ? { old: TURBO === 'old', wh: tWh, ev: tEv, bov: tb.bov } : null, SEV: sEv, SP: sPunch, RM });
   await page.close();
   const ob = server.files.get('/__out'), all = new Float32Array(ob.buffer, ob.byteOffset, ob.length / 4);
   const L = all.subarray(0, all.length / 2), R = all.subarray(all.length / 2);

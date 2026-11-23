@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createSqueal, loadTyreWorklet, setSquealKind, squealKind } from './audio-tyres.js';
+import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -36,7 +36,7 @@ export function createAudio() {
   let muted = false, ev = false, turbo = false, background = false;
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
-  let noiseSrc = null, workletReady = false, squeal = null;
+  let noiseSrc = null, workletReady = false, squeal = null, gravel = null, looseS = 0;
   const voices = [];
   const shiftSound = createShiftSound();
 
@@ -87,6 +87,8 @@ export function createAudio() {
     // between the held note and the modelled squeal of public/tyre-worklet.js)
     loadTyreWorklet(ctx, `${import.meta.env.BASE_URL}tyre-worklet.js`);
     squeal = createSqueal(ctx, noise, bus);
+    // and on loose ground, stones in the arches and the tread digging in (src/audio-tyres.js createGravel)
+    gravel = createGravel(ctx, bus);
     noise.start();
     noiseSrc = noise;
   }
@@ -322,6 +324,9 @@ export function createAudio() {
     spinGain.gain.setTargetAtTime(spinS * SPIN_LEVEL, t, 0.08);
     // the squeal, at the speed the tread slides over the road (wheel speed less ground speed)
     squeal.step(t, spinS, car.slipV || 0, skid, v, car.spec.mass);
+    // wheelspin on gravel, dirt and grass: the same spin, on loose ground and with the wheels down
+    looseS += ((dead || flying || car.surface === 1 || car.surface === 4 ? 0 : spinAmount(car)) - looseS) * 0.15;
+    gravel.step(t, looseS, car.slipV || 0, dead || flying ? 0 : v, car.surface);
   }
 
   // ---- other players' cars
@@ -351,6 +356,7 @@ export function createAudio() {
     v.spinGain = ctx.createGain(); v.spinGain.gain.value = 0;
     noiseSrc.connect(v.spinFilt).connect(v.spinGain).connect(v.mix);
     v.squeal = createSqueal(ctx, noiseSrc, v.mix, { voices: 1 });
+    v.gravel = createGravel(ctx, v.mix); v.loose = 0;
     voices.push(v);
     return v;
   }
@@ -413,6 +419,8 @@ export function createAudio() {
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
     v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
     v.squeal.step(t, v.spin, r.slipV || 0, v.skid, speed, s.mass);
+    v.loose += ((r.paved || r.ground == null ? 0 : spinAmount(r)) - v.loose) * 0.15;
+    v.gravel.step(t, v.loose, r.slipV || 0, speed, r.ground ?? 1);
   }
   // list: other players' cars (multiplayer.js remotes()); cam: the camera, which is where the ears are
   const near = [];

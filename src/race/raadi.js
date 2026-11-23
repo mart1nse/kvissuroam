@@ -865,7 +865,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const { car: pb } = best(carId);
-            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString() };
+            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road' };
             if (st.pen) run.pen = st.pen;
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);

@@ -309,7 +309,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
 
   const st = {
     running: false, t0: 0, clk: 0, wall: null, carT: null, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
-    prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null,
+    prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null, tyT: {},
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -417,7 +417,11 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       st.wall = wall; st.carT = car.time;
       const time = st.clk;
       // seconds of the lap driven with each kind of control (moving only); the lap is put down to the most used
-      if (st.running && st.inpAt != null && Math.abs(car.vx) > 2) st.inpT[inp] = (st.inpT[inp] || 0) + Math.max(0, Math.min(0.1, time - st.inpAt));
+      if (st.running && st.inpAt != null && Math.abs(car.vx) > 2) {
+        const dtk = Math.max(0, Math.min(0.1, time - st.inpAt)), ty = car.tyres === 'gravel' ? 'gravel' : 'road';
+        st.inpT[inp] = (st.inpT[inp] || 0) + dtk;
+        st.tyT[ty] = (st.tyT[ty] || 0) + dtk;        // (the tyres on for most of the lap are the lap's tyres)
+      }
       st.inpAt = time;
       const near = track.nearest(x, z, st.hint);
       st.hint = near.d < 30 ? near.i : -1;
@@ -445,6 +449,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   const ref = st.ref;
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
                   const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
+                  if ((st.tyT.gravel || 0) > (st.tyT.road || 0)) lap.ty = 'gravel';
                   showSplit(`FINISH${vs(ref)}`, lapT, ref ? ref.ms / 1000 : null);
                   // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
                   const b = bestFor(carId);
@@ -459,7 +464,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.tyT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }

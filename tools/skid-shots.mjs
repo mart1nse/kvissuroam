@@ -2,7 +2,8 @@
 // grass and gravel). Lays marks with a made-up sliding car along a line, then looks at them.
 //   node tools/skid-shots.mjs <out dir> <name:x,z,heading-deg,length[,mode]> ...
 // mode: slide (default, the rear sliding, the front a little), vary (the rear's slide builds and eases), roll (no slide: only a muddy tyre leaves prints),
-// mud (slides over the first third, rolls after). Needs the vite dev server on :5173 and Playwright.
+// mud (slides over the first third, rolls after), arc (a hard slide round a circle of radius len/6).
+// SKID_QUERY=grassmarks=b adds to the page's address (grass marks B). Needs the vite dev server on :5173 and Playwright.
 import { createRequire } from 'module';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [out, ...spots] = process.argv.slice(2);
@@ -11,7 +12,7 @@ const b = await chromium.launch({ args });
 const p = await b.newPage({ viewport: { width: 960, height: 540 } });
 p.on('pageerror', (e) => console.log('PAGEERR', e.message));
 p.on('console', (m) => { if (m.type() === 'error') console.log('console', m.type(), m.text().slice(0, 200)); });
-await p.goto('http://127.0.0.1:5173/?drive&nointro');
+await p.goto(`http://127.0.0.1:5173/?drive&nointro${process.env.SKID_QUERY ? '&' + process.env.SKID_QUERY : ''}`);
 await p.waitForFunction(() => window.__game?.world && window.__game.car && window.__game.skids, null, { timeout: 240000 });
 await p.waitForTimeout(6000);
 for (const spot of spots) {
@@ -32,8 +33,12 @@ for (const spot of spots) {
       const wig = Math.sin(d / 5) * 0.25;              // a slow wiggle: the tail out one way and the other
       car.yaw = yaw + wig;
       car.x = x + fx * d + Math.cos(yaw) * Math.sin(d / 5) * 1.2; car.z = z + fz * d + Math.sin(yaw) * Math.sin(d / 5) * 1.2;
+      if (mode === 'arc') {           // round a circle ahead, the tail out
+        const R = len / 6, th = d / R, cx = x + fx * R * 2, cz = z + fz * R * 2;
+        car.x = cx - Math.cos(th) * R; car.z = cz - Math.sin(th) * R; car.yaw = th + 0.5;
+      }
       car.y = g.world.heightAt(car.x, car.z);
-      const slide = mode === 'slide' || mode === 'vary' || (mode === 'mud' && d < len / 3);
+      const slide = mode === 'slide' || mode === 'vary' || mode === 'arc' || (mode === 'mud' && d < len / 3);
       // vary: the slide builds and eases off again along the way
       car.skidR = mode === 'vary' ? 0.12 + 0.7 * Math.abs(Math.sin(d / 9)) : slide ? 0.75 : 0; car.rubR = slide ? 8 : 0; car.skidF = slide ? 0.3 : 0; car.rubF = slide ? 4 : 0;
       sk.update(car);

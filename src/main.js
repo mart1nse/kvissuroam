@@ -706,6 +706,7 @@ async function boot() {
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
   hud = createHud(world);
   skids = createSkidMarks(world);
+  skids.setGrass(grassMarks);
   scene.add(skids.mesh);
   smoke = createSmoke(world);
   applyFx();
@@ -1169,6 +1170,31 @@ optSqueal?.addEventListener('click', (e) => {
   setSqueal(b.dataset.squeal);
 });
 input.on('KeyV', () => setSqueal(audio.squealKind === 'real' ? 'note' : 'real'));
+// Tyre marks on grass (K, or OPTIONS > GRAPHICS; Martin 2026-11-23: a second look to compare): A the torn soil ruts
+// of #513, B grass laid flat that shows by its sheen, torn in chunks with clods only in a hard slide. Remembered
+// per browser; ?grassmarks=a or ?grassmarks=b sets it on a phone.
+const optGrass = $('#opt-grassmarks');
+let grassSaved = 'a';
+try { grassSaved = localStorage.getItem('kvissuroam.grassmarks') || 'a'; } catch {}
+if (params.get('grassmarks') === 'a' || params.get('grassmarks') === 'b') grassSaved = params.get('grassmarks');
+let grassMarks = grassSaved;
+const showGrass = () => { if (optGrass) for (const b of optGrass.children) b.classList.toggle('on', b.dataset.grassmarks === grassMarks); };
+showGrass();
+function setGrassMarks(k, quiet) {
+  grassMarks = k === 'b' ? 'b' : 'a';
+  skids?.setGrass(grassMarks);
+  if (quiet) return;
+  try { localStorage.setItem('kvissuroam.grassmarks', grassMarks); } catch {}
+  showGrass();
+  hud.toast(grassMarks === 'b' ? 'GRASS MARKS B · LAID FLAT, TORN IN CHUNKS' : 'GRASS MARKS A · SOIL RUTS', 1800);
+}
+optGrass?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-grassmarks]');
+  if (!b) return;
+  b.blur();
+  setGrassMarks(b.dataset.grassmarks);
+});
+input.on('KeyK', () => setGrassMarks(grassMarks === 'b' ? 'a' : 'b'));
 // Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
 const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);
 let gfxShown = 0;

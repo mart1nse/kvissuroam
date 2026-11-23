@@ -476,6 +476,22 @@ export function createAudio() {
     });
   }
 
+  // the start lights' beeps (Martin 24 Nov: "perhaps beeps would be good" at the Raadi start): a short pip for
+  // each counted second and a longer, higher one at green, like a rally start clock. Game sound, so it follows
+  // the sound switch (through master), not the notifications one.
+  function beep(kind) {
+    if (!ctx || ctx.state !== 'running') return;
+    const go = kind === 'go', t = ctx.currentTime + 0.005, len = go ? 0.5 : 0.13;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square'; o.frequency.value = go ? 1320 : 880;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.07, t + 0.006);
+    g.gain.setValueAtTime(0.07, t + len - 0.03);
+    g.gain.linearRampToValueAtTime(0, t + len);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + len + 0.02);
+  }
+
   // disc golf putts on the Sireli lawn: 'chains' (the disc rattles into the chains and drops into the cage),
   // 'clang' (it glances off the cage or the top band), 'thud' (it lands on the grass). level 0..1 by distance.
   function putt(kind, level = 1) {
@@ -534,7 +550,7 @@ export function createAudio() {
   }
 
   return {
-    start, update, updateRemotes, updateSpace, chime, putt, smash, wood,
+    start, update, updateRemotes, updateSpace, chime, beep, putt, smash, wood,
     setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {

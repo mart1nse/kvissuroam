@@ -41,6 +41,10 @@ const LAST_S = 3;                          // the last seconds, yellow, counted 
 const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
 const FIN_WIDE = 4;                         // metres beside the road that the finish line still counts
+// On the right the finish counts only up to its flag, and a tape runs on from the flag across the grass (Martin
+// 23 Nov 00:14, a red line beside the right flag: "you will need to cross it from the left side to make sure no
+// wide finish"): FIN_TAPE m of it.
+const FIN_FLAG = 1.4, FIN_TAPE = 9;
 const SHORT_M = 150;                       // metres along a later part of the stage before that is a short cut
 // an apex cut costs time (Martin 23 Nov: a small penalty for a small cut, a large one for a large cut): how far
 // inside the path's edge the middle of the car went at the apex, in metres, and the seconds it adds
@@ -69,7 +73,9 @@ for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], 
 const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
 // The first corner's bale a little further in (Martin 23 Nov 19:26, an arrow from the bale away from the road:
 // "move the haybale a bit inward ... but just slightly"), metres.
-const BALE_IN = { 33: 0.5 };
+// And the bale at the corner by the pond a touch the other way, towards the road (Martin 23 Nov 00:10, a green
+// arrow from the bale to the road: "move the bale a touch more to the inside and extend the tape to the bale").
+const BALE_IN = { 33: 0.5, 370: -0.4 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
 // The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
 // from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its
@@ -168,7 +174,8 @@ const WRAP = { 854: 1.3 };
 // At the corner by the pond the inside is free a little further past the bale (Martin 23 Nov 20:21, a green line
 // across its tape just beyond the bale: "Shorten the tape a bit so a bit more can be cut in this corner without
 // penalty"): FREE[k] metres more before the seconds begin, and the spur's tape starts that much further in.
-const FREE = { 370: 1.5 };
+// (Since 00:10 the tape there runs to the bale again and is the border, as everywhere: none free now.)
+const FREE = {};
 const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k]) + (WRAP[k] ? WRAP[k] - 0.2 : 0) + (FREE[k] || 0)]));
 // Two corners close together whose insides are one (Martin 23 Nov 16:24, a blue line from the one bale past the next
 // and on along the bend: "Add smooth transition of the two taped parts"): JOIN[k] is the apex the inside of apex k
@@ -185,10 +192,27 @@ const afterOf = (k) => (JOIN[k] ? JOIN[k] - k : 5);            // points after t
 // (Martin 23 Nov 19:19, a green line from the bale: "Last corner, put a straight fence, like on the pic"): turned
 // the other way, away from the corner's tip.
 const SPUR = { 370: 0, 402: 22, 854: -38 };
+// (each spur's way into the corner from its bale, unit: the line across the stage at the apex turned SPUR degrees)
+const SPUR_DIR = new Map(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, sd]) => {
+  const turn = SPUR[k] * Math.PI / 180 * -sd, ix = TAN[k][1] * -sd, iz = -TAN[k][0] * -sd;
+  return [k, [ix * Math.cos(turn) - iz * Math.sin(turn), ix * Math.sin(turn) + iz * Math.cos(turn)]];
+}));
+// The tape along the way into a corner carried on to the bale of the corner before it, where the two are on the same
+// side (Martin 23 Nov 23:58, a green line from the end of the tape after the second corner to its bale: "lengthen
+// this tape up to the bale"): [the corner whose way in it is, the corner whose bale]. Only the tape: crossing
+// there is the earlier corner's inside, judged at its bale as before.
+const LINK = [[108, 82]];
+// (by the earlier corner: the segment from its bale, { bx, bz, ux, uz, d, nx, nz }, n the side away from the road)
+const LINK_AT = new Map(LINK.map(([k, k2]) => {
+  const [e0, , sd, , , tape] = ENTRY.find((e) => e[4] === k), [sx, sz] = side(e0, -sd * (HW[e0] + tape));
+  const [, , bx, bz] = STAGE.apex.find((a) => a[0] === k2), d = Math.hypot(sx - bx, sz - bz), ux = (sx - bx) / d, uz = (sz - bz) / d;
+  const [px, pz] = P[e0], o = (px - bx) * -uz + (pz - bz) * ux;          // (which side of it the stage is)
+  return [k2, { bx, bz, ux, uz, d, nx: o > 0 ? uz : -uz, nz: o > 0 ? -ux : ux }];
+}));
 // Where each penalty begins, as lines beside the stage: [first point, last point, (i) => metres to the right of
 // travel], with the tape along them.
 const LINES = [
-  ...STAGE.apex.filter(([k]) => !NO_APEX.includes(k) && !WRAP[k] && SPUR[k] == null && !Object.values(JOIN).includes(k)).map(([k, sd]) => {
+  ...STAGE.apex.filter(([k]) => !NO_APEX.includes(k) && !WRAP[k] && SPUR[k] == null && !Object.values(JOIN).includes(k) && !LINK_AT.has(k)).map(([k, sd]) => {
     // (a joined pair is one line: the first's, on through the second's)
     const k2 = JOIN[k], last = Math.min(N - 1, (k2 || k) + 5);
     return [k, last, (i) => sd * (HW[i] + (k2 && i > k2 ? ROOM.get(k2) : roomAt(k, i)) + APEX_PEN.at(-1)[0] + TAPE_OUT)];
@@ -203,11 +227,20 @@ const ARCS = STAGE.apex.filter(([k]) => WRAP[k] && SPUR[k] == null).map(([k, , b
   for (let a = -100; a <= 100; a += 20) pts.push([bx + Math.cos(a0 + a * Math.PI / 180) * r, bz + Math.sin(a0 + a * Math.PI / 180) * r]);
   pts.step = 1.9;
   return pts;
-}).concat(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, sd, bx, bz]) => {
+}).concat(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, , bx, bz]) => {
   // (from just clear of the bale, or FREE further, 6.5 m into the corner)
-  const turn = SPUR[k] * Math.PI / 180 * -sd, ix = TAN[k][1] * -sd, iz = -TAN[k][0] * -sd;      // into the corner, across the stage
-  const dx = ix * Math.cos(turn) - iz * Math.sin(turn), dz = ix * Math.sin(turn) + iz * Math.cos(turn);
+  const [dx, dz] = SPUR_DIR.get(k);
   const f = FREE[k] || 0, pts = [0.9 + f, (0.9 + f + 6.5) / 2, 6.5].map((m) => [bx + dx * m, bz + dz * m]);
+  pts.step = 2.8;
+  return pts;
+})).concat([(() => {
+  // (the finish's: from beside its right flag straight out across the grass)
+  const pts = [HW[FIN] + FIN_FLAG + 0.3, HW[FIN] + FIN_FLAG + 0.3 + FIN_TAPE / 2, HW[FIN] + FIN_FLAG + 0.3 + FIN_TAPE].map((d) => side(FIN, d));
+  pts.step = 2.8;
+  return pts;
+})()]).concat(LINK.map(([k, k2]) => {
+  // (from where the way in's tape starts, straight to just clear of the bale)
+  const { bx, bz, ux, uz, d } = LINK_AT.get(k2), pts = [0.9, (0.9 + d) / 2, d].map((m) => [bx + ux * m, bz + uz * m]);
   pts.step = 2.8;
   return pts;
 }));
@@ -338,7 +371,7 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-export function createStage({ world, scene, toast, place, onRun, wood, bestFor, online }) {
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -634,7 +667,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     startKit();
     line(START);
     // (no yellow flag 100 m before the finish: before the last corner it read as the finish itself, Martin 23 Nov)
-    sign('finish', FIN, HW[FIN] + 1.4);
+    sign('finish', FIN, HW[FIN] + FIN_FLAG);
     sign('finish', FIN, -(HW[FIN] + 1.4));
     line(FIN, 0.2);
     // the finish halo, like the lap's (Martin 23 Nov: "finish line rectangle halo"): a glowing frame across the
@@ -876,7 +909,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     setup(pose);
   }
   function setup(pose) {
-    st.phase = 'count';
+    st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
     st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
@@ -975,6 +1008,10 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
         if (st.goFor !== st.countAt) { st.goFor = st.countAt; const go = Date.now() + left * 1000; st.clockOff = Math.ceil(go / 60000) * 60000 - go; }
         st.goAt = green ? performance.now() : 0;
         setLamps(green ? 3 : left <= LAST_S ? 2 : 1, green ? null : n);
+        // a pip for each counted second and a long high one at green (Martin 24 Nov); none while the lights wait
+        // (and once each: a wait for loading after the first pip starts the same second again, unheard)
+        const bn = green ? 0 : left <= LAST_S && e > 0.05 ? n : -1;
+        if (bn >= 0 && bn !== st.beepN) { beep?.(bn === 0 ? 'go' : 'pip'); st.beepN = bn; }
         lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
@@ -1035,11 +1072,16 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
         // (crossed(n, out): how far inside the gravel's edge (+) or outside it (-) the car crossed check n's line
         // this step, going the stage's way and no further than `out` m beyond the road's far edge; null if it did not)
         const crossed = (n, out) => {
-          const [k, sd] = STAGE.apex[n], [gx, gz] = P[k], [tx, tz] = TAN[k];
+          const [k, sd, bx, bz] = STAGE.apex[n], sp = SPUR_DIR.get(k);
+          // (where the tape is a spur from the bale, its line is the check: through the bale along the spur, so
+          // what costs seconds begins where the tape does; elsewhere the line across the stage at the apex)
+          let gx = P[k][0], gz = P[k][1], tx = TAN[k][0], tz = TAN[k][1];
+          if (sp) { gx = bx; gz = bz; tx = -sp[1] * sd; tz = sp[0] * sd; if (tx * TAN[k][0] + tz * TAN[k][1] < 0) { tx = -tx; tz = -tz; } }
           const a0 = (st.prev.x - gx) * tx + (st.prev.z - gz) * tz, a1 = (x - gx) * tx + (z - gz) * tz;
           if (!(a0 < 0 && a1 >= 0)) return null;
           const f = a0 / (a0 - a1), cx = st.prev.x + (x - st.prev.x) * f - gx, cz = st.prev.z + (z - st.prev.z) * f - gz;
-          const deep = (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);
+          const deep = sp ? cx * sp[0] + cz * sp[1] + 1 - (WRAP[k] ? WRAP[k] - 0.2 : 0) - (FREE[k] || 0)
+            : (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);
           return deep > GATE_IN || deep < -2 * HW[k] - out ? null : deep;
         };
         while (st.gate < STAGE.apex.length && st.prev && st.phase === 'run') {
@@ -1047,7 +1089,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
           if (st.prog < k - GATE_FROM) break;
           const deep = crossed(st.gate, GATE_OUT);
           if (deep == null) break;
-          apexCut(k, deep);
+          if (!LINK_AT.has(k)) apexCut(k, deep);
           st.gate++;
         }
         // A check not crossed ends the run only when the car comes through the NEXT one (or the finish) without it
@@ -1058,8 +1100,17 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
         // And for the 10 m after the apex (Martin 23 Nov: only at the apex or after it; a spin to the inside before
         // the corner costs nothing when the car is back on the path by the bale and drives the corner).
         for (const [k, sd] of STAGE.apex) {
-          const n = afterOf(k);
-          if (st.prog < k - 25 || st.prog > k + n + 3 || st.phase !== 'run') continue;
+          const n = afterOf(k), L = LINK_AT.get(k);
+          if (st.prog < k - 25 || st.prog > k + n + 3 || st.phase !== 'run' || SPUR[k] != null) continue;
+          if (L) {
+            // (where the tape runs from the bale to the next corner's, beyond it, as far as it goes; the car's middle
+            // TAPE_OUT short of it is where the seconds begin, as at every other tape). Only from the apex on: on the
+            // way in the road itself lies beyond the line the tape is on, drawn on back past the bale
+            if (st.prog < k) continue;
+            const ox = x - L.bx, oz = z - L.bz, along = ox * L.ux + oz * L.uz;
+            if (along > 0 && along < L.d) apexCut(k, APEX_PEN.at(-1)[0] + TAPE_OUT + ox * L.nx + oz * L.nz);
+            continue;
+          }
           const a = nearestIn(x, z, k - 8, k + n);
           if (a.i < k || a.d * a.d - a.lat * a.lat > 2.25) continue;       // before the apex, or past the end of it
           apexCut(k, a.lat * sd - HW[a.i] - roomAt(k, a.i));
@@ -1094,7 +1145,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
           const a = (st.prev.x - fx) * tx + (st.prev.z - fz) * tz, b = (x - fx) * tx + (z - fz) * tz;
           // (the line counts across the road and FIN_WIDE m to each side, not on across the park)
           const f0 = a < 0 && b >= 0 ? a / (a - b) : 0, wide = Math.abs(-(st.prev.x + (x - st.prev.x) * f0 - fx) * tz + (st.prev.z + (z - st.prev.z) * f0 - fz) * tx);
-          if (wide > HW[FIN] + FIN_WIDE) { /* not through the finish */ }
+          const right = -(st.prev.x + (x - st.prev.x) * f0 - fx) * tz + (st.prev.z + (z - st.prev.z) * f0 - fz) * tx;
+          if (wide > HW[FIN] + FIN_WIDE || right > HW[FIN] + FIN_FLAG) { /* not through the finish */ }
           else if (a < 0 && b >= 0 && st.gate < STAGE.apex.length) cancel('MISSED A CORNER · STAGE CANCELLED');
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;

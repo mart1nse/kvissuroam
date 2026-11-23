@@ -197,6 +197,18 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   filter: drop-shadow(2px 2px 0 var(--hot)); }
 #unit { position: absolute; left: 0; right: 0; top: 63%; text-align: center; font-size: calc(var(--d) * .05); letter-spacing: .3em; padding-left: .3em; color: var(--pink); }
 #gear { position: absolute; left: 0; right: 0; bottom: 3%; text-align: center; font-size: calc(var(--d) * .1); font-weight: 900; font-style: italic; color: var(--sun); text-shadow: 0 0 10px rgba(255, 180, 60, .8); }
+/* the tyre on the car, beside the gear (Martin 2026-11-23): a click or tap switches road / gravel; the hit area
+   reaches past the small icon (it stays clear of the steering pads on phones, which sit below the dial) */
+#tyre { position: absolute; left: 63%; bottom: 2.5%; width: calc(var(--d) * .12); height: calc(var(--d) * .14); padding: 0; border: none; background: none;
+  pointer-events: auto; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#tyre::before { content: ''; position: absolute; inset: -7px -9px -4px -7px; }
+#tyre svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.5px rgba(10, 2, 30, .95)); }
+#tyre .t { fill: rgba(18, 6, 43, .55); stroke-width: 1.7; }
+#tyre.road .t { stroke: var(--cyan); }
+#tyre.road .g { fill: none; stroke: var(--cyan); stroke-width: 1.5; stroke-linecap: round; }
+#tyre.gravel .t { stroke: #f0b860; }
+#tyre .b { fill: #f0b860; }
+#tyre:active svg { transform: scale(.9); }
 #carname { margin-top: 2px; font-size: clamp(8px, 1.1vw, 12px); letter-spacing: .18em; opacity: .8; }
 #toast { left: 50%; top: 16%; transform: translateX(-50%); font-size: clamp(13px, 2.2vw, 24px); font-style: italic; font-weight: 800; letter-spacing: .12em; color: var(--sun);
   text-shadow: 2px 2px 0 var(--hot), 0 0 16px rgba(255, 200, 80, .7); opacity: 0; transition: opacity .4s; white-space: nowrap; }
@@ -397,6 +409,24 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
 }
 #boardbtn svg { flex: none; width: 1.4em; height: 1.4em; fill: none; stroke: var(--cyan); stroke-width: 1.7; stroke-linecap: round; }
 #drive:active, #boardbtn:active, #ctlbtn:active { transform: scale(.97); }
+/* the tyre choice for every car (Martin 2026-11-23), left of the driver's name: one press switches road / gravel */
+#menuleft { grid-column: 1; justify-self: end; display: flex; gap: clamp(8px, 1vw, 14px); min-width: 0; }
+@media (max-width: 1100px) { #tyrebtn small { display: none; } #tyrebtn { padding: 0 .9em 0 .7em; } }
+#tyrebtn {
+  height: var(--bh); display: flex; align-items: center; gap: .55em; padding: 0 1.1em 0 .8em; border: none; border-radius: calc(var(--bh) * .4); white-space: nowrap;
+  font-size: clamp(11px, 1.25vw, 16px); font-style: italic; font-weight: 800; letter-spacing: .16em; background: rgba(18, 6, 43, .72); transition: transform .12s, background .15s;
+}
+#tyrebtn svg { flex: none; width: 1.5em; height: 1.5em; }
+#tyrebtn .t { fill: rgba(18, 6, 43, .55); stroke-width: 1.7; }
+#tyrebtn span { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+#tyrebtn small { font-size: .55em; font-style: normal; letter-spacing: .24em; opacity: .75; }
+#tyrebtn.road { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
+#tyrebtn.road .t, #tyrebtn.road .g { stroke: var(--cyan); }
+#tyrebtn.road .g { fill: none; stroke-width: 1.5; stroke-linecap: round; }
+#tyrebtn.gravel { color: #f0b860; text-shadow: 0 0 10px rgba(240, 184, 96, .8); background: rgba(56, 32, 10, .75); }
+#tyrebtn.gravel .t { stroke: #f0b860; }
+#tyrebtn.gravel .b { fill: #f0b860; }
+#tyrebtn:active { transform: scale(.97); }
 #menuside { justify-self: start; display: flex; gap: clamp(8px, 1vw, 14px); min-width: 0; }
 #ctlbtn {
   padding: 0 1.3em 0 1.15em; font-size: clamp(11px, 1.25vw, 16px); font-style: italic; font-weight: 800; letter-spacing: .2em; white-space: nowrap;

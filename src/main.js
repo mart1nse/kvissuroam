@@ -19,7 +19,7 @@ import { createAudio } from './audio.js';
 import { createTrackKerbs } from './race/trackkerbs.js';
 import { updateShelters } from './world/shelter.js';
 import { updateFences } from './world/breakfence.js';
-import { createHud } from './hud.js';
+import { createHud, tyreIcon } from './hud.js';
 import { createStreetPhotos } from './world/streetphotos.js';
 import { createRoadMarkings } from './world/roads.js';
 import { buildDeckBodies } from './world/decks.js';
@@ -766,6 +766,15 @@ async function boot() {
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); } });
+  {
+    // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
+    const drv = $('#driver'), left = document.createElement('div');
+    left.id = 'menuleft';
+    drv?.replaceWith(left);
+    left.append(tyreBtn);
+    if (drv) left.append(drv);
+  }
+  showTyres();
   raceMode = createRaceMode({
     mp, track: race.track, cars: CARS, isTouch, toast: (t, ms) => hud.toast(t, ms), chime: (k) => audio.chime?.(k),
     place: (pose) => place(pose), isDriving: () => mode === 'drive',
@@ -884,6 +893,7 @@ function setCar(id, now = false) {
   const spec = CARS[id];
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
+  car.tyres = tyres;
   if (model) { scene.remove(model.group); freeModel(model.group); }
   try {
     model = buildCarModel ? buildCarModel(id) : buildPlaceholder(spec);
@@ -897,6 +907,7 @@ function setCar(id, now = false) {
   if (shrinker) { const m = model; m.ready?.then(() => { shrinker.again(m.group); shrinker.scan(m.group); }, () => {}); }   // (a scanned body arrives later, with its own pictures)
   audio.setCar(spec);
   hud.setCar(spec);
+  hud.setTyres(tyres);
   mp?.setCar(id);
   raceMode?.out('car');                            // after the lights another car means out of the race
   race?.cancel('LAP CANCELLED');
@@ -1280,6 +1291,41 @@ optGrass?.addEventListener('click', (e) => {
   setGrassMarks(b.dataset.grassmarks);
 });
 input.on('KeyK', () => setGrassMarks(grassMarks === 'b' ? 'a' : 'b'));
+// Tyres (Martin 2026-11-23): road or gravel on every car, picked in the garage, by the tyre icon beside the
+// gear on the dial, or Y. Switched on the fly, even on the start lights or mid time attack. Starting the Raadi
+// stage fits gravel tyres and a Toomemägi race road tyres; whatever is on stays on after a lap, race or stage.
+// Remembered per browser; ?tyres=gravel or ?tyres=road sets it.
+let tyres = stored('kvissuroam.tyres') === 'gravel' ? 'gravel' : 'road';
+if (params.get('tyres') === 'gravel' || params.get('tyres') === 'road') tyres = params.get('tyres');
+const tyreBtn = document.createElement('button');
+tyreBtn.id = 'tyrebtn';
+tyreBtn.dataset.act = 'tyres';
+tyreBtn.title = 'Road or gravel tyres, for every car (Y while driving)';
+const showTyres = () => {
+  tyreBtn.innerHTML = `${tyreIcon(tyres)}<span><small>TYRES</small>${tyres === 'gravel' ? 'GRAVEL' : 'ROAD'}</span>`;
+  tyreBtn.className = tyres;
+  hud?.setTyres(tyres);
+};
+function setTyres(k, why) {
+  k = k === 'gravel' ? 'gravel' : 'road';
+  const changed = k !== tyres;
+  tyres = k;
+  if (car) car.tyres = tyres;
+  try { localStorage.setItem('kvissuroam.tyres', tyres); } catch {}
+  showTyres();
+  if (mode === 'drive' && (changed || !why)) hud.toast(`${tyres === 'gravel' ? 'GRAVEL' : 'ROAD'} TYRES${why ? ` · ${why}` : ''}`, 1800);
+}
+input.on('KeyY', () => { if (mode === 'drive') setTyres(tyres === 'gravel' ? 'road' : 'gravel'); });
+// the race and the stage fit their tyres as they start (watched here, so neither needs to know about tyres)
+let tyreStage = 'idle', tyrePin = null;
+function tyreDefaults() {
+  const ph = stage?.phase || 'idle';
+  if (ph === 'count' && tyreStage !== 'count') setTyres('gravel', 'RALLY STAGE');
+  tyreStage = ph;
+  const pin = raceMode?.pin || null;
+  if (pin && !tyrePin) setTyres('road', 'RACE');
+  tyrePin = pin;
+}
 // Graphics: AUTO follows the frame rate; HIGH / MEDIUM / LOW fix a level. Remembered per browser.
 const gfxNames = (i) => (i < 0 ? '?q=low' : `${i + 1} of ${gfx.levels.length}`);
 let gfxShown = 0;
@@ -1421,6 +1467,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
   else if (act === 'options') toggleOptions();
   else if (act === 'full') toggleFull();
+  else if (act === 'tyres') { e.target.closest('[data-act]').blur?.(); setTyres(tyres === 'gravel' ? 'road' : 'gravel'); }
   else if (act === 'options-close') optEl.classList.add('hidden');
   else if (act === 'controls') { if (mode === 'drive') showOverlay('controls'); else setup.open(); }
 });
@@ -1597,6 +1644,7 @@ function frame(ts) {
   mp.setDriving(((mode === 'drive' && !document.hidden) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : mode === 'drive' ? 'map' : 'garage');   // (the menu is the garage)
   raceMode?.update(car, dt);
+  tyreDefaults();
   people.update();
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
 

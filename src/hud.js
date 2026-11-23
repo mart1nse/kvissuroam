@@ -2,9 +2,20 @@ import { speedKmh } from './cars/physics.js';
 
 const $ = (s) => document.querySelector(s);
 
+// The tyre icons (Martin 2026-11-23): the tread seen from the front. Road: a wide tyre with straight
+// grooves. Gravel: a narrower one with chunky staggered blocks.
+export function tyreIcon(kind) {
+  if (kind === 'gravel') {
+    let b = '';
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 2; c++) b += `<rect x="${(r % 2 ? 8.6 : 7.6) + c * 4.2}" y="${3.3 + r * 3.6}" width="2.8" height="2.4" rx=".5"/>`;
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="t" x="6.2" y="1.6" width="11.6" height="20.8" rx="3.2"/><g class="b">${b}</g></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="t" x="4.6" y="1.6" width="14.8" height="20.8" rx="3"/><path class="g" d="M9.6 3.2v17.6M14.4 3.2v17.6"/></svg>`;
+}
+
 export function createHud(world) {
   const elSpeed = $('#speed'), elGear = $('#gear'), elStreet = $('#street');
-  const elName = $('#carname'), elToast = $('#toast');
+  const elName = $('#carname'), elToast = $('#toast'), elTyre = $('#tyre');
   const map = $('#minimap');
   const ctx = map.getContext('2d');
   let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
@@ -153,6 +164,12 @@ export function createHud(world) {
 
   return {
     setOverlay(fn) { overlay = fn; },
+    setTyres(kind) {
+      if (!elTyre) return;
+      elTyre.innerHTML = tyreIcon(kind);
+      elTyre.className = kind === 'gravel' ? 'gravel' : 'road';
+      elTyre.setAttribute('aria-label', kind === 'gravel' ? 'Gravel tyres: change to road tyres' : 'Road tyres: change to gravel tyres');
+    },
     setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); buildDial(s.engine); },
     toast(text, ms = 3200) {
       elToast.textContent = text;

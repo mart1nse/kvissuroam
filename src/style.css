@@ -51,7 +51,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(3px 3px 0 #2b0a5c) drop-shadow(0 0 18px rgba(255, 95, 162, .6));
 }
-.tag { margin: 0; letter-spacing: .32em; font-size: clamp(9px, 1.5vw, 14px); color: var(--cyan); text-shadow: 0 0 10px rgba(47, 243, 255, .7); z-index: 1; }
+.tag { margin: 0; letter-spacing: .32em; font-size: clamp(9px, 1.5vw, 14px); color: var(--cyan); text-shadow: 0 0 10px rgba(47, 243, 255, .7); z-index: 1; text-transform: uppercase; text-align: center; max-width: 94vw; }
+/* round dots between the parts of the tagline, a bit bigger than a middle dot (the left margin is smaller to make up for the letter spacing after the word) */
+.tag .dot { display: inline-block; width: .42em; height: .42em; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px rgba(47, 243, 255, .8); vertical-align: middle; position: relative; top: -.08em; margin: 0 .95em 0 .65em; }
 .small { margin: 0; font-size: clamp(9px, 1.25vw, 12px); letter-spacing: .08em; opacity: .85; z-index: 1; }
 .attribution { opacity: .6; }
 .bar { width: min(360px, 60vw); height: 10px; border: 2px solid var(--cyan); box-shadow: 0 0 14px rgba(47, 243, 255, .6); z-index: 1; }

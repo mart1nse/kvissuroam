@@ -1,5 +1,6 @@
 // Garage additions: the driver name (changeable, never required) and the lap times board,
 // best lap per car of all time and of today, plus this browser's last laps.
+import { tyreIcon } from '../hud.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
 import { createTrackPicker, TRACK_ICON, TRACKS } from './trackpick.js';
@@ -11,6 +12,7 @@ const INP = {
   wheel: ['WHEEL', '<circle cx="12" cy="10.5" r="8.5"/><circle cx="12" cy="10.5" r="2"/><path d="M3.6 9.5l6.4 1M20.4 9.5l-6.4 1M12 12.5V19"/>'],
   touch: ['TOUCH SCREEN', '<rect x="6.5" y="1.5" width="11" height="17" rx="2"/><path d="M10.5 15.5h3"/>'],
 };
+const tyreMark = (k) => `<i class="tymark ${k}" title="${k === 'gravel' ? 'Gravel' : 'Road'} tyres">${tyreIcon(k)}</i>`;
 const inpIcon = (k) => { const [name, d] = INP[k] || INP.kb; return `<svg class="inp" viewBox="0 0 24 20" role="img" aria-label="${name}"><title>${name}</title>${d}</svg>`; };
 
 // stage: the Raadi rally stage (?raadi=1): then a track picker in place of the outline, and both circuits' times
@@ -99,7 +101,10 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
     // which controller drove each lap shows only once laps exist with more than one kind
     const kinds = new Set([...(b?.inputs || []), ...race.laps.map((l) => l.inp || 'kb')]);
-    const ic = (r) => (kinds.size > 1 ? inpIcon(r?.inp || 'kb') : '');
+    // the tyres, marked where they are not the circuit's usual ones: gravel on Toomemägi, road at Raadi
+    // (Raadi runs from before tyres were kept carry none and get no mark)
+    const ty = (r) => (r?.track === 'raadi' ? r.ty === 'road' : r?.ty === 'gravel') ? tyreMark(r.ty) : '';
+    const ic = (r) => (kinds.size > 1 ? inpIcon(r?.inp || 'kb') : '') + ty(r);
     // (the best ever also says the day the record was set)
     const cell = (r, dated) => (r ? `${ic(r)}<b>${fmtTime(r.ms / 1000)}</b><small>${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
     const rows = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td></tr>`).join('');

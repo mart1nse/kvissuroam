@@ -1,7 +1,7 @@
 // The things at a rally stage's start line (Martin 23 Nov 2026, from his pictures of WRC starts):
 //  - the start clock on a metal frame beside the road, a little past the line: a black box with a screen
 //    (the seconds to go, and the rally time of day in green under them) and a lamp panel beside the screen
-//    that is red, then yellow for the last five seconds, then green;
+//    that is red, then yellow while the seconds are counted, then green (raadi.js says how long each lasts);
 //  - the start line camera on a tripod at the line, its battery box (blue, orange lid) between the legs.
 // One mesh of boxes and thin tubes, and one small mesh for the screen whose digits are squares of a shared
 // picture of 0 to 9: a new second moves their corners in that picture, nothing is painted again.

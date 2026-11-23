@@ -39,7 +39,9 @@ const cleanName = (s) => String(s ?? '').normalize('NFC')
   .replace(/\s+/g, ' ').trim().slice(0, 20).trim();
 // only cars the game has (anything else, such as "constructor", broke the other browsers)
 const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) ? s : '');
-const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' ? w : '');
+const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w === 'watch' ? w : '');
+// whom a spectator watches (Martin, 2026-11-23): another player's id, short letters and digits only
+const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
 const MAX_SOCKETS = 150;          // everyone with the game open
@@ -195,7 +197,7 @@ export class Lobby extends DurableObject {
     const out = [];
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}) });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(a.w === 'watch' && a.on ? { on: a.on } : {}) });
     }
     return out;
   }
@@ -501,10 +503,11 @@ export class Lobby extends DurableObject {
       // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
       const ghost = !!m.ghost || !!me?.ghost;
       const w = cleanWhere(m.w) || me?.w;
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}) };
+      const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), board: this.board() }));
-      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}), ...(on ? { on } : {}) }, ws); this.race.back(a); }
       this.race.sendTo(ws);
       return;
     }
@@ -521,11 +524,12 @@ export class Lobby extends DurableObject {
       me.car = car; ws.serializeAttachment(me);
       if (!me.ghost) { this.broadcast({ t: 'car', id: me.id, car }, ws); this.race.changed(me); }
     } else if (m.t === 'at') {
-      // where a player is (map, garage, away in another tab), for the others' lists (Martin, 2026-11-23)
-      const w = cleanWhere(m.w);
-      if (!w || w === me.w) return;
-      me.w = w; ws.serializeAttachment(me);
-      if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w }, ws);
+      // where a player is (map, garage, away in another tab), for the others' lists (Martin, 2026-11-23);
+      // 'watch' with on: following another player's car as a spectator
+      const w = cleanWhere(m.w), on = w === 'watch' ? cleanOn(m.on) : '';
+      if (!w || (w === me.w && on === (me.on || ''))) return;
+      me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
+      if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w, ...(on ? { on } : {}) }, ws);
     }
   }
 

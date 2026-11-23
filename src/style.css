@@ -1033,3 +1033,43 @@ body.touch #tyre::before { inset: -9px -10px -6px -8px; }
 /* your own best per car, beside the records (board.js) */
 #board th.you { color: var(--cyan); }
 #board td.you b { color: var(--cyan); }
+
+/* ---- spectator mode (desktop only, src/spectate.js; Martin 2026-11-23): who is watched, and a soft pill back
+   to your own car, bottom centre between the minimap and the rev counter. Borderless, like the race HUD. */
+#watch { left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
+  gap: 8px; white-space: nowrap; animation: watchin .45s cubic-bezier(.2, .9, .3, 1.15); }
+#watch.hidden { display: none; }
+@keyframes watchin { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } }
+#watch .who { display: flex; align-items: baseline; gap: .55em; padding: .5em 1.15em .55em; border-radius: 999px; background: rgba(18, 6, 43, .58);
+  font-size: clamp(12px, 1.05vw, 17px); font-weight: 800; letter-spacing: .12em; color: #fff; text-shadow: 1px 1px 0 var(--ink); }
+#watch .who .eye { font-size: .78em; letter-spacing: .22em; color: var(--cyan); opacity: .85; }
+#watch .who .eye::before { content: 'WATCHING'; }
+#watch .who i { align-self: center; width: .7em; height: .7em; border-radius: 50%; background: var(--c, var(--cyan)); box-shadow: 0 0 7px var(--c, var(--cyan)); }
+#watch .who b { font: 400 1.12em 'Russo One', var(--font); letter-spacing: .06em; }
+#watch .who .car { font-size: .85em; font-weight: 400; font-style: italic; letter-spacing: .04em; opacity: .85; }
+#watch .who .st:empty { display: none; }
+#watch .who .st { font-size: .78em; letter-spacing: .16em; color: var(--sun); }
+#watch .who .st.hot { color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }
+#watch .back { pointer-events: auto; cursor: pointer; border: none; border-radius: 999px; padding: .62em 1.5em .66em;
+  font: 800 clamp(12px, 1.05vw, 17px) var(--font); letter-spacing: .14em; color: var(--ink);
+  background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot)); box-shadow: 0 0 18px rgba(47, 243, 255, .45), 0 0 26px rgba(255, 43, 214, .3);
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
+#watch .back::before { content: '↩'; margin-right: .55em; font-weight: 900; }
+#watch .back:hover { transform: scale(1.05); filter: brightness(1.08); box-shadow: 0 0 24px rgba(47, 243, 255, .7), 0 0 34px rgba(255, 43, 214, .45); }
+#watch .back:active { transform: scale(.97); }
+#watch kbd, #watch .hint kbd { margin-left: .5em; padding: .1em .45em; border-radius: .45em; font: 800 .72em var(--font); letter-spacing: .08em; background: rgba(18, 6, 43, .22); }
+#watch .hint { font-size: clamp(9px, .75vw, 12px); font-weight: 800; letter-spacing: .2em; color: #fff; opacity: .6; text-shadow: 1px 1px 0 var(--ink); }
+#watch .hint kbd { margin: 0 .35em 0 0; background: rgba(18, 6, 43, .55); color: #fff; }
+#watch .hint.hidden { display: none; }
+/* the watched player's own name tag is in the pill */
+.pname.watched { display: none !important; }
+/* your own car waits: its tyre button, lap timer and stage panel are not for the watched car */
+body.watching #tyre, body.watching #lap, body.watching #lapsplit, body.watching #lapback, body.watching #trackpills,
+body.watching #stage, body.watching #stageagain { visibility: hidden; }
+/* the online list on desktop: a name is a button that watches that car, your own line brings you back */
+body:not(.touch) #people .who li[data-id] { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; margin-left: -.1em;
+  transition: background .15s ease, opacity .15s ease; }
+body:not(.touch) #people .who li[data-id]:hover { background: rgba(47, 243, 255, .16); opacity: 1; }
+body:not(.touch) #people .who li.on { background: rgba(47, 243, 255, .22); opacity: 1; box-shadow: 0 0 10px rgba(47, 243, 255, .25); }
+body:not(.touch) #people .me.back { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; opacity: .9; }
+body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }

@@ -71,11 +71,24 @@ const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
 // "move the haybale a bit inward ... but just slightly"), metres.
 const BALE_IN = { 33: 0.5 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
+// The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
+// from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its
+// distance off the edge, and the corner's line across the stage (its hidden check, its penalties, its tape) goes
+// with it.
+const BALE_ON = { 498: 3 };
+for (const a of STAGE.apex) {
+  const m = BALE_ON[a[0]];
+  if (!m) continue;
+  const k = a[0], lat = (a[2] - P[k][0]) * -TAN[k][1] + (a[3] - P[k][1]) * TAN[k][0];
+  const k2 = k + Math.round(m / 2);
+  a[0] = k2; a[2] = P[k2][0] - TAN[k2][1] * lat; a[3] = P[k2][1] + TAN[k2][0] * lat;
+}
 // The glow along the inside of the tight corners is rounded (Martin 23 Nov 19:26, blue curves inside five apexes:
 // "Round a bit the halos in the apexes"): the path's inside edge folds into a sharp point there. ROUND[k] is the
 // arc that takes its place: { a, b, cx, cz, r, t0, t1 }, points a..b on a circle of radius r round (cx, cz) from
 // angle t0 to t1. The largest of ROUND_R that leaves the bale wholly beyond it (the edge's penalties are judged
 // from the bale, so nothing else changes); not at the last corner with its own fence.
+const TRACK_ROUND = new Map([[82, 16]]), TRACK_W = 12;
 const ROUND_R = [8, 6.5, 5, 4, 3, 2.5, 2], ROUND_W = 6, NO_ROUND = [854];
 const ROUND = new Map();
 for (const [k, sd, bx, bz] of STAGE.apex) {
@@ -152,7 +165,11 @@ const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
 // bale's middle the middle of the car may go there. (The tape went round the bale that far out; now it is the
 // straight fence of SPUR below.)
 const WRAP = { 854: 1.3 };
-const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k]) + (WRAP[k] ? WRAP[k] - 0.2 : 0)]));
+// At the corner by the pond the inside is free a little further past the bale (Martin 23 Nov 20:21, a green line
+// across its tape just beyond the bale: "Shorten the tape a bit so a bit more can be cut in this corner without
+// penalty"): FREE[k] metres more before the seconds begin, and the spur's tape starts that much further in.
+const FREE = { 370: 1.5 };
+const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k]) + (WRAP[k] ? WRAP[k] - 0.2 : 0) + (FREE[k] || 0)]));
 // Two corners close together whose insides are one (Martin 23 Nov 16:24, a blue line from the one bale past the next
 // and on along the bend: "Add smooth transition of the two taped parts"): JOIN[k] is the apex the inside of apex k
 // runs on to, and between the two the room goes over evenly from the one's to the other's.
@@ -187,10 +204,10 @@ const ARCS = STAGE.apex.filter(([k]) => WRAP[k] && SPUR[k] == null).map(([k, , b
   pts.step = 1.9;
   return pts;
 }).concat(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, sd, bx, bz]) => {
-  // (from just clear of the bale, 6.5 m into the corner)
+  // (from just clear of the bale, or FREE further, 6.5 m into the corner)
   const turn = SPUR[k] * Math.PI / 180 * -sd, ix = TAN[k][1] * -sd, iz = -TAN[k][0] * -sd;      // into the corner, across the stage
   const dx = ix * Math.cos(turn) - iz * Math.sin(turn), dz = ix * Math.sin(turn) + iz * Math.cos(turn);
-  const pts = [0.9, 3.7, 6.5].map((m) => [bx + dx * m, bz + dz * m]);
+  const f = FREE[k] || 0, pts = [0.9 + f, (0.9 + f + 6.5) / 2, 6.5].map((m) => [bx + dx * m, bz + dz * m]);
   pts.step = 2.8;
   return pts;
 }));
@@ -518,17 +535,37 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     group.add(m);
   }
 
-  // ---- the wheel tracks and scuffs, one mesh multiplied over the ground
+  // ---- the wheel tracks and scuffs, one mesh multiplied over the ground. Fainter since Martin 23 Nov 20:15 ("reduce
+  // the effect of tyre marks on gravel"), and round the second corner they curve as the cars drive it, not along
+  // the path's fold ("the tyre mark could be more round around it"): TRACK_ROUND[k] passes of smoothing, TRACK_W
+  // points either side of apex k.
   function* buildTracks() {
     const pos = [], col = [], uv = [], idx = [];
     const LIFT = 0.035;
     // a ribbon along the stage: per point i in [i0, i1], centre offset off(i), half width w(i), strength a(i) and colour c
     const ribbon = function* (i0, i1, off, w, a, c) {
       const base = pos.length / 3;
+      // (its middle line, smoothed round the corners of TRACK_ROUND, and the way it runs there)
+      const mx = new Float64Array(i1 - i0 + 1), mz = new Float64Array(i1 - i0 + 1);
+      for (let i = i0; i <= i1; i++) [mx[i - i0], mz[i - i0]] = side(i, off(i));
+      for (const [k, n] of TRACK_ROUND) {
+        const j0 = Math.max(1, k - TRACK_W - i0), j1 = Math.min(mx.length - 2, k + TRACK_W - i0);
+        for (let q = 0; q < n && j0 < j1; q++) {
+          let px = mx[j0 - 1], pz = mz[j0 - 1];
+          for (let j = j0; j <= j1; j++) {
+            const x = mx[j], z = mz[j];
+            mx[j] = (px + 2 * x + mx[j + 1]) / 4; mz[j] = (pz + 2 * z + mz[j + 1]) / 4;
+            px = x; pz = z;
+          }
+        }
+      }
       let v = 0, n = 0;
       for (let i = i0; i <= i1; i++) {
-        const o = off(i), hw = w(i), al = Math.max(0, Math.min(1, a(i)));
-        const [lx, lz] = side(i, o - hw), [rx, rz] = side(i, o + hw);
+        const j = i - i0, ja = Math.max(0, j - 1), jb = Math.min(mx.length - 1, j + 1);
+        let tx = mx[jb] - mx[ja], tz = mz[jb] - mz[ja];
+        const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+        const hw = w(i), al = Math.max(0, Math.min(1, a(i)));
+        const lx = mx[j] + tz * hw, lz = mz[j] - tx * hw, rx = mx[j] - tz * hw, rz = mz[j] + tx * hw;
         pos.push(lx, groundY(lx, lz) + LIFT, lz, rx, groundY(rx, rz) + LIFT, rz);
         col.push(c[0] * al, c[1] * al, c[2] * al, al, c[0] * al, c[1] * al, c[2] * al, al);
         uv.push(0, v / 3, 1, v / 3);
@@ -550,12 +587,12 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     const i0 = Math.max(START - 3, STAGE.gravelFrom || 0), i1 = N - 1;       // (the first straight is tarmac)
     const GRAV = [0.62, 0.55, 0.47];
     for (const wo of [-0.78, 0.78]) {
-      yield* ribbon(i0, i1, (i) => L[i] + wo, (i) => 0.24 + 0.08 * work[i], (i) => 0.42 + 0.4 * work[i], GRAV);
+      yield* ribbon(i0, i1, (i) => L[i] + wo, (i) => 0.24 + 0.08 * work[i], (i) => 0.24 + 0.24 * work[i], GRAV);
       yield;
     }
     // loose gravel swept to the edges, heavier on the outside of the corners
     for (const sg of [-1, 1]) {
-      yield* ribbon(i0, i1, (i) => sg * (HW[i] - 0.35), () => 0.35, (i) => 0.12 + 0.25 * work[i], [0.7, 0.63, 0.55]);
+      yield* ribbon(i0, i1, (i) => sg * (HW[i] - 0.35), () => 0.35, (i) => 0.07 + 0.15 * work[i], [0.7, 0.63, 0.55]);
       yield;
     }
     // grass torn up: inside each apex (cut over the edge) and on the outside of its exit (run wide)

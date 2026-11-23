@@ -67,6 +67,47 @@ const S = new Float64Array(N);
 for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
 // a point beside the centre line: d metres to the right of the direction of travel
 const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
+// The first corner's bale a little further in (Martin 23 Nov 19:26, an arrow from the bale away from the road:
+// "move the haybale a bit inward ... but just slightly"), metres.
+const BALE_IN = { 33: 0.5 };
+for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
+// The glow along the inside of the tight corners is rounded (Martin 23 Nov 19:26, blue curves inside five apexes:
+// "Round a bit the halos in the apexes"): the path's inside edge folds into a sharp point there. ROUND[k] is the
+// arc that takes its place: { a, b, cx, cz, r, t0, t1 }, points a..b on a circle of radius r round (cx, cz) from
+// angle t0 to t1. The largest of ROUND_R that leaves the bale wholly beyond it (the edge's penalties are judged
+// from the bale, so nothing else changes); not at the last corner with its own fence.
+const ROUND_R = [8, 6.5, 5, 4, 3, 2.5, 2], ROUND_W = 6, NO_ROUND = [854];
+const ROUND = new Map();
+for (const [k, sd, bx, bz] of STAGE.apex) {
+  if (NO_ROUND.includes(k) || k - 2 * ROUND_W < 0 || k + 2 * ROUND_W >= N) continue;
+  const d1 = TAN[k - ROUND_W], d2 = TAN[k + ROUND_W], e1 = side(k - ROUND_W, sd * HW[k - ROUND_W]), e2 = side(k + ROUND_W, sd * HW[k + ROUND_W]);
+  const den = d1[0] * d2[1] - d1[1] * d2[0];
+  if (Math.abs(den) < 0.05) continue;
+  // (where the two arms' edges meet, and the turn between them)
+  const s0 = ((e2[0] - e1[0]) * d2[1] - (e2[1] - e1[1]) * d2[0]) / den, tx = e1[0] + d1[0] * s0, tz = e1[1] + d1[1] * s0;
+  let ux = d2[0] - d1[0], uz = d2[1] - d1[1];
+  const ul = Math.hypot(ux, uz); ux /= ul; uz /= ul;
+  const phi = Math.acos(Math.max(-1, Math.min(1, d1[0] * d2[0] + d1[1] * d2[1])));
+  for (const r of ROUND_R) {
+    const cd = r / Math.cos(phi / 2), cx = tx + ux * cd, cz = tz + uz * cd, hit = new Map();
+    for (let i = k - 2 * ROUND_W; i <= k + 2 * ROUND_W; i++) {
+      // (along the inside normal from the centre line, the arc's near side between the two arms)
+      const nx = -TAN[i][1] * sd, nz = TAN[i][0] * sd, ox = P[i][0] - cx, oz = P[i][1] - cz;
+      const b = ox * nx + oz * nz, disc = b * b - (ox * ox + oz * oz - r * r);
+      if (disc < 0) continue;
+      const t = -b - Math.sqrt(disc), hx = P[i][0] + nx * t - cx, hz = P[i][1] + nz * t - cz;
+      if (t > HW[i] && (hx * (tx - cx) + hz * (tz - cz)) / (r * cd) >= Math.cos(phi / 2) - 1e-6) hit.set(i, t - HW[i]);
+    }
+    if (!hit.size || r - Math.hypot(bx - cx, bz - cz) < 0.85) continue;      // (the bale, 0.6 m round, stays beyond it)
+    const a = Math.min(...hit.keys()), b = Math.max(...hit.keys());
+    if (b - a < 2) break;
+    const ang = (i) => { const [x, z] = side(i, sd * (HW[i] + hit.get(i))); return Math.atan2(z - cz, x - cx); };
+    let t0 = ang(a), t1 = ang(b);
+    if (t1 - t0 > Math.PI) t1 -= 2 * Math.PI; else if (t0 - t1 > Math.PI) t1 += 2 * Math.PI;
+    ROUND.set(k, { a, b, cx, cz, r, t0, t1, tx, tz, cd, half: phi / 2 });
+    break;
+  }
+}
 // The red and white tape (src/race/tape.js) stands TAPE_OUT beyond where a penalty begins: the penalties are judged
 // by the middle of the car, so its side is at the tape as they begin.
 const TAPE_OUT = 0.85;
@@ -108,7 +149,8 @@ const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
 // where it stands further in than a metre off this path's edge, the inside is judged from that much further in.
 // At the last corner the inside costs seconds only behind the bale (Martin 23 Nov 17:58, a green line drawn round
 // the far side of the bale: "Lax the last corner penalty area like on the green line"): WRAP is how far behind the
-// bale's middle the middle of the car may go there, and the tape goes round the bale that far out.
+// bale's middle the middle of the car may go there. (The tape went round the bale that far out; now it is the
+// straight fence of SPUR below.)
 const WRAP = { 854: 1.3 };
 const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k]) + (WRAP[k] ? WRAP[k] - 0.2 : 0)]));
 // Two corners close together whose insides are one (Martin 23 Nov 16:24, a blue line from the one bale past the next
@@ -122,7 +164,10 @@ const roomAt = (k, i) => {
 const afterOf = (k) => (JOIN[k] ? JOIN[k] - k : 5);            // points after the apex where its inside is judged
 // And two where the tape is a spur from the bale into the corner (his green lines at 16:24), along the line across
 // the stage at the apex turned SPUR[k] degrees towards the way out. What costs seconds there is as it was.
-const SPUR = { 370: 0, 402: 22 };
+// The last corner's is a straight fence from the bale down the grass between its two arms, alongside the way out
+// (Martin 23 Nov 19:19, a green line from the bale: "Last corner, put a straight fence, like on the pic"): turned
+// the other way, away from the corner's tip.
+const SPUR = { 370: 0, 402: 22, 854: -38 };
 // Where each penalty begins, as lines beside the stage: [first point, last point, (i) => metres to the right of
 // travel], with the tape along them.
 const LINES = [
@@ -134,8 +179,9 @@ const LINES = [
   ...ENTRY.map(([e0, e1, sd, , , tape]) => [e0, e1, (i) => -sd * (HW[i] + tape)]),
   ...BENDS.map(([i0, i1, sd]) => [i0, i1, (i) => sd * (HW[i] + CUT_IN + TAPE_OUT)]),
 ];
-// (and round the far side of the bale where WRAP says so: an arc of 200 degrees, a stick every 1.9 m)
-const ARCS = STAGE.apex.filter(([k]) => WRAP[k]).map(([k, , bx, bz]) => {
+// (and round the far side of the bale where WRAP says so and there is no spur: an arc of 200 degrees, a stick
+// every 1.9 m)
+const ARCS = STAGE.apex.filter(([k]) => WRAP[k] && SPUR[k] == null).map(([k, , bx, bz]) => {
   const r = WRAP[k] + TAPE_OUT, a0 = Math.atan2(bz - P[k][1], bx - P[k][0]), pts = [];
   for (let a = -100; a <= 100; a += 20) pts.push([bx + Math.cos(a0 + a * Math.PI / 180) * r, bz + Math.sin(a0 + a * Math.PI / 180) * r]);
   pts.step = 1.9;
@@ -416,9 +462,27 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     const i0 = Math.max(0, START - 3), n = N - i0;
     for (let k = 0; k < 2; k++) {
       const sg = k ? 1 : -1, c = C[k];
-      const edge = [], vis = [];
+      const edge = [], vis = [], inn = [];
+      // (the rounded insides: point i of a..b evenly along its arc, and the band's inner side a metre further out)
+      const arc = new Array(N).fill(null);
+      for (const [k, sd] of STAGE.apex) {
+        const R = ROUND.get(k);
+        if (!R || sd !== sg) continue;
+        for (let i = R.a; i <= R.b; i++) arc[i] = [R, R.t0 + (R.t1 - R.t0) * (i - R.a) / (R.b - R.a)];
+      }
       for (let i = i0; i < N; i++) {
-        const [x, z] = side(i, sg * HW[i]);
+        const [R, t] = arc[i] || [];
+        let [x, z] = R ? [R.cx + Math.cos(t) * R.r, R.cz + Math.sin(t) * R.r] : side(i, sg * HW[i]);
+        let [ix, iz] = R ? [R.cx + Math.cos(t) * (R.r + 1), R.cz + Math.sin(t) * (R.r + 1)] : side(i, sg * (HW[i] - 1));
+        // (where the stage comes through a rounded corner again on a later pass, its edge in the cut-off tip goes
+        // onto the arc too, the band moved with it)
+        if (!R) for (const Q of ROUND.values()) {
+          const ex = x - Q.cx, ez = z - Q.cz, d = Math.hypot(ex, ez);
+          if (d <= Q.r || d > Q.cd + 0.5 || (ex * (Q.tx - Q.cx) + ez * (Q.tz - Q.cz)) / (d * Q.cd) < Math.cos(Q.half)) continue;
+          const f = Q.r / d, nx = Q.cx + ex * f, nz = Q.cz + ez * f;
+          ix += nx - x; iz += nz - z; x = nx; z = nz;
+        }
+        inn.push([ix, iz]);
         let v = 1;
         for (let j = i0; j < N && v; j += 2) if (Math.abs(j - i) > 25 && Math.hypot(P[j][0] - x, P[j][1] - z) < HW[j] - 0.4) v = 0;
         edge.push([x, groundY(x, z) + 0.07, z]); vis.push(v);
@@ -428,7 +492,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
         const base = pos.length / 3;
         for (let q = 0; q < n; q++) {
           const i = i0 + q, [x, y, z] = edge[q];
-          const [ix, iz] = inner ? side(i, sg * (HW[i] - inner)) : [x, z];
+          const [ix, iz] = inner ? inn[q] : [x, z];
           pos.push(x, y, z, ix, inner ? groundY(ix, iz) + 0.07 : y + h, iz);
           col.push(c.r, c.g, c.b, a0 * vis[q], c.r, c.g, c.b, 0);
           if (q) { const a = base + (q - 1) * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
@@ -805,6 +869,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, bestFor, 
     get phase() { return st.phase; },
     get runs() { return runs; },
     get gate() { return st.gate; },
+    get round() { return [...ROUND].map(([k, R]) => [k, R.r, R.a, R.b]); },
     get pen() { return st.pen; },
     get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },

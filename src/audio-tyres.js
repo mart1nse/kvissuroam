@@ -19,6 +19,10 @@ export const SQUEAL_LEVEL = 0.035;
 // the modelled squeal's output gain (public/tyre-worklet.js, V in the game), set so it is as loud to the ear as
 // the held note (A-weighted, in a 190E burnout and donut: tools/engine-space-demo.mjs --tyres --real)
 export const TYRE_REAL_LEVEL = 0.096;
+// the squeal of an electric car (Enyaq, bZ4X), as a share of the others' (Martin 2026-11-23: "Reduce the volume
+// of kummivilin for EVs"): 6 dB down. With no engine under it the squeal stood out far more on them. The howl
+// and the rolling and skid noise stay as they are.
+export const EV_SQUEAL_TRIM = 0.5;
 
 // the squeal's pitch in Hz for a tread sliding at s m/s (tools: engine-space-demo.mjs prints it)
 export function squealPitch(s, mass = 1400) {
@@ -94,7 +98,10 @@ let kind = 'real';          // (B is the default since 2026-11-23; A plays until
 export function setSquealKind(k) { kind = k === 'real' ? 'real' : 'note'; }
 export function squealKind() { return kind; }
 
-export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
+export function createSqueal(ctx, noise, dest, { voices = 2 } = {}) {
+  // (one gain after both squeals, so a car's own share of them, EV_SQUEAL_TRIM, is one number)
+  const out = ctx.createGain(); out.connect(dest);
+  let trim = 1;
   const note = createSquealer(ctx, noise, out, { voices });
   let node = null, P = null, ready = false, live = false;
   // (made as soon as the worklet is in, while B is the choice, so the first squeal of a drive costs nothing)
@@ -122,7 +129,9 @@ export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
     P.slip.setTargetAtTime(slip, t, 0.02); P.speed.setTargetAtTime(speed, t, 0.02);
     P.mass.value = mass;
   }
-  return { step, note };
+  // k: this car's share of the squeal (1, or EV_SQUEAL_TRIM for an electric car)
+  function setTrim(k) { if (k === trim) return; trim = k; out.gain.setTargetAtTime(k, ctx.currentTime, 0.05); }
+  return { step, note, setTrim };
 }
 
 // ---- wheelspin on loose ground: stones in the arches, the tread digging, the spray, the grit shower

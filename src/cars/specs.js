@@ -7,6 +7,7 @@ export const CARS = {
     id: 'w201',
     name: 'Mercedes-Benz 190E 2.6',
     short: '190E 2.6',
+    tag: '190E',                // the online lists (Martin, 2026-11-23)
     year: 1987,
     blurb: 'W201 · 2.6 R6 · 118 kW · 4-speed automatic · rear-wheel drive',
     mass: 1305,                 // kerb 1230 kg (automatic) + driver
@@ -41,6 +42,7 @@ export const CARS = {
     id: 'crv',
     name: 'Honda CR-V 2.0 i-VTEC',
     short: 'CR-V 2.0',
+    tag: 'CR-V',                // the online lists (Martin, 2026-11-23)
     year: 2007,
     blurb: 'RE5 · 2.0 R4 · 110 kW · 5-speed automatic · Real Time 4WD',
     mass: 1650,                 // kerb 1575 kg (automatic) + driver
@@ -77,6 +79,7 @@ export const CARS = {
     id: 'enyaq',
     name: 'Škoda Enyaq 80x',
     short: 'Enyaq 80x',
+    tag: 'Enyaq',                // the online lists (Martin, 2026-11-23)
     year: 2023,
     blurb: 'MEB · two electric motors · 195 kW · single speed · all-wheel drive',
     mass: 2310,                 // kerb 2235 kg + driver
@@ -108,6 +111,7 @@ export const CARS = {
     id: 'rav4',
     name: 'Toyota RAV4 2.0 4WD',
     short: 'RAV4 2.0',
+    tag: 'RAV4',                // the online lists (Martin, 2026-11-23)
     year: 2020,
     blurb: 'XA50 · 2.0 R4 · 129 kW · Multidrive S automatic · all-wheel drive',
     mass: 1700,                 // kerb about 1625 kg + driver
@@ -145,6 +149,7 @@ export const CARS = {
     id: 'passat',
     name: 'Volkswagen Passat Variant 1.9 TDI',
     short: 'Passat TDI',
+    tag: 'Passat',                // the online lists (Martin, 2026-11-23)
     year: 1998,
     blurb: 'B5 · 1.9 R4 TDI · 81 kW · 5-speed · front-wheel drive · tired DPF, smokes on throttle',
     mass: 1475,                 // kerb about 1395 kg + driver
@@ -190,6 +195,7 @@ export const CARS = {
     id: 'mazda6',
     name: 'Mazda 6 Wagon 2.0',
     short: 'Mazda 6 2.0',
+    tag: 'Mazda6',                // the online lists (Martin, 2026-11-23)
     year: 2019,
     blurb: 'GL · 2.0 R4 Skyactiv-G · 121 kW · 6-speed automatic · front-wheel drive',
     mass: 1575,                 // kerb about 1500 kg + driver
@@ -223,6 +229,7 @@ export const CARS = {
     id: 'bz4x',
     name: 'Toyota bZ4X Touring AWD',
     short: 'bZ4X Touring',
+    tag: 'bZ4X',                // the online lists (Martin, 2026-11-23)
     year: 2026,
     blurb: 'e-TNGA · two electric motors · 280 kW · single speed · all-wheel drive',
     mass: 2255,                 // kerb about 2180 kg + driver
@@ -255,6 +262,7 @@ export const CARS = {
     id: 'f40',
     name: 'Ferrari F40',
     short: 'F40',
+    tag: 'F40',                // the online lists (Martin, 2026-11-23)
     year: 1987,
     blurb: 'F120A · 2.9 twin-turbo V8 · 352 kW (478 PS) · 5 speeds, driven as an automatic · rear-wheel drive',
     mass: 1330,                 // about 1255 kg with fluids (1100 kg dry) + driver
@@ -310,6 +318,7 @@ export const CARS = {
     id: 'cgt',
     name: 'Porsche Carrera GT',
     short: 'Carrera GT',
+    tag: 'Carrera GT',                // the online lists (Martin, 2026-11-23)
     year: 2004,
     blurb: 'Typ 980 · 5.7 V10 · 450 kW (612 PS) · 6 speeds, driven as an automatic · rear-wheel drive',
     mass: 1455,                 // kerb 1380 kg + driver
@@ -351,6 +360,7 @@ export const CARS = {
     id: 'audi200',
     name: 'Audi 200 Avant quattro 20V',
     short: '200 Avant',
+    tag: '200 Avant',                // the online lists (Martin, 2026-11-23)
     year: 1990,
     blurb: 'Typ 44 · 2.2 R5 20V turbo · 162 kW (220 PS) · 5 speeds, driven as an automatic · quattro',
     mass: 1635,                 // kerb 1560 kg + driver
@@ -400,6 +410,7 @@ export const CARS = {
     id: 'm3',
     name: 'BMW M3 Coupé',
     short: 'M3 E92',
+    tag: 'M3',                // the online lists (Martin, 2026-11-23)
     year: 2008,
     blurb: 'E92 · 4.0 V8 · 309 kW (420 PS) · 7-speed M DCT · rear-wheel drive',
     mass: 1675,                 // 1580 kg DIN + M DCT + driver
@@ -442,6 +453,7 @@ export const CARS = {
     id: 'impreza',
     name: 'Subaru Impreza 22B STi',
     short: '22B STi',
+    tag: 'STI',                // the online lists (Martin, 2026-11-23)
     year: 1998,
     blurb: 'GC8 · 2.2 flat-four turbo · 280 PS on paper, about 305 hp for real · 5 speeds, driven as an automatic · all-wheel drive',
     mass: 1345,                 // kerb 1270 kg + driver
@@ -502,6 +514,7 @@ export const CARS = {
     id: 'bus',
     name: 'Scania Citywide LF CNG',
     short: 'Citywide',
+    tag: 'Liinibuss',                // the online lists (Martin, 2026-11-23)
     year: 2019,
     blurb: 'GoBus line 8 · OC09 9.3 R5 CNG · 206 kW · 6-speed automatic · rear-wheel drive',
     mass: 13200,                // about 11.6 t empty, plus driver, a full load of gas and some 20 passengers

@@ -7,17 +7,22 @@
 // While a race vote has votes in (Martin, 2026-11-23), each name that may vote gets a small mark in
 // front: a lit tick when voted, a faint ring when not. Gone again when the vote is over.
 import { escapeHtml } from '../race/race.js';
+import { CARS } from '../cars/specs.js';
 
 const NOTE_MS = 6000;
 const LIST_MAX = 24;              // names listed on desktop before "+N MORE"
-const LIST_MAX_PHONE = 5;         // rows on a phone, "+N MORE" included
+const LIST_MAX_PHONE = 5;
+const ME_COLOUR = '#ffd45e';    // your own arrow on the maps         // rows on a phone, "+N MORE" included
 
 export function createPeople({ mp, onFocus, votes }) {
   // a vote mark for one player id ('' when no vote is open or they may not vote)
+  // the car a player drives, short (Martin, 2026-11-23: STI, M3, F40, ...)
+  const carTag = (id) => { const t = id && CARS[id]?.tag; return t ? ` <small class="car">${escapeHtml(t)}</small>` : ''; };
   const mark = (vm, id) => (vm && id && vm.can(id) ? (vm.has(id) ? '<u class="vt on"></u>' : '<u class="vt"></u>') : '');
   const box = document.createElement('div');
   box.id = 'people';
-  box.innerHTML = '<ul class="who hidden"></ul><div class="count hidden"><i></i><span></span></div><div class="me"></div><ul class="feed"></ul>';
+  // (Martin, 2026-11-23: the count on top, then you, then the others; no light before the count)
+  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><ul class="feed"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
   const elWho = box.querySelector('.who');
@@ -40,13 +45,14 @@ export function createPeople({ mp, onFocus, votes }) {
   function refresh() {
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
-    const nm = mp.name ? `YOU: ${mp.name}${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}` : '';
+    const nm = mp.name ? `YOU: ${mp.name}` : '';
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}`;
     const vm = mp.online ? votes?.() : null;
-    const meHtml = nm ? mark(vm, mp.id) + escapeHtml(nm) : '';
+    const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
     const drivers = mp.online ? mp.drivers() : [];
     const n = mp.online ? drivers.length + 1 : 0;
-    const key = `${n}|${mp.name}|${vm?.key || ''}|${drivers.map((p) => p.name + p.colour + mp.recordOf(p.name)).join('|')}`;
+    const key = `${n}|${mp.name}|${vm?.key || ''}|${drivers.map((p) => p.name + p.colour + p.car + mp.recordOf(p.name)).join('|')}`;
     if (key === last) return;
     last = key;
     // the city map's list follows the connection (lost, back) and the vote while the map is open
@@ -59,7 +65,7 @@ export function createPeople({ mp, onFocus, votes }) {
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const sorted = drivers.slice().sort((a, b) => a.name.localeCompare(b.name));
     const more = sorted.length > listMax ? sorted.length - listMax + 1 : 0;
-    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => { const r = mp.recordOf(p.name); return `<li>${mark(vm, p.id)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
+    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => { const r = mp.recordOf(p.name); return `<li>${mark(vm, p.id)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${r ? ` <small class="rec">${r}</small>` : ''}</li>`; });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');
@@ -98,8 +104,8 @@ export function createPeople({ mp, onFocus, votes }) {
       const others = mp.online ? mp.roster() : [];
       const vm = mp.online ? votes?.() : null;
       const driving = others.filter((p) => p.x !== undefined), away = others.filter((p) => p.x === undefined);
-      shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
+      shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
       const head = mp.online ? `${driving.length + 1} ONLINE` : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');

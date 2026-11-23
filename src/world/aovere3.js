@@ -9,7 +9,9 @@
 //    long red barn under a pale metal roof, the white garage, the metal-roofed shed the map has no block for,
 //    the row of solar panels by the field and the cars by the drive;
 //  - the farm in the wood at the end of Aasa tee: the cream house under brown roofs, the board sheds and the
-//    junk barn by the track, a trampoline, a caravan, the small sheds and the wood piles.
+//    junk barn by the track, a trampoline, a caravan, the small sheds and the wood piles;
+//  - Tõumesila on Kiigi tee, a bee farm: the house of pale grey-blue boards, the brown board barn and the long
+//    white barn, all three under bright blue roofs, two dark sheds, and the rows of hives in the meadow.
 // Guessed: windows and doors on the sides the photos see only at a slant. Nothing is put on a road or a track.
 // Each farm is built only when the car is within 380 m of it, in small steps through the work queue.
 import * as THREE from 'three';
@@ -38,6 +40,11 @@ const HOUSES = [
   ['aasa', 'store', '11_-7', 1449, [6877, -5115], 6, 0x8a7560, 0xb9b9b9, null],
   ['aasa', 'hut', '11_-7', 1544, [6878, -5081], 5, 0x7a6a58, 0x5a3f33, null],
   ['aasa', 'woodshed', '12_-7', 1267, [6897, -5079], 7, 0x4e4239, 0x4a3b33, null],
+  ['tou', 'house', '12_-7', 1984, [7277, -4727], 14, 0xdde3e8, 0x3f78b8, 'blueHouse'],
+  ['tou', 'barn', '12_-7', 1987, [7309, -4727], 14, 0x6b4a33, 0x3f78b8, 'brownBarn'],
+  ['tou', 'long', '12_-7', 1892, [7320, -4767], 18, 0xe9ebec, 0x3f78b8, 'whiteBarn'],
+  ['tou', 'shed', '12_-7', 1896, [7270, -4754], 6, 0x4a3d33, 0x3d3d3d, null],
+  ['tou', 'hut', '12_-7', 1878, [7284, -4758], 6, 0x3b3530, 0x45464a, null],
 ];
 
 export function aovere3Walls(walls) {
@@ -53,6 +60,15 @@ export const AOVERE3_CARS = [
   [6960.3, -4624.5, 1.57, 'ceedsw', 'red', 0.03],
   [6960.6, -4620.5, 1.57, 'passat', 'black', 0.03],
   [6203.5, -5212.0, 0.6, 'rav4', 'grey', 0.03],
+];
+
+// Tõumesila's bee hive rows, each from one end to the other
+const HIVES = [
+  [[7290.3, -4817.7], [7296.3, -4809.3]],
+  [[7293.0, -4818.7], [7299.3, -4810.3]],
+  [[7297.7, -4820.7], [7304.3, -4811.7]],
+  [[7276.0, -4800.3], [7289.7, -4775.0]],
+  [[7277.3, -4785.3], [7285.0, -4771.0]],
 ];
 
 // ---------------------------------------------------------------- the painters
@@ -116,7 +132,32 @@ function cream(P, W) {
     row(P, W, 0.9, 1.3, 1.2, 3.2, opt, (x) => Math.abs(x - W.len * 0.55) < 1.4);
   } else row(P, W, 0.9, 1.3, 1.2, 3.2, opt);
 }
-const PAINT = { barn, brown, white, cream };
+// Tõumesila: the two-storey house of pale grey-blue boards, the brown board barn, the long white barn
+function blueHouse(P, W) {
+  P.boards(0, P.y0, W.len, P.y1, [221, 227, 232], 0.12);
+  P.weather(0, P.y0, W.len, P.y1, 0.15, 91);
+  P.r(0, P.y0, W.len, 0.45, '#8e8f91');
+  if (W.nz > 0.6 && W.len > 6) {
+    P.door(W.len * 0.5 - 0.5, W.len * 0.5 + 0.5, 2.1, '#3f5f86', { frame: '#f3f2ee', light: 0.3, panels: 2 });
+    row(P, W, 0.9, 1.3, 1.1, 3.0, WHITEWIN, (x) => Math.abs(x - W.len * 0.5) < 1.4);
+  } else row(P, W, 0.9, 1.3, 1.1, 3.0, WHITEWIN);
+  if (P.y1 > 4.5) row(P, W, 3.6, 1.2, 1.1, 3.0, WHITEWIN);
+}
+function brownBarn(P, W) {
+  P.boards(0, P.y0, W.len, P.y1, [107, 74, 51], 0.12);
+  P.weather(0, P.y0, W.len, P.y1, 0.2, 37);
+  P.r(0, P.y0, W.len, 0.3, '#77787a');
+  if (W.len > 8) { const m = W.len / 2; P.r(m - 1.6, 0, m + 1.6, 2.9, '#5a3d2a'); P.r(m - 0.04, 0, m + 0.04, 2.9, '#3e2a1d'); }
+  else if (W.len > 3) P.win(W.len / 2 - 0.45, 1.3, W.len / 2 + 0.45, 2.1, WHITEWIN);
+}
+function whiteBarn(P, W) {
+  P.boards(0, P.y0, W.len, P.y1, [233, 235, 236], 0.12);
+  P.weather(0, P.y0, W.len, P.y1, 0.2, 29);
+  P.r(0, P.y0, W.len, 0.3, '#77787a');
+  if (W.len > 8) { const m = W.len / 2; P.r(m - 1.6, 0, m + 1.6, 2.9, '#c9ccce'); row(P, W, 1.4, 0.8, 1.0, 4.5, WHITEWIN, (x) => Math.abs(x - m) < 2.6); }
+  else if (W.len > 3) P.r(W.len / 2 - 1.4, 0, W.len / 2 + 1.4, 2.7, '#c9ccce');
+}
+const PAINT = { barn, brown, white, cream, blueHouse, brownBarn, whiteBarn };
 
 // ---------------------------------------------------------------- the build
 export function createAovere3(scene, world, { shadows = true } = {}) {
@@ -192,6 +233,26 @@ export function createAovere3(scene, world, { shadows = true } = {}) {
       for (const [x, z, yaw] of [[6830.5, -5070.5, 0.2], [6826, -5065.5, -0.4], [6855.5, -5066, 1.3]]) {
         p.box(2.6, 1.1, 1.2, 0x7a5a3e, x, h(x, z) + 0.5, z, yaw);
         p.box(2.7, 0.06, 1.3, 0x55585e, x, h(x, z) + 1.08, z, yaw);
+      }
+      A.finish();
+    } },
+    { name: 'tou', at: [7295, -4760], check: [[7277, -4727], [7320, -4767]], *build() {
+      paint('tou');
+      yield;
+      const A = areaKit(world, group, { shadows });
+      const { p, h } = A;
+      // the bee hives in their rows (read off the orthophoto): pale boxes on low stands, lids a shade darker
+      const TINT = [0xe9e6dc, 0xdcd8cc, 0xe8e2c8, 0xcfd6d8, 0xe2d2b4];
+      let k = 0;
+      for (const [a, b] of HIVES) {
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(len / 1.7)), yaw = Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
+        for (let i = 0; i <= n; i++) {
+          const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n, g = h(x, z);
+          p.box(0.5, 0.55, 0.5, TINT[k++ % TINT.length], x, g + 0.48, z, yaw);
+          p.box(0.58, 0.07, 0.58, 0x8c8f93, x, g + 0.79, z, yaw);
+          p.box(0.42, 0.2, 0.42, 0x5a4838, x, g + 0.1, z, yaw);
+        }
+        if (jobs.late()) yield;
       }
       A.finish();
     } },

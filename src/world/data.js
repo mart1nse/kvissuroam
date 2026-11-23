@@ -487,6 +487,21 @@ export async function loadWorldData(onProgress = () => {}) {
     return h;
   }
 
+  // Hand-built roofs a car can drive on (ERM, 23 Nov): { x0, z0, x1, z1, at(x, z) -> top, or -Infinity where
+  // there is none }. Like a deck: a car up level with one (or above it) stands on it, one well below it is on the
+  // ground under it.
+  const slabs = [];
+  function slabAt(x, z, yMax) {
+    let y = -Infinity;
+    for (let k = 0; k < slabs.length; k++) {
+      const b = slabs[k];
+      if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue;
+      const t = b.at(x, z);
+      if (t < yMax && t > y) y = t;
+    }
+    return y;
+  }
+
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 
   const world = {
@@ -612,6 +627,8 @@ export async function loadWorldData(onProgress = () => {}) {
     // Small raised shapes on top of the height field (kerbs finer than its 2 m grid): each is
     // { x0, z0, x1, z1, at(x, z) -> metres }.
     addBump(b) { bumps.push(b); },
+    // A drivable roof (see slabs): { x0, z0, x1, z1, at(x, z) }.
+    addSlab(b) { slabs.push(b); },
     // How much those raised shapes add at the point: the physics feels a kerb as a step by it.
     kerbAt(x, z) { return bumps.length === 0 ? 0 : bumpAt(x, z); },
     // The raised ground of those shapes that draw it as ground (a bump with top(x0, z0, size, out)
@@ -624,7 +641,8 @@ export async function loadWorldData(onProgress = () => {}) {
 
     // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
     groundAt(x, z, y) {
-      const t = this.heightAt(x, z);
+      let t = this.heightAt(x, z);
+      if (slabs.length !== 0) { const r = slabAt(x, z, y + UNDER); if (r > t) t = r; }
       if (decks.length === 0 || !deckAt(x, z, y + UNDER)) return t;
       return hit.y > t ? hit.y : t;
     },
@@ -655,6 +673,7 @@ export async function loadWorldData(onProgress = () => {}) {
     // Surface class under the point. With y (a car's height), a bridge deck it is level with counts as paved.
     surfaceAt(x, z, y) {
       if (y !== undefined && decks.length !== 0 && deckAt(x, z, y + UNDER) && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
+      if (y !== undefined && slabs.length !== 0 && slabAt(x, z, y + UNDER) > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       const s = find(x, z);
       if (s === null) return SURFACE.GRASS;
       let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);

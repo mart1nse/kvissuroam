@@ -19,6 +19,7 @@ import { PARKING, rnd } from '../race/landmarks.js';
 import { uueturuParked } from '../race/uueturu.js';
 import { AKSI_CARS } from './aksi.js';
 import { SIRELI_CARS } from './sireli.js';
+import { POOTSMANI12_CARS } from './pootsmani12.js';
 import { COOP_CARS } from './coop.js';
 import { PEPLERI_CARS } from './pepleri.js';
 import { JAAAEG_CARS } from './jaaaeg.js';
@@ -155,6 +156,7 @@ function allSpots() {
   VAKSALI_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `vk${i}`, x, z, yaw, id, paint, lift }));
   LENNUAKADEEMIA_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `la${i}`, x, z, yaw, id, paint, lift }));
   ULENURME_KONSUM_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `uk${i}`, x, z, yaw, id, paint, lift }));
+  POOTSMANI12_CARS.forEach(([x, z, yaw, id, paint, lift], i) => out.push({ key: `pt${i}`, x, z, yaw, id, paint, lift }));
   BUS_STOPS.forEach(([x, z, yaw], i) => out.push({ key: `b${i}`, x, z, yaw, id: 'bus', paint: null, bus: true }));
   return out;
 }

@@ -1249,6 +1249,20 @@ const optSound = $('#opt-sound');
 function showSound() { for (const b of optSound.children) b.classList.toggle('on', (b.dataset.sound === 'off') === audio.muted); }
 showSound();
 optSound.addEventListener('click', (e) => { const b = e.target.closest('[data-sound]'); if (b && (b.dataset.sound === 'off') !== audio.muted) toggleSound(); });
+// notification sounds (Martin 2026-11-23): the chimes for someone joining or leaving, a lap record and a race
+// call can be switched off on their own; the toasts still show. Remembered per browser.
+const optNotify = $('#opt-notify');
+audio.setNotify(stored('kvissuroam.notify') !== '0');
+function showNotify() { for (const b of optNotify.children) b.classList.toggle('on', (b.dataset.notify === 'on') === audio.notify); }
+showNotify();
+optNotify.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-notify]');
+  if (!b) return;
+  b.blur();
+  audio.setNotify(b.dataset.notify === 'on');
+  try { localStorage.setItem('kvissuroam.notify', audio.notify ? '1' : '0'); } catch {}
+  showNotify();
+});
 
 // ---- screens over the drive: the city map, the lap times and the options. Only one is open at a time.
 // Their keys work from any of them: M / L / O jump straight to that screen (the same key again closes it),
@@ -1298,57 +1312,12 @@ optKeys.addEventListener('click', (e) => {
   showKeys();
   hud.toast(on ? 'WASD DRIVING · AUTOMATIC GEARBOX' : 'ARROWS DRIVE · A / Z SHIFT GEARS', 2200);
 });
-// Tyre squeal (V, or OPTIONS > SOUND; Martin 2026-11-23: two squeals to A/B): NOTE is the held note of
-// src/audio-tyres.js, REAL the modelled squeal of public/tyre-worklet.js. Remembered per browser; ?squeal=real
-// or ?squeal=note sets it on a phone (no V key there).
-const optSqueal = $('#opt-squeal');
-// B (REAL) is the default since Martin 2026-11-23 ("sounds very good, move to prod as default"). The choice is
-// saved under a new key, so a NOTE picked while comparing (kvissuroam.squeal) does not keep anyone on A.
-let squealSaved = 'real';
-try { squealSaved = localStorage.getItem('kvissuroam.squeal2') || 'real'; } catch {}
-if (params.get('squeal') === 'real' || params.get('squeal') === 'note') squealSaved = params.get('squeal');
-audio.setSquealKind(squealSaved);
-const showSqueal = () => { if (optSqueal) for (const b of optSqueal.children) b.classList.toggle('on', b.dataset.squeal === audio.squealKind); };
-showSqueal();
-function setSqueal(k) {
-  audio.setSquealKind(k);
-  try { localStorage.setItem('kvissuroam.squeal2', audio.squealKind); } catch {}
-  showSqueal();
-  hud.toast(audio.squealKind === 'real' ? 'TYRE SQUEAL B · REAL (MODELLED)' : 'TYRE SQUEAL A · HELD NOTE', 1800);
-}
-optSqueal?.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-squeal]');
-  if (!b) return;
-  b.blur();
-  setSqueal(b.dataset.squeal);
-});
-input.on('KeyV', () => setSqueal(audio.squealKind === 'real' ? 'note' : 'real'));
-// Tyre marks on grass (K, or OPTIONS > GRAPHICS; Martin 2026-11-23: a second look to compare): A the torn soil ruts
-// of #513, B grass laid flat that shows by its sheen, torn in chunks with clods only in a hard slide. Remembered
-// per browser; ?grassmarks=a, b or c sets it on a phone. C (Martin 2026-11-23 evening, "very real"): the mark as a
-// shape in the ground lit by the sun, on gravel and dirt too.
-const optGrass = $('#opt-grassmarks');
-let grassSaved = 'a';
-try { grassSaved = localStorage.getItem('kvissuroam.grassmarks') || 'a'; } catch {}
-if (['a', 'b', 'c'].includes(params.get('grassmarks'))) grassSaved = params.get('grassmarks');
-let grassMarks = grassSaved;
-const showGrass = () => { if (optGrass) for (const b of optGrass.children) b.classList.toggle('on', b.dataset.grassmarks === grassMarks); };
-showGrass();
-function setGrassMarks(k, quiet) {
-  grassMarks = ['a', 'b', 'c'].includes(k) ? k : 'a';
-  skids?.setGrass(grassMarks);
-  if (quiet) return;
-  try { localStorage.setItem('kvissuroam.grassmarks', grassMarks); } catch {}
-  showGrass();
-  hud.toast({ a: 'GRASS MARKS A · SOIL RUTS', b: 'GRASS MARKS B · LAID FLAT, TORN IN CHUNKS', c: 'GRASS AND EARTH MARKS C · REAL RUTS IN THE SUN' }[grassMarks], 1800);
-}
-optGrass?.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-grassmarks]');
-  if (!b) return;
-  b.blur();
-  setGrassMarks(b.dataset.grassmarks);
-});
-input.on('KeyK', () => setGrassMarks({ a: 'b', b: 'c', c: 'a' }[grassMarks]));
+// Tyre squeal: the modelled squeal of public/tyre-worklet.js (B) is the only one since Martin 2026-11-23 took the
+// A/B choice out of the options; ?squeal=note still brings the held note of src/audio-tyres.js back for comparing.
+audio.setSquealKind(params.get('squeal') === 'note' ? 'note' : 'real');
+// Tyre marks on grass: A, the torn soil ruts of #513, is the only look since Martin 2026-11-23 took the A/B/C
+// choice out of the options; ?grassmarks=b or c still shows the other two (tools/skid-shots.mjs, SKID_QUERY).
+const grassMarks = ['b', 'c'].includes(params.get('grassmarks')) ? params.get('grassmarks') : 'a';
 // Tyres (Martin 2026-11-23): road or gravel on every car, picked in the garage, by the tyre icon beside the
 // gear on the dial, or Y. Switched on the fly, even on the start lights or mid time attack. Starting the Raadi
 // stage fits gravel tyres and a Toomemägi race road tyres; whatever is on stays on after a lap, race or stage.

@@ -34,6 +34,7 @@ export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
+  let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
   let noiseSrc = null, workletReady = false, squeal = null, gravel = null, looseS = 0;
@@ -453,7 +454,7 @@ export function createAudio() {
 
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
-    if (!ctx || ctx.state !== 'running') return;
+    if (!notify || !ctx || ctx.state !== 'running') return;
     const join = kind === 'join' || kind === 'record';
     // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7
     const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : join ? [659.25, 987.77] : [783.99, 523.25];
@@ -548,6 +549,7 @@ export function createAudio() {
       if (master) master.gain.setTargetAtTime(muted || b ? 0 : 0.5, ctx.currentTime, 0.05);
     },
     get muted() { return muted; },
+    setNotify(on) { notify = !!on; }, get notify() { return notify; },
     // the tyre squeal: 'note' (the held note) or 'real' (modelled, public/tyre-worklet.js)
     setSquealKind, get squealKind() { return squealKind(); },
     // (for tests: which other cars have a voice, how far off they are and how loud)

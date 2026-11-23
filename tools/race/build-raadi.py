@@ -164,6 +164,41 @@ for i in range(START + 1): off[i] = 0.0
 off = [v[0] for v in smooth([(o,) for o in off], 2)]
 
 # ---- corners: a run of points turning one way; the apex is where the racing line comes nearest the inside
+# The bale stands a metre off all the gravel there is, not only off this pass's edge: inside a tight corner the
+# corner's other arm is near, and where paths meet the gravel is wider than the paths (the aprons of
+# raadipaths.json). Martin 23 Nov: "some haybales fall into the track". Where the usual spot is not, the nearest
+# one that is, within 6 m, on the inside.
+APRONS = [[(a[i], a[i + 1]) for i in range(0, len(a), 2)] for a in PATHS.get('aprons', [])]
+NEAR_ROADS = [r for r in d['roads'] if any(BOX[0] < q[0] < BOX[2] and BOX[1] < q[1] < BOX[3] for q in r['pts'])]
+def seg_d(p, a, b):
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    t = max(0, min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz or 1)))
+    return math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t)
+def off_gravel(p):
+    m = min(seg_d(p, c[i], c[i + 1]) - max(hw[i], hw[i + 1]) for i in range(N - 1))
+    for r in NEAR_ROADS:
+        if r.get('s') in (2, 3) or r.get('type') == 'Muu tee':
+            m = min(m, min(seg_d(p, a, b) for a, b in zip(r['pts'], r['pts'][1:])) - r.get('w', 4) / 2)
+    for q in APRONS:
+        inside = False
+        for i in range(len(q)):
+            a, b = q[i], q[i - 1]
+            if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]: inside = not inside
+        e = min(seg_d(p, q[i], q[i - 1]) for i in range(len(q)))
+        m = min(m, -e if inside else e)
+    return m
+def bale_spot(p, nx, nz, d0):
+    home = (p[0] + nx * d0, p[1] + nz * d0)
+    if off_gravel(home) >= 0.99: return home
+    # the nearest spot that is, on the inside of the corner (the way straight in can run along the corner's other arm)
+    best = None
+    for gx in range(-30, 31):
+        for gz in range(-30, 31):
+            q = (home[0] + gx * 0.2, home[1] + gz * 0.2)
+            dd = math.hypot(gx, gz) * 0.2
+            if dd > 6 or (best and dd >= best[0]) or (q[0] - p[0]) * nx + (q[1] - p[1]) * nz < d0 - 0.5: continue
+            if off_gravel(q) >= 0.99: best = (dd, q)
+    return best[1] if best else home
 apex = []
 turn = [wrap(head(min(N - 1, i + 2)) - head(max(0, i - 2))) / (s[min(N - 1, i + 2)] - s[max(0, i - 2)] or 1) for i in range(N)]   # rad per metre
 i = START
@@ -177,7 +212,7 @@ while i < FIN:
             k = max(range(i, j + 1), key=lambda q: side * off[q]) if j > i else i
             k = max(range(i, j + 1), key=lambda q: abs(turn[q])) if abs(off[k]) < 0.5 else k
             nx, nz = -T[k][1] * side, T[k][0] * side
-            cone = (c[k][0] + nx * (hw[k] + 1.0), c[k][1] + nz * (hw[k] + 1.0))
+            cone = bale_spot(c[k], nx, nz, hw[k] + 1.0)
             apex.append([k, side, round(cone[0], 2), round(cone[1], 2), round(math.degrees(abs(total))), i])
         i = j + 1
     else: i += 1

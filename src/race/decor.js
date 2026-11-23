@@ -15,7 +15,7 @@ function canvasTex(w, h, draw) {
 }
 
 // three chevrons pointing right, glowing pink on a faint dark plate
-function chevronTex() {
+export function chevronTex() {
   return canvasTex(512, 192, (g, w, h) => {
     g.fillStyle = 'rgba(18,6,43,0.35)';
     g.fillRect(0, 0, w, h);

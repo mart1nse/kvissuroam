@@ -15,7 +15,7 @@ Writes, for src/race/raadi.js:
   start  index of the start line, finish: index of the flying finish (the stop board is the last point)
   gravelFrom: the first straight up to this index is old tarmac (no wheel tracks worn into it)
   line   the racing line: sideways offset from the centre line at each point (+ is right of travel)
-  apex   corners: [index, side (1 right, -1 left), cone x, cone z]
+  apex   corners: [index, side (1 right, -1 left), bale x, bale z, degrees turned, index where the corner begins]
   junctions: where other paths meet the route; per side path the point of a barrier across it and the
          index ranges of the stage during which that path is shut (a barrier that moves: the stage passes
          some junctions twice, going another way each time)
@@ -178,7 +178,7 @@ while i < FIN:
             k = max(range(i, j + 1), key=lambda q: abs(turn[q])) if abs(off[k]) < 0.5 else k
             nx, nz = -T[k][1] * side, T[k][0] * side
             cone = (c[k][0] + nx * (hw[k] + 1.0), c[k][1] + nz * (hw[k] + 1.0))
-            apex.append([k, side, round(cone[0], 2), round(cone[1], 2), round(math.degrees(abs(total)))])
+            apex.append([k, side, round(cone[0], 2), round(cone[1], 2), round(math.degrees(abs(total))), i])
         i = j + 1
     else: i += 1
 # no two cones closer than 12 m (an S bend's two apexes, the double pass of the west side)
@@ -206,23 +206,70 @@ for n, idxs in nodeIdx.items():
     for _, a, b in passes: used |= {a, b}
     branches = []
     for v, _ in adj[n]:
-        # a barrier 5 m down the side path, across it
-        px, pz = coords[n]
-        # walk 5 m along the branch
-        prev, cur, dist = n, v, math.dist(coords[n], coords[v])
-        while dist < 5 and len(adj[cur]) == 2:
-            nn = [u for u, _ in adj[cur] if u != prev][0]
-            dist += math.dist(coords[cur], coords[nn]); prev, cur = cur, nn
-        bx, bz = coords[cur]
-        l = math.dist((bx, bz), (px, pz)) or 1
-        ux, uz = (bx - px) / l, (bz - pz) / l
-        k = min(5.0, l)
-        x, z = px + ux * k, pz + uz * k
-        # shut during each pass that does not use it: the index window round that pass
         shut = [[max(0, i - 40), min(N - 1, i + 12)] for i, a, b in passes if v not in (a, b)]
         if not shut: continue
-        branches.append({'x': round(x, 2), 'z': round(z, 2), 'yaw': round(math.atan2(ux, -uz), 3),
-                         'w': round(width.get((n, v), 4.6), 1), 'shut': shut, 'always': len(shut) == len(passes)})
+        # the side path as a line from the junction (on through plain bends, up to 30 m)
+        line, prev, cur, tot = [coords[n], coords[v]], n, v, math.dist(coords[n], coords[v])
+        while tot < 30 and len(adj[cur]) == 2:
+            nn = [u for u, _ in adj[cur] if u != prev][0]
+            tot += math.dist(coords[cur], coords[nn]); line.append(coords[nn]); prev, cur = cur, nn
+        w = width.get((n, v), 4.6)
+        def along(dd):
+            for a, b in zip(line, line[1:]):
+                l = math.dist(a, b)
+                if dd <= l or (a, b) == (line[-2], line[-1]):
+                    t = min(1, dd / l); return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ((b[0] - a[0]) / l, (b[1] - a[1]) / l)
+                dd -= l
+        # the stage's road while this barrier is shut, and at any time (for where it waits when open)
+        during = sorted({k for a, b in shut for k in range(max(0, a - 15), min(N, b + 16))})
+        def clear(pts, idx, gap):
+            return min(math.dist(q, c[k]) - hw[k] for q in pts for k in idx) >= gap
+        def across(pos, u, half):                         # points along a barrier across the path at pos
+            return [(pos[0] - u[1] * half * t, pos[1] + u[0] * half * t) for t in (-1, -0.5, 0, 0.5, 1)]
+        # as near the junction as it stands wholly off the stage's road (Martin 23 Nov: "barriers on the road
+        # some times, move them away further"): 7 m down the side path at least and 2.5 m from the stage's edge,
+        # short of the side path's far end
+        half = (w + 0.6) / 2
+        best = None
+        for dd in [7 + 0.5 * q for q in range(0, int((min(tot - 2, 28) - 7) / 0.5) + 1)] or [min(7, max(2, tot - 2))]:
+            pos, u = along(dd)
+            best = (dd, pos, u)
+            if clear(across(pos, u, half), during, 2.5): break
+        else: print('  barrier not clear of the stage', [round(v) for v in best[1]], 'at junction', [round(q) for q in coords[n]])
+        dd, pos, u = best
+        # open: slid off the path to one side and turned along it, clear of the stage's road on every pass
+        side = 1
+        for sd in (1, -1):
+            for extra in (1.4, 2.4, 3.6):
+                o = (w / 2 + half * 0 + extra + 0.3)
+                cx, cz = pos[0] - u[1] * sd * o, pos[1] + u[0] * sd * o
+                ends = [(cx + u[0] * half * t, cz + u[1] * half * t) for t in (-1, -0.5, 0, 0.5, 1)]
+                if clear(ends, range(START, N), 0.8): break
+            else: continue
+            side, away = sd, o
+            break
+        else:
+            away = w / 2 + 1.7
+            print('  open barrier not clear', [round(v) for v in pos])
+        # its chevrons point the way to go as the driver coming up sees it: to the right when this side path leaves
+        # on the left, to the left when it leaves on the right, and the way the stage turns when it lies straight on
+        i0 = next(i for i, a, b in passes if v not in (a, b))
+        A, M, X = c[max(0, i0 - 8)], c[i0], c[min(N - 1, i0 + 8)]
+        hl = math.dist(A, M) or 1; hx, hz = (M[0] - A[0]) / hl, (M[1] - A[1]) / hl
+        u0 = (line[1][0] - line[0][0], line[1][1] - line[0][1]); ul = math.hypot(*u0) or 1
+        ahead = (hx * u0[0] + hz * u0[1]) / ul
+        cross = hx * (X[1] - M[1]) - hz * (X[0] - M[0]) if ahead > 0.9 else -(hx * u0[1] - hz * u0[0])
+        want = 1 if cross >= 0 else -1                    # +1: to the driver's right
+        yaw = math.atan2(u[0], u[1] * -1)
+        rx, rz = math.cos(yaw), math.sin(yaw)             # the barrier's local +x in the world
+        point = want if rx * -hz + rz * hx >= 0 else -want
+        branches.append({'x': round(pos[0], 2), 'z': round(pos[1], 2), 'yaw': round(yaw, 3), 'w': round(w, 1), 'shut': shut,
+                         'always': len(shut) == len(passes), 'side': side, 'away': round(away, 2), 'point': point, 'd': dd})
+    # two side paths that leave side by side get one barrier between them (the wider), not two crossed
+    kept = []
+    for b in sorted(branches, key=lambda b: -b['w']):
+        if all(math.dist((b['x'], b['z']), (k['x'], k['z'])) > 4.5 for k in kept): kept.append(b)
+    branches = kept
     if branches:
         junctions.append({'x': round(coords[n][0], 2), 'z': round(coords[n][1], 2), 'passes': [p[0] for p in passes], 'b': branches})
 print('junctions', len(junctions), 'moving', sum(1 for j in junctions for b in j['b'] if not b['always']))

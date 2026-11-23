@@ -119,7 +119,7 @@ function textures() {
   // lamps and the odd glass panel to the sky
   const ceiling = paintTexture(12.8, 0, 12.8, 16, (P) => {
     P.r(0, 0, 12.8, 12.8, '#6a615a');
-    for (let q = 0; q < 12.8; q += 0.8) { P.r(q, 0, q + 0.04, 12.8, '#4a433e'); P.r(0, q, 12.8, q + 0.04, '#4a433e'); }
+    for (let q = 0; q < 12.8; q += 0.8) { P.r(q, 0, q + 0.07, 12.8, '#4a433e'); P.r(0, q, 12.8, q + 0.07, '#4a433e'); }
     for (let q = 0; q < 12.8; q += 6.4) { P.r(q, 0, q + 0.18, 12.8, '#857b72'); P.r(0, q, 12.8, q + 0.18, '#857b72'); }
     for (const [x, y] of [[2.0, 3.2], [8.4, 3.2], [5.2, 9.6], [11.6, 9.6]]) P.r(x, y, x + 0.5, y + 0.22, '#fff1d0');
     P.r(3.2, 6.4, 4.8, 8.0, '#a9b8c4');
@@ -255,7 +255,7 @@ export function createErm(scene, world, { shadows = true } = {}) {
     // ---- the canopy's ceiling: from the roof's edge down to the top of the glass front
     for (let s = S0; s < SF - 0.01; s += 6.4) for (let v = WV0; v < WV1 - 0.01; v += 6.4) {
       const sa = s, sb = Math.min(SF, s + 6.4), va = v, vb = Math.min(WV1, v + 6.4);
-      quad(ceiling, P3(sa, va, ceil(sa)), P3(sb, va, ceil(sb)), P3(sb, vb, ceil(sb)), P3(sa, vb, ceil(sa)), down, uvs(sa, sb, va, vb, 12.8));
+      quad(ceiling, P3(sa, va, ceil(sa)), P3(sa, vb, ceil(sa)), P3(sb, vb, ceil(sb)), P3(sb, va, ceil(sb)), down, uvs(sa, sb, va, vb, 12.8));
     }
     // its strips outside the walls, at the slab's underside
     for (const [v0, v1] of [[V0, WV0], [WV1, V1]]) quad(slab, P3(S0, v0, ROOF(S0) - SLAB), P3(SF, v0, ROOF(SF) - SLAB), P3(SF, v1, ROOF(SF) - SLAB), P3(S0, v1, ROOF(S0) - SLAB), down, uvs(0, 0, 0, 0));
@@ -266,7 +266,8 @@ export function createErm(scene, world, { shadows = true } = {}) {
     group.add(toMesh(plates, mat({ map: T.plate }), shadows));
     group.add(toMesh(gravel, mat({ map: T.gravel }), false));
     group.add(toMesh(conc, mat({ map: T.concrete }), shadows));
-    group.add(toMesh(ceiling, mat({ map: T.ceiling }), false));
+    // (lit from below only by the sky: a glow of its own so it reads as his photos' grey grid, not black)
+    group.add(toMesh(ceiling, mat({ map: T.ceiling, emissiveMap: T.ceiling, emissive: 0x6a6a6a }), false));
     group.add(toMesh(slab, mat({ color: 0xd6dadb }), shadows));
     yield;
 

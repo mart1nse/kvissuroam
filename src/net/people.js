@@ -8,8 +8,8 @@
 // front: a lit tick when voted, a faint ring when not. Gone again when the vote is over.
 // On desktop (Martin, 2026-11-23) a name in the list is a button: it follows that player's car as a spectator
 // (src/spectate.js); your own line takes you back to your car. Spectators are listed like those in the garage,
-// as "(watching)", never whom (Martin, 2026-11-23: anonymous); a player being watched sees "BEING WATCHED · N"
-// on their own line, without names, and a spectator sees "WATCHING" on theirs.
+// as "(watching)", never whom (Martin, 2026-11-23: anonymous); a player being watched has "WATCHED · N" after
+// their name in everyone's list (their own line too), without names, and a spectator sees "WATCHING" on theirs.
 // In front of each colour dot of a player on the map (Martin, 2026-11-23) a small thumb: a thumbs up for them,
 // shown as a neon sign in their back window (src/kudos.js); faint for 30 s after sending.
 import { escapeHtml } from '../race/race.js';
@@ -77,7 +77,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
     const wn = mp.online ? mp.watchers() : 0, sp = watching();
-    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}${wn ? ` · BEING WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${myRec ? ` · ${myRec}` : ''}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
     const vm = mp.online ? votes?.() : null;
     const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
@@ -87,7 +87,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (Martin, 2026-11-23) those in the garage are listed too, greyed, after the drivers on the map
     const inGarage = mp.online ? mp.roster().filter(idle) : [];
     const kuKey = onKudos ? drivers.filter((p) => mp.kudosWait(p.id) > 0).map((p) => p.id).join(',') : '';
-    const key = `${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.on + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.on).join(',')}`;
+    const key = `${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.wn + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.w).join(',')}`;
     if (key === last) return;
     last = key;
     // the city map's list follows the connection (lost, back) and the vote while the map is open
@@ -105,7 +105,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';
-      return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${r && !g ? ` <small class="rec">${r}</small>` : ''}</li>`;
+      return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${r && !g ? ` <small class="rec">${r}</small>` : ''}</li>`;
     });
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
@@ -148,7 +148,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       const onMap = (p) => p.x !== undefined && !idle(p);
       const driving = others.filter(onMap), away = others.filter((p) => !onMap(p));
       shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
       const head = mp.online ? `${driving.length + 1} ONLINE` : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');

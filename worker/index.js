@@ -194,15 +194,31 @@ export class Lobby extends DurableObject {
     return t0 > 0 && t0 <= Date.now() ? { t0, sid: m[2] } : null;
   }
 
-  // (forId: the player this list goes to; whom a spectator watches is told only to the one watched, and
-  // nobody learns who watches them: Martin 2026-11-23, spectating stays anonymous)
-  players(forId) {
-    const out = [];
+  // (wn: how many spectators watch that player, told to everyone; whom a spectator watches is never told:
+  // Martin 2026-11-23, spectating stays anonymous)
+  players() {
+    const out = [], wn = this.watchCounts();
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(a.w === 'watch' && a.on && a.on === forId ? { on: a.on } : {}) });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(wn.get(a.id) ? { wn: wn.get(a.id) } : {}) });
     }
     return out;
+  }
+
+  // spectators per watched player id (except: a socket that is closing)
+  watchCounts(except) {
+    const n = new Map();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      const a = ws.deserializeAttachment();
+      if (a?.id && !a.ghost && a.w === 'watch' && a.on) n.set(a.on, (n.get(a.on) || 0) + 1);
+    }
+    return n;
+  }
+  // tell everyone the new spectator count of these players
+  watchTold(ids, except) {
+    const n = this.watchCounts(except);
+    for (const id of new Set(ids)) if (id) this.broadcast({ t: 'wn', id, n: n.get(id) || 0 });
   }
 
   // Drop sockets that have gone silent: every browser pings each 25 s, so one that has neither
@@ -216,17 +232,15 @@ export class Lobby extends DurableObject {
       const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
       if (Math.max(ping, a?.at || 0) > now - 80000) continue;
       try { ws.close(1001, 'stale'); } catch { /* already closed */ }
-      if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); }
+      if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
     }
   }
 
-  // (only: { id, msg }, the one player who gets msg instead)
-  broadcast(msg, except, only) {
+  broadcast(msg, except) {
     const s = typeof msg === 'string' ? msg : JSON.stringify(msg);
-    const o = only && JSON.stringify(only.msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
-      try { ws.send(o && ws.deserializeAttachment()?.id === only.id ? o : s); } catch { /* closing */ }
+      try { ws.send(s); } catch { /* closing */ }
     }
   }
 
@@ -511,8 +525,10 @@ export class Lobby extends DurableObject {
       const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
-      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players(id).filter((p) => p.id !== id), board: this.board() }));
-      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws, on ? { id: on, msg: { t: 'join', id, name, car: a.car, w, on } } : null); this.race.back(a); }
+      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
+      // (a spectator back on: the count of whom they watch)
+      if (!ghost && (me?.on || '') !== on) this.watchTold([me?.on, on]);
       this.race.sendTo(ws);
       return;
     }
@@ -533,9 +549,10 @@ export class Lobby extends DurableObject {
       // 'watch' with on: following another player's car as a spectator
       const w = cleanWhere(m.w), on = w === 'watch' ? cleanOn(m.on) : '';
       if (!w || (w === me.w && on === (me.on || ''))) return;
+      const was = me.on;
       me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
-      // (everyone hears "watching"; only the watched player hears it is them, and not by whom: see players())
-      if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w }, ws, on ? { id: on, msg: { t: 'at', id: me.id, w, on } } : null);
+      // (everyone hears "watching", and the watched players' new counts, never who watches whom)
+      if (!me.ghost) { this.broadcast({ t: 'at', id: me.id, w }, ws); if (was !== me.on) this.watchTold([was, me.on]); }
     } else if (m.t === 'ku') {
       // a thumbs up for another player (Martin, 2026-11-23): told to everyone, sender too, since all who are
       // near see it as a sign in the receiver's back window (src/kudos.js). Not from or to a ghost or oneself.
@@ -549,7 +566,7 @@ export class Lobby extends DurableObject {
   async webSocketClose(ws) {
     const me = ws.deserializeAttachment();
     try { ws.close(); } catch { /* already closed */ }
-    if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); }
+    if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); if (me.on) this.watchTold([me.on], ws); }
   }
 
   async webSocketError(ws) {

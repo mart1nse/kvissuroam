@@ -145,7 +145,13 @@ if os.environ.get('SYNTH_TREES'):
         ok = (c >= 0) & (c < W1) & (r >= 0) & (r < H1)
         return ~ok | blk[np.clip(r, 0, H1 - 1), np.clip(c, 0, W1 - 1)]
     real = np.array([(t[0], t[1]) for t in trees.values()]).reshape(-1, 2)
-    for k, t in enumerate(synth_trees.synth(SRC, poly_en.intersection(detail_box), real, mos, X0, Z0, blocked)):
+    area = poly_en.intersection(detail_box)
+    if os.environ.get('SYNTH_SECTORS'):
+        # a partial bake: only in the new sectors, since the touched ones keep their own trees but take
+        # the new obstacle field (a made-up trunk there would be an unseen post)
+        area = area.intersection(unary_union([wbox(GRID0 + a * SECTOR, GRID0 + b * SECTOR, GRID0 + (a + 1) * SECTOR, GRID0 + (b + 1) * SECTOR)
+                                              for a, b in json.load(open(os.environ['SYNTH_SECTORS']))]))
+    for k, t in enumerate(synth_trees.synth(SRC, area, real, mos, X0, Z0, blocked)):
         trees[-1 - k] = t
     del blk
 T = np.array(list(trees.values()), 'float64')

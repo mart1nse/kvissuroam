@@ -29,6 +29,7 @@ import { createStartKit } from './startkit.js';
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
+const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
 // Appendix VII has the unit red from 30 s to go, yellow and counting for the last 5 s, green at zero. Here the
 // count is short so that a new try does not wait: "shorten the 5 sec countdown to 3 sec and let it be yellow
@@ -75,6 +76,10 @@ const BEND = (() => {
   return b;
 })();
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
+// How much wider than the path the gravel is inside each corner, m. The bale stands a metre off all the gravel
+// there (tools/race/build-raadi.py: off the corner's other arm, and off the wide gravel where paths meet), so
+// where it stands further in than a metre off this path's edge, the inside is judged from that much further in.
+const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k])]));
 
 // nearest point of the stage between indices lo and hi: { i, d, lat } (lat: sideways, + right of travel)
 function nearestIn(x, z, lo, hi) {
@@ -372,7 +377,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
         }
       }
     };
-    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + APEX_PEN.at(-1)[0] + d));
+    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + ROOM.get(k) + APEX_PEN.at(-1)[0] + d));
     yield;
     for (const [e0, e1, sd] of ENTRY) limit(e0, e1, (i, d) => -sd * (HW[i] + WIDE_PEN.at(-1)[0] + d));
     yield;
@@ -760,6 +765,10 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
       // a jump (map, H, R): the run ends
       if (st.prev && Math.hypot(x - st.prev.x, z - st.prev.z) > 40 && (st.phase === 'run' || st.phase === 'count')) cancel('STAGE CANCELLED');
       if (st.cool && dStart > 60) st.cool = false;
+      // gone from the park after a run (the garage's or the button's Toomemägi, the map, or driven off): the
+      // stage's time comes down. (Martin 23 Nov: "finished raadi, then from the garage chose toomemäe, and the
+      // raadi number stayed up", over the lap's clock.)
+      if (st.phase === 'done' && dMid > GONE_R) { st.phase = 'idle'; st.doneT = null; elMsg.textContent = ''; hideAgain(); }
 
       if (st.phase === 'idle' || st.phase === 'done') {
         // up to the start: onto the line
@@ -823,7 +832,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           const a0 = (st.prev.x - gx) * tx + (st.prev.z - gz) * tz, a1 = (x - gx) * tx + (z - gz) * tz;
           if (!(a0 < 0 && a1 >= 0)) break;
           const f = a0 / (a0 - a1), cx = st.prev.x + (x - st.prev.x) * f - gx, cz = st.prev.z + (z - st.prev.z) * f - gz;
-          const deep = (-cx * tz + cz * tx) * sd - HW[k];                    // inside the path's edge (+), outside it (-)
+          const deep = (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);       // inside the gravel's edge (+), outside it (-)
           if (deep > GATE_IN || deep < -2 * HW[k] - GATE_OUT) break;
           apexCut(k, deep);
           st.gate++;
@@ -835,7 +844,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           if (st.prog < k - 25 || st.prog > k + 8 || st.phase !== 'run') continue;
           const a = nearestIn(x, z, k - 8, k + 5);
           if (a.i < k || a.d * a.d - a.lat * a.lat > 2.25) continue;       // before the apex, or past the end of it
-          apexCut(k, a.lat * sd - HW[a.i]);
+          apexCut(k, a.lat * sd - HW[a.i] - ROOM.get(k));
         }
         // and too wide on the way in
         for (const [e0, e1, sd] of ENTRY) {

@@ -745,6 +745,7 @@ async function boot() {
   hud = createHud(world);
   skids = createSkidMarks(world);
   skids.setGrass(grassMarks);
+  skids.setSun(lights.sunOffset);
   scene.add(skids.mesh);
   smoke = createSmoke(world);
   applyFx();
@@ -1307,21 +1308,22 @@ optSqueal?.addEventListener('click', (e) => {
 input.on('KeyV', () => setSqueal(audio.squealKind === 'real' ? 'note' : 'real'));
 // Tyre marks on grass (K, or OPTIONS > GRAPHICS; Martin 2026-11-23: a second look to compare): A the torn soil ruts
 // of #513, B grass laid flat that shows by its sheen, torn in chunks with clods only in a hard slide. Remembered
-// per browser; ?grassmarks=a or ?grassmarks=b sets it on a phone.
+// per browser; ?grassmarks=a, b or c sets it on a phone. C (Martin 2026-11-23 evening, "very real"): the mark as a
+// shape in the ground lit by the sun, on gravel and dirt too.
 const optGrass = $('#opt-grassmarks');
 let grassSaved = 'a';
 try { grassSaved = localStorage.getItem('kvissuroam.grassmarks') || 'a'; } catch {}
-if (params.get('grassmarks') === 'a' || params.get('grassmarks') === 'b') grassSaved = params.get('grassmarks');
+if (['a', 'b', 'c'].includes(params.get('grassmarks'))) grassSaved = params.get('grassmarks');
 let grassMarks = grassSaved;
 const showGrass = () => { if (optGrass) for (const b of optGrass.children) b.classList.toggle('on', b.dataset.grassmarks === grassMarks); };
 showGrass();
 function setGrassMarks(k, quiet) {
-  grassMarks = k === 'b' ? 'b' : 'a';
+  grassMarks = ['a', 'b', 'c'].includes(k) ? k : 'a';
   skids?.setGrass(grassMarks);
   if (quiet) return;
   try { localStorage.setItem('kvissuroam.grassmarks', grassMarks); } catch {}
   showGrass();
-  hud.toast(grassMarks === 'b' ? 'GRASS MARKS B · LAID FLAT, TORN IN CHUNKS' : 'GRASS MARKS A · SOIL RUTS', 1800);
+  hud.toast({ a: 'GRASS MARKS A · SOIL RUTS', b: 'GRASS MARKS B · LAID FLAT, TORN IN CHUNKS', c: 'GRASS AND EARTH MARKS C · REAL RUTS IN THE SUN' }[grassMarks], 1800);
 }
 optGrass?.addEventListener('click', (e) => {
   const b = e.target.closest('[data-grassmarks]');
@@ -1329,7 +1331,7 @@ optGrass?.addEventListener('click', (e) => {
   b.blur();
   setGrassMarks(b.dataset.grassmarks);
 });
-input.on('KeyK', () => setGrassMarks(grassMarks === 'b' ? 'a' : 'b'));
+input.on('KeyK', () => setGrassMarks({ a: 'b', b: 'c', c: 'a' }[grassMarks]));
 // Tyres (Martin 2026-11-23): road or gravel on every car, picked in the garage, by the tyre icon beside the
 // gear on the dial, or Y. Switched on the fly, even on the start lights or mid time attack. Starting the Raadi
 // stage fits gravel tyres and a Toomemägi race road tyres; whatever is on stays on after a lap, race or stage.

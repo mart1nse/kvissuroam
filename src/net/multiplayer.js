@@ -12,16 +12,30 @@ import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml } from '../race/race.js';
 import { STEALTH } from './stealth.js';
+import { KUDOS_GAP_S } from '../kudos.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
 const SENT_KEY = 'kvissuroam.sentLaps';      // laps the server has confirmed, as car|ms
 const SEND_HZ = 10;
+// With nobody within LONELY metres of our car, our position goes out SEND_HZ_FAR times a second: to the
+// others we are then at most a block on the horizon or an arrow on the map. Each message a player sends
+// counts against the server's free daily allowance (Cloudflare counts 20 incoming messages as one request,
+// 100 000 a day), and the server passes every one on to everybody else.
+const SEND_HZ_FAR = 3, LONELY = 600;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
-const HOT = 8;                   // flag: this car's lap timer is running          // more players than the server lets in are not ours to draw
+const HOT = 8;                   // flag: this car's lap timer is running
+// Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
+// past DETAIL metres is a small block in its paint colour, all such blocks one draw call (a whole car is
+// 11-12 pieces of 50-75 thousand triangles, a few pixels tall that far away); past FAR it is not drawn at
+// all (the map arrows and the list still show it). Names float over the TAGS nearest within TAG_DIST.
+const DETAIL = 110, DETAIL_LOW = 75;
+const FAR = 900;
+const TAG_DIST = 150, TAGS = 6, TAGS_LOW = 4;   // (was every car within 600 m); a name that would cover a nearer one is left out
+const SHADOW_DIST = 60;          // only cars this near cast a shadow
 // what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
 const cleanName = (s) => String(s || '').normalize('NFC')
   .replace(/[\u0000-\u001f\u007f-\u009f<>\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g, '')
@@ -66,8 +80,38 @@ function haloMesh() {
   return m;
 }
 
+// The far stand-in: a car body and a cabin, unit sized (scaled per car to its length, width and height),
+// coloured per car. One InstancedMesh for every far car; made with the game, so its shader is compiled at
+// loading and not while driving.
+function farCars(scene, max) {
+  const body = new THREE.BoxGeometry(1, 0.5, 1); body.translate(0, 0.3, 0);
+  const cab = new THREE.BoxGeometry(0.84, 0.42, 0.5); cab.translate(0, 0.76, 0.06);
+  const pos = [...body.attributes.position.array, ...cab.attributes.position.array];
+  const nor = [...body.attributes.normal.array, ...cab.attributes.normal.array];
+  const idx = [...body.index.array, ...cab.index.array.map((i) => i + body.attributes.position.count)];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setIndex(idx);
+  body.dispose(); cab.dispose();
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), max);
+  mesh.name = 'remote far cars';
+  mesh.setColorAt(0, new THREE.Color(0xffffff));
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.count = 0;
+  mesh.frustumCulled = false;            // (spread over the whole map; one draw call either way)
+  scene.add(mesh);
+  return mesh;
+}
+// a car's paint colour, for its far stand-in (the body's paint piece, else a quiet grey)
+function paintOf(model) {
+  let c = null;
+  model.group.traverse((m) => { if (!c && m.isMesh && /_paint$|paint/i.test(m.name) && m.material?.color) c = m.material.color; });
+  return c ? c.clone() : new THREE.Color(0x9a94a8);
+}
+
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, hotlap = () => false, racing = () => false, stage = false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -77,12 +121,17 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
-  let where = '';                // map | garage | away (another tab): shown to the others (Martin, 2026-11-23)
+  let where = '';                // map | garage | away (another tab) | watch: shown to the others (Martin, 2026-11-23)
+  let whereOn = '';              // with 'watch': the id of the player we follow as a spectator
   // until the race state has come on this connection, each clock question also asks for it (r: 1):
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
+  const kudosAt = new Map();     // id -> when we last sent them a thumbs up (seconds)
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
+  const far = farCars(scene, MAX_OTHERS);
+  const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fe = new THREE.Euler(0, 0, 0, 'YXZ'), fp = new THREE.Vector3(), fs = new THREE.Vector3();
+  const tagList = [], boxes = [];
   const labels = document.createElement('div');
   labels.id = 'names';
   document.body.appendChild(labels);
@@ -101,6 +150,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // "M3 LAP RECORD" tag in the online list and over the car for REC_MS, while the record stands
   const REC_MS = 15 * 60000;
   const recs = new Map();
+  const lastLaps = new Map();       // name -> { ms, car, t }: each player's newest lap on the board, for a spectator's view
   function setBoard(b) {
     board = b;
     for (const [n, r] of recs) { const best = b.allTime?.find((x) => x.car === r.car); if (!best || best.name !== n) recs.delete(n); }
@@ -125,7 +175,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let ping = 0;
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false;
-      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined });
+      send({ t: 'hello', name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -175,8 +225,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const el = document.createElement('div');
     el.className = 'pname';
     el.textContent = p.name;
+    el.style.display = 'none';
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '' };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', on: typeof p.on === 'string' ? p.on : '' };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -201,15 +252,32 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     o.halo = null;
     o.model = buildModel(o.car);
     o.model.group.rotation.order = 'YXZ';
+    o.model.group.userData.remoteCar = true;
     o.model.group.traverse((c) => { if (c.isMesh) c.castShadow = true; });
+    o.shadow = true;
     o.model.group.visible = false;
-    scene.add(o.model.group);
+    o.paint = paintOf(o.model);
+    o.near = false;                       // in the scene, drawn whole (else the far stand-in, or nothing)
   }
+  // a whole car in or out of the scene (out, its pieces cost nothing a frame, not even their places)
+  function setNear(o, on) {
+    if (o.near === on) return;
+    o.near = on;
+    if (on) scene.add(o.model.group); else scene.remove(o.model.group);
+  }
+  // a label's place and size, written only when it changes
+  function showTag(o, on, tf) {
+    if (o.tagOn !== on) { o.tagOn = on; o.el.style.display = on ? '' : 'none'; }
+    if (on && tf !== o.tf) { o.tf = tf; o.el.style.transform = tf; }
+  }
+  // somebody is watching our car as a spectator (src/spectate.js)
+  function watchedNow() { if (myId) for (const o of others.values()) if (o.w === 'watch' && o.on === myId) return true; return false; }
   function drop(id) {
     const o = others.get(id);
     if (!o) return;
     if (o.model) scene.remove(o.model.group);
     o.el.remove();
+    o.dropped = true;
     others.delete(id);
   }
 
@@ -254,9 +322,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (o) setRemoteCar(o, m.car);
         break;
       }
+      case 'ku':            // a thumbs up, from id to `to` (either may be us): see src/kudos.js
+        if (typeof m.id === 'string' && typeof m.to === 'string') onKudos?.(m.id, m.to);
+        break;
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
-        if (o) o.w = typeof m.w === 'string' ? m.w : '';
+        if (o) { o.w = typeof m.w === 'string' ? m.w : ''; o.on = typeof m.on === 'string' ? m.on : ''; }
         break;
       }
       case 'clock': {
@@ -273,6 +344,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (m.lap && typeof m.lap.name === 'string') {
           const best = m.board.allTime?.find((b) => b.car === m.lap.car);
           const short = Object.hasOwn(CARS, m.lap.car) ? CARS[m.lap.car].short.toUpperCase() : '';
+          if (Number.isFinite(m.lap.ms)) lastLaps.set(m.lap.name, { ms: m.lap.ms, car: m.lap.car, t: Date.now() });
           if (best && best.ms === m.lap.ms && best.name === m.lap.name) {
             recs.set(m.lap.name, { car: m.lap.car, t: Date.now() });
             if (m.lap.name !== name) { toast(`${m.lap.name.toUpperCase()} SET A ${short} LAP RECORD`, 3500); onRecord?.(m.lap.name, m.lap.car); }
@@ -432,6 +504,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
 
   const v3 = new THREE.Vector3();
+  let nearest = 0;                 // metres from our car to the nearest other one, last frame
   function update(car, dt, active) {
     const now = performance.now() / 1000;
     // send our position while anyone else is online
@@ -439,7 +512,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
-      sendTimer = 1 / SEND_HZ;
+      // (a spectator follows our car: full rate for them, wherever the others are)
+      sendTimer = 1 / (nearest < LONELY || racing(myId) || watchedNow() ? SEND_HZ : SEND_HZ_FAR);
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
       const r2 = (v) => Math.round(v * 100) / 100;
       const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -459,51 +533,96 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
+    tagList.length = 0;
     haloParts && (haloParts.mat.opacity = 0.7 + 0.3 * Math.sin(now * 4.5));
+    const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
+    let nf = 0, recolour = false, near2 = Infinity;
     for (const o of others.values()) {
       o.pose = sample(o, now);
       if (o.pose && o.live) o.seen = now;                            // (its last news, not the coasting after it)
       if (o.pose && o.live && o.modelCar !== o.car && modelReady(o.car, true)) showModel(o);
-      // (heard, and smoking, even while their car is still being built)
-      if (o.pose && o.live) fxList.push(effects(o, o.pose, Math.sin(o.pose[3]), -Math.cos(o.pose[3])));
-      const g = o.model?.group;
-      if (!g || !o.pose || o.model.warmed === false) { if (g) g.visible = false; o.el.style.display = 'none'; continue; }
       const p = o.pose;
-      // on a hotlap: the glow under their car and the tag over their name
-      const hot = o.live && !!(p[20] & HOT);
-      if (hot && !o.halo) {
-        o.halo = haloMesh();
-        const sz = o.model.size;
-        o.halo.scale.set((sz?.width ?? o.halfWid * 2) + 1.5, 1, (sz?.length ?? o.halfLen * 2) + 1.7);
-        o.halo.position.y = 0.06;
-        g.add(o.halo);
+      const d = p ? Math.hypot(p[0] - cam.x, p[1] - cam.z, p[2] - cam.y) : Infinity;
+      if (p && car) near2 = Math.min(near2, (p[0] - car.x) ** 2 + (p[1] - car.z) ** 2);
+      // (heard, and smoking, even while their car is still being built; past 400 m neither is heard or seen)
+      if (p && o.live && d < 400) fxList.push(effects(o, p, Math.sin(p[3]), -Math.cos(p[3])));
+      const g = o.model?.group;
+      if (!g || !p || o.model.warmed === false) { if (g) setNear(o, false); showTag(o, false); continue; }
+      const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
+      // whole car near, a block further out (a little either way before it changes: no flicker at the edge)
+      const near = d < (o.near ? detail * 1.15 : detail);
+      setNear(o, near);
+      if (!near) {
+        if (d < farMax) {
+          const sz = o.model.size;
+          fp.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
+          fq.setFromEuler(fe.set(p[4], -p[3], -p[5]));
+          fs.set(sz?.width ?? o.halfWid * 2, sz?.height ?? 1.45, sz?.length ?? o.halfLen * 2);
+          far.setMatrixAt(nf, fm.compose(fp, fq, fs));
+          if (far.userData[nf] !== o.paint) { far.userData[nf] = o.paint; far.setColorAt(nf, o.paint); recolour = true; }
+          nf++;
+        }
+      } else {
+        // on a hotlap: the glow under their car and the tag over their name
+        const hot = o.live && !!(p[20] & HOT);
+        if (hot && !o.halo) {
+          o.halo = haloMesh();
+          const sz = o.model.size;
+          o.halo.scale.set((sz?.width ?? o.halfWid * 2) + 1.5, 1, (sz?.length ?? o.halfLen * 2) + 1.7);
+          o.halo.position.y = 0.06;
+          g.add(o.halo);
+        }
+        if (o.halo) o.halo.visible = hot;
+        // a shadow only close by, where it can be seen
+        const sh = d < SHADOW_DIST;
+        if (sh !== o.shadow) { o.shadow = sh; g.traverse((c) => { if (c.isMesh && c !== o.halo) c.castShadow = sh; }); }
+        g.visible = true;
+        g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
+        g.rotation.set(p[4], -p[3], -p[5]);
+        const w = o.model.wheels;
+        const speed = p[6] * fx + p[7] * fz;
+        o.wheel = (o.wheel + (speed / (o.spec.wheelRadius || 0.32)) * dt) % (Math.PI * 2);
+        if (w) {
+          w.fl.steer.rotation.y = w.fr.steer.rotation.y = -p[8];
+          w.fl.spin.rotation.x = w.fr.spin.rotation.x = w.rl.spin.rotation.x = w.rr.spin.rotation.x = -o.wheel;
+        }
+        const brake = !!p[9], rev = !!p[10];
+        if (brake !== o.brake || rev !== o.rev) { o.brake = brake; o.rev = rev; o.model.setLights?.({ brake, reverse: rev, headlights: true }); }
+        if (o.model.setSoot && p[11] !== undefined && p[11] !== o.sootK) { o.sootK = p[11]; o.model.setSoot(p[11]); }
       }
-      if (o.halo) o.halo.visible = hot;
+      if (d > TAG_DIST) { showTag(o, false); continue; }
+      tagList.push(o);
+      o.d = d;
+    }
+    nearest = Math.sqrt(near2);
+    far.count = nf;
+    if (nf) far.instanceMatrix.needsUpdate = true;
+    if (recolour) far.instanceColor.needsUpdate = true;
+    // floating names over the nearest few only: held well above the roof (and lifted a little more on screen,
+    // past the record line that hangs under it), so a player ahead does not hide the racing line (Martin 2026-11-23)
+    const most = low() ? TAGS_LOW : TAGS;
+    tagList.sort((a, b) => a.d - b.d);
+    let shown = 0;
+    for (const o of tagList) {
+      if (shown >= most) { showTag(o, false); continue; }
+      const p = o.pose;
+      const hot = o.live && !!(p[20] & HOT);
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
       const rec = recs.size ? recordOf(o.name) : '';
       if (rec !== (o.rec || '')) { o.rec = rec; if (rec) o.el.dataset.rec = rec; else delete o.el.dataset.rec; }
-      const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
-      g.visible = true;
-      g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
-      g.rotation.set(p[4], -p[3], -p[5]);
-      const w = o.model.wheels;
-      const speed = p[6] * fx + p[7] * fz;
-      o.wheel += (speed / (o.spec.wheelRadius || 0.32)) * dt;
-      if (w) {
-        w.fl.steer.rotation.y = w.fr.steer.rotation.y = -p[8];
-        w.fl.spin.rotation.x = w.fr.spin.rotation.x = w.rl.spin.rotation.x = w.rr.spin.rotation.x = -o.wheel;
-      }
-      o.model.setLights?.({ brake: !!p[9], reverse: !!p[10], headlights: true });
-      if (o.model.setSoot && p[11] !== undefined) o.model.setSoot(p[11]);
-      // floating name: held well above the roof (and lifted a little more on screen, past the record
-      // line that hangs under it), so a player ahead does not hide the racing line (Martin 2026-11-23)
       v3.set(p[0], p[2] + 3.0, p[1]);
-      const dist = v3.distanceTo(camera.position);
       v3.project(camera);
-      if (v3.z > 1 || dist > 600 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { o.el.style.display = 'none'; continue; }
-      o.el.style.display = '';
-      const sc = Math.max(0.55, Math.min(1.2, 28 / dist));
-      o.el.style.transform = `translate(${((v3.x + 1) / 2) * W}px, ${((1 - v3.y) / 2) * H}px) translate(-50%, calc(-100% - ${(24 * sc).toFixed(1)}px)) scale(${sc.toFixed(2)})`;
+      if (v3.z > 1 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { showTag(o, false); continue; }
+      const sc = Math.max(0.55, Math.min(1.2, 28 / o.d));
+      // its box on screen (from the name's length: measuring the page each frame would cost more than it saves)
+      const x = ((v3.x + 1) / 2) * W, y = ((1 - v3.y) / 2) * H - 34 * sc, hw = (o.name.length * 5.5 + 12) * sc, hh = 11 * sc;
+      let covered = false;
+      for (let i = 0; i < shown; i++) { const q = boxes[i]; if (Math.abs(q.x - x) < q.hw + hw && Math.abs(q.y - y) < q.hh + hh) { covered = true; break; } }
+      if (covered) { showTag(o, false); continue; }
+      const q = boxes[shown] || (boxes[shown] = {});
+      q.x = x; q.y = y; q.hw = hw; q.hh = hh;
+      shown++;
+      showTag(o, true, `translate(${(((v3.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - v3.y) / 2) * H).toFixed(1)}px) translate(-50%, calc(-100% - ${(24 * sc).toFixed(1)}px)) scale(${sc.toFixed(2)})`);
     }
   }
 
@@ -518,13 +637,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, name: o.name, colour: o.colour, car: o.car })); },
-    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, on: o.on, name: o.name, colour: o.colour, car: o.car })); },
+    players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
       if (!n || n === name) return name;
@@ -534,7 +653,19 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     get car() { return carId; },
     // where we are (map, garage, away), told to the others when it changes
-    setWhere(w) { if (w === where) return; where = w; if (!STEALTH) send({ t: 'at', w }); },
+    // (watch: following another player's car as a spectator, on: their id)
+    setWhere(w, on = '') {
+      if (w !== 'watch') on = '';
+      if (w === where && on === whereOn) return;
+      where = w; whereOn = on;
+      if (!STEALTH) send({ t: 'at', w, ...(on ? { on } : {}) });
+    },
+    // another player as this page holds them (pose, car, colour, name tag), for the spectator camera
+    remote(id) { return others.get(id) || null; },
+    // somebody is watching our car as a spectator
+    get watched() { return watchedNow(); },
+    watchers() { let n = 0; for (const o of others.values()) if (o.w === 'watch' && o.on === myId && myId) n++; return n; },
+    lastLap(n) { const l = lastLaps.get(n); return l && Date.now() - l.t < 10 * 60000 ? l : null; },
     setCar(id) { if (id === carId) return; carId = id; send({ t: 'car', car: id }); },
     // the online race
     get id() { return myId; },
@@ -554,6 +685,21 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get counted() { return driving && !STEALTH; },
     poseOf(id) { const o = others.get(id); return o?.pose || null; },
     nameOf(id) { return others.get(id)?.name; },
+    colourOf(id) { return others.get(id)?.colour; },
+    // another player's car as drawn now (null when far: then nobody sees a sign on it), and its kind
+    carOf(id) { const o = others.get(id); return o?.model && o.near ? { group: o.model.group, car: o.modelCar } : null; },
+    // a thumbs up for another player (src/kudos.js): false while the last one to them is under KUDOS_GAP_S old
+    // (the server holds to the same), or in stealth
+    kudos(id) {
+      if (STEALTH || !online || !others.has(id)) return false;
+      const t = performance.now() / 1000;
+      if (t - (kudosAt.get(id) ?? -1e9) < KUDOS_GAP_S) return false;
+      kudosAt.set(id, t);
+      send({ t: 'ku', to: id });
+      return true;
+    },
+    // seconds until another thumbs up may go to this player (0: now)
+    kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
     // "M3 LAP RECORD" for a driver who set a record lately (and still holds it), else ''
     recordOf,
     submitLap(lap) {

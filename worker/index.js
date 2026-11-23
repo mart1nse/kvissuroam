@@ -39,13 +39,16 @@ const cleanName = (s) => String(s ?? '').normalize('NFC')
   .replace(/\s+/g, ' ').trim().slice(0, 20).trim();
 // only cars the game has (anything else, such as "constructor", broke the other browsers)
 const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) ? s : '');
-const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' ? w : '');
+const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w === 'watch' ? w : '');
+// whom a spectator watches (Martin, 2026-11-23): another player's id, short letters and digits only
+const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
 const MAX_SOCKETS = 150;          // everyone with the game open
 const MAX_SOCKETS_IP = 12;        // from one address (a household, a LAN party)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
+const KUDOS_GAP = 30000, KUDOS_MAX = 8;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 3;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
@@ -191,11 +194,13 @@ export class Lobby extends DurableObject {
     return t0 > 0 && t0 <= Date.now() ? { t0, sid: m[2] } : null;
   }
 
-  players() {
+  // (forId: the player this list goes to; whom a spectator watches is told only to the one watched, and
+  // nobody learns who watches them: Martin 2026-11-23, spectating stays anonymous)
+  players(forId) {
     const out = [];
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}) });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(a.w === 'watch' && a.on && a.on === forId ? { on: a.on } : {}) });
     }
     return out;
   }
@@ -215,11 +220,13 @@ export class Lobby extends DurableObject {
     }
   }
 
-  broadcast(msg, except) {
+  // (only: { id, msg }, the one player who gets msg instead)
+  broadcast(msg, except, only) {
     const s = typeof msg === 'string' ? msg : JSON.stringify(msg);
+    const o = only && JSON.stringify(only.msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
-      try { ws.send(s); } catch { /* closing */ }
+      try { ws.send(o && ws.deserializeAttachment()?.id === only.id ? o : s); } catch { /* closing */ }
     }
   }
 
@@ -501,10 +508,11 @@ export class Lobby extends DurableObject {
       // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
       const ghost = !!m.ghost || !!me?.ghost;
       const w = cleanWhere(m.w) || me?.w;
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}) };
+      const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
-      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), board: this.board() }));
-      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
+      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players(id).filter((p) => p.id !== id), board: this.board() }));
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws, on ? { id: on, msg: { t: 'join', id, name, car: a.car, w, on } } : null); this.race.back(a); }
       this.race.sendTo(ws);
       return;
     }
@@ -521,11 +529,20 @@ export class Lobby extends DurableObject {
       me.car = car; ws.serializeAttachment(me);
       if (!me.ghost) { this.broadcast({ t: 'car', id: me.id, car }, ws); this.race.changed(me); }
     } else if (m.t === 'at') {
-      // where a player is (map, garage, away in another tab), for the others' lists (Martin, 2026-11-23)
-      const w = cleanWhere(m.w);
-      if (!w || w === me.w) return;
-      me.w = w; ws.serializeAttachment(me);
-      if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w }, ws);
+      // where a player is (map, garage, away in another tab), for the others' lists (Martin, 2026-11-23);
+      // 'watch' with on: following another player's car as a spectator
+      const w = cleanWhere(m.w), on = w === 'watch' ? cleanOn(m.on) : '';
+      if (!w || (w === me.w && on === (me.on || ''))) return;
+      me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
+      // (everyone hears "watching"; only the watched player hears it is them, and not by whom: see players())
+      if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w }, ws, on ? { id: on, msg: { t: 'at', id: me.id, w, on } } : null);
+    } else if (m.t === 'ku') {
+      // a thumbs up for another player (Martin, 2026-11-23): told to everyone, sender too, since all who are
+      // near see it as a sign in the receiver's back window (src/kudos.js). Not from or to a ghost or oneself.
+      const to = cleanOn(m.to);
+      if (me.ghost || !to || to === me.id || !this.players().some((p) => p.id === to)) return;
+      if (this.over(`k|${me.id}`, KUDOS_MAX, 60000) || this.over(`k|${me.id}|${to}`, 1, KUDOS_GAP)) return;
+      this.broadcast({ t: 'ku', id: me.id, to });
     }
   }
 

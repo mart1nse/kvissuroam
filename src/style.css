@@ -819,5 +819,5 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 .vt.on::after { content: ''; position: absolute; left: 34%; top: 16%; width: 24%; height: 46%; border: solid #06301a; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 #roster li .vt { margin-right: 6px; }
 /* the car each player drives, short, after the name (Martin, 2026-11-23) */
-#people small.car, #roster small.car { margin-left: .35em; font-size: .78em; font-weight: 700; letter-spacing: .06em; color: var(--cyan); opacity: .8; }
-#roster li small.car { font-size: 10px; letter-spacing: .06em; margin-left: 5px; }
+#people small.car, #roster small.car { margin-left: .4em; font-size: .85em; font-weight: 400; font-style: italic; letter-spacing: .04em; color: #fff; opacity: .82; }
+#roster li small.car { font-size: 11px; letter-spacing: .06em; margin-left: 5px; }

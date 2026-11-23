@@ -149,11 +149,18 @@ export class SquealCore {
 // etc, add some realistic sounds to it. A few smaller stones hitting the wheel wells, the tyre in the sand
 // sound etc."). Four layers, all from the same inputs (how hard the tyres spin, the tread's speed over the
 // ground, the car's speed, and the ground: 2 gravel, 3 dirt or sand, 0 grass):
-//  - Stones in the wheel arches. A spinning tyre flings stones up into the arch: each one a short knock,
-//    most against the plastic liner (a dull tok, 0.9 to 2.4 kHz, gone in 5 to 12 ms), some on bare metal
-//    (a ping, 2 to 5 kHz, ringing 20 to 50 ms). Their sizes are mostly small with the odd big one, and they
-//    often come in a little spray of two or three. How many: up to about 45 a second at full spin on
-//    gravel, a few on dirt, hardly any on grass; a fast car on gravel throws the odd one without spinning.
+//  - Stones in the wheel arches. A spinning tyre flings what it digs up into the arch. Nothing in there
+//    rings like glass: the arch is lined with soft plastic, and a stone hitting it is a knock whose colour is
+//    set by the stone. Sizes follow a sieve curve: many grains of grit for every pea, many peas for every
+//    walnut. How bright a knock is follows how long the stone stays in contact (a Hertz contact: a grain of
+//    grit bounces off in a tenth of a millisecond and ticks, a walnut-sized stone takes about a
+//    millisecond and thumps), and how loud follows its weight. The liner has so many close, damped modes
+//    that it answers as a burst of noise dying in a few ms (a knock, never a note), and the box of air in
+//    the arch adds a hollow thud at 150 to 220 Hz that only the big ones wake. Now and then one strikes the
+//    bare sill or the underbody: lower, a little longer, a dull tunk, never a ping.
+//    Stones come in bunches: a big one brings grit with it. Up to about 70 a second at full spin on gravel
+//    (most of them grit), fewer and smaller on dirt, where clods of earth thud in as well, and on grass
+//    mostly clods and turf, soft and low. A fast car on gravel throws the odd stone without spinning.
 //  - The dig. The tread tearing through the loose top: a dense crackle of thousands of tiny grain
 //    collisions, brighter on gravel, duller and softer in sand, scrabbling in bursts.
 //  - The spray. The cloud of grit and sand thrown back: a rushing hiss, lower and rounder in sand ("the tyre
@@ -168,21 +175,23 @@ function ring(f, tau, sr) {
 }
 
 const GROUND = {
-  // stones a second at full spin, how big they come, crackle grains a second, crackle colour, spray band and
-  // loudness (sand roars more), the fine shower
-  2: { stones: 45, size: 1, grains: 2600, dig: 1900, digQ: 0.8, dull: 5200, spray: 900, sprayQ: 0.55, sprayG: 1, churn: 0.35, fine: 1 },
-  3: { stones: 8, size: 0.6, grains: 1500, dig: 1100, digQ: 0.6, dull: 2400, spray: 420, sprayQ: 0.5, sprayG: 1.8, churn: 0.6, fine: 0.4 },
-  0: { stones: 1.5, size: 0.4, grains: 700, dig: 900, digQ: 0.6, dull: 2000, spray: 650, sprayQ: 0.6, sprayG: 0.8, churn: 0.4, fine: 0.1 },
+  // stones a second at full spin; their sizes in mm (smallest, largest, and the slope of the sieve curve:
+  // higher is more grit); the share that are clods of earth (soft: long contact, no crack); crackle grains a
+  // second, crackle colour, spray band and loudness (sand roars more), the fine shower, and the whole (soft
+  // ground is quieter by nature, and was lost under the engine in a park: Martin 2026-11-23)
+  2: { stones: 70, dMin: 2, dMax: 30, slope: 2.6, clods: 0, grains: 2600, dig: 1900, digQ: 0.8, dull: 5200, spray: 900, sprayQ: 0.55, sprayG: 1, churn: 0.35, fine: 1, gain: 1 },
+  3: { stones: 28, dMin: 1.5, dMax: 16, slope: 2.9, clods: 0.35, grains: 1500, dig: 1100, digQ: 0.6, dull: 2400, spray: 420, sprayQ: 0.5, sprayG: 1.8, churn: 0.6, fine: 0.4, gain: 1.25 },
+  0: { stones: 16, dMin: 3, dMax: 25, slope: 2.4, clods: 0.85, grains: 900, dig: 800, digQ: 0.6, dull: 1800, spray: 520, sprayQ: 0.6, sprayG: 1.1, churn: 0.5, fine: 0.1, gain: 1.6 },
 };
 
 export class GravelCore {
   constructor(sr, seed = 1) {
     this.sr = sr;
     this.seed = (seed * 2246822519) >>> 0 || 7;
-    this.hits = [];                        // ringing stones: up to 8 at once, 3 modes each
-    for (let i = 0; i < 8; i++) this.hits.push({ m: [ring(1000, 0.01, sr), ring(1000, 0.01, sr), ring(1000, 0.01, sr)], a: [0, 0, 0], left: 0, x: 0 });
+    this.hits = [];                        // stones sounding: up to 10 at once
+    for (let i = 0; i < 10; i++) this.hits.push({ bp: new Bq(), lp: new Bq(), thud: ring(180, 0.012, sr), left: 0, t: 0, tc: 1, amp: 0, e: 0, dec: 0, thudA: 0, kick: 0, crack: 0 });
     this.next = 0;
-    this.queue = [];                       // followers of a spray: [samples to wait, size, metal]
+    this.queue = [];                       // the grit that comes with a stone: [samples to wait, size mm]
     this.dig = new Bq(); this.dull = new Bq(); this.spray = new Bq(); this.sprayLp = new Bq();
     this.fine = ring(780, 0.004, sr); this.fine2 = ring(1350, 0.003, sr);
     this.hp = new Bq().set('hp', 90, 0.6, sr); this.top = new Bq().set('lp', 9000, 0.7, sr);
@@ -192,23 +201,48 @@ export class GravelCore {
     this.ground = -1;
     this.p = { amount: 0, slip: 0, speed: 0, ground: 2, level: 1 };
     // the layers' share: stones, dig, spray, fine shower (tools solo them to set the balance)
-    this.mix = [0.43, 3.1, 1.2, 0.14];
+    this.mix = [9, 3.1, 1.2, 0.14];
+    // a stone's knock: the liner's burst, the arch's thud, the crack
+    this.knock = [1, 0.5, 1];
   }
   rnd() { let x = this.seed; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.seed = x >>> 0; return this.seed / 4294967296; }
   set(p) { Object.assign(this.p, p); }
-  strike(size, metal) {
+  // a stone of d mm (soft: a clod of earth) strikes the arch
+  strike(d, soft) {
     let h = this.hits[0];
     for (const c of this.hits) if (c.left < h.left) h = c;
     const sr = this.sr, R = () => this.rnd();
-    const f = metal ? 2000 + 3000 * R() : 900 + 1500 * R(), tau = metal ? 0.02 + 0.03 * R() : 0.005 + 0.007 * R();
-    const ratios = [1, 1.5 + 0.35 * R(), 2.3 + 0.6 * R()];
-    for (let k = 0; k < 3; k++) {
-      const m = ring(Math.min(sr * 0.42, f * ratios[k]), tau / (1 + 0.6 * k), sr);
-      h.m[k].c1 = m.c1; h.m[k].c2 = m.c2; h.m[k].g = m.g; h.m[k].y1 = 0; h.m[k].y2 = 0;
-      h.a[k] = size * (k === 0 ? 1 : k === 1 ? 0.55 * R() + 0.2 : 0.35 * R() + 0.1) * (metal ? 0.7 : 1);
+    // contact time: 0.13 ms for a 2 mm grain up to about 1.2 ms for a 30 mm stone, four times that for a clod
+    const tc = 0.00013 * Math.pow(d / 2, 0.85) * (soft ? 4 : 1) * (0.8 + 0.4 * R());
+    h.tc = Math.max(2, Math.round(tc * sr)); h.t = 0;
+    // its push: grows with the stone's weight, flattened (a 30 mm stone is not 3000 times a 2 mm grain to the
+    // ear) and scattered by how fast it was thrown
+    h.amp = Math.pow(d / 30, 1.0) * (0.45 + 0.55 * R()) * (soft ? 0.7 : 1);
+    // The liner answers with a short burst of its many close modes (heard as a knock, not a note): noise
+    // dying away in a few ms, centred where the stone hits hardest (3.5 kHz for grit, about 1 kHz for a
+    // big stone, lower for a clod) and cut above what so long a contact can excite.
+    // (one in twelve stones finds the bare steel instead: lower, narrower and longer, still dull)
+    const steel = !soft && R() < 0.08;
+    const fc = (soft ? 900 : 3600) * Math.pow(d / 2, -0.42) * (0.85 + 0.3 * R()) * (steel ? 0.6 : 1);
+    h.bp.set('bp', fc, steel ? 1.6 : 0.6, sr); h.bp.z1 = h.bp.z2 = 0;
+    h.lp.set('lp', Math.min(9000, 1.3 / tc), 0.6, sr); h.lp.z1 = h.lp.z2 = 0;
+    const tau = (soft ? 0.006 : 0.0018 + 0.0045 * Math.sqrt(d / 30)) * (0.8 + 0.4 * R()) * (steel ? 2.2 : 1);
+    h.dec = Math.exp(-1 / (tau * sr)); h.e = 0;
+    // the box of air in the arch, a hollow thud only the big ones (and clods) wake
+    const th = ring(150 + 70 * R(), 0.01 + 0.006 * R(), sr);
+    h.thud.c1 = th.c1; h.thud.c2 = th.c2; h.thud.g = th.g; h.thud.y1 = 0; h.thud.y2 = 0;
+    h.kick = 1.6 / h.tc;                   // (the thud takes the blow as a whole, its length does not matter)
+    h.thudA = soft ? 0.5 : Math.max(0, Math.min(1, (d - 6) / 18)) * 0.45;
+    // the crack of the contact itself (none from a clod)
+    h.crack = soft ? 0 : 0.12;
+    h.left = h.tc + Math.round(Math.max(tau * 7, 0.05) * sr);
+  }
+  // a stone size from the sieve curve (a power law between the ground's smallest and largest)
+  stoneSize(g) {
+    for (;;) {
+      const d = g.dMin * Math.pow(1 - this.rnd() * 0.9999, -1 / (g.slope - 1));
+      if (d <= g.dMax) return d;
     }
-    h.left = Math.round(tau * sr * 7);
-    h.x = Math.round(0.0003 * sr) + 1;     // the knock itself: a burst of a third of a millisecond
   }
   process(out) {
     const n = out.length, p = this.p, sr = this.sr;
@@ -234,21 +268,27 @@ export class GravelCore {
         this.next -= 1;
         if (this.next <= 0) {
           this.next = -Math.log(1 - this.rnd() * 0.999) / rate * sr;
-          const r = this.rnd(), size = g.size * (0.15 + 0.85 * r * r * r) * Math.min(1, 0.4 + amount);
-          this.strike(size, this.rnd() < 0.3);
-          if (this.rnd() < 0.3) for (let k = 1 + (this.rnd() < 0.4 ? 1 : 0); k > 0; k--) this.queue.push([Math.round((0.005 + 0.035 * this.rnd()) * sr), size * (0.3 + 0.5 * this.rnd()), this.rnd() < 0.3]);
+          const soft = this.rnd() < g.clods;
+          // the harder the spin, the bigger what it can lift
+          const d = this.stoneSize(g) * (0.55 + 0.45 * Math.min(1, 0.3 + amount));
+          this.strike(d, soft);
+          // a bigger stone brings a little grit with it
+          if (d > 6 && this.rnd() < 0.6) for (let k = 1 + Math.floor(this.rnd() * 3); k > 0; k--) this.queue.push([Math.round((0.002 + 0.03 * this.rnd()) * sr), g.dMin * (1 + 1.5 * this.rnd())]);
         }
-        for (let q = this.queue.length - 1; q >= 0; q--) if (--this.queue[q][0] <= 0) { const [, sz, mt] = this.queue[q]; this.queue.splice(q, 1); this.strike(sz, mt); }
+        for (let q = this.queue.length - 1; q >= 0; q--) if (--this.queue[q][0] <= 0) { const sz = this.queue[q][1]; this.queue.splice(q, 1); this.strike(sz, false); }
       }
       let st = 0;
+      const W = this.knock;
       for (const h of this.hits) {
         if (h.left <= 0) continue;
         h.left--;
-        const x = h.x > 0 ? (h.x--, this.rnd() * 2 - 1) : 0;
-        for (let k = 0; k < 3; k++) {
-          const m = h.m[k], y = m.c1 * m.y1 + m.c2 * m.y2 + x * m.g;
-          m.y2 = m.y1; m.y1 = y; st += y * h.a[k];
-        }
+        // the push: half a sine as long as the contact; the liner's burst swells with it and then dies away
+        let x = 0;
+        if (h.t < h.tc) { x = Math.sin(Math.PI * h.t / h.tc); h.e = Math.max(h.e, x); h.t++; } else h.e *= h.dec;
+        const knock = h.lp.run(h.bp.run((this.rnd() * 2 - 1) * h.e));
+        const th = h.thud, v = th.c1 * th.y1 + th.c2 * th.y2 + x * h.kick * th.g;
+        th.y2 = th.y1; th.y1 = v;
+        st += (knock * W[0] + v * h.thudA * W[1] + x * h.crack * W[2]) * h.amp;
       }
       // the dig: sparse random grains, scrabbling in bursts
       this.scrab += (this.rnd() * 2 - 1 - this.scrab) * this.kScrab;
@@ -265,7 +305,7 @@ export class GravelCore {
       const fine = (y1 + y2 * 0.7) * g.fine;
       const e = this.env;
       const M = this.mix;
-      out[i] = this.top.run(this.hp.run(st * M[0] * Math.min(1, 0.3 + e * 1.5) + (dig * M[1] + sp * M[2] * g.sprayG + fine * M[3]) * e)) * 0.5 * p.level;
+      out[i] = this.top.run(this.hp.run(st * M[0] * Math.min(1, 0.3 + e * 1.5) + (dig * M[1] + sp * M[2] * g.sprayG + fine * M[3]) * e)) * 0.5 * g.gain * p.level;
     }
   }
 }

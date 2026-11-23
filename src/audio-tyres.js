@@ -128,8 +128,9 @@ export function createSqueal(ctx, noise, out, { voices = 2 } = {}) {
 // ---- wheelspin on loose ground: stones in the arches, the tread digging, the spray, the grit shower
 // (public/tyre-worklet.js 'gravel-spin'; Martin 2026-11-23). ground: the physics surface class (0 grass,
 // 2 gravel, 3 dirt; anything else is silent). The node is made when the worklet is in and does no work
-// while nothing spins on loose ground.
-export const GRAVEL_LEVEL = 0.08;
+// while nothing spins on loose ground. GRAVEL_LEVEL 0.08 at first was lost under the engine in play (Martin
+// 2026-11-23, an M3 in a park); now the M3's gravel burnout is 7-9 dB under the mix A-weighted, the 190E's 1-5.
+export const GRAVEL_LEVEL = 0.2;
 export function createGravel(ctx, out) {
   let node = null, P = null, live = false;
   function make() {

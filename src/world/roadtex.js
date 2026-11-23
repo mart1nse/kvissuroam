@@ -10,6 +10,7 @@ import * as THREE from 'three';
 
 const KERBED = new Set(['Tänav', 'Põhimaantee', 'Tugimaantee', 'Kõrvalmaantee', 'Ramp või ühenduste']);
 const TONE0 = [183, 136];                    // typical Tartu street in the photo: brightness, 128 + (red - blue)
+const DIRT_TONE = 8;                         // tone red on a bare earth road (anything paved is far brighter)
 const RUTTED = 8.6;                          // gravel roads up to this wide (ETAK) get wheel tracks (one car wide: up to 4.6)
 
 // gravel roads that keep no painted wheel tracks of their own (the Raadi rally stage lays its own along the racing line)
@@ -136,9 +137,12 @@ export function createRoadPainter(world, size) {
     const [tv, tctx] = canvas(n2, s);
     tctx.fillStyle = toneOf(null, false);
     tctx.fillRect(s.x0, s.z0, S, S);
+    // (bare earth roads are marked by a near-black red in the tone: the ground shader draws them as darker
+    // soil, Martin 2026-11-23: "Dirt (bare earth) should then be darker than gravel")
     for (const r of e.roads) {
-      if ((r.s !== 2 && r.s !== 3) || r.w > RUTTED || unrutted(r)) continue;
-      tctx.strokeStyle = `rgb(${TONE0[0]},${TONE0[1]},${Math.round(r.w * 2)})`;
+      const ruts = r.w <= RUTTED && !unrutted(r);
+      if ((r.s !== 2 && r.s !== 3) || (!ruts && r.s !== 3)) continue;
+      tctx.strokeStyle = `rgb(${r.s === 3 ? DIRT_TONE : TONE0[0]},${TONE0[1]},${ruts ? Math.round(r.w * 2) : 0})`;
       tctx.lineWidth = r.w + 6;
       line(tctx, r.pts);
       tctx.stroke();

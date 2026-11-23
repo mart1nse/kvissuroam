@@ -16,6 +16,11 @@ const R = 0.6, H = 1.2, MASS = 260, MU = 0.75, REST = 0, G = 9.81;   // (straw d
 const IY = 0.5 * MASS * R * R;                 // turning about its own axis
 const TIP = Math.atan2(R, H / 2);              // lean past which it falls over (45 degrees for this shape)
 const CORNER = 0.45;                           // how round the car's corners are taken to be (m)
+// The nose and the tail are bowed, not flat (Martin 23 Nov: a bale caught in front rode along on the bumper and
+// went the way he steered; it should drop off to the left or right quickly): the push leans outwards by this
+// much at the bumper's end, so a bale off the middle slides further off, faster the further out it is.
+const BOW = 0.75;
+const RUB = 0.12;                              // straw against paint: how much of the push can drag it sideways
 const BANNER_U = 0.4;                          // middle of the banner, as a share of the way round
 
 function baleTexture() {
@@ -151,7 +156,13 @@ export function createBales({ world, group, spots }) {
           const pf = hl - Math.abs(lf), pl = hw - Math.abs(ll);
           if (pf < pl) { nx = fx * Math.sign(lf || 1); nz = fz * Math.sign(lf || 1); pen = pf + rad; }
           else { nx = rx * Math.sign(ll || 1); nz = rz * Math.sign(ll || 1); pen = pl + rad; }
-        } else { nx = ox / d; nz = oz / d; pen = rad + CORNER - d; }
+        } else {
+          nx = ox / d; nz = oz / d; pen = rad + CORNER - d;
+          if (Math.abs(lf) > hl - CORNER && Math.abs(ll) < hw - CORNER) {
+            const k = BOW * ll / hw, l = Math.hypot(1, k);
+            nx = (nx + rx * k) / l; nz = (nz + rz * k) / l;
+          }
+        }
         if (pen > 0) {
           // where they touch, from the car's middle and from the bale's
           const ax = dx - nx * rad, az = dz - nz * rad, bx = -nx * rad, bz = -nz * rad;
@@ -164,7 +175,7 @@ export function createBales({ world, group, spots }) {
             const J = (1 + REST) * vn / (1 / Mc + 1 / MASS + (ca * ca) / Iz + (cb * cb) / IY);
             // the bale: off it goes, turning if it was caught off its middle; straw rubs along the bodywork too
             const tx = -nz, tz = nx, vt = (cvx - bvx) * tx + (cvz - bvz) * tz;
-            const Jt = Math.max(-0.35 * J, Math.min(0.35 * J, vt * MASS * 0.5));
+            const Jt = Math.max(-RUB * J, Math.min(RUB * J, vt * MASS * 0.5));
             b.vx += (J * nx + Jt * tx) / MASS; b.vz += (J * nz + Jt * tz) / MASS;
             b.wy += (cb * J + (bx * tz - bz * tx) * Jt) / IY;
             // caught by a corner of the car, off the car's middle: its near side is carried along and it spins round

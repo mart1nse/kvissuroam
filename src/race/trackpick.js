@@ -6,7 +6,6 @@ import TRACK from './track.json';
 import { stagePath, STAGE_KM } from './raadi.js';
 import { fmtTime, escapeHtml } from './race.js';
 
-const KEY = 'kvissuroam.track';
 
 // a circuit's outline as SVG path data, north up, in a box `size` across
 function loopPath(pts, size = 1000, pad = 60, step = 3, close = true) {
@@ -31,8 +30,11 @@ export const TRACKS = [
   { id: 'raadi', name: 'RAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi },
 ];
 
+// A fresh page always opens with Toomemägi picked (Martin 23 Nov: the last pick is not remembered); a link
+// with ?track=raadi opens with that one.
 export function pickedTrack() {
-  try { const t = localStorage.getItem(KEY); return TRACKS.some((x) => x.id === t) ? t : 'toome'; } catch { return 'toome'; }
+  const t = new URLSearchParams(location.search).get('track');
+  return TRACKS.some((x) => x.id === t) ? t : 'toome';
 }
 
 // record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null
@@ -67,7 +69,6 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) 
     b.blur();
     if (b.dataset.track === picked) return;          // (a click only picks: the lap times are on their own button, Martin 23 Nov)
     picked = b.dataset.track;
-    try { localStorage.setItem(KEY, picked); } catch { /* private mode */ }
     render();
     onPick?.(picked);
   });

@@ -15,6 +15,17 @@ function canvasTex(w, h, draw) {
 }
 
 // three chevrons pointing right, glowing pink on a faint dark plate
+// the finish halo's picture: a glowing cyan frame, fading upwards to pink (the lap's finish and the Raadi stage's)
+export function haloTex() {
+  return canvasTex(128, 64, (g, w, h) => {
+    const f = g.createLinearGradient(0, h, 0, 0);
+    f.addColorStop(0, 'rgba(47,243,255,0.55)'); f.addColorStop(0.55, 'rgba(47,243,255,0.22)'); f.addColorStop(1, 'rgba(255,43,214,0.18)');
+    g.fillStyle = f; g.fillRect(0, 0, w, h);
+    g.shadowColor = '#2ff3ff'; g.shadowBlur = 8; g.strokeStyle = '#2ff3ff'; g.lineWidth = 6;
+    g.strokeRect(4, 4, w - 8, h - 8);
+  });
+}
+
 export function chevronTex() {
   return canvasTex(512, 192, (g, w, h) => {
     g.fillStyle = 'rgba(18,6,43,0.35)';
@@ -242,13 +253,7 @@ export function createDecor(track, world) {
     }
     // the finish halo (online race, Martin 2026-11-21): a glowing frame from the road up to the
     // banner, shown while a race is on its way to the finish; one small texture, one plane
-    const ht = canvasTex(128, 64, (g, w, h) => {
-      const f = g.createLinearGradient(0, h, 0, 0);
-      f.addColorStop(0, 'rgba(47,243,255,0.55)'); f.addColorStop(0.55, 'rgba(47,243,255,0.22)'); f.addColorStop(1, 'rgba(255,43,214,0.18)');
-      g.fillStyle = f; g.fillRect(0, 0, w, h);
-      g.shadowColor = '#2ff3ff'; g.shadowBlur = 8; g.strokeStyle = '#2ff3ff'; g.lineWidth = 6;
-      g.strokeRect(4, 4, w - 8, h - 8);
-    });
+    const ht = haloTex();
     // up to the underside of the black START · FINISH banner (its centre H - 0.6, its height (width + 0.6) / 8)
     const hh = H - 0.6 - (width + 0.6) / 16;
     st.halo = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.6, hh), new THREE.MeshBasicMaterial({

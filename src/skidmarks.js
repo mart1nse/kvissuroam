@@ -138,9 +138,9 @@ float n1(float x) { float i = floor(x), f = fract(x); return mix(h1(i), h1(i + 1
 // across and along the mark (metres): a trough as wide as the tyre, the ground it pushed aside heaped beside it, and
 // the tread pressed into the bottom: blocks when the tyre rolls, combed lines when it slides.
 // q: x across the mark (-1 to 1), y along it in metres; D: depth; tH: half the tyre's share of the mark's width.
-float rutH(vec2 q, float D, float tH, float smear) {
+float rutH(vec2 q, float D, float tH, float smear, float wv) {
   float ax = abs(q.x), side = step(0.0, q.x);
-  float e = ax + (n1(q.y * 5.0 + side * 17.0) - 0.5) * 0.08 + (n1(q.y * 23.0 + side * 5.0) - 0.5) * 0.04;
+  float e = ax + ((n1(q.y * 5.0 + side * 17.0) - 0.5) * 0.08 + (n1(q.y * 23.0 + side * 5.0) - 0.5) * 0.04) * wv;
   float trough = 1.0 - smoothstep(tH - 0.16, tH + 0.02, e);
   float berm = exp(-pow((e - tH - 0.1) / 0.09, 2.0));
   float t = fract(q.y * 14.0 + ax * 0.7);
@@ -156,13 +156,15 @@ vec3 realMark(float a, vec3 tint, vec4 sk, float grass, vec2 gu, vec2 gv) {
   vec2 q = vec2(vUv.x * 2.0 - 1.0, vUv.y * TILE);
   float tH = mix(0.58, 0.48, grass);
   // grass tears open only in a hard slide, in patches; earth is dug all along
-  float chunk = 0.6 * n1(q.y * 2.4 + 11.0) + 0.4 * n1(q.y * 9.0 + 3.0);
-  float torn = grass > 0.5 ? smoothstep(0.75, 1.15, d * (0.4 + 0.9 * chunk) + (sk.g - 0.5) * 0.35 + (n1(q.y * 31.0 + q.x * 7.0) - 0.5) * 0.15) : 1.0;
-  float D = grass > 0.5 ? 0.003 + 0.01 * d + 0.03 * torn * d : 0.008 + 0.035 * d;
+  // grass (Martin 23 Nov 2026 evening: "more consistent, not a lot of variance"): one even rut whose depth and torn
+  // core follow the slide's strength alone, edges nearly straight; earth and gravel keep their wander
+  float torn = grass > 0.5 ? smoothstep(0.55, 0.95, d) : 1.0;
+  float D = grass > 0.5 ? 0.004 + 0.022 * d : 0.008 + 0.035 * d;
+  float wv = grass > 0.5 ? 0.3 : 1.0;
   float smear = smoothstep(0.25, 0.7, d);
-  float h0 = rutH(q, D, tH, smear);
-  float hx = (rutH(q + vec2(0.02, 0.0), D, tH, smear) - rutH(q - vec2(0.02, 0.0), D, tH, smear)) / 0.04;
-  float hv = (rutH(q + vec2(0.0, 0.01), D, tH, smear) - rutH(q - vec2(0.0, 0.01), D, tH, smear)) / 0.02;
+  float h0 = rutH(q, D, tH, smear, wv);
+  float hx = (rutH(q + vec2(0.02, 0.0), D, tH, smear, wv) - rutH(q - vec2(0.02, 0.0), D, tH, smear, wv)) / 0.04;
+  float hv = (rutH(q + vec2(0.0, 0.01), D, tH, smear, wv) - rutH(q - vec2(0.0, 0.01), D, tH, smear, wv)) / 0.02;
   vec2 eye = vW.xz - cameraPosition.xz;
   float dist = length(eye);
   // the slope on the ground (fades out far away, where it would only shimmer)
@@ -173,17 +175,17 @@ vec3 realMark(float a, vec3 tint, vec4 sk, float grass, vec2 gu, vec2 gv) {
   float ao = 1.0 - 0.3 * clamp(-h0 / 0.04, 0.0, 1.0);
   // what the ground is made of where it is
   float ax = abs(q.x);
-  float trough = 1.0 - smoothstep(tH - 0.12, tH + 0.04, ax + (sk.g - 0.5) * 0.12);
+  float trough = 1.0 - smoothstep(tH - 0.12, tH + 0.04, ax + (sk.g - 0.5) * 0.12 * wv);
   float berm = exp(-pow((ax - tH - 0.1) / 0.1, 2.0));
   vec3 base; float wet;
   if (grass > 0.5) {
-    // crushed blades: darker and a little greener where the tyre pressed them; soil where the turf tore, wet and dark
-    // at the bottom, crumbs of it on the turf thrown up beside
+    // crushed blades the width of the tyre, evenly a shade darker; in a harder slide a steady core of soil down the
+    // middle of it, wet and dark, as even as the slide
     vec3 crushed = mix(one, vec3(0.88, 0.9, 0.8), trough * (0.35 + 0.65 * smoothstep(0.0, 0.6, d)));
-    float soil = smoothstep(0.3, 0.6, torn * trough + (sk.g - 0.5) * 0.5) * step(0.02, torn);
-    float crumbs = smoothstep(0.55, 0.8, sk.g) * berm * torn;
-    vec3 earth = tint * (0.9 + 0.5 * sk.g);
-    base = mix(mix(crushed, tint * 1.25, crumbs), earth, soil);
+    float core = 1.0 - smoothstep(tH * 0.5, tH * 0.72, ax + (sk.g - 0.5) * 0.04);
+    float soil = 0.85 * torn * core;
+    vec3 earth = tint * (1.0 + 0.2 * sk.g);
+    base = mix(crushed, earth, soil);
     wet = soil;
   } else {
     // earth and gravel: the bottom pressed smooth and a shade darker, the loose stuff pushed up lighter, stones in it
@@ -196,7 +198,7 @@ vec3 realMark(float a, vec3 tint, vec4 sk, float grass, vec2 gu, vec2 gv) {
   // clods thrown out in a hard slide: little lumps lit on the sun's side, each with its shadow
   vec2 cg = vec2(vUv.x * 6.0, vUv.y * 14.0), ci = floor(cg), cf = fract(cg) - 0.5;
   float ha = fract(sin(dot(ci, vec2(41.3, 289.1))) * 43758.5453), hb = fract(sin(dot(ci, vec2(17.7, 113.9))) * 23421.631);
-  float p = 0.35 * smoothstep(0.6, 1.0, d) * smoothstep(0.3, 0.8, ax) * (grass > 0.5 ? smoothstep(0.2, 0.6, torn) : 1.0);
+  float p = grass > 0.5 ? 0.0 : 0.35 * smoothstep(0.6, 1.0, d) * smoothstep(0.3, 0.8, ax);   // (none on grass: kept even)
   if (hb < p) {
     vec2 cq = (cf - (vec2(ha, hb) - 0.5) * 0.4) * vec2(7.0, 10.0);
     float r = 1.2 + 2.2 * fract(ha * 7.13);

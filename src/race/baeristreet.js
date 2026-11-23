@@ -124,8 +124,13 @@ export function baeriStreetWalls(walls) {
   ]);
 }
 
-// the iron fence round the Vallikraavi bend: lap indexes, metres outside the road edge on the left
+// the iron fence round the Vallikraavi bend: lap indexes, metres outside the road edge on the left (the lawn
+// verge and the map trees moved behind it still follow these)
 const FENCE = { i0: 243, i1: 286, off: 4.1 };
+// the fence itself is straight, not round (Martin's red line, 23 Nov, and the street view of 17 Vallikraavi):
+// it runs along the road from i1 back to the bend (on the line through i1 and `from`), carries straight on past
+// the corner across the hollow to far[0], then turns up the hill to far[1]. Nothing on the left before the corner
+const FENCE_LINE = { from: 266, far: [[1128.9, 3145.5], [1118.6, 3168.6]] };
 // the left side of Baeri past the tennis courts, from Martin's Street View (19 Nov): granite kerb, a strip of
 // grass with the trees in it, then a grey brick footpath with an odd red brick. gap: grass width (m) beyond
 // the kerb, widening down the hill
@@ -694,9 +699,19 @@ export function createBaeriStreet(world, group, { shadows = true } = {}) {
       railFence(edge(222.5, 229.5, -1, 2.3, 2.0));
       // shrubs by the no-entry sign where the path climbs the hill
       for (const [i, o] of [[214, 2.6], [215, 3.2], [216, 2.4]]) K.shrub(...T(i, hw(i) + o), 0.9, COL.hedge[i % 3], 0.9);
-      // the old iron fence on concrete posts round the bend and on towards Baeri
+      // the old iron fence on concrete posts from the bend on towards Baeri, in straight runs (FENCE_LINE)
       // solid, and back in the grass behind a verge as in the street view (Martin, 19 Nov)
-      ironFence(edge(FENCE.i0, FENCE.i1, -1, FENCE.off, 2.7), { solid: true });
+      {
+        const E = T(FENCE.i1, -(hw(FENCE.i1) + FENCE.off)), M = T(FENCE_LINE.from, -(hw(FENCE_LINE.from) + FENCE.off));
+        const l = Math.hypot(M[0] - E[0], M[1] - E[1]), dx = (M[0] - E[0]) / l, dz = (M[1] - E[1]) / l;
+        const [f0, f1] = FENCE_LINE.far, d = (f0[0] - E[0]) * dx + (f0[1] - E[1]) * dz, A = [E[0] + dx * d, E[1] + dz * d];
+        const pts = [];
+        for (const [a, b] of [[E, A], [A, f1]]) {
+          const n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2.7));
+          for (let k = pts.length ? 1 : 0; k <= n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+        }
+        ironFence(pts, { solid: true });
+      }
       for (let i = FENCE.i0; i < FENCE.i1; i++) K.ribbon(F, i, i + 1, -(hw(i) + 2.4), -(hw(i) + 4.6), 'lawn');
       // the stone terraces in the hollow: rows of old steps on the slope
       {

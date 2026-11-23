@@ -151,11 +151,14 @@ export function createBoard({ mp, race, cars, order, stage, onTrack }) {
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
   }
   btn.addEventListener('click', show);
+  const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
   const record = (id) => {
-    if (id === 'raadi') { const r = stage.best().any; return r ? { ms: r.ms, name: mp.name } : null; }
-    return (mp.board?.allTime || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
+    if (id === 'raadi') { const r = stage.best().any; return r ? { ms: r.ms, name: mp.name, car: cars[r.car]?.short } : null; }
+    const r = least(mp.board?.allTime || []);
+    return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
   };
-  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, onOpenBoard: show, onPick: onTrack }) : null;
+  const mine = (id) => least(id === 'raadi' ? stage.runs : race.laps);
+  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack }) : null;
   if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => { if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden'); });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);

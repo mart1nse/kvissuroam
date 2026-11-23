@@ -99,6 +99,7 @@ export function createRoadMarkings(world) {
     const main = MAIN.has(r.type);
     if (!main && r.type !== 'Tänav') continue;
     if (r.nomark) continue;                               // the real road has no lines here (src/world/lounapaint.js)
+    if (r.s === 2 || r.s === 3) continue;                 // gravel and dirt carry no paint
     if (r.w < (main ? 5.5 : 6.4) || r.pts.length < 2) continue;
     level = r.e || 0;
     if (r.w >= 11.5) {

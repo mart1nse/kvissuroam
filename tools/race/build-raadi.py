@@ -212,7 +212,7 @@ while i < FIN:
             k = max(range(i, j + 1), key=lambda q: side * off[q]) if j > i else i
             k = max(range(i, j + 1), key=lambda q: abs(turn[q])) if abs(off[k]) < 0.5 else k
             nx, nz = -T[k][1] * side, T[k][0] * side
-            cone = bale_spot(c[k], nx, nz, hw[k] + 1.0)
+            cone = (c[k][0] + nx * (hw[k] + 1.0), c[k][1] + nz * (hw[k] + 1.0))
             apex.append([k, side, round(cone[0], 2), round(cone[1], 2), round(math.degrees(abs(total))), i])
         i = j + 1
     else: i += 1
@@ -221,6 +221,11 @@ keep = []
 for a in apex:
     if all(math.dist(a[2:4], b[2:4]) > 12 for b in keep): keep.append(a)
 apex = keep
+# (the bales are moved off the gravel only now: which corners count must not hang on that)
+for a in apex:
+    k, side = a[0], a[1]
+    q = bale_spot(c[k], -T[k][1] * side, T[k][0] * side, hw[k] + 1.0)
+    a[2], a[3] = round(q[0], 2), round(q[1], 2)
 print('apexes', [(a[0], a[1], a[4]) for a in apex])
 
 # ---- junctions: graph nodes on the route with paths leaving that the route does not take (at that pass)

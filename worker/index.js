@@ -48,6 +48,7 @@ const MAX_SOCKETS = 150;          // everyone with the game open
 const MAX_SOCKETS_IP = 12;        // from one address (a household, a LAN party)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
+const KUDOS_GAP = 30000, KUDOS_MAX = 8;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 3;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
@@ -530,6 +531,13 @@ export class Lobby extends DurableObject {
       if (!w || (w === me.w && on === (me.on || ''))) return;
       me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
       if (!me.ghost) this.broadcast({ t: 'at', id: me.id, w, ...(on ? { on } : {}) }, ws);
+    } else if (m.t === 'ku') {
+      // a thumbs up for another player (Martin, 2026-11-23): told to everyone, sender too, since all who are
+      // near see it as a sign in the receiver's back window (src/kudos.js). Not from or to a ghost or oneself.
+      const to = cleanOn(m.to);
+      if (me.ghost || !to || to === me.id || !this.players().some((p) => p.id === to)) return;
+      if (this.over(`k|${me.id}`, KUDOS_MAX, 60000) || this.over(`k|${me.id}|${to}`, 1, KUDOS_GAP)) return;
+      this.broadcast({ t: 'ku', id: me.id, to });
     }
   }
 

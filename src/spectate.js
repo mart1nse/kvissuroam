@@ -80,12 +80,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
 
   function lost(o, dt) {
     lostFor += dt;
-    // they watch somebody else now: follow along (watching us: back to our car)
-    if (o.w === 'watch' && o.on) {
-      if (o.on === mp.id) return stop(`${o.name.toUpperCase()} IS WATCHING YOU`);
-      const t = mp.remote(o.on);
-      if (t?.pose) { start(o.on); return; }
-    }
+    // (whom they watch, if they start watching too, is not told: spectating is anonymous)
     if (lostFor > LOST_S) stop(`${o.name.toUpperCase()} LEFT THE MAP`);
   }
 

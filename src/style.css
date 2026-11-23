@@ -484,6 +484,7 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #roster { position: absolute; left: max(10px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); max-height: 50vh; overflow: auto; min-width: 150px;
   padding: 10px 16px 12px; background: rgba(18, 6, 43, .78); border: none; border-radius: 16px; }
 #roster h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .2em; color: var(--cyan); }
+#roster h4.off { color: #ff9a3c; }
 #roster ul { list-style: none; margin: 0; padding: 0; }
 #roster li { padding: 5px 2px; font-size: 13px; font-weight: 700; color: #fff; cursor: pointer; white-space: nowrap; }
 #roster li b { color: #2ff3ff; margin-right: 6px; font-size: 11px; }

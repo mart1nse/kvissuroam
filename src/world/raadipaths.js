@@ -8,12 +8,18 @@
 //    broken, with a couple of patches. No zebra, lamp or tree stands on it;
 //  - the park road from that corner along the manor wall is gravel from a few metres in (the map has it as
 //    gravel too, but inside the same paving, which hid it: it showed as asphalt with a dashed centre line).
+//  - the gravel is wider than a path of one width where paths meet, round the outside of some bends and along
+//    the park road (`aprons`: 39 outlines, the photo's pale gravel that lies outside the drawn paths within 14 m
+//    of the rally stage, tools/race/raadi-gravel.py). Painted at the value a gravel path has at its edge, so no
+//    wheel track is laid on them.
 // The same list is read by tools/race/build-raadi.py, which routes the stage over these paths.
 import PATHS from './raadipaths.json';
-import { surfaceStrip, SURFACE } from './data.js';
+import { surfaceStrip, surfaceArea, SURFACE } from './data.js';
 
 for (const r of PATHS.add) surfaceStrip(r.pts, r.w / 2, SURFACE.GRAVEL);
 for (const g of PATHS.gravel) surfaceStrip(g.line, g.w / 2, SURFACE.GRAVEL);
+const APRONS = PATHS.aprons.map((a) => { const q = []; for (let i = 0; i < a.length; i += 2) q.push([a[i], a[i + 1]]); return q; });
+for (const q of APRONS) surfaceArea(q, SURFACE.GRAVEL);
 for (const p of PATHS.paved) surfaceStrip(p.pts, p.hw, SURFACE.PAVED);
 
 // the outline of a band w wide along a line
@@ -50,6 +56,7 @@ export function raadiRoads(vectors) {
     over.push({ cover: '#f00', outer });
     tone.push({ outer, tone: `rgb(${Math.round((cr + cg + cb) / 3)},${128 + cr - cb},0)` });
   }
+  for (const outer of APRONS) over.push({ cover: 'rgb(0,0,138)', outer });
   vectors.overPaint = [...(vectors.overPaint || []), ...over];
   vectors.toneOver = [...(vectors.toneOver || []), ...tone];
   for (const r of PATHS.add) vectors.roads.push({ ...r });

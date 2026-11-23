@@ -29,6 +29,7 @@ import { createStartKit } from './startkit.js';
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
 const BUILD_R = 600;                       // the stage's things are built within this of it
+const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
 // Appendix VII has the unit red from 30 s to go, yellow and counting for the last 5 s, green at zero. Here the
 // count is short so that a new try does not wait: "shorten the 5 sec countdown to 3 sec and let it be yellow
@@ -75,6 +76,10 @@ const BEND = (() => {
   return b;
 })();
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
+// How much wider than the path the gravel is inside each corner, m. The bale stands a metre off all the gravel
+// there (tools/race/build-raadi.py: off the corner's other arm, and off the wide gravel where paths meet), so
+// where it stands further in than a metre off this path's edge, the inside is judged from that much further in.
+const ROOM = new Map(STAGE.apex.map(([k, sd, bx, bz]) => [k, Math.max(0, ((bx - P[k][0]) * -TAN[k][1] + (bz - P[k][1]) * TAN[k][0]) * sd - 1 - HW[k])]));
 
 // nearest point of the stage between indices lo and hi: { i, d, lat } (lat: sideways, + right of travel)
 function nearestIn(x, z, lo, hi) {
@@ -198,7 +203,9 @@ function streakTex() {
 }
 
 // ---------------------------------------------------------------- the stage
-export function createStage({ world, scene, toast, place, onRun, wood }) {
+// bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
+// own) or null; online(): the server's board is known, so a time under that best is the stage record
+export function createStage({ world, scene, toast, place, onRun, wood, bestFor, online }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -372,7 +379,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
         }
       }
     };
-    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + APEX_PEN.at(-1)[0] + d));
+    for (const [k, sd] of STAGE.apex) limit(k, Math.min(N - 1, k + 5), (i, d) => sd * (HW[i] + ROOM.get(k) + APEX_PEN.at(-1)[0] + d));
     yield;
     for (const [e0, e1, sd] of ENTRY) limit(e0, e1, (i, d) => -sd * (HW[i] + WIDE_PEN.at(-1)[0] + d));
     yield;
@@ -661,15 +668,22 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
   }
 
   // ---- runs
+  // This browser's best: in the car, and in any. Only runs the server was sent count (they carry `inp`, since
+  // 23 Nov 2026 when it began to keep stage times): the ones from before were driven while the penalties were
+  // still being shaped and are on nobody's board, so they stay in the list of last runs and are no best.
   function best(carId) {
     let b = null, any = null;
-    for (const r of runs) { if (!any || r.ms < any.ms) any = r; if (r.car === carId && (!b || r.ms < b.ms)) b = r; }
+    for (const r of runs) { if (!r.inp) continue; if (!any || r.ms < any.ms) any = r; if (r.car === carId && (!b || r.ms < b.ms)) b = r; }
     return { car: b, any };
   }
+  const top = (carId) => (bestFor ? bestFor(carId) : best(carId).car);
+  let bestKey = '';
   function renderBest(carId, carShort) {
-    const { car: b } = best(carId);
+    const b = top(carId), key = `${carShort}|${b?.ms}|${b?.name}`;
+    if (key === bestKey) return;
+    bestKey = key;
     elCar.textContent = carShort;
-    elBest.innerHTML = b ? fmtTime(b.ms / 1000) : '<small>NO TIME YET</small>';
+    elBest.innerHTML = b ? `${fmtTime(b.ms / 1000)}${b.name ? ` <small>${escapeHtml(b.name)}</small>` : ''}` : '<small>NO TIME YET</small>';
   }
 
   // the lamps on the screen and on the clock at the line: 0 off, 1 red, 2 yellow, 3 green; n: the seconds to go
@@ -694,7 +708,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     st.phase = 'count';
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null;
+    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
     bales.reset();
     standBarriers();
     setBarriers(START, true);
@@ -731,7 +745,8 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
     // the car was moved by the player (map, H, R, garage): a run in progress ends
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
-    update(car, carId, carShort, dt) {
+    // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
+    update(car, carId, carShort, dt, inp = 'kb') {
       const x = car.x, z = car.z;
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
@@ -760,6 +775,10 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
       // a jump (map, H, R): the run ends
       if (st.prev && Math.hypot(x - st.prev.x, z - st.prev.z) > 40 && (st.phase === 'run' || st.phase === 'count')) cancel('STAGE CANCELLED');
       if (st.cool && dStart > 60) st.cool = false;
+      // gone from the park after a run (the garage's or the button's Toomemägi, the map, or driven off): the
+      // stage's time comes down. (Martin 23 Nov: "finished raadi, then from the garage chose toomemäe, and the
+      // raadi number stayed up", over the lap's clock.)
+      if (st.phase === 'done' && dMid > GONE_R) { st.phase = 'idle'; st.doneT = null; elMsg.textContent = ''; hideAgain(); }
 
       if (st.phase === 'idle' || st.phase === 'done') {
         // up to the start: onto the line
@@ -794,6 +813,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
       }
 
       if (st.phase === 'run') {
+        st.inpT[inp] = (st.inpT[inp] || 0) + (dt || 0);
         // progress along the stage: only forwards from where the car is, in a short window
         const w = nearestIn(x, z, st.prog - 6, st.prog + 40);
         const onIt = w.d < HW[w.i] + 6;
@@ -823,7 +843,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           const a0 = (st.prev.x - gx) * tx + (st.prev.z - gz) * tz, a1 = (x - gx) * tx + (z - gz) * tz;
           if (!(a0 < 0 && a1 >= 0)) break;
           const f = a0 / (a0 - a1), cx = st.prev.x + (x - st.prev.x) * f - gx, cz = st.prev.z + (z - st.prev.z) * f - gz;
-          const deep = (-cx * tz + cz * tx) * sd - HW[k];                    // inside the path's edge (+), outside it (-)
+          const deep = (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);       // inside the gravel's edge (+), outside it (-)
           if (deep > GATE_IN || deep < -2 * HW[k] - GATE_OUT) break;
           apexCut(k, deep);
           st.gate++;
@@ -835,7 +855,7 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           if (st.prog < k - 25 || st.prog > k + 8 || st.phase !== 'run') continue;
           const a = nearestIn(x, z, k - 8, k + 5);
           if (a.i < k || a.d * a.d - a.lat * a.lat > 2.25) continue;       // before the apex, or past the end of it
-          apexCut(k, a.lat * sd - HW[a.i]);
+          apexCut(k, a.lat * sd - HW[a.i] - ROOM.get(k));
         }
         // and too wide on the way in
         for (const [e0, e1, sd] of ENTRY) {
@@ -866,18 +886,22 @@ export function createStage({ world, scene, toast, place, onRun, wood }) {
           if (a < 0 && b >= 0 && st.gate < STAGE.apex.length) cancel('MISSED A CORNER · STAGE CANCELLED');
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
-            const { car: pb } = best(carId);
-            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road' };
+            // (the bests before this run: this browser's own in the car, and anyone's)
+            const { car: pb } = best(carId), all = top(carId);
+            const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
+            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road', inp: used };
             if (st.pen) run.pen = st.pen;
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);
             try { localStorage.setItem(KEY, JSON.stringify(runs)); } catch { /* private mode */ }
             const rec = !pb || run.ms < pb.ms;
+            // the car's stage record: under everyone's best there, when the server's board is at hand
+            const word = online?.() && (!all || run.ms < all.ms) ? 'STAGE RECORD' : 'YOUR BEST';
             st.phase = 'done'; st.cool = true; st.doneT = t;
-            elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}YOUR BEST</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
-            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ' · YOUR BEST' : ''}`, 4500);
+            elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}${word}</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
+            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ` · ${word}` : ''}`, 4500);
             showAgain();
-            onRun?.('finish', run);
+            onRun?.('finish', run, { rec, record: word === 'STAGE RECORD' });
           }
         }
       }

@@ -94,6 +94,7 @@ import { createNarva4, narva4Walls } from './world/narva4.js';
 import { createNarva5, narva5Walls } from './world/narva5.js';
 import { createNarva6, narva6Walls } from './world/narva6.js';
 import { createNarva7, narva7Walls } from './world/narva7.js';
+import { createAovere, aovereWalls } from './world/aovere.js';
 import { createUlikooliPaint, ulikooliPaintVectors } from './world/ulikoolipaint.js';
 import { createUlenurmePaint, ulenurmePaintVectors } from './world/ulenurmepaint.js';
 import { createTuru6, turu6Walls } from './world/turu6.js';
@@ -109,6 +110,7 @@ import { createUlenurme } from './world/ulenurme.js';
 import { createUlenurmeKonsum, ulenurmeKonsumWalls } from './world/ulenurmekonsum.js';
 import { createRoad3, road3PaintVectors } from './world/road3raadi.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
+import { createRaadiPark, raadiParkTrees } from './world/raadipark.js';
 import { createIsaJaPoeg } from './world/isapoeg.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { skipHidden, onePass } from './still.js';
@@ -314,7 +316,7 @@ let trackPicked = false;                // a track was picked on the start scree
 if (RAADI) setUnrutted(onStage);
 const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, aovere;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -422,7 +424,7 @@ async function boot() {
   emajoeVectors(world.vectors);                 // own lane lines and garden wall on Emajõe
   veskiRoads(world.vectors);                    // Veski paints its own line beside the red lane (after emajoeVectors, which starts the list of such stretches)
   kroonuaiaRoads(world.vectors);               // Kroonuaia and the Jakobi hill paint their own lines
-  raadiClearing(world);
+  raadiClearing(world); raadiParkTrees(world);
   raadiRoads(world.vectors);                    // Raadi park: the gravel cut-through the map lacks, gravel at the park road's mouth
   korveRoads(world.vectors);                    // road 210's fork and sweep where it meets the highway at Kõrveküla
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
@@ -492,6 +494,7 @@ async function boot() {
   ulikooli5Walls(world.walls);                  // Ülikooli from the town hall to Poe, Lossi up to Inglisild
   narvaWalls(world.walls);                      // Narva mnt by Võidu sild: Spark Hub, the Fortuuna tower, Narva 9
   narva7Walls(world.walls);                     // Narva mnt from Peetri kirik to Raadi Maxima
+  aovereWalls(world.walls);                     // the three houses on Aasa tee by the Haava junction
   narva6Walls(world.walls);                     // Narva mnt 86 to 149: the boarded and plastered houses up towards Peetri
   narva5Walls(world.walls);                     // Narva mnt 84 to 107: the student house, the Jüri church, the boarded houses
   narva4Walls(world.walls);                     // Ujula: the Coop Konsum block and the university sports hall
@@ -630,6 +633,7 @@ async function boot() {
   narva5 = createNarva5(scene, world, { shadows: !isTouch });
   narva6 = createNarva6(scene, world, { shadows: !isTouch });
   narva7 = createNarva7(scene, world, { shadows: !isTouch });
+  aovere = createAovere(scene, world, { shadows: !isTouch });
   ulikooliPaint = createUlikooliPaint(scene, world);
   ulenurmePaint = createUlenurmePaint(scene, world);
   turu6 = createTuru6(scene, world, { shadows: !isTouch });
@@ -645,6 +649,7 @@ async function boot() {
   ulenurmeKonsum = createUlenurmeKonsum(scene, world, { shadows: !isTouch });
   road3 = createRoad3(scene, world);
   kaluri = createKaluri(scene, world, { shadows: !isTouch });
+  raadiPark = createRaadiPark(scene, world, { lite: isTouch || !!xlow });   // the park's stones (its young trees: raadiParkTrees)
   isaJaPoeg = createIsaJaPoeg(scene, world, { shadows: !isTouch });   // the Isa ja poeg bronze at the first corner
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
@@ -741,6 +746,7 @@ async function boot() {
       people?.event(kind, name, old);
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
+    stage: RAADI,
     hotlap: () => ((!!race?.running || !!stage?.running) && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
@@ -760,7 +766,17 @@ async function boot() {
     },
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
-  if (RAADI) stage = createStage({ world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level) });
+  if (RAADI) stage = createStage({
+    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
+    // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
+    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }); if (info?.record) audio.chime?.('record'); } },
+    online: () => !!mp.board?.raadi,
+    bestFor: (id) => {
+      const net = mp.bestFor(id, 'raadi'), own = stage.best(id).car, mine = own && { ms: own.ms, name: mp.name };
+      return net && (!mine || net.ms <= mine.ms) ? net : mine;
+    },
+  });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
@@ -990,8 +1006,7 @@ function startDriving() {
 // again from a tap, so any tap while not in full screen asks for it again. That starts with the first
 // tap in the opening menu, where the browser's own bars leave the garage little room.
 // The FULL button in the top bar turns that off and on (and full screen on a computer). An iPhone has no
-// full screen for pages in any browser: there the button tells how to add the game to the Home Screen,
-// which opens it with no browser bars. Started from the Home Screen the button is not needed and hides.
+// full screen for pages, so it gets no button (Martin 23 Nov); nor does the game started from a Home Screen.
 let wantFull = isTouch, fullAsked = false;
 const fullOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
 function goFull() {
@@ -1005,10 +1020,8 @@ function goFull() {
 for (const ev of ['pointerup', 'touchend']) addEventListener(ev, () => { if (wantFull && !document.hidden) goFull(); }, { passive: true, capture: true });
 const canFull = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 const installed = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
-const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
-const fullBtn = $('#fullbtn'), fullHint = $('#fullhint');
-document.body.append(fullHint);            // over the pedals (the HUD's own layer is under them)
-if (!installed && (canFull || isIPhone)) {
+const fullBtn = $('#fullbtn');
+if (!installed && canFull) {
   fullBtn.classList.remove('hidden');
   document.body.classList.add('fullbtn');
   const mark = () => fullBtn.classList.toggle('on', fullOn());
@@ -1016,7 +1029,6 @@ if (!installed && (canFull || isIPhone)) {
   document.addEventListener('webkitfullscreenchange', mark);
 }
 function toggleFull() {
-  if (!canFull) { fullHint.classList.toggle('hidden'); return; }
   if (fullOn()) {
     wantFull = false;                       // a phone stops asking again on every tap until FULL is pressed again
     (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
@@ -1025,8 +1037,6 @@ function toggleFull() {
     goFull();
   }
 }
-// any tap closes the iPhone hint (the tap on FULL that opened it is the button's own)
-addEventListener('pointerdown', (e) => { if (!fullHint.classList.contains('hidden') && !e.target.closest?.('#fullbtn')) fullHint.classList.add('hidden'); }, true);
 
 let drivenOnce = false;
 // (in the garage Esc goes back to the car, once there is a drive to go back to; the lap times board
@@ -1637,7 +1647,7 @@ function frame(ts) {
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
     // Three streets coming due in one frame used to be one freeze of their sum.
     if (!jobs.resting) {
-      PLACES ||= [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7];
+      PLACES ||= [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, aovere];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];
@@ -1687,7 +1697,7 @@ function frame(ts) {
     }
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
-    stage?.update(car, carId, s0Short(), dt);
+    stage?.update(car, carId, s0Short(), dt, inpNow());
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });

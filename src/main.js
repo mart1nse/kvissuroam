@@ -728,7 +728,7 @@ async function boot() {
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
   });
-  people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z) });
+  people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks() });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },

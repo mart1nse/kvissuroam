@@ -360,6 +360,16 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     get holding() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
     get pin() { return pin; },
+    // the player lists' vote marks (Martin, 2026-11-23): while a vote has at least one vote in, who has
+    // voted and who may still vote; null otherwise. can(id): a start vote is everyone's, a restart only
+    // for racers still in.
+    voteMarks() {
+      const v = r?.vote;
+      if (!v || v.kind === 'none' || !v.ids?.length) return null;
+      const ids = new Set(v.ids);
+      const can = v.kind === 'restart' ? (id) => !!r.racers.find((x) => x.id === id && !x.out) : () => true;
+      return { kind: v.kind, key: `${v.kind}:${v.ids.join(',')}`, has: (id) => ids.has(id), can: (id) => can(id) && !(id === mp.id && mp.stealth) };
+    },
     // our lap timer finished a lap
     // a lap was completed (race.js); info.rec: it is a lap record for the car, info.prev: the best it beat
     lap(lap, info) {

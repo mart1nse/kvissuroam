@@ -811,3 +811,11 @@ body.touch #rlights { top: 30%; font-size: 13px; }
     bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + 6px);
     max-height: max(36px, 100vh - var(--tbh) - 8px - clamp(35px, 9.6vh, 45px) - 6px - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px) - clamp(72px, 24vh, 118px) - 6px); }
 }
+
+/* race vote marks in the player lists (Martin, 2026-11-23): a lit tick for voted, a faint ring for not yet;
+   only while a vote has votes in */
+.vt { position: relative; display: inline-block; flex: none; width: max(10px, .95em); height: max(10px, .95em);
+  margin: 0 .45em .1em 0; border-radius: 50%; vertical-align: middle; text-decoration: none; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .42); }
+.vt.on { background: #5dff9b; box-shadow: 0 0 6px rgba(93, 255, 155, .7); }
+.vt.on::after { content: ''; position: absolute; left: 34%; top: 16%; width: 24%; height: 46%; border: solid #06301a; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+#roster li .vt { margin-right: 6px; }

@@ -500,12 +500,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get count() { return others.size; },
     nameReady,
     // everyone else online, including those who have not sent a position yet
-    roster() { return [...others.values()].map((o) => ({ name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
+    roster() { return [...others.entries()].map(([id, o]) => ({ id, name: o.name, colour: o.colour, car: o.car, x: o.pose?.[0], z: o.pose?.[1] })); },
     // other players' cars that are sending right now, for sound, smoke and tyre marks (see effects())
     remotes() { return fxList; },
     // everyone counted as online, as the server counts them for a race vote: on the map, or off it
     // (garage, menu, another tab) for less than AWAY_S
-    drivers() { return [...others.values()].filter((o) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map((o) => ({ name: o.name, colour: o.colour })); },
+    drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, name: o.name, colour: o.colour })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);

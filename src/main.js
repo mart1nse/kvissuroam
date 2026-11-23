@@ -1393,6 +1393,11 @@ let back = null;                 // the half minute after coming back to the tab
 let rafLast = 0, rafMs = 1000 / 60, rafTick = 0;
 let crawl = 4;                              // frames in a row that took over 0.2 s (a crawl until the first quick frame: the start's own work is done at once)
 let PLACES = null, placeAt = 0;             // the places that build on approach, and which one is asked first
+// For the freeze count in the stats (src/stats.js): when the game was last somewhere a long frame is not a
+// freeze a player feels while driving (garage, GETTING READY, a jump or reset, the city map or options open,
+// another window in front, the tab hidden). A long frame counts only if the whole of it came after that.
+let quietAt = 0, frameTs = 0;
+for (const [t, ev] of [[window, 'blur'], [window, 'focus'], [document, 'visibilitychange']]) t.addEventListener(ev, () => { quietAt = performance.now(); });
 function frame(ts) {
   requestAnimationFrame(frame);
   const gap = ts - rafLast;
@@ -1405,6 +1410,8 @@ function frame(ts) {
   lag.poll();
   clock.update(ts);
   const rawDt = clock.getDelta();
+  const gapFrom = frameTs;
+  frameTs = ts;
   let dt = Math.min(rawDt, 0.05);
   if (settle > 0) {
     settle -= dt;
@@ -1417,10 +1424,15 @@ function frame(ts) {
   setup.update();
   padMenu();
   if (!car) return;
+  // (a frame that ends a quiet spell, or starts one, is not a felt freeze either)
+  if (mode !== 'drive' || readyOn || dropping || respawning || overlayOpen() || document.hidden || !document.hasFocus() || !world.ready(car.x, car.z)) quietAt = performance.now();
   // building work is spread over frames only while somebody drives and watches the road (src/jobs.js).
   // Not at a crawl either (under 5 frames a second for a while: drawing without a graphics card, a test taking
   // pictures): there a frame is too long to hide anything in, and the queue would take minutes.
   crawl = rawDt > 0.2 ? Math.min(crawl + 1, 8) : 0;
+  // (a freeze stands out from smooth driving: on a device crawling along at under 5 frames a second
+  // every frame is slow, which the frame rate in the stats already shows)
+  const felt = gapFrom > quietAt && crawl < 4;
   jobs.setLive(mode === 'drive' && !dropping && !document.hidden && crawl < 4 && world.ready(car.x, car.z));
 
   // hold the car still while the ground under it is still loading (after a jump across the map)
@@ -1503,7 +1515,7 @@ function frame(ts) {
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
   }
-  stats.frame({ mode, dt, raw: rawDt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
+  stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
 
   // ---- car visuals
   const s = car.spec;

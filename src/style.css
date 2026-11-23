@@ -1089,3 +1089,5 @@ body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
 @keyframes kusent { 0% { transform: scale(1.7); color: #fff; } 100% { transform: scale(1); } }
 /* phones: a finger-sized target around the small thumb */
 body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: -7px .1em -7px -6px; box-sizing: content-box; }
+/* a player someone is watching: the count after their name, for everyone (no names: Martin 2026-11-23) */
+#people small.wn, #roster small.wn { margin-left: .5em; font-size: .78em; font-weight: 800; font-style: normal; letter-spacing: .14em; color: var(--cyan); text-shadow: 0 0 6px rgba(47, 243, 255, .6); }

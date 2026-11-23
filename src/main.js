@@ -1411,7 +1411,8 @@ function setTyres(k) {
   if (car) car.tyres = tyres;
   try { localStorage.setItem('kvissuroam.tyres', tyres); } catch {}
   showTyres();
-  if (!changed) return;
+  // (not in the garage: its TYRES button already says it, and the note sat over DRIVE; Martin 23 Nov)
+  if (!changed || mode !== 'drive') return;
   tyreToast.innerHTML = `${tyreIcon(tyres)}<span>Tyres changed to: <b>${tyres}</b></span>`;
   tyreToast.className = `show ${tyres}`;
   clearTimeout(tyreToastT);

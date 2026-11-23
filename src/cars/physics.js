@@ -132,6 +132,7 @@ const SURF = [
   { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
+const WIDE_LOOSE = 0.5;          // wide road tyres off paving: grip 1 - (spec.grip - 1) x this
 // Gravel tyres (Martin 2026-11-23: road or gravel, picked in the garage or by the tyre icon on the tach):
 // narrow, soft, deep blocks that dig into loose ground and squirm on tarmac. The same table with more
 // bite on gravel, dirt and grass and less on paving, a softer, later-peaking tread on tarmac, and the
@@ -875,13 +876,18 @@ function substep(car, input, world, dt) {
   const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
   // (wide performance tyres: spec.grip scales every surface; on gravel tyres only a lower figure stays,
   // the bus's hard rubber, since every car gets the same kind of gravel tyre)
-  const tyre = car.tyres === 'gravel' ? Math.min(1, s.grip ?? 1) : s.grip ?? 1;
+  // Wide performance rubber only helps on paving: on loose ground and grass it floats on top instead of
+  // digging in, so it slips more than a narrow road tyre (WIDE_LOOSE of the extra grip is lost, not gained;
+  // Martin 2026-11-23). Hard tyres (grip under 1, the bus) are as poor everywhere.
+  const wide = car.tyres === 'gravel' ? Math.min(1, s.grip ?? 1) : s.grip ?? 1;
+  const looseWide = wide > 1 ? 1 - (wide - 1) * WIDE_LOOSE : wide;
+  const tyreF = surfF === 1 ? wide : looseWide, tyreR = surfR === 1 ? wide : looseWide;
   // No surface grips the same everywhere: dust, damp, ruts and worn patches a few metres across
   // (more on loose ground than on paving), so a slide or a donut never repeats itself exactly.
   const patch = (x, z, k) => 1 + k * (0.55 * Math.sin(x * 0.83 + Math.sin(z * 0.31) * 2.1) * Math.sin(z * 0.71 + 1.3) + 0.45 * Math.sin((x + z) * 0.37 + Math.sin(x * 0.19) * 1.7));
   const pF = patch(car.x + fx * car.a, car.z + fz * car.a, surfF === 1 ? 0.05 : 0.13);
   const pR = patch(car.x - fx * car.b, car.z - fz * car.b, surfR === 1 ? 0.05 : 0.13);
-  const capF = sf.mu * tyre * fzF * pF, capR = sr.mu * tyre * fzR * pR;
+  const capF = sf.mu * tyreF * fzF * pF, capR = sr.mu * tyreR * fzR * pR;
   // traction left on each driven axle once cornering has taken its share
   const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;

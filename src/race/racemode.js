@@ -285,6 +285,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       label = 'RACE ON'; cls = 'dim';
       const on = r.racers.filter(active).length;
       line = `${on} RACING · ${clock(t - r.tGreen)} / 7:00`;
+      // the winner is over the line (Martin 2026-11-24): finished, the rest still on their lap until 7:00
+      const win = r.racers.filter((x) => x.ms != null).sort((p, q) => p.ms - q.ms)[0];
+      if (win) {
+        label = 'RACE FINISHED'; cls = 'dim long';
+        line = `${isTouch ? '' : `${escapeHtml(win.name).toUpperCase()} WON · `}${on ? `${on} STILL ON THE LAP · ${clock(t - r.tGreen)} / 7:00` : 'ALL THROUGH'}`;
+      }
     }
     // ?off=100 (Martin 2026-11-22): never in the vote pool or a race; the button only tells what the others do
     // on a Raadi stage run: nothing but a small JOIN while a race starts or can still be joined

@@ -537,8 +537,12 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #lapsplit span { font-size: 10px; letter-spacing: .2em; color: var(--pink); }
 #lapsplit b { font-size: clamp(16px, 2.2vw, 24px); font-style: italic; font-weight: 900; color: #fff; }
 #lapsplit i { font-style: normal; font-size: clamp(15px, 2vw, 22px); font-weight: 900; }
-#lapsplit.ahead i { color: #5dff9b; text-shadow: 0 0 10px rgba(93, 255, 155, .7); }
-#lapsplit.behind i { color: #ff5a6e; text-shadow: 0 0 10px rgba(255, 90, 110, .7); }
+#lapsplit i.ahead { color: #5dff9b; text-shadow: 0 0 10px rgba(93, 255, 155, .7); }
+#lapsplit i.behind { color: #ff5a6e; text-shadow: 0 0 10px rgba(255, 90, 110, .7); }
+/* BEST and REC side by side, each with its small label (Martin 24 Nov) */
+#lapsplit i em, #lapmsg i em { font-style: normal; font-size: .42em; letter-spacing: .14em; color: #fff; opacity: .8; margin-right: .35em; vertical-align: .3em; text-shadow: none; }
+#lapmsg i em { font-size: .85em; vertical-align: 0; }
+#lapmsg i + i { margin-left: .6em; }
 #lapsplit.cut span { color: #ff5a6e; }
 #lapsplit.cut b { color: #ff5a6e; font-style: normal; text-shadow: 1px 1px 0 var(--ink), 0 0 12px rgba(255, 90, 110, .8); }
 body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: max(22%, calc(max(6px, env(safe-area-inset-top)) + 92px)); }   /* under the lap timer */

@@ -111,7 +111,7 @@ function haloMesh() {
 // The far stand-in: a low car shape, unit sized (scaled per car to its width, height and length), coloured per
 // car. One InstancedMesh for every far car; made with the game, so its shader is compiled at loading and not
 // while driving. (Martin 2026-11-24: cars that caught up looked like bricks. On a phone a fourth kind of car
-// stays a stand-in however near, see LEAN_KINDS, so it has a bonnet, a boot, dark windows and wheels: 140
+// stays a stand-in however near, see LEAN_KINDS, so it has a bonnet, a boot, dark windows and wheels: 68
 // triangles, still one draw call. The windows and wheels are dark by their vertex colour, which the
 // car's colour multiplies.)
 function farCars(scene, max) {
@@ -120,7 +120,7 @@ function farCars(scene, max) {
   const tri = (a, b, c, k) => { pos.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) col.push(...k); };
   const quad = (a, b, c, d, k) => { tri(a, b, c, k); tri(a, c, d, k); };
   // a side profile (z forward -0.5 to the back 0.5, y up), made solid across x from -w to w; the profile goes
-  // round counter-clockwise seen from +x. kind(i) colours the strip from point i to i+1.
+  // round clockwise seen from +x. kind(i) colours the strip from point i to i+1.
   const prism = (pr, w, kind, sideK) => {
     const n = pr.length;
     for (let i = 0; i < n; i++) {
@@ -128,8 +128,8 @@ function farCars(scene, max) {
       quad([w, y0, z0], [w, y1, z1], [-w, y1, z1], [-w, y0, z0], kind(i));
     }
     for (let i = 1; i < n - 1; i++) {
-      tri([w, pr[0][1], pr[0][0]], [w, pr[i][1], pr[i][0]], [w, pr[i + 1][1], pr[i + 1][0]], sideK);
-      tri([-w, pr[0][1], pr[0][0]], [-w, pr[i + 1][1], pr[i + 1][0]], [-w, pr[i][1], pr[i][0]], sideK);
+      tri([w, pr[0][1], pr[0][0]], [w, pr[i + 1][1], pr[i + 1][0]], [w, pr[i][1], pr[i][0]], sideK);
+      tri([-w, pr[0][1], pr[0][0]], [-w, pr[i][1], pr[i][0]], [-w, pr[i + 1][1], pr[i + 1][0]], sideK);
     }
   };
   // body: bumper, bonnet, the deck under the windows, boot lid, tail, underside
@@ -198,7 +198,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let carId = 'w201';
   const far = farCars(scene, MAX_OTHERS);
   const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fe = new THREE.Euler(0, 0, 0, 'YXZ'), fp = new THREE.Vector3(), fs = new THREE.Vector3();
-  const tagList = [], boxes = [];
+  const tagList = [], boxes = [], hudBoxes = [];
+  let hudAt = -9;
+  const HUD_KEEP = '#people, #people > *, #minimap, #topbar, #lap, #racebox, #rlist';
   const labels = document.createElement('div');
   labels.id = 'names';
   document.body.appendChild(labels);
@@ -990,6 +992,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const most = low() ? TAGS_LOW : TAGS;
     tagList.sort((a, b) => a.d - b.d);
     let shown = 0;
+    // the HUD's own corners (online list, minimap, buttons, lap clock, race list) are kept free of names: on a
+    // phone a near car's name and HOTLAP badge covered the online list (Martin 2026-11-24). Measured once a second.
+    if (tagList.length && now - hudAt > 1) {
+      hudAt = now;
+      hudBoxes.length = 0;
+      for (const el of document.querySelectorAll(HUD_KEEP)) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) hudBoxes.push({ x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, hw: r.width / 2, hh: r.height / 2 });
+      }
+    }
     for (const o of tagList) {
       if (shown >= most) { showTag(o, false); continue; }
       const p = o.pose;
@@ -1007,8 +1019,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (v3.z > 1 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { showTag(o, false); continue; }
       const sc = Math.max(0.55, Math.min(1.2, 28 / o.d));
       // its box on screen (from the name's length: measuring the page each frame would cost more than it saves)
-      const x = ((v3.x + 1) / 2) * W, y = ((1 - v3.y) / 2) * H - 34 * sc, hw = (o.name.length * 5.5 + 12) * sc, hh = 11 * sc;
+      // (a badge over the name, HOTLAP or P3 or a record line, makes it about twice as tall)
+      const tall = hot || pl || rec ? 13 * sc : 0;
+      const x = ((v3.x + 1) / 2) * W, y = ((1 - v3.y) / 2) * H - 34 * sc - tall, hw = (o.name.length * 5.5 + 12) * sc, hh = 11 * sc + tall;
       let covered = false;
+      for (const q of hudBoxes) if (Math.abs(q.x - x) < q.hw + hw && Math.abs(q.y - y) < q.hh + hh) { covered = true; break; }
       for (let i = 0; i < shown; i++) { const q = boxes[i]; if (Math.abs(q.x - x) < q.hw + hw && Math.abs(q.y - y) < q.hh + hh) { covered = true; break; } }
       if (covered) { showTag(o, false); continue; }
       const q = boxes[shown] || (boxes[shown] = {});

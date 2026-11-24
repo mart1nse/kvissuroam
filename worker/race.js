@@ -15,9 +15,10 @@
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
 const LATE_MS = 150000;          // join after the lights up to this long (Martin 2026-11-22), with a start of one's own
-// a late joiner's own start (Martin 2026-11-23: straight to the lights, no count first): their grid time is set
-// five seconds back, so the first light is on as they land on the grid, the fifth at 4 s, out at LATE_GO
-const LATE_GO = 5600;
+// a late joiner's own start (Martin 2026-11-23: straight to the lights, no count first; 24 Nov: the race is on,
+// in as quickly as possible, one red lamp and go): their grid time is set five seconds back, so the lamp is on
+// as they land on the grid, out at LATE_GO (time for the join to reach the page and the car to be put there)
+const LATE_GO = 2000;
 const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (random, the same for all)
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const VOTE_MS = 120000;          // a vote lapses after two minutes

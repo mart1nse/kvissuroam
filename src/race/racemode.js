@@ -316,7 +316,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     document.body.classList.toggle('racegrid', !!lit);
     if (lit) {
       // (one light a second from five seconds on the grid; all five stay lit through the random hold, then out)
-      const e = t - gridT(mine), n5 = mph === 'race' ? 0 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
+      // (a late joiner into a race that is on, Martin 2026-11-24: one red lamp from landing on the grid, then go)
+      const one = !!mine.go;
+      const e = t - gridT(mine), n5 = mph === 'race' ? 0 : one ? 1 : Math.max(0, Math.min(5, Math.floor((e - 5000) / 1000) + 1));
+      lights.classList.toggle('one', one);
       lamps.forEach((l, i) => l.classList.toggle('on', i < n5));
       // (a late joiner, Martin 2026-11-23: told it is the race that is on, not a new one starting)
       const wait = mine.go ? (isTouch ? 'JOINING · WAIT FOR LIGHTS OUT' : 'JOINING THE RACE · WAIT FOR LIGHTS OUT') : 'WAIT FOR LIGHTS OUT';

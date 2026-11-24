@@ -777,6 +777,7 @@ body.touch #ctlbtn { display: none; }
   padding: .55em 1.2em .65em; border-radius: 26px; background: rgba(10, 4, 24, .62); font-size: clamp(14px, 1.4vw, 24px); }
 #rlights .lamps { display: flex; gap: .6em; padding: .4em .6em; border-radius: 99px; background: rgba(7, 2, 15, .85); }
 #rlights .lamps i { width: 2.4em; height: 2.4em; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3348, #17121f 70%); }
+#rlights.one .lamps i:not(:first-child) { display: none; }
 #rlights .lamps i.on { background: radial-gradient(circle at 40% 35%, #ffd0d0, #ff2a2a 45%, #8a0000); box-shadow: 0 0 18px #ff2a2a, 0 0 40px rgba(255, 42, 42, .55); }
 #rlights .cap { font: 400 1.1em 'Russo One', var(--font); letter-spacing: .2em; color: var(--sun); }
 #rlights.go .cap { color: #7dff5a; font-size: 2em; }

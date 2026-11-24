@@ -3,7 +3,7 @@
 //    (the seconds to go, and the rally time of day in green under them) and a lamp panel beside the screen
 //    that is red, then yellow while the seconds are counted, then green (raadi.js says how long each lasts);
 //  - the start line camera on a tripod at the line, its battery box (blue, orange lid) between the legs.
-// One mesh of boxes and thin tubes, and one small mesh for the screen whose digits are squares of a shared
+// A few small meshes of boxes and thin tubes (one per piece a car can knock loose: src/race/knock.js), and one for the screen whose digits are squares of a shared
 // picture of 0 to 9: a new second moves their corners in that picture, nothing is painted again.
 import * as THREE from 'three';
 import { Parts } from './landmarks.js';
@@ -40,46 +40,56 @@ function glyphs() {
 
 // clock, cam: { x, y, z, yaw } on the ground (yaw: the way its face looks, as rotation.y)
 export function createStartKit({ group, clock, cam }) {
-  const p = new Parts();
   const STEEL = 0x9a9ea4, BLACK = 0x121216;
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // each piece its own small mesh, built round its own middle, so that a car can knock it off (src/race/knock.js)
+  const piece = (build, at) => {
+    const p = new Parts();
+    build(p);
+    const m = p.mesh(mat);
+    m.castShadow = true;
+    m.position.set(at.x, at.y, at.z);
+    m.rotation.y = at.yaw;
+    group.add(m);
+    return m;
+  };
 
   // ---- the clock's frame: four legs, a rail low down and one under the box, and the box on top
   const K = 1.25, W = 1.2 * K, H = 0.62 * K, D = 0.18, TOP = 1.45;            // the box, and the height of its underside
-  {
-    const { x, y, z, yaw } = clock, c = Math.cos(yaw), s = Math.sin(yaw);
-    const at = (lx, lz) => [x + c * lx + s * lz, z - s * lx + c * lz];
+  const frame = piece((p) => {
     const fw = 0.5, fd = 0.28;
-    for (const lx of [-fw, fw]) for (const lz of [-fd, fd]) { const [ax, az] = at(lx, lz); p.box(0.035, TOP, 0.035, STEEL, ax, y + TOP / 2, az, yaw); }
+    for (const lx of [-fw, fw]) for (const lz of [-fd, fd]) p.box(0.035, TOP, 0.035, STEEL, lx, TOP / 2, lz);
     for (const hy of [0.22, TOP - 0.02]) {
-      for (const lz of [-fd, fd]) { const [ax, az] = at(0, lz); p.box(fw * 2, 0.03, 0.03, STEEL, ax, y + hy, az, yaw); }
-      for (const lx of [-fw, fw]) { const [ax, az] = at(lx, 0); p.box(0.03, 0.03, fd * 2, STEEL, ax, y + hy, az, yaw); }
+      for (const lz of [-fd, fd]) p.box(fw * 2, 0.03, 0.03, STEEL, 0, hy, lz);
+      for (const lx of [-fw, fw]) p.box(0.03, 0.03, fd * 2, STEEL, lx, hy, 0);
     }
-    p.box(W, H, D, BLACK, x, y + TOP + H / 2, z, yaw);
-    const [hx, hz] = at(0, 0.04);
-    p.box(W + 0.06, 0.03, D + 0.16, BLACK, hx, y + TOP + H + 0.015, hz, yaw);   // a peak over the screen
-  }
+  }, clock);
+  const clockBox = piece((p) => {
+    p.box(W, H, D, BLACK, 0, TOP + H / 2, 0);
+    p.box(W + 0.06, 0.03, D + 0.16, BLACK, 0, TOP + H + 0.015, 0.04);   // a peak over the screen
+  }, clock);
 
   // ---- the camera on its tripod, looking across the line
-  {
-    const { x, y, z, yaw } = cam, HEAD = 1.12;
+  const HEAD = 1.12;
+  const tripod = piece((p) => {
     for (let k = 0; k < 3; k++) {
-      const a = yaw + k * Math.PI * 2 / 3 + 0.5, spread = 0.42, len = Math.hypot(HEAD, spread);
+      const a = k * Math.PI * 2 / 3 + 0.5, spread = 0.42, len = Math.hypot(HEAD, spread);
       const leg = new THREE.CylinderGeometry(0.014, 0.016, len, 5);
       leg.rotateX(-Math.atan2(spread, HEAD)).rotateY(a);    // its foot out along +z turned by a
-      p.add(leg, 0x2a2a2e, x + Math.sin(a) * spread / 2, y + HEAD / 2, z + Math.cos(a) * spread / 2);
+      p.add(leg, 0x2a2a2e, Math.sin(a) * spread / 2, HEAD / 2, Math.cos(a) * spread / 2);
       leg.dispose();
     }
-    p.box(0.04, 0.22, 0.04, 0x2a2a2e, x, y + HEAD + 0.08, z, yaw);
-    p.box(0.3, 0.2, 0.2, BLACK, x, y + HEAD + 0.28, z, yaw);
-    const c = Math.cos(yaw), s = Math.sin(yaw);
-    p.box(0.13, 0.13, 0.1, 0x3a3d44, x + s * 0.14, y + HEAD + 0.28, z + c * 0.14, yaw);    // the lens hood
-    p.box(0.34, 0.02, 0.26, BLACK, x + s * 0.02, y + HEAD + 0.39, z + c * 0.02, yaw);      // a rain cover
-    p.box(0.3, 0.26, 0.22, 0x1f5fd0, x, y + 0.15, z, yaw + 0.4);                           // the battery box
-    p.box(0.3, 0.05, 0.22, 0xf07a18, x, y + 0.305, z, yaw + 0.4);
-  }
-  const body = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
-  body.castShadow = true;
-  group.add(body);
+    p.box(0.04, 0.22, 0.04, 0x2a2a2e, 0, HEAD + 0.08, 0);
+  }, cam);
+  const head = piece((p) => {
+    p.box(0.3, 0.2, 0.2, BLACK, 0, HEAD + 0.28, 0);
+    p.box(0.13, 0.13, 0.1, 0x3a3d44, 0, HEAD + 0.28, 0.14);    // the lens hood
+    p.box(0.34, 0.02, 0.26, BLACK, 0, HEAD + 0.39, 0.02);      // a rain cover
+  }, cam);
+  const battery = piece((p) => {
+    p.box(0.3, 0.26, 0.22, 0x1f5fd0, 0, 0.15, 0, 0.4);                           // the battery box
+    p.box(0.3, 0.05, 0.22, 0xf07a18, 0, 0.305, 0, 0.4);
+  }, cam);
 
   // ---- the screen: two big digits (seconds to go), HH:MM:SS under them, the lamp panel on the right
   const quads = [];                                         // [x0, y0, x1, y1]
@@ -100,6 +110,8 @@ export function createStartKit({ group, clock, cam }) {
   screen.position.set(clock.x + Math.sin(clock.yaw) * (D / 2 + 0.006), clock.y + TOP + H / 2, clock.z + Math.cos(clock.yaw) * (D / 2 + 0.006));
   screen.rotation.y = clock.yaw;
   group.add(screen);
+  // (it goes where the clock's box goes)
+  clockBox.attach(screen);
 
   const tint = new THREE.Color();
   const put = (q, cell, hex) => {
@@ -123,5 +135,12 @@ export function createStartKit({ group, clock, cam }) {
     geo.attributes.color.needsUpdate = true;
   }
   show(0, null, '00:00:00');
-  return { show };
+  return {
+    show,
+    // what a car can knock over, and what each comes apart into
+    knocks: [
+      { x: clock.x, z: clock.z, reach: 0.45, parts: [{ objs: [frame], mass: 18 }, { objs: [clockBox], mass: 22 }] },
+      { x: cam.x, z: cam.z, reach: 0.4, parts: [{ objs: [tripod], mass: 3 }, { objs: [head], mass: 4 }, { objs: [battery], mass: 7 }] },
+    ],
+  };
 }

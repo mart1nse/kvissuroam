@@ -23,6 +23,7 @@ import STAGE from './raadi.json';
 import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
+import { createKnocks } from './knock.js';
 import { chevronTex, haloTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
@@ -87,7 +88,9 @@ STAGE.apex.sort((p, q) => p[0] - q[0]);
 // And the bale at the corner by the pond a touch the other way, towards the road (Martin 23 Nov 00:10, a green
 // arrow from the bale to the road: "move the bale a touch more to the inside and extend the tape to the bale").
 // And the bale at the east loop's fork onto the corner's tip (24 Nov 11:12, an arrow from the bale to the apex).
-const BALE_IN = { 33: 0.5, 370: -0.4, 464: -1.5 };
+// And the bale at the east gate's junction 0.7 m away from the road, towards its tape's end (24 Nov 12:52: "one small
+// bale position change, like 0.7m"); its inside is judged from where it now stands, as everywhere.
+const BALE_IN = { 33: 0.5, 82: 0.7, 370: -0.4, 464: -1.5 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
 // The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
 // from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its
@@ -468,6 +471,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     .concat(MORE_BALES.map(([x, z, k]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] }))) });
   // the red and white tape on sticks where the penalties begin
   const tape = createTape({ world, group, wood });
+  // the signs, the start clock and the camera: a car knocks them over and breaks them (src/race/knock.js)
+  const knocks = createKnocks({ world, group });
   const groundY = (x, z) => world.heightAt(x, z);
 
   function sign(kind, i, d, h = 1.7) {
@@ -485,6 +490,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     g.rotation.y = Math.atan2(-TAN[i][0], -TAN[i][1]);       // facing the cars coming up to it
     g.traverse((o) => { o.castShadow = true; });
     group.add(g);
+    // (the board comes off its post when it is hit hard)
+    knocks.add({ x, z, y, reach: 0.15, parts: [{ objs: [post], mass: 6 }, { objs: [board], mass: 3 }] });
   }
 
   // the start clock on its stand on the right, 8 m past the line and turned to the car waiting on it, and the
@@ -498,6 +505,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       clock: { x: cx, y: groundY(cx, cz), z: cz, yaw: Math.atan2(pose.x - cx, pose.z - cz) },
       cam: { x: ax, y: groundY(ax, az), z: az, yaw: Math.atan2(-TAN[START][1], TAN[START][0]) },
     });
+    for (const k of kit.knocks) knocks.add(k);
   }
 
   // a white line across the path
@@ -967,6 +975,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.prog = START; st.off = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
     bales.reset();
     tape.reset();
+    knocks.reset();
     standBarriers();
     setBarriers(START, true);
     setLamps(0);
@@ -1000,6 +1009,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     data: STAGE,
     get bales() { return bales; },
     get tape() { return tape; },
+    get knocks() { return knocks; },
     lines: LINES, side,
     best,
     goStart,
@@ -1226,6 +1236,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       }
       bales.update(car, dt);
       tape.update(car, dt);
+      knocks.update(car, dt);
       if (halo && near) halo.material.opacity = st.phase === 'run' ? 0.75 + 0.25 * Math.sin(time * 5) : 0.6;
       breakBarriers(car, Math.min(dt || 0.016, 0.05));
       drawBoards(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);

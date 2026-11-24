@@ -6,12 +6,15 @@
 // track during a lap (a wrong turn or a shortcut through the city) cancels it; overshooting a
 // corner and coming back is fine. A checkpoint reached while an earlier one is missing (the Jakobi
 // short cut past the Emajõe loop: the lap crosses itself there) cancels the lap at that checkpoint.
+// Between the checkpoints hidden gates about every 50 m must be passed in order too (src/race/lapgates.js:
+// up Kroonuaia and back, the river loop backwards, Lai from the hill).
 // Near the track its edges glow faintly so the way is clear.
 import * as THREE from 'three';
 import TRACK from './track.json';
 import { createDecor } from './decor.js';
 import { createLandmarks } from './landmarks.js';
 import { jobs } from '../jobs.js';
+import { lapGates, throughGate } from './lapgates.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
@@ -88,6 +91,7 @@ export function createTrack() {
   return {
     P, HW, N, tan, s, length: TRACK.length, nearest, spawnI: sp,
     checkpoints: TRACK.checkpoints.map((i) => ({ i, x: P[i][0], z: P[i][1] })),
+    gates: lapGates(TRACK, CP_RADIUS),
     spawn: { x: P[sp][0], z: P[sp][1], yaw: Math.atan2(tan[sp][0], -tan[sp][1]) },
   };
 }
@@ -326,7 +330,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
 
   const st = {
-    running: false, t0: 0, clk: 0, wall: null, carT: null, t: 0, off: 0, cps: new Set(), hint: -1, onTrack: false, near: false,
+    running: false, t0: 0, clk: 0, wall: null, carT: null, t: 0, off: 0, cps: new Set(), gate: 0, hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null, tyT: {},
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
@@ -463,7 +467,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               const tc = st.prevTime + (time - st.prevTime) * f;
               if (st.running) {
                 const lapT = tc - st.t0;
-                const missed = track.checkpoints.length - st.cps.size;
+                const missed = track.gates.length - st.gate;
                 if (missed === 0 && lapT > MIN_LAP) {
                   const ref = st.ref;
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
@@ -490,21 +494,27 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
           if (st.running) {
-            track.checkpoints.forEach((cp, k) => {
-              if (!st.running || st.cps.has(cp.i) || Math.hypot(x - cp.x, z - cp.z) >= track.HW[cp.i] + CP_RADIUS) return;
-              // a checkpoint with an earlier one missing: the lap was cut short
-              if (st.cps.size < k) { cancel(CUT_TEXT, true, 'cut'); return; }
-              st.cps.add(cp.i);
+            // the gates in order (checkpoints among them): the next one counts; one further on touched first is a
+            // short cut, at once where only a short cut gets there, else when the next checkpoint or the finish comes
+            const G = track.gates;
+            for (let j = st.gate; st.running && j < G.length; j++) {
+              const g = G[j];
+              if (!throughGate(g, st.prev.x, st.prev.z, x, z)) continue;
+              if (j > st.gate) { if (g.strict) cancel(CUT_TEXT, true, 'cut'); break; }
+              st.gate++;
+              if (g.cp < 0) continue;
+              const k = g.cp;
+              st.cps.add(g.i);
               const t = time - st.t0;
               st.splits[k] = Math.round(t * 1000);
               if (!st.ref) st.ref = refLaps(carId);
               showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, refAt(st.ref, k));
-            });
+            }
             if (st.running && !onTrack) {
               st.off += moved;
               if (st.off > OFF_LIMIT) cancel('OFF THE TRACK · LAP CANCELLED', true, 'off');

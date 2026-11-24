@@ -20,6 +20,7 @@ import { CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
+import { lapGates, throughGate } from '../src/race/lapgates.js';
 
 const TRACK = 'toomemagi';
 // The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
@@ -144,11 +145,12 @@ async function gunzip(bytes, max) {
   for (const p of parts) { all.set(p, o); o += p.length; }
   return new TextDecoder().decode(all);
 }
-// the places a replay has to pass, in order, and how near: Toomemägi's checkpoints and its start/finish line
-// (the lap is flying: it starts and ends there); the Raadi stage's start, a point every 80 along it, its finish
+// the places a replay has to pass, in order, and how near: Toomemägi's checkpoints and hidden gates (the game's
+// own, src/race/lapgates.js) and its start/finish line (the lap is flying: it starts and ends there); the Raadi
+// stage's start, a point every 80 along it, its finish
 const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
 const GATES = {
-  toomemagi: { first: near(0, LAP.pts, 30), pass: [...LAP.checkpoints.map((i) => near(i, LAP.pts, LAP.hw[i] + 28)), near(0, LAP.pts, 30)] },
+  toomemagi: { first: near(0, LAP.pts, 30), pass: [...lapGates(LAP, 28), near(0, LAP.pts, 30)] },
   raadi: { first: near(STAGE.start, STAGE.pts, 30),
     pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
 };
@@ -165,8 +167,9 @@ function checkTrace(text, track, driving) {
     x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
     if (i && Math.hypot(x - px, z - pz) > 12) return 'speed';
-    const q = g.pass[gate];
-    if (q && Math.hypot(x - q.x, z - q.z) < q.r && (gate < g.pass.length - 1 || i > n - 4)) gate++;
+    // (on the line between two samples, as the game judges a frame: at 10 a second a fast car moves 8 m)
+    while (i && g.pass[gate] && throughGate(g.pass[gate], px, pz, x, z) && (gate < g.pass.length - 1 || i > n - 4)) gate++;
+    if (i === 0 && Math.hypot(x - g.pass[0].x, z - g.pass[0].z) < g.pass[0].r) gate++;
     px = x; pz = z;
   }
   return gate < g.pass.length ? 'route' : '';

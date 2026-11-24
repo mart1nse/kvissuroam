@@ -42,10 +42,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const box = document.createElement('div');
   box.id = 'people';
   // (Martin, 2026-11-23: the count on top, then you, then the others; no light before the count)
-  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><ul class="feed"></ul>';
+  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><div class="up hidden"></div><ul class="feed"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
-  const elWho = box.querySelector('.who');
+  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" over the names)
 
   const list = document.createElement('div');
   list.id = 'roster';
@@ -62,7 +62,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const touch = document.body.classList.contains('touch');
   // desktop: how many rows fit between your line and the race button, and whether the race list is up
   // (read from the page at most three times a second, never every frame)
-  let fitAt = 0, fitRows = LIST_MAX, raceList = false;
+  let fitAt = 0, fitRows = LIST_MAX, raceList = false, nNames = 0;
   function fit() {
     const t = performance.now();
     if (t < fitAt) return;
@@ -84,21 +84,26 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
     // (Martin, 2026-11-24: all names listed, the mouse wheel scrolls those that do not fit; no scrollbar)
-    const mh = `${Math.round(fitRows * rowH)}px`;
+    // (Martin, 24 Nov: "+N MORE" kept, over the names, when they do not all fit; it takes one row)
+    const mh = `${Math.round((nNames > fitRows ? fitRows - 1 : fitRows) * rowH)}px`;
     if (elWho.style.maxHeight !== mh) { elWho.style.maxHeight = mh; edges(); }
   }
   // a soft fade at the end that has more names past it (desktop: first name at the bottom, so scrollTop
   // is 0 there and negative scrolled up)
   // (Martin 2026-11-24, 55 online: reading the list's height straight after changing it made the browser lay the
-  // page out there and then, 5 to 15 ms each time somebody came, went or voted. The fade goes by the rows'
-  // count and height and by where the wheel left the list, which the scroll event gives when it is laid out.)
-  let scrolled = 0, rowPx = 0;
+  // page out there and then, 5 to 15 ms each time somebody came, went or voted. The fade and the "+N MORE" go by
+  // the rows' count and height and by where the wheel left the list, which the scroll event gives when it is laid out.)
+  let scrolled = 0, rowPx = 0, upN = -1;
   function edges() {
-    const over = rowCount * (rowPx || 16) - fitRows * (rowPx || 16);
+    const step = rowPx || 16, room = nNames > fitRows ? fitRows - 1 : fitRows;
+    const over = elWho.classList.contains('hidden') ? 0 : (rowCount - room) * step;
     const up = -scrolled;
     const a = over > 2 && up < over - 2, b = over > 2 && up > 2;
     if (a !== elWho.classList.contains('more-up')) elWho.classList.toggle('more-up', a);
     if (b !== elWho.classList.contains('more-down')) elWho.classList.toggle('more-down', b);
+    // the names out of view above (all rows are the same height)
+    const n = over > 2 ? Math.ceil((over - up - 2) / step) : 0;
+    if (n !== upN) { upN = n; elUp.textContent = `+${n} MORE`; elUp.classList.toggle('hidden', n <= 0); }
   }
   if (!touch) elWho.addEventListener('scroll', () => { scrolled = elWho.scrollTop; edges(); }, { passive: true });
   // (the thumbs up button, before the click to watch: on a phone too)
@@ -150,7 +155,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
-    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); clearRows(); return; }
+    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); clearRows(); if (!touch) edges(); return; }
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);
@@ -158,6 +163,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (desktop: every name, scrolled with the wheel; phones: a few, then "+N MORE")
     const cap = touch ? listMax : LIST_ALL;
     const more = sorted.length > cap ? sorted.length - cap + 1 : 0;
+    if (!touch && sorted.length !== nNames) { nNames = sorted.length; fitAt = 0; }
     const want = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';

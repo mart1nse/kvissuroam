@@ -561,6 +561,8 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
 /* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
 body:not(.touch) #people .who::-webkit-scrollbar { display: none; }
 body:not(.touch) #people .who > li { flex-shrink: 0; }
+#people .up { display: none; }
+body:not(.touch) #people .up:not(.hidden) { display: block; margin: 0 0 1px; color: #fff; opacity: .6; letter-spacing: .08em; white-space: nowrap; }
 body:not(.touch) #people .who.more-up { -webkit-mask-image: linear-gradient(transparent, #000 1.6em); mask-image: linear-gradient(transparent, #000 1.6em); }
 body:not(.touch) #people .who.more-down { -webkit-mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); }
 body:not(.touch) #people .who.more-up.more-down { -webkit-mask-image: linear-gradient(transparent, #000 1.6em, #000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(transparent, #000 1.6em, #000 calc(100% - 1.6em), transparent); }

@@ -124,6 +124,15 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 5 }));
   const b = visit().cap;
   check(a === 5 && b === 3, `a crash caps one level lower, a second one soon after two (${a}, ${b})`);
+  // the clues the mark carried come out for the stats (24 Nov 2026), and an old mark without them still works
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 4, s: 700, heap: 520, tex: 260 }));
+  const d = visit().death;
+  check(d && d.level === 4 && d.s === 700 && d.heap === 520 && d.tex === 260 && d.cap === 2, `a death's clues reach the stats (${JSON.stringify(d)})`);
+  mem.set('kvissuroam.gfxCap2', JSON.stringify({ ladder: id, level: 5 }));
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 3 }));
+  const d2 = visit().death;
+  check(d2 && d2.s === null && d2.heap === null && d2.cap === 2, `an old mark without clues (${JSON.stringify(d2)})`);
+  check(visit().death === null, 'no death after a visit that closed in the ordinary way');
   delete globalThis.localStorage;
 }
 

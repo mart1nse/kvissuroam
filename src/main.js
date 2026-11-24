@@ -289,7 +289,7 @@ else if (xlow) setPaintScale(0.45);
 else if (lite) setPaintScale(0.6);
 if (liteWhy) console.info('Light mode (small pictures, still menu, simpler parked cars):', liteWhy);
 // anonymous game stats (src/stats.js): only on www.linnaring.com
-stats.start({ isTouch, lite, software: gpu.software });
+stats.start({ isTouch, lite, software: gpu.software, death: gfx.death });
 // Graphics lost in the background (Android, another app and back): the page loads again, the car where it
 // was (src/gfxloss.js). Nothing of it runs in a frame.
 gfxLoss.watch(canvas, {

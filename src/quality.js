@@ -307,7 +307,7 @@ export function createQuality(hooks, caps, opts = {}) {
   // shadow map), lower again after another crash. After 10 minutes on screen at that cap without a
   // crash, the next visit may go one level higher again.
   const ALIVE = 'kvissuroam.alive2', CAPKEY = 'kvissuroam.gfxCap2';
-  let cap = top, crashed = false;
+  let cap = top, crashed = false, death = null;
   try {
     const c = readLevel(CAPKEY, true);
     if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
@@ -318,12 +318,26 @@ export function createQuality(hooks, caps, opts = {}) {
       // holds otherwise needs a crash for every level on the way down)
       const again = c && Date.now() - (c.t || 0) < 30 * 60e3;
       cap = Math.max(0, Math.min(cap, alive.level - (again ? 2 : 1)));
+      // what the mark said about the moment it was last written, for the stats (Martin 2026-11-24: does a
+      // strong phone that lands at the bottom really run out of memory, or is the page killed for
+      // something else? Only logged for now; the cap above is the same either way.)
+      death = { level: alive.level, cap, s: alive.s ?? null, heap: alive.heap ?? null, tex: alive.tex ?? null };
       store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap, t: Date.now() }));
       console.warn(`The last visit ended on screen at level ${alive.level + 1} (out of memory?): auto graphics stay at ${cap + 1} or lower`);
     }
   } catch {}
   start = Math.min(start, cap);
-  const markAlive = () => { if (!opts.headless && current >= 0) store(ALIVE, JSON.stringify({ ladder: ladderId, level: current })); };
+  // The mark also carries clues to why a page might die on screen, written again every 10 s on screen:
+  // seconds on screen this visit, the script memory in MB (Chrome only, and rough: Chrome rounds it and
+  // renews it only now and then) and how many pictures the game holds on the graphics card.
+  let onScreenMs = 0, clueMs = 0;
+  const clue = () => {
+    const m = typeof performance !== 'undefined' && performance.memory;
+    const heap = m && m.usedJSHeapSize > 0 ? Math.round(m.usedJSHeapSize / 1e6) : null;
+    const tex = hooks.renderer?.info?.memory?.textures ?? null;
+    return { s: Math.round(onScreenMs / 1000), heap, tex };
+  };
+  const markAlive = () => { if (!opts.headless && current >= 0) store(ALIVE, JSON.stringify({ ladder: ladderId, level: current, ...clue() })); };
   const markGone = () => { try { localStorage.removeItem(ALIVE); } catch {} };
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => (document.hidden ? markGone() : markAlive()));
@@ -386,7 +400,7 @@ export function createQuality(hooks, caps, opts = {}) {
 
   return {
     levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
-    get auto() { return mode === 'auto' && auto; }, get cap() { return cap < top ? cap : null; }, crashed,
+    get auto() { return mode === 'auto' && auto; }, get cap() { return cap < top ? cap : null; }, crashed, death,
     get capped() { return mode === 'auto' && auto ? gov.capped : 0; },
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
@@ -397,6 +411,8 @@ export function createQuality(hooks, caps, opts = {}) {
     frame(ms, jsMs = 0, gpuMs = null) {
       if (ms > 0 && ms < 1000) {
         meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05;
+        onScreenMs += ms;
+        if ((clueMs += ms) >= 10000 && (typeof document === 'undefined' || !document.hidden)) { clueMs = 0; markAlive(); }
         win.push(ms); winMs += ms;
         if (winMs >= 2000) {
           const s = win.slice().sort((a, b) => a - b), base = s[s.length >> 2];

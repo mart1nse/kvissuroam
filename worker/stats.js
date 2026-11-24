@@ -47,6 +47,9 @@ const MAPS = {
   quit: [LIST('0', '1', '2', '3', '4', '5', '6'), N],         // checkpoints passed when a lap was given up
   lapCar: [(k) => Object.hasOwn(CARS, k), N],                  // finished laps per car
   smash: [LIST('prop', 'glass'), 200],
+  // a page that died on screen, found by the graphics crash guard: device|os|memory GB|level|cap after|
+  // where (load, menu, drive; tab: a new tab)|time on screen|script memory MB|pictures on the card (src/stats.js)
+  death: [(k) => /^(desktop|phone|tablet)\|(Windows|macOS|iOS|Android|Linux|ChromeOS|other)\|m(\?|0\.25|0\.5|1|2|4|8|16|32)\|L\d{1,2}\|c\d{1,2}\|(load|menu|drive|tab)\|t(\?|<1|1-5|5-15|15\+)\|h(\?|<200|200-400|400-700|700\+)\|x(\?|<150|150-300|300-500|500\+)$/.test(k), 2],
   misc: [LIST('drives', 'water', 'mapjump', 'garage', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };
@@ -73,6 +76,7 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
       if (++n > 120) break;
       if (!ok(k)) continue;
       if (name === 'heat' && !dst[k] && Object.keys(dst).length >= 4000) continue;
+      if (name === 'death' && !dst[k] && Object.keys(dst).length >= 300) continue;
       add(dst, k, num(v, max, 1));
     }
   }

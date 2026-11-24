@@ -123,8 +123,9 @@ export async function loadWorldData(onProgress = () => {}) {
       s.D = new Uint8Array(buf, o, dn * dn); o += dn * dn;
       s.buildings = { nv, buf, offset: o }; o += nv * 15;
       s.trees = new Float32Array(buf.slice(o, o + nt * 24)); o += nt * 24;
-      if (treeMoves.length) moveTrees(s);
-      if (clearings.length) s.trees = clearTrees(s.trees);
+      const gone = [];                                  // map trees moved or cleared away: [x, z, height] where they stood
+      if (treeMoves.length) moveTrees(s, gone);
+      if (clearings.length) s.trees = clearTrees(s.trees, gone);
       if (treeAdds.length) addTreesTo(s);               // after the clearings: planted trees stay
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
@@ -137,8 +138,18 @@ export async function loadWorldData(onProgress = () => {}) {
       // freed ground before the solids (hand-made walls are written in after), in the work queue: one long box
       // (ERM's) was a 65 to 95 ms stand-still as its map square came in on Narva mnt (22 Nov). The square stays
       // 'loading' meanwhile, as it was while its file came.
-      if (!frees.some((b) => touches(s, b))) return done();
-      return new Promise((resolve) => jobs.add(function* () { yield* carveSteps(s, frees); done(); resolve(); }, 'carve'));
+      // A tree's trunk is baked into the field as well: where a map tree was moved or cleared away the field is
+      // freed round the spot it stood on (Vallikraavi, 24 Nov: the trunk of a tree moved behind the fence stayed
+      // in front of it as an invisible post, the physics only leaves the field out round the trunks it knows of)
+      const stumps = gone.map(([x, z, h]) => { const r = Math.min(0.45, Math.max(0.14, 0.035 * h)) + 0.15; return { x, z, yaw: 0, hx: r, hz: r }; });
+      const freed = frees.some((b) => touches(s, b));
+      if (!freed && !stumps.length) return done();
+      return new Promise((resolve) => jobs.add(function* () {
+        if (stumps.length) yield* carveSteps(s, stumps, stumps, STUMP_R);
+        if (freed) yield* carveSteps(s, frees);
+        done();
+        resolve();
+      }, 'carve'));
     }, (err) => { loading--; s.state = 'failed'; console.warn(err); });
     return s.promise;
   }
@@ -146,7 +157,7 @@ export async function loadWorldData(onProgress = () => {}) {
   // Hand-made places that move map trees ((x, z) => [x, z] or null): applied as a sector loads, the tree
   // set on the ground of its new spot
   const treeMoves = [];
-  function moveTrees(s) {
+  function moveTrees(s, gone) {
     const rec = s.trees, H = s.H;
     for (let i = 0; i < rec.length; i += 6) {
       for (const f of treeMoves) {
@@ -156,6 +167,7 @@ export async function loadWorldData(onProgress = () => {}) {
         const c = Math.floor(fx), r = Math.floor(fz), k = r * hn + c;
         fx -= c; fz -= r;
         const y = ((H[k] * (1 - fx) + H[k + 1] * fx) * (1 - fz) + (H[k + hn] * (1 - fx) + H[k + hn + 1] * fx) * fz) * hs + hoff;
+        gone.push([rec[i], rec[i + 2], rec[i + 3]]);
         rec[i] = to[0]; rec[i + 1] += y - (rec[i + 1]); rec[i + 2] = to[1];
         break;
       }
@@ -182,11 +194,12 @@ export async function loadWorldData(onProgress = () => {}) {
 
   // Rectangles kept free of trees (hand-made places such as the Toome tennis courts): { x0, z0, x1, z1 }
   const clearings = [];
-  function clearTrees(rec) {
+  function clearTrees(rec, gone) {
     const keep = [];
     for (let i = 0; i < rec.length; i += 6) {
       const x = rec[i], z = rec[i + 2];
       if (!clearings.some((c) => (c.test ? c.test(x, z) : x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1))) for (let k = 0; k < 6; k++) keep.push(rec[i + k]);
+      else gone.push([x, z, rec[i + 3]]);
     }
     return keep.length === rec.length ? rec : new Float32Array(keep);
   }
@@ -284,6 +297,7 @@ export async function loadWorldData(onProgress = () => {}) {
   // own walls then come back as solids. b: { x, z, yaw, hx, hz } like a solid.
   const frees = [];
   const FREE_R = 6;                                  // m: how far round a freed box the field is redone
+  const STUMP_R = 2;                                 // (round the spot a moved or cleared map tree stood on)
   const inBox = (b, x, z) => {
     if (b._c === undefined) { b._c = Math.cos(b.yaw); b._s = Math.sin(b.yaw); }
     const c = b._c, sn = b._s, px = x - b.x, pz = z - b.z;
@@ -295,20 +309,21 @@ export async function loadWorldData(onProgress = () => {}) {
   const touches = (s, b) => { const [ex, ez] = boxReach(b); return !(b.x + ex + FREE_R < s.x0 || b.x - ex - FREE_R > s.x1 || b.z + ez + FREE_R < s.z0 || b.z - ez - FREE_R > s.z1); };
   function carve(s, list) { const it = carveSteps(s, list); while (!it.next().done); }
   // (a generator: `yield` where the work queue may stop until the next frame)
-  function* carveSteps(s, list) {
+  // (pool: every free box that drops obstacle cells; R: how far round each box of list the field is redone)
+  function* carveSteps(s, list, pool = frees, R = FREE_R) {
     const D = s.D, solid = Math.floor(((0 - dmin) / dspan) * 255);   // D at or below this: inside an obstacle
-    const rc = Math.ceil(FREE_R / dres) + 2;
+    const rc = Math.ceil(R / dres) + 2;
     for (const b of list) {
       // the window: the square round the turned box and FREE_R more (past that the field is as it was), not the
       // circle round it (Narva mnt, 22 Nov: ERM's long box made a 384 m window and a 65 to 95 ms sector load)
-      const [ex, ez] = boxReach(b), rx = ex + FREE_R, rz = ez + FREE_R;
+      const [ex, ez] = boxReach(b), rx = ex + R, rz = ez + R;
       if (b.x + rx < s.x0 || b.x - rx > s.x1 || b.z + rz < s.z0 || b.z - rz > s.z1) continue;
       const c0 = Math.max(0, Math.floor((b.x - rx - s.x0) / dres)), c1 = Math.min(dn - 1, Math.ceil((b.x + rx - s.x0) / dres));
       const r0 = Math.max(0, Math.floor((b.z - rz - s.z0) / dres)), r1 = Math.min(dn - 1, Math.ceil((b.z + rz - s.z0) / dres));
       // the obstacle cells that stay (outside every free box), in and round the window
       const R0 = Math.max(0, r0 - rc), R1 = Math.min(dn - 1, r1 + rc), C0 = Math.max(0, c0 - rc), C1 = Math.min(dn - 1, c1 + rc);
       const wx0 = s.x0 + C0 * dres, wx1 = s.x0 + C1 * dres, wz0 = s.z0 + R0 * dres, wz1 = s.z0 + R1 * dres;
-      const near = frees.filter((f) => { const [fx, fz] = boxReach(f); return f.x + fx >= wx0 && f.x - fx <= wx1 && f.z + fz >= wz0 && f.z - fz <= wz1; });
+      const near = pool.filter((f) => { const [fx, fz] = boxReach(f); return f.x + fx >= wx0 && f.x - fx <= wx1 && f.z + fz >= wz0 && f.z - fz <= wz1; });
       const w = C1 - C0 + 1, keep = new Uint8Array(w * (R1 - R0 + 1));
       for (let r = R0; r <= R1; r++) for (let c = C0; c <= C1; c++) {
         if (D[r * dn + c] > solid) continue;
@@ -349,7 +364,7 @@ export async function loadWorldData(onProgress = () => {}) {
         // the face of an obstacle cell is taken half a cell out from its centre; past FREE_R the old value stands
         // unless it was nearer (it saw what was taken away)
         const e = Math.sqrt(d2[k]) * dres - dres / 2;
-        const d = e >= FREE_R ? Math.max(FREE_R, dmin + (D[i] / 255) * dspan) : Math.max(dres / 2, e);
+        const d = e >= R ? Math.max(R, dmin + (D[i] / 255) * dspan) : Math.max(dres / 2, e);
         D[i] = Math.max(0, Math.min(255, Math.round(((d - dmin) / dspan) * 255)));
         if (c === c1 && jobs.late()) yield;
       }

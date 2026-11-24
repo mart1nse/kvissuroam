@@ -89,6 +89,21 @@ for (const a of STAGE.apex) {
   const k2 = k + Math.round(m / 2);
   a[0] = k2; a[2] = P[k2][0] - TAN[k2][1] * lat; a[3] = P[k2][1] + TAN[k2][0] * lat;
 }
+// And the junction bale by the middle pond a little up the road, towards the turn (Martin 24 Nov, an arrow from
+// the bale: "move this bale further up the road"), metres along the stage at the same distance off it. The corner
+// keeps its point (its spur tape and its check go through the bale, so they move with it).
+const BALE_UP = { 402: 2.5 };
+for (const a of STAGE.apex) {
+  const m = BALE_UP[a[0]];
+  if (!m) continue;
+  const k = a[0], lat = (a[2] - P[k][0]) * -TAN[k][1] + (a[3] - P[k][1]) * TAN[k][0];
+  const f = k + m / 2, i = Math.floor(f), t = f - i, px = P[i][0] + (P[i + 1][0] - P[i][0]) * t, pz = P[i][1] + (P[i + 1][1] - P[i][1]) * t;
+  const tx = TAN[i][0] + (TAN[i + 1][0] - TAN[i][0]) * t, tz = TAN[i][1] + (TAN[i + 1][1] - TAN[i][1]) * t, l = Math.hypot(tx, tz);
+  a[2] = px - tz / l * lat; a[3] = pz + tx / l * lat;
+}
+// Bales that are not at a corner, set where Martin asked for them: [x, z, the point whose way the banner faces]
+// (24 Nov "haybale here": right of the road at the side road's mouth before the east loop's fork)
+const MORE_BALES = [[2873.1, 455.9, 449]];
 // The glow along the inside of the tight corners is rounded (Martin 23 Nov 19:26, blue curves inside five apexes:
 // "Round a bit the halos in the apexes"): the path's inside edge folds into a sharp point there. ROUND[k] is the
 // arc that takes its place: { a, b, cx, cz, r, t0, t1 }, points a..b on a circle of radius r round (cx, cz) from
@@ -192,6 +207,8 @@ const afterOf = (k) => (JOIN[k] ? JOIN[k] - k : 5);            // points after t
 // (Martin 23 Nov 19:19, a green line from the bale: "Last corner, put a straight fence, like on the pic"): turned
 // the other way, away from the corner's tip.
 const SPUR = { 370: 0, 402: 22, 854: -38 };
+// (how far the spur runs from the bale, m; 6.5 unless said: the junction's 1.5 m shorter, Martin 24 Nov)
+const SPUR_LEN = { 402: 5 };
 // (each spur's way into the corner from its bale, unit: the line across the stage at the apex turned SPUR degrees)
 const SPUR_DIR = new Map(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, sd]) => {
   const turn = SPUR[k] * Math.PI / 180 * -sd, ix = TAN[k][1] * -sd, iz = -TAN[k][0] * -sd;
@@ -230,7 +247,7 @@ const ARCS = STAGE.apex.filter(([k]) => WRAP[k] && SPUR[k] == null).map(([k, , b
 }).concat(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, , bx, bz]) => {
   // (from just clear of the bale, or FREE further, 6.5 m into the corner)
   const [dx, dz] = SPUR_DIR.get(k);
-  const f = FREE[k] || 0, pts = [0.9 + f, (0.9 + f + 6.5) / 2, 6.5].map((m) => [bx + dx * m, bz + dz * m]);
+  const f = FREE[k] || 0, end = SPUR_LEN[k] || 6.5, pts = [0.9 + f, (0.9 + f + end) / 2, end].map((m) => [bx + dx * m, bz + dz * m]);
   pts.step = 2.8;
   return pts;
 })).concat([(() => {
@@ -413,7 +430,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   const barriers = [];
   let barMesh = null, kit = null, halo = null;
   // a bale 1.1 m inside the path's edge at each apex, its banner towards the cars coming
-  const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] })) });
+  const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] }))
+    .concat(MORE_BALES.map(([x, z, k]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] }))) });
   // the red and white tape on sticks where the penalties begin
   const tape = createTape({ world, group, wood });
   const groundY = (x, z) => world.heightAt(x, z);

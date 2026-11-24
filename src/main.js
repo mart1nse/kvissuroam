@@ -898,6 +898,8 @@ async function boot() {
     halo: (on) => race.finishHalo(on),
     // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
     busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
+    // (desktop: a name in the race list follows that car, like the online list)
+    onWatch: isTouch ? null : (id) => watch?.start(id), watching: () => watch?.id || null,
   });
   // (the lap's line is put together once: its 2,400 points were walked again each time the small map was
   // drawn, sixteen times a second)

@@ -21,7 +21,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, onWatch = null, watching = () => null }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -137,6 +137,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   const loneRacer = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null && r.racers.filter((x) => !x.out).length === 1 && mp.drivers().length > 0; };
   const racingNow = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null; };
   list.addEventListener('click', (e) => {
+    // (desktop, Martin 2026-11-24: a name in the race list follows that car, as in the online list)
+    const nm = e.target.closest('td.n[data-id]');
+    if (nm && onWatch) { e.stopPropagation(); onWatch(nm.dataset.id); render(); return; }
     if (!e.target.closest('[data-r="x"]')) return;
     if (racingNow()) {
       if (now() < askQuit) {
@@ -227,7 +230,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (!x.out && (x.ms == null || x.ms !== prevMs)) pos = i + 1;
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n">${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 

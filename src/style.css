@@ -1146,6 +1146,10 @@ body:not(.touch) #people .who li[data-id] { pointer-events: auto; cursor: pointe
   transition: background .15s ease, opacity .15s ease; }
 body:not(.touch) #people .who li[data-id]:hover { background: rgba(47, 243, 255, .16); opacity: 1; }
 body:not(.touch) #people .who li.on { background: rgba(47, 243, 255, .22); opacity: 1; box-shadow: 0 0 10px rgba(47, 243, 255, .25); }
+/* the race list on desktop too (Martin 2026-11-24): a racer's name watches their car */
+body:not(.touch) #rlist td.n[data-id] { cursor: pointer; border-radius: 999px; transition: background .15s ease; }
+body:not(.touch) #rlist td.n[data-id]:hover { background: rgba(47, 243, 255, .16); }
+body:not(.touch) #rlist td.n[data-on] { background: rgba(47, 243, 255, .22); }
 body:not(.touch) #people .me.back { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; opacity: .9; }
 body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
 

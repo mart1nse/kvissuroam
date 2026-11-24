@@ -28,6 +28,28 @@ const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5],
 
 export function raadiParkTrees(world) { world.addTrees(PARK.trees); }
 
+// The park's lamp posts and a bench (Martin 24 Nov, dots on four air photos and a picture from the stage: "You can
+// place the roughly 1.5m from the edge of the road, and lets finetune form there on"). Each [x, z, bearing to the
+// road], read off his photos by matching their paths to the Land Board's; the ones by the stage set 1.5 m off its
+// gravel at the point marked, the four by the other paths 1.5 m off theirs. Thin 6 m poles that snap
+// (src/world/props.js PARK). The one by the pond's south shore, after the left turn at bale 370, carries the red
+// dog-waste bin ("only one of them has the dog poop orange container attached to it. Near the lake after turning left").
+const LAMPS = [
+  [2656.6, 333.1, 203], [2678.2, 343.9, 212], [2703.5, 355.8, 190], [2727.5, 359.0, 189],   // north of the boulder field
+  [2749.6, 367.7, 208], [2780.4, 368.1, 170], [2820.3, 386.8, 261],                          // round the middle pond's north
+  [2816.7, 423.4, 264], [2840.0, 448.2, 248],                                                // the S path across it (not the stage)
+  [2839.3, 478.6, 290], [2822.7, 505.7, 116], [2824.7, 517.0, 25],                           // its east side and the junction
+  [2847.3, 528.8, 37], [2862.3, 550.7, 77], [2861.2, 575.7, 114], [2838.6, 603.3, 132],      // inside the S down to the woods
+  [2820.2, 636.5, 110], [2790.6, 671.5, 168],
+  [2815.1, 718.9, 27], [2791.2, 696.0, 326],                                                 // the path east from its foot (not the stage)
+];
+const BIN_LAMP = [2790.8, 490.0, 214];
+// the bench in the boulder field by the road down from the junction west of the middle pond (his green circle)
+const BENCH = [2756.7, 425.5, 79];
+export function raadiParkProps() {
+  return [...LAMPS.map(([x, z, b]) => [41, x, z, b]), [42, ...BIN_LAMP], [3, ...BENCH]];
+}
+
 // one boulder, 1 m in radius before it is squashed: a 80-sided ball with its corners pushed in and out, flat below
 function rockGeometry(lite) {
   const g = new THREE.IcosahedronGeometry(1, lite ? 0 : 1), pos = g.attributes.position, col = new Float32Array(pos.count * 3);

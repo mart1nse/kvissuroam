@@ -14,6 +14,9 @@ const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZE
 const FACES = 21;
 // kinds past the sign faces: the white and blue striped post at raised crossings (Veski by Mandel)
 const STRIPED = 40;
+// Raadi park lamp (the rally stage, Martin's photo of 24 Nov): a slim galvanised pole of 6 m with a short
+// arm and a flat head; PARKBIN is the one with the red dog-waste bin on it, by the pond
+const PARK = 41, PARKBIN = 42;
 const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
@@ -42,11 +45,16 @@ const SOLID = {
     part(new THREE.CylinderGeometry(0.13, 0.2, 0.36, 4).rotateY(Math.PI / 4).translate(0, 3.47, 0), 0x24232a),
     part(new THREE.ConeGeometry(0.24, 0.2, 4).rotateY(Math.PI / 4).translate(0, 3.81, 0), 0x24232a)],
   sign: [cyl(0.035, 2.9, 0, 1.45, 0, 0x8a8a94, 5)],
+  [PARK]: [cyl(0.065, 6, 0, 3, 0, 0x9c9fa8, 6), box(0.05, 0.05, 0.4, 0, 5.97, 0.18, 0x9c9fa8), box(0.17, 0.08, 0.5, 0, 5.98, 0.6, 0x8e9099)],
+  BIN: [cyl(0.17, 0.5, 0, 0.72, 0.2, 0xc8261e, 8), cyl(0.18, 0.07, 0, 1.0, 0.2, 0x1b1a1f, 8)],
 };
+SOLID[PARKBIN] = [...SOLID[PARK], ...SOLID.BIN];
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
   [LANTERN]: box(0.16, 0.16, 0.16, 0, 3.5, 0, 0xffe2a8),
+  [PARK]: box(0.13, 0.02, 0.4, 0, 5.93, 0.62, 0xfff0d0),
 };
+GLOW[PARKBIN] = GLOW[PARK];
 const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.07, 1.75), 0xffffff);
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
 
@@ -58,7 +66,10 @@ const SHAFT = {
   [SIGNAL]: { r: 0.07, h: 3.4, hex: 0x4a4852, sides: 6, top: SOLID[SIGNAL].slice(1) },
   [LANTERN]: { r: 0.075, h: 3.3, hex: 0x24232a, sides: 8, top: SOLID[LANTERN].slice(1), glow: [GLOW[LANTERN]] },
   sign: { r: 0.035, h: 2.9, hex: 0x8a8a94, sides: 5, top: [], plate: true },
+  [PARK]: { r: 0.065, h: 6, hex: 0x9c9fa8, sides: 6, top: SOLID[PARK].slice(1), glow: [GLOW[PARK]] },
 };
+// (low: parts fixed to the foot of the pole, which stay with the bottom piece when it snaps)
+SHAFT[PARKBIN] = { ...SHAFT[PARK], low: SOLID.BIN };
 const shaftOf = (kind) => (isSign(kind) ? SHAFT.sign : SHAFT[kind]);
 // the stretch of a shaft between heights y0 and y1 (it tapers to 0.8 of its radius at the top)
 function shaftPiece(sh, y0, y1) {
@@ -150,8 +161,10 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, sign: 10 };
-const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, sign: 0.08 };
+const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, sign: 10 };
+const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, sign: 0.08 };
+// thin poles that snap on most hits (the Raadi park lamps, Martin 24 Nov: "should then break. Not very thick posts")
+const THIN = { [PARK]: 1, [PARKBIN]: 1 };
 const KNOCK_KEY = 'streetlap.knocked';
 const G = 9.81;
 
@@ -222,8 +235,8 @@ export function createProps(world, opts = {}) {
       if (kind === LIGHT) {
         glow.add(GLOW[LIGHT], x, y, z, cs, sn);
         if (opts.pools !== false) pool.add(POOL, x, y, z, cs, sn);
-      } else if (kind === LANTERN) {
-        glow.add(GLOW[LANTERN], x, y, z, cs, sn);
+      } else if (kind === LANTERN || kind === PARK || kind === PARKBIN) {
+        glow.add(GLOW[kind], x, y, z, cs, sn);
       } else if (kind === SIGNAL) {
         const r = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
         const on = r < 0.45 ? 0 : r < 0.9 ? 2 : 1;
@@ -279,6 +292,7 @@ export function createProps(world, opts = {}) {
     const y0 = piece ? piece.y0 : 0, y1 = piece ? piece.y1 : sh?.h;
     if (sh) {
       solid.add(shaftPiece(sh, y0, y1), 0, 0, 0, cs, sn);
+      if (y0 === 0) for (const p of sh.low || []) solid.add(p, 0, 0, 0, cs, sn);
       if (y1 >= sh.h) {
         for (const p of sh.top) solid.add(p, 0, 0, 0, cs, sn);
         for (const p of sh.glow || []) glow.add(p, 0, 0, 0, cs, sn);
@@ -568,7 +582,7 @@ export function createProps(world, opts = {}) {
           const j = hit(b, cvx, cvz, M, sideOf(e.x, e.z));
           took += j;
           // sometimes it snaps straight away, more often the faster the car; else maybe later, under a wheel
-          if (canBreak(b) && Math.random() < Math.min(0.5, Math.max(0.08, (speed - 6) / 40))) split(b, impactCuts(b.kind));
+          if (canBreak(b) && Math.random() < (THIN[b.kind] ? Math.min(0.95, Math.max(0.6, (speed - 4) / 20)) : Math.min(0.5, Math.max(0.08, (speed - 6) / 40)))) split(b, impactCuts(b.kind));
           cvx -= tmpN.x * j / M; cvz -= tmpN.z * j / M;
           saveTimer = 0.5;
         }

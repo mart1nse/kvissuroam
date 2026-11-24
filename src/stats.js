@@ -87,6 +87,7 @@ function putBack(o) {
 //        paint                                the page's thread was free and still no picture came: the
 //                                             graphics card (or the phone itself) held it
 //   new  shaders | pictures | none            what the frame before the gap sent to the graphics card first
+//   kpc  yes | no                           the browser can build shaders aside and say when they are done
 //   gc   yes                                  script memory fell by over 30 MB across the gap (Chrome only)
 //   os, mem (GB), lvl (graphics level), on (others online), t (since DRIVE), len, do (free, hotlap, race,
 //   stage), kmh, at (the 250 m square)
@@ -142,6 +143,7 @@ function freeze(s, ms) {
   const facts = {
     why,
     new: f.progs > 0 ? 'shaders' : f.tex > 0 ? 'pictures' : 'none',
+    kpc: f.kpc ? 'yes' : 'no',
     os, mem: dm, lvl: String(s.gfx ?? '?'),
     on: bucket(s.others || 0, [1, 10, 30], ['0', '1-9', '10-29', '30+']),
     t: bucket(since, [30, 120, 600], ['<30s', '30s-2m', '2-10m', '10m+']),

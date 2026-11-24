@@ -14,7 +14,7 @@ const { stretches } = require('./freeze-profile.cjs');
 
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
 
-async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0 } = {}) {
+async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0, slowLink = 0, menu = false } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: draw ? { width: 480, height: 270 } : { width: 1280, height: 720 } });
@@ -22,6 +22,43 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
     const errs = [];
     p.on('pageerror', (e) => errs.push(e.message));
     await p.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); localStorage.setItem('kvissuroam.name', 'Tester'); });
+    // shader programs linked while drawing (draw only): when, how long the link and its first check took, and
+    // what three.js named it (a phone links them on its own thread only where the browser can, and iPhones
+    // cannot: 24 Nov 2026, 172 of 235 phone freezes of 1 s or more drew new shaders, 30+ others online)
+    // slowLink: a graphics driver like an iPhone's (draw only): no KHR_parallel_shader_compile, and the first
+    // question about a new program (its build, its uniforms, its first use) waits `slowLink` ms for the build
+    if (slowLink) await p.addInitScript((ms) => {
+      const G = window.WebGL2RenderingContext?.prototype;
+      if (!G) return;
+      const ext = G.getExtension, sup = G.getSupportedExtensions, built = new WeakSet();
+      G.getExtension = function (n) { return n === 'KHR_parallel_shader_compile' ? null : ext.call(this, n); };
+      G.getSupportedExtensions = function () { return (sup.call(this) || []).filter((n) => n !== 'KHR_parallel_shader_compile'); };
+      window.__waits = []; Error.stackTraceLimit = 40;
+      // (where each wait came: inside the drawing of a frame, or ahead in the game's own first use, src/warm.js)
+      const wait = (prog) => {
+        if (!prog || built.has(prog)) return;
+        built.add(prog);
+        const st = new Error().stack || '', where = /useFirsts/.test(st) ? 'ahead' : /\.render \(|at render /.test(st) ? 'draw' : 'other';
+        const t = performance.now(); while (performance.now() - t < ms);
+        __waits.push([t, where, prog]);
+      };
+      for (const k of ['getProgramParameter', 'getProgramInfoLog', 'getActiveUniform', 'getUniformLocation', 'getActiveAttrib', 'getAttribLocation', 'useProgram']) {
+        const f = G[k];
+        G[k] = function (prog, ...a) { wait(prog); return f.call(this, prog, ...a); };
+      }
+    }, slowLink);
+    await p.addInitScript(() => {
+      window.__links = [];
+      const G = window.WebGL2RenderingContext?.prototype;
+      if (!G) return;
+      const link = G.linkProgram;
+      G.linkProgram = function (prog) {
+        let name = '?';
+        try { for (const sh of this.getAttachedShaders(prog) || []) { const m = (this.getShaderSource(sh) || '').match(/#define SHADER_NAME (\S+)/); if (m) { name = m[1]; break; } } } catch {}
+        __links.push([performance.now(), name]);
+        return link.call(this, prog);
+      };
+    });
     await p.addInitScript(() => {
       const raf = window.requestAnimationFrame.bind(window);
       window.__fr = [];
@@ -129,7 +166,12 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
     await p.goto(`http://localhost:${port}/`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     const I0 = 1700, yaw0 = Math.atan2(P[I0 + 1][0] - P[I0][0], -(P[I0 + 1][1] - P[I0][1]));
-    await p.evaluate(async ([x, z, yaw, draw]) => { if (!draw) __game.renderer.render = () => {}; __game.startDriving(); await __game.world.loadAround(x, z, 260); __game.place({ x, z, yaw }); }, [P[I0][0], P[I0][1], yaw0, draw]);
+    // menu: as a player comes in, the menu's warm-up frames first, then DRIVE where the game puts the car
+    if (menu) {
+      await p.waitForFunction(() => __game.warm >= 20, null, { timeout: 120000 });
+      await p.waitForTimeout(3000);
+      await p.evaluate(() => { window.__drive0 = performance.now(); __game.startDriving(); });
+    } else await p.evaluate(async ([x, z, yaw, draw]) => { if (!draw) __game.renderer.render = () => {}; window.__drive0 = performance.now(); window.__progs0 = __game.renderer.info.programs?.length || 0; __game.startDriving(); await __game.world.loadAround(x, z, 260); __game.place({ x, z, yaw }); }, [P[I0][0], P[I0][1], yaw0, draw]);
     await p.waitForFunction(() => __game.mode === 'drive' && !__game.flying, null, { timeout: 180000 });
     // the place built and the first cars of each kind made (worker build, warm-up)
     await p.waitForTimeout(touch ? 25000 : 20000);
@@ -140,12 +182,14 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
     await cdp.send('Profiler.enable');
     await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
     await cdp.send('Profiler.start');
+    const linksBefore = await p.evaluate(() => __links.length);
     const tStart = await p.evaluate(() => { window.__rec = true; return performance.now(); });
     await p.waitForTimeout(secs * 1000);
     const { profile } = await cdp.send('Profiler.stop');
     if (shot) await p.screenshot({ path: shot });
-    const { fr, online, loaf } = await p.evaluate(() => { window.__rec = false; return { fr: __fr, online: __game.mp().count, loaf: __loaf }; });
-    return { errs, fr, profile, tStart, online, secs, loaf };
+    const { fr, online, loaf, links, t0, progs, waits } = await p.evaluate(() => { window.__rec = false; return { fr: __fr, online: __game.mp().count, loaf: __loaf, links: __links, t0: window.__drive0 || 0, waits: (window.__waits || []).map(([t, w, g]) => { const q = (__game.renderer.info.programs || []).find((x) => x.program === g); return [t, w, q ? `${q.name || ''} ${String(q.cacheKey).split(',').filter((x) => x && x !== 'false' && x !== 'undefined' && x !== '0').slice(0, 3).join(' ')} ${String(q.cacheKey).slice(-60).replace(/\s+/g, ' ')}` : '(gone)']; }),
+      progs: (__game.renderer.info.programs || []).slice(window.__progs0 || 0).map((q) => [q.name, q.cacheKey.split(',').filter((x) => x && x !== 'false' && x !== 'undefined' && x !== '0').slice(0, 40).join(' ')]) }; });
+    return { errs, fr, profile, tStart, online, secs, loaf, links, linksBefore, t0, progs, waits };
   } finally { await b.close(); }
 }
 
@@ -193,7 +237,7 @@ module.exports = { crowd, summarise, report };
 if (require.main === module) {
   const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(k + '=')); return a ? a.slice(k.length + 1) : d; };
   (async () => {
-    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0) });
+    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0), slowLink: +arg('slowLink', 0), menu: process.argv.includes('menu') });
     if (r.errs.length) console.log('PAGE ERRORS', r.errs.slice(0, 5));
     console.log(JSON.stringify({ online: r.online, ...summarise(r) }));
     console.log(report(r, +arg('top', 12)));

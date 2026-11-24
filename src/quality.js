@@ -369,7 +369,10 @@ export function createQuality(hooks, caps, opts = {}) {
     try { renderer.shadowMap.enabled = want; sun.castShadow = want; ready = renderer.compileAsync(scene, camera); }
     catch { ready = Promise.resolve(); }
     finally { renderer.shadowMap.enabled = was; sun.castShadow = was; }
-    ready.catch(() => {}).then(() => {
+    // (then the new programs' first use, a program a frame, before the switch: on an iPhone compiling only
+    // asks for them, and the wait for all of them came in the first frame with the new setting; see firstUse
+    // in src/warm.js)
+    ready.catch(() => {}).then(() => (warmFor === want && hooks.firstUse ? hooks.firstUse(scene) : null)).catch(() => {}).then(() => {
       if (warmFor !== want) return;
       warmFor = null;
       if ((levels[current].shadow > 0) === want && renderer.shadowMap.enabled !== want) flip(want);

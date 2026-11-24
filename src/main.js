@@ -253,7 +253,7 @@ function setFar(m) {
   sky.scale.setScalar(far * 0.9);
   scene.fog.far = far < quality.far ? far * 0.95 : 2800;
 }
-const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar }, gfxCaps, {
+const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o) }, gfxCaps, {
   locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
@@ -406,7 +406,20 @@ let warm = 0, warmSkip = 0, pickTimer = 0;
 // finish the one before (createLag in quality.js). Test runs start at once, as before (?warmgate tries it).
 const warmGate = lag.available && params.get('warmgate') !== '0' && (!navigator.webdriver || params.has('warmgate'));
 let readyWait = 0;               // when DRIVE was pressed during the warm-up (0: not waiting)
-const warmedUp = () => warm >= WARM_FRAMES && lag.behind === 0;
+// After the warm-up frames, every shader of everything in the scene (seen from the start or not: the near
+// versions of cars and houses, other players' cars, signs and lights that come on later) is compiled and its
+// first use made, behind the menu. On an iPhone each of them was otherwise a wait of a tenth of a second or
+// more in the frame that first drew it, several at once a freeze of 1 s and more in the first minutes of a
+// drive (24 Nov 2026, /stats: 172 of 235 phone freezes drew new shaders). See firstUse in src/warm.js.
+let sceneShaders = null;           // null: not begun; a promise while compiling; true when done
+function shadersReady() {
+  if (sceneShaders === true) return true;
+  if (!sceneShaders) {
+    try { sceneShaders = warmer.ready(scene).then(() => { sceneShaders = true; }, () => { sceneShaders = true; }); } catch { sceneShaders = true; }
+  }
+  return sceneShaders === true;
+}
+const warmedUp = () => warm >= WARM_FRAMES && lag.behind === 0 && shadersReady();
 function showReady() {
   const b = $('#drive b');
   if (!readyWait) { if (b.dataset.was) { b.textContent = b.dataset.was; delete b.dataset.was; } return; }
@@ -449,8 +462,9 @@ async function boot() {
     carModels = await import('./cars/models/index.js');
     ({ buildCarModel } = carModels);
     // (a car's shaders compiled and its textures sent to the graphics card, one a frame, before it is shown)
+    // (and the first use of its shader programs made ahead, a program a frame: see firstUse in src/warm.js)
     carModels.setCarWarmer(async (obj) => {
-      await renderer.compileAsync(obj, camera, scene);
+      await warmer.ready(obj);
       const texs = new Set();
       obj.traverse((o) => { if (o.isMesh) for (const m of [o.material].flat()) for (const v of Object.values(m)) if (v?.isTexture) texs.add(v); });
       for (const t of texs) { await new Promise((r) => requestAnimationFrame(r)); renderer.initTexture(t); }
@@ -809,7 +823,7 @@ async function boot() {
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
     stage: RAADI,
     // (a nearby ghost car's see-through shader, compiled before it is first used)
-    warm: (obj) => renderer.compileAsync(obj, camera, scene),
+    warm: (obj) => warmer.ready(obj),
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
@@ -1118,6 +1132,7 @@ function startDriving() {
     return;
   }
   if (readyWait) { readyWait = 0; showReady(); }
+  shadersReady();                                    // (where nothing waited for them: made ready from here on)
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
@@ -1160,6 +1175,9 @@ function startDriving() {
   input.enable(true);
   if (resume?.pose && !resume.told) { resume.told = true; setTimeout(() => hud.toast('BACK WHERE YOU WERE', 2500), 700); }
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
+  // what DRIVE itself put in the scene (the race lights, markers, the car's own bits): its shaders now, at the
+  // press of the button, and not in the first frames of the drive (see shadersReady)
+  try { warmer.firstUse(renderer.compile(scene, camera)); } catch (err) { console.warn(err); }
 }
 
 // Full screen on phones. The browser drops it when you switch to another app and only lets a page ask
@@ -1811,7 +1829,8 @@ let PLACES = null, placeAt = 0;             // the places that build on approach
 let quietAt = 0, frameTs = 0;
 // what the last frame did, for the stats' account of a freeze (src/stats.js freeze()): the game's own code, its
 // building and drawing parts (ms), new shader programs and new pictures on the graphics card, script memory
-const lastFrame = { js: 0, build: 0, draw: 0, progs: 0, tex: 0, heap: 0 };
+// (kpc: the browser builds shader programs on its own thread and says when they are done, see src/warm.js)
+const lastFrame = { js: 0, build: 0, draw: 0, progs: 0, tex: 0, heap: 0, kpc: !!renderer.extensions.has('KHR_parallel_shader_compile') };
 for (const [t, ev] of [[window, 'blur'], [window, 'focus'], [document, 'visibilitychange']]) t.addEventListener(ev, () => { quietAt = performance.now(); });
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -2184,6 +2203,7 @@ function frame(ts) {
     lastFrame.tex = renderer.info.memory.textures - tex0;
     part.draw += (lastFrame.draw - part.draw) * 0.05;
     if (still) camera.far = far;
+    if (still && warm >= WARM_FRAMES && mode === 'menu') shadersReady();
   }
   if (readyWait) { showReady(); if (warmedUp() || performance.now() - readyWait > 40000) startDriving(); }
 

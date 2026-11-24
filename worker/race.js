@@ -292,7 +292,10 @@ export class RaceDesk {
   changed(me) {
     const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
     if (!r) return;
-    r.name = me.name; r.car = me.car;
+    r.name = me.name;
+    // the car is the one raced in (Martin 2026-11-24: a winner shown in a bus they took after the finish): it
+    // may change only until their lights go out; after that a car change is OUT for a racer still on the lap
+    if (Date.now() < (r.go || this.s.tGreen)) r.car = me.car;
     this.save(); this.send();
   }
   // a socket went away

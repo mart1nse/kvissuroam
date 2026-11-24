@@ -864,6 +864,7 @@ async function boot() {
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
+    onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
     onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }); if (info?.record) audio.chime?.('record'); } },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {

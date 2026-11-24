@@ -434,7 +434,7 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online }) {
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -1002,14 +1002,21 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   function showAgain() { st.againUntil = performance.now() + 15000; again.classList.remove('hidden'); }
   // the column of light over the start spot: one open cylinder, seen from far (no fog), while no run is on
   let beam = null;
+  // (made through the work queue, so warm.js holds it back unseen until its shader and picture are on the card)
+  let beamQueued = false;
   function showBeam(on) {
-    if (!on && !beam) return;
     if (!beam) {
-      const sp = startPose(), geo = new THREE.CylinderGeometry(START_R, START_R, BEAM_H, 48, 1, true);
-      beam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
-      beam.position.set(sp.x, groundY(sp.x, sp.z) - 0.3 + BEAM_H / 2, sp.z);
-      beam.renderOrder = 5;
-      scene.add(beam);
+      if (!on || beamQueued) return;
+      beamQueued = true;
+      jobs.add(function* () {
+        const sp = startPose(), geo = new THREE.CylinderGeometry(START_R, START_R, BEAM_H, 48, 1, true);
+        const b = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
+        b.position.set(sp.x, groundY(sp.x, sp.z) - 0.3 + BEAM_H / 2, sp.z);
+        b.renderOrder = 5;
+        scene.add(b);
+        beam = b;
+      }, 'raadi start beam');
+      return;
     }
     beam.visible = on;
   }
@@ -1025,6 +1032,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       const pose = startPose();
       place(pose);
       setup(pose);
+      onJump?.();          // (gravel tyres on, as the RAADI button does; Martin 24 Nov: "when goin into the halo i did not get gravel tires")
       st.jump = false;
       requestAnimationFrame(() => { fader.style.opacity = '0'; });
     }, FADE_S * 1000 + 20);

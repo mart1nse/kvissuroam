@@ -88,9 +88,9 @@ STAGE.apex.sort((p, q) => p[0] - q[0]);
 // And the bale at the corner by the pond a touch the other way, towards the road (Martin 23 Nov 00:10, a green
 // arrow from the bale to the road: "move the bale a touch more to the inside and extend the tape to the bale").
 // And the bale at the east loop's fork onto the corner's tip (24 Nov 11:12, an arrow from the bale to the apex).
-// And the bale at the east gate's junction 0.7 m away from the road, towards its tape's end (24 Nov 12:52: "one small
-// bale position change, like 0.7m"); its inside is judged from where it now stands, as everywhere.
-const BALE_IN = { 33: 0.5, 82: 0.7, 370: -0.4, 464: -1.5 };
+// Then 0.7 m back from that tip, away from the road towards its tape's end (24 Nov 12:52: "one small bale position
+// change, like 0.7m", with the map at 14:23); its inside is judged from where it now stands, as everywhere.
+const BALE_IN = { 33: 0.5, 370: -0.4, 464: -0.8 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
 // The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
 // from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its

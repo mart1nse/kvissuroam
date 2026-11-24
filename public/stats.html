@@ -220,12 +220,23 @@
     ].map(function (x) { return '<div class="tile"><b>' + x[0] + '</b><span>' + x[1] + '</span><small>' + x[2] + '</small></div>'; }).join('') + '</div>';
 
     h += '<div class="grid">';
-    // visits per day
-    if (d.days > 1) {
-      var days = [], byDay = {};
+    // visits per day, or per hour on the 24 h tab (Tartu time)
+    var days = [];
+    if (d.hours) {
+      var byHr = {}, hr0 = Math.floor(Date.now() / 36e5) * 36e5;
+      (d.visits || []).forEach(function (r) { byHr[r.at] = r; });
+      for (var i = 23; i >= 0; i--) {
+        var at = hr0 - i * 36e5, lab = new Date(at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Tallinn', hour: '2-digit', minute: '2-digit' });
+        var r0 = byHr[at] || { sessions: 0, drove: 0 };
+        days.push({ day: lab, sessions: r0.sessions, drove: r0.drove, drive: r0.drive, laps: r0.laps, races: r0.races });
+      }
+    } else if (d.days > 1) {
+      var byDay = {};
       (d.daily || []).forEach(function (r) { byDay[r.day] = r; });
       var end = new Date(d.to + 'T12:00:00Z');
-      for (var i = d.days - 1; i >= 0; i--) { var dd = new Date(end - i * 864e5).toISOString().slice(0, 10); days.push(byDay[dd] || { day: dd, sessions: 0, drove: 0 }); }
+      for (i = d.days - 1; i >= 0; i--) { var dd = new Date(end - i * 864e5).toISOString().slice(0, 10); days.push(byDay[dd] || { day: dd, sessions: 0, drove: 0 }); }
+    }
+    if (days.length) {
       var mx = Math.max(1, Math.max.apply(null, days.map(function (r) { return r.sessions; })));
       var cols = days.map(function (r) {
         var only = Math.max(0, r.sessions - r.drove);
@@ -234,7 +245,7 @@
           (only ? '<div class="seg" style="height:' + (only / mx * 100) + '%;background:' + C.violet + '"></div>' : '') +
           (r.drove ? '<div class="seg" style="height:' + (r.drove / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
       }).join('');
-      h += card('Visits per day', null, '<div class="legend"><span><i style="background:' + C.cyan + '"></i>pressed DRIVE</span><span><i style="background:' + C.violet + '"></i>stayed in the menu</span></div>' +
+      h += card(d.hours ? 'Visits hour by hour' : 'Visits per day', d.hours ? 'The last 24 hours, Tartu time.' : null, '<div class="legend"><span><i style="background:' + C.cyan + '"></i>pressed DRIVE</span><span><i style="background:' + C.violet + '"></i>stayed in the menu</span></div>' +
         chart(cols, mx) + '<div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
     }
     h += demand(d);
@@ -287,10 +298,6 @@
       [misc.speed150, 'past 150 km/h'], [misc.speed200, 'past 200 km/h'], [misc.speed250, 'past 250 km/h'],
     ].map(function (x) { return '<div><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');
 
-    var errs = rowsOf(t.err).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 20);
-    h += card('Errors', 'The most common script errors, counted once per visit.', errs.length
-      ? '<table><thead><tr><th>Error</th><th style="text-align:right">Visits</th></tr></thead><tbody>' + errs.map(function (r) { return '<tr><td><code>' + esc(r[0]) + '</code></td><td class="n">' + fmt(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>'
-      : '<p class="empty">No errors. Nice.</p>', true);
     h += '</div>';
     out.innerHTML = h;
     drawMap(t.heat || {}, d.heat);

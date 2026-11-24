@@ -320,10 +320,21 @@ export class Stats extends DurableObject {
     }
     if (req.method === 'GET') {
       if (this.over(`g|${ip}`, 60, 60000)) return json({ error: 'too many requests' }, 429);
+      // The script errors are not on /stats (Martin 2026-11-24: "not needed there"): ?errors=1 gives only them,
+      // for the unlisted page /stats-errors; the stats answer leaves them out
+      const errs = !!url.searchParams.get('errors');
+      const answer = (body) => {
+        if (errs) {
+          const e = Object.entries(body.total.err || {}).sort((a, b) => b[1] - a[1]).slice(0, 100);
+          return json({ days: body.days, hours: body.hours, from: body.from, to: body.to, visits: body.total.sessions || 0, err: e });
+        }
+        const { err, ...total } = body.total;
+        return json({ ...body, total });
+      };
       if (url.searchParams.get('hours')) {
         // the last 24 hours: this hour so far and the 23 before it
         const hit = this.cache.get('h24');
-        if (hit && Date.now() - hit.at < 60000) return json(hit.body);
+        if (hit && Date.now() - hit.at < 60000) return answer(hit.body);
         const from = hourKey(Date.now() - 23 * HOUR);
         const now = Date.now();
         const hrs = this.sql.exec('SELECT hour, data FROM hours WHERE hour >= ? ORDER BY hour', from).toArray()
@@ -337,14 +348,16 @@ export class Stats extends DurableObject {
           const a = Date.parse(r.hour + ':00:00Z');
           return { at: a, ...loadView(r.data.load, loadSpan(r.data.load, a, Math.min(now, a + HOUR))) };
         });
+        // visits hour by hour, the 24 h tab's columns (the other tabs have them per day)
+        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0 }));
         const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
-          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly };
+          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits };
         this.cache.set('h24', { at: Date.now(), body });
-        return json(body);
+        return answer(body);
       }
       const days = Math.max(1, Math.min(KEEP_DAYS, parseInt(url.searchParams.get('days'), 10) || 30));
       const hit = this.cache.get(days);
-      if (hit && Date.now() - hit.at < 60000) return json(hit.body);
+      if (hit && Date.now() - hit.at < 60000) return answer(hit.body);
       const from = tartuDay(new Date(Date.now() - (days - 1) * 86400000));
       const rows = this.sql.exec('SELECT day, data FROM days WHERE day >= ? ORDER BY day', from).toArray()
         .map((r) => { try { return { day: r.day, data: JSON.parse(r.data) }; } catch { return { day: r.day, data: {} }; } });
@@ -359,7 +372,7 @@ export class Stats extends DurableObject {
       const total = sumDays(rows.map((r) => r.data));
       const body = { days, from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)) };
       this.cache.set(days, { at: Date.now(), body });
-      return json(body);
+      return answer(body);
     }
     return json({ error: 'not found' }, 404);
   }

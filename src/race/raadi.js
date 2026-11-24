@@ -105,7 +105,9 @@ for (const a of STAGE.apex) {
 // Bales that are not at a corner, set where Martin asked for them: [x, z, the point whose way the banner faces]
 // (24 Nov "haybale here": right of the road at the side road's mouth before the east loop's fork; at 11:12 a little up
 // the road and in towards it, "move 2 haybales"; and "ad 1": on the outside of the fork's left turn, under its board)
-const MORE_BALES = [[2874.7, 454.1, 451], [2901.1, 436.3, 470]];
+// and (12:10) one in front of the birch on the outside of the east loop's left hairpin, "to soften potential impac
+// to tree and proect it"
+const MORE_BALES = [[2874.7, 454.1, 451], [2901.1, 436.3, 470], [2905.7, 360.9, 512]];
 // The glow along the inside of the tight corners is rounded (Martin 23 Nov 19:26, blue curves inside five apexes:
 // "Round a bit the halos in the apexes"): the path's inside edge folds into a sharp point there. ROUND[k] is the
 // arc that takes its place: { a, b, cx, cz, r, t0, t1 }, points a..b on a circle of radius r round (cx, cz) from

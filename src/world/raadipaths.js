@@ -21,7 +21,12 @@ import { surfaceStrip, surfaceArea, SURFACE } from './data.js';
 
 for (const r of PATHS.add) surfaceStrip(r.pts, r.w / 2, SURFACE.GRAVEL);
 for (const g of PATHS.gravel) surfaceStrip(g.line, g.w / 2, SURFACE.GRAVEL);
-const APRONS = [...PATHS.aprons, ...(PATHS.fillets || [])].map((a) => { const q = []; for (let i = 0; i < a.length; i += 2) q.push([a[i], a[i + 1]]); return q; });
+// And wider on the pond side of the stretch between the middle pond and the boulder field (Martin 24 Nov 12:06, a
+// blue line about 2 m out from the edge: "add width to the road to the blue line. extend it with gravel so if you
+// drive over it the current edge it helps a bit to catch you"): stage points 321 to 346, 2.2 m more on the left.
+// Only the ground: the stage's edge and its penalties stay where they were.
+const WIDEN = [2761.9, 380.6, 2761.6, 383.2, 2760.5, 385.0, 2759.6, 386.4, 2759.0, 387.8, 2758.5, 389.3, 2758.2, 391.2, 2758.0, 393.3, 2757.9, 395.3, 2758.1, 397.2, 2758.4, 399.1, 2758.7, 401.0, 2759.1, 402.9, 2759.6, 404.8, 2760.1, 406.7, 2760.6, 408.6, 2761.1, 410.6, 2761.6, 412.6, 2762.1, 414.5, 2762.7, 416.5, 2763.2, 418.4, 2763.7, 420.4, 2764.2, 422.4, 2764.6, 424.3, 2765.0, 426.2, 2765.2, 428.0, 2765.3, 429.9, 2765.4, 432.0, 2765.8, 432.0, 2765.7, 429.9, 2766.2, 427.9, 2766.7, 426.0, 2767.1, 423.8, 2766.6, 421.8, 2766.1, 419.8, 2765.6, 417.8, 2765.1, 415.8, 2764.6, 413.9, 2764.0, 411.9, 2763.5, 410.0, 2763.0, 408.0, 2762.5, 406.1, 2762.0, 404.2, 2761.6, 402.3, 2761.2, 400.5, 2760.8, 398.6, 2760.6, 396.9, 2760.4, 395.3, 2760.5, 393.5, 2760.6, 391.5, 2760.9, 389.9, 2761.3, 388.6, 2761.8, 387.6, 2761.7, 385.7, 2761.9, 383.3, 2762.3, 380.6];
+const APRONS = [...PATHS.aprons, ...(PATHS.fillets || []), WIDEN].map((a) => { const q = []; for (let i = 0; i < a.length; i += 2) q.push([a[i], a[i + 1]]); return q; });
 for (const q of APRONS) surfaceArea(q, SURFACE.GRAVEL);
 for (const p of PATHS.paved) surfaceStrip(p.pts, p.hw, SURFACE.PAVED);
 

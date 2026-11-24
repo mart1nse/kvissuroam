@@ -73,4 +73,13 @@ await place(D, 1702);
 await D.waitForFunction(() => __game.mp().kudosCars([]).length, null, { timeout: 60000 }).catch(() => {});
 await D.waitForTimeout(1500);
 console.log('D (joined later) sees:', JSON.stringify(await signs(D)), '· counts D holds:', await D.evaluate(() => JSON.stringify(__game.mp().roster().map((p) => [p.name, __game.mp().remote(p.id)?.kn]))));
+// B reloads its page: today's thumbs are kept in its browser and told to the server again
+await B.reload();
+await B.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
+await B.evaluate(() => { __game.setCar('m3', true); __game.startDriving(); });
+await B.waitForFunction(() => __game.mode === 'drive' && !__game.flying, null, { timeout: 120000 });
+await place(B, 1708);
+await D.waitForFunction(() => __game.mp().kudosCars([]).length, null, { timeout: 90000 }).catch(() => {});
+await B.waitForTimeout(3000);
+console.log('after B reloads, B sees:', JSON.stringify(await signs(B)), '· D sees:', JSON.stringify(await signs(D)));
 for (const b of [ba, bb, bc, bd]) await b.close();

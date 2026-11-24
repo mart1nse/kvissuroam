@@ -60,6 +60,7 @@ const poseOk = (p) => Array.isArray(p) && p.length >= 9 && p.length <= 24 && p.e
 const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital'];
 const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo', 'Tiger', 'Wave', 'Fox'];
 
+const KUDOS_KEY = 'kvissuroam.kudos';
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
 
@@ -142,7 +143,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
   const kudosAt = new Map();     // id -> when we last sent them a thumbs up (seconds)
-  const myKudos = { kn: 0, kf: [] };   // thumbs up we got this session (each other player's: o.kn, o.kf, from the server too)
+  // thumbs up we got today (each other player's: o.kn, o.kf, from the server). Kept in this browser until
+  // midnight (Martin, 2026-11-24: a reload or a lost connection kept nothing) and told to the server in every
+  // hello, so after a reconnect the others see the same count we do.
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: Array.isArray(v.kf) ? v.kf.filter((x) => typeof x === 'string').slice(-24) : [] }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
+  const saveKudos = () => lsSet(KUDOS_KEY, JSON.stringify({ day: today(), kn: myKudos.kn, kf: myKudos.kf }));
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
   const far = farCars(scene, MAX_OTHERS);
@@ -203,7 +209,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false; bundled = false;
       // b: 1, everyone's positions in one message ten times a second (see TICK in worker/index.js)
-      send({ t: 'hello', b: 1, name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined });
+      send({ t: 'hello', b: 1, name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined, kn: myKudos.kn || undefined, kf: myKudos.kn ? myKudos.kf : undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -395,7 +401,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'ku': {          // a thumbs up, from id to `to` (either may be us): see src/kudos.js
         if (typeof m.id !== 'string' || typeof m.to !== 'string') break;
         const o = m.to === myId ? myKudos : others.get(m.to);
-        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), m.id].slice(-24); }
+        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), m.id].slice(-24); if (o === myKudos) saveKudos(); }
         onKudos?.(m.id, m.to);
         break;
       }

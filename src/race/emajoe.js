@@ -518,6 +518,7 @@ export function createEmajoe(world, group) {
         const P3 = (t, d, lift) => { const [x, z] = atT(t, kerbFace(t) + d); return [x, world.heightAt(x, z) + lift, z]; };
         const step = 0.5;
         for (let t = PAVE.i0; t < last - 1e-6; t += step) {
+          if (jobs.late()) yield;                 // (26 ms in one go on the lap check, 24 Nov)
           const u = Math.min(last, t + step);
           // face: from just under the road up the rounded edge (it follows the bump the cars feel), the
           // lower part in the face colour and the round-over in stone, then the stone on top

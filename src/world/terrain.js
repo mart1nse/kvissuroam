@@ -384,6 +384,35 @@ export function createTerrain(world, renderer, opts) {
     }
     return a;
   }
+  // The same tile drawn coarser far off (Martin 2026-11-24: lag at the end of Emajõe in a race. Looking back across
+  // the river the view held the most ground of the lap, squares of 51 thousand triangles each drawn whole out to
+  // 1.5 km). A block of B by B cells is two triangles; along the tile's edges a block takes every point of the edge
+  // (a fan round its middle), so it meets a neighbour drawn at any detail without a crack.
+  const lodCache = new Map();
+  function lodIndex(seg, B) {
+    if (B === 1 || seg % B) return indexFor(seg);
+    const key = `${seg}/${B}`;
+    let a = lodCache.get(key);
+    if (a) return a;
+    const nv = seg + 1, v = (i, j) => j * nv + i, out = [];
+    for (let j0 = 0; j0 < seg; j0 += B) for (let i0 = 0; i0 < seg; i0 += B) {
+      const i1 = i0 + B, j1 = j0 + B;
+      const top = j0 === 0, bot = j1 === seg, left = i0 === 0, right = i1 === seg;
+      if (!top && !bot && !left && !right) { out.push(v(i0, j0), v(i0, j1), v(i1, j0), v(i1, j0), v(i0, j1), v(i1, j1)); continue; }
+      // round the block: down its left side, along its bottom, up its right side, back along its top
+      const ring = [];
+      for (let j = j0; j < j1; j += left ? 1 : B) ring.push(v(i0, j));
+      for (let i = i0; i < i1; i += bot ? 1 : B) ring.push(v(i, j1));
+      for (let j = j1; j > j0; j -= right ? 1 : B) ring.push(v(i1, j));
+      for (let i = i1; i > i0; i -= top ? 1 : B) ring.push(v(i, j0));
+      const m = v(i0 + B / 2, j0 + B / 2);
+      for (let k = 0; k < ring.length; k++) out.push(m, ring[k], ring[(k + 1) % ring.length]);
+    }
+    a = new THREE.BufferAttribute(nv * nv > 65535 ? new Uint32Array(out) : new Uint16Array(out), 1);
+    lodCache.set(key, a);
+    return a;
+  }
+  const LOD2 = 600, LOD4 = 1100;          // metres from a tile's middle (its near edge some 230 m nearer): blocks of 2, then of 4 (a little either way: no flicker)
 
   // Ground mask of a sector, built when the first of its tiles comes close and shared by them.
   const paint = createRoadPainter(world, opts.roadTex || 1024);
@@ -537,7 +566,7 @@ export function createTerrain(world, renderer, opts) {
           mesh.userData.kerb = km;
         }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
-        const ch = { url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
+        const ch = { seg, B: 1, url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
         yield;
@@ -637,6 +666,8 @@ export function createTerrain(world, renderer, opts) {
     const want = [];
     for (const ch of chunks) {
       ch.d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
+      const k = ch.B === 1 ? (ch.d > LOD2 + 30 ? 2 : 1) : ch.B === 2 ? (ch.d < LOD2 - 30 ? 1 : ch.d > LOD4 + 30 ? 4 : 2) : ch.d < LOD4 - 30 ? 2 : 4;
+      if (k !== ch.B) { ch.B = k; ch.mesh.geometry.setIndex(lodIndex(ch.seg, k)); }
       if (ch.xurl) {
         if (ch.state === 'hi' && ch.xstate === 'none' && ch.d < 200 && loading < 4) loadX(ch);
         else if (ch.xstate === 'on' && ch.d > 300) dropX(ch);

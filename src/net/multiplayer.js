@@ -47,6 +47,11 @@ const DETAIL = 110, DETAIL_LOW = 75;
 const FAR = 900;
 const TAG_DIST = 150, TAGS = 6, TAGS_LOW = 4;   // (was every car within 600 m); a name that would cover a nearer one is left out
 const SHADOW_DIST = 60;          // only cars this near cast a shadow
+// A pack (Martin 2026-11-24, lag in a race of 19 with 60 online): every car within DETAIL was drawn whole, 50 to 75
+// thousand triangles and a dozen pieces each, and again for the sun's shadow within SHADOW_DIST: at a race start
+// twenty such cars about doubled what the graphics card draws. Now only the WHOLE nearest are whole (the rest that
+// far are blocks), and only the SHADOWS nearest cast a shadow.
+const WHOLE = 10, WHOLE_LOW = 6, SHADOWS = 4;
 // Phones (Martin 2026-11-24, getting ready for 50 and more online): each kind of car another player drives
 // is built once on this page (its template, about 16 MB on the graphics card and 19 MB of memory), and 22
 // players in 12 kinds of car added some 400 MB on an emulated phone, more than an iPhone has to spare. On
@@ -98,21 +103,49 @@ function haloMesh() {
   return m;
 }
 
-// The far stand-in: a car body and a cabin, unit sized (scaled per car to its length, width and height),
-// coloured per car. One InstancedMesh for every far car; made with the game, so its shader is compiled at
-// loading and not while driving.
+// The far stand-in: a low car shape, unit sized (scaled per car to its width, height and length), coloured per
+// car. One InstancedMesh for every far car; made with the game, so its shader is compiled at loading and not
+// while driving. (Martin 2026-11-24: cars that caught up looked like bricks. On a phone a fourth kind of car
+// stays a stand-in however near, see LEAN_KINDS, so it has a bonnet, a boot, dark windows and wheels: 140
+// triangles, still one draw call. The windows and wheels are dark by their vertex colour, which the
+// car's colour multiplies.)
 function farCars(scene, max) {
-  const body = new THREE.BoxGeometry(1, 0.5, 1); body.translate(0, 0.3, 0);
-  const cab = new THREE.BoxGeometry(0.84, 0.42, 0.5); cab.translate(0, 0.76, 0.06);
-  const pos = [...body.attributes.position.array, ...cab.attributes.position.array];
-  const nor = [...body.attributes.normal.array, ...cab.attributes.normal.array];
-  const idx = [...body.index.array, ...cab.index.array.map((i) => i + body.attributes.position.count)];
+  const pos = [], col = [];
+  const PAINT = [1, 1, 1], GLASS = [0.1, 0.11, 0.14], TYRE = [0.05, 0.05, 0.05];
+  const tri = (a, b, c, k) => { pos.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) col.push(...k); };
+  const quad = (a, b, c, d, k) => { tri(a, b, c, k); tri(a, c, d, k); };
+  // a side profile (z forward -0.5 to the back 0.5, y up), made solid across x from -w to w; the profile goes
+  // round counter-clockwise seen from +x. kind(i) colours the strip from point i to i+1.
+  const prism = (pr, w, kind, sideK) => {
+    const n = pr.length;
+    for (let i = 0; i < n; i++) {
+      const [z0, y0] = pr[i], [z1, y1] = pr[(i + 1) % n];
+      quad([w, y0, z0], [w, y1, z1], [-w, y1, z1], [-w, y0, z0], kind(i));
+    }
+    for (let i = 1; i < n - 1; i++) {
+      tri([w, pr[0][1], pr[0][0]], [w, pr[i][1], pr[i][0]], [w, pr[i + 1][1], pr[i + 1][0]], sideK);
+      tri([-w, pr[0][1], pr[0][0]], [-w, pr[i + 1][1], pr[i + 1][0]], [-w, pr[i][1], pr[i][0]], sideK);
+    }
+  };
+  // body: bumper, bonnet, the deck under the windows, boot lid, tail, underside
+  prism([[-0.5, 0.13], [0.5, 0.13], [0.5, 0.47], [0.43, 0.56], [-0.12, 0.58], [-0.46, 0.5], [-0.5, 0.4]], 0.5, () => PAINT, PAINT);
+  // cabin: windscreen, roof (painted), rear window; its sides are the side windows
+  prism([[-0.15, 0.57], [0.4, 0.57], [0.25, 0.94], [0.0, 0.95]], 0.42, (i) => (i === 2 ? PAINT : GLASS), GLASS);
+  // wheels: an octagon on each side, a little outside the body (round on a car of 4.5 by 1.45 m)
+  const R = 0.21, RZ = R * 1.45 / 4.4;
+  for (const sx of [1, -1]) for (const zc of [-0.32, 0.32]) {
+    const x = 0.505 * sx, c = [x, R, zc];
+    for (let k = 0; k < 8; k++) {
+      const a0 = (k / 8) * Math.PI * 2, a1 = ((k + 1) / 8) * Math.PI * 2;
+      const p0 = [x, R + Math.sin(a0) * R, zc + Math.cos(a0) * RZ], p1 = [x, R + Math.sin(a1) * R, zc + Math.cos(a1) * RZ];
+      if (sx > 0) tri(c, p1, p0, TYRE); else tri(c, p0, p1, TYRE);
+    }
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  geo.setIndex(idx);
-  body.dispose(); cab.dispose();
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), max);
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), max);
   mesh.name = 'remote far cars';
   mesh.setColorAt(0, new THREE.Color(0xffffff));
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -707,6 +740,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
     f.a = a;
   }
+  let wholeCut = Infinity, shadowCut = Infinity;
+  const dsBuf = [];
   // ---- Lap record replays (src/race/replay.js): one car at a time, drawn like another player's (not in the online
   // list, the map or the race; nobody bumps it), its pose read from the recorded lap instead of the network.
   const REPLAY_ID = '~replay';           // (not a server id: those are letters and digits, see cleanOn in worker/index.js)
@@ -819,6 +854,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const ghostMe = hotlap(), me = active && car;
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let nf = 0, recolour = false, near2 = Infinity, copied = false;
+    const ds = dsBuf;
     for (const o of replay ? [...others.values(), replay] : others.values()) {
       o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
@@ -839,7 +875,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // whole car near, a block further out (a little either way before it changes: no flicker at the edge);
       // a block too while its car is not built (yet, or on a phone not at all: see LEAN_NEAR)
       const whole = !!g && o.model.warmed !== false;
-      const near = whole && d < (o.near ? detail * 1.15 : detail);
+      if (whole && d < detail * 1.15) ds.push(d);
+      const near = whole && d < (o.near ? Math.min(detail * 1.15, wholeCut * 1.08) : Math.min(detail, wholeCut));
       if (g) setNear(o, near);
       if (!near) {
         if (d < farMax) {
@@ -884,7 +921,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         o.tagA = 1 - (1 - TAG_MIN) * (1 - o.fa) / (1 - FADE_MIN);
         if (o.halo && hot) o.halo.material.opacity = pulse * o.tagA;
         // a shadow only close by, where it can be seen
-        const sh = d < SHADOW_DIST;
+        const sh = d < (o.shadow ? Math.min(SHADOW_DIST, shadowCut * 1.08) : Math.min(SHADOW_DIST, shadowCut));
         if (sh !== o.shadow) { o.shadow = sh; g.traverse((c) => { if (c.isMesh && c !== o.halo) c.castShadow = sh; }); }
         g.visible = true;
         g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
@@ -905,6 +942,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       o.d = d;
     }
     nearest = Math.sqrt(near2);
+    // the nearest WHOLE (and SHADOWS) cars only, by last frame's distances (see WHOLE)
+    ds.sort((a, b) => a - b);
+    const wholeMax = low() ? WHOLE_LOW : WHOLE;
+    wholeCut = ds.length > wholeMax ? ds[wholeMax - 1] + 0.01 : Infinity;
+    shadowCut = ds.length > SHADOWS ? ds[SHADOWS - 1] + 0.01 : Infinity;
+    ds.length = 0;
     far.count = nf;
     if (nf) far.instanceMatrix.needsUpdate = true;
     if (recolour) far.instanceColor.needsUpdate = true;

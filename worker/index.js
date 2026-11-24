@@ -92,7 +92,8 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) {
-      // page loads on the old address go to www.linnaring.com (worker/moved.js)
+      // the page itself never gets here (a static asset; index.html moves the old addresses on), but
+      // other paths on the old address go to www.linnaring.com (worker/moved.js)
       return moved(req, url) || (env.ASSETS ? env.ASSETS.fetch(req) : new Response('Not found', { status: 404 }));
     }
     // the game only ever calls its own address: another website may not use a visitor's browser to

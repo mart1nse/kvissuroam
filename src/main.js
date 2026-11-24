@@ -1623,9 +1623,9 @@ document.addEventListener('click', (e) => {
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
 }
-// (one finger dragging the row of cars, the lap times board, the options panel or the race standings is a scroll, and must be left alone)
+// (one finger dragging the row of cars, the lap times board, the options panel, the race standings or the map's list of players is a scroll, and must be left alone)
 document.addEventListener('touchmove', (e) => {
-  if (e.touches.length === 1 && e.target.closest?.('#cards, #board, #options, #rlist .tb')) return;
+  if (e.touches.length === 1 && e.target.closest?.('#cards, #board, #options, #rlist .tb, #roster')) return;
   if (e.cancelable) e.preventDefault();
 }, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());

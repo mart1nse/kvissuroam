@@ -1778,6 +1778,9 @@ let PLACES = null, placeAt = 0;             // the places that build on approach
 // freeze a player feels while driving (garage, GETTING READY, a jump or reset, the city map or options open,
 // another window in front, the tab hidden). A long frame counts only if the whole of it came after that.
 let quietAt = 0, frameTs = 0;
+// what the last frame did, for the stats' account of a freeze (src/stats.js freeze()): the game's own code, its
+// building and drawing parts (ms), new shader programs and new pictures on the graphics card, script memory
+const lastFrame = { js: 0, build: 0, draw: 0, progs: 0, tex: 0, heap: 0 };
 for (const [t, ev] of [[window, 'blur'], [window, 'focus'], [document, 'visibilitychange']]) t.addEventListener(ev, () => { quietAt = performance.now(); });
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -1913,7 +1916,8 @@ function frame(ts) {
     stage?.update(car, carId, s0Short(), dt, inpNow());
     if (stage) trackPills();
   }
-  stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1 });
+  stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,
+    from: gapFrom, fz: lastFrame, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free' });
 
   // ---- car visuals
   const s = car.spec;
@@ -2113,7 +2117,9 @@ function frame(ts) {
     warmer.tick((frameMs / 16.7) * (hurry ? 4 : 1));
     if (jobs.live && !hurry && performance.now() - q1 > Math.max(8, frameMs * 0.15)) jobs.rest();
   }
-  part.build += (performance.now() - q0 - part.build) * 0.05;
+  lastFrame.build = performance.now() - q0;
+  lastFrame.draw = lastFrame.progs = lastFrame.tex = 0;
+  part.build += (lastFrame.build - part.build) * 0.05;
   hudTimer -= dt;
   // (spectating: the watched car's speed, revs, street and minimap)
   const hc = watch?.view || car;
@@ -2135,14 +2141,17 @@ function frame(ts) {
     const far = camera.far;
     if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
-    const d0 = performance.now();
+    const d0 = performance.now(), progs0 = renderer.info.programs?.length || 0, tex0 = renderer.info.memory.textures;
     shrinker?.wake();                              // a picture of a place the car is coming back to (phonetex.js)
     onePass(scene);                                // see-through sheets in one go (src/still.js)
     gpuTimer.begin();
     renderer.render(scene, camera);
     gpuTimer.end();
     lag.mark();
-    part.draw += (performance.now() - d0 - part.draw) * 0.05;
+    lastFrame.draw = performance.now() - d0;
+    lastFrame.progs = (renderer.info.programs?.length || 0) - progs0;
+    lastFrame.tex = renderer.info.memory.textures - tex0;
+    part.draw += (lastFrame.draw - part.draw) * 0.05;
     if (still) camera.far = far;
   }
   if (readyWait) { showReady(); if (warmedUp() || performance.now() - readyWait > 40000) startDriving(); }
@@ -2151,6 +2160,8 @@ function frame(ts) {
   // (not judged: a tab coming back, the city loading after a jump, the phones' menu shot drawn at half rate)
   if (settle > 0 || intro?.fixed || still || !world.ready(car.x, car.z)) gfx.hold(1);   // (nothing is drawn behind the still menu picture)
   const jsMs = performance.now() - t0;
+  lastFrame.js = jsMs;
+  if (stats.on) lastFrame.heap = performance.memory?.usedJSHeapSize || 0;
   const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms);
   if (back) {
     back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);

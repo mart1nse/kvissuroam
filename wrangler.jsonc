@@ -5,6 +5,8 @@
   "name": "kvissuroam",
   "main": "worker/index.js",
   "compatibility_date": "2026-06-01",
+  // variables set in the Cloudflare dashboard (MAX_ONLINE: the online cap, at most 100) survive deploys
+  "keep_vars": true,
   "build": {
     "command": "npm run build"
   },

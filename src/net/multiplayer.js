@@ -58,6 +58,11 @@ const WHOLE = 10, WHOLE_LOW = 6, SHADOWS = 4;
 // a phone a car is built only once it comes within LEAN_NEAR metres, and at most LEAN_KINDS kinds; any
 // other is a block in the player's map colour.
 const LEAN_NEAR = 120, LEAN_KINDS = 3;
+// Which 3 (Martin 2026-11-24: "could it be the 3 cars that are the most in the race"): the first kinds to come near
+// take the places, but every LEAN_PICK seconds the kinds are counted (in a race we are in: the racers; else the cars
+// within LEAN_POOL metres) and a kind with LEAN_MARGIN more cars than the least driven one held takes its place:
+// that kind's cars become stand-ins and its template is freed from the page and the graphics card (dropModel).
+const LEAN_POOL = 240, LEAN_PICK = 2, LEAN_MARGIN = 2;
 // what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
 const cleanName = (s) => String(s || '').normalize('NFC')
   .replace(/[\u0000-\u001f\u007f-\u009f<>\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g, '')
@@ -162,7 +167,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, stage = false, low = () => false, lean = () => false, warm = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {} }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -332,7 +337,32 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (!lean()) modelReady(id, false);               // (a phone waits until the car comes near: see LEAN_NEAR)
   }
   // may this page build (or has it built) this kind of car? Always, except on a phone over LEAN_KINDS
-  const kinds = new Set();
+  const kinds = new Set(), kindCount = new Map();
+  let kindAt = 0;
+  // a car's whole model taken away (it is drawn as the stand-in until it gets one again)
+  function unModel(o) {
+    if (!o.model) return;
+    setNear(o, false);
+    dropFade(o);
+    o.model = null; o.modelCar = null; o.halo = null;
+  }
+  // the most driven kinds take the places (see LEAN_PICK); kindCount was filled by this frame's update
+  function pickKinds(now) {
+    if (now - kindAt < LEAN_PICK) return;
+    kindAt = now;
+    if (kinds.size < LEAN_KINDS) return;
+    let best = null, bn = 0, worst = null, wn = Infinity;
+    for (const [id, n] of kindCount) if (!kinds.has(id) && n > bn) { best = id; bn = n; }
+    // (not the kind we drive: its scanned body's pictures are our car's too, and would be sent to the card again)
+    for (const id of kinds) { const n = kindCount.get(id) || 0; if (id !== carId && n < wn) { worst = id; wn = n; } }
+    if (!best || !worst || bn < wn + LEAN_MARGIN) return;
+    for (const o of others.values()) if (o.modelCar === worst) unModel(o);
+    if (replay?.modelCar === worst) unModel(replay);
+    fadeWarm.delete(worst);
+    kinds.delete(worst);
+    dropModel(worst);
+    kinds.add(best);
+  }
   function kindOk(id) {
     if (!lean() || kinds.has(id)) return true;
     if (kinds.size >= LEAN_KINDS) return false;
@@ -851,7 +881,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     fxList.length = 0;
     tagList.length = 0;
     const pulse = 0.7 + 0.3 * Math.sin(now * 4.5);
-    const ghostMe = hotlap(), me = active && car;
+    const ghostMe = hotlap(), me = active && car, racingMe = !!myId && racing(myId);
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let nf = 0, recolour = false, near2 = Infinity, copied = false;
     const ds = dsBuf;
@@ -869,6 +899,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (p && car) near2 = Math.min(near2, (p[0] - car.x) ** 2 + (p[1] - car.z) ** 2);
       // (heard, and smoking, even while their car is still being built; past 400 m neither is heard or seen)
       if (p && o.live && d < 400) fxList.push(effects(o, p, Math.sin(p[3]), -Math.cos(p[3])));
+      if (p && lean() && o.live && (racingMe ? racing(o.id) : d < LEAN_POOL)) kindCount.set(o.car, (kindCount.get(o.car) || 0) + 1);
+      // (a phone: someone changed to a kind it does not build: the stand-in, not their old car)
+      if (o.model && o.modelCar !== o.car && lean() && !kinds.has(o.car)) unModel(o);
       const g = o.model?.group;
       if (!p) { if (g) setNear(o, false); showTag(o, false); continue; }
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
@@ -942,6 +975,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       o.d = d;
     }
     nearest = Math.sqrt(near2);
+    if (lean()) { pickKinds(now); kindCount.clear(); }
     // the nearest WHOLE (and SHADOWS) cars only, by last frame's distances (see WHOLE)
     ds.sort((a, b) => a - b);
     const wholeMax = low() ? WHOLE_LOW : WHOLE;

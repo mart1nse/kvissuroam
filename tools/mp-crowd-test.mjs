@@ -13,6 +13,7 @@ const N = +arg('n', 22), PACK = +arg('pack', 6), port = +arg('port', 5199), touc
 const P = JSON.parse(fs.readFileSync(new URL('../src/race/track.json', import.meta.url))).pts;
 const I0 = 1700;                       // our spot on the track
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
+if (arg('cars', '')) CARS.splice(0, CARS.length, ...arg('cars', '').split(','));   // cars=a,b,c: the drivers' cars in turn
 
 const VW = +arg('vw', 1000), VH = +arg('vh', 600);
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -111,7 +112,7 @@ const shot = arg('shot', '');
 if (shot) { await p.waitForTimeout(3000); await p.screenshot({ path: shot }); }
 if (process.argv.includes('models')) console.log(JSON.stringify(await p.evaluate(() => {
   const out = [];
-  __game.scene.traverse((o) => { if (!o.userData?.remoteCar) return; let m = 0, t = 0, sh = 0; o.traverse((c) => { if (c.isMesh) { m++; if (c.castShadow) sh++; const g = c.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3 * (c.count || 1); } }); out.push([m, Math.round(t / 1000), sh]); });
+  __game.scene.traverse((o) => { if (!o.userData?.remoteCar) return; out.push(o.name); let m = 0, t = 0, sh = 0; o.traverse((c) => { if (c.isMesh) { m++; if (c.castShadow) sh++; const g = c.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3 * (c.count || 1); } }); out.push([m, Math.round(t / 1000), sh]); });
   return out;
 })));
 await b.close();

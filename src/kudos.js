@@ -153,7 +153,7 @@ export function createKudos({ bags = () => [], onBig } = {}) {
 
   // the small thumbs on a board: n received, colours of their senders (oldest first)
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color();
-  function layout(b, n, colours) {
+  function layout(b, n, colours, from = []) {
     const key = `${n}|${colours.slice(-b.slots.length).join(',')}`;
     if (key === b.key) return;
     b.key = key;
@@ -166,6 +166,8 @@ export function createKudos({ bags = () => [], onBig } = {}) {
     }
     const full = n > cap, shown = full ? cap - 1 : n;
     const cols = colours.slice(-shown);            // (full: the newest ones)
+    // who gave which (for a click on one, see pick): the newest `shown` in their places, the older ones under +N
+    b.who = from.slice(-shown); b.older = from.slice(0, Math.max(0, from.length - shown)).reverse(); b.olderN = full ? n - shown : 0;
     for (let i = 0; i < shown; i++) {
       const [x, y] = b.slots[i];
       b.thumbs.setMatrixAt(i, M.compose(V.set(x, y, 0), Q, S.set(b.c, b.c, 1)));
@@ -286,10 +288,32 @@ export function createKudos({ bags = () => [], onBig } = {}) {
       const b = boardOf(bag.group, bag.car);
       if (!b) continue;
       seen.add(bag.group);
-      layout(b, Math.max(0, bag.n - pending(bag.group)), bag.colours);
+      layout(b, Math.max(0, bag.n - pending(bag.group)), bag.colours, bag.from);
     }
     for (const g of boards.keys()) if (!seen.has(g) && !live.some((l) => l.group === g) && !waiting.has(g)) dropBoard(g);
   }
 
-  return { show, update, get showing() { return live.length + waiting.size; } };
+  // A click or tap at (x, y) px on the screen: the small thumb nearest to it within `reach` px, on any car's
+  // window ({ who: [id, name, ms] } or, on the +N place, { older: [...], more }), else null. Only the places of
+  // the thumbs shown are projected, and only on a click: nothing a frame (Martin, 2026-11-24).
+  const P = new THREE.Vector3();
+  function pick(camera, x, y, W, H, reach = 26) {
+    let best = null, bd = reach * reach;
+    for (const b of boards.values()) {
+      const shown = b.thumbs?.count || 0;
+      if (!shown && !b.plus) continue;
+      b.root.updateWorldMatrix(true, false);
+      const n = shown + (b.plus ? 1 : 0);                        // (the +N place is the one after the thumbs)
+      for (let i = 0; i < n; i++) {
+        const [sx, sy] = b.slots[Math.min(i, b.slots.length - 1)];
+        P.set(sx, sy, 0).applyMatrix4(b.root.matrixWorld).project(camera);
+        if (P.z > 1) continue;                                   // (behind the camera)
+        const px = (P.x + 1) / 2 * W, py = (1 - P.y) / 2 * H, d = (px - x) ** 2 + (py - y) ** 2;
+        if (d < bd) { bd = d; best = i >= shown ? { older: b.older, more: b.olderN, x: px, y: py } : { who: b.who[i], x: px, y: py }; }
+      }
+    }
+    return best;
+  }
+
+  return { show, update, pick, get showing() { return live.length + waiting.size; } };
 }

@@ -143,7 +143,7 @@ import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
-import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
+import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
@@ -328,7 +328,7 @@ const kudos = createKudos({ bags: () => {
   mp.kudosCars(kudosBags);
   const k = mp.myKudos;
   if (k.kn && model) kudosBags.push({ group: model.group, car: carId, n: k.kn, from: k.kf });
-  for (const b of kudosBags) if (!b.colours || b.colours.length !== b.from.length) b.colours = b.from.map(kudosColour);
+  for (const b of kudosBags) if (!b.colours || b.colours.length !== b.from.length) b.colours = b.from.map((k) => kudosColour(k[0]));
   return kudosBags;
 } });
 let watch = null;                  // spectator mode, desktop only: the camera follows another player's car (src/spectate.js)
@@ -1609,6 +1609,31 @@ input.on('KeyC', unlessMap(() => {
 // out around the car every frame and the camera is placed between them, so it never trails the car.
 const VIEW_BLEND = 0.8;
 let droneMix = camView === 'drone' ? 1 : 0;
+// a click or tap on a small thumbs up on a back window (src/kudos.js, Martin 2026-11-24): who gave it, and when,
+// in a small label there for a few seconds; on the +N place the older ones. Only work at the click itself.
+let kudoPop = null, kudoPopT = 0;
+function showKudoWho(r) {
+  if (!kudoPop) { kudoPop = document.createElement('div'); kudoPop.id = 'kudopop'; $('#hud').appendChild(kudoPop); }
+  const at = (ms) => (ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+  const nm = (k) => escapeHtml((k[1] || mp?.nameOf(k[0]) || (k[0] === mp?.id ? mp.name : '') || 'A DRIVER').toUpperCase());
+  const row = (k) => `<div><i style="--c:${kudosColour(k[0])}"></i>${nm(k)}${k[2] ? ` <small>${at(k[2])}</small>` : ''}</div>`;
+  if (r.who) kudoPop.innerHTML = row(r.who);
+  else {
+    const list = r.older.slice(0, 4);
+    kudoPop.innerHTML = list.map(row).join('') + (r.more > list.length ? `<div class="more">+${r.more - list.length} MORE</div>` : '');
+  }
+  kudoPop.style.transform = `translate(${Math.round(r.x)}px, ${Math.round(r.y)}px) translate(-50%, calc(-100% - 14px))`;
+  kudoPop.classList.remove('out');
+  clearTimeout(kudoPopT);
+  kudoPopT = setTimeout(() => kudoPop.classList.add('out'), 3500);
+}
+renderer.domElement.addEventListener('click', (e) => {
+  if (mode !== 'drive' || !kudos.pick) return;
+  const rc = renderer.domElement.getBoundingClientRect();
+  const r = kudos.pick(camera, e.clientX - rc.left, e.clientY - rc.top, rc.width, rc.height, isTouch ? 34 : 24);
+  if (r && (r.who || r.older?.length)) { r.x += rc.left; r.y += rc.top; showKudoWho(r); }
+  else kudoPop?.classList.add('out');
+});
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;

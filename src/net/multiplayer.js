@@ -609,6 +609,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
   }
 
+  // the other cars within r metres of (x, z) that ours would bump (not those on a lap or in the race), as [x, z]:
+  // for a free spot at the start (src/race/startslots.js)
+  function carsNear(x, z, r) {
+    const out = [];
+    for (const o of others.values()) {
+      const p = o.pose;
+      if (!p || (p[20] & HOT) || racing(o.id)) continue;
+      if ((p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) out.push([p[0], p[1]]);
+    }
+    return out;
+  }
+
   // Another player's car as the sound, smoke and tyre mark code wants it: the same fields as our own car
   // after its physics step, rebuilt from what that browser sends.
   const fxList = [];
@@ -854,6 +866,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   return {
     update,
     collide,
+    carsNear,
     get name() { return name; },
     get online() { return online; },
     // the server was full: driving offline until a place frees (see schedule)

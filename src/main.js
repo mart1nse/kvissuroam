@@ -143,6 +143,7 @@ import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
+import { slots as startSlots, pick as pickSlot } from './race/startslots.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
@@ -357,6 +358,14 @@ if (!CARS[carId]) carId = 'w201';
 let mode = 'loading';            // loading | menu | drive
 let buildCarModel = null, carModels = null;
 let startPose;
+let startSpots = null;            // where the start puts the car when its spot is busy (src/race/startslots.js)
+// the start's spot, or with other cars on it a free one near it (Martin 24 Nov: with ~70 online everyone was put on
+// the one spot and the pushing apart sent cars up the park wall)
+function freeStart() {
+  if (!mp || !startSpots) return startPose;
+  const s = pickSlot(startSpots, mp.carsNear);
+  return s === startSpots[0] ? startPose : { x: s.x, z: s.z, yaw: s.yaw };
+}
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
 let wetAt = null;                // where and when the car went into the water: { x, z, t }
@@ -771,6 +780,7 @@ async function boot() {
 
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
+  startSpots = startSlots(createTrack(), startPose);
   hud = createHud(world);
   skids = createSkidMarks(world);
   skids.setGrass(grassMarks);
@@ -1116,6 +1126,8 @@ function startDriving() {
     trackPicked = false;
     droveOnce = true;
   }
+  // (the car waits on the start's spot behind the menu: if somebody is standing there now, a free spot near it)
+  if (!atRaadi() && Math.hypot(car.x - startPose.x, car.z - startPose.z) < 1) { const f = freeStart(); if (f !== startPose) place(f); }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
@@ -1229,7 +1241,7 @@ function goHome() {
   stage?.teleported();
   history.length = 0;
   wetAt = null;
-  place(startPose);
+  place(freeStart());
 }
 
 // R: back to the newest remembered spot that is dry. After a plunge into the water that is a spot at
@@ -1793,7 +1805,9 @@ function frame(ts) {
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     // (what our car knocks over and bumps into: not while it waits for a spectator)
     if (!watch?.active) {
-      mp.collide(car);
+      // (behind the menu and in the garage the others do not see our car, so nobody pushes it: it stays on the
+      // start's spot until DRIVE finds it a free one)
+      if (mode === 'drive') mp.collide(car);
       trackside.collide(car);
       props.update(car, dt);
       updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames

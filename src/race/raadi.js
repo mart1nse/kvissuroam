@@ -75,7 +75,8 @@ const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
 // "move the haybale a bit inward ... but just slightly"), metres.
 // And the bale at the corner by the pond a touch the other way, towards the road (Martin 23 Nov 00:10, a green
 // arrow from the bale to the road: "move the bale a touch more to the inside and extend the tape to the bale").
-const BALE_IN = { 33: 0.5, 370: -0.4 };
+// And the bale at the east loop's fork onto the corner's tip (24 Nov 11:12, an arrow from the bale to the apex).
+const BALE_IN = { 33: 0.5, 370: -0.4, 464: -1.5 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
 // The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
 // from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its
@@ -102,8 +103,9 @@ for (const a of STAGE.apex) {
   a[2] = px - tz / l * lat; a[3] = pz + tx / l * lat;
 }
 // Bales that are not at a corner, set where Martin asked for them: [x, z, the point whose way the banner faces]
-// (24 Nov "haybale here": right of the road at the side road's mouth before the east loop's fork)
-const MORE_BALES = [[2873.1, 455.9, 449]];
+// (24 Nov "haybale here": right of the road at the side road's mouth before the east loop's fork; at 11:12 a little up
+// the road and in towards it, "move 2 haybales"; and "ad 1": on the outside of the fork's left turn, under its board)
+const MORE_BALES = [[2874.7, 454.1, 451], [2901.1, 436.3, 470]];
 // The glow along the inside of the tight corners is rounded (Martin 23 Nov 19:26, blue curves inside five apexes:
 // "Round a bit the halos in the apexes"): the path's inside edge folds into a sharp point there. ROUND[k] is the
 // arc that takes its place: { a, b, cx, cz, r, t0, t1 }, points a..b on a circle of radius r round (cx, cz) from
@@ -214,6 +216,17 @@ const SPUR_DIR = new Map(STAGE.apex.filter(([k]) => SPUR[k] != null).map(([k, sd
   const turn = SPUR[k] * Math.PI / 180 * -sd, ix = TAN[k][1] * -sd, iz = -TAN[k][0] * -sd;
   return [k, [ix * Math.cos(turn) - iz * Math.sin(turn), ix * Math.sin(turn) + iz * Math.cos(turn)]];
 }));
+// The stretch along the middle pond's south shore is driven twice, and the second time through its corners had no
+// check (Martin 24 Nov: "I can cut pretty heavily in the left corner before the trash bin currently without getting
+// penalty ... also in the next corner to the left"). TWIN[j] = k: point j of the second pass is the very place of
+// corner k of the first (the left turn by the pond, the same way both times; the junction after it, which the
+// second pass goes straight through), judged at the same bale by the same line and tape: no second bale, board or
+// tape. CHECKS is every hidden check in the order the stage meets them.
+const TWIN = { 664: 370, 696: 402 };
+// (and its ways in: the same tape, judged on the second pass too)
+const ENTRY_ALL = ENTRY.concat(Object.entries(TWIN).flatMap(([j, k]) => ENTRY.filter((e) => e[4] === k).map(([e0, e1, sd, pen, , tape]) => [e0 + (j - k), e1 + (j - k), sd, pen, +j, tape])));
+const CHECKS = STAGE.apex.concat(Object.entries(TWIN).map(([j, k]) => [+j, ...STAGE.apex.find((a) => a[0] === k).slice(1, 4)])).sort((p, q) => p[0] - q[0]);
+for (const [j, k] of Object.entries(TWIN)) { ROOM.set(+j, ROOM.get(k)); SPUR[j] = SPUR[k]; if (SPUR_DIR.has(k)) SPUR_DIR.set(+j, SPUR_DIR.get(k)); }
 // The tape along the way into a corner carried on to the bale of the corner before it, where the two are on the same
 // side (Martin 23 Nov 23:58, a green line from the end of the tape after the second corner to its bale: "lengthen
 // this tape up to the bale"): [the corner whose way in it is, the corner whose bale]. Only the tape: crossing
@@ -1047,7 +1060,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         st.inpT[inp] = (st.inpT[inp] || 0) + (dt || 0);
         // progress along the stage: only forwards from where the car is, in a short window
         // (and not past a check the car has not crossed: beside a hairpin its way out is as near as its way in)
-        const hold = st.gate < STAGE.apex.length ? STAGE.apex[st.gate][0] + GATE_HOLD : N;
+        const hold = st.gate < CHECKS.length ? CHECKS[st.gate][0] + GATE_HOLD : N;
         const w = nearestIn(x, z, st.prog - 6, Math.min(st.prog + 40, hold));
         const onIt = w.d < HW[w.i] + 6;
         if (onIt) st.prog = Math.max(st.prog, w.i);
@@ -1056,7 +1069,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         st.offNow = !onIt;
         // on the stage beyond a check it has not crossed: the stage says so, and it is not metres off the stage
         const past = !onIt && hold < N ? nearestIn(x, z, hold, hold + 40) : null;
-        const gk = hold < N ? STAGE.apex[st.gate][0] : 0;
+        const gk = hold < N ? CHECKS[st.gate][0] : 0;
         st.missed = !!past && past.i > hold + 2 && past.d < HW[past.i] + 6 && (x - P[gk][0]) * TAN[gk][0] + (z - P[gk][1]) * TAN[gk][1] > 0;
         if (st.missed) st.off -= dOff;
         // joined further on from somewhere else: on the stage, but far from where the run is. (Not when the car
@@ -1090,7 +1103,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (crossed(n, out): how far inside the gravel's edge (+) or outside it (-) the car crossed check n's line
         // this step, going the stage's way and no further than `out` m beyond the road's far edge; null if it did not)
         const crossed = (n, out) => {
-          const [k, sd, bx, bz] = STAGE.apex[n], sp = SPUR_DIR.get(k);
+          const [k, sd, bx, bz] = CHECKS[n], sp = SPUR_DIR.get(k);
           // (where the tape is a spur from the bale, its line is the check: through the bale along the spur, so
           // what costs seconds begins where the tape does; elsewhere the line across the stage at the apex)
           let gx = P[k][0], gz = P[k][1], tx = TAN[k][0], tz = TAN[k][1];
@@ -1102,8 +1115,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
             : (-cx * tz + cz * tx) * sd - HW[k] - ROOM.get(k);
           return deep > GATE_IN || deep < -2 * HW[k] - out ? null : deep;
         };
-        while (st.gate < STAGE.apex.length && st.prev && st.phase === 'run') {
-          const k = STAGE.apex[st.gate][0];
+        while (st.gate < CHECKS.length && st.prev && st.phase === 'run') {
+          const k = CHECKS[st.gate][0];
           if (st.prog < k - GATE_FROM) break;
           const deep = crossed(st.gate, GATE_OUT);
           if (deep == null) break;
@@ -1114,10 +1127,10 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (Martin 23 Nov 16:36, off wide before the last corner and cancelled as he came back to take it: "allow
         // to still get the apex. Check on every bale that the last bale was completed and ... on finish"). Until
         // then the run stands where it is: the stage goes on from this check (see the progress above).
-        if (st.phase === 'run' && st.prev && st.gate + 1 < STAGE.apex.length && crossed(st.gate + 1, GATE_NEXT) != null) cancel('MISSED A CORNER · STAGE CANCELLED');
+        if (st.phase === 'run' && st.prev && st.gate + 1 < CHECKS.length && crossed(st.gate + 1, GATE_NEXT) != null) cancel('MISSED A CORNER · STAGE CANCELLED');
         // And for the 10 m after the apex (Martin 23 Nov: only at the apex or after it; a spin to the inside before
         // the corner costs nothing when the car is back on the path by the bale and drives the corner).
-        for (const [k, sd] of STAGE.apex) {
+        for (const [k, sd] of CHECKS) {
           const n = afterOf(k), L = LINK_AT.get(k);
           if (st.prog < k - 25 || st.prog > k + n + 3 || st.phase !== 'run' || SPUR[k] != null) continue;
           if (L) {
@@ -1134,7 +1147,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           apexCut(k, a.lat * sd - HW[a.i] - roomAt(k, a.i));
         }
         // and too wide on the way in
-        for (const [e0, e1, sd, steps] of ENTRY) {
+        for (const [e0, e1, sd, steps] of ENTRY_ALL) {
           if (st.prog < e0 || st.prog > e1 || st.phase !== 'run') continue;
           const a = nearestIn(x, z, st.prog - 4, st.prog + 4), out = -a.lat * sd - HW[a.i];
           const pen = steps.find(([m]) => out > m)?.[1] || 0, had = st.widePen.get(e1) || 0;
@@ -1158,14 +1171,14 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // the flying finish
         // (also with the last check still open: the car's place on the stage waits there, and the finish is what
         // judges it)
-        if (st.phase === 'run' && st.prev && (st.prog >= FIN - 12 || (st.gate === STAGE.apex.length - 1 && st.prog >= STAGE.apex[st.gate][0] - GATE_FROM))) {
+        if (st.phase === 'run' && st.prev && (st.prog >= FIN - 12 || (st.gate === CHECKS.length - 1 && st.prog >= CHECKS[st.gate][0] - GATE_FROM))) {
           const [fx, fz] = P[FIN], [tx, tz] = TAN[FIN];
           const a = (st.prev.x - fx) * tx + (st.prev.z - fz) * tz, b = (x - fx) * tx + (z - fz) * tz;
           // (the line counts across the road and FIN_WIDE m to each side, not on across the park)
           const f0 = a < 0 && b >= 0 ? a / (a - b) : 0, wide = Math.abs(-(st.prev.x + (x - st.prev.x) * f0 - fx) * tz + (st.prev.z + (z - st.prev.z) * f0 - fz) * tx);
           const right = -(st.prev.x + (x - st.prev.x) * f0 - fx) * tz + (st.prev.z + (z - st.prev.z) * f0 - fz) * tx;
           if (wide > HW[FIN] + FIN_WIDE || right > HW[FIN] + FIN_FLAG) { /* not through the finish */ }
-          else if (a < 0 && b >= 0 && st.gate < STAGE.apex.length) cancel('MISSED A CORNER · STAGE CANCELLED');
+          else if (a < 0 && b >= 0 && st.gate < CHECKS.length) cancel('MISSED A CORNER · STAGE CANCELLED');
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             // (the bests before this run: this browser's own in the car, and anyone's)

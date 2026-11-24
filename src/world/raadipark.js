@@ -24,7 +24,12 @@ const CENTRE = [2650, 440], NEAR = 620;
 // (24 Nov, "small stone here too")
 // and two 0.5 m outside the tape of the bend after the east loop's crossing, a bigger and a smaller one
 // (24 Nov "two stones here, one bigger one smaller ... 0,5 m to the left of the tape")
-const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5], [2864.1, 452.1, 0.3]];
+// and a small rock left of the road in the wood loop's last bend, 1.4 m off it (24 Nov "Add rock (red circle)")
+const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5], [2864.1, 452.1, 0.3], [2832.9, 624.2, 0.45]];
+// Stones of the air photo moved where Martin asked: [x, z of the stone, new x, z] (24 Nov "move boulder (green
+// arrow)": the boulder by the wood loop's right-hand bend, up the road to just before its tape, 0.9 m off the gravel)
+const MOVED = [[2858.1, 554.3, 2863.1, 558.3]];
+for (const [x, z, nx, nz] of MOVED) { const s = PARK.stones.find((q) => Math.abs(q[0] - x) < 0.05 && Math.abs(q[1] - z) < 0.05); if (s) { s[0] = nx; s[1] = nz; } }
 
 export function raadiParkTrees(world) { world.addTrees(PARK.trees); }
 
@@ -32,20 +37,22 @@ export function raadiParkTrees(world) { world.addTrees(PARK.trees); }
 // place the roughly 1.5m from the edge of the road, and lets finetune form there on"). Each [x, z, bearing to the
 // road], read off his photos by matching their paths to the Land Board's; the ones by the stage set 1.5 m off its
 // gravel at the point marked, the four by the other paths 1.5 m off theirs. Thin 6 m poles that snap
-// (src/world/props.js PARK). The one by the pond's south shore, after the left turn at bale 370, carries the red
-// dog-waste bin ("only one of them has the dog poop orange container attached to it. Near the lake after turning left").
+// (src/world/props.js PARK). The one beside the stage north of the junction east of the pond carries the red
+// dog-waste bin ("only one of them has the dog poop orange container attached to it"; first on the shore after the
+// left turn by the pond, then 24 Nov 11:08 "move the trashbin to the post with th eorange square").
 const LAMPS = [
   [2656.6, 333.1, 203], [2678.2, 343.9, 212], [2703.5, 355.8, 190], [2727.5, 359.0, 189],   // north of the boulder field
   [2749.6, 367.7, 208], [2780.4, 368.1, 170], [2820.3, 386.8, 261],                          // round the middle pond's north
   [2816.7, 423.4, 264], [2840.0, 448.2, 248],                                                // the S path across it (not the stage)
-  [2839.3, 478.6, 290], [2822.7, 505.7, 116], [2824.7, 517.0, 25],                           // its east side and the junction
+  [2822.7, 505.7, 116], [2824.7, 517.0, 25], [2790.8, 490.0, 214],                           // its east side, the junction, the shore
   [2847.3, 528.8, 37], [2862.3, 550.7, 77], [2861.2, 575.7, 114], [2838.6, 603.3, 132],      // inside the S down to the woods
   [2820.2, 636.5, 110], [2790.6, 671.5, 168],
   [2815.1, 718.9, 27], [2791.2, 696.0, 326],                                                 // the path east from its foot (not the stage)
 ];
-const BIN_LAMP = [2790.8, 490.0, 214];
-// the bench in the boulder field by the road down from the junction west of the middle pond (his green circle)
-const BENCH = [2756.7, 425.5, 79];
+const BIN_LAMP = [2839.3, 478.6, 290];
+// the bench by the road down from the junction west of the middle pond (his green circle, then 24 Nov "move the
+// bench 20m further along the road, curenlty it is between rocks")
+const BENCH = [2757.4, 444.1, 92];
 export function raadiParkProps() {
   return [...LAMPS.map(([x, z, b]) => [41, x, z, b]), [42, ...BIN_LAMP], [3, ...BENCH]];
 }

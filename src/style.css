@@ -831,6 +831,7 @@ body:not(.touch) #rlist.live { width: max-content; min-width: min(340px, 26vw); 
 #rsplash .t em { font-style: normal; color: #7dff5a; margin-left: .4em; }
 #rsplash .p.tm { font-size: 4.2em; }
 #rsplash.rec .k { color: #ffd23a; letter-spacing: .32em; }
+#rsplash.pb .k, #rsplash .k.pk { color: var(--cyan); letter-spacing: .32em; text-shadow: 2px 2px 0 var(--ink), 0 0 12px rgba(47, 243, 255, .7); }   /* personal best: the board's YOUR BEST cyan */
 /* the record on a race lap: the record banner's two parts under the race result */
 #rsplash .k.rk { margin-top: .9em; }
 #rsplash .p.rtm { font-size: 3.4em; }

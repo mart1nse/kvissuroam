@@ -274,8 +274,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     <div class="lb"><span class="lbl">BEST <span id="lapcar"></span></span><b id="lapbest"></b></div>
     <ol id="laplast"></ol><div id="lapmsg"></div>`;
   // checkpoint split: time at the checkpoint and, side by side, +/- against this browser's best lap
-  // in this car (BEST) and against the car's lap record (REC) (Martin 24 Nov). When the record is
-  // your own best, one figure shows as BEST · REC.
+  // in this car (ME) and against the car's lap record (BEST, as the board's BEST EVER) (Martin 24 Nov).
+  // When the record is your own best, one figure shows as ME · BEST.
   const split = document.createElement('div');
   split.id = 'lapsplit';
   split.className = 'hidden';
@@ -289,8 +289,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   // ref: { own, rec } times in seconds (null where there is nothing to compare with)
   function showSplit(label, t, ref) {
     const same = ref?.own != null && ref.own === ref.rec;
-    const ds = (tag) => same ? delta(t, ref.own, 'BEST · REC', tag)
-      : delta(t, ref?.own, 'BEST', tag) + delta(t, ref?.rec, 'REC', tag);
+    const ds = (tag) => same ? delta(t, ref.own, 'ME · BEST', tag)
+      : delta(t, ref?.own, 'ME', tag) + delta(t, ref?.rec, 'BEST', tag);
     split.className = '';
     split.innerHTML = `<span>${label}</span><b>${fmtTime(t)}</b>${ds('i')}`;
     st.lastSplit = `${label} · ${fmtTime(t)} ${ds('i')}`;
@@ -471,13 +471,18 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
                   const b = bestFor(carId);
                   const pb = !b || lap.ms < b.ms;
+                  // your own best in the car before this lap: beating it (when it is not also the record)
+                  // gets a NEW PERSONAL BEST banner (Martin 24 Nov)
+                  let mine = null;
+                  for (const l of laps) if (l.car === carId && (!mine || l.ms < mine.ms)) mine = l;
+                  const own = !pb && mine && lap.ms < mine.ms ? { ms: mine.ms } : null;
                   laps.push(lap);
                   if (laps.length > 200) laps.splice(0, laps.length - 200);
                   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(laps)); } catch { /* private mode */ }
                   renderLast();
                   // a record gets the big LAP RECORD banner (racemode.js) instead of a toast
-                  if (!pb) toast(`LAP · ${fmtTime(lapT)}`, 4000);
-                  onLap?.(lap, { rec: pb, prev: b });
+                  if (!pb && !own) toast(`LAP · ${fmtTime(lapT)}`, 4000);
+                  onLap?.(lap, { rec: pb, prev: b, own });
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');

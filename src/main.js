@@ -783,6 +783,8 @@ async function boot() {
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
     stage: RAADI,
+    // (a nearby ghost car's see-through shader, compiled before it is first used)
+    warm: (obj) => renderer.compileAsync(obj, camera, scene),
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,

@@ -2,8 +2,8 @@
 // Only players whose car is on the map count (Martin, 2026-11-17: the count showed people who sat in
 // the menu or had the game in a background tab). On desktop (Martin, 2026-11-24) the list grows up from
 // the minimap: the count, your line over it, then the names going up as far as there is room under the race
-// button (its vote line and chip), then "+N MORE". While the race list or results show there, only the
-// count and your line stay, and the race panel gets the room down to them. On phones (Martin, 2026-11-21) a short list sits under
+// button (its vote line and chip), then "+N MORE". While the race list or results show there, the race
+// panel comes first (down to your line at most) and the names fill what is left under it (Martin, 24 Nov). On phones (Martin, 2026-11-21) a short list sits under
 // the count, in the gap between the minimap and the rev counter: four names, then "+N MORE".
 // On the big map a list of everyone online; tapping a name centres the map on that car.
 // While a race vote has votes in (Martin, 2026-11-23), each name that may vote gets a small mark in
@@ -70,13 +70,17 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     raceList = !!rl && !rl.classList.contains('hidden');
     const bottom = box.getBoundingClientRect().bottom;
     if (!bottom) return;
-    const top = rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     const fs = parseFloat(getComputedStyle(box).fontSize) || 12;
     const rowH = elWho.firstElementChild?.getBoundingClientRect().height || fs * 1.35;
     const under = elCount.offsetHeight + elMe.offsetHeight + feed.offsetHeight + 6;   // count, you, notes
+    // the race panel ends above the count and your line at the lowest, and with others online takes at most
+    // about 60% of the room (it scrolls to your row); the names fill what is left under it
+    if (raceList) {
+      const room = bottom - under - rl.getBoundingClientRect().top - 10;
+      rl.style.maxHeight = `${Math.max(fs * 10, mp.online && mp.count > 0 ? room * 0.6 : room)}px`;
+    }
+    const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
-    // the race panel ends above the count and your line
-    if (raceList) rl.style.maxHeight = `${Math.max(fs * 10, bottom - under - rl.getBoundingClientRect().top - 10)}px`;
   }
   // (the thumbs up button, before the click to watch: on a phone too)
   box.addEventListener('click', kuClick);
@@ -103,7 +107,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   let last = '', meLast = '';
   function refresh() {
     if (!touch) fit();
-    const listMax = touch ? LIST_MAX_PHONE : raceList ? 0 : fitRows;
+    const listMax = touch ? LIST_MAX_PHONE : fitRows;
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';

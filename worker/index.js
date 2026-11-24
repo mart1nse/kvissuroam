@@ -150,7 +150,7 @@ async function gunzip(bytes, max) {
 // stage's start, a point every 80 along it, its finish
 const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
 const GATES = {
-  toomemagi: { first: near(0, LAP.pts, 30), pass: [...lapGates(LAP, 28), near(0, LAP.pts, 30)] },
+  toomemagi: { first: near(0, LAP.pts, 30), pass: [...lapGates(LAP, 14), near(0, LAP.pts, 30)] },
   raadi: { first: near(STAGE.start, STAGE.pts, 30),
     pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
 };

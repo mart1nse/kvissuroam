@@ -22,6 +22,10 @@ const GATE = { base: 2564, at: [2386, 508] };
 const WALLS = [
   [[2489.6, 511.7], [2414.6, 462.4], [2386, 501]],
   [[2380, 527], [2377, 530], [2370, 524], [2322, 581], [2320, 580], [2317, 582], [2316, 584], [2317, 586], [2296, 607], [2263, 641], [2250, 664], [2196, 784], [2209, 790]],
+  // past the east gate the wall goes on along the stage (Martin, 24 Nov: "this wall actually extends near the track
+  // for quite some time"): north-east beside the white house, 6 m or more from the stage's gravel at k85-k125, then
+  // south-east along the path to the park's east corner. Traced from its line and shadow on the air photo.
+  [[2499, 519.8], [2534.6, 473.2], [2568.3, 498.3], [2600, 523], [2661.5, 577]],
 ];
 const PANEL = 3.4, WALL_H = 2.1, THICK = 0.4;
 const CREAM = 0xeee3bf, CAP = 0xd4cfc2;

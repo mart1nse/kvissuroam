@@ -142,6 +142,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // a browser that missed it on joining otherwise had no race button until somebody voted
   let raceSeen = false;
   const kudosAt = new Map();     // id -> when we last sent them a thumbs up (seconds)
+  const myKudos = { kn: 0, kf: [] };   // thumbs up we got this session (each other player's: o.kn, o.kf, from the server too)
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
   const far = farCars(scene, MAX_OTHERS);
@@ -257,7 +258,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.textContent = p.name;
     el.style.display = 'none';
     labels.appendChild(el);
-    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0 };
+    const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0,
+      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: Array.isArray(p.kf) ? p.kf.filter((x) => typeof x === 'string').slice(-24) : [] };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -390,9 +392,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (o) setRemoteCar(o, m.car);
         break;
       }
-      case 'ku':            // a thumbs up, from id to `to` (either may be us): see src/kudos.js
-        if (typeof m.id === 'string' && typeof m.to === 'string') onKudos?.(m.id, m.to);
+      case 'ku': {          // a thumbs up, from id to `to` (either may be us): see src/kudos.js
+        if (typeof m.id !== 'string' || typeof m.to !== 'string') break;
+        const o = m.to === myId ? myKudos : others.get(m.to);
+        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), m.id].slice(-24); }
+        onKudos?.(m.id, m.to);
         break;
+      }
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
         if (o) o.w = typeof m.w === 'string' ? m.w : '';
@@ -850,6 +856,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       return true;
     },
     // seconds until another thumbs up may go to this player (0: now)
+    // thumbs up received this session: ours, and those of each other car drawn whole now
+    get myKudos() { return myKudos; },
+    kudosCars(out) {
+      for (const o of others.values()) if (o.kn && o.model && o.near) out.push({ group: o.model.group, car: o.modelCar, n: o.kn, from: o.kf });
+      return out;
+    },
     kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
     // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,

@@ -318,7 +318,19 @@ let ctl = input.state;           // what drives the car this frame: the keys, or
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
-const kudos = createKudos();        // thumbs up between players: a neon sign in the receiver's back window
+// thumbs up between players: a neon sign in the receiver's back window, then a small thumb in its row there
+// (bags: the cars near with thumbs received this session, ours too; colours as each sender's dot in our list)
+const kudosBags = [];
+const kudosColour = (id) => (id === mp?.id ? ME_COLOUR : mp?.colourOf(id) || '#ffffff');
+const kudos = createKudos({ bags: () => {
+  kudosBags.length = 0;
+  if (!mp) return kudosBags;
+  mp.kudosCars(kudosBags);
+  const k = mp.myKudos;
+  if (k.kn && model) kudosBags.push({ group: model.group, car: carId, n: k.kn, from: k.kf });
+  for (const b of kudosBags) if (!b.colours || b.colours.length !== b.from.length) b.colours = b.from.map(kudosColour);
+  return kudosBags;
+} });
 let watch = null;                  // spectator mode, desktop only: the camera follows another player's car (src/spectate.js)
 let watchSpec = null;              // the car the HUD shows while watching
 const mapHits = [];                // the players' arrows on the minimap as last drawn (canvas pixels), to click
@@ -795,8 +807,9 @@ async function boot() {
     onKudos: (from, to) => {
       const who = from === mp.id ? { name: mp.name, colour: ME_COLOUR } : { name: mp.nameOf(from), colour: mp.colourOf(from) };
       const on = to === mp.id ? (model ? { group: model.group, car: carId } : null) : mp.carOf(to);
-      if (on && who.name) kudos.show(on.group, on.car, who);
-      if (to === mp.id && who.name) { audio.chime?.('kudos'); people?.event('kudos', who.name); }
+      // (ours: the airy chord as the big sign goes up, one at a time, see kudos.show)
+      if (on && who.name) kudos.show(on.group, on.car, who, to === mp.id ? () => audio.chime?.('kudos') : null);
+      if (to === mp.id && who.name) people?.event('kudos', who.name);
     },
     // phones, old computers and the low graphics levels draw other cars whole only nearer
     low: () => isTouch || !!xlow || lowRung(),
@@ -1779,7 +1792,7 @@ function frame(ts) {
   } else smoke.update(null, dt, false, mp.remotes());
   // (a spectator sends no position: the others do not see the parked car meanwhile)
   mp.update(car, dt, mode === 'drive' && !watch?.active);
-  if (kudos.showing) kudos.update(dt);
+  warmer.scope(() => kudos.update(dt));   // (held unseen while a new small picture and its drawing are made ready)
   watch?.frame(dt);
   // counted for race votes by the same rule as the online list: on the map, page in view (off the map
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)

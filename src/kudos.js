@@ -6,6 +6,11 @@
 // crosses the window, so its thumb is bigger and the name goes under the wing line.
 // Everybody near sees the sign on that car, the sender too, as their confirmation.
 //
+// Collected (Martin, 2026-11-24): after its 5 s the big sign shrinks into a small thumb at the top edge of the
+// back window; those received this session line up there in rows and columns (`grid`), the last place shows
+// +N once they are full. Everybody near sees a car's collection (the server counts each player's, so one who
+// comes later sees it too). Big signs come one at a time per car, at least 5 s apart: the rest wait their turn.
+//
 // Light by design: one painted 512 px picture per sender (0.6 of that on phones, paintScale), painted in the
 // work queue a step a frame and kept for the next time (the last few), one flat piece drawn for five seconds.
 import * as THREE from 'three';
@@ -30,8 +35,12 @@ const SPOTS = {
   impreza: { y: 1.15, z: 1.36, s: 0.6, tilt: 1.08 },
   f40: { y: 1.06, z: 1.15, s: 0.72, tilt: 1.47 },
   cgt: { y: 0.99, z: 1.35, s: 0.72, tilt: 1.45, dark: true },
-  bus: { y: 1.95, z: 6.36, s: 1.0, tilt: 0 },
+  bus: { y: 1.95, z: 6.36, s: 1.0, tilt: 0, grid: [7, 3] },
 };
+// small thumbs in a row across the top of the window, rows downwards: [columns, rows] (default 6 x 2)
+for (const k of ['cgt', 'f40']) { SPOTS[k].grid = [3, 1]; SPOTS[k].c = 0.17; SPOTS[k].low = true; }   // (engine cover, no window: a few only, a little bigger, at its back edge: the front one hides behind the roll hoops)
+SPOTS.m3.grid = [6, 2]; SPOTS.audi200.grid = [5, 2]; SPOTS.w201.grid = [5, 2]; SPOTS.impreza.grid = [5, 2];
+const MORPH_S = 0.7;                    // the big sign shrinking into its place
 const NEON = '#ff2bd6';
 const CACHE = 4;                        // painted signs kept for a sender who sends again
 
@@ -74,12 +83,113 @@ function paintSign(g, W, name, colour, dark, big) {
   g.shadowBlur = 0;
 }
 
-export function createKudos() {
+export function createKudos({ bags = () => [], onBig } = {}) {
   const plane = new THREE.PlaneGeometry(1, 1);
-  const signs = new Map();             // key -> { tex, used }
-  const live = [];                     // { mesh, t, parent }
+  const signs = new Map();             // key -> { tex, used, busy }
+  const live = [];                     // big signs up now: { mesh, t, key, sign, board, from }
+  const waiting = new Map();           // group -> [{ carId, from, cb }] big signs waiting their turn
+  const boards = new Map();            // group -> a car's board (big sign and collection), see boardOf
   let fontReady = false;
   try { document.fonts?.load('400 100px "Russo One"').then(() => { fontReady = true; }, () => { fontReady = true; }); } catch { fontReady = true; }
+
+  // ---- shared small pictures, painted once: a neon thumb (light and dark) and a soft white dot
+  const small = {};
+  function smallTex(kind) {
+    if (small[kind]) return small[kind];
+    const W = kind === 'dot' ? 32 : 128, cv = document.createElement('canvas'); cv.width = cv.height = W;
+    const g = cv.getContext('2d');
+    if (kind === 'dot') { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, '#fff'); gr.addColorStop(0.75, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, W); }
+    else {
+      const dark = kind === 'dark', k = W / 100, sc = 0.82 * k;
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      const layers = dark ? [[9, 0.5, '#7a0a64', 6], [5, 1, '#a3108a', 3], [2, 1, '#e02cc0', 1]] : [[9, 0.4, NEON, 8], [5, 0.95, NEON, 4], [1.8, 1, '#fff', 1]];
+      for (const [w, a, c, blur] of layers) { g.globalAlpha = a; g.strokeStyle = c; g.lineWidth = w * k; g.shadowColor = dark ? '#7a0a64' : NEON; g.shadowBlur = blur * k; thumbPath(g, sc, W / 2 - 51 * sc, W / 2 - 50 * sc); g.stroke(); }
+    }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.userData.keepImage = true;
+    return (small[kind] = tex);
+  }
+  const mats = {};
+  const matOf = (kind, dark) => mats[kind + dark] || (mats[kind + dark] = new THREE.MeshBasicMaterial({ map: smallTex(kind === 'thumb' ? (dark ? 'dark' : 'light') : 'dot'), transparent: true, depthWrite: false, toneMapped: false,
+    blending: dark ? THREE.NormalBlending : THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  // "+N" in the last place: a small picture of its own, made anew when N changes (never repainted)
+  function plusTex(n, dark) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = `400 ${n > 99 ? 44 : 58}px "Russo One", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = dark ? '#7a0a64' : NEON; g.shadowBlur = 10; g.fillStyle = dark ? '#5a0a50' : '#fff';
+    g.fillText(`+${n}`, 64, 68);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.userData.keepImage = true;
+    return tex;
+  }
+
+  // a car's board: lies on its back window (or engine cover), x across, y up the glass
+  function boardOf(group, carId) {
+    let b = boards.get(group);
+    if (b && b.carId === carId) return b;
+    if (b) dropBoard(group);
+    const spot = SPOTS[carId];
+    if (!spot) return null;
+    const root = new THREE.Group();
+    root.name = 'thumbs up board';
+    root.position.set(0, spot.y, spot.z); root.rotation.x = -spot.tilt;
+    group.add(root);
+    const [cols, rows] = spot.grid || [6, 2], c = spot.c || Math.max(0.085, spot.s * 0.22), pitch = c * 1.12;
+    const slots = [];
+    for (let r = 0; r < rows; r++) for (let i = 0; i < cols; i++) slots.push([(i - (cols - 1) / 2) * pitch, spot.low ? -spot.s * 0.3 + r * pitch : spot.s * 0.5 - c * 0.5 - r * pitch]);
+    b = { group, carId, spot, root, slots, c, key: '', thumbs: null, dots: null, plus: null, plusN: 0 };
+    boards.set(group, b);
+    return b;
+  }
+  function dropBoard(group) {
+    const b = boards.get(group);
+    if (!b) return;
+    b.root.parent?.remove(b.root);
+    b.plus?.material.map.dispose(); b.plus?.material.dispose();
+    b.thumbs?.dispose(); b.dots?.dispose();
+    boards.delete(group);
+  }
+  // how many of a car's thumbs are not shown small yet (big now, or waiting)
+  const pending = (group) => (waiting.get(group)?.length || 0) + live.filter((l) => l.group === group).length;
+
+  // the small thumbs on a board: n received, colours of their senders (oldest first)
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color();
+  function layout(b, n, colours) {
+    const key = `${n}|${colours.slice(-b.slots.length).join(',')}`;
+    if (key === b.key) return;
+    b.key = key;
+    const cap = b.slots.length, dark = !!b.spot.dark;
+    if (!b.thumbs) {
+      b.thumbs = new THREE.InstancedMesh(plane, matOf('thumb', dark), cap);
+      b.dots = new THREE.InstancedMesh(plane, matOf('dot', dark), cap);
+      for (const m of [b.thumbs, b.dots]) { m.renderOrder = 2; m.frustumCulled = false; m.layers.enable(1); b.root.add(m); }
+      b.thumbs.name = 'thumbs up small'; b.dots.name = 'thumbs up dots';
+    }
+    const full = n > cap, shown = full ? cap - 1 : n;
+    const cols = colours.slice(-shown);            // (full: the newest ones)
+    for (let i = 0; i < shown; i++) {
+      const [x, y] = b.slots[i];
+      b.thumbs.setMatrixAt(i, M.compose(V.set(x, y, 0), Q, S.set(b.c, b.c, 1)));
+      b.dots.setMatrixAt(i, M.compose(V.set(x + b.c * 0.34, y - b.c * 0.36, 0.001), Q, S.set(b.c * 0.4, b.c * 0.4, 1)));
+      b.dots.setColorAt(i, C.set(cols[i] || '#ffffff'));
+    }
+    b.thumbs.count = b.dots.count = shown;
+    b.thumbs.instanceMatrix.needsUpdate = b.dots.instanceMatrix.needsUpdate = true;
+    if (b.dots.instanceColor) b.dots.instanceColor.needsUpdate = true;
+    const more = full ? n - shown : 0;
+    if (more !== b.plusN) {
+      b.plusN = more;
+      if (b.plus) { b.root.remove(b.plus); b.plus.material.map.dispose(); b.plus.material.dispose(); b.plus = null; }
+      if (more) {
+        const mat = new THREE.MeshBasicMaterial({ map: plusTex(more, dark), transparent: true, depthWrite: false, toneMapped: false,
+          blending: dark ? THREE.NormalBlending : THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+        b.plus = new THREE.Mesh(plane, mat);
+        const [x, y] = b.slots[cap - 1];
+        b.plus.position.set(x, y, 0); b.plus.scale.set(b.c * 1.1, b.c * 1.1, 1);
+        b.plus.renderOrder = 2; b.plus.layers.enable(1);
+        b.root.add(b.plus);
+      }
+    }
+  }
 
   function evict() {
     while (signs.size > CACHE) {
@@ -90,13 +200,19 @@ export function createKudos() {
     }
   }
 
-  // put a sign on a car (its model group and car id); from: { name, colour }
-  function show(group, carId, from) {
+  // a big sign for a car (its model group and car id); from: { name, colour }; cb() when it goes up
+  // (one at a time on each car: the others wait their turn, so all are seen)
+  function show(group, carId, from, cb) {
+    if (!group || !SPOTS[carId] || !from?.name) return;
+    let q = waiting.get(group);
+    if (!q) waiting.set(group, (q = []));
+    q.push({ carId, from, cb });
+  }
+  function start(group, { carId, from, cb }) {
     const spot = SPOTS[carId];
-    if (!group || !spot || !from?.name) return;
     const key = `${from.name}|${from.colour}|${spot.dark ? 1 : 0}|${carId === 'impreza' ? 1 : 0}`;
-    // the same sign on this car already: it starts again
-    for (const l of live) if (l.mesh.parent === group && l.key === key) { l.t = 0.45; return; }
+    const l = { mesh: null, t: 0, key, sign: null, group, carId, from };
+    live.push(l);                                  // (counted as up already, while it is painted)
     jobs.add(function* kudosSign() {
       let sign = signs.get(key);
       if (!sign) {
@@ -116,38 +232,64 @@ export function createKudos() {
       }
       sign.used = performance.now(); sign.busy = true;
       evict();
-      for (const l of live) if (l.mesh.parent === group) l.t = Math.max(l.t, KUDOS_S - 0.25);   // (another sender's on this car: it gives way)
+      const b = boardOf(group, carId);
+      if (!b || !live.includes(l)) return;
       const mat = new THREE.MeshBasicMaterial({ map: sign.tex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0,
-        blending: spot.dark ? THREE.NormalBlending : THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+        blending: spot.dark ? THREE.NormalBlending : THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
       const mesh = new THREE.Mesh(plane, mat);
       mesh.name = 'thumbs up';
-      mesh.position.set(0, spot.y, spot.z);
-      mesh.rotation.x = -spot.tilt;
       mesh.scale.set(spot.s, spot.s, 1);
-      mesh.renderOrder = 2;
+      mesh.position.z = 0.002;
+      mesh.renderOrder = 3;
       mesh.layers.enable(1);
-      group.add(mesh);
-      live.push({ mesh, t: 0, key, sign });
+      b.root.add(mesh);
+      l.mesh = mesh; l.sign = sign; l.board = b; l.t = 0;
+      cb?.();
     }, 'thumbs up');
   }
+  const ease = (x) => x * x * (3 - 2 * x);
 
-  // each frame: a neon tube flickering on, five seconds lit, then fading
+  // each frame: the next waiting sign goes up, the one up flickers on like a neon tube, shows five seconds,
+  // then shrinks into its place on the window; the collections follow the counts
   function update(dt) {
+    for (const [group, q] of waiting) {
+      if (!q.length) { waiting.delete(group); continue; }
+      if (!group.parent) { waiting.delete(group); continue; }            // (the car is gone: a car change)
+      if (!live.some((l) => l.group === group)) start(group, q.shift());
+    }
     for (let i = live.length - 1; i >= 0; i--) {
       const l = live[i];
+      if (!l.mesh) { if (!l.group.parent) live.splice(i, 1); continue; }   // (still being painted)
       l.t += dt;
-      const t = l.t, m = l.mesh.material;
-      let a = t < 0.45 ? [1, 0.25, 1, 0.4, 1][Math.floor(t / 0.09)] ?? 1 : 1;
-      if (t > KUDOS_S - 0.6) a *= Math.max(0, (KUDOS_S - t) / 0.6);
-      m.opacity = a;
-      if (t >= KUDOS_S || !l.mesh.parent) {
+      const t = l.t, m = l.mesh.material, b = l.board;
+      m.opacity = t < 0.45 ? [1, 0.25, 1, 0.4, 1][Math.floor(t / 0.09)] ?? 1 : 1;
+      if (t > KUDOS_S) {
+        // shrink to the place this thumb takes (the last one when the window is full): the thumb in the big
+        // picture sits 0.23 of its height above the middle and fills half of it, a small one 0.8 of its own
+        const k = ease(Math.min(1, (t - KUDOS_S) / MORPH_S)), shown = b.thumbs?.count ?? 0;
+        const [x, y] = b.slots[Math.min(shown, b.slots.length - 1)], sc = b.c * 1.6;
+        const s = b.spot.s + (sc - b.spot.s) * k;
+        l.mesh.scale.set(s, s, 1);
+        l.mesh.position.set(x * k, (y - 0.23 * sc) * k, 0.002);
+      }
+      if (t >= KUDOS_S + MORPH_S || !l.group.parent) {
         l.mesh.parent?.remove(l.mesh);
         m.dispose();
-        l.sign.busy = live.some((o, j) => j !== i && o.sign === l.sign);
         live.splice(i, 1);
+        l.sign.busy = live.some((o) => o.sign === l.sign);
       }
     }
+    // the collections: each car near with thumbs received (bags: [{ group, car, n, colours }])
+    const seen = new Set();
+    for (const bag of bags()) {
+      if (!bag.n || !bag.group?.parent) continue;
+      const b = boardOf(bag.group, bag.car);
+      if (!b) continue;
+      seen.add(bag.group);
+      layout(b, Math.max(0, bag.n - pending(bag.group)), bag.colours);
+    }
+    for (const g of boards.keys()) if (!seen.has(g) && !live.some((l) => l.group === g) && !waiting.has(g)) dropBoard(g);
   }
 
-  return { show, update, get showing() { return live.length; } };
+  return { show, update, get showing() { return live.length + waiting.size; } };
 }

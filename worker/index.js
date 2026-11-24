@@ -59,7 +59,7 @@ const TICK = 100;                                     // ms between bundles
 const POSE_FAR = 600, POSE_FAR_MS = 300;              // further than this from the receiver: about 3 a second
 const POSE_VFAR = 2000, POSE_VFAR_MS = 1000;          // and once a second this far
 const POSE_KEEP = 5000;                               // a car that has not sent for this long is left out
-const KUDOS_GAP = 30000, KUDOS_MAX = 8;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
+const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 3;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
@@ -275,7 +275,7 @@ export class Lobby extends DurableObject {
     const out = [], wn = this.watchCounts();
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(wn.get(a.id) ? { wn: wn.get(a.id) } : {}) });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(wn.get(a.id) ? { wn: wn.get(a.id) } : {}), ...(a.kn ? { kn: a.kn, kf: a.kf } : {}) });
     }
     return out;
   }
@@ -612,7 +612,7 @@ export class Lobby extends DurableObject {
       const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
       const b = m.b === 1 || !!me?.b;              // takes positions in bundles (see TICK)
       this.bund.set(ws, b);
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(me?.kn ? { kn: me.kn, kf: me.kf } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
@@ -648,6 +648,14 @@ export class Lobby extends DurableObject {
       const to = cleanOn(m.to);
       if (me.ghost || !to || to === me.id || !this.players().some((p) => p.id === to)) return;
       if (this.over(`k|${me.id}`, KUDOS_MAX, 60000) || this.over(`k|${me.id}|${to}`, 1, KUDOS_GAP)) return;
+      // the receiver's count for this session and the last senders, for those who come later (src/kudos.js:
+      // the small thumbs on that car's back window)
+      for (const w of this.ctx.getWebSockets()) {
+        const a = w.deserializeAttachment();
+        if (a?.id !== to || a.ghost) continue;
+        a.kn = (a.kn || 0) + 1; a.kf = [...(a.kf || []), me.id].slice(-KUDOS_KEEP);
+        w.serializeAttachment(a);
+      }
       this.broadcast({ t: 'ku', id: me.id, to });
     }
   }

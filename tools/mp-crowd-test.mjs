@@ -1,4 +1,4 @@
-// Many players online: what do the other cars cost a frame?   node tools/mp-crowd-test.mjs [n=22] [port=5199] [touch] [secs=12] [models] [shot=file.png]
+// Many players online: what do the other cars cost a frame?   node tools/mp-crowd-test.mjs [n=22] [pack=6] [port=5199] [touch] [secs=12] [models] [shot=file.png]
 // Needs the dev server (npx vite --port 5199). No game server: the page's WebSocket is replaced by a fake
 // lobby that welcomes n made-up drivers and sends their positions ten times a second, as the real one
 // does. They drive along the race track around ours at different distances (a pack near us, the rest
@@ -9,13 +9,14 @@ import { createRequire } from 'module';
 import fs from 'fs';
 const { chromium, devices } = createRequire(import.meta.url)('playwright');
 const arg = (k, d) => { const a = process.argv.find((s) => s.startsWith(`${k}=`)); return a ? a.slice(k.length + 1) : d; };
-const N = +arg('n', 22), port = +arg('port', 5199), touch = process.argv.includes('touch'), secs = +arg('secs', 12);
+const N = +arg('n', 22), PACK = +arg('pack', 6), port = +arg('port', 5199), touch = process.argv.includes('touch'), secs = +arg('secs', 12);
 const P = JSON.parse(fs.readFileSync(new URL('../src/race/track.json', import.meta.url))).pts;
 const I0 = 1700;                       // our spot on the track
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
 
+const VW = +arg('vw', 1000), VH = +arg('vh', 600);
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: 1000, height: 600 } });
+const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: VW, height: VH } });
 const p = await ctx.newPage();
 p.on('pageerror', (e) => console.log('PAGEERR', e.message));
 // graphics card bytes (textures and buffers), as tools/perf-budget.cjs counts them
@@ -34,12 +35,12 @@ await p.addInitScript(() => {
   P.deleteBuffer = function (b) { if (b) { buf -= sizes.get(b) || 0; sizes.delete(b); } return dB.apply(this, arguments); };
   window.__glMB = () => Math.round((tex + buf) / 1e6);
 });
-await p.addInitScript(([P, I0, N, CARS]) => {
+await p.addInitScript(([P, I0, N, CARS, PACK]) => {
   // a lobby in the page: the offsets along the track (in points, 2 m each) of each made-up driver
   const at = [];
   for (let k = 0; k < N; k++) {
-    if (k < 6) at.push(8 + k * 9);                                  // a pack just ahead of us, 16 to 110 m
-    else at.push(Math.round(((k - 5) / (N - 5)) * (P.length - 120)) + 60);   // the rest round the lap
+    if (k < PACK) at.push(8 + Math.round(k * 54 / PACK));          // a pack just ahead of us, 16 to 110 m
+    else at.push(Math.round(((k - PACK + 1) / (N - PACK + 1)) * (P.length - 120)) + 60);   // the rest round the lap
   }
   const players = at.map((a, k) => ({ id: `bot${k}`, name: `Driver${String(k).padStart(2, '0')}`, car: CARS[k % CARS.length], w: 'map' }));
   class FakeWS {
@@ -55,7 +56,7 @@ await p.addInitScript(([P, I0, N, CARS]) => {
           const t = (performance.now() - t0) / 1000;
           for (let k = 0; k < N; k++) {
             // the pack rolls to and fro within 16 to 130 m of us (so it stays near for the whole test); the rest drive on
-            const pack = k < 6, speed = pack ? 6 : 12 + (k % 5) * 3;                          // m/s
+            const pack = k < PACK, speed = pack ? 6 : 12 + (k % 5) * 3;                          // m/s
             const f = pack ? I0 + at[k] + 6 + 5 * Math.sin(t * 0.25 + k) : I0 + at[k] + (t * speed) / 2.045;
             const i = Math.floor(f) % P.length, j = (i + 1) % P.length, u = f - Math.floor(f);
             const x = P[i][0] + (P[j][0] - P[i][0]) * u, z = P[i][1] + (P[j][1] - P[i][1]) * u;
@@ -73,7 +74,7 @@ await p.addInitScript(([P, I0, N, CARS]) => {
     close() { clearInterval(this.timer); this.readyState = 3; }
   }
   window.WebSocket = FakeWS;
-}, [P, I0, N, CARS]);
+}, [P, I0, N, CARS, PACK]);
 await p.goto(`http://localhost:${port}/?trees=old`, { timeout: 180000 });
 await p.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
 await p.evaluate(() => { __game.setCar('w201', true); __game.startDriving(); });
@@ -81,7 +82,7 @@ await p.waitForFunction(() => __game.mode === 'drive' && !__game.flying, null, {
 const yaw0 = Math.atan2(P[I0 + 1][0] - P[I0][0], -(P[I0 + 1][1] - P[I0][1]));
 await p.evaluate(([x, z, yaw]) => __game.place({ x, z, yaw }), [P[I0][0], P[I0][1], yaw0]);
 // the cars are built and let into the picture (worker build, warm-up)
-await p.waitForTimeout(25000);
+await p.waitForTimeout(+arg('wait', 25) * 1000);
 const r = await p.evaluate(async (secs) => {
   const g = __game, mp = g.mp(), rd = g.renderer;
   const tm = { mp: 0, render: 0, frames: 0, calls: 0, tris: 0, tags: 0, cars: 0, gaps: [] };

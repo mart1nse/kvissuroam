@@ -45,6 +45,11 @@ const DETAIL = 110, DETAIL_LOW = 75;
 const FAR = 900;
 const TAG_DIST = 150, TAGS = 6, TAGS_LOW = 4;   // (was every car within 600 m); a name that would cover a nearer one is left out
 const SHADOW_DIST = 60;          // only cars this near cast a shadow
+// A pack (Martin 2026-11-24, lag in a race of 19 with 60 online): every car within DETAIL was drawn whole, 50 to 75
+// thousand triangles and a dozen pieces each, and again for the sun's shadow within SHADOW_DIST: at a race start
+// twenty such cars about doubled what the graphics card draws. Now only the WHOLE nearest are whole (the rest that
+// far are blocks), and only the SHADOWS nearest cast a shadow.
+const WHOLE = 10, WHOLE_LOW = 6, SHADOWS = 4;
 // Phones (Martin 2026-11-24, getting ready for 50 and more online): each kind of car another player drives
 // is built once on this page (its template, about 16 MB on the graphics card and 19 MB of memory), and 22
 // players in 12 kinds of car added some 400 MB on an emulated phone, more than an iPhone has to spare. On
@@ -690,6 +695,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
     f.a = a;
   }
+  let wholeCut = Infinity, shadowCut = Infinity;
+  const dsBuf = [];
   function update(car, dt, active) {
     const now = performance.now() / 1000;
     // send our position while anyone else is online
@@ -725,6 +732,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const ghostMe = hotlap(), me = active && car;
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let nf = 0, recolour = false, near2 = Infinity, copied = false;
+    const ds = dsBuf;
     for (const o of others.values()) {
       o.pose = sample(o, now);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
@@ -745,7 +753,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // whole car near, a block further out (a little either way before it changes: no flicker at the edge);
       // a block too while its car is not built (yet, or on a phone not at all: see LEAN_NEAR)
       const whole = !!g && o.model.warmed !== false;
-      const near = whole && d < (o.near ? detail * 1.15 : detail);
+      if (whole && d < detail * 1.15) ds.push(d);
+      const near = whole && d < (o.near ? Math.min(detail * 1.15, wholeCut * 1.08) : Math.min(detail, wholeCut));
       if (g) setNear(o, near);
       if (!near) {
         if (d < farMax) {
@@ -790,7 +799,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         o.tagA = 1 - (1 - TAG_MIN) * (1 - o.fa) / (1 - FADE_MIN);
         if (o.halo && hot) o.halo.material.opacity = pulse * o.tagA;
         // a shadow only close by, where it can be seen
-        const sh = d < SHADOW_DIST;
+        const sh = d < (o.shadow ? Math.min(SHADOW_DIST, shadowCut * 1.08) : Math.min(SHADOW_DIST, shadowCut));
         if (sh !== o.shadow) { o.shadow = sh; g.traverse((c) => { if (c.isMesh && c !== o.halo) c.castShadow = sh; }); }
         g.visible = true;
         g.position.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
@@ -811,6 +820,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       o.d = d;
     }
     nearest = Math.sqrt(near2);
+    // the nearest WHOLE (and SHADOWS) cars only, by last frame's distances (see WHOLE)
+    ds.sort((a, b) => a - b);
+    const wholeMax = low() ? WHOLE_LOW : WHOLE;
+    wholeCut = ds.length > wholeMax ? ds[wholeMax - 1] + 0.01 : Infinity;
+    shadowCut = ds.length > SHADOWS ? ds[SHADOWS - 1] + 0.01 : Infinity;
+    ds.length = 0;
     far.count = nf;
     if (nf) far.instanceMatrix.needsUpdate = true;
     if (recolour) far.instanceColor.needsUpdate = true;

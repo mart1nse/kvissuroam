@@ -482,7 +482,8 @@ export class Lobby extends DurableObject {
       }
       players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
       const ph = race.phase(now);
-      return json({ now, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
+      // (total and drv count everyone: the list shows the first 60, and the page once counted only those, 24 Nov)
+      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
         race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
     }
 

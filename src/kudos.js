@@ -35,11 +35,11 @@ const SPOTS = {
   impreza: { y: 1.15, z: 1.36, s: 0.6, tilt: 1.08 },
   f40: { y: 1.06, z: 1.15, s: 0.72, tilt: 1.47 },
   cgt: { y: 0.99, z: 1.35, s: 0.72, tilt: 1.45, dark: true },
-  bus: { y: 1.95, z: 6.36, s: 1.0, tilt: 0, grid: [7, 3] },
+  bus: { y: 1.95, z: 6.36, s: 1.0, tilt: 0, grid: [6, 3] },
 };
 // small thumbs in a row across the top of the window, rows downwards: [columns, rows] (default 6 x 2)
-for (const k of ['cgt', 'f40']) { SPOTS[k].grid = [3, 1]; SPOTS[k].c = 0.17; SPOTS[k].low = true; }   // (engine cover, no window: a few only, a little bigger, at its back edge: the front one hides behind the roll hoops)
-SPOTS.m3.grid = [6, 2]; SPOTS.audi200.grid = [5, 2]; SPOTS.w201.grid = [5, 2]; SPOTS.impreza.grid = [5, 2];
+for (const k of ['cgt', 'f40']) { SPOTS[k].grid = [3, 1]; SPOTS[k].c = 0.2; SPOTS[k].low = true; }   // (engine cover, no window: a few only, a little bigger, at its back edge: the front one hides behind the roll hoops)
+SPOTS.m3.grid = [5, 2]; SPOTS.audi200.grid = [5, 2]; SPOTS.w201.grid = [5, 2]; SPOTS.impreza.grid = [5, 2];
 const MORPH_S = 0.7;                    // the big sign shrinking into its place
 const NEON = '#ff2bd6';
 const CACHE = 4;                        // painted signs kept for a sender who sends again
@@ -133,7 +133,7 @@ export function createKudos({ bags = () => [], onBig } = {}) {
     root.name = 'thumbs up board';
     root.position.set(0, spot.y, spot.z); root.rotation.x = -spot.tilt;
     group.add(root);
-    const [cols, rows] = spot.grid || [6, 2], c = spot.c || Math.max(0.085, spot.s * 0.22), pitch = c * 1.12;
+    const [cols, rows] = spot.grid || [6, 2], c = spot.c || Math.max(0.105, spot.s * 0.27), pitch = c * 1.12;   // (a touch bigger, Martin 2026-11-24)
     const slots = [];
     for (let r = 0; r < rows; r++) for (let i = 0; i < cols; i++) slots.push([(i - (cols - 1) / 2) * pitch, spot.low ? -spot.s * 0.3 + r * pitch : spot.s * 0.5 - c * 0.5 - r * pitch]);
     b = { group, carId, spot, root, slots, c, key: '', thumbs: null, dots: null, plus: null, plusN: 0 };

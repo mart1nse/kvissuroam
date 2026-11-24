@@ -80,6 +80,19 @@ export class RaceDesk {
     }
     return out;
   }
+  // spectators (Martin, 2026-11-24: "allow me to vote for start when i am watching"): following another car,
+  // their own off the map, id -> attachment. They may vote to start and join a race; one counts in the start
+  // vote's pool only once their vote is in, so a spectator who just watches never makes a start harder.
+  watchers() {
+    const out = new Map();
+    for (const ws of this.lobby.ctx.getWebSockets()) {
+      if (ws === this.skip) continue;
+      const a = ws.deserializeAttachment();
+      if (!this.live(ws, a)) continue;
+      if (a?.id && !a.ghost && !a.drv && a.w === 'watch') out.set(a.id, a);
+    }
+    return out;
+  }
   online() {
     const out = new Set();
     for (const ws of this.lobby.ctx.getWebSockets()) { if (ws === this.skip) continue; const a = ws.deserializeAttachment(); if (a?.id && !a.ghost && this.live(ws, a)) out.add(a.id); }
@@ -103,8 +116,11 @@ export class RaceDesk {
   ballot(now = Date.now()) {
     const ph = this.phase(now);
     if (ph === 'idle' || this.openForStart()) {
-      const d = this.drivers();
-      return { kind: 'start', voters: new Set(d.keys()), need: needStart(d.size), of: d.size };
+      const d = this.drivers(), sp = this.watchers();
+      const voters = new Set([...d.keys(), ...sp.keys()]);
+      let of = d.size;
+      for (const id of sp.keys()) { const v = this.s.votes[id]; if (v?.k === 'start' && now - v.t < VOTE_MS) of++; }
+      return { kind: 'start', voters, need: needStart(of), of };
     }
     if (ph === 'race') {
       const on = this.online();
@@ -131,7 +147,7 @@ export class RaceDesk {
   start(ids, now) {
     const s = this.s;
     if (s.phase === 'on') this.close('restart', now);
-    const d = this.drivers();
+    const d = new Map([...this.watchers(), ...this.drivers()]);
     s.id = (s.id || 0) + 1;
     s.phase = 'on';
     s.tGrid = now + COUNT_MS;
@@ -196,7 +212,8 @@ export class RaceDesk {
         if (!!me.drv === on) return true;
         me.drv = on; ws.serializeAttachment(me);
         // (off the map for good, after the page's 30 s grace: a start vote goes with the driver)
-        if (!on && this.s.votes[me.id]?.k === 'start') delete this.s.votes[me.id];
+        // (a spectator keeps theirs: watching another car, they still want the race)
+        if (!on && me.w !== 'watch' && this.s.votes[me.id]?.k === 'start') delete this.s.votes[me.id];
         this.check(now); this.tally(now); this.save(); this.send();
         return true;
       }
@@ -214,7 +231,7 @@ export class RaceDesk {
       case 'rj': {          // join or leave before the lights
         if (me.ghost || this.s.phase !== 'on') return true;
         const ph = this.phase(now), i = this.s.racers.findIndex((r) => r.id === me.id);
-        const room = i < 0 && this.s.racers.length < MAX_RACERS && me.drv;
+        const room = i < 0 && this.s.racers.length < MAX_RACERS && (me.drv || me.w === 'watch');
         if (m.on && ph === 'count' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car });
         // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
         // (g on the grid, go lights out: the race time is counted from go)
@@ -245,6 +262,15 @@ export class RaceDesk {
       default:
         return false;
     }
+  }
+  // a player's page says where they are (index.js 'at'): a spectator who stops watching without coming back to
+  // the map (the garage, the menu, another tab) takes their start vote with them, as a driver going off it does
+  moved(me, was) {
+    if (was !== 'watch' || me.w === 'watch' || me.w === 'map' || me.drv) return;
+    if (this.s.votes[me.id]?.k !== 'start') return;
+    const now = Date.now();
+    delete this.s.votes[me.id];
+    this.tally(now); this.save(); this.send();
   }
   // a racer's car or name changed
   changed(me) {

@@ -354,8 +354,10 @@ export function createSkidMarks(world) {
     L: [0, 0, 0, 0], C: RUBBER, mud: 0, mx: 0, mz: 0, look: LOOK.PAVED }));
   const mine = wheelSet(), theirs = new Map();
 
-  // the look under a point: what a hand-built place laid there, else the map's surface (0 on water)
-  const lookAt = (x, z) => groundLook(x, z) || GRID[world.surfaceAt(x, z)] || 0;
+  // the look under a point: what a hand-built place laid there, else the map's surface (0 on water). With y (the
+  // car's height), a roof or bridge deck it stands on (ERM roof, world.addSlab / decks) is tarmac, not the grass below
+  const lookAt = (x, z, y) => (y !== undefined && world.groundAt(x, z, y + 0.4) > world.heightAt(x, z) + 0.3 ? LOOK.PAVED : 0)
+    || groundLook(x, z) || GRID[world.surfaceAt(x, z)] || 0;
 
   // one quad from the wheel's last point to a new one (its look L, colour C)
   function quad(w, lx, ly, lz, rx, ry, rz, a, v, L, C) {
@@ -415,7 +417,7 @@ export function createSkidMarks(world) {
         const dm = Math.hypot(x - w.mx, z - w.mz);
         if (dm > 3) { w.mx = x; w.mz = z; }
         else if (dm >= STEP) {
-          w.look = lookAt(x, z);
+          w.look = lookAt(x, z, car.y);
           w.mud = soft(w.look) ? Math.min(1, w.mud + dm * 0.6) : w.mud * Math.exp(-dm / (hard(w.look) ? 5 : 2.5));
           w.mx = x; w.mz = z;
         }
@@ -426,7 +428,7 @@ export function createSkidMarks(world) {
       const dx = x - w.x, dz = z - w.z, d = Math.hypot(dx, dz);
       if (w.on && d > 3) w.on = false;              // the car was moved: not one mark
       if (w.on && d < STEP) continue;
-      const look = lookAt(x, z);
+      const look = lookAt(x, z, car.y);
       if (!look) { w.on = false; continue; }
       // what is laid here: the ground's own look, with mud over it from a tyre that carries some
       const G = LOOKS[look], m = hard(look) ? w.mud : 0;

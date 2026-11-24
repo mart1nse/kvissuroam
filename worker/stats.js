@@ -88,7 +88,7 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
   const dev = FIRST.dev(b.dev) ? b.dev : 'other';
   const tr = b.trouble;
   if (tr && typeof tr === 'object' && !Array.isArray(tr)) {
-    for (const k of ['glLost', 'stall', 'frz1', 'frz3', 'err', 'cap']) { const v = num(tr[k], N); if (v) add((t.trouble ||= {}), `${dev}:${k}`, v); }
+    for (const k of ['glLost', 'stall', 'frz1', 'frz3', 'err', 'cap', 'vpWide']) { const v = num(tr[k], N); if (v) add((t.trouble ||= {}), `${dev}:${k}`, v); }
   }
   if (b.loaded === true) { add(t, 'loaded', 1); add((t.loadedBy ||= {}), dev, 1); }
   if (b.drove === true) add((t.droveBy ||= {}), dev, 1);

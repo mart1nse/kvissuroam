@@ -37,6 +37,13 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; min-width: 0; }
   .card.wide { grid-column: 1 / -1; }
+  .fold summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+  .fold summary::-webkit-details-marker { display: none; }
+  .fold summary h2 { margin: 0; }
+  .fold summary h2::before { content: '\25B8'; display: inline-block; width: 1em; color: var(--muted); transition: transform .15s; }
+  .fold details[open] summary h2::before { transform: rotate(90deg); }
+  .fold summary span { color: var(--muted); font-size: 13px; }
+  .fold details[open] summary { margin-bottom: 6px; }
   .card h2 { margin: 0 0 2px; font: 800 15px/1.3 Montserrat, system-ui, sans-serif; letter-spacing: .03em; text-transform: uppercase; }
   .card .note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
   .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
@@ -165,6 +172,12 @@
     }).join('') + '</ul>';
   }
   var rowsOf = function (o, name) { return Object.keys(o || {}).map(function (k) { return [name ? name(k) : k, o[k]]; }); };
+  // a card folded into one line (its title and a short summary) that opens on a tap, for the long tables
+  var folds = {};
+  function fold(id, title, line, note, body) {
+    return '<section class="card wide fold"><details data-fold="' + id + '"' + (folds[id] ? ' open' : '') + ' ontoggle="window.__fold&&__fold(this)"><summary><h2>' + esc(title) + '</h2><span>' + line + '</span></summary>' + (note ? '<p class="note">' + note + '</p>' : '') + body + '</details></section>';
+  }
+  window.__fold = function (el) { folds[el.dataset.fold] = el.open; };
   function card(title, note, body, wide) {
     return '<section class="card' + (wide ? ' wide' : '') + '"><h2>' + esc(title) + '</h2>' + (note ? '<p class="note">' + note + '</p>' : '') + body + '</section>';
   }
@@ -414,6 +427,7 @@
       ['stall', 'Long frames, old count', 'Until 23 Nov 2026: every picture of 3 s or more anywhere but the loading screen, several a visit, mostly the garage and GETTING READY. Not freezes a player felt.', 'old'],
       ['glLost', 'Lost the 3D picture', 'The browser or graphics driver took the 3D picture away (WebGL context lost).'],
       ['cap', 'Held at about 30 FPS', 'Visits where less detail did not make the game faster: the browser or the system held the frame rate, most often a battery saver.'],
+      ['vpWide', 'Page wider than the screen', 'iPhone in landscape: the browser laid the page out as wide as the whole screen, past the notch, and the game laid it out again (Chrome cut a side off, 22 to 24 Nov). Counted from 25 Nov 2026.'],
       ['err', 'Visits with a script error', 'Visits where at least one script error happened. The errors themselves are listed at the bottom.'],
     ];
     var name = { desktop: 'Desktop', phone: 'Phone', tablet: 'Tablet' };
@@ -442,7 +456,10 @@
         return '<tr><td>' + esc(p[0] + ', ' + p[1]) + '</td><td>' + esc(p[2].slice(1) === '?' ? '?' : p[2].slice(1) + ' GB') + '</td><td>' + esc(p[3].slice(1) + ' → ' + p[4].slice(1)) + '</td><td>' + esc(where[p[5]] || p[5]) +
           '</td><td>' + esc(p[6].slice(1) === '?' ? '?' : p[6].slice(1) + ' min') + '</td><td>' + esc(p[7].slice(1) === '?' ? '?' : p[7].slice(1) + ' MB') + '</td><td>' + esc(p[8].slice(1)) + '</td><td class="n"><b>' + fmt(o[k]) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
-    return card('Pages that died on screen', 'Found at the next start by the graphics guard, which then keeps that device at a lower level. Memory: what the browser reports (Chrome only, 8 GB at most). Script memory: how much the game\'s scripts held at the last check before the death (Chrome only, rough). Pictures: how many the game held on the graphics card. Counted from 24 Nov 2026.', body, true);
+    var tot = 0, os = {};
+    keys.forEach(function (k) { tot += o[k]; var p = k.split('|'); os[p[1]] = (os[p[1]] || 0) + o[k]; });
+    var line = fmt(tot) + ' · ' + Object.keys(os).sort(function (a, b) { return os[b] - os[a]; }).map(function (k) { return esc(k) + ' ' + fmt(os[k] / tot * 100) + '%'; }).join(', ');
+    return fold('deaths', 'Pages that died on screen', line, 'Found at the next start by the graphics guard, which then keeps that device at a lower level. Memory: what the browser reports (Chrome only, 8 GB at most). Script memory: how much the game\'s scripts held at the last check before the death (Chrome only, rough). Pictures: how many the game held on the graphics card. Counted from 24 Nov 2026.', body);
   }
 
   // ---- what the freezes of 1 s or more had going on (src/stats.js freeze(), from 24 Nov 2026): for each kind of
@@ -485,7 +502,15 @@
       });
     });
     body += '</tbody></table>';
-    return card('What the freezes had going on', 'Every freeze of 1 s or more while driving (up to 8 a visit), and the share of them that had each fact. "What held the picture": the game\'s own code, the page busy with something else, or neither (the graphics card or the phone). The map above can show where they were. Counted from 24 Nov 2026.', body, true);
+    // (the line: for the device with the most freezes, what held the picture most often and what was new)
+    var top = devs.slice().sort(function (a, b) { return total[b] - total[a]; })[0];
+    var most = function (kind) {
+      var best = null, n = 0;
+      Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[0] === top && p[1] === kind && o[k] > n) { n = o[k]; best = p.slice(2).join(':'); } });
+      return best == null ? '' : fmt(n / total[top] * 100) + '% ' + ({ 'game:draw': 'drawing', 'game:build': 'building', 'game:other': 'game code', paint: 'graphics card', shaders: 'new shaders', pictures: 'new pictures', none: 'nothing new' }[best] || best);
+    };
+    var line = fmt(total[top]) + ' ' + name[top].toLowerCase() + ' freezes · ' + [most('why'), most('new')].filter(Boolean).join(', ');
+    return fold('freezes', 'What the freezes had going on', line, 'Every freeze of 1 s or more while driving (up to 8 a visit), and the share of them that had each fact. "What held the picture": the game\'s own code, the page busy with something else, or neither (the graphics card or the phone). The map above can show where they were. Counted from 24 Nov 2026.', body);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

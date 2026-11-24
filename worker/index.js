@@ -20,6 +20,7 @@ import { CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
+import { lapGates, throughGate } from '../src/race/lapgates.js';
 
 const TRACK = 'toomemagi';
 // The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
@@ -144,14 +145,22 @@ async function gunzip(bytes, max) {
   for (const p of parts) { all.set(p, o); o += p.length; }
   return new TextDecoder().decode(all);
 }
-// the places a replay has to pass, in order, and how near: Toomemägi's checkpoints and its start/finish line
-// (the lap is flying: it starts and ends there); the Raadi stage's start, a point every 80 along it, its finish
+// the places a replay has to pass, in order, and how near: Toomemägi's checkpoints and hidden gates (the game's
+// own, src/race/lapgates.js) and its start/finish line (the lap is flying: it starts and ends there); the Raadi
+// stage's start, a point every 80 along it, its finish
 const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
 const GATES = {
-  toomemagi: { first: near(0, LAP.pts, 30), pass: [...LAP.checkpoints.map((i) => near(i, LAP.pts, LAP.hw[i] + 28)), near(0, LAP.pts, 30)] },
+  toomemagi: { first: near(0, LAP.pts, 30), pass: [...lapGates(LAP), near(0, LAP.pts, 30)] },
   raadi: { first: near(STAGE.start, STAGE.pts, 30),
     pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
 };
+// the move from (ax, az) to (bx, bz) through a gate: across the line of a lap gate, or within a circle
+function thru(q, ax, az, bx, bz) {
+  if (q.ax != null) return throughGate(q, ax, az, bx, bz);
+  const dx = bx - ax, dz = bz - az;
+  const t = Math.max(0, Math.min(1, ((q.x - ax) * dx + (q.z - az) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(ax + dx * t - q.x, az + dz * t - q.z) < q.r;
+}
 // what is wrong with a replay's samples ('' for nothing): driving ms is the time without penalty seconds
 function checkTrace(text, track, driving) {
   const a = text.split(',').map(Number);
@@ -165,8 +174,15 @@ function checkTrace(text, track, driving) {
     x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
     if (i && Math.hypot(x - px, z - pz) > 12) return 'speed';
-    const q = g.pass[gate];
-    if (q && Math.hypot(x - q.x, z - q.z) < q.r && (gate < g.pass.length - 1 || i > n - 4)) gate++;
+    // (on the line between two samples, as the game judges a frame: at 10 a second a fast car moves 8 m)
+    // (one gate missed is forgiven when the next is passed, as in the game: running wide onto the grass)
+    for (;;) {
+      const last = (k) => k < g.pass.length - 1 || i > n - 4;
+      if (i && g.pass[gate] && thru(g.pass[gate], px, pz, x, z) && last(gate)) gate++;
+      else if (i && g.pass[gate + 1] && thru(g.pass[gate + 1], px, pz, x, z) && last(gate + 1)) gate += 2;
+      else break;
+    }
+    if (i === 0 && Math.hypot(x - g.pass[0].x, z - g.pass[0].z) < g.pass[0].r) gate++;
     px = x; pz = z;
   }
   return gate < g.pass.length ? 'route' : '';
@@ -201,6 +217,16 @@ export class Lobby extends DurableObject {
     // the record lap of each car on each circuit as movement, to be watched (see "Replays"); one row a car and circuit
     this.sql.exec('CREATE TABLE IF NOT EXISTS replays (track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, at TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (track, car))');
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
+    // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
+    // (checkpoint 2 about 10 s early, the audi200 record's replay shows the route) and the replay of that record.
+    // The new gates (src/race/lapgates.js) stop such laps; the lap board is made again from what is left.
+    if (!this.meta('cleanup-2026-11-24')) {
+      const CHEATS = [60, 138, 152, 363, 410, 413, 434, 437, 444, 504, 515, 519, 550, 602, 608, 617, 625, 635, 665, 681, 808, 819, 832, 846, 876, 892, 911, 942, 945, 949, 960, 964, 979, 998, 1001, 1002, 1018, 1025, 1028, 1054, 1069, 1120];
+      for (const id of CHEATS) this.sql.exec("DELETE FROM laps WHERE id = ? AND track = 'toomemagi'", id);
+      this.sql.exec("DELETE FROM replays WHERE track = 'toomemagi' AND car = 'audi200' AND ms = 168444");
+      this.sql.exec("DELETE FROM meta WHERE k = 'board'");
+      this.setMeta('cleanup-2026-11-24', '1');
+    }
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.rl = new Map();          // rate limit counters (in memory: they only matter while it is busy)

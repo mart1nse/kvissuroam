@@ -258,7 +258,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {} }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {} }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -1111,6 +1111,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // in a race with us: their place instead of HOTLAP (Martin 2026-11-24), written only when it changes
       const pl = place(o.id);
       if (pl !== (o.pl || 0)) { o.pl = pl; if (pl) o.el.dataset.pos = `P${pl}`; else delete o.el.dataset.pos; }
+      // won the last race (or is first over the line in this one): WINNER over their name instead of HOTLAP
+      const won = !pl && winner(o.id);
+      if (won !== !!o.won) { o.won = won; o.el.classList.toggle('won', won); }
       const ta = o.near ? Math.round((o.tagA ?? 1) * 50) / 50 : 1;
       if (ta !== (o.ta ?? 1)) { o.ta = ta; o.el.style.opacity = ta === 1 ? '' : ta; }
       const rec = o.rp ? o.rp.tag : recs.size ? recordOf(o.name) : '';
@@ -1120,8 +1123,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (v3.z > 1 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) { showTag(o, false); continue; }
       const sc = Math.max(0.55, Math.min(1.2, 28 / o.d));
       // its box on screen (from the name's length: measuring the page each frame would cost more than it saves)
-      // (a badge over the name, HOTLAP or P3 or a record line, makes it about twice as tall)
-      const tall = hot || pl || rec ? 13 * sc : 0;
+      // (a badge over the name, HOTLAP or WINNER or P3 or a record line, makes it about twice as tall)
+      const tall = hot || pl || won || rec ? 13 * sc : 0;
       const x = ((v3.x + 1) / 2) * W, y = ((1 - v3.y) / 2) * H - 34 * sc - tall, hw = (o.name.length * 5.5 + 12) * sc, hh = 11 * sc + tall;
       let covered = false;
       for (const q of hudBoxes) if (Math.abs(q.x - x) < q.hw + hw && Math.abs(q.y - y) < q.hh + hh) { covered = true; break; }

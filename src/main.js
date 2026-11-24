@@ -138,6 +138,7 @@ import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
 import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear, kroonuaiaRoads } from './race/kroonuaia.js';
 import { jakobiLaiWalls, jakobiLaiVectors } from './race/jakobilai.js';
+import { realStreetNames } from './world/streetnames.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -468,6 +469,7 @@ async function boot() {
   raadiRoads(world.vectors);                    // Raadi park: the gravel cut-through the map lacks, gravel at the park road's mouth
   korveRoads(world.vectors);                    // road 210's fork and sweep where it meets the highway at Kõrveküla
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
+  realStreetNames(world.vectors);               // street names for the label, not the state road's route name
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   elvaVectors(world.vectors);                  // nor has Elva by 33 to 37, nor the lane by 35b
@@ -813,6 +815,7 @@ async function boot() {
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
+    winner: (id) => !!raceMode?.winner(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
     // a thumbs up (src/kudos.js): the sign on the receiver's car wherever it is in view, ours or another's
@@ -1719,6 +1722,33 @@ if (window.visualViewport) {
       requestAnimationFrame(() => { vp.content = content; });
     }, 60);
   });
+}
+// Chrome on an iPhone sometimes lays the page out wider than it shows it, so the side at the notch is cut off
+// and the page can be dragged sideways (Martin's and his son's iPhones, 22 to 24 Nov; ?vp=1 shows the sizes).
+// In landscape it shows the page between the notch and the other edge, narrower than the screen (750 of 844),
+// so a page as wide as the whole screen there is the fault: the viewport is set again so the browser lays the
+// page out anew, and the page is put back at its left edge whenever it has been dragged.
+if (/iPhone|iPod/.test(navigator.userAgent)) {
+  const vp = document.querySelector('meta[name="viewport"]');
+  const content = vp.content;
+  const notched = Math.max(screen.width, screen.height) / Math.min(screen.width, screen.height) > 2;
+  let told = false, redo = 0;
+  const fit = () => {
+    if (scrollX || scrollY) scrollTo(0, 0);
+    const wide = !content.includes('cover') && notched && innerWidth > innerHeight && innerWidth >= Math.max(screen.width, screen.height) - 1;
+    if (!wide || redo > 3) return;
+    redo++;
+    if (!told) { told = true; stats.trouble('vpWide'); }
+    vp.content = content.replace('initial-scale=1', 'initial-scale=1.0001');
+    requestAnimationFrame(() => { vp.content = content; scrollTo(0, 0); });
+  };
+  const soon = () => { redo = 0; for (const ms of [100, 500, 1500]) setTimeout(fit, ms); };
+  addEventListener('resize', soon);
+  addEventListener('orientationchange', soon);
+  addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); }, { passive: true });
+  window.visualViewport?.addEventListener('scroll', () => { if (visualViewport.scale <= 1.01 && (visualViewport.offsetLeft || scrollX)) scrollTo(0, 0); });
+  soon();
+  setInterval(fit, 3000);
 }
 
 // ---------------------------------------------------------------- frame loop

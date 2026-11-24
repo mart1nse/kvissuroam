@@ -42,10 +42,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const box = document.createElement('div');
   box.id = 'people';
   // (Martin, 2026-11-23: the count on top, then you, then the others; no light before the count)
-  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><ul class="feed"></ul>';
+  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><div class="up hidden"></div><ul class="feed"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
-  const elWho = box.querySelector('.who');
+  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" over the names)
 
   const list = document.createElement('div');
   list.id = 'roster';
@@ -62,7 +62,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const touch = document.body.classList.contains('touch');
   // desktop: how many rows fit between your line and the race button, and whether the race list is up
   // (read from the page at most three times a second, never every frame)
-  let fitAt = 0, fitRows = LIST_MAX, raceList = false;
+  let fitAt = 0, fitRows = LIST_MAX, raceList = false, nNames = 0;
   function fit() {
     const t = performance.now();
     if (t < fitAt) return;
@@ -83,16 +83,22 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
     // (Martin, 2026-11-24: all names listed, the mouse wheel scrolls those that do not fit; no scrollbar)
-    const mh = `${Math.round(fitRows * rowH)}px`;
+    // (Martin, 24 Nov: "+N MORE" kept, over the names, when they do not all fit; it takes one row)
+    const mh = `${Math.round((nNames > fitRows ? fitRows - 1 : fitRows) * rowH)}px`;
     if (elWho.style.maxHeight !== mh) { elWho.style.maxHeight = mh; edges(); }
   }
   // a soft fade at the end that has more names past it (desktop: first name at the bottom, so scrollTop
   // is 0 there and negative scrolled up)
+  let upN = -1;
   function edges() {
     const over = elWho.scrollHeight - elWho.clientHeight;
     const up = -elWho.scrollTop;
     elWho.classList.toggle('more-up', over > 2 && up < over - 2);
     elWho.classList.toggle('more-down', over > 2 && up > 2);
+    // the names out of view above (all rows are the same height)
+    const step = elWho.firstElementChild ? elWho.firstElementChild.offsetHeight + 1 : 0;
+    const n = over > 2 && step && !elWho.classList.contains('hidden') ? Math.ceil((over - up - 2) / step) : 0;
+    if (n !== upN) { upN = n; elUp.textContent = `+${n} MORE`; elUp.classList.toggle('hidden', n <= 0); }
   }
   if (!touch) elWho.addEventListener('scroll', edges, { passive: true });
   // (the thumbs up button, before the click to watch: on a phone too)
@@ -144,7 +150,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
-    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
+    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); elWho.innerHTML = ''; if (!touch) edges(); return; }
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);
@@ -152,6 +158,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (desktop: every name, scrolled with the wheel; phones: a few, then "+N MORE")
     const cap = touch ? listMax : LIST_ALL;
     const more = sorted.length > cap ? sorted.length - cap + 1 : 0;
+    if (!touch && sorted.length !== nNames) { nNames = sorted.length; fitAt = 0; }
     const rows = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';

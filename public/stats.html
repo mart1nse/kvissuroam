@@ -51,6 +51,11 @@
   .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
   .chart .seg { border-radius: 4px 4px 0 0; }
   .chart .seg + .seg { border-radius: 0; margin-top: 0; border-top: 2px solid var(--panel); }
+  .chart { padding-right: 40px; }
+  .chart .tick { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid rgba(255,255,255,.06); pointer-events: none; }
+  .chart .tick::after { content: ''; position: absolute; right: 32px; width: 6px; top: -1px; border-top: 1px solid var(--muted); }
+  .chart .tick span { position: absolute; right: 0; width: 28px; transform: translateY(-50%); color: var(--muted); font-size: 10.5px; line-height: 1; }
+  .axis { padding-right: 40px; }
   .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; margin-top: 4px; }
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2); margin: 0 0 8px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -118,6 +123,14 @@
   var sum = function (o) { var t = 0; for (var k in o) t += o[k]; return t; };
   var countries = null;
   try { countries = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) {}
+
+  // a bar chart with short scale lines and numbers on the right (Martin 2026-11-24)
+  function chart(cols, mx, cls) {
+    var raw = mx / 4, mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1)))), n = raw / mag;
+    var step = Math.max(1, (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag), ticks = '';
+    for (var v = step; v <= mx; v += step) ticks += '<div class="tick" style="bottom:calc((100% - 8px) * ' + (v / mx).toFixed(4) + ')"><span>' + fmt(v) + '</span></div>';
+    return '<div class="chart' + (cls ? ' ' + cls : '') + '">' + ticks + cols + '</div>';
+  }
 
   // tooltips: anything with data-tip
   document.addEventListener('pointermove', function (e) {
@@ -220,7 +233,7 @@
           (r.drove ? '<div class="seg" style="height:' + (r.drove / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
       }).join('');
       h += card('Visits per day', null, '<div class="legend"><span><i style="background:' + C.cyan + '"></i>pressed DRIVE</span><span><i style="background:' + C.violet + '"></i>stayed in the menu</span></div>' +
-        '<div class="chart">' + cols + '</div><div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
+        chart(cols, mx) + '<div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
     }
     h += crashes(t);
     // where people drive
@@ -253,7 +266,7 @@
       var v = hours[hh] || 0;
       hc += '<div class="col" data-tip="' + hh + ':00–' + hh + ':59 · ' + fmt(v) + ' visits"><div class="seg" style="height:' + (v / hm * 100) + '%;background:' + C.cyan + '"></div></div>';
     }
-    h += card('Time of day', 'Visits by the hour they started, Tartu time.', '<div class="chart hours">' + hc + '</div><div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
+    h += card('Time of day', 'Visits by the hour they started, Tartu time.', chart(hc, hm, 'hours') + '<div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
 
     // speed and stability
     h += card('Loading time', 'Until the garage is ready.', bars(['<5', '5-10', '10-20', '20-40', '40+'].map(function (k) { return [k.replace('<', 'under ').replace('40+', 'over 40') + ' s', (t.load || {})[k] || 0]; }), { keep: true, colour: C.sun }));
@@ -320,7 +333,7 @@
       var v = hours[hh] || 0;
       hc += '<div class="col" data-tip="' + hh + ':00–' + hh + ':59 · ' + fmt(v) + (v === 1 ? ' race' : ' races') + '"><div class="seg" style="height:' + (v / hm * 100) + '%;background:' + C.hot + '"></div></div>';
     }
-    h += card('When people race', 'Races by the hour the lights went out, Tartu time.', '<div class="chart hours">' + hc + '</div><div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
+    h += card('When people race', 'Races by the hour the lights went out, Tartu time.', chart(hc, hm, 'hours') + '<div class="axis"><span>0:00</span><span>12:00</span><span>23:00</span></div>');
     return h;
   }
 

@@ -80,6 +80,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
   let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, sentRf = null, sentRd = null, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
+  let watchCur = false;
+  let finAt = 0;                  // when we crossed the line (phones: the full results open 5 s later)            // not in the race that is on: its live standings are showing (positions followed only then)
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
   // each racer's place while we race too, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP);
   // worked out with the live order ten times a second, read by the name tags (changed only when a place changes)
@@ -118,6 +120,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (ph === 'race' && loneRacer()) { mp.raceSend({ t: 'rj', on: 0 }); quitFor = r.id; toast('RACE ENDED', 2000); return; }
     // (the lights just went out and the server's word on the restart vote is still on its way: it judges by the clock)
     if (ph === 'race' && !voteOpen && mine && active(mine)) { mp.raceSend({ t: 'rv', on: 1 }); return; }
+    // not in the race that is on (RACE ON / RACE FINISHED, Martin 2026-11-24): the button shows its live standings
+    if (ph === 'race' && !mine && r.vote.kind !== 'start') { openCur(!(listOpen && !showLast)); return; }
     if (voteOpen && r.vote.kind === 'restart' && !(mine && !mine.out)) return;
     if (voteOpen) {
       if (!isDriving()) return;
@@ -130,8 +134,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   btn.addEventListener('click', act);
   // (finished or out of a race still running: the chip opens this race's list, not the one before, Martin 2026-11-24)
   const doneIn = (t = now()) => { const m = me(); return !!m && !active(m) && phaseFor(m, t) === 'race'; };
-  chip.addEventListener('click', () => { showLast = !doneIn(); listOpen = true; listUntil = Infinity; hidFor = 0; render(); });
-  // phones (Martin 2026-11-24): no chip (the online list has its place), the race line itself opens the results
+  // (not in it: the race that is on, live, Martin 2026-11-24; the last race only when none is on)
+  const curOn = (t = now()) => !me() && phaseOf(t) === 'race';
+  function openCur(on) {
+    if (on && !watchCur) track_.clear();      // (positions were not followed while the list was shut: start afresh)
+    listOpen = on; showLast = !on; listUntil = Infinity; hidFor = 0; render();
+  }
+  chip.addEventListener('click', () => { if (curOn()) { openCur(true); return; } showLast = !doneIn(); listOpen = true; listUntil = Infinity; hidFor = 0; render(); });
+  // phones (Martin 2026-11-24): no chip (the online list has its place), the race line itself opens what the chip did
   sub.addEventListener('click', () => { if (isTouch && sub.classList.contains('tap')) chip.click(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
   // otherwise it tucks the list away
@@ -356,14 +366,22 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       rows = standings(r.racers, true);
       const myRow = rows.findIndex((x) => x.id === mp.id);
       const done = r.racers.filter((x) => x.ms != null).length;
-      compact = finishedMs == null && active(mine);
-      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
+      // (phones, Martin 2026-11-24: the small live list until 5 s after crossing the line, then the full results)
+      compact = (finishedMs == null && active(mine)) || (isTouch && finishedMs != null && t < finAt + 5000);
+      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime((finishedMs ?? Math.max(0, t - r.tGreen)) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = compact ? '' : `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
+    } else if (listOpen && !showLast && !mine && ph === 'race') {
+      // (a race you are not in: its live standings)
+      rows = standings(r.racers, true);
+      const done = r.racers.filter((x) => x.ms != null).length;
+      head = '<h3><i class="flag"></i> LIVE RACE</h3>';
+      foot = `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
     } else if (listOpen && r.last) {
       rows = standings(r.last.racers, false);
       head = '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = `TOOMEMÄGI · 1 LAP · ${new Date(r.last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     }
+    watchCur = !!rows && !mine && ph === 'race' && !showLast;
     show(list, !!rows);
     document.body.classList.toggle('racelist', !!rows);
     list.classList.toggle('live', compact);
@@ -391,6 +409,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       show(chip, !rows);
       setText(chip, `<i class="flag"></i> ${at >= 0 ? `<em>P${at + 1}</em>` : 'OUT'}${isTouch ? '' : ` · ${still} STILL RACING`} · ${clock(t - r.tGreen)} / 7:00 ›`);
       chipTag = at >= 0 ? `<em>P${at + 1}</em>` : 'OUT';
+    } else if (!mine && ph === 'race') {
+      show(chip, !rows);
+      setText(chip, `<i class="flag"></i> LIVE RACE · ${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00 ›`);
+      chipTag = 'LIVE RACE';
     } else {
       const lastRows = r.last ? standings(r.last.racers, false) : null;
       const myPos = lastRows ? lastRows.findIndex((x) => x.id === mp.id) : -1;
@@ -466,6 +488,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       sentRf = { t: 'rf', ms: own, id: r.id };
       mp.raceSend(sentRf);
       finishedMs = own + Math.max(0, greenT(m) - r.tGreen);
+      finAt = now();
       // (the standings stay up until everyone is through, a new race starts or 7:00: Martin 2026-11-24)
       listOpen = true; showLast = false; listUntil = Infinity; hidFor = 0;
       // place: those already through with a better time, plus one (nobody still out there can beat it)
@@ -506,7 +529,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (ph === 'race' && t > r.tGreen + MAX_MS + 3000) r.on = false;
       // live order: positions ten times a second
       sample -= dt;
-      if (ph === 'race' && m && sample <= 0) {
+      if (ph === 'race' && (m || watchCur) && sample <= 0) {
         sample = 0.1;
         for (const x of r.racers) {
           if (!active(x)) continue;
@@ -517,9 +540,11 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         }
         // (the same order as the live list: finished by time, then by distance; those out have no place)
         places.clear();
-        const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
-        const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
-        for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
+        if (m) {
+          const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
+          const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
+          for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
+        }
       } else if (places.size && !(ph === 'race' && m)) places.clear();
       tick -= dt;
       if (tick <= 0) { tick = 0.25; render(); }

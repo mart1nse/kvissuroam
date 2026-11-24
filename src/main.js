@@ -827,6 +827,7 @@ async function boot() {
     low: () => isTouch || !!xlow || lowRung(),
     // phones build other players' cars only near, and only a few kinds (memory)
     lean: () => isTouch,
+    dropModel: (id) => carModels?.dropCarModel(id, freeModel),
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},

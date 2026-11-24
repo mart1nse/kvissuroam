@@ -75,6 +75,7 @@ function adopt(id, T) {
 // put together here in a few milliseconds. Without a worker (or if it fails) they are built here.
 let worker = null, workerOk = typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof window !== 'undefined';
 const pending = new Map();                          // id -> when it was asked for
+const unwanted = new Set();                         // dropped while the worker was still building it
 function startWorker() {
   if (!workerOk) return null;
   if (worker) return worker;
@@ -91,6 +92,7 @@ function startWorker() {
       return;
     }
     pending.delete(id);
+    if (unwanted.delete(id)) return;
     if (templates.has(id)) return;
     if (error) { console.warn('car worker', id, error); workerOk = false; return; }
     try {
@@ -175,6 +177,7 @@ export function buildCarInWorker(id, opts) {
 // is back). now: the car is needed straight away and may be built here if there is no worker.
 export function requestCarModel(id, now = false) {
   if (!BUILDERS[id]) return true;                     // (instanceCarModel throws: a placeholder is used)
+  unwanted.delete(id);
   if (templates.has(id)) return true;
   // (a worker that hasn't answered in 15 s is given up on)
   if (now && pending.has(id) && performance.now() - pending.get(id) > 15000) { console.warn('car worker too slow', id); workerOk = false; }
@@ -185,6 +188,16 @@ export function requestCarModel(id, now = false) {
   if (!now) return false;
   try { template(id); } catch { /* instanceCarModel throws again: a placeholder is used */ }
   return true;
+}
+
+// A phone lets go of a kind of car no other player near it drives any more (multiplayer.js, LEAN_KINDS), once
+// every copy of it is gone: free(group) frees its geometry, materials and pictures (freeModel in main.js).
+export function dropCarModel(id, free) {
+  if (pending.has(id)) unwanted.add(id);
+  const T = templates.get(id);
+  if (!T) return;
+  templates.delete(id);
+  free(T.group);
 }
 
 export function instanceCarModel(id) {

@@ -178,6 +178,7 @@
     var ps = o.players || [], drv = o.drv != null ? o.drv : ps.filter(function (p) { return p.drv; }).length;
     var all = o.total != null ? o.total : ps.length + (o.more || 0);
     var note = all ? fmt(all) + (all === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
+    if (o.waiting) note += ' <b style="color:' + C.pink + '">Server full: ' + fmt(o.waiting) + ' more waiting outside</b>, driving offline until a place frees (' + fmt(all + o.waiting) + ' want to play online, the cap is ' + fmt(o.cap) + ').';
     var r = o.race;
     if (r) note += r.phase === 'race'
       ? ' A race is on: ' + fmt(r.racing) + ' racing, ' + fmt(r.finished) + ' finished' + (r.green ? ', lights out ' + (o.now - r.green < 60000 ? 'under a minute ago' : Math.floor((o.now - r.green) / 60000) + ' min ago') : '') + '.'
@@ -236,6 +237,7 @@
       h += card('Visits per day', null, '<div class="legend"><span><i style="background:' + C.cyan + '"></i>pressed DRIVE</span><span><i style="background:' + C.violet + '"></i>stayed in the menu</span></div>' +
         chart(cols, mx) + '<div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
     }
+    h += demand(d);
     h += crashes(t);
     h += deaths(t);
     // where people drive
@@ -292,6 +294,55 @@
     h += '</div>';
     out.innerHTML = h;
     drawMap(t.heat || {}, d.heat);
+  }
+
+  // ---- online demand (Martin 2026-11-24): the lobby counts each minute who is online, who is driving and
+  // how many pages wait outside after SERVER FULL (worker/index.js loadTick); peaks are the busiest minute
+  function demand(d) {
+    var L = d.load;
+    if (!L) return '';
+    var h = '';
+    var nums = [
+      [fmt(L.on, 1), 'online on average', 'Players in the game (driving, garage or menu), averaged over every minute of the period. Peak ' + fmt(L.onMax) + '.'],
+      [fmt(L.onMax), 'online at the peak', 'The busiest minute. The cap is ' + fmt(L.cap) + '.'],
+      [fmt(L.drv, 1), 'driving on average', 'Online and out on the map. Peak ' + fmt(L.drvMax) + '.'],
+      [fmt(L.waitMax), 'waiting at the peak', 'Most pages waiting outside at once after SERVER FULL, driving offline and asking again every 20 to 40 s. Average ' + fmt(L.wait, 1) + '.'],
+      [fmt(L.totMax), 'wanted to play online at the peak', 'Online plus waiting outside, in the busiest minute: the cap it would take to let everyone in. Average ' + fmt(L.tot, 1) + '.'],
+      [fmt(L.away), 'turned away', 'Players who met SERVER FULL (each wait counted once, however often the page asked again).'],
+      [fmt(L.joined), 'got in after waiting', L.joined ? 'They waited ' + dur(L.waitAvg) + ' on average. The rest gave up or are still waiting.' : 'Nobody has got in after a wait yet.'],
+      [dur(L.full * 60), 'with the server full', 'Minutes in which somebody was waiting outside. ' + fmt(L.ref) + ' join attempts refused in all.'],
+    ];
+    h += card('Online demand', 'Counted each minute by the server since 24 November 2026: averages over every minute of the period, peaks from its busiest minute.', '<div class="nums">' + nums.map(function (x) {
+      return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>', true);
+    // the peak of each hour (24 h) or day: online, and waiting outside on top of it
+    var rows = [];
+    if (d.hours) {
+      var byH = {};
+      (d.hourly || []).forEach(function (r) { byH[r.at] = r; });
+      var h0 = Math.floor(Date.now() / 36e5) * 36e5;
+      for (var i = 23; i >= 0; i--) { var at = h0 - i * 36e5; rows.push({ lab: new Date(at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Tallinn', hour: '2-digit', minute: '2-digit' }), r: byH[at] }); }
+    } else if (d.days > 1) {
+      var byD = {};
+      (d.daily || []).forEach(function (r) { if (r.load) byD[r.day] = r.load; });
+      var end = new Date(d.to + 'T12:00:00Z');
+      for (var j = d.days - 1; j >= 0; j--) { var dd = new Date(end - j * 864e5).toISOString().slice(0, 10); rows.push({ lab: dd, r: byD[dd] }); }
+    }
+    if (!rows.length) return h;
+    var mx = 1;
+    rows.forEach(function (x) { if (x.r) mx = Math.max(mx, x.r.totMax || 0, x.r.onMax || 0); });
+    var cols = rows.map(function (x) {
+      var r = x.r;
+      if (!r) return '<div class="col" data-tip="' + esc(x.lab) + '<br>nobody online"></div>';
+      var on = r.onMax || 0, wait = Math.max(0, (r.totMax || 0) - on);
+      var t = esc(x.lab) + '<br>peak ' + fmt(on) + ' online · average ' + fmt(r.on, 1) + (r.waitMax ? '<br>peak ' + fmt(r.waitMax) + ' waiting · ' + fmt(r.away) + ' turned away<br>' + fmt(r.totMax) + ' wanted to play online' : '');
+      return '<div class="col" data-tip="' + t + '">' +
+        (wait ? '<div class="seg" style="height:' + (wait / mx * 100) + '%;background:' + C.pink + '"></div>' : '') +
+        (on ? '<div class="seg" style="height:' + (on / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
+    }).join('');
+    h += card(d.hours ? 'Online demand by the hour' : 'Online demand by the day', 'The busiest minute of each ' + (d.hours ? 'hour, Tartu time.' : 'day.'),
+      '<div class="legend"><span><i style="background:' + C.cyan + '"></i>online</span><span><i style="background:' + C.pink + '"></i>waiting outside (server full)</span></div>' +
+      chart(cols, mx) + '<div class="axis"><span>' + esc(rows[0].lab) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(rows[rows.length - 1].lab) + '</span></div>', true);
+    return h;
   }
 
   // ---- online races (worker/race.js tells worker/stats.js how each race went: cars, times, no names)

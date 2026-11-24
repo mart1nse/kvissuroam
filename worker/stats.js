@@ -164,12 +164,60 @@ export function addRace(t, r, now = Date.now()) {
   return true;
 }
 
+// One minute of the online lobby (worker/index.js loadTick, Martin 2026-11-24: how many would play online
+// if the cap let them in): online, of them driving, pages waiting outside after SERVER FULL, and since the
+// last minute the refusals, new players turned away, and those who got in after waiting (and how long).
+// Kept in t.load as sums over the minutes sampled plus the highest minute; averages divide the sums by
+// the minutes of the period (a minute without a sample had nobody driving and nobody waiting).
+const LOAD_SUM = ['on', 'drv', 'wait', 'ref', 'away', 'joined', 'waitMs'];
+export function addLoad(t, s) {
+  if (!s || typeof s !== 'object' || s.v !== 1) return false;
+  const L = (t.load ||= {});
+  const v = {};
+  for (const k of LOAD_SUM) v[k] = num(s[k], k === 'waitMs' ? 86400000 : k === 'ref' ? 100000 : 5000);
+  v.tot = v.on + v.wait;
+  add(L, 'min', 1);
+  for (const k of LOAD_SUM) add(L, k, v[k]);
+  if (v.wait || v.ref) add(L, 'full', 1);
+  for (const k of ['on', 'drv', 'wait', 'tot']) L[k + 'Max'] = Math.max(L[k + 'Max'] || 0, v[k]);
+  if (typeof s.t === 'number') L.t0 = Math.min(L.t0 || Infinity, Math.floor(s.t / 60000) * 60000);
+  const cap = num(s.cap, 1000);
+  if (cap) L.cap = cap;
+  return true;
+}
+const mergeLoad = (d, s) => {
+  for (const [k, v] of Object.entries(s)) {
+    if (typeof v !== 'number') continue;
+    if (k.endsWith('Max')) d[k] = Math.max(d[k] || 0, v);
+    else if (k === 't0') d.t0 = Math.min(d.t0 || Infinity, v);
+    else if (k === 'cap') d.cap = v;
+    else add(d, k, v);
+  }
+};
+// the minutes of a period [from, to) that the load counts cover (none before its first sample)
+export const loadSpan = (L, from, to) => (L?.t0 ? Math.max(1, Math.round((to - Math.max(from, L.t0)) / 60000)) : 0);
+// when a Tartu day starts (epoch ms)
+export const tartuStart = (day) => { const t = Date.parse(day + 'T00:00:00Z'); return t - tartuHour(new Date(t)) * HOUR; };
+// the load figures the page shows: averages over the period and the highest minute
+export function loadView(L, span) {
+  if (!L?.min || !span) return null;
+  const avg = (k) => Math.round((L[k] || 0) / span * 10) / 10;
+  return {
+    min: L.min, span, cap: L.cap || 0,
+    on: avg('on'), drv: avg('drv'), wait: avg('wait'), tot: Math.round(((L.on || 0) + (L.wait || 0)) / span * 10) / 10,
+    onMax: L.onMax || 0, drvMax: L.drvMax || 0, waitMax: L.waitMax || 0, totMax: L.totMax || 0,
+    ref: L.ref || 0, away: L.away || 0, joined: L.joined || 0, waitAvg: L.joined ? Math.round(L.waitMs / L.joined / 1000) : 0,
+    full: L.full || 0,          // minutes with somebody waiting outside
+  };
+}
+
 // several days' totals added together
 export function sumDays(rows) {
   const out = {};
   const merge = (dst, src) => {
     for (const [k, v] of Object.entries(src)) {
       if (k === 'peak') dst.peak = Math.max(dst.peak || 0, v);
+      else if (k === 'load') mergeLoad((dst.load ||= {}), v);
       else if (k === 'raceBest') { const b = (dst.raceBest ||= {}); for (const [c, ms] of Object.entries(v)) if (!b[c] || ms < b[c]) b[c] = ms; }
       else if (typeof v === 'number') add(dst, k, v);
       else if (v && typeof v === 'object') merge((dst[k] ||= {}), v);
@@ -249,6 +297,12 @@ export class Stats extends DurableObject {
     return true;
   }
 
+  // a minute of the online lobby (worker/index.js loadTick): RPC like addRace
+  addLoad(s) {
+    const now = typeof s?.t === 'number' && Math.abs(s.t - Date.now()) < 300000 ? new Date(s.t) : new Date();
+    return this.addNow((d) => addLoad(d, s), now);
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
     const ip = req.headers.get('cf-connecting-ip') || 'local';
@@ -271,10 +325,20 @@ export class Stats extends DurableObject {
         const hit = this.cache.get('h24');
         if (hit && Date.now() - hit.at < 60000) return json(hit.body);
         const from = hourKey(Date.now() - 23 * HOUR);
-        const rows = this.sql.exec('SELECT data FROM hours WHERE hour >= ? ORDER BY hour', from).toArray()
-          .map((r) => { try { return JSON.parse(r.data); } catch { return {}; } });
+        const now = Date.now();
+        const hrs = this.sql.exec('SELECT hour, data FROM hours WHERE hour >= ? ORDER BY hour', from).toArray()
+          .map((r) => { try { return { hour: r.hour, data: JSON.parse(r.data) }; } catch { return { hour: r.hour, data: {} }; } });
+        const rows = hrs.map((r) => r.data);
         const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
-        const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date().toISOString(), heat: HEAT, total: sumDays(rows), daily: [], names };
+        const total = sumDays(rows);
+        const t0 = Date.parse(from + ':00:00Z');
+        // online demand hour by hour (the hour starts as a UTC hour; the page shows it in Tartu time)
+        const hourly = hrs.filter((r) => r.data.load).map((r) => {
+          const a = Date.parse(r.hour + ':00:00Z');
+          return { at: a, ...loadView(r.data.load, loadSpan(r.data.load, a, Math.min(now, a + HOUR))) };
+        });
+        const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
+          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly };
         this.cache.set('h24', { at: Date.now(), body });
         return json(body);
       }
@@ -284,9 +348,16 @@ export class Stats extends DurableObject {
       const from = tartuDay(new Date(Date.now() - (days - 1) * 86400000));
       const rows = this.sql.exec('SELECT day, data FROM days WHERE day >= ? ORDER BY day', from).toArray()
         .map((r) => { try { return { day: r.day, data: JSON.parse(r.data) }; } catch { return { day: r.day, data: {} }; } });
-      const daily = rows.map((r) => ({ day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0 }));
+      const now = Date.now();
+      const daySpan = (day, L) => { const a = tartuStart(day); return loadSpan(L, a, Math.min(now, a + 86400000)); };
+      const daily = rows.map((r) => {
+        const lv = loadView(r.data.load, daySpan(r.day, r.data.load));
+        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
+          load: lv && { on: lv.on, onMax: lv.onMax, wait: lv.wait, waitMax: lv.waitMax, tot: lv.tot, totMax: lv.totMax, away: lv.away } };
+      });
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
-      const body = { days, from, to: tartuDay(), heat: HEAT, total: sumDays(rows.map((r) => r.data)), daily, names };
+      const total = sumDays(rows.map((r) => r.data));
+      const body = { days, from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)) };
       this.cache.set(days, { at: Date.now(), body });
       return json(body);
     }

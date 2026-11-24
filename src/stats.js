@@ -12,9 +12,9 @@ const params = new URLSearchParams(location.search);
 const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0;
 const once = new Set();
 const errSeen = new Set();
 
@@ -35,7 +35,7 @@ function device(isTouch) {
 }
 
 const empty = (o) => !first && !o.menu && !o.drive && !o.err.length
-  && ['laps', 'smash', 'misc', 'death'].every((k) => !Object.keys(o[k]).length)
+  && ['laps', 'smash', 'misc', 'death', 'frz'].every((k) => !Object.keys(o[k]).length)
   && !(loadMs && !once.has('load')) && !(loaded && !once.has('loaded')) && !(drove && !once.has('drove'));
 
 function send(leaving = false, closing = false) {
@@ -72,8 +72,89 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
+}
+
+// ---- What a freeze was (Martin 2026-11-24: 41 in 100 phone drivers froze for 1 s or more, and the test
+// drives, headless on a fast machine, never see over 0.1 s). For each felt freeze of 1 s or more (up to 8 a
+// visit) the bundle's `frz` counts a few plain facts, each as "device:kind:value", so /stats can show what
+// most freezes had in common:
+//   why  game:build | game:draw | game:other  the game's own frame code took most of the gap (queued building,
+//                                             handing the picture to the graphics card, the rest)
+//        page:<what>                          the page's thread was busy outside the game's frame: loading
+//                                             callbacks, network, garbage collection (Chrome names the caller)
+//        paint                                the page's thread was free and still no picture came: the
+//                                             graphics card (or the phone itself) held it
+//   new  shaders | pictures | none            what the frame before the gap sent to the graphics card first
+//   gc   yes                                  script memory fell by over 30 MB across the gap (Chrome only)
+//   os, mem (GB), lvl (graphics level), on (others online), t (since DRIVE), len, do (free, hotlap, race,
+//   stage), kmh, at (the 250 m square)
+// The page's thread is watched by a timer every 100 ms that does nothing but note the time: a gap between
+// its ticks as long as the freeze means the thread was busy. Nothing of it runs while stats are off.
+const beat = new Float64Array(64);
+let beatI = 0;
+if (on) setInterval(() => { beat[beatI++ & 63] = performance.now(); }, 100);
+// the longest stretch with no tick between a and b (a and b count as ticks: the frames around the gap)
+function beatGap(a, b) {
+  const t = [];
+  for (const x of beat) if (x > a && x < b) t.push(x);
+  t.sort((p, q) => p - q);
+  let prev = a, most = 0;
+  for (const x of [...t, b]) { most = Math.max(most, x - prev); prev = x; }
+  return most;
+}
+// Chrome 123 and later: the long animation frames and which script call took them (no names of the game's
+// own functions survive the build, but the kind of call does: a fetch's answer, a worker's message ...)
+// (the observer hears of a long frame a moment after it, so the freeze is written down a second later)
+const loaf = [];
+let loafObs = null;
+const keep = (l) => { for (const e of l) { loaf.push(e); if (loaf.length > 30) loaf.shift(); } };
+if (on) try {
+  loafObs = new PerformanceObserver((l) => keep(l.getEntries()));
+  loafObs.observe({ type: 'long-animation-frame', buffered: false });
+} catch { loafObs = null; /* not this browser */ }
+function caller(a, b) {
+  if (loafObs) keep(loafObs.takeRecords());
+  let best = null;
+  for (const e of loaf) {
+    if (e.startTime + e.duration < a || e.startTime > b) continue;
+    for (const sc of e.scripts || []) if (sc.invoker !== 'FrameRequestCallback' && (!best || sc.duration > best.duration)) best = sc;
+  }
+  if (!best || best.duration < 200) return '?';
+  const inv = String(best.invoker || '');
+  // (a URL says only "a script file": keep the kind of call)
+  const name = /^https?:/.test(inv) ? best.invokerType : inv;
+  return String(name || best.invokerType || '?').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 40) || '?';
+}
+const bucket = (v, cuts, names) => { for (let i = 0; i < cuts.length; i++) if (v < cuts[i]) return names[i]; return names[cuts.length]; };
+function freeze(s, ms) {
+  const f = s.fz || {}, from = s.from || 0, now = performance.now();
+  const busy = beatGap(from, now);
+  let why;
+  if (f.js >= ms * 0.5) why = f.build >= f.draw && f.build >= f.js * 0.4 ? 'game:build' : f.draw >= f.js * 0.4 ? 'game:draw' : 'game:other';
+  else if (busy >= Math.max(400, ms * 0.5)) why = 'page';
+  else why = 'paint';
+  const heap = performance.memory?.usedJSHeapSize;
+  const os = first?.os || device(true).os;
+  const dm = navigator.deviceMemory > 0 ? String(navigator.deviceMemory) : '?';
+  const since = driveAt ? (now - driveAt) / 1000 : 0;
+  const facts = {
+    why,
+    new: f.progs > 0 ? 'shaders' : f.tex > 0 ? 'pictures' : 'none',
+    os, mem: dm, lvl: String(s.gfx ?? '?'),
+    on: bucket(s.others || 0, [1, 10, 30], ['0', '1-9', '10-29', '30+']),
+    t: bucket(since, [30, 120, 600], ['<30s', '30s-2m', '2-10m', '10m+']),
+    len: bucket(ms / 1000, [3, 10], ['1-3s', '3-10s', '10s+']),
+    do: s.doing || 'free',
+    kmh: bucket(s.kmh || 0, [5, 50], ['<5', '5-50', '50+']),
+    at: `${Math.floor(s.x / HEAT)},${Math.floor(s.z / HEAT)}`,
+  };
+  if (heap && f.heap && f.heap - heap > 30e6) facts.gc = 'yes';
+  setTimeout(() => {
+    if (why === 'page') facts.why = `page:${caller(from, now)}`;
+    for (const [k, v] of Object.entries(facts)) inc(b.frz, `${dev || 'other'}:${k}:${v}`);
+  }, 1000);
 }
 
 let fpsT = 0, fpsN = 0;
@@ -118,6 +199,7 @@ export const stats = {
     if (!on) return;
     inc(b.misc, 'drives');
     drove = true;
+    driveAt = performance.now();
     this.phase('drive');
   },
   // something went wrong: glLost (the browser took the 3D picture away), frz1 and frz3 (froze 1 or 3 s while driving)
@@ -138,7 +220,8 @@ export const stats = {
     errSeen.add(m);
     b.err.push(m);
   },
-  // every frame. s: { mode, dt, raw, felt, car, x, z, kmh, inp, view, gfx, others, lapCp }
+  // every frame. s: { mode, dt, raw, felt, car, x, z, kmh, inp, view, gfx, others, lapCp, from, fz, doing }
+  // (from: when the frame before began; fz: what that frame did, see freeze() above; doing: free, hotlap, race, stage)
   // (lapCp: checkpoints passed on the running lap, -1 when no lap is running)
   frame(s) {
     if (!on || document.hidden) return;
@@ -155,6 +238,7 @@ export const stats = {
     wallAt = wall; perfAt = now;
     if (s.felt && s.raw >= 1 && s.raw < 60 && drift < 500) {
       for (const [k, t] of [['frz1', 1], ['frz3', 3]]) if (s.raw >= t && !once.has(k)) { once.add(k); inc(b.trouble, k); }
+      if (frzN < 8) { frzN++; try { freeze(s, s.raw * 1000); } catch { /* never in the way of the game */ } }
     }
     if (s.mode === 'menu') { b.menu += dt; return; }
     if (s.mode !== 'drive') return;

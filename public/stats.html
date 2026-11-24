@@ -251,8 +251,9 @@
     h += demand(d);
     h += crashes(t);
     h += deaths(t);
+    h += freezes(t);
     // where people drive
-    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button></div>', true);
+    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button>' + (frzHeat(t) ? '<button id="frzmap" type="button">' + (frzMap ? 'Show driving' : 'Show freezes') + '</button>' : '') + '</div>', true);
 
     var name = function (k) { return d.names[k] || k; };
     h += card('Cars', 'Time driven in each car.', bars(rowsOf(t.car, name), { show: dur, top: 12 }));
@@ -300,7 +301,9 @@
 
     h += '</div>';
     out.innerHTML = h;
-    drawMap(t.heat || {}, d.heat);
+    drawMap(frzMap && frzHeat(t) ? frzHeat(t) : t.heat || {}, d.heat);
+    var fb = document.getElementById('frzmap');
+    if (fb) fb.onclick = function () { frzMap = !frzMap; view = null; fb.textContent = frzMap ? 'Show driving' : 'Show freezes'; drawMap(frzMap ? frzHeat(t) : t.heat || {}, d.heat); };
   }
 
   // ---- online demand (Martin 2026-11-24): the lobby counts each minute who is online, who is driving and
@@ -440,6 +443,49 @@
           '</td><td>' + esc(p[6].slice(1) === '?' ? '?' : p[6].slice(1) + ' min') + '</td><td>' + esc(p[7].slice(1) === '?' ? '?' : p[7].slice(1) + ' MB') + '</td><td>' + esc(p[8].slice(1)) + '</td><td class="n"><b>' + fmt(o[k]) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
     return card('Pages that died on screen', 'Found at the next start by the graphics guard, which then keeps that device at a lower level. Memory: what the browser reports (Chrome only, 8 GB at most). Script memory: how much the game\'s scripts held at the last check before the death (Chrome only, rough). Pictures: how many the game held on the graphics card. Counted from 24 Nov 2026.', body, true);
+  }
+
+  // ---- what the freezes of 1 s or more had going on (src/stats.js freeze(), from 24 Nov 2026): for each kind of
+  // fact, the share of freezes on each kind of device that had it
+  var frzMap = false;
+  function frzHeat(t) {
+    var o = t.frz || {}, h = null;
+    Object.keys(o).forEach(function (k) { var m = k.match(/^\w+:at:(.+)$/); if (m) { h = h || {}; h[m[1]] = (h[m[1]] || 0) + o[k]; } });
+    return h;
+  }
+  function freezes(t) {
+    var o = t.frz || {}, total = {};
+    Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[1] === 'len') total[p[0]] = (total[p[0]] || 0) + o[k]; });
+    var devs = ['phone', 'desktop', 'tablet'].filter(function (d) { return total[d]; });
+    if (!devs.length) return '';
+    var name = { desktop: 'Desktop', phone: 'Phone', tablet: 'Tablet' };
+    var kinds = [
+      ['why', 'What held the picture', {
+        'game:build': 'the game building places (queued work)', 'game:draw': 'the game handing the picture to the graphics card', 'game:other': 'the game\'s other frame code',
+        'paint': 'nothing on the page: the graphics card or the phone held it', 'page:?': 'the page busy outside the game\'s frame (caller unknown)' }],
+      ['new', 'New on the graphics card the frame before', { shaders: 'new shaders', pictures: 'new pictures', none: 'nothing new' }],
+      ['gc', 'Script memory cleared over the gap', { yes: 'yes, over 30 MB (Chrome only)' }],
+      ['len', 'How long', {}], ['t', 'Time since DRIVE', {}], ['on', 'Others online', {}],
+      ['do', 'Driving', { free: 'free driving', hotlap: 'a hotlap', race: 'an online race', stage: 'the Raadi stage' }],
+      ['kmh', 'Speed, km/h', {}], ['lvl', 'Graphics level', {}], ['os', 'System', {}], ['mem', 'Memory, GB (Chrome only)', {}],
+    ];
+    var body = '<table class="trouble"><thead><tr><th></th>' + devs.map(function (d) { return '<th class="n">' + name[d] + '<small>' + fmt(total[d]) + (total[d] === 1 ? ' freeze' : ' freezes') + '</small></th>'; }).join('') + '</tr></thead><tbody>';
+    kinds.forEach(function (kd) {
+      var vals = {};
+      Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[1] === kd[0]) { var v = p.slice(2).join(':'); vals[v] = (vals[v] || 0) + o[k]; } });
+      var keys = Object.keys(vals).sort(function (a, b) { return vals[b] - vals[a]; });
+      if (!keys.length) return;
+      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>' + kd[1] + '</b></td></tr>';
+      keys.slice(0, 10).forEach(function (v) {
+        var label = kd[2][v] || (v.indexOf('page:') === 0 ? 'the page busy outside the game\'s frame: ' + v.slice(5) : v);
+        body += '<tr><td>' + esc(label) + '</td>' + devs.map(function (d) {
+          var n = o[d + ':' + kd[0] + ':' + v] || 0;
+          return n ? '<td class="n"><b>' + fmt(n / total[d] * 100, 0) + '%</b><small>' + fmt(n) + '</small></td>' : '<td class="n tr0">0</td>';
+        }).join('') + '</tr>';
+      });
+    });
+    body += '</tbody></table>';
+    return card('What the freezes had going on', 'Every freeze of 1 s or more while driving (up to 8 a visit), and the share of them that had each fact. "What held the picture": the game\'s own code, the page busy with something else, or neither (the graphics card or the phone). The map above can show where they were. Counted from 24 Nov 2026.', body, true);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

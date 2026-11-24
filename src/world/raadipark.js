@@ -19,8 +19,12 @@ import { still } from '../still.js';
 
 const CENTRE = [2650, 440], NEAR = 620;
 // and stones set by hand where Martin asked for one: [x, z, radius] (24 Nov, "perhaps add a small stone here":
-// on the inside of the S before the bale at point 187, between the road and the way-in tape, at point 175)
-const HAND = [[2557.0, 393.4, 0.32]];
+// on the inside of the S before the bale at point 187, between the road and the way-in tape, at point 175, 1.7 m off the gravel: 24 Nov "1m inside")
+// and one just outside the tape of the bend north of the boulder field, at point 290, by its end near the road
+// (24 Nov, "small stone here too")
+// and two 0.5 m outside the tape of the bend after the east loop's crossing, a bigger and a smaller one
+// (24 Nov "two stones here, one bigger one smaller ... 0,5 m to the left of the tape")
+const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5], [2864.1, 452.1, 0.3]];
 
 export function raadiParkTrees(world) { world.addTrees(PARK.trees); }
 

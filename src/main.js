@@ -923,7 +923,7 @@ async function boot() {
     // (spectating, the map is centred on the watched car, and our own parked car is a yellow arrow too)
     mapHits.length = 0;
     const own = ownCar();
-    const players = mp.players().filter((p) => p.id !== watch?.id);
+    const players = mp.players().filter((p) => p.id !== watch?.id), rim = new Map();
     if (watch?.view) players.push({ id: null, x: own.x, z: own.z, yaw: own.yaw, colour: '#ffd45e' });
     if (!players.length) return;
     const m = ctx.getTransform(), R = ctx.canvas.width / 2;
@@ -944,12 +944,19 @@ async function boot() {
       const ox = me.x - R, oy = me.y - R, rr = R - 26;      // (pointers made bigger, Martin 2026-11-17)
       const b = ox * ux + oy * uy, t = -b + Math.sqrt(Math.max(0, b * b - (ox * ox + oy * oy - rr * rr)));
       mapHits.push({ x: me.x + ux * t, y: me.y + uy * t, id: p.id });
-      ctx.save(); ctx.translate(me.x + ux * t, me.y + uy * t); ctx.rotate(Math.atan2(ux, -uy));
-      ctx.fillStyle = p.colour; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
-      ctx.shadowColor = p.colour; ctx.shadowBlur = 8;
-      ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(17, 11); ctx.lineTo(-17, 11); ctx.closePath();
-      ctx.stroke(); ctx.fill(); ctx.restore();
+      // (into one shape per colour, drawn with its glow after the loop: with 55 online each pointer's own blurred
+      // glow was 55 blurs twelve times a second; now at most one per colour)
+      const cx = me.x + ux * t, cy = me.y + uy * t, rx = -uy, ry = ux;    // (the pointer's own up is (ux, uy))
+      const pt = (a, b) => [cx + a * rx + b * ux, cy + a * ry + b * uy];
+      const path = rim.get(p.colour) || rim.set(p.colour, new Path2D()).get(p.colour);
+      path.moveTo(...pt(0, 22)); path.lineTo(...pt(17, -11)); path.lineTo(...pt(-17, -11)); path.closePath();
     }
+    for (const [colour, path] of rim) {
+      ctx.fillStyle = colour; ctx.strokeStyle = '#160735'; ctx.lineWidth = 2.5;
+      ctx.shadowColor = colour; ctx.shadowBlur = 8;
+      ctx.stroke(path); ctx.fill(path);
+    }
+    rim.clear();
     ctx.restore();
   });
   // desktop: a click on a player's arrow on the minimap (or the pointer on its rim) watches that car; on

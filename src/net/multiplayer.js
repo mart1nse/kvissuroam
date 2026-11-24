@@ -716,7 +716,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const pulse = 0.7 + 0.3 * Math.sin(now * 4.5);
     const ghostMe = hotlap(), me = active && car;
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
-    let nf = 0, recolour = false, near2 = Infinity;
+    let nf = 0, recolour = false, near2 = Infinity, copied = false;
     for (const o of others.values()) {
       o.pose = sample(o, now);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
@@ -726,7 +726,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (o.pose && o.live) o.seen = now;                            // (its last news, not the coasting after it)
       const p = o.pose;
       const d = p ? Math.hypot(p[0] - cam.x, p[1] - cam.z, p[2] - cam.y) : Infinity;
-      if (p && o.live && o.modelCar !== o.car && (!lean() || (d < LEAN_NEAR && kindOk(o.car))) && modelReady(o.car, true)) showModel(o);
+      // (one car copied a frame: when the first car of a kind is ready, everybody driving one is waiting for it)
+      if (p && o.live && o.modelCar !== o.car && !copied && (!lean() || (d < LEAN_NEAR && kindOk(o.car))) && modelReady(o.car, true)) { showModel(o); copied = true; }
       if (p && car) near2 = Math.min(near2, (p[0] - car.x) ** 2 + (p[1] - car.z) ** 2);
       // (heard, and smoking, even while their car is still being built; past 400 m neither is heard or seen)
       if (p && o.live && d < 400) fxList.push(effects(o, p, Math.sin(p[3]), -Math.cos(p[3])));

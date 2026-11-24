@@ -337,7 +337,7 @@ export function createAudio() {
   // arrive, a gain that falls with distance and a pan towards where the car is. The delay changing as
   // the car closes or pulls away is the Doppler shift: higher coming at you, dropping as it goes past.
   function makeVoice() {
-    const v = { id: null, carId: null, synth: null, cfg: null, skid: 0, spin: 0, lastBoost: 0, lastPsh: 0, d: 0 };
+    const v = { id: null, carId: null, synth: null, cfg: null, skid: 0, spin: 0, lastBoost: 0, lastPsh: 0, d: 0, at: -1 };
     v.mix = ctx.createGain();
     v.lp = ctx.createBiquadFilter(); v.lp.type = 'lowpass'; v.lp.frequency.value = 8000; v.lp.Q.value = 0.5;
     v.delay = ctx.createDelay(1);
@@ -414,15 +414,15 @@ export function createAudio() {
       if (v.synth && v.cfg) v.synth.port.postMessage({ state: { rpm: Math.max(r.rpm, e.idle * 0.8), throttle: r.throttle, boost: b, on: 1, redline: e.redline, idle: e.idle, cut: r.revCut ? 1 : 0, shift: 0 } });
     }
     const k = r.paved ? Math.max(r.skidF, r.skidR) : 0;
-    v.skid += (k - v.skid) * 0.2;
+    v.skid += (k - v.skid) * 0.36;                              // (as 0.2 a frame at 60, now called 30 times a second)
     v.tyreFilt.frequency.setTargetAtTime(1050 + Math.min(speed, 35) * 16, t, 0.08);
     v.tyreGain.gain.setTargetAtTime(Math.max(0, v.skid - 0.15) * 0.07, t, 0.07);
-    v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.15;
+    v.spin += ((r.paved ? spinAmount(r) : 0) - v.spin) * 0.28;
     v.spinFilt.frequency.setTargetAtTime(680 + 420 * v.spin, t, 0.1);
     v.spinGain.gain.setTargetAtTime(v.spin * SPIN_LEVEL, t, 0.08);
     v.squeal.setTrim(v.ev ? EV_SQUEAL_TRIM : 1);
     v.squeal.step(t, v.spin, r.slipV || 0, v.skid, speed, s.mass);
-    v.loose += ((r.paved || r.ground == null ? 0 : spinAmount(r)) - v.loose) * 0.15;
+    v.loose += ((r.paved || r.ground == null ? 0 : spinAmount(r)) - v.loose) * 0.28;
     v.gravel.step(t, v.loose, r.slipV || 0, speed, r.ground ?? 1);
   }
   // list: other players' cars (multiplayer.js remotes()); cam: the camera, which is where the ears are
@@ -447,7 +447,12 @@ export function createAudio() {
         v = voices.find((x) => x.id === null) || (voices.length < VOICES ? makeVoice() : null);
         if (!v) continue;
         bind(v, r, d);
+        v.at = -1;
       }
+      // (thirty times a second is plenty for a car going by, its changes all glide: each change to a sound is a
+      // word to the sound thread, some fifteen a car, and with many online they came in bunches that hitched)
+      if (ctx.currentTime - v.at < 0.03) continue;
+      v.at = ctx.currentTime;
       const dd = Math.max(d, 0.5);
       const side = ((r.x - c.x) * m[0] + (r.y + 0.5 - c.y) * m[1] + (r.z - c.z) * m[2]) / dd;
       drive(v, r, dd, Math.max(-0.85, Math.min(0.85, side * 0.85 * Math.min(1, d / 4))));

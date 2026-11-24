@@ -46,6 +46,7 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 // ---- Limits
 const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
                                   // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
+const IDLE_MS = 120000;           // in the garage, the menu or another tab this long: gives up the place when the server is full (seats)
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
@@ -300,16 +301,45 @@ export class Lobby extends DurableObject {
   // pinged nor said hello for 80 s is a dead connection (a phone that went to sleep, a lost
   // network) that would otherwise stay in everyone's player list.
   prune(except) {
-    const now = Date.now();
+    const now = Date.now(), gone = new Set();
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
       const a = ws.deserializeAttachment();
       const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
       if (Math.max(ping, a?.at || 0) > now - 80000) continue;
-      try { ws.close(1001, 'stale'); } catch { /* already closed */ }
-      this.dropPose(ws, a?.id);
-      if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
+      this.release(ws, a, 1001, 'stale');
+      gone.add(ws);
     }
+    return gone;
+  }
+
+  // a socket closed by the server (gone silent, or idle in the garage while the server is full), told to the others
+  release(ws, a, code, why) {
+    try { ws.close(code, why); } catch { /* already closed */ }
+    this.dropPose(ws, a?.id);
+    if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
+  }
+
+  // The places taken toward the cap (Martin 2026-11-24: SERVER FULL with about 60 drivers on the map). Not
+  // counted: sockets gone silent (a phone asleep, a closed laptop: they were only dropped when somebody said
+  // hello, so a newcomer was counted against them first) and ghosts. If that is still the cap, the player who
+  // has sat longest in the garage, the menu or another tab (over IDLE_MS) gives up the place: their page
+  // knows why (code 4002) and joins again as soon as it is back on the map.
+  seats(max) {
+    const gone = this.prune();
+    const now = Date.now(), idleMs = (Number(this.env?.IDLE_S) || IDLE_MS / 1000) * 1000;   // (IDLE_S on the Worker changes it without a deploy)
+    let n = 0, idle = null, idleAt = Infinity;
+    for (const ws of this.ctx.getWebSockets()) {
+      if (gone.has(ws)) continue;
+      const a = ws.deserializeAttachment();
+      if (a?.ghost) continue;
+      n++;
+      if (!a?.id || (a.w !== 'garage' && a.w !== 'away') || this.race.racing(a.id)) continue;
+      const since = a.wt || a.at || now;
+      if (since < now - idleMs && since < idleAt) { idle = { ws, a }; idleAt = since; }
+    }
+    if (n >= max && idle) { this.release(idle.ws, idle.a, 4002, 'idle'); n--; }
+    return n;
   }
 
   broadcast(msg, except) {
@@ -409,11 +439,10 @@ export class Lobby extends DurableObject {
 
     if (path === '/api/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
-      const open = this.ctx.getWebSockets();
       if (this.over(`c|${ip}`, 60, 300000)) return busy();
       // (a MAX_ONLINE variable on the Worker, set in the Cloudflare dashboard, overrides the cap without a deploy)
       const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
-      if (open.length >= max) {
+      if (this.seats(max) >= max) {
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
@@ -423,7 +452,7 @@ export class Lobby extends DurableObject {
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
       let mine = 0;
-      for (const ws of open) if (ws.deserializeAttachment()?.ip === ip) mine++;
+      for (const ws of this.ctx.getWebSockets()) if (ws.deserializeAttachment()?.ip === ip) mine++;
       if (mine >= MAX_SOCKETS_IP) return busy();
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
@@ -616,7 +645,7 @@ export class Lobby extends DurableObject {
       // lost connection keeps it), or what this socket had
       const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
       const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanOn).filter(Boolean).slice(-KUDOS_KEEP) : [];
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
@@ -643,6 +672,7 @@ export class Lobby extends DurableObject {
       const w = cleanWhere(m.w), on = w === 'watch' ? cleanOn(m.on) : '';
       if (!w || (w === me.w && on === (me.on || ''))) return;
       const was = me.on, wasW = me.w;
+      if (w !== me.w) me.wt = now;
       me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
       if (!me.ghost) this.race.moved(me, wasW);
       // (everyone hears "watching", and the watched players' new counts, never who watches whom)

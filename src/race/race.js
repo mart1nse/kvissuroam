@@ -257,7 +257,8 @@ function loadLocal() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; }
 }
 
-export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor }) {
+// rec: the lap's replay recorder (src/race/replay.js), or none
+export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor, rec = null }) {
   const track = createTrack();
   const edges = createEdges(track, world);
   scene.add(edges.group);
@@ -374,6 +375,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     if (!st.running) return;
     onEvent?.(kind, st.cps.size);
     st.running = false;
+    rec?.cancel();
     elMsg.textContent = why;
     toast(why, offer ? 4500 : 2600);
     if (offer) offerBack();
@@ -466,6 +468,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   const ref = st.ref;
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
                   const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
+                  // (its replay: kept apart from the lap, which goes into this browser's list of laps)
+                  const trace = rec?.finish(tc, time, car);
                   if ((st.tyT.gravel || 0) > (st.tyT.road || 0)) lap.ty = 'gravel';
                   showSplit('FINISH', lapT, refAt(ref || refLaps(carId), null));
                   // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
@@ -482,11 +486,11 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   renderLast();
                   // a record gets the big LAP RECORD banner (racemode.js) instead of a toast
                   if (!pb && !own) toast(`LAP · ${fmtTime(lapT)}`, 4000);
-                  onLap?.(lap, { rec: pb, prev: b, own });
+                  onLap?.(lap, { rec: pb, prev: b, own, trace });
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; st.inpT = {}; st.tyT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
@@ -511,6 +515,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       st.prev = { x, z };
       st.prevTime = time;
       st.onTrack = onTrack;
+      rec?.frame(time, car);
 
       const show = st.running || st.near;
       edges.update(x, z);

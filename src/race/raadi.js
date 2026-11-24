@@ -434,7 +434,8 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump }) {
+// rec: the run's replay recorder (src/race/replay.js), or none
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -994,6 +995,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   function cancel(why) {
     if (st.phase !== 'run' && st.phase !== 'count') return;
     st.phase = 'done'; st.pin = null; st.cool = true; st.doneT = null;
+    rec?.cancel();
     elMsg.textContent = why;
     toast(why, 3200);
     showAgain();
@@ -1060,6 +1062,11 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     best,
     goStart,
     // the car was moved by the player (map, H, R, garage): a run in progress ends
+    // a spectator's own car waits (spectate.js): a run ends, the start lights before one go out without a word
+    rest() {
+      if (st.phase === 'run') return cancel('STAGE CANCELLED');
+      if (st.phase === 'count') { st.phase = 'idle'; st.pin = null; st.cool = true; elMsg.textContent = ''; lights.classList.add('hidden'); }
+    },
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
     // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
@@ -1121,6 +1128,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0;
+          rec?.begin(time);
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
@@ -1252,6 +1260,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           else if (a < 0 && b >= 0 && st.gate < CHECKS.length) cancel('MISSED A CORNER · STAGE CANCELLED');
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
+            const trace = rec?.finish(tc, time, car);
             // (the bests before this run: this browser's own in the car, and anyone's)
             const { car: pb } = best(carId), all = top(carId);
             const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
@@ -1267,7 +1276,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
             elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}${word}</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
             toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ` · ${word}` : ''}`, 4500);
             showAgain();
-            onRun?.('finish', run, { rec, record: word === 'STAGE RECORD' });
+            onRun?.('finish', run, { rec, record: word === 'STAGE RECORD', trace });
           }
         }
       }
@@ -1284,6 +1293,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       breakBarriers(car, Math.min(dt || 0.016, 0.05));
       drawBoards(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);
       st.prev = { x, z }; st.prevTime = time;
+      rec?.frame(time, car);
 
       // HUD
       const show = st.phase !== 'idle' || dStart < 120;

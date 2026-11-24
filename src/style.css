@@ -714,18 +714,27 @@ body.touch #ctlbtn { display: none; }
   width: clamp(200px, 20.8vw, 376px); height: clamp(46px, 4.5vw, 80px); padding: 0 12px; border: none; border-radius: 999px;
   font-family: 'Russo One', var(--font); font-size: clamp(22px, 2.4vw, 43px); letter-spacing: .04em; line-height: 1;
   color: var(--cyan); background: rgba(18, 6, 43, .62); text-shadow: 0 0 8px var(--cyan); }
-#rbtn.lit { color: var(--sun); background: rgba(70, 40, 10, .55); text-shadow: 0 0 10px var(--sun); animation: rpulse 1.1s ease-in-out infinite; }
-#rbtn.voted { color: #7dff5a; text-shadow: 0 0 8px #7dff5a; }
+/* the call to act (VOTE START, JOIN RACE, START NOW): a see-through pill with its letters in the cyan-to-pink
+   gradient of the race card (Martin 2026-11-24: one colour scheme, no yellow), the pill breathing a soft glow */
+#rbtn span { display: block; }
+#rbtn.lit, #rbtn.voted { text-shadow: none; }
+#rbtn.lit span, #rcount .btns .go span { color: transparent; -webkit-text-fill-color: transparent;
+  background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot)); -webkit-background-clip: text; background-clip: text;
+  filter: drop-shadow(0 0 6px rgba(47, 243, 255, .35)) drop-shadow(0 0 10px rgba(255, 43, 214, .3)); }
+#rbtn.voted span, #rcount .btns .in span { color: transparent; -webkit-text-fill-color: transparent;
+  background: linear-gradient(100deg, #7dff5a, var(--cyan)); -webkit-background-clip: text; background-clip: text;
+  filter: drop-shadow(0 0 6px rgba(125, 255, 90, .35)); }
+#rbtn.lit { animation: rpulse 1.6s ease-in-out infinite; }
 #rbtn.dim { color: rgba(255, 255, 255, .65); text-shadow: none; }
 #rbtn.pink { color: #fff; background: rgba(90, 10, 70, .55); text-shadow: 0 0 8px var(--hot); }
 #rbtn.pink.on { color: #ffd0f4; }
-@keyframes rpulse { 50% { background: rgba(110, 70, 10, .7); } }
+@keyframes rpulse { 50% { box-shadow: 0 0 18px rgba(47, 243, 255, .35), 0 0 26px rgba(255, 43, 214, .28); } }
 #rsub { margin-left: 10px; font-size: clamp(10px, .98vw, 18px); font-weight: 800; letter-spacing: .08em; white-space: nowrap; color: #fff;
   text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 #rsub b { color: var(--cyan); }
 #rsub .pips { display: inline-flex; gap: 3px; margin-right: .5em; vertical-align: middle; }
 #rsub .pips i { width: .75em; height: .75em; border-radius: 50%; border: 1.5px solid var(--cyan); }
-#rsub .pips i.on { background: var(--sun); border-color: var(--sun); box-shadow: 0 0 6px var(--sun); }
+#rsub .pips i.on { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
 #rchip { pointer-events: auto; border: none; border-radius: 999px; background: rgba(18, 6, 43, .62); color: #fff; font: 800 clamp(10px, .85vw, 14.5px) var(--font);
   letter-spacing: .08em; padding: .6em 1.1em; white-space: nowrap; }
 #rchip em, #rlist em { font-style: normal; color: var(--sun); }
@@ -780,15 +789,14 @@ body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rcount .names span.wait { opacity: .5; font-style: italic; }
 #rcount .btns { display: flex; gap: 12px; justify-content: center; align-items: center; }
 #rcount .btns button { cursor: pointer; white-space: nowrap; border: none; border-radius: 999px; padding: .74em 1.75em .78em;
-  font: 800 clamp(16px, 1.65vw, 27px) var(--font); letter-spacing: .14em; text-shadow: none;
+  font: 800 clamp(20px, 2.1vw, 34px) var(--font); letter-spacing: .14em; text-shadow: none;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, background .18s ease; }
 #rcount .btns button:hover { transform: scale(1.05); }
 #rcount .btns button:active { transform: scale(.97); }
-#rcount .btns .go { color: var(--ink); background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot));
-  box-shadow: 0 0 18px rgba(47, 243, 255, .45), 0 0 26px rgba(255, 43, 214, .3); }
-#rcount .btns .go::before { content: '▶'; margin-right: .6em; font-size: .8em; }
-#rcount .btns .go:hover { filter: brightness(1.08); box-shadow: 0 0 24px rgba(47, 243, 255, .7), 0 0 34px rgba(255, 43, 214, .45); }
-#rcount .btns .in { color: var(--ink); background: linear-gradient(100deg, #7dff5a, #2ff3ff); box-shadow: 0 0 16px rgba(125, 255, 90, .4); }
+#rcount .btns .go, #rcount .btns .in { background: rgba(255, 255, 255, .1); animation: rpulse 1.6s ease-in-out infinite; }
+#rcount .btns .go span::before { content: '▶'; margin-right: .6em; font-size: .8em; }
+#rcount .btns .go:hover { background: rgba(255, 255, 255, .16); box-shadow: 0 0 22px rgba(47, 243, 255, .5), 0 0 30px rgba(255, 43, 214, .38); animation: none; }
+#rcount .btns .in { animation: none; box-shadow: 0 0 14px rgba(125, 255, 90, .25); }
 #rcount .btns [data-r="no"] { color: rgba(255, 255, 255, .88); background: rgba(255, 255, 255, .1); }
 #rcount .btns [data-r="no"]:hover { background: rgba(255, 255, 255, .18); color: #fff; }
 #rcount .btns button small { margin-left: .6em; padding: .1em .45em; border-radius: .45em; font: 800 .72em var(--font); letter-spacing: .08em;

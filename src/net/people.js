@@ -86,7 +86,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
     const wn = mp.online ? mp.watchers() : 0, sp = watching();
-    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : ' · OFFLINE'}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : mp.full ? ' · SERVER FULL' : ' · OFFLINE'}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
     const vm = mp.online ? votes?.() : null;
     const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}${myRec ? ` ${recTag(myRec, mp.recordTime(mp.name))}` : ''}` : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
@@ -158,7 +158,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       const driving = others.filter(onMap), away = others.filter((p) => !onMap(p));
       shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
       const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
-      const head = mp.online ? `${driving.length + 1} ONLINE` : 'OFFLINE · RECONNECTING';
+      const head = mp.online ? `${driving.length + 1} ONLINE` : mp.full ? 'SERVER FULL · DRIVING OFFLINE' : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
       rosterKey = `${mp.online}|${others.length}|${vm?.key || ''}`;

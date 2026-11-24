@@ -44,7 +44,8 @@ const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w ==
 const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
-const MAX_SOCKETS = 150;          // everyone with the game open
+const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
+                                  // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
@@ -408,8 +409,18 @@ export class Lobby extends DurableObject {
     if (path === '/api/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
       const open = this.ctx.getWebSockets();
-      if (open.length >= MAX_SOCKETS) return json({ error: 'full' }, 503);
       if (this.over(`c|${ip}`, 60, 300000)) return busy();
+      // (a MAX_ONLINE variable on the Worker, set in the Cloudflare dashboard, overrides the cap without a deploy)
+      const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
+      if (open.length >= max) {
+        // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
+        // read why an upgrade was refused; the game then drives offline and asks again now and then
+        const pair = new WebSocketPair();
+        pair[1].accept();
+        pair[1].send(JSON.stringify({ t: 'full', max }));
+        pair[1].close(4001, 'full');
+        return new Response(null, { status: 101, webSocket: pair[0] });
+      }
       let mine = 0;
       for (const ws of open) if (ws.deserializeAttachment()?.ip === ip) mine++;
       if (mine >= MAX_SOCKETS_IP) return busy();

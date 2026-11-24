@@ -127,7 +127,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false, lean = () => false, warm = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, stage = false, low = () => false, lean = () => false, warm = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -824,6 +824,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const p = o.pose;
       const hot = o.live && !!(p[20] & HOT);
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
+      // in a race with us: their place instead of HOTLAP (Martin 2026-11-24), written only when it changes
+      const pl = place(o.id);
+      if (pl !== (o.pl || 0)) { o.pl = pl; if (pl) o.el.dataset.pos = `P${pl}`; else delete o.el.dataset.pos; }
       const ta = o.near ? Math.round((o.tagA ?? 1) * 50) / 50 : 1;
       if (ta !== (o.ta ?? 1)) { o.ta = ta; o.el.style.opacity = ta === 1 ? '' : ta; }
       const rec = recs.size ? recordOf(o.name) : '';

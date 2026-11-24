@@ -81,6 +81,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, sentRf = null, sentRd = null, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
+  // each racer's place while we race too, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP);
+  // worked out with the live order ten times a second, read by the name tags (changed only when a place changes)
+  const places = new Map();
   let tick = 0, sample = 0;
 
   const now = () => mp.serverNow();
@@ -412,6 +415,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
     // (Martin, 2026-11-22: from lights out, not only from the start line)
     racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
+    // another racer's place in the race we are in (1 = leading), or 0: not racing with us
+    place(id) { return places.get(id) || 0; },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
     get holding() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
@@ -493,7 +498,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
           const p = mp.poseOf(x.id);
           if (p) progress(x.id, p[0], p[1], t, rt);
         }
-      }
+        // (the same order as the live list: finished by time, then by distance; those out have no place)
+        places.clear();
+        const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
+        const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
+        for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
+      } else if (places.size && !(ph === 'race' && m)) places.clear();
       tick -= dt;
       if (tick <= 0) { tick = 0.25; render(); }
     },

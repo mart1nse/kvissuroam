@@ -359,6 +359,12 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
   text-shadow: none; animation: hotpulse 1.4s ease-in-out infinite;
 }
 @keyframes hotpulse { 50% { opacity: .6; } }
+/* racing with us: their place in the race over their name instead (Martin 2026-11-24), a little larger */
+.pname[data-pos]::before {
+  content: attr(data-pos); position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; padding: 0 9px; border-radius: 999px;
+  font: 400 17px/1.25 'Russo One', var(--font); letter-spacing: .06em; color: #fff; background: linear-gradient(100deg, var(--hot), var(--violet));
+  text-shadow: none; animation: none;
+}
 /* a lap record set lately (multiplayer.js recordOf): a plain line under the name over the car, white
    race font on a pink glow like the online list's (no filled pill: it covered the road, Martin 2026-11-23) */
 .pname[data-rec]::after {

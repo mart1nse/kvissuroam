@@ -45,6 +45,8 @@ const COUNT_S = 0;                         // seconds of red before the counted 
 const LAST_S = 3;                          // the last seconds, yellow, counted one by one
 const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
+const BACK_LIMIT = 100;                    // metres driven the wrong way along the stage before the run is cancelled
+const BACK_WARN = 25;                      // ... and from this far on the panel says WRONG WAY
 const FIN_WIDE = 4;                         // metres beside the road that the finish line still counts
 // On the right the finish counts only up to its flag, and a tape runs on from the flag across the grass (Martin
 // 23 Nov 00:14, a red line beside the right flag: "you will need to cross it from the left side to make sure no
@@ -982,7 +984,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
+    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
     bales.reset();
     tape.reset();
     knocks.reset();
@@ -1127,7 +1129,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
-          st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0;
+          st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0;
           rec?.begin(time);
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
@@ -1173,6 +1175,19 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           }
         } else { st.later = null; st.laterM = 0; }
         if (st.off > OFF_LIMIT) cancel('OFF THE STAGE · CANCELLED');
+        // the wrong way (Martin 25 Nov: the stage backwards, or its loop the other way round): metres moved against
+        // the stage's direction on its gravel, where it is now or on any other part of it; forwards pays them back,
+        // so a spin or reversing to a missed bale stays well inside the limit
+        if (st.prev && st.phase === 'run') {
+          const r = onIt ? w : nearestIn(x, z, START, FIN);
+          // (not between a check still to cross and the next one: going back round a missed bale is what it asks)
+          const nextK = st.gate + 1 < CHECKS.length ? CHECKS[st.gate + 1][0] : FIN;
+          if (r.i >= 0 && r.d < HW[r.i] + 6 && !(hold < N && r.i > hold - GATE_HOLD && r.i < nextK)) {
+            const ds = (x - st.prev.x) * TAN[r.i][0] + (z - st.prev.z) * TAN[r.i][1];
+            st.back = Math.max(0, (st.back || 0) - ds);
+            if (st.back > BACK_LIMIT) cancel('WRONG WAY · STAGE CANCELLED');
+          }
+        }
         // apexes: cutting inside the edge adds seconds, more for a deeper cut (once per apex: the deepest counts)
         const apexCut = (k, deep) => {
           if (NO_APEX.includes(k)) return;
@@ -1303,7 +1318,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         panel.classList.toggle('idle', st.phase !== 'run' && st.phase !== 'done');
         renderBest(carId, carShort);
         if (st.phase === 'idle' && !elMsg.textContent) elMsg.textContent = 'DRIVE TO THE START LINE';
-        if (st.phase === 'run') elMsg.textContent = st.missed ? 'MISSED THE BALE · GO BACK ROUND IT' : st.later != null && st.laterM > 15 ? `NOT THIS WAY YET · ${Math.round(st.laterM)} / ${SHORT_M} M` : st.offNow && st.off > 40 ? `OFF THE STAGE ${Math.round(st.off)} / ${OFF_LIMIT} M` : st.pen ? `PENALTY +${st.pen} S` : '';
+        if (st.phase === 'run') elMsg.textContent = st.back > BACK_WARN ? `WRONG WAY ${Math.round(st.back)} / ${BACK_LIMIT} M` : st.missed ? 'MISSED THE BALE · GO BACK ROUND IT' : st.later != null && st.laterM > 15 ? `NOT THIS WAY YET · ${Math.round(st.laterM)} / ${SHORT_M} M` : st.offNow && st.off > 40 ? `OFF THE STAGE ${Math.round(st.off)} / ${OFF_LIMIT} M` : st.pen ? `PENALTY +${st.pen} S` : '';
       }
       if (st.phase === 'done' && st.againUntil && performance.now() > st.againUntil) hideAgain();
     },

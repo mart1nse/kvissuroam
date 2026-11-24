@@ -14,13 +14,11 @@ import TRACK from './track.json';
 import { createDecor } from './decor.js';
 import { createLandmarks } from './landmarks.js';
 import { jobs } from '../jobs.js';
-import { lapGates, throughGate } from './lapgates.js';
+import { lapGates, lapGatesSteps, throughGate } from './lapgates.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
 const NEAR = 45;               // within this of the track the edges and the lap panel show
-const CP_RADIUS = 14;          // how close a checkpoint has to be passed (beyond the road; was 28 until 24 Nov:
-                               // at the river and Vanemuise corners that let a car turn in over the garden or car park)
 const MIN_LAP = 30;            // seconds; anything faster is a glitch (a reset onto the line)
 const CUT_TEXT = 'SHORT CUT · LAP CANCELLED';
 const BACK_LIMIT = 100;        // metres driven the wrong way along the lap before it is cancelled (Martin, 24 Nov)
@@ -37,6 +35,7 @@ export function fmtTime(sec) {
 // a grid cell (column c, row r) as one number
 export const cellKey = (c, r) => (c + 8192) * 16384 + r + 8192;     // (a small integer for cells within 80 km)
 
+let GATES = null;
 export function createTrack() {
   const P = TRACK.pts, HW = TRACK.hw, N = P.length;
   const tan = [], s = new Float64Array(N);
@@ -94,7 +93,9 @@ export function createTrack() {
   return {
     P, HW, N, tan, s, length: TRACK.length, nearest, spawnI: sp,
     checkpoints: TRACK.checkpoints.map((i) => ({ i, x: P[i][0], z: P[i][1] })),
-    gates: lapGates(TRACK, CP_RADIUS),
+    // (worked out once, in the work queue as the race is made (createRace): about 40 ms in all; here only if a lap
+    // comes before that is done)
+    get gates() { return (GATES ||= lapGates(TRACK)); },
     spawn: { x: P[sp][0], z: P[sp][1], yaw: Math.atan2(tan[sp][0], -tan[sp][1]) },
   };
 }
@@ -267,6 +268,10 @@ function loadLocal() {
 // rec: the lap's replay recorder (src/race/replay.js), or none
 export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor, rec = null }) {
   const track = createTrack();
+  if (!GATES) {
+    const out = [];
+    jobs.add(function* () { yield* lapGatesSteps(TRACK, out); GATES ||= out; }, 'lap gates');
+  }
   const edges = createEdges(track, world);
   scene.add(edges.group);
   const decor = createDecor(track, world);
@@ -516,18 +521,24 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
             // the gates in order (checkpoints among them): the next one counts; one further on touched first is a
             // short cut, at once where only a short cut gets there, else when the next checkpoint or the finish comes
             const G = track.gates;
-            for (let j = st.gate; st.running && j < G.length; j++) {
-              const g = G[j];
-              if (!throughGate(g, st.prev.x, st.prev.z, x, z)) continue;
-              if (j > st.gate) { if (g.strict) cancel(CUT_TEXT, true, 'cut'); break; }
+            // One gate missed is forgiven when the next is passed (Martin, 24 Nov: running wide onto the grass must
+            // not cost the lap); a short cut leaves out at least two.
+            const pass = (g) => {
               st.gate++;
-              if (g.cp < 0) continue;
+              if (g.cp < 0) return;
               const k = g.cp;
               st.cps.add(g.i);
               const t = time - st.t0;
               st.splits[k] = Math.round(t * 1000);
               if (!st.ref) st.ref = refLaps(carId);
               showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, refAt(st.ref, k));
+            };
+            for (let j = st.gate; st.running && j < G.length; j++) {
+              const g = G[j];
+              if (!throughGate(g, st.prev.x, st.prev.z, x, z)) continue;
+              if (j === st.gate + 1) pass(G[st.gate]);
+              else if (j > st.gate) { if (g.strict) cancel(CUT_TEXT, true, 'cut'); break; }
+              pass(g);
             }
             if (st.running && st.back > BACK_LIMIT) cancel('WRONG WAY · LAP CANCELLED', true, 'cut');
             if (st.running && !onTrack) {

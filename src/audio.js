@@ -454,16 +454,37 @@ export function createAudio() {
     }
   }
 
+  // a thumbs up for us (src/kudos.js, Martin 2026-11-24: "a very airy 7 chord synth sound"): Dmaj9 spread
+  // wide, D4 A4 C#5 F#5 E6, each a soft sine pair a few cents apart (slow beating, the air), notes coming in
+  // one after another, a slow swell and a two-second tail, softened by a low-pass. 10 oscillators, 2.8 s.
+  function airy() {
+    const t0 = ctx.currentTime + 0.02, out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.3;
+    out.gain.value = 0.9; lp.connect(out); out.connect(master);
+    [293.66, 440, 554.37, 739.99, 1318.51].forEach((f, i) => {
+      const t = t0 + i * 0.045, g = ctx.createGain(), level = i === 4 ? 0.026 : 0.045;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(level, t + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + 2.7);
+      for (const d of [-4, 4]) {
+        const o = ctx.createOscillator();
+        o.type = 'sine'; o.frequency.value = f; o.detune.value = d;
+        o.connect(g); o.start(t); o.stop(t + 2.8);
+      }
+      g.connect(lp);
+    });
+  }
+
   // short two-note chime for someone joining (rising) or leaving (falling, softer and lower)
   function chime(kind) {
     if (!notify || !ctx || ctx.state !== 'running') return;
-    const join = kind === 'join' || kind === 'record' || kind === 'kudos';
-    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7, kudos (a thumbs up for
-    // us, src/kudos.js): a quick D6 A6 D7 sparkle
-    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : kind === 'kudos' ? [1174.66, 1760, 2349.32] : join ? [659.25, 987.77] : [783.99, 523.25];
-    const t0 = ctx.currentTime + 0.01, level = kind === 'kudos' ? 0.13 : join ? 0.16 : 0.12;
+    if (kind === 'kudos') { airy(); return; }
+    const join = kind === 'join' || kind === 'record';
+    // join: E5 -> B5, leave: G5 -> C5, record (someone set a lap record): C6 E6 G6 C7
+    const notes = kind === 'record' ? [1046.5, 1318.5, 1568, 2093] : join ? [659.25, 987.77] : [783.99, 523.25];
+    const t0 = ctx.currentTime + 0.01, level = join ? 0.16 : 0.12;
     notes.forEach((f, i) => {
-      const t = t0 + i * (kind === 'record' ? 0.08 : kind === 'kudos' ? 0.06 : 0.11);
+      const t = t0 + i * (kind === 'record' ? 0.08 : 0.11);
       const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
       o.type = join ? 'sine' : 'triangle'; o.frequency.value = f;
       o2.type = 'sine'; o2.frequency.value = f * 2.005;           // a little shimmer an octave up

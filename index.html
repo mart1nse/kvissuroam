@@ -2,6 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <script>
+    // The game lives at www.linnaring.com. The old kvissuroam.parttime.workers.dev address and the bare
+    // linnaring.com get this same page as a static file (no Worker runs for it, so the page loads even
+    // if the Worker is ever stopped by a spending limit). There it reads the driver name, car, queued
+    // and best laps (a browser keeps those per address) and goes on to the canonical address with them
+    // in the URL fragment, which the "Arriving from the old address" script below stores. Same as
+    // bridgePage in worker/moved.js, which still answers other paths on the old addresses.
+    (function () {
+      if (!/^(kvissuroam\.parttime\.workers\.dev|linnaring\.com)$/.test(location.hostname)) return;
+      var t = 'https://www.linnaring.com' + location.pathname + location.search, h = '';
+      try {
+        var g = function (k) { return localStorage.getItem('kvissuroam.' + k); };
+        var J = function (k) { try { var v = JSON.parse(g(k)); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+        var d = { n: g('name'), c: g('car'), v: g('view'), p: J('pendingLaps').slice(-100) };
+        // of the laps driven here only the best per car goes along (it carries the split times)
+        var best = {};
+        J('laps').forEach(function (l) {
+          if (!l || !l.car || !(l.ms > 0)) return;
+          var k = l.car + '|' + (l.cp || '');
+          if (!best[k] || l.ms < best[k].ms) best[k] = l;
+        });
+        d.l = Object.keys(best).map(function (k) { return best[k]; });
+        var keys = {};
+        d.l.forEach(function (l) { keys[l.car + '|' + l.ms] = 1; });
+        d.s = J('sentLaps').filter(function (k) { return keys[k]; });
+        if (d.n || d.c || d.p.length || d.l.length) {
+          var e = encodeURIComponent(JSON.stringify(d));
+          if (e.length > 12000) { d.l = []; d.s = []; e = encodeURIComponent(JSON.stringify(d)); }
+          if (e.length > 12000) { d.p = d.p.slice(-20); e = encodeURIComponent(JSON.stringify(d)); }
+          if (e.length <= 12000) h = '#moved=' + e;
+        }
+      } catch (e) { /* storage blocked: just go */ }
+      document.documentElement.style.display = 'none';
+      location.replace(t + h);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <script>
     // Chrome, Firefox and Edge on an iPhone keep the page out of the notch side in landscape, but with viewport-fit=cover

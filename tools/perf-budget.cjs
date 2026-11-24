@@ -72,6 +72,14 @@
 //            Then 30 s of a race of 30 under way with us in it (Martin, 24 Nov: "almost 30 in the race"): each kind of
 //            car's see-through ghost shaders were made ready in one go when it first came close, 13 to 30 ms.
 //            The "online code" counts src/race/racemode.js (the live race list) too.
+//   shaders the iPhone way (tools/crowd-hitch.cjs, as a phone, drawing on, 60 online): the menu's warm-up frames,
+//            DRIVE, 25 s standing where the game puts the car, with a graphics driver made to behave like an iPhone's:
+//            no KHR_parallel_shader_compile, and the first question about each new shader program waits 150 ms for it
+//            to be built. Judged: how many programs were first used inside the drawing of a frame after DRIVE (each a
+//            wait there), and the most in one frame. Why: on 24 Nov 2026 /stats showed 41 in 100 phone drivers with a
+//            freeze of 1 s or more, 172 of 235 of them drawing new shaders, 80% iPhones, mostly at the busy start in
+//            the first minutes (src/stats.js freeze()). Before the fix 9 programs, 4 in one frame (the start boards);
+//            after it 2, never two in one frame (src/warm.js firstUse, the scene's shaders behind the menu).
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
@@ -363,6 +371,14 @@ async function waitForServer(url, ms) {
       out.crowdRace = { ...crowdSummary(r), errors: r.errs.slice(0, 5) };
       out.crowdRaceReport = crowdReport(r, 8);
     } catch (e) { out.crowdRace = null; out.crowdRaceReport = `the race of 30 failed: ${e.message}`; }
+    // ---- shaders the iPhone way (see the top): programs first used in the drawing of a frame after DRIVE
+    try {
+      const r = await crowd({ port: PORT, n: 60, secs: 25, touch: true, draw: true, slowLink: 150, menu: true });
+      const d = (r.waits || []).filter((w) => w[0] >= r.t0 && w[1] === 'draw').map((w) => w[0]);
+      let most = 0;
+      for (let i = 0, j = 0; i < d.length; i++) { while (d[i] - d[j] > 200) j++; most = Math.max(most, i - j + 1); }
+      out.shaders = { inDrawing: d.length, mostInOneFrame: most, ahead: (r.waits || []).filter((w) => w[0] >= r.t0 && w[1] === 'ahead').length, errors: r.errs.slice(0, 5) };
+    } catch (e) { out.shaders = null; console.warn(`the iPhone shaders run failed: ${e.message}`); }
   } finally {
     await browser?.close();
     vite.kill();
@@ -470,6 +486,15 @@ async function waitForServer(url, ms) {
       ['a race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s', R?.online5, B.onlineOver5ms],
       ['a race of 30: the online code\'s most in one stretch (ms)', R?.onlineMax, B.onlineLongestMs],
       ['a race of 30: page errors', R ? R.errors.length : null, 0],
+    );
+  }
+  {
+    // shaders the iPhone way (see the top)
+    const S = out.shaders, B = budget.shaders;
+    checks.push(
+      ['phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE', S?.inDrawing, B.inDrawing],
+      ['phone, shaders built the iPhone way: most such programs in one frame', S?.mostInOneFrame, B.mostInOneFrame],
+      ['phone, shaders built the iPhone way: page errors', S ? S.errors.length : null, 0],
     );
   }
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);

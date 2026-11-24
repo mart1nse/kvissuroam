@@ -169,11 +169,22 @@ function checkTrace(text, track, driving) {
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
   const g = GATES[track];
-  let x = 0, z = 0, px = 0, pz = 0, gate = 0;
+  let x = 0, z = 0, px = 0, pz = 0, gate = 0, hops = 0;
+  const xs = new Float64Array(n), zs = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100;
+    xs[i] = x; zs[i] = z;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
-    if (i && Math.hypot(x - px, z - pz) > 12) return 'speed';
+    if (i && Math.hypot(x - px, z - pz) > 12) {
+      // R puts the car back on a spot it drove through at least 3 s before and the lap goes on (main.js
+      // goLastSpot, race.js hopped): a jump back onto the trace's own earlier path is that, and passes no gate
+      // (until 25 Nov such a lap's replay was refused as too fast, and its record could not be watched)
+      let back = false;
+      for (let j = 0; j < i - 20 && !back; j++) back = Math.hypot(xs[j] - x, zs[j] - z) < 8;
+      if (!back || ++hops > 20) return 'speed';
+      px = x; pz = z;
+      continue;
+    }
     // (on the line between two samples, as the game judges a frame: at 10 a second a fast car moves 8 m)
     // (one gate missed is forgiven when the next is passed, as in the game: running wide onto the grass)
     for (;;) {
@@ -215,6 +226,7 @@ export class Lobby extends DurableObject {
     // small values kept between wake-ups: the signing secret and the finished lap board
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
     // the record lap of each car on each circuit as movement, to be watched (see "Replays"); one row a car and circuit
+    this.sql.exec('CREATE TABLE IF NOT EXISTS replay_refused (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, why TEXT NOT NULL, bytes INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS replays (track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, at TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (track, car))');
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
@@ -590,11 +602,17 @@ export class Lobby extends DurableObject {
     try { body = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
     const car = cleanCar(body?.car), track = cleanTrack(body?.track), ms = Math.round(Number(body?.ms));
     const tk = await this.readTicket(body?.k);
-    if (!car || !tk || !(ms > 0) || typeof body?.z !== 'string') return json({ error: 'invalid' }, 400);
+    // a refusal is kept (the last 50) so a record without a replay can be told why: GET /api/replay?refused=1
+    const refuse = (why, name = '', n = 0) => {
+      this.sql.exec('INSERT INTO replay_refused (at, track, car, ms, name, why, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), track, car || '?', ms || 0, name, why, n);
+      this.sql.exec('DELETE FROM replay_refused WHERE id <= (SELECT MAX(id) FROM replay_refused) - 50');
+      return json({ error: why === 'invalid' || why === 'no such lap' || why === 'not the record' ? why : `replay refused: ${why}` }, 400);
+    };
+    if (!car || !tk || !(ms > 0) || typeof body?.z !== 'string') return refuse('invalid');
     const lap = this.sql.exec('SELECT name, at, pen FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, track).toArray()[0];
-    if (!lap) return json({ error: 'no such lap' }, 400);
+    if (!lap) return refuse('no such lap');
     const best = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ?', track, car).one().m;
-    if (best !== ms) return json({ error: 'not the record' }, 400);
+    if (best !== ms) return refuse('not the record', lap.name);
     const had = this.sql.exec('SELECT ms FROM replays WHERE track = ? AND car = ?', track, car).toArray()[0];
     if (had && had.ms <= ms) return json({ ok: true });              // (that record's replay came already)
     let bytes, why;
@@ -602,7 +620,7 @@ export class Lobby extends DurableObject {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000);
     } catch { why = 'unreadable'; }
-    if (why) return json({ error: `replay refused: ${why}` }, 400);
+    if (why) return refuse(why, lap.name, bytes?.length || 0);
     this.sql.exec('INSERT OR REPLACE INTO replays (track, car, ms, name, at, data) VALUES (?, ?, ?, ?, ?, ?)', track, car, ms, lap.name, lap.at, bytes);
     this.rpIndex = null;
     this.broadcast({ t: 'board', board: this.board() });
@@ -733,6 +751,9 @@ export class Lobby extends DurableObject {
     }
 
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
+    if (path === '/api/replay' && url.searchParams.get('refused')) {
+      return json(this.sql.exec('SELECT at, track, car, ms, name, why, bytes FROM replay_refused ORDER BY id DESC').toArray());
+    }
     if (path === '/api/replay') {
       // a record's replay: the gzipped samples as they came, with whose lap it is and its time in headers
       const track = cleanTrack(url.searchParams.get('track')), car = cleanCar(url.searchParams.get('car'));

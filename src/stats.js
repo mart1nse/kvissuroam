@@ -12,7 +12,7 @@ const params = new URLSearchParams(location.search);
 const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, err: [] });
 let b = fresh();
 let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0;
 const once = new Set();
@@ -35,7 +35,7 @@ function device(isTouch) {
 }
 
 const empty = (o) => !first && !o.menu && !o.drive && !o.err.length
-  && ['laps', 'smash', 'misc'].every((k) => !Object.keys(o[k]).length)
+  && ['laps', 'smash', 'misc', 'death'].every((k) => !Object.keys(o[k]).length)
   && !(loadMs && !once.has('load')) && !(loaded && !once.has('loaded')) && !(drove && !once.has('drove'));
 
 function send(leaving = false, closing = false) {
@@ -72,7 +72,7 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
 }
 
@@ -80,7 +80,7 @@ let fpsT = 0, fpsN = 0;
 export const stats = {
   on,
   // once, at the start: what kind of device this is
-  start({ isTouch, lite, software }) {
+  start({ isTouch, lite, software, death }) {
     if (!on) return;
     let ret = false, crash = '';
     try {
@@ -93,6 +93,16 @@ export const stats = {
     } catch { /* storage blocked */ }
     first = { ...device(isTouch), ret, crash, lite: !!lite, sw: !!software };
     dev = first.dev;
+    // The graphics crash guard found that the last visit died on screen (src/quality.js): one line of
+    // clues, so /stats can tell a phone out of memory from a page killed for something else (Martin
+    // 2026-11-24). 'tab': the guard saw it but this tab did not (opened afresh after the death).
+    if (death) {
+      const dm = navigator.deviceMemory > 0 ? String(navigator.deviceMemory) : '?';
+      const t = death.s == null ? '?' : death.s < 60 ? '<1' : death.s < 300 ? '1-5' : death.s < 900 ? '5-15' : '15+';
+      const h = death.heap == null ? '?' : death.heap < 200 ? '<200' : death.heap < 400 ? '200-400' : death.heap < 700 ? '400-700' : '700+';
+      const x = death.tex == null ? '?' : death.tex < 150 ? '<150' : death.tex < 300 ? '150-300' : death.tex < 500 ? '300-500' : '500+';
+      inc(b.death, [first.dev, first.os, `m${dm}`, `L${death.level + 1}`, `c${death.cap + 1}`, crash || 'tab', `t${t}`, `h${h}`, `x${x}`].join('|'));
+    }
     this.phase('load');
     addEventListener('error', (e) => this.error(`${e.message || 'error'}${e.filename ? ` @ ${e.filename}:${e.lineno}` : ''}`));
     addEventListener('unhandledrejection', (e) => this.error(`promise: ${e.reason?.message || e.reason}`));

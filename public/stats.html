@@ -236,6 +236,7 @@
         chart(cols, mx) + '<div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
     }
     h += crashes(t);
+    h += deaths(t);
     // where people drive
     h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button></div>', true);
 
@@ -364,6 +365,22 @@
         return '<tr data-tip="' + esc(r[2]) + '"><td>' + r[1] + '</td>' + devs.map(function (d) { return cell(tr[d + ':' + r[0]] || 0, r[3] === 'drove' ? drove[d] : visits[d], r[3] === 'drove'); }).join('') + '</tr>';
       }).join('') + '</tbody></table>';
     return card('Crashes and freezes', 'A crash is counted when the game opens again in the same tab after the page died. A crash where the player closes the tab or app cannot be seen.', body, true);
+  }
+
+  // ---- pages that died on screen, as the graphics crash guard saw them (src/quality.js, from 24 Nov 2026):
+  // one row per kind of death, to tell a phone out of memory from a page killed for something else
+  function deaths(t) {
+    var o = t.death || {}, keys = Object.keys(o);
+    if (!keys.length) return '';
+    var where = { load: 'loading', menu: 'garage', drive: 'driving', tab: 'unknown (new tab)' };
+    keys.sort(function (a, b) { return o[b] - o[a]; });
+    var body = '<table class="trouble"><thead><tr><th>Device</th><th>Memory</th><th>Level, then cap</th><th>Where</th><th>On screen</th><th>Script memory</th><th>Pictures</th><th class="n">Times</th></tr></thead><tbody>' +
+      keys.map(function (k) {
+        var p = k.split('|');
+        return '<tr><td>' + esc(p[0] + ', ' + p[1]) + '</td><td>' + esc(p[2].slice(1) === '?' ? '?' : p[2].slice(1) + ' GB') + '</td><td>' + esc(p[3].slice(1) + ' → ' + p[4].slice(1)) + '</td><td>' + esc(where[p[5]] || p[5]) +
+          '</td><td>' + esc(p[6].slice(1) === '?' ? '?' : p[6].slice(1) + ' min') + '</td><td>' + esc(p[7].slice(1) === '?' ? '?' : p[7].slice(1) + ' MB') + '</td><td>' + esc(p[8].slice(1)) + '</td><td class="n"><b>' + fmt(o[k]) + '</b></td></tr>';
+      }).join('') + '</tbody></table>';
+    return card('Pages that died on screen', 'Found at the next start by the graphics guard, which then keeps that device at a lower level. Memory: what the browser reports (Chrome only, 8 GB at most). Script memory: how much the game\'s scripts held at the last check before the death (Chrome only, rough). Pictures: how many the game held on the graphics card. Counted from 24 Nov 2026.', body, true);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

@@ -597,9 +597,13 @@ body.touch #people .who:not(.hidden) { overflow: hidden; }
 body.touch #people .who > li { flex: none; height: 1.45em; line-height: 1.45em; }
 body.touch #people .who > li:has(small.rec) { height: 2.61em; }
 body.touch #people .who small.rec { line-height: 1.45em; margin: 0; }
+/* lined up on the right, with the right edge of the top buttons (Martin 2026-11-24) */
+body.touch #people { align-items: flex-end; text-align: right; }
+body.touch #people .who:not(.hidden) { align-items: flex-end; }
+body.touch #people .who li:has(> .ku) small.rec { margin-left: 0; }
 /* a short phone (800x304): the count and your line share a row, so one more name fits */
 @media (max-height: 340px) {
-  body.touch #people { flex-flow: row wrap; align-items: baseline; column-gap: .9em; }
+  body.touch #people { flex-flow: row wrap; align-items: baseline; justify-content: flex-end; column-gap: .9em; }
   body.touch #people .me { flex: 0 1 auto; min-width: 0; }
   body.touch #people .who { flex: 0 0 100%; }
 }

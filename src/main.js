@@ -138,6 +138,7 @@ import { mandelWalls, mandelProps, mandelSignSkip } from './race/mandel.js';
 import { veskiEndWalls, veskiEndProps } from './race/veskiend.js';
 import { kroonuaiaWalls, kroonuaiaProps, kroonuaiaClear, kroonuaiaRoads } from './race/kroonuaia.js';
 import { jakobiLaiWalls, jakobiLaiVectors } from './race/jakobilai.js';
+import { realStreetNames } from './world/streetnames.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
@@ -468,6 +469,7 @@ async function boot() {
   raadiRoads(world.vectors);                    // Raadi park: the gravel cut-through the map lacks, gravel at the park road's mouth
   korveRoads(world.vectors);                    // road 210's fork and sweep where it meets the highway at Kõrveküla
   jakobiLaiVectors(world.vectors);              // road tones from Baeri through Jakobi to Lai
+  realStreetNames(world.vectors);               // street names for the label, not the state road's route name
   janeseVectors(world.vectors);                // Jänese tänav has no painted lines
   arhitektiVectors(world.vectors);             // nor has Arhitekti by 24 to 28
   elvaVectors(world.vectors);                  // nor has Elva by 33 to 37, nor the lane by 35b

@@ -59,6 +59,7 @@
   .nums div b { display: block; font: 700 20px/1.2 Montserrat, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
   .nums div span { color: var(--ink2); font-size: 12.5px; }
   #map { width: 100%; aspect-ratio: 4 / 3; max-height: 720px; display: block; border-radius: 8px; background: #160735; touch-action: pan-y; }
+  @media (hover: hover) and (pointer: fine) { #map { cursor: grab; } }
   .scale { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 8px; }
   .scale button { margin-left: auto; font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: var(--line); border: 0; border-radius: 7px; padding: 6px 10px; cursor: pointer; }
   .scale i { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(255,43,214,.15), rgba(255,43,214,1)); }
@@ -223,7 +224,7 @@
     }
     h += crashes(t);
     // where people drive
-    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button></div>', true);
+    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button></div>', true);
 
     var name = function (k) { return d.names[k] || k; };
     h += card('Cars', 'Time driven in each car.', bars(rowsOf(t.car, name), { show: dur, top: 12 }));
@@ -353,7 +354,7 @@
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)
-  var mapData = null, mapReq = null, wholeMap = false;
+  var mapData = null, mapReq = null, wholeMap = false, view = null, fit = null, raf = 0;   // view: the mouse's own zoom and pan
   function drawMap(heat, cell) {
     var cv = document.getElementById('map');
     if (!cv) return;
@@ -372,6 +373,8 @@
       x0 = mx - half; x1 = mx + half; z0 = mz - half; z1 = mz + half;
     } else b.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); });
     var k = Math.min(W / (x1 - x0), H / (z1 - z0)) * 0.96, ox = W / 2 - (x0 + x1) / 2 * k, oz = H / 2 - (z0 + z1) / 2 * k;
+    fit = { k: k, ox: ox, oz: oz };
+    if (view) { k = view.k; ox = view.ox; oz = view.oz; }
     var X = function (x) { return ox + x * k; }, Z = function (z) { return oz + z * k; };
     ctx.clearRect(0, 0, W, H);
     var line = function (flat, from) { ctx.moveTo(X(flat[from]), Z(flat[from + 1])); for (var i = from + 2; i < flat.length; i += 2) ctx.lineTo(X(flat[i]), Z(flat[i + 1])); };
@@ -390,10 +393,10 @@
     // heat: one hue, stronger with more time (log scale, so a busy square does not hide the rest)
     var cells = Object.keys(heat), max = 1;
     cells.forEach(function (c) { max = Math.max(max, heat[c]); });
-    var lmax = Math.log(1 + max), s = cell * k;
+    var lmax = Math.log(1 + max), s = cell * k, fade = Math.max(0.4, Math.min(1, 24 / s));   // zoomed in: see the streets through
     cells.forEach(function (c) {
       var p = c.split(','), a = Math.log(1 + heat[c]) / lmax;
-      ctx.fillStyle = 'rgba(255,43,214,' + (0.15 + 0.8 * a).toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(255,43,214,' + ((0.15 + 0.8 * a) * fade).toFixed(3) + ')';
       ctx.fillRect(X(p[0] * cell) + 0.5, Z(p[1] * cell) + 0.5, Math.max(1, s - 1), Math.max(1, s - 1));
     });
     if (mapData) {
@@ -409,8 +412,28 @@
       else { delete tip.dataset.map; tip.style.display = 'none'; }
     };
     cv.onpointerleave = function () { delete tip.dataset.map; tip.style.display = 'none'; };
+    // mouse wheel zooms about the pointer, a drag with the mouse moves the map (Martin 2026-11-24);
+    // phones keep scrolling the page with a finger
+    var redraw = function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; drawMap(heat, cell); }); };
+    cv.onwheel = function (e) {
+      e.preventDefault();
+      var v = view || { k: k, ox: ox, oz: oz }, r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      var nk = Math.max(fit.k * 0.5, Math.min(0.6, v.k * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0015))));
+      view = { k: nk, ox: px - (px - v.ox) * nk / v.k, oz: py - (py - v.oz) * nk / v.k };
+      delete tip.dataset.map; tip.style.display = 'none';
+      redraw();
+    };
+    cv.onpointerdown = function (e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      var v = view || { k: k, ox: ox, oz: oz }, sx = e.clientX, sy = e.clientY;
+      cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing';
+      var move = function (m) { view = { k: v.k, ox: v.ox + m.clientX - sx, oz: v.oz + m.clientY - sy }; redraw(); };
+      var up = function () { cv.removeEventListener('pointermove', move); cv.removeEventListener('pointerup', up); cv.style.cursor = ''; };
+      cv.addEventListener('pointermove', move); cv.addEventListener('pointerup', up);
+    };
+    cv.ondblclick = function () { view = null; redraw(); };
     var wb = document.getElementById('whole');
-    if (wb) wb.onclick = function () { wholeMap = !wholeMap; wb.textContent = wholeMap ? 'Zoom to the driving' : 'Whole map'; drawMap(heat, cell); };
+    if (wb) wb.onclick = function () { view = null; wholeMap = !wholeMap; wb.textContent = wholeMap ? 'Zoom to the driving' : 'Whole map'; drawMap(heat, cell); };
     lastHeat = [heat, cell];
   }
   var lastHeat = null, rz = 0;

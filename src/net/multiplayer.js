@@ -132,6 +132,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const mine = new Set();
   let bundled = false;           // this connection's server sends positions in bundles
   let myWn = 0;                  // spectators watching our car (the server's count)
+  let holdId = null;             // the car we spectate: drawn parked where it was last heard of when it goes quiet
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   let name = lsGet(NAME_KEY) || '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
@@ -521,9 +522,20 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       p = B.p.slice();
       p[0] += p[6] * ahead; p[1] += p[7] * ahead;
     }
-    if (now - B.t > 5) return null;                              // gone quiet
+    if (now - B.t > 5) { o.live = false; return null; }          // gone quiet
     o.live = now - B.t < 0.6;                                    // still sending: its sound and smoke are current
     return p;
+  }
+
+  function parkedPose(o) {
+    const last = o.buf[o.buf.length - 1];
+    if (o.parked?.from !== last) {
+      const p = last.p.slice();
+      p[6] = p[7] = 0;                                            // standing
+      for (let k = 9; k < p.length; k++) p[k] = 0;                // no lamps, pedals, revs, slides or flags
+      o.parked = { from: last, p };
+    }
+    return o.parked.p;
   }
 
   // push our car out of anyone it overlaps; boxes as oriented rectangles (separating axis test)
@@ -677,6 +689,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let nf = 0, recolour = false, near2 = Infinity;
     for (const o of others.values()) {
       o.pose = sample(o, now);
+      // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
+      // off, so the camera is not left on an empty road; spectate.js moves on after a while)
+      o.held = !o.pose && o.id === holdId && o.buf.length > 0;
+      if (o.held) o.pose = parkedPose(o);
       if (o.pose && o.live) o.seen = now;                            // (its last news, not the coasting after it)
       const p = o.pose;
       const d = p ? Math.hypot(p[0] - cam.x, p[1] - cam.z, p[2] - cam.y) : Infinity;
@@ -825,6 +841,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     },
     // another player as this page holds them (pose, car, colour, name tag), for the spectator camera
     remote(id) { return others.get(id) || null; },
+    // the car we spectate (null: none): kept drawn, parked, while it is quiet
+    hold(id) { holdId = id || null; },
     // somebody is watching our car as a spectator
     get watched() { return watchedNow(); },
     watchers() { return myWn; },

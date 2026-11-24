@@ -13,6 +13,7 @@ const LOST_S = 30;                 // a watched player in the garage this long: 
 const QUIET_S = 6;                 // and gone quiet any other way (another tab, app or lost signal; Martin 2026-11-24:
                                    // a bus stopped being drawn and the HUD stood at 52 km/h): their car waits parked
                                    // where it was last heard of (multiplayer.js `hold`), at 0 km/h, this long
+const END_S = 2.5;                 // a replay's car waits this long past the finish before the camera comes back
 const JUMP = 60;                   // m between two frames: they were put somewhere else (map, R, H), the camera cuts
 
 export function createSpectate({ mp, world, toast, canStart, busy, onStart, onStop, racing = () => false }) {
@@ -54,7 +55,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     if (!o.pose || o.held) { toast(`${o.name.toUpperCase()} IS ${o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'watch' ? 'WATCHING TOO' : 'NOT ON THE MAP'}`, 2000); return; }
     if (!id && !canStart()) return;
     const was = id;
-    if (was) mp.remote(was)?.el.classList.remove('watched');
+    if (was) { const w = mp.remote(was); w?.el.classList.remove('watched'); if (w?.rp) mp.stopReplay(); }
     id = to; lostAt = 0; uiKey = ''; uiTimer = 0;
     mp.hold?.(to);
     o.el.classList.add('watched');                // (their name is in the pill)
@@ -67,7 +68,9 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
 
   function stop(why) {
     if (!id) return;
-    mp.remote(id)?.el.classList.remove('watched');
+    const o = mp.remote(id);
+    o?.el.classList.remove('watched');
+    if (o?.rp) mp.stopReplay();                  // (a lap record's replay: gone with the watching)
     id = null; shown = false;
     mp.hold?.(null);
     el.classList.add('hidden');
@@ -114,8 +117,13 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
 
   function frame(dt) {
     if (!id) return;
-    if (!mp.online) return stop('CONNECTION LOST');
     const o = mp.remote(id);
+    // a lap record's replay (src/race/replay.js) needs no connection; it runs once the camera is on it, and
+    // after the finish line the car waits there a moment before the camera comes back to yours
+    if (o?.rp) {
+      o.rp.run = shown;
+      if (o.rp.ended && performance.now() / 1000 - o.rp.ended > END_S) return stop('REPLAY FINISHED');
+    } else if (!mp.online) return stop('CONNECTION LOST');
     if (!o) {
       // gone offline: on to the next one, if there is anyone left to watch
       const name = elName.textContent;
@@ -145,7 +153,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     uiTimer = 0.25;
     const hot = p && o.live && (p[20] & 8), race = racing(id);
     const lap = mp.lastLap(o.name);
-    const st = !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? 'ON A HOTLAP'
+    const st = o.rp ? (!shown ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY · ${secs(o.rp.t)} / ${fmt(o.rp.ms)}`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? 'ON A HOTLAP'
       : lap ? `LAST LAP ${fmt(lap.ms)}` : '';
     const wait = mp.kudosWait(id) > 0;
     const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${wait}|${mp.stealth}`;
@@ -155,11 +163,12 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     elName.textContent = o.name.toUpperCase();
     elCar.textContent = CARS[o.car]?.short || '';
     elSt.textContent = st;
-    elSt.classList.toggle('hot', !!(hot || race));
-    elHint.classList.toggle('hidden', order().length < 2);
+    elSt.classList.toggle('hot', !!(hot || race || o.rp));
+    elHint.classList.toggle('hidden', order().length < 2 || !!o.rp);
     elKu.classList.toggle('wait', wait);
-    elKu.classList.toggle('hidden', !!mp.stealth);
+    elKu.classList.toggle('hidden', !!mp.stealth || !!o.rp);
   }
+  const secs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const fmt = (ms) => `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, '0')}`;
 
   return {

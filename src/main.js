@@ -169,6 +169,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createRecorder } from './race/replay.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -844,7 +845,7 @@ async function boot() {
         // your own car waits where it is, stopped; a lap or a stage run in progress ends
         car.vx = car.vy = car.yawRate = 0;
         race?.cancel('LAP CANCELLED');
-        stage?.cancel('STAGE CANCELLED');
+        stage?.rest();
         closeOverlays();
       }
       shrinker?.jump(scene, o.pose[0], o.pose[1]);
@@ -859,7 +860,8 @@ async function boot() {
   });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
+    rec: createRecorder(mp.pose),
+    onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k); },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
@@ -876,7 +878,8 @@ async function boot() {
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
-    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }); if (info?.record) audio.chime?.('record'); } },
+    rec: createRecorder(mp.pose),
+    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); } },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {
       const net = mp.bestFor(id, 'raadi'), own = stage.best(id).car, mine = own && { ms: own.ms, name: mp.name };
@@ -890,7 +893,7 @@ async function boot() {
     tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); } });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null });
   {
     // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
     const drv = $('#driver'), left = document.createElement('div');
@@ -1211,6 +1214,32 @@ function openGarage() {
   $('#sunk').classList.add('hidden');
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
   car.vx = car.vy = car.yawRate = 0;
+}
+
+// A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
+// like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
+// car to the stage's start first, so the stage's bales and tape are there around it.
+let replayAsk = 0;
+async function watchReplay(track, carOf) {
+  if (raceMode?.holding || raceMode?.ghost) { hud.toast('NOT DURING YOUR RACE', 1800); return; }
+  const ask = ++replayAsk;
+  let rp = null;
+  try { rp = await mp.loadReplay(track, carOf); } catch { /* none */ }
+  if (ask !== replayAsk) return;
+  if (!rp) { hud.toast('REPLAY NOT AVAILABLE', 2200); return; }
+  board.hide();
+  closeOverlays();
+  if (mode !== 'drive') startDriving();
+  let moved = false;
+  const t0 = performance.now();
+  const go = () => {
+    if (ask !== replayAsk) return;
+    if (mode !== 'drive' || dropping || respawning || bigmap.isOpen) { if (performance.now() - t0 < 60000) requestAnimationFrame(go); return; }
+    if (track === 'raadi' && stage && !atRaadi() && !moved) { moved = true; stage.goStart(); requestAnimationFrame(go); return; }
+    watch.start(mp.playReplay(rp));
+    if (!watch.active) mp.stopReplay();
+  };
+  go();
 }
 
 function place(pose) {

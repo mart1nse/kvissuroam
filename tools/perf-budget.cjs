@@ -69,6 +69,9 @@
 //            Why: with 55 to 78 online the picture hitched now and then on a fast desktop (Martin, 24 Nov 2026: 59
 //            FPS, late frames 1 in 2 s, longest 67 ms). The player list was made anew, sixty rows, whenever anybody
 //            came, went, changed car or voted, and read back at once: 5 to 15 ms each time, 56 times in 40 s.
+//            Then 30 s of a race of 30 under way with us in it (Martin, 24 Nov: "almost 30 in the race"): each kind of
+//            car's see-through ghost shaders were made ready in one go when it first came close, 13 to 30 ms.
+//            The "online code" counts src/race/racemode.js (the live race list) too.
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
@@ -354,6 +357,12 @@ async function waitForServer(url, ms) {
       out.crowd = { ...crowdSummary(r), errors: r.errs.slice(0, 5) };
       out.crowdReport = crowdReport(r, 8);
     } catch (e) { out.crowd = null; out.crowdReport = `the many-players run failed: ${e.message}`; }
+    // ---- and a race of 30 of them under way, us in it (ghost cars, the live race list)
+    try {
+      const r = await crowd({ port: PORT, n: 60, secs: 30, race: 30 });
+      out.crowdRace = { ...crowdSummary(r), errors: r.errs.slice(0, 5) };
+      out.crowdRaceReport = crowdReport(r, 8);
+    } catch (e) { out.crowdRace = null; out.crowdRaceReport = `the race of 30 failed: ${e.message}`; }
   } finally {
     await browser?.close();
     vite.kill();
@@ -456,6 +465,12 @@ async function waitForServer(url, ms) {
       ['60 players online: the online code per frame (ms), not judged', D?.onlineMsPerFrame, null],
       ['60 players online: times the game was busy for over 25 ms, not judged', D?.busy25, null],
     );
+    const R = out.crowdRace;
+    checks.push(
+      ['a race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s', R?.online5, B.onlineOver5ms],
+      ['a race of 30: the online code\'s most in one stretch (ms)', R?.onlineMax, B.onlineLongestMs],
+      ['a race of 30: page errors', R ? R.errors.length : null, 0],
+    );
   }
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {
@@ -472,6 +487,8 @@ async function waitForServer(url, ms) {
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));
   }
   if (out.crowd) console.log(`60 players online ${JSON.stringify(out.crowd)}`);
+  if (out.crowdRace) console.log(`a race of 30 ${JSON.stringify(out.crowdRace)}`);
+  if (out.over.some((n) => n.startsWith('a race of 30')) && out.crowdRaceReport) console.log(`what the page was busy with, a race of 30:\n${out.crowdRaceReport}`);
   if (out.over.some((n) => n.startsWith('60 players')) && out.crowdReport) console.log(`what the page was busy with, 60 players online:\n${out.crowdReport}`);
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('lowest level', JSON.stringify(out.lowest));

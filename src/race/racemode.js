@@ -94,6 +94,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   const me = () => r?.racers?.find((x) => x.id === mp.id) || null;
   const active = (x) => x && !x.out && x.ms == null;
 
+  const lp = { hd: null, tb: null, ft: null };          // the list's three parts (see render)
   function setText(el, html) { if (el._h !== html) { el._h = html; el.innerHTML = html; } }
   function show(el, on) { el.classList.toggle('hidden', !on); }
 
@@ -355,9 +356,18 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     const asking = compact && t < askQuit;
     const xBtn = asking ? `<button data-r="x" class="ask">${r.racers.filter(active).length <= 1 ? 'END RACE?' : 'LEAVE RACE?'}</button>` : '<button data-r="x">✕</button>';
     if (rows) {
-      const top = list.querySelector('.tb')?.scrollTop || 0;
-      setText(list, `<div class="hd">${head}${xBtn}</div><div class="tb"><table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table></div>${foot ? `<div class="ft">${foot}</div>` : ''}`);
-      keepScroll(top);
+      // (in three parts, each written only when it changed: the race clock in the head changes at every drawing, the
+      // table only when somebody passes a timing point. Martin 2026-11-24, a race of almost 30: the whole list was
+      // written four times a second and read back for its scroll, 4 to 5 ms each time.)
+      if (!lp.hd || lp.hd.parentNode !== list) {
+        list.innerHTML = '<div class="hd"></div><div class="tb"></div><div class="ft"></div>';
+        lp.hd = list.querySelector('.hd'); lp.tb = list.querySelector('.tb'); lp.ft = list.querySelector('.ft');
+      }
+      setText(lp.hd, `${head}${xBtn}`);
+      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
+      if (lp.tb._h !== tb) { const top = lp.tb.scrollTop; setText(lp.tb, tb); keepScroll(top); }
+      setText(lp.ft, foot);
+      lp.ft.style.display = foot ? '' : 'none';
     }
     // the LAST RACE chip, when the list is tucked away; finished or out of the race that still runs (Martin
     // 2026-11-24): this race's chip instead, with your place and the race clock up to 7:00

@@ -13,6 +13,7 @@ import { CARS } from '../cars/specs.js';
 import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
+import { jobs } from '../jobs.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -653,19 +654,26 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     });
     return (m.fade = { first: m.group.children[0], list, a: 1 });
   }
+  // (Martin 2026-11-24, a race of almost 30: making a kind of car's see-through shaders ready took 13 to 30 ms in one
+  // go, once for each kind of car, and in a race many kinds come close at the start. Now one piece of the car a frame,
+  // through the work queue, and begun when such a car is FADE_EARLY metres off, so it is mostly ready when it is close.)
+  const FADE_EARLY = 80;
   function warmFade(o) {
     if (!warm) { fadeWarm.set(o.car, true); return; }
     fadeWarm.set(o.car, 'busy');
-    const id = o.car, tmp = new THREE.Group();
-    for (const e of fadeParts(o).list) {
-      const t = e.base.clone(); t.transparent = true; t.opacity = 0.5;
-      const q = new THREE.Mesh(e.c.geometry, t); q.receiveShadow = e.c.receiveShadow; q.castShadow = e.c.castShadow;
-      tmp.add(q);
-    }
-    Promise.resolve(warm(tmp)).catch(() => {}).then(() => {
-      fadeWarm.set(id, true);
-      tmp.traverse((q) => q.isMesh && q.material.dispose());
-    });
+    const id = o.car, list = fadeParts(o).list.map((e) => ({ geo: e.c.geometry, mat: e.base, rs: e.c.receiveShadow, cs: e.c.castShadow }));
+    jobs.add(function* fadeShaders() {
+      const waits = [], made = [];
+      for (const e of list) {
+        yield 'frame';
+        const t = e.mat.clone(); t.transparent = true; t.opacity = 0.5;
+        const q = new THREE.Mesh(e.geo, t); q.receiveShadow = e.rs; q.castShadow = e.cs;
+        const g = new THREE.Group(); g.add(q);
+        made.push(t);
+        waits.push(Promise.resolve(warm(g)).catch(() => {}));
+      }
+      Promise.all(waits).then(() => { fadeWarm.set(id, true); for (const t of made) t.dispose(); });
+    }, 'see-through car');
   }
   function setFade(o, a) {
     const f = fadeParts(o);
@@ -763,6 +771,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (o.halo) o.halo.visible = hot;
         // passing through each other and close: see-through (FADE_MIN on our spot, solid FADE_AHEAD / FADE_SIDE away)
         let a = 1;
+        // (made ready ahead, while the car is still a little way off)
+        if (me && d < FADE_EARLY && !fadeWarm.has(o.car) && (ghostMe || (p[20] & HOT) || racing(o.id))) warmFade(o);
         if (me && (ghostMe || (p[20] & HOT) || racing(o.id))) {
           const dx = p[0] - me.x, dz = p[1] - me.z, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
           const k = Math.max(Math.abs(dx * sy - dz * cy) / FADE_AHEAD, Math.abs(dx * cy + dz * sy) / FADE_SIDE);

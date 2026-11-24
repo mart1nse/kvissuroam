@@ -14,7 +14,7 @@ const { stretches } = require('./freeze-profile.cjs');
 
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
 
-async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '' } = {}) {
+async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0 } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: draw ? { width: 480, height: 270 } : { width: 1280, height: 720 } });
@@ -43,7 +43,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
       });
     });
     const P = await (async () => JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../src/race/track.json'))).pts)();
-    await p.addInitScript(([P, N, CARS, CHURN]) => {
+    await p.addInitScript(([P, N, CARS, CHURN, RACE]) => {
       const I0 = 1700;
       let seq = 0;
       const bots = [];
@@ -83,8 +83,15 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
               }
               msg({ t: 'S', b: out });
               // a race vote filling up, one vote a second, then over (each vote changes every row's mark in the list)
+              // or (race=N) a race of N under way, us in it, as the server tells it: started 10 s ago
+              if (RACE && !this.raced) {
+                this.raced = true;
+                const g = Date.now() - 10000;
+                const racers = [{ id: 'me', name: 'Tester', car: 'm3' }, ...bots.slice(0, RACE - 1).map((o) => ({ id: o.id, name: o.name, car: o.car }))];
+                msg({ t: 'race', r: { id: 1, on: true, seed: 1, tGrid: g - 10000, tGreen: g, racers, vote: { kind: 'none', ids: [], need: 1 } } });
+              }
               const vt = Math.floor(t) % 20;
-              if (vt !== this.vt) {
+              if (!RACE && vt !== this.vt) {
                 this.vt = vt;
                 const ids = vt < 12 ? bots.slice(0, vt).map((o) => o.id) : [];
                 msg({ t: 'race', r: { id: 1, on: false, racers: [], vote: { kind: ids.length ? 'start' : 'none', ids, need: 12 } } });
@@ -118,7 +125,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         close() { clearInterval(this.timer); this.readyState = 3; }
       }
       window.WebSocket = FakeWS;
-    }, [P, n, CARS, churn]);
+    }, [P, n, CARS, churn, race]);
     await p.goto(`http://localhost:${port}/`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     const I0 = 1700, yaw0 = Math.atan2(P[I0 + 1][0] - P[I0][0], -(P[I0 + 1][1] - P[I0][1]));
@@ -144,7 +151,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
 
 // the online code's part of a busy stretch: the player list, the other cars (positions, copies, name tags, the
 // minimap's arrows), their sounds and tyre marks
-const ONLINE = /src\/net\/|updateRemotes|updateOthers|setOverlay|playerArrow/;
+const ONLINE = /src\/net\/|src\/race\/racemode|updateRemotes|updateOthers|setOverlay|playerArrow/;
 const onlineMs = (r) => { let t = 0; for (const [k, v] of r.by) if (ONLINE.test(k)) t += v; return t / 1000; };
 
 // gaps between frames, busy stretches and the short hitches, as freeze-profile.cjs counts them for a drive
@@ -186,7 +193,7 @@ module.exports = { crowd, summarise, report };
 if (require.main === module) {
   const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(k + '=')); return a ? a.slice(k.length + 1) : d; };
   (async () => {
-    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', '') });
+    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0) });
     if (r.errs.length) console.log('PAGE ERRORS', r.errs.slice(0, 5));
     console.log(JSON.stringify({ online: r.online, ...summarise(r) }));
     console.log(report(r, +arg('top', 12)));

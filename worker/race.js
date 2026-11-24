@@ -183,9 +183,23 @@ export class RaceDesk {
     const s = this.s;
     if (s.phase !== 'on') return;
     if (now >= s.tGreen + MAX_RACE_MS) { this.close('time', now); return; }
+    this.quiet(now);
     // nobody left on the grid before the lights: nothing to race
     if (!s.racers.length || (now >= s.tGrid && !this.active().length)) { this.close('empty', now); return; }
     if (now >= s.tGreen && s.racers.every((r) => r.ms != null || r.out)) this.close('done', now);
+  }
+  // Racers still in the race whose page is gone quiet (Martin 2026-11-24: all finished or out, yet the race ran on
+  // to 7:00): no live socket (asleep, or its 'rf'/'rd' never got through), or off the map for good (another tab,
+  // the menu: the page's own 30 s grace has passed). They are out ('left'), so the race ends when the rest are done.
+  quiet(now) {
+    const s = this.s;
+    if (this.phase(now) !== 'race') return;
+    let on = null, d = null;
+    for (const r of s.racers) {
+      if (r.out || r.ms != null || now < (r.go || s.tGreen) + 10000) continue;
+      on ||= this.online(); d ||= this.drivers();
+      if (!on.has(r.id) || !d.has(r.id)) r.out = 'left';
+    }
   }
   // A vote (by: who voted) starts the race once enough are in. When drivers leave (by: none) and the
   // votes already in become enough, it starts only if two or more want it (Martin 2026-11-22: five
@@ -306,9 +320,11 @@ export class RaceDesk {
     this.save(); this.send();
   }
   alarm() {
-    const now = Date.now();
+    const now = Date.now(), s = this.s, was = `${s.phase}${s.id}${JSON.stringify(s.racers)}`;
     this.check(now);
-    if (this.s.phase === 'on') this.lobby.ctx.storage.setAlarm(Math.max(now + 1000, this.s.tGreen + MAX_RACE_MS));
-    this.save(); this.send();
+    // (every 15 s while the race runs, so racers gone quiet are found without anyone else's message)
+    if (s.phase === 'on') this.lobby.ctx.storage.setAlarm(Math.max(now + 1000, Math.min(now + 15000, s.tGreen + MAX_RACE_MS)));
+    // (told to all at the lights, and whenever it changed something)
+    if (now < s.tGreen + 5000 || was !== `${s.phase}${s.id}${JSON.stringify(s.racers)}`) { this.save(); this.send(); }
   }
 }

@@ -117,7 +117,7 @@ import { createUlenurme } from './world/ulenurme.js';
 import { createUlenurmeKonsum, ulenurmeKonsumWalls } from './world/ulenurmekonsum.js';
 import { createRoad3, road3PaintVectors } from './world/road3raadi.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
-import { createRaadiPark, raadiParkTrees } from './world/raadipark.js';
+import { createRaadiPark, raadiParkTrees, raadiParkProps } from './world/raadipark.js';
 import { createIsaJaPoeg } from './world/isapoeg.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { skipHidden, onePass } from './still.js';
@@ -573,7 +573,7 @@ async function boot() {
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
   // the hand-placed props of the hand-made places (worked out once: the clear hook keeps lights and poles round them)
   let handPlaced = null;
-  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props(), ...kaluriProps(), ...ulikooliProps(), ...ulikooli2Props(), ...ulikooli3Props()]);
+  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props(), ...kaluriProps(), ...ulikooliProps(), ...ulikooli2Props(), ...ulikooli3Props(), ...raadiParkProps()]);
   // where crowded lights and poles are not thinned: round hand-placed props, bus stops and hand-painted ground
   const keepOutCircles = (hand) => [
     ...hand.map(([, x, z]) => ({ x, z, r: 60 })),

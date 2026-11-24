@@ -182,10 +182,14 @@ const ENTRY = STAGE.apex.map(([k, sd], n) => {
 // The inside of two bends that have no bale is out of bounds as well (Martin 23 Nov: "needs outside banned areas",
 // with the lines he drove over the grass drawn on two pictures; every bend had it for an hour, then "there are a
 // lot more red lines around the track. Just add the ones I added on the two pics"). BENDS: [first point, last
-// point, side the stage turns to (1 right, -1 left)]; BEND[i] is that side at point i, 0 elsewhere. Stage covered
-// while the middle of the car is more than CUT_IN m inside the path's edge there adds seconds: CUT_PEN is [metres
-// covered, seconds], counted for each trip off the path, so a spin that goes nowhere is free.
-const CUT_IN = 1.2, CUT_PEN = [[50, 10], [25, 5], [10, 2]];
+// point, side the stage turns to (1 right, -1 left)]; BEND[i] is that side at point i, 0 elsewhere. The tape stands
+// where the side of the car meets it with its middle CUT_IN m inside the path's edge. Crossing it costs time at once,
+// by how deep, once per bend (the deepest counts), after a metre's leeway to brush the tape and break it (Martin 24
+// Nov 12:43: "penalty as soon as you cross the tape, but give 1m of leeway ... if you go deeper than 1m, start the
+// penalties with the +2 +5 etc"): BEND_PEN is [metres the middle of the car is inside the edge, seconds]. (Until then
+// it counted stage covered beyond the tape, from zero again at each return to the gravel: dabbing back every 8 m
+// made a whole bend's cut free.)
+const CUT_IN = 1.2, BEND_PEN = [[CUT_IN + 6, 10], [CUT_IN + 3, 5], [CUT_IN + 1, 2]];
 // (north of the boulder field; after the bale east of the middle pond; and, from his pictures of 15:29, the
 // right-hand bend of the loop by the wood)
 const BENDS = [[277, 292, -1], [436, 449, -1], [737, 753, 1]];
@@ -194,6 +198,8 @@ const BEND = (() => {
   for (const [i0, i1, sd] of BENDS) b.fill(sd, i0, i1 + 1);
   return b;
 })();
+const BEND_OF = new Int8Array(N).fill(-1);
+BENDS.forEach(([i0, i1], n) => BEND_OF.fill(n, i0, i1 + 1));
 const yawAt = (i) => Math.atan2(TAN[i][0], -TAN[i][1]);
 // How much wider than the path the gravel is inside each corner, m. The bale stands a metre off all the gravel
 // there (tools/race/build-raadi.py: off the corner's other arm, and off the wide gravel where paths meet), so
@@ -448,7 +454,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   const st = {
     phase: 'idle',          // idle, count (on the start line, lights), run, done
     t0: 0, clk: 0, wall: null, carT: null, prog: START, off: 0, prev: null, cool: false, againUntil: 0,
-    pin: null, countAt: 0, clockOff: 0, goAt: 0, gate: 0, cutM: 0, cutPen: 0, cutI: null, cut: '', pen: 0, apexPen: new Map(), widePen: new Map(),
+    pin: null, countAt: 0, clockOff: 0, goAt: 0, gate: 0, cut: '', pen: 0, bendPen: new Map(), apexPen: new Map(), widePen: new Map(),
   };
 
   // ---- the stage's things (built near)
@@ -958,7 +964,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.gate = 0; st.cutM = 0; st.cutPen = 0; st.cutI = null; st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
+    st.prog = START; st.off = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
     bales.reset();
     tape.reset();
     standBarriers();
@@ -1176,13 +1182,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // and the inside of the bends of BENDS
         {
           const i = w.i, sd = BEND[i], deep = sd ? w.lat * sd - HW[i] : 0;
-          if (Math.abs(w.lat) < HW[i]) { st.cutM = 0; st.cutPen = 0; st.cutI = null; }       // back on the path
-          else if (deep > CUT_IN) {
-            if (st.cutI != null && i > st.cutI) st.cutM += S[i] - S[st.cutI];
-            st.cutI = Math.max(st.cutI ?? i, i);
-            const pen = CUT_PEN.find(([m]) => st.cutM > m)?.[1] || 0;
-            if (pen > st.cutPen && st.phase === 'run') { st.pen += pen - st.cutPen; st.cutPen = pen; toast(penText(pen), 2600); }
-          } else st.cutI = Math.max(st.cutI ?? i, i);
+          const pen = sd ? BEND_PEN.find(([m]) => deep > m)?.[1] || 0 : 0, had = st.bendPen.get(BEND_OF[i]) || 0;
+          if (pen > had && st.phase === 'run') { st.bendPen.set(BEND_OF[i], pen); st.pen += pen - had; toast(penText(pen), 2600); }
         }
         setBarriers(st.prog);
         // the flying finish

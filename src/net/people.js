@@ -165,7 +165,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const wn = mp.online ? mp.watchers() : 0, sp = watching();
     const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : mp.full ? ' · SERVER FULL' : ' · OFFLINE'}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
     const vm = mp.online ? votes?.() : null;
-    const meHtml = nm ? `${mark(vm, mp.id)}<i style="--c:${ME_COLOUR}"></i>${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}${myRec ? ` ${recTag(myRec, mp.recordTime(mp.name))}` : ''}` : '';
+    // (phones, Martin 2026-11-24: the list is lined up on the right, so the colour dot goes at the right end of the
+    // name; the thumb stays in front of it. The name in its own box, cut short there, so the dot is never cut off.)
+    const row = (lead, dot, words, rec) => (touch ? `${lead}<span class="nm">${words}</span>${dot}${rec}` : `${lead}${dot}${words}${rec}`);
+    const meHtml = nm ? row(mark(vm, mp.id), `<i style="--c:${ME_COLOUR}"></i>`, `${escapeHtml(nm)}${carTag(mp.car)}${escapeHtml(nmMore)}`, myRec ? ` ${recTag(myRec, mp.recordTime(mp.name))}` : '') : '';
     if (meHtml !== meLast) { meLast = meHtml; elMe.innerHTML = meHtml; }
     elMe.classList.toggle('back', !!sp);
     const drivers = mp.online ? mp.drivers() : [];
@@ -194,7 +197,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const want = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';
-      return { id: p.id, cls, html: `${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : ''}` };
+      return { id: p.id, cls, html: row(`${mark(vm, p.id)}${g ? '' : kuBtn(p)}`, `<i style="--c:${p.colour}"></i>`, `${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}`, r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : '') };
     });
     if (more) want.push({ id: '', cls: 'more', html: `+${more} MORE` });
     place(want);

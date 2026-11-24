@@ -607,6 +607,10 @@ body.touch #people .who small.rec { line-height: 1.45em; margin: 0; }
 body.touch #people { align-items: flex-end; text-align: right; }
 body.touch #people .who:not(.hidden) { align-items: flex-end; }
 body.touch #people .who li:has(> .ku) small.rec { margin-left: 0; }
+body.touch #people :is(.who > li, .me) { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+body.touch #people :is(.who > li, .me) > .nm { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch #people :is(.who > li, .me) > i { flex: none; margin: 0 .05em .06em .45em; }
+body.touch #people :is(.who > li, .me) > small.rec { flex: 0 0 100%; }
 /* a short phone (800x304): the count and your line share a row, so one more name fits */
 @media (max-height: 340px) {
   body.touch #people { flex-flow: row wrap; align-items: baseline; justify-content: flex-end; column-gap: .9em; }

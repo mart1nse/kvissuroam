@@ -14,6 +14,7 @@ import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
+import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -37,6 +38,7 @@ const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
 const STAMP = 21;                // position's slot for when it was taken (see addPose)
+const POSE_SC = POSE_DEC.map((d) => 10 ** d);
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
 // past DETAIL metres is a small block in its paint colour, all such blocks one draw call (a whole car is
 // 11-12 pieces of 50-75 thousand triangles, a few pixels tall that far away); past FAR it is not drawn at
@@ -160,7 +162,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false, lean = () => false, warm = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, stage = false, low = () => false, lean = () => false, warm = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -183,7 +185,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // midnight (Martin, 2026-11-24: a reload or a lost connection kept nothing) and told to the server in every
   // hello, so after a reconnect the others see the same count we do.
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
-  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: Array.isArray(v.kf) ? v.kf.filter((x) => typeof x === 'string').slice(-24) : [] }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
+  // (each received one: [sender id, their name then, when in ms]; a bare id from before 24 Nov)
+  const kudoList = (a) => (Array.isArray(a) ? a.map((x) => (typeof x === 'string' ? [x, '', 0] : Array.isArray(x) && typeof x[0] === 'string' ? [x[0], typeof x[1] === 'string' ? x[1] : '', Number(x[2]) || 0] : null)).filter(Boolean).slice(-24) : []);
+  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: kudoList(v.kf) }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
   const saveKudos = () => lsSet(KUDOS_KEY, JSON.stringify({ day: today(), kn: myKudos.kn, kf: myKudos.kf }));
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
@@ -307,7 +311,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.style.display = 'none';
     labels.appendChild(el);
     const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0,
-      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: Array.isArray(p.kf) ? p.kf.filter((x) => typeof x === 'string').slice(-24) : [] };
+      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: kudoList(p.kf) };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -458,7 +462,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'ku': {          // a thumbs up, from id to `to` (either may be us): see src/kudos.js
         if (typeof m.id !== 'string' || typeof m.to !== 'string') break;
         const o = m.to === myId ? myKudos : others.get(m.to);
-        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), m.id].slice(-24); if (o === myKudos) saveKudos(); }
+        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), [m.id, m.id === myId ? name : others.get(m.id)?.name || '', Date.now()]].slice(-24); if (o === myKudos) saveKudos(); }
         onKudos?.(m.id, m.to);
         break;
       }
@@ -547,6 +551,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
     saveQueue();
     flushing = false;
+    if (traces.length) sendReplays();
     if (queue.length) { clearTimeout(retryTimer); retryTimer = setTimeout(flushLaps, 30000); }
   }
   nameReady.then(() => flushLaps());
@@ -640,6 +645,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     }
   }
 
+  // the other cars within r metres of (x, z) that ours would bump (not those on a lap or in the race), as [x, z]:
+  // for a free spot at the start (src/race/startslots.js)
+  function carsNear(x, z, r) {
+    const out = [];
+    for (const o of others.values()) {
+      const p = o.pose;
+      if (!p || (p[20] & HOT) || racing(o.id)) continue;
+      if ((p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) out.push([p[0], p[1]]);
+    }
+    return out;
+  }
+
   // Another player's car as the sound, smoke and tyre mark code wants it: the same fields as our own car
   // after its physics step, rebuilt from what that browser sends.
   const fxList = [];
@@ -725,6 +742,95 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
   let wholeCut = Infinity, shadowCut = Infinity;
   const dsBuf = [];
+  // ---- Lap record replays (src/race/replay.js): one car at a time, drawn like another player's (not in the online
+  // list, the map or the race; nobody bumps it), its pose read from the recorded lap instead of the network.
+  const REPLAY_ID = '~replay';           // (not a server id: those are letters and digits, see cleanOn in worker/index.js)
+  let replay = null;
+  // seconds into the lap: they run once the camera is on it and the car is built (spectate.js sets rp.run)
+  function replayPose(o, dt) {
+    const r = o.rp, dur = r.ms / 1000;
+    if (r.run && o.model && o.modelCar === o.car && o.model.warmed !== false && !r.ended) {
+      r.t += Math.min(dt, 0.25);
+      if (r.t >= dur) { r.t = dur; r.ended = performance.now() / 1000; }
+    }
+    o.live = !r.ended;
+    replayAt(r, r.t, r.out);
+    if (r.ended) { r.out[6] = r.out[7] = 0; for (let k = 9; k < STAMP; k++) r.out[k] = 0; }    // (stopped past the line, engine off)
+    return r.out;
+  }
+  function stopReplay() {
+    if (!replay) return;
+    const o = replay;
+    replay = null;
+    if (o.model) { scene.remove(o.model.group); dropFade(o); }
+    o.el.remove();
+    o.dropped = true;
+  }
+  // a replay to watch: { track, car, ms, name, frames } (loadReplay); its car is mp.remote(REPLAY_ID)
+  function playReplay(rp) {
+    stopReplay();
+    const el = document.createElement('div');
+    el.className = 'pname';
+    el.textContent = rp.name;
+    el.style.display = 'none';
+    labels.appendChild(el);
+    const o = { id: REPLAY_ID, name: rp.name, colour: '#ff9a3c', car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: '', wn: 0, kn: 0, kf: [],
+      rp: { ...rp, t: 0, run: false, ended: 0, out: new Array(STAMP).fill(0), tag: `REPLAY · ${fmtTime((rp.lapMs || rp.ms) / 1000)}` } };
+    setRemoteCar(o, rp.car);
+    o.pose = replayAt(o.rp, 0, o.rp.out);
+    replay = o;
+    return REPLAY_ID;
+  }
+  // the record lap of a car on a circuit, from the server (null: none kept)
+  async function loadReplay(track, car) {
+    const r = await fetch(`/api/replay?track=${encodeURIComponent(track)}&car=${encodeURIComponent(car)}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const name = decodeURIComponent(r.headers.get('x-name') || ''), ms = Number(r.headers.get('x-ms'));
+    const rp = await unpack(new Uint8Array(await r.arrayBuffer()));
+    return { ...rp, track, car, name, lapMs: ms };
+  }
+
+  // Our record laps' replays: a lap's samples wait here (in memory only, they are big) until the server has the
+  // lap, then go there only if the lap is the car's record on the board. One request a record; none otherwise.
+  const traces = [];
+  async function sendReplays() {
+    for (let i = traces.length - 1; i >= 0; i--) {
+      const { lap, trace } = traces[i];
+      if (!sent.has(lapKey(lap))) continue;                       // (not answered yet)
+      traces.splice(i, 1);
+      const best = (lap.track ? board?.[lap.track] : board)?.allTime?.find((r) => r.car === lap.car);
+      if (!best || best.ms !== lap.ms || best.name !== name) continue;
+      try {
+        const z = await pack(trace, jobs);
+        await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, track: lap.track || undefined, z }) });
+        refreshBoard();
+      } catch { /* the lap stands without a replay */ }
+    }
+  }
+  function refreshBoard() {
+    fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
+  }
+
+  // Our car as a position for the others (and for a lap's replay, src/race/replay.js): the first STAMP values of
+  // what goes out, unrounded (the sender rounds them to POSE_DEC decimals). hot: flag 8, the lap timer is running.
+  const sendPose = new Float64Array(STAMP);
+  function poseNow(car, out, hot = false) {
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    out[0] = car.x; out[1] = car.z; out[2] = car.y; out[3] = car.yaw; out[4] = car.pitch; out[5] = car.roll;
+    out[6] = car.vx * fx + car.vy * rx; out[7] = car.vx * fz + car.vy * rz; out[8] = car.steer; out[9] = car.brake > 0 ? 1 : 0; out[10] = car.reversing ? 1 : 0;
+    // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke; the pedal
+    // is sent as lifted during a gear change and for long enough after it to be seen at this send rate,
+    // which cuts the smoke on the other side too)
+    out[11] = 0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2)); out[12] = shiftHold > 0 ? 0 : car.throttle || 0; out[13] = car.boost || 0;
+    // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
+    // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
+    // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
+    // the water is grass)
+    out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0);
+    return out;
+  }
   function update(car, dt, active) {
     const now = performance.now() / 1000;
     // send our position while anyone else is online
@@ -734,24 +840,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
       sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
-      const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
-      const r2 = (v) => Math.round(v * 100) / 100;
-      const r3 = (v) => Math.round(v * 1000) / 1000;
-      const r1 = (v) => Math.round((v || 0) * 10) / 10;
-      send({ t: 's', p: [r2(car.x), r2(car.z), r2(car.y), r3(car.yaw), r3(car.pitch), r3(car.roll),
-        r2(car.vx * fx + car.vy * rx), r2(car.vx * fz + car.vy * rz), r3(car.steer), car.brake > 0 ? 1 : 0, car.reversing ? 1 : 0,
-        // (for a sooty diesel: how black its tail is, and the pedal and boost that make its smoke; the pedal
-        // is sent as lifted during a gear change and for long enough after it to be seen at this send rate,
-        // which cuts the smoke on the other side too)
-        r2(0.95 * (1 - Math.exp(-(car.sootKm || 0) / 2.2))), r2(shiftHold > 0 ? 0 : car.throttle || 0), r2(car.boost || 0),
-        // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
-        // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
-        // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-        // the water is grass)
-        Math.round(car.rpm || 0), r1(car.slipV), r1(car.skidF), r1(car.skidR), r1(car.rubF), r1(car.rubR),
-        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0),
-        // when this position was taken, by our own clock (ms within the minute; see addPose)
-        Date.now() % 60000] });
+      const p = poseNow(car, sendPose, hotlap());
+      const out = new Array(STAMP + 1);
+      for (let k = 0; k < STAMP; k++) out[k] = Math.round(p[k] * POSE_SC[k]) / POSE_SC[k];
+      // when this position was taken, by our own clock (ms within the minute; see addPose)
+      out[STAMP] = Date.now() % 60000;
+      send({ t: 's', p: out });
     }
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
@@ -761,8 +855,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let nf = 0, recolour = false, near2 = Infinity, copied = false;
     const ds = dsBuf;
-    for (const o of others.values()) {
-      o.pose = sample(o, now);
+    for (const o of replay ? [...others.values(), replay] : others.values()) {
+      o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
       // off, so the camera is not left on an empty road; spectate.js moves on after a while)
       o.held = !o.pose && o.id === holdId && o.buf.length > 0;
@@ -867,9 +961,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const p = o.pose;
       const hot = o.live && !!(p[20] & HOT);
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
+      // in a race with us: their place instead of HOTLAP (Martin 2026-11-24), written only when it changes
+      const pl = place(o.id);
+      if (pl !== (o.pl || 0)) { o.pl = pl; if (pl) o.el.dataset.pos = `P${pl}`; else delete o.el.dataset.pos; }
       const ta = o.near ? Math.round((o.tagA ?? 1) * 50) / 50 : 1;
       if (ta !== (o.ta ?? 1)) { o.ta = ta; o.el.style.opacity = ta === 1 ? '' : ta; }
-      const rec = recs.size ? recordOf(o.name) : '';
+      const rec = o.rp ? o.rp.tag : recs.size ? recordOf(o.name) : '';
       if (rec !== (o.rec || '')) { o.rec = rec; if (rec) o.el.dataset.rec = rec; else delete o.el.dataset.rec; }
       v3.set(p[0], p[2] + 3.0, p[1]);
       v3.project(camera);
@@ -892,6 +989,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   return {
     update,
     collide,
+    carsNear,
     get name() { return name; },
     get online() { return online; },
     // the server was full: driving offline until a place frees (see schedule)
@@ -925,7 +1023,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (!STEALTH) send({ t: 'at', w, ...(on ? { on } : {}) });
     },
     // another player as this page holds them (pose, car, colour, name tag), for the spectator camera
-    remote(id) { return others.get(id) || null; },
+    remote(id) { return id === REPLAY_ID ? replay : others.get(id) || null; },
     // the car we spectate (null: none): kept drawn, parked, while it is quiet
     hold(id) { holdId = id || null; },
     // somebody is watching our car as a spectator
@@ -975,15 +1073,22 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
     recordTime,
-    submitLap(lap) {
+    // trace: the lap's samples (src/race/replay.js), sent on if the lap is the car's record
+    submitLap(lap, trace) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)
-      enqueue({ name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen });
+      const l = { name, car: lap.car, ms: lap.ms, at: lap.at, splits: lap.splits, cp: lap.cp, k: ticket || undefined, inp: lap.inp, ty: lap.ty, track: lap.track, pen: lap.pen };
+      if (trace && l.k) { traces.push({ lap: l, trace }); if (traces.length > 3) traces.shift(); }
+      enqueue(l);
       saveQueue();
       flushLaps();
     },
-    refreshBoard() {
-      fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
-    },
+    refreshBoard,
+    // our car's position values now (a lap's replay is made of these: src/race/replay.js)
+    pose: (car, out) => poseNow(car, out),
+    loadReplay,
+    playReplay,
+    stopReplay,
+    get replay() { return replay; },
     get board() { return board; },
     // the record in this car: of Toomemägi's lap, or of a stage (track 'raadi')
     bestFor(id, track) {

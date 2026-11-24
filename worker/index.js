@@ -18,6 +18,8 @@ import { moved } from './moved.js';
 export { Stats } from './stats.js';
 import { CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
+import LAP from '../src/race/track.json';
+import STAGE from '../src/race/raadi.json';
 
 const TRACK = 'toomemagi';
 // The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
@@ -41,6 +43,13 @@ const cleanName = (s) => String(s ?? '').normalize('NFC')
 const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) ? s : '');
 const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w === 'watch' ? w : '');
 // whom a spectator watches (Martin, 2026-11-23): another player's id, short letters and digits only
+// one received thumbs up: [sender id, their name then, when (ms)]; a bare id from pages before 24 Nov
+const cleanKudo = (v) => {
+  if (typeof v === 'string') { const id = cleanOn(v); return id ? [id, '', 0] : null; }
+  if (!Array.isArray(v)) return null;
+  const id = cleanOn(v[0]);
+  return id ? [id, cleanName(v[1]) || '', Number.isFinite(v[2]) ? Math.max(0, Math.floor(v[2])) : 0] : null;
+};
 const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
@@ -118,6 +127,51 @@ export default {
   },
 };
 
+// ---- Replays: unpacking and checking (the packing is in src/race/replay.js)
+async function gunzip(bytes, max) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+  const parts = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.length;
+    if (n > max) { reader.cancel(); throw new Error('too big'); }
+    parts.push(value);
+  }
+  const all = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) { all.set(p, o); o += p.length; }
+  return new TextDecoder().decode(all);
+}
+// the places a replay has to pass, in order, and how near: Toomemägi's checkpoints and its start/finish line
+// (the lap is flying: it starts and ends there); the Raadi stage's start, a point every 80 along it, its finish
+const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
+const GATES = {
+  toomemagi: { first: near(0, LAP.pts, 30), pass: [...LAP.checkpoints.map((i) => near(i, LAP.pts, LAP.hw[i] + 28)), near(0, LAP.pts, 30)] },
+  raadi: { first: near(STAGE.start, STAGE.pts, 30),
+    pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
+};
+// what is wrong with a replay's samples ('' for nothing): driving ms is the time without penalty seconds
+function checkTrace(text, track, driving) {
+  const a = text.split(',').map(Number);
+  const [v, f, ms, n] = a;
+  if (v !== 1 || f !== 21 || !Number.isInteger(n) || a.length !== 4 + n * f || !a.every(Number.isInteger)) return 'shape';
+  if (Math.abs(ms - driving) > 2) return 'time';
+  if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
+  const g = GATES[track];
+  let x = 0, z = 0, px = 0, pz = 0, gate = 0;
+  for (let i = 0; i < n; i++) {
+    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100;
+    if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
+    if (i && Math.hypot(x - px, z - pz) > 12) return 'speed';
+    const q = g.pass[gate];
+    if (q && Math.hypot(x - q.x, z - q.z) < q.r && (gate < g.pass.length - 1 || i > n - 4)) gate++;
+    px = x; pz = z;
+  }
+  return gate < g.pass.length ? 'route' : '';
+}
+
 export class Lobby extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -144,6 +198,9 @@ export class Lobby extends DurableObject {
     if (!cols.includes('pen')) this.sql.exec('ALTER TABLE laps ADD COLUMN pen INTEGER');
     // small values kept between wake-ups: the signing secret and the finished lap board
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+    // the record lap of each car on each circuit as movement, to be watched (see "Replays"); one row a car and circuit
+    this.sql.exec('CREATE TABLE IF NOT EXISTS replays (track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, at TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (track, car))');
+    this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.rl = new Map();          // rate limit counters (in memory: they only matter while it is busy)
@@ -460,6 +517,13 @@ export class Lobby extends DurableObject {
       for (const t of Object.keys(STAGES)) this.cache[t].today = [];
       this.saveBoard();
     }
+    // which records can be watched: { toomemagi: { car: ms }, raadi: {...} } (a replay whose ms is no longer the
+    // car's best is of an older record, and the board does not offer it)
+    if (!this.rpIndex) {
+      this.rpIndex = {};
+      for (const r of this.sql.exec('SELECT track, car, ms FROM replays').toArray()) (this.rpIndex[r.track] ||= {})[r.car] = r.ms;
+    }
+    this.cache.rp = this.rpIndex;
     return this.cache;
   }
   // a lap that has just been stored
@@ -485,6 +549,38 @@ export class Lobby extends DurableObject {
       i = faster(b.refs, (r) => r.car === l.car && r.cp === l.cp);
       if (i !== null) b.refs[i] = { car: l.car, cp: l.cp, name: l.name, ms: l.ms, splits: l.splits };
     }
+  }
+
+  // ---- Replays (Martin 2026-11-24): the record lap of each car, as movement (src/race/replay.js). A browser sends
+  // one only for a lap of its own that the board has as the car's record: the lap must be stored under the same
+  // ticket, car and time, still be the car's best, and its samples must hold up: as many as the time takes, the
+  // car never faster than 430 km/h between two, from the start line through every checkpoint in order to the
+  // finish. A forger now has to make up a whole drive, not one number; and a record can be watched.
+  async takeReplay(req, ip) {
+    if (this.over(`r|${ip}`, 6, 60000)) return json({ error: 'too many requests' }, 429);
+    const text = await req.text();
+    if (text.length > 400000) return json({ error: 'too big' }, 413);
+    let body;
+    try { body = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
+    const car = cleanCar(body?.car), track = cleanTrack(body?.track), ms = Math.round(Number(body?.ms));
+    const tk = await this.readTicket(body?.k);
+    if (!car || !tk || !(ms > 0) || typeof body?.z !== 'string') return json({ error: 'invalid' }, 400);
+    const lap = this.sql.exec('SELECT name, at, pen FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, track).toArray()[0];
+    if (!lap) return json({ error: 'no such lap' }, 400);
+    const best = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ?', track, car).one().m;
+    if (best !== ms) return json({ error: 'not the record' }, 400);
+    const had = this.sql.exec('SELECT ms FROM replays WHERE track = ? AND car = ?', track, car).toArray()[0];
+    if (had && had.ms <= ms) return json({ ok: true });              // (that record's replay came already)
+    let bytes, why;
+    try {
+      bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
+      why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000);
+    } catch { why = 'unreadable'; }
+    if (why) return json({ error: `replay refused: ${why}` }, 400);
+    this.sql.exec('INSERT OR REPLACE INTO replays (track, car, ms, name, at, data) VALUES (?, ?, ?, ?, ?, ?)', track, car, ms, lap.name, lap.at, bytes);
+    this.rpIndex = null;
+    this.broadcast({ t: 'board', board: this.board() });
+    return json({ ok: true });
   }
 
   async fetch(req) {
@@ -610,6 +706,15 @@ export class Lobby extends DurableObject {
       return json({ ok: true, saved: ok, board });
     }
 
+    if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
+    if (path === '/api/replay') {
+      // a record's replay: the gzipped samples as they came, with whose lap it is and its time in headers
+      const track = cleanTrack(url.searchParams.get('track')), car = cleanCar(url.searchParams.get('car'));
+      const r = car && this.sql.exec('SELECT ms, name, data FROM replays WHERE track = ? AND car = ?', track, car).toArray()[0];
+      if (!r) return json({ error: 'no replay' }, 404);
+      return new Response(r.data, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-ms': String(r.ms), 'x-name': encodeURIComponent(r.name) } });
+    }
+
     if (path === '/api/laps.csv' || path === '/api/laps.json') {
       if (this.over(`d|${ip}`, 6, 60000)) return busy();
       // the .json is the complete record (the nightly backup saves it, see .github/workflows/backup-laps.yml)
@@ -711,7 +816,7 @@ export class Lobby extends DurableObject {
       // thumbs up received today: the page's own count (kept in its browser till midnight, so a reload or a
       // lost connection keeps it), or what this socket had
       const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
-      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanOn).filter(Boolean).slice(-KUDOS_KEEP) : [];
+      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
@@ -755,7 +860,7 @@ export class Lobby extends DurableObject {
       for (const w of this.ctx.getWebSockets()) {
         const a = w.deserializeAttachment();
         if (a?.id !== to || a.ghost) continue;
-        a.kn = (a.kn || 0) + 1; a.kf = [...(a.kf || []), me.id].slice(-KUDOS_KEEP);
+        a.kn = (a.kn || 0) + 1; a.kf = [...(a.kf || []), [me.id, me.name, now]].slice(-KUDOS_KEEP);
         w.serializeAttachment(a);
       }
       this.broadcast({ t: 'ku', id: me.id, to });

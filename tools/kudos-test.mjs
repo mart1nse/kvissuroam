@@ -67,6 +67,11 @@ await B.evaluate(() => { const r = __game.renderer; r.render = r.realRender; });
 await B.waitForTimeout(1500);
 await B.screenshot({ path: `${out}/kudos-collected.png` });
 await B.evaluate(() => { __game.renderer.render = () => {}; });
+// a click on one of B's small thumbs (found with a wide reach, then clicked for real): who gave it
+const spot = await B.evaluate(() => { const c = __game.renderer.domElement.getBoundingClientRect(); return __game.kudos().pick(__game.camera, c.width / 2, c.height / 2, c.width, c.height, 5000); });
+if (spot) await B.mouse.click(spot.x, spot.y);
+await B.waitForTimeout(500);
+console.log('B clicks a small thumb:', await B.evaluate(() => document.querySelector('#kudopop')?.textContent || 'no label'));
 // D comes later: the server tells it B's count
 const [bd, D] = await open('w201', 'TESTD');
 await place(D, 1702);
@@ -82,4 +87,8 @@ await place(B, 1708);
 await D.waitForFunction(() => __game.mp().kudosCars([]).length, null, { timeout: 90000 }).catch(() => {});
 await B.waitForTimeout(3000);
 console.log('after B reloads, B sees:', JSON.stringify(await signs(B)), '· D sees:', JSON.stringify(await signs(D)));
+const spotD = await D.evaluate(() => { const c = __game.renderer.domElement.getBoundingClientRect(); return __game.kudos().pick(__game.camera, c.width / 2, c.height / 2, c.width, c.height, 5000); });
+if (spotD) await D.mouse.click(spotD.x, spotD.y);
+await D.waitForTimeout(500);
+console.log('D clicks one on B\'s car:', await D.evaluate(() => document.querySelector('#kudopop')?.textContent || 'no label'));
 for (const b of [ba, bb, bc, bd]) await b.close();

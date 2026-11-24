@@ -143,7 +143,8 @@ import { createSmoke } from './smoke.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
-import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders } from './race/race.js';
+import { slots as startSlots, pick as pickSlot } from './race/startslots.js';
+import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
@@ -168,6 +169,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createRecorder } from './race/replay.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -328,7 +330,7 @@ const kudos = createKudos({ bags: () => {
   mp.kudosCars(kudosBags);
   const k = mp.myKudos;
   if (k.kn && model) kudosBags.push({ group: model.group, car: carId, n: k.kn, from: k.kf });
-  for (const b of kudosBags) if (!b.colours || b.colours.length !== b.from.length) b.colours = b.from.map(kudosColour);
+  for (const b of kudosBags) if (!b.colours || b.colours.length !== b.from.length) b.colours = b.from.map((k) => kudosColour(k[0]));
   return kudosBags;
 } });
 let watch = null;                  // spectator mode, desktop only: the camera follows another player's car (src/spectate.js)
@@ -357,6 +359,14 @@ if (!CARS[carId]) carId = 'w201';
 let mode = 'loading';            // loading | menu | drive
 let buildCarModel = null, carModels = null;
 let startPose;
+let startSpots = null;            // where the start puts the car when its spot is busy (src/race/startslots.js)
+// the start's spot, or with other cars on it a free one near it (Martin 24 Nov: with ~70 online everyone was put on
+// the one spot and the pushing apart sent cars up the park wall)
+function freeStart() {
+  if (!mp || !startSpots) return startPose;
+  const s = pickSlot(startSpots, mp.carsNear);
+  return s === startSpots[0] ? startPose : { x: s.x, z: s.z, yaw: s.yaw };
+}
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
 let wetAt = null;                // where and when the car went into the water: { x, z, t }
@@ -771,6 +781,7 @@ async function boot() {
 
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
+  startSpots = startSlots(createTrack(), startPose);
   hud = createHud(world);
   skids = createSkidMarks(world);
   skids.setGrass(grassMarks);
@@ -801,6 +812,7 @@ async function boot() {
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
+    place: (id) => raceMode?.place(id) || 0,
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
     // a thumbs up (src/kudos.js): the sign on the receiver's car wherever it is in view, ours or another's
@@ -833,7 +845,7 @@ async function boot() {
         // your own car waits where it is, stopped; a lap or a stage run in progress ends
         car.vx = car.vy = car.yawRate = 0;
         race?.cancel('LAP CANCELLED');
-        stage?.cancel('STAGE CANCELLED');
+        stage?.rest();
         closeOverlays();
       }
       shrinker?.jump(scene, o.pose[0], o.pose[1]);
@@ -848,7 +860,8 @@ async function boot() {
   });
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
-    onLap: (lap, info) => { mp.submitLap(lap); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
+    rec: createRecorder(mp.pose),
+    onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k); },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
@@ -865,7 +878,8 @@ async function boot() {
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
-    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }); if (info?.record) audio.chime?.('record'); } },
+    rec: createRecorder(mp.pose),
+    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); } },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {
       const net = mp.bestFor(id, 'raadi'), own = stage.best(id).car, mine = own && { ms: own.ms, name: mp.name };
@@ -879,7 +893,7 @@ async function boot() {
     tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); } });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null });
   {
     // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
     const drv = $('#driver'), left = document.createElement('div');
@@ -897,6 +911,8 @@ async function boot() {
     halo: (on) => race.finishHalo(on),
     // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
     busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
+    // (desktop: a name in the race list follows that car, like the online list)
+    onWatch: isTouch ? null : (id) => watch?.start(id), watching: () => watch?.id || null,
   });
   // (the lap's line is put together once: its 2,400 points were walked again each time the small map was
   // drawn, sixteen times a second)
@@ -1115,6 +1131,8 @@ function startDriving() {
     trackPicked = false;
     droveOnce = true;
   }
+  // (the car waits on the start's spot behind the menu: if somebody is standing there now, a free spot near it)
+  if (!atRaadi() && Math.hypot(car.x - startPose.x, car.z - startPose.z) < 1) { const f = freeStart(); if (f !== startPose) place(f); }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
@@ -1198,6 +1216,32 @@ function openGarage() {
   car.vx = car.vy = car.yawRate = 0;
 }
 
+// A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
+// like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
+// car to the stage's start first, so the stage's bales and tape are there around it.
+let replayAsk = 0;
+async function watchReplay(track, carOf) {
+  if (raceMode?.holding || raceMode?.ghost) { hud.toast('NOT DURING YOUR RACE', 1800); return; }
+  const ask = ++replayAsk;
+  let rp = null;
+  try { rp = await mp.loadReplay(track, carOf); } catch { /* none */ }
+  if (ask !== replayAsk) return;
+  if (!rp) { hud.toast('REPLAY NOT AVAILABLE', 2200); return; }
+  board.hide();
+  closeOverlays();
+  if (mode !== 'drive') startDriving();
+  let moved = false;
+  const t0 = performance.now();
+  const go = () => {
+    if (ask !== replayAsk) return;
+    if (mode !== 'drive' || dropping || respawning || bigmap.isOpen) { if (performance.now() - t0 < 60000) requestAnimationFrame(go); return; }
+    if (track === 'raadi' && stage && !atRaadi() && !moved) { moved = true; stage.goStart(); requestAnimationFrame(go); return; }
+    watch.start(mp.playReplay(rp));
+    if (!watch.active) mp.stopReplay();
+  };
+  go();
+}
+
 function place(pose) {
   watch?.stop();                                   // (put somewhere: back in your own car)
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
@@ -1228,7 +1272,7 @@ function goHome() {
   stage?.teleported();
   history.length = 0;
   wetAt = null;
-  place(startPose);
+  place(freeStart());
 }
 
 // R: back to the newest remembered spot that is dry. After a plunge into the water that is a spot at
@@ -1608,6 +1652,31 @@ input.on('KeyC', unlessMap(() => {
 // out around the car every frame and the camera is placed between them, so it never trails the car.
 const VIEW_BLEND = 0.8;
 let droneMix = camView === 'drone' ? 1 : 0;
+// a click or tap on a small thumbs up on a back window (src/kudos.js, Martin 2026-11-24): who gave it, and when,
+// in a small label there for a few seconds; on the +N place the older ones. Only work at the click itself.
+let kudoPop = null, kudoPopT = 0;
+function showKudoWho(r) {
+  if (!kudoPop) { kudoPop = document.createElement('div'); kudoPop.id = 'kudopop'; $('#hud').appendChild(kudoPop); }
+  const at = (ms) => (ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+  const nm = (k) => escapeHtml((k[1] || mp?.nameOf(k[0]) || (k[0] === mp?.id ? mp.name : '') || 'A DRIVER').toUpperCase());
+  const row = (k) => `<div><i style="--c:${kudosColour(k[0])}"></i>${nm(k)}${k[2] ? ` <small>${at(k[2])}</small>` : ''}</div>`;
+  if (r.who) kudoPop.innerHTML = row(r.who);
+  else {
+    const list = r.older.slice(0, 4);
+    kudoPop.innerHTML = list.map(row).join('') + (r.more > list.length ? `<div class="more">+${r.more - list.length} MORE</div>` : '');
+  }
+  kudoPop.style.transform = `translate(${Math.round(r.x)}px, ${Math.round(r.y)}px) translate(-50%, calc(-100% - 14px))`;
+  kudoPop.classList.remove('out');
+  clearTimeout(kudoPopT);
+  kudoPopT = setTimeout(() => kudoPop.classList.add('out'), 3500);
+}
+renderer.domElement.addEventListener('click', (e) => {
+  if (mode !== 'drive' || !kudos.pick) return;
+  const rc = renderer.domElement.getBoundingClientRect();
+  const r = kudos.pick(camera, e.clientX - rc.left, e.clientY - rc.top, rc.width, rc.height, isTouch ? 34 : 24);
+  if (r && (r.who || r.older?.length)) { r.x += rc.left; r.y += rc.top; showKudoWho(r); }
+  else kudoPop?.classList.add('out');
+});
 document.addEventListener('click', (e) => {
   const act = e.target.closest?.('[data-act]')?.dataset.act;
   if (!act) return;
@@ -1767,7 +1836,9 @@ function frame(ts) {
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     // (what our car knocks over and bumps into: not while it waits for a spectator)
     if (!watch?.active) {
-      mp.collide(car);
+      // (behind the menu and in the garage the others do not see our car, so nobody pushes it: it stays on the
+      // start's spot until DRIVE finds it a free one)
+      if (mode === 'drive') mp.collide(car);
       trackside.collide(car);
       props.update(car, dt);
       updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames

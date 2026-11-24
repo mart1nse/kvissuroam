@@ -21,7 +21,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, onWatch = null, watching = () => null }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -81,6 +81,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, sentRf = null, sentRd = null, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
+  // each racer's place while we race too, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP);
+  // worked out with the live order ten times a second, read by the name tags (changed only when a place changes)
+  const places = new Map();
   let tick = 0, sample = 0;
 
   const now = () => mp.serverNow();
@@ -134,6 +137,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   const loneRacer = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null && r.racers.filter((x) => !x.out).length === 1 && mp.drivers().length > 0; };
   const racingNow = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null; };
   list.addEventListener('click', (e) => {
+    // (desktop, Martin 2026-11-24: a name in the race list follows that car, as in the online list)
+    const nm = e.target.closest('td.n[data-id]');
+    if (nm && onWatch) { e.stopPropagation(); onWatch(nm.dataset.id); render(); return; }
     if (!e.target.closest('[data-r="x"]')) return;
     if (racingNow()) {
       if (now() < askQuit) {
@@ -224,7 +230,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (!x.out && (x.ms == null || x.ms !== prevMs)) pos = i + 1;
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n">${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 
@@ -285,6 +291,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       label = 'RACE ON'; cls = 'dim';
       const on = r.racers.filter(active).length;
       line = `${on} RACING · ${clock(t - r.tGreen)} / 7:00`;
+      // the winner is over the line (Martin 2026-11-24): finished, the rest still on their lap until 7:00
+      const win = r.racers.filter((x) => x.ms != null).sort((p, q) => p.ms - q.ms)[0];
+      if (win) {
+        label = 'RACE FINISHED'; cls = 'dim long';
+        line = `${isTouch ? '' : `${escapeHtml(win.name).toUpperCase()} WON · `}${on ? `${on} STILL ON THE LAP · ${clock(t - r.tGreen)} / 7:00` : 'ALL THROUGH'}`;
+      }
     }
     // ?off=100 (Martin 2026-11-22): never in the vote pool or a race; the button only tells what the others do
     // on a Raadi stage run: nothing but a small JOIN while a race starts or can still be joined
@@ -412,6 +424,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
     // (Martin, 2026-11-22: from lights out, not only from the start line)
     racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
+    // another racer's place in the race we are in (1 = leading), or 0: not racing with us
+    place(id) { return places.get(id) || 0; },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
     get holding() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null
@@ -493,7 +507,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
           const p = mp.poseOf(x.id);
           if (p) progress(x.id, p[0], p[1], t, rt);
         }
-      }
+        // (the same order as the live list: finished by time, then by distance; those out have no place)
+        places.clear();
+        const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
+        const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
+        for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
+      } else if (places.size && !(ph === 'race' && m)) places.clear();
       tick -= dt;
       if (tick <= 0) { tick = 0.25; render(); }
     },

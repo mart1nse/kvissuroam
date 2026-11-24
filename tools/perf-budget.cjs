@@ -19,6 +19,9 @@
 //            starts fine and reloads some minutes into a drive (21 Nov 2026). That day's cause was the
 //            saved graphics cap of the crash guard, dropped by an update: tools/quality-test.mjs is run
 //            here too, and a failing test in it is over budget.
+//            And a fresh page at the Raadi rally stage (?raadi=1): in along Narva mnt as the stage builds itself and
+//            along the whole stage in hops, what the phone holds at the end and the card's peak (Martin, 24 Nov
+//            2026: what the stage weighs on a phone before it leaves its flag).
 //   test drive (tools/freeze-profile.cjs, once as a desktop and once as a phone): 4.5 km through the
 //            centre at 48 m/s. Judged: the stretches in which the page itself was busy without a break
 //            (how many over 0.1 s, the longest, the time in those over 50 ms), the gaps between frames
@@ -223,6 +226,43 @@ async function waitForServer(url, ms) {
     out.phone.errors = errors;
     await ctx.close();
 
+    // ---- the phone at the Raadi rally stage (?raadi=1): a fresh page, DRIVE, then in along Narva mnt as the
+    // stage builds itself (bales, barriers, tape, signs, start kit, the light column, the park's stones) and in
+    // hops of about 120 m along the whole stage, 4 s at each. What the phone holds at the end, and the peak on
+    // the graphics card on the way. Why: before the stage leaves its flag for everyone, its weight on an
+    // iPhone 13 was not known (Martin, 24 Nov 2026: "please do test the memory part"). Judged against the same
+    // limits as the drive through the centre: what the phone can hold.
+    try {
+      const rc = await browser.newContext({ ...devices['iPhone 13 landscape'] });
+      await rc.addInitScript(tracker);
+      const r = await rc.newPage();
+      r.on('pageerror', (e) => errors.push('raadi: ' + e.message));
+      await r.goto(`${url}?gfx=auto&raadi=1`, { timeout: 180000 });
+      await r.waitForFunction(() => window.__game?.car && __game.stage?.(), null, { timeout: 180000 });
+      await r.waitForTimeout(8000);
+      await r.evaluate(() => __game.startDriving());
+      await r.waitForTimeout(15000);
+      const R = require('./freeze-routes.cjs').stageIn, hops = [];
+      for (let i = 1; i < R.length; i++) {
+        const [x0, z0] = R[i - 1], [x1, z1] = R[i], n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 120);
+        for (let k = 1; k <= n; k++) hops.push([x0 + (x1 - x0) * k / n, z0 + (z1 - z0) * k / n, Math.atan2(x1 - x0, -(z1 - z0))]);
+      }
+      hops.push(...(await r.evaluate(() => {
+        const P = __game.stage().data.pts, out = [];
+        for (let i = 60; i < P.length; i += 60) { const j = Math.min(i + 3, P.length - 1); out.push([P[i][0], P[i][1], Math.atan2(P[j][0] - P[i][0], -(P[j][1] - P[i][1]))]); }
+        return out;
+      })));
+      await r.evaluate(() => __perfPeak());
+      for (const [x, z, yaw] of hops) {
+        await r.evaluate(async ([x, z, yaw]) => { await __game.world.loadAround(x, z, 260); __game.place({ x, z, yaw }); }, [x, z, yaw]);
+        await r.waitForTimeout(4000);
+      }
+      out.phone.raadi = await r.evaluate(() => window.gc && gc()).then(() => r.evaluate(() => __perf()));
+      out.phone.raadi.built = await r.evaluate(() => !!__game.stage().bales?.built);
+      out.phone.raadiCanvases = await r.evaluate(() => __perfCanvases());
+      await rc.close();
+    } catch (e) { out.phone.raadi = null; console.warn('the phone pass at the Raadi stage failed:', e.message); }
+
     // ---- an old computer: what the lowest graphics level asks to be drawn
     // (light mode + the extra low setup + GRAPHICS LOW, standing at the Riia and Turu junction, the heaviest
     // view of the centre: pieces drawn and triangles in one frame. No frame rate can be measured without
@@ -325,6 +365,8 @@ async function waitForServer(url, ms) {
   checks.push(
     ['phone total after 2 km through the centre', out.phone.centre && out.phone.centre.canvas + out.phone.centre.gl + out.phone.centre.heap, budget.phone.centreTotalMB],
     ['phone graphics card peak through the centre', out.phone.centre?.glPeak, budget.phone.centreGlPeakMB],
+    ['phone total at the Raadi stage (?raadi=1)', out.phone.raadi && out.phone.raadi.canvas + out.phone.raadi.gl + out.phone.raadi.heap, budget.phone.raadiTotalMB],
+    ['phone graphics card peak at the Raadi stage', out.phone.raadi?.glPeak, budget.phone.raadiGlPeakMB],
     ['graphics level tests failing (saved level, crash guard)', lost, 0],
   );
   checks.push(
@@ -406,9 +448,10 @@ async function waitForServer(url, ms) {
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('lowest level', JSON.stringify(out.lowest));
   console.log('Raadi stage drawn', JSON.stringify({ lowest: out.lowestStage, top: out.topStage }));
-  console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
+  console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump, raadi: out.phone.raadi }));
   if (out.over.some((n) => n.startsWith('phone ') && !n.startsWith('phone drive'))) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
   if (out.over.some((n) => n.includes('through the centre'))) console.log('biggest canvas makers after the centre:\n' + (out.phone.centreCanvases || []).join('\n'));
+  if (out.over.some((n) => n.includes('Raadi stage') && n.includes('phone'))) console.log('biggest canvas makers at the Raadi stage:\n' + (out.phone.raadiCanvases || []).join('\n'));
   if (out.levelTests?.length) console.log(out.levelTests.join('\n'));
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });

@@ -23,6 +23,10 @@ const SEND_HZ = 10;
 // counts against the server's free daily allowance (Cloudflare counts 20 incoming messages as one request,
 // 100 000 a day), and the server passes every one on to everybody else.
 const SEND_HZ_FAR = 3, LONELY = 600;
+// and SEND_HZ only with another car within CLOSE metres (near enough to bump, or to be seen whole), else
+// SEND_HZ_MID: half the messages for players spread round the map (the server's limit is about 1,000 a
+// second in all, 100 players at ten each; Martin 2026-11-24)
+const SEND_HZ_MID = 5, CLOSE = 150;
 const DELAY = 0.15;              // seconds other cars are drawn behind real time
 // (in bundles, a position waits up to one bundle, 0.1 s, at the server before it is passed on, so the
 // cars are drawn a little further back: then there is nearly always a newer position to glide towards)
@@ -39,6 +43,12 @@ const DETAIL = 110, DETAIL_LOW = 75;
 const FAR = 900;
 const TAG_DIST = 150, TAGS = 6, TAGS_LOW = 4;   // (was every car within 600 m); a name that would cover a nearer one is left out
 const SHADOW_DIST = 60;          // only cars this near cast a shadow
+// Phones (Martin 2026-11-24, getting ready for 50 and more online): each kind of car another player drives
+// is built once on this page (its template, about 16 MB on the graphics card and 19 MB of memory), and 22
+// players in 12 kinds of car added some 400 MB on an emulated phone, more than an iPhone has to spare. On
+// a phone a car is built only once it comes within LEAN_NEAR metres, and at most LEAN_KINDS kinds; any
+// other is a block in the player's map colour.
+const LEAN_NEAR = 120, LEAN_KINDS = 3;
 // what the server does to a name (worker/index.js cleanName), so the name box shows what the others see
 const cleanName = (s) => String(s || '').normalize('NFC')
   .replace(/[\u0000-\u001f\u007f-\u009f<>\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g, '')
@@ -114,7 +124,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false, lean = () => false }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -261,7 +271,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     o.spec = s;
     o.off = s.wheelbase * s.cgFront - s.wheelbase / 2;
     o.halfLen = s.halfLen ?? s.wheelbase / 2 + 0.85; o.halfWid = s.halfWid ?? s.track / 2 + 0.13;
-    modelReady(id, false);
+    o.plain = null;
+    if (!lean()) modelReady(id, false);               // (a phone waits until the car comes near: see LEAN_NEAR)
+  }
+  // may this page build (or has it built) this kind of car? Always, except on a phone over LEAN_KINDS
+  const kinds = new Set();
+  function kindOk(id) {
+    if (!lean() || kinds.has(id)) return true;
+    if (kinds.size >= LEAN_KINDS) return false;
+    kinds.add(id);
+    return true;
   }
   function showModel(o) {
     if (o.model) scene.remove(o.model.group);
@@ -553,7 +572,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
-      sendTimer = 1 / (nearest < LONELY || racing(myId) || watchedNow() ? SEND_HZ : SEND_HZ_FAR);
+      sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
       const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
       const r2 = (v) => Math.round(v * 100) / 100;
       const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -580,26 +599,28 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const o of others.values()) {
       o.pose = sample(o, now);
       if (o.pose && o.live) o.seen = now;                            // (its last news, not the coasting after it)
-      if (o.pose && o.live && o.modelCar !== o.car && modelReady(o.car, true)) showModel(o);
       const p = o.pose;
       const d = p ? Math.hypot(p[0] - cam.x, p[1] - cam.z, p[2] - cam.y) : Infinity;
+      if (p && o.live && o.modelCar !== o.car && (!lean() || (d < LEAN_NEAR && kindOk(o.car))) && modelReady(o.car, true)) showModel(o);
       if (p && car) near2 = Math.min(near2, (p[0] - car.x) ** 2 + (p[1] - car.z) ** 2);
       // (heard, and smoking, even while their car is still being built; past 400 m neither is heard or seen)
       if (p && o.live && d < 400) fxList.push(effects(o, p, Math.sin(p[3]), -Math.cos(p[3])));
       const g = o.model?.group;
-      if (!g || !p || o.model.warmed === false) { if (g) setNear(o, false); showTag(o, false); continue; }
+      if (!p) { if (g) setNear(o, false); showTag(o, false); continue; }
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
-      // whole car near, a block further out (a little either way before it changes: no flicker at the edge)
-      const near = d < (o.near ? detail * 1.15 : detail);
-      setNear(o, near);
+      // whole car near, a block further out (a little either way before it changes: no flicker at the edge);
+      // a block too while its car is not built (yet, or on a phone not at all: see LEAN_NEAR)
+      const whole = !!g && o.model.warmed !== false;
+      const near = whole && d < (o.near ? detail * 1.15 : detail);
+      if (g) setNear(o, near);
       if (!near) {
         if (d < farMax) {
-          const sz = o.model.size;
+          const sz = whole ? o.model.size : null, paint = whole ? o.paint : o.plain || (o.plain = new THREE.Color(o.colour));
           fp.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
           fq.setFromEuler(fe.set(p[4], -p[3], -p[5]));
           fs.set(sz?.width ?? o.halfWid * 2, sz?.height ?? 1.45, sz?.length ?? o.halfLen * 2);
           far.setMatrixAt(nf, fm.compose(fp, fq, fs));
-          if (far.userData[nf] !== o.paint) { far.userData[nf] = o.paint; far.setColorAt(nf, o.paint); recolour = true; }
+          if (far.userData[nf] !== paint) { far.userData[nf] = paint; far.setColorAt(nf, paint); recolour = true; }
           nf++;
         }
       } else {

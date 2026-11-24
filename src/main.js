@@ -767,6 +767,7 @@ async function boot() {
   smoke = createSmoke(world);
   applyFx();
   scene.add(smoke.points);
+  const chimed = {};
   mp = createMultiplayer({
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
     // (other players' cars are copies of one built car of each kind: see instanceCarModel)
@@ -776,12 +777,15 @@ async function boot() {
     modelReady: (id, now) => !carModels || carModels.requestCarModel(id, now || mode !== 'drive' || document.hidden),
     onBoard: () => { race?.refreshBest(); board?.render(); },
     onPeople: (kind, name, old) => {
-      if (kind === 'join' || kind === 'leave') audio.chime?.(kind);
+      // (with many online, people come and go all the time: one chime of a kind in 8 s, none past 20 online)
+      if ((kind === 'join' || kind === 'leave') && mp.count <= 20 && performance.now() - (chimed[kind] || -1e9) > 8000) { chimed[kind] = performance.now(); audio.chime?.(kind); }
       people?.event(kind, name, old);
     },
     // our lap timer is running (or we are in a race): the others see it and their cars pass through ours
     stage: RAADI,
-    hotlap: () => ((!!race?.running || !!stage?.running) && mode === 'drive') || !!raceMode?.ghost,
+    // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
+    // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
+    hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
@@ -794,6 +798,8 @@ async function boot() {
     },
     // phones, old computers and the low graphics levels draw other cars whole only nearer
     low: () => isTouch || !!xlow || lowRung(),
+    // phones build other players' cars only near, and only a few kinds (memory)
+    lean: () => isTouch,
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},

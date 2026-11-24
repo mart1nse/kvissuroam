@@ -18,6 +18,22 @@ const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftsha
 const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: 1000, height: 600 } });
 const p = await ctx.newPage();
 p.on('pageerror', (e) => console.log('PAGEERR', e.message));
+// graphics card bytes (textures and buffers), as tools/perf-budget.cjs counts them
+await p.addInitScript(() => {
+  const sizes = new WeakMap(); let tex = 0, buf = 0;
+  const P = WebGL2RenderingContext.prototype, tI = P.texImage2D, tS = P.texStorage2D, bD = P.bufferData, dT = P.deleteTexture, dB = P.deleteBuffer;
+  P.texImage2D = function (...a) {
+    const t = this.getParameter(this.TEXTURE_BINDING_2D); let w, h;
+    if (a.length >= 8) { w = a[3]; h = a[4]; } else { const s = a[5]; w = s?.width || 0; h = s?.height || 0; }
+    if (t && a[1] === 0) { tex -= sizes.get(t) || 0; const n = w * h * 4 * 1.33; sizes.set(t, n); tex += n; }
+    return tI.apply(this, a);
+  };
+  P.texStorage2D = function (target, levels, fmt, w, h) { const t = this.getParameter(this.TEXTURE_BINDING_2D); if (t) { tex -= sizes.get(t) || 0; const n = w * h * 4 * (levels > 1 ? 1.33 : 1); sizes.set(t, n); tex += n; } return tS.apply(this, arguments); };
+  P.bufferData = function (target, data) { const b = this.getParameter(target === this.ELEMENT_ARRAY_BUFFER ? this.ELEMENT_ARRAY_BUFFER_BINDING : this.ARRAY_BUFFER_BINDING); const n = typeof data === 'number' ? data : data?.byteLength || 0; if (b) { buf -= sizes.get(b) || 0; sizes.set(b, n); buf += n; } return bD.apply(this, arguments); };
+  P.deleteTexture = function (t) { if (t) { tex -= sizes.get(t) || 0; sizes.delete(t); } return dT.apply(this, arguments); };
+  P.deleteBuffer = function (b) { if (b) { buf -= sizes.get(b) || 0; sizes.delete(b); } return dB.apply(this, arguments); };
+  window.__glMB = () => Math.round((tex + buf) / 1e6);
+});
 await p.addInitScript(([P, I0, N, CARS]) => {
   // a lobby in the page: the offsets along the track (in points, 2 m each) of each made-up driver
   const at = [];
@@ -87,7 +103,7 @@ const r = await p.evaluate(async (secs) => {
   const f = tm.frames || 1, gaps = tm.gaps.sort((a, b) => a - b);
   return { frames: tm.frames, fps: +(tm.frames / secs).toFixed(1), mpMs: +(tm.mp / f).toFixed(2), renderMs: +(tm.render / f).toFixed(1),
     calls: Math.round(tm.calls / f), ktris: Math.round(tm.tris / f / 1000), tags: +(tm.tags / f).toFixed(1), carsDrawn: +(tm.cars / f).toFixed(1),
-    gapP50: +gaps[gaps.length >> 1].toFixed(1), gapP95: +gaps[Math.floor(gaps.length * 0.95)].toFixed(1), level: g.gfx?.level, online: mp.count };
+    gapP50: +gaps[gaps.length >> 1].toFixed(1), gapP95: +gaps[Math.floor(gaps.length * 0.95)].toFixed(1), level: g.gfx?.level, online: mp.count, glMB: window.__glMB(), heapMB: Math.round(performance.memory.usedJSHeapSize / 1e6) };
 }, secs);
 console.log(JSON.stringify({ n: N, touch, ...r }));
 const shot = arg('shot', '');

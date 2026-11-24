@@ -45,7 +45,7 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 
 // ---- Limits
 const MAX_SOCKETS = 150;          // everyone with the game open
-const MAX_SOCKETS_IP = 12;        // from one address (a household, a LAN party)
+const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
 // Positions in bundles (Martin 2026-11-23, 22 online and more coming): a page that says so in its hello

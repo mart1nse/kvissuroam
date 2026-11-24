@@ -71,6 +71,17 @@ const S = new Float64Array(N);
 for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
 // a point beside the centre line: d metres to the right of the direction of travel
 const side = (i, d) => [P[i][0] - TAN[i][1] * d, P[i][1] + TAN[i][0] * d];
+// Corners Martin added a bale to after the stage was built: [point, side]. The east loop's second bend, where it
+// turns down its west side (24 Nov 12:24, a red circle inside the bend: "just add a bale to the red circle to make
+// sure the bale cutting corner skip comes to effect"): the loop's inside had no check after the hairpin's bale, and
+// straight across the grass to the fork was about 2 s quicker and free. Its bale stands like the others, a metre
+// off the gravel; its check, its penalties and its tape are every corner's.
+const ADD_APEX = [[523, -1]];
+for (const [k, sd] of ADD_APEX) {
+  const [bx, bz] = side(k, sd * (HW[k] + 1));
+  STAGE.apex.push([k, sd, +bx.toFixed(2), +bz.toFixed(2), 90, k]);
+}
+STAGE.apex.sort((p, q) => p[0] - q[0]);
 // The first corner's bale a little further in (Martin 23 Nov 19:26, an arrow from the bale away from the road:
 // "move the haybale a bit inward ... but just slightly"), metres.
 // And the bale at the corner by the pond a touch the other way, towards the road (Martin 23 Nov 00:10, a green
@@ -156,7 +167,9 @@ const TAPE_OUT = 0.85;
 //  - WIDE_AT: a way in with its own length or steps. The start stretch: "move it more closer on the left side so
 //    you can't take a very wide angle", so half a metre off the lane there and on to the corner itself. Before the
 //    left-hander past the boulders the line begins at the corner before it (his red stripe on the right).
-const NO_WIDE = [205, 429, 550, 854], NO_APEX = [550, 583];
+// (Martin 24 Nov 12:24: "add penalty to each haybale (irregardless of the color i highlighted it)": NO_APEX is
+// empty again, the S bend north of the pond is judged at both its bales; the loop's added bend has no way-in line.)
+const NO_WIDE = [205, 429, 523, 550, 854], NO_APEX = [];
 //    Then, with the tape standing there (16:24): "In the start, allow to break the tape, penalize only 2 m to the
 //    left from the tape": the tape stays 1.35 m off the lane (`tape`) and the seconds begin 2 m beyond it.
 const WIDE_AT = { 33: { from: START + 2, to: 30, pen: [[7.35, 5], [3.35, 2]], tape: 1.35 }, 402: { from: 371 } };
@@ -1122,7 +1135,9 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           if (st.prog < k - GATE_FROM) break;
           const deep = crossed(st.gate, GATE_OUT);
           if (deep == null) break;
-          if (!LINK_AT.has(k)) apexCut(k, deep);
+          // (every bale, also the second corner's, whose tape runs on to the next corner: Martin 24 Nov 12:24, its cut
+          // inside the bale had been free since that tape was lengthened)
+          apexCut(k, deep);
           st.gate++;
         }
         // A check not crossed ends the run only when the car comes through the NEXT one (or the finish) without it

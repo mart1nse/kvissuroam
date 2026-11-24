@@ -363,10 +363,10 @@ body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 va
   text-shadow: none; animation: hotpulse 1.4s ease-in-out infinite;
 }
 @keyframes hotpulse { 50% { opacity: .6; } }
-/* won the last race (Martin 2026-11-24): WINNER in the same spot instead, gold, steady, on a hotlap or not */
+/* won the last race (Martin 2026-11-24): WINNER in the same spot instead, HOTLAP's pink-violet pill, steady, on a hotlap or not */
 .pname.won::before {
   content: 'WINNER'; position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; padding: 1px 7px; border-radius: 999px;
-  font-size: 10px; letter-spacing: .24em; line-height: 1.3; color: #2a0b3d; background: linear-gradient(100deg, #ffe46b, #ffb347);
+  font-size: 10px; letter-spacing: .24em; line-height: 1.3; color: #fff; background: linear-gradient(100deg, var(--hot), var(--violet));
   text-shadow: none; animation: none;
 }
 /* racing with us: their place in the race over their name instead (Martin 2026-11-24), a little larger */

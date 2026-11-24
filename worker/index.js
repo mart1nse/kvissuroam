@@ -612,10 +612,14 @@ export class Lobby extends DurableObject {
       const on = w === 'watch' ? cleanOn(m.on) || me?.on || '' : '';
       const b = m.b === 1 || !!me?.b;              // takes positions in bundles (see TICK)
       this.bund.set(ws, b);
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(me?.kn ? { kn: me.kn, kf: me.kf } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
+      // thumbs up received today: the page's own count (kept in its browser till midnight, so a reload or a
+      // lost connection keeps it), or what this socket had
+      const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
+      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanOn).filter(Boolean).slice(-KUDOS_KEEP) : [];
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
-      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}) }, ws); this.race.back(a); }
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
       // (a spectator back on: the count of whom they watch)
       if (!ghost && (me?.on || '') !== on) this.watchTold([me?.on, on]);
       this.race.sendTo(ws);

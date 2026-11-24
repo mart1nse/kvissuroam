@@ -175,8 +175,9 @@
   function renderOnline() {
     var el = document.getElementById('online'), o = onlineData;
     if (!o) return;
-    var ps = o.players || [], drv = ps.filter(function (p) { return p.drv; }).length;
-    var note = ps.length ? fmt(ps.length) + (ps.length === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
+    var ps = o.players || [], drv = o.drv != null ? o.drv : ps.filter(function (p) { return p.drv; }).length;
+    var all = o.total != null ? o.total : ps.length + (o.more || 0);
+    var note = all ? fmt(all) + (all === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
     var r = o.race;
     if (r) note += r.phase === 'race'
       ? ' A race is on: ' + fmt(r.racing) + ' racing, ' + fmt(r.finished) + ' finished' + (r.green ? ', lights out ' + (o.now - r.green < 60000 ? 'under a minute ago' : Math.floor((o.now - r.green) / 60000) + ' min ago') : '') + '.'

@@ -6,6 +6,8 @@
 // the bundle is added into one row of totals for the day (Tartu time) and then forgotten, so there
 // are no names, addresses, cookies or IDs to keep or leak. GET /api/stats?days=30 gives the totals
 // of the last days added together, for the open page at /stats (public/stats.html).
+// Each bundle also goes into a row of totals for its hour (UTC), kept two days, so that
+// GET /api/stats?hours=24 gives a rolling last 24 hours (Martin 2026-11-24: "24 h", not since midnight).
 //
 // One bundle is one row written, far inside the free plan's 100,000 a day. Everything in a bundle is
 // checked against fixed lists and limits, because anyone can post one: a made-up bundle can at worst
@@ -15,6 +17,9 @@ import { CARS } from '../src/cars/specs.js';
 
 export const HEAT = 250;                       // heat map squares, metres
 const KEEP_DAYS = 400;
+const KEEP_HOURS = 48;
+const HOUR = 3600000;
+const hourKey = (t = Date.now()) => new Date(Math.floor(t / HOUR) * HOUR).toISOString().slice(0, 13);   // '2026-11-24T08', UTC
 const tartuDay = (d = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Tallinn' }).format(d);
 const tartuHour = (d = new Date()) => +new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Tallinn', hour: '2-digit', hourCycle: 'h23' }).format(d);
 
@@ -175,7 +180,17 @@ export class Stats extends DurableObject {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS days (day TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    const fresh = !this.sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'hours'").toArray().length;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS hours (hour TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    if (fresh) {
+      // the hours start now: today's totals so far count as the hour of Tartu midnight, so the
+      // 24 h view is whole from the first day and they leave it 24 h after that midnight
+      const now = Date.now();
+      const row = this.sql.exec('SELECT data FROM days WHERE day = ?', tartuDay(new Date(now))).toArray()[0];
+      if (row) this.sql.exec('INSERT INTO hours (hour, data) VALUES (?, ?)', hourKey(Math.floor(now / HOUR) * HOUR - tartuHour(new Date(now)) * HOUR), row.data);
+    }
     this.today = null;            // { day, data } kept in memory between bundles
+    this.thisHour = null;         // { hour, data }, the same for the hour
     this.rl = new Map();
     this.cache = new Map();       // GET answers, a minute each
   }
@@ -201,11 +216,31 @@ export class Stats extends DurableObject {
     return this.today;
   }
 
+  hourRow(hour) {
+    if (this.thisHour?.hour !== hour) {
+      const row = this.sql.exec('SELECT data FROM hours WHERE hour = ?', hour).toArray()[0];
+      let data = {};
+      try { data = row ? JSON.parse(row.data) : {}; } catch { /* start the hour afresh */ }
+      this.thisHour = { hour, data };
+      this.sql.exec('DELETE FROM hours WHERE hour < ?', hourKey(Date.now() - KEEP_HOURS * HOUR));
+    }
+    return this.thisHour;
+  }
+
+  // adds into the day's and the hour's totals and writes both rows: add(data) returns false for no bundle
+  addNow(fn, now = new Date()) {
+    const t = this.dayRow(tartuDay(now));
+    if (!fn(t.data)) return false;
+    const h = this.hourRow(hourKey(now.getTime()));
+    fn(h.data);
+    this.sql.exec('INSERT INTO days (day, data) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data', t.day, JSON.stringify(t.data));
+    this.sql.exec('INSERT INTO hours (hour, data) VALUES (?, ?) ON CONFLICT (hour) DO UPDATE SET data = excluded.data', h.hour, JSON.stringify(h.data));
+    return true;
+  }
+
   // a race from the lobby (worker/index.js raceStat): Durable Object RPC, so no browser can call it
   addRace(r) {
-    const t = this.dayRow(tartuDay());
-    if (!addRace(t.data, r)) return false;
-    this.sql.exec('INSERT INTO days (day, data) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data', t.day, JSON.stringify(t.data));
+    if (!this.addNow((d) => addRace(d, r))) return false;
     this.cache.clear();
     return true;
   }
@@ -221,13 +256,24 @@ export class Stats extends DurableObject {
       let b;
       try { b = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
       const now = new Date();
-      const t = this.dayRow(tartuDay(now));
-      if (!addBundle(t.data, b, { country: req.headers.get('x-country') || '', hour: tartuHour(now) })) return json({ error: 'bad bundle' }, 400);
-      this.sql.exec('INSERT INTO days (day, data) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data', t.day, JSON.stringify(t.data));
+      const opt = { country: req.headers.get('x-country') || '', hour: tartuHour(now) };
+      if (!this.addNow((d) => addBundle(d, b, opt), now)) return json({ error: 'bad bundle' }, 400);
       return json({ ok: true });
     }
     if (req.method === 'GET') {
       if (this.over(`g|${ip}`, 60, 60000)) return json({ error: 'too many requests' }, 429);
+      if (url.searchParams.get('hours')) {
+        // the last 24 hours: this hour so far and the 23 before it
+        const hit = this.cache.get('h24');
+        if (hit && Date.now() - hit.at < 60000) return json(hit.body);
+        const from = hourKey(Date.now() - 23 * HOUR);
+        const rows = this.sql.exec('SELECT data FROM hours WHERE hour >= ? ORDER BY hour', from).toArray()
+          .map((r) => { try { return JSON.parse(r.data); } catch { return {}; } });
+        const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
+        const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date().toISOString(), heat: HEAT, total: sumDays(rows), daily: [], names };
+        this.cache.set('h24', { at: Date.now(), body });
+        return json(body);
+      }
       const days = Math.max(1, Math.min(KEEP_DAYS, parseInt(url.searchParams.get('days'), 10) || 30));
       const hit = this.cache.get(days);
       if (hit && Date.now() - hit.at < 60000) return json(hit.body);

@@ -124,7 +124,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false, lean = () => false }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, stage = false, low = () => false, lean = () => false, warm = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -230,10 +230,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // 4, 8 and then 15 s, and at once when the network or the tab comes back (Martin, 2026-11-23: offline
   // for up to a minute after a deploy, while the game looked as if nothing was wrong)
   let wsRetry = 0;
+  // The server full (100 online, Martin 2026-11-24): drive offline and ask again every 20 to 40 s (spread,
+  // so a freed place is not fought over by everyone waiting at the same moment).
+  let full = false;
   function schedule() {
     retry = Math.min(retry * 2, 15);
     clearTimeout(wsRetry);
-    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, retry * 1000);
+    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, full ? 20000 + Math.random() * 20000 : retry * 1000);
   }
   const soon = () => { if (wsRetry && !document.hidden) { clearTimeout(wsRetry); wsRetry = 0; connect(); } };
   addEventListener('online', soon);
@@ -282,8 +285,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     kinds.add(id);
     return true;
   }
+  // a car's see-through copies, when it is taken away
+  function dropFade(o) {
+    for (const e of o.model?.fade?.list || []) if (!e.mine) e.copy?.dispose();
+    o.halo?.material.dispose();
+  }
   function showModel(o) {
-    if (o.model) scene.remove(o.model.group);
+    if (o.model) { scene.remove(o.model.group); dropFade(o); }
     o.modelCar = o.car;
     o.halo = null;
     o.model = buildModel(o.car);
@@ -312,7 +320,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function drop(id) {
     const o = others.get(id);
     if (!o) return;
-    if (o.model) scene.remove(o.model.group);
+    if (o.model) { scene.remove(o.model.group); dropFade(o); }
     o.el.remove();
     o.dropped = true;
     others.delete(id);
@@ -343,7 +351,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         }
         break;
       }
+      case 'full':
+        if (!full) toast(`SERVER FULL (${Number(m.max) || 100} ONLINE) · DRIVING OFFLINE, JOINING WHEN A PLACE FREES`, 5000);
+        full = true; online = false;
+        onPeople?.('count');
+        break;
       case 'welcome':
+        if (full) toast('A PLACE FREED UP · ONLINE AGAIN', 3000);
+        full = false;
         myId = m.id;
         myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
@@ -564,6 +579,57 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
 
   const v3 = new THREE.Vector3();
   let nearest = 0;                 // metres from our car to the nearest other one, last frame
+  // Ghost cars fade near ours (Martin 2026-11-24): when we pass through each other (a hotlap, the online race,
+  // the Raadi stage, where everybody starts from one spot), a car on our spot is drawn at FADE_MIN and comes
+  // back gradually, solid once FADE_AHEAD metres ahead or behind or FADE_SIDE to the side. Its name, HOTLAP tag
+  // and glow fade too, but only a touch (to TAG_MIN). Free driving, where cars bump, is as it was.
+  // A car's pieces share their materials with every other copy of that car (cars/models/index.js), so a fading
+  // car gets see-through copies of its own, made the first time it comes close and kept; its lamp and soot
+  // materials are its own already and are changed in place. See-through is another shader, compiled ahead
+  // (`warm`, once per kind of car) and only then used: until it is ready the car stays solid.
+  const FADE_MIN = 0.1, FADE_AHEAD = 10, FADE_SIDE = 5, TAG_MIN = 0.6;
+  const fadeWarm = new Map();        // car id -> 'busy' | true
+  function fadeParts(o) {
+    const m = o.model;
+    if (m.fade && m.fade.first === m.group.children[0]) return m.fade;
+    const own = new Set([...Object.values(m.lit || {}), m.soot?.mesh?.material, m.soot?.shell?.material].filter(Boolean));
+    const list = [];
+    m.group.traverse((c) => {
+      if (!c.isMesh || c === o.halo || Array.isArray(c.material)) return;
+      const base = c.material, mine = own.has(base);
+      list.push({ c, base, mine, op: base.opacity, tr: base.transparent, copy: mine ? base : null });
+    });
+    return (m.fade = { first: m.group.children[0], list, a: 1 });
+  }
+  function warmFade(o) {
+    if (!warm) { fadeWarm.set(o.car, true); return; }
+    fadeWarm.set(o.car, 'busy');
+    const id = o.car, tmp = new THREE.Group();
+    for (const e of fadeParts(o).list) {
+      const t = e.base.clone(); t.transparent = true; t.opacity = 0.5;
+      const q = new THREE.Mesh(e.c.geometry, t); q.receiveShadow = e.c.receiveShadow; q.castShadow = e.c.castShadow;
+      tmp.add(q);
+    }
+    Promise.resolve(warm(tmp)).catch(() => {}).then(() => {
+      fadeWarm.set(id, true);
+      tmp.traverse((q) => q.isMesh && q.material.dispose());
+    });
+  }
+  function setFade(o, a) {
+    const f = fadeParts(o);
+    if (Math.abs(a - f.a) < 0.01 && a !== 1) return;
+    if (a === f.a) return;
+    const solid = a >= 1;
+    for (const e of f.list) {
+      if (!e.mine && !e.copy) e.copy = e.base.clone();
+      const m = e.copy;
+      const tr = solid ? e.tr : true;
+      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      m.opacity = e.op * a;
+      if (!e.mine) e.c.material = solid ? e.base : m;
+    }
+    f.a = a;
+  }
   function update(car, dt, active) {
     const now = performance.now() / 1000;
     // send our position while anyone else is online
@@ -593,7 +659,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
     tagList.length = 0;
-    haloParts && (haloParts.mat.opacity = 0.7 + 0.3 * Math.sin(now * 4.5));
+    const pulse = 0.7 + 0.3 * Math.sin(now * 4.5);
+    const ghostMe = hotlap(), me = active && car;
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let nf = 0, recolour = false, near2 = Infinity;
     for (const o of others.values()) {
@@ -628,12 +695,31 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         const hot = o.live && !!(p[20] & HOT);
         if (hot && !o.halo) {
           o.halo = haloMesh();
+          o.halo.material = o.halo.material.clone();      // (its own, to fade with the car; same shader)
           const sz = o.model.size;
           o.halo.scale.set((sz?.width ?? o.halfWid * 2) + 1.5, 1, (sz?.length ?? o.halfLen * 2) + 1.7);
           o.halo.position.y = 0.06;
           g.add(o.halo);
         }
         if (o.halo) o.halo.visible = hot;
+        // passing through each other and close: see-through (FADE_MIN on our spot, solid FADE_AHEAD / FADE_SIDE away)
+        let a = 1;
+        if (me && (ghostMe || (p[20] & HOT) || racing(o.id))) {
+          const dx = p[0] - me.x, dz = p[1] - me.z, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
+          const k = Math.max(Math.abs(dx * sy - dz * cy) / FADE_AHEAD, Math.abs(dx * cy + dz * sy) / FADE_SIDE);
+          if (k < 1) {
+            const w = fadeWarm.get(o.car);
+            if (w === true) a = FADE_MIN + (1 - FADE_MIN) * k;
+            else if (!w) warmFade(o);
+          }
+        }
+        // (eased, so a lap starting or ending with a car beside us does not snap)
+        // (a car just changed for one whose see-through shader is not ready: solid at once)
+        const fa = fadeWarm.get(o.car) === true ? o.fa ?? 1 : 1;
+        o.fa = a >= 1 && fa > 0.995 ? 1 : fa + (a - fa) * Math.min(1, dt * 8);
+        if (o.fa !== 1 || o.model.fade) setFade(o, o.fa);
+        o.tagA = 1 - (1 - TAG_MIN) * (1 - o.fa) / (1 - FADE_MIN);
+        if (o.halo && hot) o.halo.material.opacity = pulse * o.tagA;
         // a shadow only close by, where it can be seen
         const sh = d < SHADOW_DIST;
         if (sh !== o.shadow) { o.shadow = sh; g.traverse((c) => { if (c.isMesh && c !== o.halo) c.castShadow = sh; }); }
@@ -669,6 +755,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const p = o.pose;
       const hot = o.live && !!(p[20] & HOT);
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
+      const ta = o.near ? Math.round((o.tagA ?? 1) * 50) / 50 : 1;
+      if (ta !== (o.ta ?? 1)) { o.ta = ta; o.el.style.opacity = ta === 1 ? '' : ta; }
       const rec = recs.size ? recordOf(o.name) : '';
       if (rec !== (o.rec || '')) { o.rec = rec; if (rec) o.el.dataset.rec = rec; else delete o.el.dataset.rec; }
       v3.set(p[0], p[2] + 3.0, p[1]);
@@ -694,6 +782,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     collide,
     get name() { return name; },
     get online() { return online; },
+    // the server was full: driving offline until a place frees (see schedule)
+    get full() { return full; },
     stealth: STEALTH,
     get count() { return others.size; },
     nameReady,

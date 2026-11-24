@@ -35,6 +35,7 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const STAMP = 21;                // position's slot for when it was taken (see addPose)
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
 // past DETAIL metres is a small block in its paint colour, all such blocks one draw call (a whole car is
 // 11-12 pieces of 50-75 thousand triangles, a few pixels tall that far away); past FAR it is not drawn at
@@ -335,10 +336,25 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     others.delete(id);
   }
 
-  // a position into a car's list, at the moment the server got it (age ms before now), never before the last one
+  // A position into a car's list, never before the last one. Where it belongs in time (Martin 2026-11-24: cars very
+  // near wobbled now and then): timed by when it reached the server, a position that left a phone or Wi-Fi 30 ms
+  // late looked like the car braking and catching up, about a metre at racing speed, plain to see 20 m away. A page
+  // that sends p[STAMP] (the moment it took the position by its own clock, ms within the minute) is placed by that:
+  // how much later than its quickest one this position came is how late it is, and it goes that much back in time.
+  // The quickest way is remembered per car (base: our clock minus theirs plus the quickest trip), creeping up 2 ms a
+  // second so a clock that drifts is followed. No synced clock is needed: two clocks apart only make base bigger.
+  // Without a stamp (an older page): by the server's arrival (age ms before now), as before.
   function addPose(o, p, age) {
-    const b = o.buf, last = b[b.length - 1];
-    let t = performance.now() / 1000 - age / 1000;
+    const b = o.buf, last = b[b.length - 1], now = performance.now() / 1000;
+    let t = now - age / 1000;
+    if (p.length > STAMP) {
+      const raw = (((Date.now() - p[STAMP]) % 60000) + 60000) % 60000;
+      let late = o.base === undefined ? 0 : ((raw - o.base + 90000) % 60000) - 30000;
+      if (o.base === undefined || late < 0 || late > 1500) { o.base = raw; late = 0; }   // quicker than ever (or a restart)
+      else o.base = (o.base + Math.min(late, 2 * (now - (o.baseAt || now)))) % 60000;
+      o.baseAt = now;
+      t = now - late / 1000;
+    }
     if (last && t <= last.t) t = last.t + 0.001;
     b.push({ t, p });
     if (b.length > 30) b.shift();
@@ -506,16 +522,22 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const B = b[i], A = b[i - 1];
     let p;
     if (A && t <= B.t) {
-      const f = Math.max(0, Math.min(1, (t - A.t) / (B.t - A.t || 1)));
+      const span = B.t - A.t || 1, f = Math.max(0, Math.min(1, (t - A.t) / span));
       p = A.p.map((v, k) => {
         if (k === 3 || k === 4 || k === 5 || k === 8) {            // angles
           let d = B.p[k] - v; d = Math.atan2(Math.sin(d), Math.cos(d));
           return v + d * f;
         }
         if (B.p[k] === undefined) return v;                         // (a browser still on an older version)
-        if (k === 20) return B.p[k];                                // flags
+        if (k >= 20) return B.p[k];                                 // flags, the time stamp
         return v + (B.p[k] - v) * f;
       });
+      // the way between two positions follows the car's speed at both ends (a cubic Hermite curve), not a
+      // straight line: round a bend an arc, and no change of pace at each position (Martin 2026-11-24)
+      if (span < 0.5) {
+        const f2 = f * f, f3 = f2 * f, h10 = f3 - 2 * f2 + f, h11 = f3 - f2, h01 = 3 * f2 - 2 * f3, h00 = 1 - h01;
+        for (const [k, vk] of [[0, 6], [1, 7]]) p[k] = h00 * A.p[k] + h10 * span * A.p[vk] + h01 * B.p[k] + h11 * span * B.p[vk];
+      }
     } else {
       // past the newest update: carry on along its velocity for a moment
       const ahead = Math.min(0.35, t - B.t);
@@ -678,7 +700,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
         // the water is grass)
         Math.round(car.rpm || 0), r1(car.slipV), r1(car.skidF), r1(car.skidR), r1(car.rubF), r1(car.rubR),
-        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0)] });
+        (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hotlap() ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0),
+        // when this position was taken, by our own clock (ms within the minute; see addPose)
+        Date.now() % 60000] });
     }
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;

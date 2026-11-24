@@ -9,14 +9,24 @@ import fs from 'fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const arg = (k, d) => { const a = process.argv.find((s) => s.startsWith(`${k}=`)); return a ? a.slice(k.length + 1) : d; };
 const NB = +arg('bots', 9), port = +arg('port', 8787);
+// jitter: each position leaves the bot up to this many ms late, as on Wi-Fi or a phone (Martin 2026-11-24: cars
+// very near wobble now and then); the position is stamped with the moment it was made (p[21], the sender's
+// own clock, ms within the minute) unless nostamp
+const JIT = +arg('jitter', 0), STAMP = !process.argv.includes('nostamp');
 const P = JSON.parse(fs.readFileSync(new URL('../src/race/track.json', import.meta.url))).pts;
 const I0 = 1700, SPEED = 15;
 
 // ---- bots
 const bots = [];
+// (along the lap by distance, so each bot's real speed is SPEED: the track's points are not evenly spaced)
+const CUM = [0];
+for (let i = 1; i <= P.length; i++) CUM.push(CUM[i - 1] + Math.hypot(P[i % P.length][0] - P[i - 1][0], P[i % P.length][1] - P[i - 1][1]));
 const at = (k, t) => {
-  const f = I0 + 10 + k * 6 + (t * SPEED) / 2.045;
-  const i = Math.floor(f) % P.length, j = (i + 1) % P.length, u = f - Math.floor(f);
+  const s0 = CUM[I0 + 10 + k * 6], d = (s0 + t * SPEED) % CUM[P.length];
+  let i = Math.max(0, Math.min(P.length - 1, Math.floor(d / 2.045)));
+  while (i > 0 && CUM[i] > d) i--;
+  while (i < P.length - 1 && CUM[i + 1] <= d) i++;
+  const j = (i + 1) % P.length, u = (d - CUM[i]) / (CUM[i + 1] - CUM[i] || 1);
   const x = P[i][0] + (P[j][0] - P[i][0]) * u, z = P[i][1] + (P[j][1] - P[i][1]) * u;
   const yaw = Math.atan2(P[j][0] - P[i][0], -(P[j][1] - P[i][1]));
   return [+x.toFixed(2), +z.toFixed(2), 0, +yaw.toFixed(3), 0, 0, +(Math.sin(yaw) * SPEED).toFixed(2), +(-Math.cos(yaw) * SPEED).toFixed(2), 0, 0, 0, 0, 0.5, 0, 3000, 0, 0, 0, 0, 0, 4];
@@ -28,11 +38,21 @@ for (let k = 0; k < NB; k++) {
   const old = k === NB - 1;
   // (each bot from an address of its own, as players are: the server lets 30 in from one)
   const ws = new WebSocket(`ws://localhost:${port}/api/ws`, { headers: { 'cf-connecting-ip': `10.0.${k >> 8}.${k & 255}` } });
+  const bot = { last: 0 };
   ws.onopen = () => {
     ws.send(JSON.stringify({ t: 'hello', ...(old ? {} : { b: 1 }), name: `Bot${k}${old ? 'Old' : ''}`, car: ['impreza', 'f40', 'm3'][k % 3] }));
     ws.send(JSON.stringify({ t: 'drv', on: 1 }));
     // (a real page's send timer drifts a little against the server's ticks)
-    const tick = () => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 's', p: at(k, (Date.now() - t0) / 1000) })); setTimeout(tick, 95 + Math.random() * 10); };
+    const tick = () => {
+      if (ws.readyState === 1) {
+        const p = at(k, (Date.now() - t0) / 1000);
+        if (STAMP) p.push(Date.now() % 60000);
+        const go = () => ws.readyState === 1 && ws.send(JSON.stringify({ t: 's', p }));
+        // (late, but never overtaking the one before: one connection keeps its order)
+        if (JIT) { const at_ = Math.max(bot.last, Date.now() + Math.random() * JIT); bot.last = at_; setTimeout(go, at_ - Date.now()); } else go();
+      }
+      setTimeout(tick, 95 + Math.random() * 10);
+    };
     setTimeout(tick, Math.random() * 100);
   };
   if (old) ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t in oldGot) oldGot[m.t]++; };
@@ -77,7 +97,8 @@ async function run(asOld) {
     mp.update = function (...a) {
       const ts = performance.now(); const v = upd.apply(this, a);
       const pz = mp.poseOf(id);
-      if (pz && last && ts > lt) { out.sp.push(Math.hypot(pz[0] - last[0], pz[1] - last[1]) / ((ts - lt) / 1000)); if (out.dbg.length < 400) out.dbg.push([+(ts - lt).toFixed(1), +pz[0].toFixed(2), +pz[1].toFixed(2)]); }
+      if (pz && last && ts - lt > 10 && ts - lt < 25) {   // (steady frames only: a stalled test page says nothing about the game)
+         out.sp.push(Math.hypot(pz[0] - last[0], pz[1] - last[1]) / ((ts - lt) / 1000)); if (out.dbg.length < 400) out.dbg.push([+(ts - lt).toFixed(1), +pz[0].toFixed(2), +pz[1].toFixed(2)]); }
       if (pz) { last = [pz[0], pz[1]]; lt = ts; }
       out.frames++;
       return v;
@@ -96,7 +117,7 @@ async function run(asOld) {
   return { page: asOld ? 'older page' : 'bundles', others: r.others, msgsPerSec: +((r.in1.all - r.in0.all) / 10).toFixed(1), single: r.in1.s - r.in0.s, bundles: r.in1.S - r.in0.S,
     fps: +(r.frames / 10).toFixed(0), speedMean: +mean.toFixed(2), speedSpread: +(sd / SPEED * 100).toFixed(1) + '%', worstJump: +(worst).toFixed(1) + ' m/s' };
 }
-const order = process.argv.includes('oldfirst') ? [true, false] : [false, true];
+const order = process.argv.includes('new') ? [false] : process.argv.includes('oldfirst') ? [true, false] : [false, true];
 for (const asOld of order) { oldGot = { s: 0, S: 0 }; console.log(JSON.stringify(await run(asOld))); }
 console.log('old bot meanwhile got', JSON.stringify(oldGot));
 { const s = (Date.now() - got.t) / 1000; console.log('bot 0 got', JSON.stringify({ bundlesPerSec: +(got.n / s).toFixed(1), carsPerBundle: +(got.cars / got.n).toFixed(1), meanAgeMs: Math.round(got.age / got.cars), maxAgeMs: got.maxAge, kbPerSec: +(got.bytes / s / 1000).toFixed(1) })); }

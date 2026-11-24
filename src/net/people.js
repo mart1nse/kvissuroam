@@ -22,7 +22,7 @@ const LIST_MAX = 60;              // names listed on desktop at most (fewer when
 const LIST_MAX_PHONE = 5;
 export const ME_COLOUR = '#ffd45e';
 // the thumbs up button (src/kudos.js), the same neon thumb as the sign in the back window
-const THUMB = '<svg viewBox="8 8 86 86" aria-hidden="true"><path d="M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z"/></svg>';    // your own arrow on the maps         // rows on a phone, "+N MORE" included
+export const THUMB = '<svg viewBox="8 8 86 86" aria-hidden="true"><path d="M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z"/></svg>';    // your own arrow on the maps         // rows on a phone, "+N MORE" included
 
 export function createPeople({ mp, onFocus, votes, onWatch, watching = () => null, onKudos }) {
   // a thumbs up button for a player on the map: lit, or faint while the last one to them is under 30 s old

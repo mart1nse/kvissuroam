@@ -770,18 +770,29 @@ body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rcount .big { display: flex; align-items: baseline; gap: .4em; }
 #rcount .t1 { font: 400 clamp(16px, 1.6vw, 26px) 'Russo One', var(--font); letter-spacing: .25em; color: var(--sun); text-shadow: 2px 2px 0 var(--hot); }
 #rcount .t2 { font: 400 clamp(56px, 7vw, 130px) 'Russo One', var(--font); line-height: .9; color: #fff; text-shadow: 4px 4px 0 var(--hot), 0 0 26px rgba(255, 43, 214, .8); }
-#rcount .rcard { pointer-events: auto; max-width: min(620px, 92vw); padding: 12px 18px; border-radius: 18px; background: rgba(18, 6, 43, .6); font-size: clamp(11px, 1vw, 15px); }
-#rcount .names { display: flex; flex-wrap: wrap; gap: .4em; justify-content: center; margin-bottom: 10px; max-width: 34em; }
+/* the join card fits its buttons (Martin 2026-11-24: they spilled out of it); the buttons are the soft pills of
+   BACK TO MY CAR (spectator mode): JOIN RACE in its cyan-to-pink glow, NOT INTERESTED a quiet see-through pill */
+#rcount .rcard { pointer-events: auto; width: max-content; max-width: 94vw; box-sizing: border-box; padding: 12px 16px 14px; border-radius: 22px;
+  background: rgba(18, 6, 43, .6); font-size: clamp(11px, 1vw, 15px); display: flex; flex-direction: column; align-items: center; }
+#rcount .names { display: flex; flex-wrap: wrap; gap: .4em; justify-content: center; margin-bottom: 12px; max-width: 34em; }
 #rcount .names span { padding: .2em .65em; border-radius: 99px; background: rgba(255, 255, 255, .12); font-weight: 700; }
 #rcount .names span.me { background: rgba(125, 255, 90, .22); color: #7dff5a; }
 #rcount .names span.wait { opacity: .5; font-style: italic; }
-#rcount .btns { display: flex; gap: 10px; justify-content: center; }
-#rcount .btns { gap: 14px; }
-#rcount .btns button small { font-size: .55em; opacity: .6; letter-spacing: .1em; margin-left: .4em; vertical-align: .15em; }
-#rcount .btns button { white-space: nowrap; border: none; border-radius: 999px; padding: .6em 1.5em; font: 400 2em 'Russo One', var(--font); letter-spacing: .06em; }
-#rcount .btns .go { background: linear-gradient(180deg, #ffe58a, #ffb52e); color: var(--ink); }
-#rcount .btns .in { background: rgba(20, 60, 20, .5); color: #7dff5a; }
-#rcount .btns [data-r="no"] { background: rgba(18, 6, 43, .6); color: rgba(255, 255, 255, .85); font-size: 1.6em; }
+#rcount .btns { display: flex; gap: 12px; justify-content: center; align-items: center; }
+#rcount .btns button { cursor: pointer; white-space: nowrap; border: none; border-radius: 999px; padding: .74em 1.75em .78em;
+  font: 800 clamp(16px, 1.65vw, 27px) var(--font); letter-spacing: .14em; text-shadow: none;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, background .18s ease; }
+#rcount .btns button:hover { transform: scale(1.05); }
+#rcount .btns button:active { transform: scale(.97); }
+#rcount .btns .go { color: var(--ink); background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot));
+  box-shadow: 0 0 18px rgba(47, 243, 255, .45), 0 0 26px rgba(255, 43, 214, .3); }
+#rcount .btns .go::before { content: '▶'; margin-right: .6em; font-size: .8em; }
+#rcount .btns .go:hover { filter: brightness(1.08); box-shadow: 0 0 24px rgba(47, 243, 255, .7), 0 0 34px rgba(255, 43, 214, .45); }
+#rcount .btns .in { color: var(--ink); background: linear-gradient(100deg, #7dff5a, #2ff3ff); box-shadow: 0 0 16px rgba(125, 255, 90, .4); }
+#rcount .btns [data-r="no"] { color: rgba(255, 255, 255, .88); background: rgba(255, 255, 255, .1); }
+#rcount .btns [data-r="no"]:hover { background: rgba(255, 255, 255, .18); color: #fff; }
+#rcount .btns button small { margin-left: .6em; padding: .1em .45em; border-radius: .45em; font: 800 .72em var(--font); letter-spacing: .08em;
+  background: rgba(18, 6, 43, .45); opacity: .8; }
 #rcount .small { margin-top: 8px; font-size: .8em; opacity: .85; letter-spacing: .08em; font-weight: 700; }
 #rlights { left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: .35em;
   padding: .55em 1.2em .65em; border-radius: 26px; background: rgba(10, 4, 24, .62); font-size: clamp(14px, 1.4vw, 24px); }
@@ -848,8 +859,12 @@ body.touch.racegrid #rlist .tb { visibility: hidden; }
 /* the wide results list lies over the online list for its few seconds: that one steps aside meanwhile */
 body.touch:has(#rlist:not(.hidden):not(.live)) #people { visibility: hidden; }
 body.touch #rcount { top: 20%; gap: 6px; }
-body.touch #rcount .rcard { max-width: 92vw; padding: 8px 14px; }
-body.touch #rcount .btns button { font-size: 1.7em; } body.touch #rcount .btns [data-r="no"] { font-size: 1.35em; }
+body.touch #rcount .rcard { padding: 8px 12px 10px; border-radius: 18px; }
+body.touch #rcount .names { margin-bottom: 8px; }
+body.touch #rcount .btns { gap: 10px; }
+body.touch #rcount .btns button { font-size: 16px; padding: .72em 1.4em .76em; }
+/* a short phone (800x304): the card goes up a little so it ends above the pedals */
+@media (max-height: 340px) { body.touch #rcount { top: 9%; } }
 body.racegrid :is(#lap, #stage), body.touch.racelist :is(#lap, #stage), body.touch.racelist #lapmsg { visibility: hidden; }
 body.touch #rlights { top: 30%; font-size: 13px; }
 /* a phone with its address bar still on screen: no room for the street name under the minimap, so it goes

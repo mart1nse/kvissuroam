@@ -15,6 +15,7 @@ import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
+import { STANDINS } from './standins.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -156,8 +157,98 @@ function farCars(scene, max) {
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0;
   mesh.frustumCulled = false;            // (spread over the whole map; one draw call either way)
+  mesh.visible = false;
   scene.add(mesh);
-  return mesh;
+  // and one for each car in STANDINS: its own shape and colour (one draw call for each kind that has a car
+  // drawn so; the same material, so no new shader is ever compiled for them)
+  const kinds = new Map(), all = [mesh];
+  for (const [id, sd] of Object.entries(STANDINS)) {
+    const m = new THREE.InstancedMesh(standinGeo(sd), mesh.material, max);
+    m.name = `remote far cars ${id}`;
+    m.setColorAt(0, new THREE.Color(0xffffff));
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    m.count = 0;
+    m.frustumCulled = false;
+    m.visible = false;
+    m.userData.paint = new THREE.Color(sd.paint);
+    scene.add(m);
+    kinds.set(id, m);
+    all.push(m);
+  }
+  for (const m of all) { m.userData.n = 0; m.userData.cols = []; }
+  return { mesh, all, of: (id) => kinds.get(id) || null };
+}
+
+// A car's stand-in shape from its STANDINS entry, in metres: the body up to the windows (or its whole outline
+// where it has none), the cabin over the windows (dark sides, dark windscreen and rear window where the roof
+// line is steep, painted roof), a roof band over the windows where glassTop is given (the bus), and wheels.
+// Some 160 triangles.
+function standinGeo(sd) {
+  const pos = [], col = [];
+  const PAINT = [1, 1, 1], GLASS = [0.1, 0.11, 0.14], TYRE = [0.05, 0.05, 0.05];
+  // a triangle facing out along (ox, oy, oz)
+  const tri = (a, b, c, k, ox, oy, oz) => {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    if (nx * ox + ny * oy + nz * oz < 0) pos.push(...a, ...c, ...b); else pos.push(...a, ...b, ...c);
+    for (let i = 0; i < 3; i++) col.push(...k);
+  };
+  const quad = (a, b, c, d, k, ox, oy, oz) => { tri(a, b, c, k, ox, oy, oz); tri(a, c, d, k, ox, oy, oz); };
+  const N = sd.top.length, z0 = sd.z[0], z1 = sd.z[1], dz = (z1 - z0) / N;
+  // a solid between two lines over the steps i0..i1 (a step's line is at its middle; the ends run to the
+  // car's front and back), w wide either side; topK(i) colours the top from step i to i+1
+  const column = (i0, i1, lo, hi, w, sideK, topK, endK) => {
+    const zs = [], los = [], his = [];
+    for (let i = i0; i <= i1; i++) { zs.push(z0 + (i + 0.5) * dz); los.push(lo(i)); his.push(hi(i)); }
+    zs[0] = i0 === 0 ? z0 : z0 + i0 * dz;
+    zs[zs.length - 1] = i1 === N - 1 ? z1 : z0 + (i1 + 1) * dz;
+    for (let j = 0; j < zs.length - 1; j++) {
+      const za = zs[j], zb = zs[j + 1];
+      for (const sx of [1, -1]) quad([sx * w, los[j], za], [sx * w, los[j + 1], zb], [sx * w, his[j + 1], zb], [sx * w, his[j], za], sideK, sx, 0, 0);
+      quad([w, his[j], za], [w, his[j + 1], zb], [-w, his[j + 1], zb], [-w, his[j], za], topK(j + i0, (his[j + 1] - his[j]) / (zb - za)), 0, 1, 0);
+      quad([w, los[j], za], [w, los[j + 1], zb], [-w, los[j + 1], zb], [-w, los[j], za], sideK, 0, -1, 0);
+    }
+    const e = zs.length - 1;
+    quad([w, los[0], zs[0]], [w, his[0], zs[0]], [-w, his[0], zs[0]], [-w, los[0], zs[0]], endK, 0, 0, -1);
+    quad([w, los[e], zs[e]], [w, his[e], zs[e]], [-w, his[e], zs[e]], [-w, los[e], zs[e]], endK, 0, 0, 1);
+  };
+  const [g0, g1] = sd.glass, clear = sd.wr * 0.55, cw = sd.w * (sd.cabin ?? 0.86);
+  const glassy = (i) => i >= g0 && i <= g1;
+  // body: under the windows where there are windows, else the whole outline
+  column(0, N - 1, () => clear, (i) => (glassy(i) ? Math.min(sd.belt, sd.top[i]) : sd.top[i]), sd.w, PAINT, () => PAINT, PAINT);
+  // cabin: windscreen and rear window (steep) dark, roof painted
+  const roof = (i) => (sd.glassTop ? Math.min(sd.glassTop, sd.top[i]) : sd.top[i]);
+  column(g0, g1, () => sd.belt, roof, cw, GLASS, (i, slope) => (!sd.glassTop && Math.abs(slope) > 0.45 ? GLASS : PAINT), GLASS);
+  if (sd.glassTop) column(g0, g1, () => sd.glassTop, (i) => sd.top[i], cw, PAINT, () => PAINT, PAINT);
+  // a rear wing: a plate on two posts
+  if (sd.wing) {
+    const [wa, wbk, wy] = sd.wing, ww = sd.w * 0.92, t = 0.05;
+    const box = (x0, x1, y0, y1, za, zb) => {
+      quad([x1, y0, za], [x1, y0, zb], [x1, y1, zb], [x1, y1, za], PAINT, 1, 0, 0);
+      quad([x0, y0, za], [x0, y0, zb], [x0, y1, zb], [x0, y1, za], PAINT, -1, 0, 0);
+      quad([x0, y1, za], [x1, y1, za], [x1, y1, zb], [x0, y1, zb], PAINT, 0, 1, 0);
+      quad([x0, y0, za], [x1, y0, za], [x1, y0, zb], [x0, y0, zb], PAINT, 0, -1, 0);
+      quad([x0, y0, za], [x1, y0, za], [x1, y1, za], [x0, y1, za], PAINT, 0, 0, -1);
+      quad([x0, y0, zb], [x1, y0, zb], [x1, y1, zb], [x0, y1, zb], PAINT, 0, 0, 1);
+    };
+    box(-ww, ww, wy - t, wy, wa, wbk);
+    const zm = (wa + wbk) / 2, base = sd.top[N - 3] - 0.05;
+    for (const sx of [1, -1]) box(sx * ww * 0.7 - 0.03, sx * ww * 0.7 + 0.03, base, wy - t, zm - 0.04, zm + 0.04);
+  }
+  // wheels: an octagon on each side at each axle
+  const R = sd.wr, x = sd.w + 0.01;
+  for (const sx of [1, -1]) for (const zc of [-sd.wb / 2, sd.wb / 2]) {
+    const c = [sx * x, R, zc];
+    for (let k = 0; k < 8; k++) {
+      const a0 = (k / 8) * Math.PI * 2, a1 = ((k + 1) / 8) * Math.PI * 2;
+      tri(c, [sx * x, R + Math.sin(a0) * R, zc + Math.cos(a0) * R], [sx * x, R + Math.sin(a1) * R, zc + Math.cos(a1) * R], TYRE, sx, 0, 0);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return geo;
 }
 // a car's paint colour, for its far stand-in (the body's paint piece, else a quiet grey)
 function paintOf(model) {
@@ -889,7 +980,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const pulse = 0.7 + 0.3 * Math.sin(now * 4.5);
     const ghostMe = hotlap(), me = active && car, racingMe = !!myId && racing(myId);
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
-    let nf = 0, recolour = false, near2 = Infinity, copied = false;
+    let near2 = Infinity, copied = false;
     const ds = dsBuf;
     for (const o of replay ? [...others.values(), replay] : others.values()) {
       o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
@@ -919,13 +1010,19 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (g) setNear(o, near);
       if (!near) {
         if (d < farMax) {
-          const sz = whole ? o.model.size : null, paint = whole ? o.paint : o.plain || (o.plain = new THREE.Color(o.colour));
+          // its own shape and colour (STANDINS), else the general one scaled to its size
+          const fk = far.of(o.car), fmesh = fk || far.mesh;
           fp.set(p[0] + fx * o.off, p[2], p[1] + fz * o.off);
           fq.setFromEuler(fe.set(p[4], -p[3], -p[5]));
-          fs.set(sz?.width ?? o.halfWid * 2, sz?.height ?? 1.45, sz?.length ?? o.halfLen * 2);
-          far.setMatrixAt(nf, fm.compose(fp, fq, fs));
-          if (far.userData[nf] !== paint) { far.userData[nf] = paint; far.setColorAt(nf, paint); recolour = true; }
-          nf++;
+          let paint;
+          if (fk) { fs.set(1, 1, 1); paint = fk.userData.paint; } else {
+            const sz = whole ? o.model.size : null;
+            paint = whole ? o.paint : o.plain || (o.plain = new THREE.Color(o.colour));
+            fs.set(sz?.width ?? o.halfWid * 2, sz?.height ?? 1.45, sz?.length ?? o.halfLen * 2);
+          }
+          const u = fmesh.userData, n = u.n++;
+          fmesh.setMatrixAt(n, fm.compose(fp, fq, fs));
+          if (u.cols[n] !== paint) { u.cols[n] = paint; fmesh.setColorAt(n, paint); u.rc = true; }
         }
       } else {
         // on a hotlap: the glow under their car and the tag over their name
@@ -988,9 +1085,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     wholeCut = ds.length > wholeMax ? ds[wholeMax - 1] + 0.01 : Infinity;
     shadowCut = ds.length > SHADOWS ? ds[SHADOWS - 1] + 0.01 : Infinity;
     ds.length = 0;
-    far.count = nf;
-    if (nf) far.instanceMatrix.needsUpdate = true;
-    if (recolour) far.instanceColor.needsUpdate = true;
+    for (const m of far.all) {
+      const u = m.userData;
+      if (m.count !== u.n) { m.count = u.n; m.visible = u.n > 0; }
+      if (u.n) m.instanceMatrix.needsUpdate = true;
+      if (u.rc) { m.instanceColor.needsUpdate = true; u.rc = false; }
+      u.n = 0;
+    }
     // floating names over the nearest few only: held well above the roof (and lifted a little more on screen,
     // past the record line that hangs under it), so a player ahead does not hide the racing line (Martin 2026-11-23)
     const most = low() ? TAGS_LOW : TAGS;

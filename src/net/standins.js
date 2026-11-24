@@ -1,0 +1,35 @@
+// The stand-in shape of each car another player drives (multiplayer.js farCars): drawn where the whole car is
+// not (far away, past the nearest few, or on a phone a kind it does not build). Measured from the cars' own
+// models (Martin 2026-11-24: "so you could somewhat tell what cars others are driving", in their own colour,
+// which is fixed per car): z, the car's front and back (front is -z, 0 the middle of the wheelbase); w, half
+// its width; wb and wr, wheelbase and wheel radius; paint; top, the height of its outline in 20 even steps
+// front to back; belt, where the side windows begin, over the steps glass[0] to glass[1] (glassTop: where
+// they end, when a roof sits above them); cabin, the cabin's width against the body's (0.86 when left out); wing, a rear wing [front, back, height].
+export const STANDINS = {
+  w201: { z: [-2.12, 2.32], w: 0.84, wb: 2.67, wr: 0.3, paint: '#060607', belt: 0.95, glass: [6, 14],
+    top: [0.91, 0.86, 0.86, 0.89, 0.92, 0.94, 1.08, 1.22, 1.35, 1.38, 1.38, 1.38, 1.37, 1.35, 1.23, 1.06, 1, 1, 1, 1] },
+  crv: { z: [-2.22, 2.32], w: 0.91, wb: 2.62, wr: 0.36, paint: '#060607', belt: 1.12, glass: [6, 19],
+    top: [0.99, 1.02, 1.06, 1.08, 1.12, 1.23, 1.34, 1.47, 1.56, 1.63, 1.65, 1.66, 1.66, 1.66, 1.65, 1.63, 1.62, 1.61, 1.6, 1.48] },
+  enyaq: { z: [-2.26, 2.42], w: 0.94, wb: 2.77, wr: 0.37, paint: '#060607', belt: 1.12, glass: [6, 19],
+    top: [0.93, 0.97, 1.01, 1.04, 1.07, 1.15, 1.25, 1.38, 1.62, 1.62, 1.62, 1.62, 1.62, 1.62, 1.62, 1.57, 1.57, 1.56, 1.52, 1.29] },
+  rav4: { z: [-2.29, 2.33], w: 0.93, wb: 2.69, wr: 0.36, paint: '#5a5f66', belt: 1.13, glass: [6, 19],
+    top: [1, 1.06, 1.08, 1.11, 1.13, 1.24, 1.35, 1.48, 1.57, 1.62, 1.64, 1.65, 1.65, 1.65, 1.64, 1.64, 1.64, 1.64, 1.59, 1.4] },
+  passat: { z: [-2.28, 2.39], w: 0.87, wb: 2.7, wr: 0.32, paint: '#bcc1c6', belt: 0.94, glass: [6, 19],
+    top: [0.75, 0.78, 0.8, 0.83, 0.86, 0.94, 1.07, 1.21, 1.33, 1.42, 1.44, 1.45, 1.45, 1.45, 1.45, 1.44, 1.44, 1.43, 1.4, 1.12] },
+  mazda6: { z: [-2.35, 2.47], w: 0.92, wb: 2.75, wr: 0.34, paint: '#44474d', belt: 1.02, glass: [6, 18],
+    top: [0.77, 0.85, 0.89, 0.91, 0.96, 1, 1.11, 1.21, 1.31, 1.4, 1.43, 1.45, 1.45, 1.44, 1.43, 1.43, 1.44, 1.44, 1.35, 1.14] },
+  bz4x: { z: [-2.36, 2.49], w: 0.95, wb: 2.85, wr: 0.37, paint: '#eceeef', belt: 1.14, glass: [5, 19],
+    top: [0.94, 0.99, 1.02, 1.06, 1.11, 1.23, 1.36, 1.47, 1.55, 1.6, 1.62, 1.63, 1.63, 1.63, 1.62, 1.62, 1.63, 1.63, 1.57, 1.31] },
+  f40: { z: [-2.27, 2.11], w: 0.98, wb: 2.45, wr: 0.33, paint: '#c4100f', belt: 0.79, glass: [7, 13], wing: [1.82, 2.12, 1.13],
+    top: [0.52, 0.55, 0.61, 0.65, 0.69, 0.73, 0.84, 0.94, 1.06, 1.12, 1.12, 1.12, 1.11, 1.1, 1.07, 1.05, 1.03, 1, 0.97, 0.93] },
+  cgt: { z: [-2.4, 2.24], w: 0.96, wb: 2.73, wr: 0.35, paint: '#b7bcc1', belt: 0.83, glass: [8, 13],
+    top: [0.53, 0.6, 0.66, 0.7, 0.72, 0.77, 0.8, 0.85, 0.95, 1.08, 1.14, 1.16, 1.16, 1.12, 1.09, 1.04, 0.99, 0.99, 1.01, 1.02] },
+  audi200: { z: [-2.38, 2.45], w: 0.91, wb: 2.69, wr: 0.33, paint: '#50294e', belt: 0.94, glass: [7, 18],
+    top: [0.75, 0.79, 0.83, 0.87, 0.89, 0.93, 0.99, 1.15, 1.29, 1.38, 1.41, 1.42, 1.42, 1.41, 1.4, 1.4, 1.4, 1.29, 1.15, 1] },
+  m3: { z: [-2.14, 2.36], w: 0.9, wb: 2.76, wr: 0.34, paint: '#f2f2ee', belt: 0.97, glass: [7, 15],
+    top: [0.76, 0.81, 0.91, 0.95, 0.96, 1.01, 1.05, 1.28, 1.4, 1.42, 1.42, 1.42, 1.42, 1.42, 1.42, 1.31, 1.19, 1.09, 1.05, 1.05] },
+  impreza: { z: [-2.14, 2.16], w: 0.89, wb: 2.52, wr: 0.31, paint: '#1658c6', belt: 0.92, glass: [5, 16], wing: [1.78, 2.1, 1.19],
+    top: [0.71, 0.75, 0.86, 0.86, 0.88, 0.97, 1.08, 1.19, 1.3, 1.34, 1.36, 1.37, 1.37, 1.35, 1.33, 1.25, 1.16, 1.03, 1.02, 1.02] },
+  bus: { z: [-6.1, 6.34], w: 1.27, wb: 5.95, wr: 0.48, paint: '#c8232c', belt: 0.95, glass: [0, 19], glassTop: 2.9, cabin: 0.99,
+    top: [2.75, 3.05, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.12, 3.05] },
+};

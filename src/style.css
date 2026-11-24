@@ -528,6 +528,8 @@ body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #roster li.me b { color: #ffd45e; }
 #roster li.idle { opacity: .55; cursor: default; }
 #roster li:hover:not(.idle) { color: var(--sun); }
+/* (a finger scrolls the list when it is longer than the screen: every element has touch-action: none) */
+#roster, #roster * { touch-action: pan-y; }
 
 /* checkpoint split, under the lap panel */
 #lapsplit { left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 150px); transform: translateX(-50%); display: flex; align-items: baseline; gap: 10px; white-space: nowrap;
@@ -547,7 +549,10 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i.behind { color: #ff5a6e; }
 :is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 3px 0 0; padding: 0; gap: 1px; max-height: 42vh; overflow: hidden; }
+/* desktop: from the minimap up, the count, your line, then the names (the first just over your line) and the
+   notes on top; how many names fit is worked out in src/net/people.js */
+body:not(.touch) #people { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden; }
 /* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
    lap timer (top centre, var(--lapw) wide, its right edge at var(--lapr)) */
 body.touch #people { display: flex; flex-direction: column; align-items: flex-start;
@@ -730,6 +735,11 @@ body.touch #ctlbtn { display: none; }
   width: min(620px, 46vw, calc(50vw - 210px)); max-height: 48vh; overflow: hidden; padding: 12px 18px; border-radius: 18px; background: rgba(18, 6, 43, .55);
   font-size: clamp(11px, 1vw, 15px); font-variant-numeric: tabular-nums; }
 #rlist .hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+/* desktop: the panel reaches down to the online count (its height set in src/net/people.js); a longer list
+   scrolls inside it and keeps your own row in view (keepScroll in racemode.js) */
+body:not(.touch) #rlist:not(.hidden) { display: flex; flex-direction: column; }
+body:not(.touch) #rlist .tb { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .5) transparent; }
+body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rlist h3 { margin: 0; flex: 1; font: 400 1.3em 'Russo One', var(--font); letter-spacing: .12em; color: var(--sun); }
 #rlist h3 .dot { color: #ff2a2a; text-shadow: 0 0 8px #ff2a2a; font-weight: 400; }
 #rlist .pos { font: 400 2em 'Russo One', var(--font); color: #fff; text-shadow: 2px 2px 0 var(--hot); }

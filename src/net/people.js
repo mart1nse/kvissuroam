@@ -1,7 +1,9 @@
 // Who is online, next to the minimap: "3 ONLINE" plus small notes as people join and leave.
 // Only players whose car is on the map count (Martin, 2026-11-17: the count showed people who sat in
-// the menu or had the game in a background tab). On desktop every driver is listed above the count,
-// growing upwards, so a glance tells 2 from 20. On phones (Martin, 2026-11-21) a short list sits under
+// the menu or had the game in a background tab). On desktop (Martin, 2026-11-24) the list grows up from
+// the minimap: the count, your line over it, then the names going up as far as there is room under the race
+// button (its vote line and chip), then "+N MORE". While the race list or results show there, only the
+// count and your line stay, and the race panel gets the room down to them. On phones (Martin, 2026-11-21) a short list sits under
 // the count, in the gap between the minimap and the rev counter: four names, then "+N MORE".
 // On the big map a list of everyone online; tapping a name centres the map on that car.
 // While a race vote has votes in (Martin, 2026-11-23), each name that may vote gets a small mark in
@@ -16,7 +18,7 @@ import { escapeHtml } from '../race/race.js';
 import { CARS } from '../cars/specs.js';
 
 const NOTE_MS = 6000;
-const LIST_MAX = 24;              // names listed on desktop before "+N MORE"
+const LIST_MAX = 60;              // names listed on desktop at most (fewer when they would not fit)
 const LIST_MAX_PHONE = 5;
 export const ME_COLOUR = '#ffd45e';
 // the thumbs up button (src/kudos.js), the same neon thumb as the sign in the back window
@@ -57,7 +59,25 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   });
   let shown = [], myCar = null, rosterKey = '';
   const touch = document.body.classList.contains('touch');
-  const listMax = touch ? LIST_MAX_PHONE : LIST_MAX;
+  // desktop: how many rows fit between your line and the race button, and whether the race list is up
+  // (read from the page at most three times a second, never every frame)
+  let fitAt = 0, fitRows = LIST_MAX, raceList = false;
+  function fit() {
+    const t = performance.now();
+    if (t < fitAt) return;
+    fitAt = t + 330;
+    const rl = document.getElementById('rlist'), rb = document.getElementById('racebox');
+    raceList = !!rl && !rl.classList.contains('hidden');
+    const bottom = box.getBoundingClientRect().bottom;
+    if (!bottom) return;
+    const top = rb ? rb.getBoundingClientRect().bottom + 12 : 12;
+    const fs = parseFloat(getComputedStyle(box).fontSize) || 12;
+    const rowH = elWho.firstElementChild?.getBoundingClientRect().height || fs * 1.35;
+    const under = elCount.offsetHeight + elMe.offsetHeight + feed.offsetHeight + 6;   // count, you, notes
+    fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
+    // the race panel ends above the count and your line
+    if (raceList) rl.style.maxHeight = `${Math.max(fs * 10, bottom - under - rl.getBoundingClientRect().top - 10)}px`;
+  }
   // (the thumbs up button, before the click to watch: on a phone too)
   box.addEventListener('click', kuClick);
   // (desktop: click a name to watch that car, your own line to come back)
@@ -82,6 +102,8 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const elMe = box.querySelector('.me');
   let last = '', meLast = '';
   function refresh() {
+    if (!touch) fit();
+    const listMax = touch ? LIST_MAX_PHONE : raceList ? 0 : fitRows;
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
@@ -96,7 +118,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (Martin, 2026-11-23) those in the garage are listed too, greyed, after the drivers on the map
     const inGarage = mp.online ? mp.roster().filter(idle) : [];
     const kuKey = onKudos ? drivers.filter((p) => mp.kudosWait(p.id) > 0).map((p) => p.id).join(',') : '';
-    const key = `${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.wn + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.w).join(',')}`;
+    const key = `${listMax}|${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.wn + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.w).join(',')}`;
     if (key === last) return;
     last = key;
     // the city map's list follows the connection (lost, back) and the vote while the map is open
@@ -105,7 +127,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
-    if (n < 2 && !inGarage.length) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
+    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);

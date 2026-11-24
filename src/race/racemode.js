@@ -294,7 +294,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       line += isTouch ? '' : ' · NOT IN THE VOTE';
     }
     const lab = isTouch ? label.replace(' ', '<br>') : label;
-    if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = lab; btn.className = cls; }
+    if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = `<span>${lab}</span>`; btn.className = cls; }
     btn.classList.toggle('away', away);
     show(btn, !away || joinable(ph));
     setText(sub, away && !joinable(ph) ? '' : line);
@@ -306,7 +306,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       setText(count.querySelector('.t2'), String(Math.max(1, Math.ceil((r.tGrid - t) / 1000))));
       setText(count.querySelector('.names'), r.racers.map((x) => `<span class="${x.id === mp.id ? 'me' : ''}">${escapeHtml(x.name)}${x.id === mp.id ? ' (you)' : ''}</span>`).join('') + (mine ? '' : '<span class="wait">+ you?</span>'));
       const j = count.querySelector('[data-r="join"]');
-      setText(j, mine ? "✓ YOU'RE IN" : 'JOIN RACE');
+      setText(j, mine ? "<span>✓ YOU'RE IN</span>" : '<span>JOIN RACE</span>');
       j.className = mine ? 'in' : 'go';
     }
 

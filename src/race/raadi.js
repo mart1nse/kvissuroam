@@ -1269,14 +1269,14 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);
             try { localStorage.setItem(KEY, JSON.stringify(runs)); } catch { /* private mode */ }
-            const rec = !pb || run.ms < pb.ms;
+            const better = !pb || run.ms < pb.ms;      // (not `rec`: that is the lap recorder, used above in this block)
             // the car's stage record: under everyone's best there, when the server's board is at hand
             const word = online?.() && (!all || run.ms < all.ms) ? 'STAGE RECORD' : 'YOUR BEST';
             st.phase = 'done'; st.cool = true; st.doneT = t;
-            elMsg.innerHTML = rec ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}${word}</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
-            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${rec ? ` · ${word}` : ''}`, 4500);
+            elMsg.innerHTML = better ? `FINISH · <i class="ahead">${pb ? `−${((pb.ms - run.ms) / 1000).toFixed(2)} · ` : ''}${word}</i>` : `FINISH · <i class="behind">+${((run.ms - pb.ms) / 1000).toFixed(2)}</i>`;
+            toast(`STAGE TIME · ${fmtTime(t)}${st.pen ? ` · INCL. +${st.pen} S` : ''}${better ? ` · ${word}` : ''}`, 4500);
             showAgain();
-            onRun?.('finish', run, { rec, record: word === 'STAGE RECORD', trace });
+            onRun?.('finish', run, { rec: better, record: word === 'STAGE RECORD', trace });
           }
         }
       }

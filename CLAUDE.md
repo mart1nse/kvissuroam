@@ -10,7 +10,7 @@ enough to make that happen at DRIVE.
   budget figure only with a reason in the commit. It measures a phone's memory (the iPhone 13 crashes)
   and drives 4.5 km through the centre counting how often and how long the game stands still (the
   freeze frames), and counts what the lowest graphics level draws at the Riia and Turu junction (old
-  laptops at 10 to 18 FPS, 21 Nov). It also drives a lap of the race track and counts the short hitches
+  laptops at 10 to 18 FPS, 21 Nov), and along the Raadi stage at the lowest and the top level (24 Nov). It also drives a lap of the race track and counts the short hitches
   (the page busy for over 25 ms, frames over 33 ms) and the pictures sent to the graphics card (the slight
   microfreezes on a MacBook Pro M3 after a night of new house fronts along the track, 22 Nov), and a full run
   of the Raadi rally stage (`?raadi=1`: in as the stage builds itself, the start clock, the stage to past the

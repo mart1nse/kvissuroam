@@ -56,6 +56,8 @@
 //            (this check's own view of it reads 386 and 634). New things
 //            must not make the lowest level heavier again (far-away things, things without a simple far
 //            form, shadows that ignore the level).
+//            The same along the Raadi stage (three views, the heaviest counts), and there also at a desktop's top
+//            level: the open park shows much of the map's ground at once (Martin, 24 Nov 2026).
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
@@ -225,15 +227,11 @@ async function waitForServer(url, ms) {
     // (light mode + the extra low setup + GRAPHICS LOW, standing at the Riia and Turu junction, the heaviest
     // view of the centre: pieces drawn and triangles in one frame. No frame rate can be measured without
     // a graphics card, but these two are what an old laptop's chip pays for.)
-    try {
-      const old = await browser.newContext({ viewport: { width: 1366, height: 700 } });
-      await old.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); localStorage.setItem('kvissuroam.gfx', 'low'); });
-      const q = await old.newPage();
-      await q.goto(`${url}?lite&xlow`, { timeout: 180000 });
-      await q.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
-      await q.evaluate(() => __game.startDriving());
-      await q.waitForTimeout(6000);
-      await q.evaluate(async () => { await __game.world.loadAround(1930, 3160, 260); __game.place({ x: 1930, z: 3160, yaw: Math.atan2(-50, 50) }); });
+    // And the same along the Raadi rally stage (?raadi=1), at this level and at a desktop's top level: three
+    // views along the stage, the heaviest counts (Martin, 24 Nov 2026: "Raadi additional nightly checks yes").
+    // The park is open ground, so far more of the map's ground is in view than in the centre; new scenery
+    // there must not quietly make the stage heavier to draw.
+    const settle = async (q) => {
       // until nothing more is being built or let into the picture
       let same = 0, last = '';
       for (let k = 0; k < 30 && same < 3; k++) {
@@ -241,8 +239,48 @@ async function waitForServer(url, ms) {
         const st = await q.evaluate(() => [__game.jobs.pending, __game.renderer.info.render.calls, __game.renderer.info.memory.geometries].join('|'));
         same = st === last ? same + 1 : 0; last = st;
       }
-      out.lowest = await q.evaluate(() => { const i = __game.renderer.info, l = __game.gfx.levels[__game.gfx.level]; return { calls: i.render.calls, ktris: Math.round(i.render.triangles / 1000), level: __game.gfx.level, dpr: l.dpr, far: __game.camera.far }; });
+      return q.evaluate(() => { const i = __game.renderer.info, l = __game.gfx.levels[__game.gfx.level]; return { calls: i.render.calls, ktris: Math.round(i.render.triangles / 1000), level: __game.gfx.level, dpr: l.dpr, far: __game.camera.far }; });
+    };
+    const stageViews = async (q) => {
+      // the start line, a third and two thirds along (facing the way the stage goes): the heaviest of the three
+      const spots = await q.evaluate(() => {
+        const s = __game.stage().data, P = s.pts, N = P.length;
+        return [s.start, Math.floor(N * 0.35), Math.floor(N * 0.7)].map((i) => { const j = Math.min(i + 3, N - 1); return [P[i][0], P[i][1], Math.atan2(P[j][0] - P[i][0], -(P[j][1] - P[i][1]))]; });
+      });
+      let worst = null;
+      for (const [x, z, yaw] of spots) {
+        await q.evaluate(async ([x, z, yaw]) => { await __game.world.loadAround(x, z, 300); __game.place({ x, z, yaw }); }, [x, z, yaw]);
+        const r = await settle(q);
+        r.at = [Math.round(x), Math.round(z)];
+        if (!worst || r.calls > worst.calls) worst = { ...r, ktris: Math.max(r.ktris, worst?.ktris || 0) };
+        else worst.ktris = Math.max(worst.ktris, r.ktris);
+      }
+      return worst;
+    };
+    try {
+      const old = await browser.newContext({ viewport: { width: 1366, height: 700 } });
+      await old.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); localStorage.setItem('kvissuroam.gfx', 'low'); });
+      const q = await old.newPage();
+      await q.goto(`${url}?lite&xlow&raadi=1`, { timeout: 180000 });
+      await q.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
+      await q.evaluate(() => __game.startDriving());
+      await q.waitForTimeout(6000);
+      await q.evaluate(async () => { await __game.world.loadAround(1930, 3160, 260); __game.place({ x: 1930, z: 3160, yaw: Math.atan2(-50, 50) }); });
+      out.lowest = await settle(q);
+      try { out.lowestStage = await stageViews(q); } catch (e) { out.lowestStage = null; console.warn('the lowest level at Raadi failed:', e.message); }
       await old.close();
+      // a desktop at its top level along the stage
+      try {
+        const top = await browser.newContext({ viewport: { width: 1366, height: 700 } });
+        await top.addInitScript(() => { localStorage.setItem('kvissuroam.car', 'm3'); localStorage.setItem('kvissuroam.gfx', 'high'); });
+        const t = await top.newPage();
+        await t.goto(`${url}?raadi=1`, { timeout: 180000 });
+        await t.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
+        await t.evaluate(() => __game.startDriving());
+        await t.waitForTimeout(6000);
+        out.topStage = await stageViews(t);
+        await top.close();
+      } catch (e) { out.topStage = null; console.warn('the top level at Raadi failed:', e.message); }
     } catch (e) { out.lowest = null; console.warn('the lowest level pass failed:', e.message); }
 
     await browser.close(); browser = null;
@@ -292,6 +330,10 @@ async function waitForServer(url, ms) {
   checks.push(
     ['lowest graphics level at the Riia and Turu junction: pieces drawn in a frame', out.lowest?.calls, budget.lowest.calls],
     ['lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands)', out.lowest?.ktris, budget.lowest.kTriangles],
+    ['lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame', out.lowestStage?.calls, budget.stageDraw.lowestCalls],
+    ['lowest graphics level along the Raadi stage: triangles in a frame (thousands)', out.lowestStage?.ktris, budget.stageDraw.lowestKTriangles],
+    ['top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame', out.topStage?.calls, budget.stageDraw.topCalls],
+    ['top graphics level along the Raadi stage: triangles in a frame (thousands)', out.topStage?.ktris, budget.stageDraw.topKTriangles],
   );
   for (const who of ['desktop', 'phone']) {
     const D = out.drive[who], B = budget.drive[who];
@@ -363,6 +405,7 @@ async function waitForServer(url, ms) {
   }
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('lowest level', JSON.stringify(out.lowest));
+  console.log('Raadi stage drawn', JSON.stringify({ lowest: out.lowestStage, top: out.topStage }));
   console.log('phone', JSON.stringify({ menu: out.phone.menu, driveSpike: out.phone.driveSpike, drive: out.phone.drive, cars: out.phone.cars, jump: out.phone.jump }));
   if (out.over.some((n) => n.startsWith('phone ') && !n.startsWith('phone drive'))) console.log('biggest canvas makers at DRIVE:\n' + (out.phone.canvases || []).join('\n'));
   if (out.over.some((n) => n.includes('through the centre'))) console.log('biggest canvas makers after the centre:\n' + (out.phone.centreCanvases || []).join('\n'));

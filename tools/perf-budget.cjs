@@ -61,6 +61,14 @@
 //            form, shadows that ignore the level).
 //            The same along the Raadi stage (three views, the heaviest counts), and there also at a desktop's top
 //            level: the open park shows much of the map's ground at once (Martin, 24 Nov 2026).
+//   many players online (tools/crowd-hitch.cjs, as a desktop, drawing off): 60 made-up players, a pack around our
+//            standing car and the rest round the lap, positions in bundles ten times a second as the server sends
+//            them, someone coming or going every 4 s, changing car, stepping into the garage, a race vote filling up,
+//            the pack sliding now and then; 40 s with a CPU profile. Judged: how often the online code (the player
+//            list, the other cars, their sounds and tyre marks) kept the page busy for over 5 ms in one go, and its most.
+//            Why: with 55 to 78 online the picture hitched now and then on a fast desktop (Martin, 24 Nov 2026: 59
+//            FPS, late frames 1 in 2 s, longest 67 ms). The player list was made anew, sixty rows, whenever anybody
+//            came, went, changed car or voted, and read back at once: 5 to 15 ms each time, 56 times in 40 s.
 // Each figure is compared with tools/perf-budget.json; the script exits 1 when one is over, and then lists
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
@@ -68,7 +76,7 @@
 // What it cannot see: headless draws without a graphics card (SwiftShader), so real frame rates and the
 // graphics card's own time are not measured (what is sent to it on the lap is counted, not how long a
 // real card takes over it), the phone is Chromium dressed as an
-// iPhone and not Safari's engine, and other players joining are not played through.
+// iPhone and not Safari's engine, and the other players are a made-up crowd (no real server, no drawing).
 // The check runs every night after a day with changes (a scheduled task); its history is kept on the
 // perf-reports branch.
 const { spawn } = require('child_process');
@@ -76,6 +84,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium, devices } = require('playwright');
 const { drive, summarise, report } = require('./freeze-profile.cjs');
+const { crowd, summarise: crowdSummary, report: crowdReport } = require('./crowd-hitch.cjs');
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -339,6 +348,12 @@ async function waitForServer(url, ms) {
         out.driveReport[who] = report(r, 12).slice(3);
       } catch (e) { out.drive[who] = null; out.driveReport[who] = [`the ${who} drive failed: ${e.message}`]; }
     }
+    // ---- many players online (tools/crowd-hitch.cjs): 60 made-up players around a standing car for 40 s
+    try {
+      const r = await crowd({ port: PORT, n: 60, secs: 40 });
+      out.crowd = { ...crowdSummary(r), errors: r.errs.slice(0, 5) };
+      out.crowdReport = crowdReport(r, 8);
+    } catch (e) { out.crowd = null; out.crowdReport = `the many-players run failed: ${e.message}`; }
   } finally {
     await browser?.close();
     vite.kill();
@@ -431,6 +446,17 @@ async function waitForServer(url, ms) {
       ['stage drive: game code in a frame, the longest (ms), not judged', D?.jsMax, null],
     );
   }
+  {
+    // many players online (see the top)
+    const D = out.crowd, B = budget.crowd;
+    checks.push(
+      ['60 players online: times the online code kept the page busy for over 5 ms in 40 s', D?.online5, B.onlineOver5ms],
+      ['60 players online: the online code\'s most in one stretch (ms)', D?.onlineMax, B.onlineLongestMs],
+      ['60 players online: page errors', D ? D.errors.length : null, 0],
+      ['60 players online: the online code per frame (ms), not judged', D?.onlineMsPerFrame, null],
+      ['60 players online: times the game was busy for over 25 ms, not judged', D?.busy25, null],
+    );
+  }
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {
     const bad = v == null || (max != null && v > max);
@@ -445,6 +471,8 @@ async function waitForServer(url, ms) {
     // what ran in the busy stretches, when a drive figure is over (or the drive failed)
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));
   }
+  if (out.crowd) console.log(`60 players online ${JSON.stringify(out.crowd)}`);
+  if (out.over.some((n) => n.startsWith('60 players')) && out.crowdReport) console.log(`what the page was busy with, 60 players online:\n${out.crowdReport}`);
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));
   console.log('lowest level', JSON.stringify(out.lowest));
   console.log('Raadi stage drawn', JSON.stringify({ lowest: out.lowestStage, top: out.topStage }));

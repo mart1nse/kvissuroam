@@ -73,6 +73,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     if (!bottom) return;
     const fs = parseFloat(getComputedStyle(box).fontSize) || 12;
     const rowH = elWho.firstElementChild?.getBoundingClientRect().height || fs * 1.35;
+    rowPx = rowH + 1;                      // (the gap between rows: 1px)
     const under = elCount.offsetHeight + elMe.offsetHeight + feed.offsetHeight + 6;   // count, you, notes
     // the race panel ends above the count and your line at the lowest, and with others online takes at most
     // about 60% of the room (it scrolls to your row); the names fill what is left under it
@@ -88,13 +89,18 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   }
   // a soft fade at the end that has more names past it (desktop: first name at the bottom, so scrollTop
   // is 0 there and negative scrolled up)
+  // (Martin 2026-11-24, 55 online: reading the list's height straight after changing it made the browser lay the
+  // page out there and then, 5 to 15 ms each time somebody came, went or voted. The fade goes by the rows'
+  // count and height and by where the wheel left the list, which the scroll event gives when it is laid out.)
+  let scrolled = 0, rowPx = 0;
   function edges() {
-    const over = elWho.scrollHeight - elWho.clientHeight;
-    const up = -elWho.scrollTop;
-    elWho.classList.toggle('more-up', over > 2 && up < over - 2);
-    elWho.classList.toggle('more-down', over > 2 && up > 2);
+    const over = rowCount * (rowPx || 16) - fitRows * (rowPx || 16);
+    const up = -scrolled;
+    const a = over > 2 && up < over - 2, b = over > 2 && up > 2;
+    if (a !== elWho.classList.contains('more-up')) elWho.classList.toggle('more-up', a);
+    if (b !== elWho.classList.contains('more-down')) elWho.classList.toggle('more-down', b);
   }
-  if (!touch) elWho.addEventListener('scroll', edges, { passive: true });
+  if (!touch) elWho.addEventListener('scroll', () => { scrolled = elWho.scrollTop; edges(); }, { passive: true });
   // (the thumbs up button, before the click to watch: on a phone too)
   box.addEventListener('click', kuClick);
   // (desktop: click a name to watch that car, your own line to come back)
@@ -117,7 +123,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     return `<small class="rec">${car ? `<span class="rc">${escapeHtml(car)}</span>` : ''}${escapeHtml(words.slice(car.length))}${tm ? ` <b>${tm}</b>` : ''}</small>`;
   };
   const elMe = box.querySelector('.me');
-  let last = '', meLast = '';
+  let last = '', meLast = '', dirty = false;
   function refresh() {
     if (!touch) fit();
     const listMax = touch ? LIST_MAX_PHONE : fitRows;
@@ -144,7 +150,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elNum.textContent = `${n} ONLINE`;
     elCount.classList.toggle('solo', n === 1);
     // the list of drivers, shown once somebody else is driving
-    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); elWho.innerHTML = ''; return; }
+    if ((n < 2 && !inGarage.length) || !listMax) { elWho.classList.add('hidden'); clearRows(); return; }
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);
@@ -152,16 +158,42 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (desktop: every name, scrolled with the wheel; phones: a few, then "+N MORE")
     const cap = touch ? listMax : LIST_ALL;
     const more = sorted.length > cap ? sorted.length - cap + 1 : 0;
-    const rows = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
+    const want = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';
-      return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : ''}</li>`;
+      return { id: p.id, cls, html: `${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : ''}` };
     });
-    if (more) rows.push(`<li class="more">+${more} MORE</li>`);
-    elWho.innerHTML = rows.join('');
+    if (more) want.push({ id: '', cls: 'more', html: `+${more} MORE` });
+    place(want);
     elWho.classList.remove('hidden');
     if (!touch) edges();
   }
+  // The rows, each kept from one change to the next (Martin 2026-11-24, 55 online: the whole list was made anew,
+  // sixty rows with a thumb picture each, whenever anybody came, went, changed car or voted, and the picture
+  // hitched). Only a row whose words changed is rewritten, and rows are moved only when the order changed.
+  const rowsById = new Map();          // id ('' the "+N MORE" line) -> { li, cls, html }
+  let rowCount = 0;
+  function place(want) {
+    const keep = new Set();
+    let at = elWho.firstChild;
+    for (const w of want) {
+      keep.add(w.id);
+      let r = rowsById.get(w.id);
+      if (!r) {
+        const li = document.createElement('li');
+        if (w.id) li.dataset.id = w.id;
+        r = { li, cls: null, html: null };
+        rowsById.set(w.id, r);
+      }
+      if (r.cls !== w.cls) { r.cls = w.cls; r.li.className = w.cls; }
+      if (r.html !== w.html) { r.html = w.html; r.li.innerHTML = w.html; }
+      if (r.li !== at) elWho.insertBefore(r.li, at);
+      else at = at.nextSibling;
+    }
+    for (const [id, r] of rowsById) if (!keep.has(id)) { r.li.remove(); rowsById.delete(id); }
+    rowCount = want.length;
+  }
+  function clearRows() { if (rowsById.size) { for (const r of rowsById.values()) r.li.remove(); rowsById.clear(); } rowCount = 0; }
 
   function note(text, kind) {
     const li = document.createElement('li');
@@ -181,13 +213,17 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       else if (kind === 'leave') note(`${name}${twin} left`, 'leave');
       else if (kind === 'rename') note(`${old} is now ${name}`, 'rename');
       else if (kind === 'kudos') { note(`${name} gave you a thumbs up`, 'kudos'); return; }
-      // the player list changes right after this event; look once it has
-      queueMicrotask(() => {
-        last = ''; refresh();
-        if (myCar && document.querySelector('#bigmap:not(.hidden)')) this.showRoster();
-      });
+      // the player list changes right after this event: looked at in the next frame, once for all the events
+      // that came in the meantime (with many online several come in one frame)
+      dirty = true;
     },
-    update: refresh,
+    update() {
+      if (dirty) {
+        dirty = false; last = '';
+        if (myCar && !list.classList.contains('hidden')) api.showRoster();
+      }
+      refresh();
+    },
     // big map opened: list everyone driving, then those connected but not on the map (menu,
     // background tab), greyed out and not counted
     showRoster(car = myCar) {

@@ -18,7 +18,8 @@ import { escapeHtml } from '../race/race.js';
 import { CARS } from '../cars/specs.js';
 
 const NOTE_MS = 6000;
-const LIST_MAX = 60;              // names listed on desktop at most (fewer when they would not fit)
+const LIST_MAX = 60;              // rows of room on desktop at most (the list scrolls past them)
+const LIST_ALL = 120;             // names listed on desktop at most (the server lets 100 in)
 const LIST_MAX_PHONE = 5;
 export const ME_COLOUR = '#ffd45e';
 // the thumbs up button (src/kudos.js), the same neon thumb as the sign in the back window
@@ -81,7 +82,19 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     }
     const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
+    // (Martin, 2026-11-24: all names listed, the mouse wheel scrolls those that do not fit; no scrollbar)
+    const mh = `${Math.round(fitRows * rowH)}px`;
+    if (elWho.style.maxHeight !== mh) { elWho.style.maxHeight = mh; edges(); }
   }
+  // a soft fade at the end that has more names past it (desktop: first name at the bottom, so scrollTop
+  // is 0 there and negative scrolled up)
+  function edges() {
+    const over = elWho.scrollHeight - elWho.clientHeight;
+    const up = -elWho.scrollTop;
+    elWho.classList.toggle('more-up', over > 2 && up < over - 2);
+    elWho.classList.toggle('more-down', over > 2 && up > 2);
+  }
+  if (!touch) elWho.addEventListener('scroll', edges, { passive: true });
   // (the thumbs up button, before the click to watch: on a phone too)
   box.addEventListener('click', kuClick);
   // (desktop: click a name to watch that car, your own line to come back)
@@ -136,8 +149,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);
     const sorted = [...drivers.filter((p) => !idle(p)).sort(byName), ...drivers.filter(idle).sort(byName), ...inGarage.filter((p) => !ids.has(p.id)).sort(byName)];
-    const more = sorted.length > listMax ? sorted.length - listMax + 1 : 0;
-    const rows = sorted.slice(0, more ? listMax - 1 : listMax).map((p) => {
+    // (desktop: every name, scrolled with the wheel; phones: a few, then "+N MORE")
+    const cap = touch ? listMax : LIST_ALL;
+    const more = sorted.length > cap ? sorted.length - cap + 1 : 0;
+    const rows = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';
       return `<li data-id="${escapeHtml(p.id)}"${cls ? ` class="${cls}"` : ''}>${mark(vm, p.id)}${g ? '' : kuBtn(p)}<i style="--c:${p.colour}"></i>${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : ''}</li>`;
@@ -145,6 +160,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     if (more) rows.push(`<li class="more">+${more} MORE</li>`);
     elWho.innerHTML = rows.join('');
     elWho.classList.remove('hidden');
+    if (!touch) edges();
   }
 
   function note(text, kind) {

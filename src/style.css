@@ -556,7 +556,14 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 /* desktop: from the minimap up, the count, your line, then the names (the first just over your line) and the
    notes on top; how many names fit is worked out in src/net/people.js */
 body:not(.touch) #people { display: flex; flex-direction: column-reverse; align-items: flex-start; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden; }
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
+  pointer-events: auto; overscroll-behavior: contain; scrollbar-width: none; }
+/* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
+body:not(.touch) #people .who::-webkit-scrollbar { display: none; }
+body:not(.touch) #people .who > li { flex-shrink: 0; }
+body:not(.touch) #people .who.more-up { -webkit-mask-image: linear-gradient(transparent, #000 1.6em); mask-image: linear-gradient(transparent, #000 1.6em); }
+body:not(.touch) #people .who.more-down { -webkit-mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(#000 calc(100% - 1.6em), transparent); }
+body:not(.touch) #people .who.more-up.more-down { -webkit-mask-image: linear-gradient(transparent, #000 1.6em, #000 calc(100% - 1.6em), transparent); mask-image: linear-gradient(transparent, #000 1.6em, #000 calc(100% - 1.6em), transparent); }
 /* phones: the names go under the count and YOU line, small, and never wider than the gap up to the
    lap timer (top centre, var(--lapw) wide, its right edge at var(--lapr)) */
 body.touch #people { display: flex; flex-direction: column; align-items: flex-start;

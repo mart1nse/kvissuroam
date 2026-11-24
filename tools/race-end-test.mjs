@@ -47,4 +47,12 @@ desk.alarm();
 assert.ok(!desk.s.racers.find((r) => r.id === 'd').out, 'inside the grace');
 clock += 10000; alive(); desk.alarm();
 assert.equal(desk.s.racers.find((r) => r.id === 'd').out, 'left');
+// the car stays the one raced in: a change after the finish is not shown in the results
+{
+  const r = desk.s.racers.find((x) => x.id === 'a') || null;
+  if (desk.s.phase === 'on' && r) {
+    sockets[0].a.car = 'citywide'; desk.changed(sockets[0].a);
+    assert.equal(r.car, 'w201', 'car kept after the lights');
+  }
+}
 console.log('ok race end');

@@ -89,8 +89,9 @@ STAGE.apex.sort((p, q) => p[0] - q[0]);
 // arrow from the bale to the road: "move the bale a touch more to the inside and extend the tape to the bale").
 // And the bale at the east loop's fork onto the corner's tip (24 Nov 11:12, an arrow from the bale to the apex).
 // Then 0.7 m back from that tip, away from the road towards its tape's end (24 Nov 12:52: "one small bale position
-// change, like 0.7m", with the map at 14:23); its inside is judged from where it now stands, as everywhere.
-const BALE_IN = { 33: 0.5, 370: -0.4, 464: -0.8 };
+// change, like 0.7m", with the map at 14:23), and 0.5 m more the same way (14:42: "0,5m the arrow way"); its inside is
+// judged from where it now stands, as everywhere.
+const BALE_IN = { 33: 0.5, 370: -0.4, 464: -0.3 };
 for (const a of STAGE.apex) if (BALE_IN[a[0]]) { a[2] += -TAN[a[0]][1] * a[1] * BALE_IN[a[0]]; a[3] += TAN[a[0]][0] * a[1] * BALE_IN[a[0]]; }
 // The bale in the east loop's left hairpin a little further on, towards the turn (Martin 23 Nov 20:19, an arrow
 // from the bale along the inside: "move the haybale according to the arrow"), metres along the stage: it keeps its
@@ -175,7 +176,11 @@ const TAPE_OUT = 0.85;
 const NO_WIDE = [205, 429, 523, 550, 854], NO_APEX = [];
 //    Then, with the tape standing there (16:24): "In the start, allow to break the tape, penalize only 2 m to the
 //    left from the tape": the tape stays 1.35 m off the lane (`tape`) and the seconds begin 2 m beyond it.
-const WIDE_AT = { 33: { from: START + 2, to: 30, pen: [[7.35, 5], [3.35, 2]], tape: 1.35 }, 402: { from: 371 } };
+// And the way in to the wood loop's right-hander, past the new boulder (Martin 24 Nov 14:45: "cutting the tape here ...
+// should result already with the 5s penalty when cutting it even slightly. i can pass the new boulder on the left
+// with only 2s penalty"): the left-hand bend before it is its way in, so the tape there starts at 758 and crossing it
+// costs +5 s at once, +10 s deeper.
+const WIDE_AT = { 33: { from: START + 2, to: 30, pen: [[7.35, 5], [3.35, 2]], tape: 1.35 }, 402: { from: 371 }, 794: { from: 758, pen: [[7.2, 10], [3.6, 5]] } };
 // the way in to each corner: [first index, last index, side of the turn, steps], clear of the corner before it
 const ENTRY = STAGE.apex.map(([k, sd], n) => {
   const own = WIDE_AT[k] || {};

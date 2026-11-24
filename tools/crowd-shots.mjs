@@ -1,6 +1,6 @@
 // Pictures of a busy server: 40 online (38 made-up drivers as WebSocket bots and two pages, a desktop
 // and a phone) on the real server (npx wrangler dev --port 8787), then a race of 20 cars, running and finished.
-//   node tools/crowd-shots.mjs [out=dir] [bots=38] [racers=18] [w=1280 h=720 (the desktop window)]
+//   node tools/crowd-shots.mjs [out=dir] [bots=38] [racers=18] [w=1280 h=720 (the desktop window)] [pw=844 ph=390 (the phone)]
 import { createRequire } from 'module';
 import fs from 'fs';
 const { chromium, devices } = createRequire(import.meta.url)('playwright');
@@ -64,7 +64,7 @@ for (let k = 0; k < NB; k++) {
 // ---- the two pages
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const desk = await (await b.newContext({ viewport: { width: +arg('w', 1280), height: +arg('h', 720) }, deviceScaleFactor: 2 })).newPage();
-const phone = await (await b.newContext({ ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 2 })).newPage();
+const phone = await (await b.newContext({ ...devices['Pixel 7'], viewport: { width: +arg('pw', 844), height: +arg('ph', 390) }, deviceScaleFactor: 2 })).newPage();
 const pages = { desktop: desk, phone };
 for (const [n, p] of Object.entries(pages)) p.on('pageerror', (e) => console.log(n, 'PAGEERR', e.message));
 await Promise.all(Object.entries(pages).map(async ([n, p]) => {
@@ -130,5 +130,8 @@ await phone.evaluate(() => __game.mp().raceSend({ t: 'rf', ms: 201930 }));
 await desk.waitForTimeout(2500);
 console.log('race over', !race.on, race.last && race.last.racers.length);
 await shot('6-race-results');
+// the results tuck away after 10 s: the race line (on phones with the way back to the results at its end)
+await desk.waitForTimeout(9000);
+await shot('7-after-results');
 for (const w of bots) w.ws.close();
 await b.close();

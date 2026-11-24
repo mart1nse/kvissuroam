@@ -225,13 +225,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       try { m = JSON.parse(e.data); } catch { return; }
       onMessage(m);
     };
-    sock.onclose = () => {
+    sock.onclose = (e) => {
       clearInterval(ping); clearInterval(clockTimer);
       online = false;
       if (ws === sock) ws = null;
       for (const id of [...others.keys()]) drop(id);
+      // the server was full and we sat in the garage, the menu or another tab for over 2 minutes: our place
+      // went to someone waiting, and we join again the moment we are back on the map (see setWhere)
+      released = e?.code === 4002 && where !== 'map' && where !== 'watch';
       onPeople?.('count');
-      schedule();
+      if (released) clearTimeout(wsRetry); else schedule();
     };
     sock.onerror = () => {};
   }
@@ -242,6 +245,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // The server full (100 online, Martin 2026-11-24): drive offline and ask again every 20 to 40 s (spread,
   // so a freed place is not fought over by everyone waiting at the same moment).
   let full = false;
+  let released = false;
   function schedule() {
     retry = Math.min(retry * 2, 15);
     clearTimeout(wsRetry);
@@ -861,6 +865,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (w !== 'watch') on = '';
       if (w === where && on === whereOn) return;
       where = w; whereOn = on;
+      if (released && (w === 'map' || w === 'watch')) { released = false; retry = 1; connect(); return; }
       if (!STEALTH) send({ t: 'at', w, ...(on ? { on } : {}) });
     },
     // another player as this page holds them (pose, car, colour, name tag), for the spectator camera

@@ -69,6 +69,8 @@ export class RaceDesk {
     const ping = this.lobby.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
     return Math.max(ping, a?.at || 0) > now - 80000;
   }
+  // in the race now (on the grid or driving it, not finished or out): keeps the place even from the garage
+  racing(id) { return this.s.phase === 'on' && this.s.racers.some((r) => r.id === id && !r.out && r.ms == null); }
   // everyone connected and driving (not a ghost), id -> attachment
   drivers() {
     const out = new Map();

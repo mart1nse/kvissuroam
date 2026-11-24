@@ -230,10 +230,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // 4, 8 and then 15 s, and at once when the network or the tab comes back (Martin, 2026-11-23: offline
   // for up to a minute after a deploy, while the game looked as if nothing was wrong)
   let wsRetry = 0;
+  // The server full (100 online, Martin 2026-11-24): drive offline and ask again every 20 to 40 s (spread,
+  // so a freed place is not fought over by everyone waiting at the same moment).
+  let full = false;
   function schedule() {
     retry = Math.min(retry * 2, 15);
     clearTimeout(wsRetry);
-    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, retry * 1000);
+    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, full ? 20000 + Math.random() * 20000 : retry * 1000);
   }
   const soon = () => { if (wsRetry && !document.hidden) { clearTimeout(wsRetry); wsRetry = 0; connect(); } };
   addEventListener('online', soon);
@@ -348,7 +351,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         }
         break;
       }
+      case 'full':
+        if (!full) toast(`SERVER FULL (${Number(m.max) || 100} ONLINE) · DRIVING OFFLINE, JOINING WHEN A PLACE FREES`, 5000);
+        full = true; online = false;
+        onPeople?.('count');
+        break;
       case 'welcome':
+        if (full) toast('A PLACE FREED UP · ONLINE AGAIN', 3000);
+        full = false;
         myId = m.id;
         myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
@@ -772,6 +782,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     collide,
     get name() { return name; },
     get online() { return online; },
+    // the server was full: driving offline until a place frees (see schedule)
+    get full() { return full; },
     stealth: STEALTH,
     get count() { return others.size; },
     nameReady,

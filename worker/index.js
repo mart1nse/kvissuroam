@@ -642,8 +642,9 @@ export class Lobby extends DurableObject {
       // 'watch' with on: following another player's car as a spectator
       const w = cleanWhere(m.w), on = w === 'watch' ? cleanOn(m.on) : '';
       if (!w || (w === me.w && on === (me.on || ''))) return;
-      const was = me.on;
+      const was = me.on, wasW = me.w;
       me.w = w; me.on = on || undefined; ws.serializeAttachment(me);
+      if (!me.ghost) this.race.moved(me, wasW);
       // (everyone hears "watching", and the watched players' new counts, never who watches whom)
       if (!me.ghost) { this.broadcast({ t: 'at', id: me.id, w }, ws); if (was !== me.on) this.watchTold([was, me.on]); }
     } else if (m.t === 'ku') {

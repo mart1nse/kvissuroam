@@ -1723,6 +1723,33 @@ if (window.visualViewport) {
     }, 60);
   });
 }
+// Chrome on an iPhone sometimes lays the page out wider than it shows it, so the side at the notch is cut off
+// and the page can be dragged sideways (Martin's and his son's iPhones, 22 to 24 Nov; ?vp=1 shows the sizes).
+// In landscape it shows the page between the notch and the other edge, narrower than the screen (750 of 844),
+// so a page as wide as the whole screen there is the fault: the viewport is set again so the browser lays the
+// page out anew, and the page is put back at its left edge whenever it has been dragged.
+if (/iPhone|iPod/.test(navigator.userAgent)) {
+  const vp = document.querySelector('meta[name="viewport"]');
+  const content = vp.content;
+  const notched = Math.max(screen.width, screen.height) / Math.min(screen.width, screen.height) > 2;
+  let told = false, redo = 0;
+  const fit = () => {
+    if (scrollX || scrollY) scrollTo(0, 0);
+    const wide = !content.includes('cover') && notched && innerWidth > innerHeight && innerWidth >= Math.max(screen.width, screen.height) - 1;
+    if (!wide || redo > 3) return;
+    redo++;
+    if (!told) { told = true; stats.trouble('vpWide'); }
+    vp.content = content.replace('initial-scale=1', 'initial-scale=1.0001');
+    requestAnimationFrame(() => { vp.content = content; scrollTo(0, 0); });
+  };
+  const soon = () => { redo = 0; for (const ms of [100, 500, 1500]) setTimeout(fit, ms); };
+  addEventListener('resize', soon);
+  addEventListener('orientationchange', soon);
+  addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); }, { passive: true });
+  window.visualViewport?.addEventListener('scroll', () => { if (visualViewport.scale <= 1.01 && (visualViewport.offsetLeft || scrollX)) scrollTo(0, 0); });
+  soon();
+  setInterval(fit, 3000);
+}
 
 // ---------------------------------------------------------------- frame loop
 const FLY_IN = 1;                 // seconds from the drone to behind the car

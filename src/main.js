@@ -815,6 +815,7 @@ async function boot() {
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
+    winner: (id) => !!raceMode?.winner(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
     // a thumbs up (src/kudos.js): the sign on the receiver's car wherever it is in view, ours or another's

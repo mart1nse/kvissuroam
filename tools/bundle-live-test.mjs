@@ -23,9 +23,11 @@ const at = (k, t) => {
 };
 const t0 = Date.now();
 let oldGot = { s: 0, S: 0 };
+const got = { n: 0, cars: 0, age: 0, maxAge: 0, bytes: 0, t: Date.now() };
 for (let k = 0; k < NB; k++) {
   const old = k === NB - 1;
-  const ws = new WebSocket(`ws://localhost:${port}/api/ws`);
+  // (each bot from an address of its own, as players are: the server lets 30 in from one)
+  const ws = new WebSocket(`ws://localhost:${port}/api/ws`, { headers: { 'cf-connecting-ip': `10.0.${k >> 8}.${k & 255}` } });
   ws.onopen = () => {
     ws.send(JSON.stringify({ t: 'hello', ...(old ? {} : { b: 1 }), name: `Bot${k}${old ? 'Old' : ''}`, car: ['impreza', 'f40', 'm3'][k % 3] }));
     ws.send(JSON.stringify({ t: 'drv', on: 1 }));
@@ -34,6 +36,8 @@ for (let k = 0; k < NB; k++) {
     setTimeout(tick, Math.random() * 100);
   };
   if (old) ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t in oldGot) oldGot[m.t]++; };
+  // the first bot keeps count of its bundles: how many, how full, how old their positions were at the server
+  if (k === 0) ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t !== 'S') return; got.n++; got.cars += m.b.length; for (const x of m.b) { got.age += x[2]; got.maxAge = Math.max(got.maxAge, x[2]); } got.bytes += e.data.length; };
   bots.push(ws);
 }
 
@@ -95,5 +99,6 @@ async function run(asOld) {
 const order = process.argv.includes('oldfirst') ? [true, false] : [false, true];
 for (const asOld of order) { oldGot = { s: 0, S: 0 }; console.log(JSON.stringify(await run(asOld))); }
 console.log('old bot meanwhile got', JSON.stringify(oldGot));
+{ const s = (Date.now() - got.t) / 1000; console.log('bot 0 got', JSON.stringify({ bundlesPerSec: +(got.n / s).toFixed(1), carsPerBundle: +(got.cars / got.n).toFixed(1), meanAgeMs: Math.round(got.age / got.cars), maxAgeMs: got.maxAge, kbPerSec: +(got.bytes / s / 1000).toFixed(1) })); }
 for (const w of bots) w.close();
 await b.close();

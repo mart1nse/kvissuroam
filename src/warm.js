@@ -80,6 +80,59 @@ function texturesOf(list) {
   return [...out];
 }
 
+// ---- A shader program's first use, one program at a time.
+// Compiling a material's shaders (renderer.compile) only asks the browser to build its program. The wait for
+// it comes at the program's first use: three.js then checks the build and reads the program's uniforms,
+// and the page stands still until the graphics driver has finished. Where the browser can say when a program
+// is done (KHR_parallel_shader_compile) that wait is short; iPhones could not say, and every new kind of
+// car, and the shaders of a new shadow setting, came into the picture in one frame that waited for all of
+// its programs: 24 Nov 2026, 172 of 235 phone freezes of 1 s or more drew new shaders, 80% on iPhones, most
+// at the busy start with 30 and more others online (/stats, src/stats.js freeze()). Here that first use is
+// made ahead, a program a step in the work queue (each step a frame of its own while somebody drives, all
+// at once behind the menu), so a new car or a new shadow setting is let into the picture only after it.
+const firstUsed = new WeakSet();
+function programsOf(mats) {
+  const out = [];
+  for (const m of mats) {
+    const ps = m && renderer.properties.get(m).programs;
+    if (ps) for (const p of ps.values()) if (!firstUsed.has(p)) out.push(p);
+  }
+  return out;
+}
+function materialsOf(root) {
+  const mats = new Set();
+  root.traverse((o) => { if (o.material) for (const m of [o.material].flat()) if (m) mats.add(m); });
+  return mats;
+}
+// first use of the programs of these materials (or of everything under an object): a promise for when done
+const firsts = [];               // [program, group] waiting for their first use; group: { n, done }
+function firstUse(what) {
+  if (!renderer) return Promise.resolve();
+  const mats = what && what.isObject3D ? materialsOf(what) : what;
+  const list = programsOf(mats || []);
+  if (!list.length) return Promise.resolve();
+  return new Promise((done) => {
+    const g = { n: list.length, done };
+    for (const p of list) firsts.push([p, g]);
+    if (!jobs.live || off) useFirsts(Infinity);
+  });
+}
+// first uses until `budget` ms have gone (at least one: each a frame of its own on a phone that waits for it)
+function useFirsts(budget) {
+  const t0 = now();
+  while (firsts.length) {
+    const [p, g] = firsts.shift();
+    if (!firstUsed.has(p)) {
+      firstUsed.add(p);
+      const s0 = now();
+      try { p.getUniforms(); p.getAttributes(); } catch (err) { console.warn(err); }
+      if (now() - s0 > 20) jobs.note(`shader ${p.name || String(p.cacheKey).split(',')[0]} first use`, Math.round(now() - s0));
+    }
+    if (--g.n === 0) g.done();
+    if (now() - t0 >= budget) break;
+  }
+}
+
 export const warm = {
   // send(texture): puts a picture on the graphics card
   init(r, s, c, { on = true, send: f = null } = {}) {
@@ -92,6 +145,10 @@ export const warm = {
       return this;
     };
   },
+  firstUse,
+  // compile the shaders of everything under `obj` (in the background where the browser can) and make their
+  // first use ahead (see firstUse): a promise for when it can be drawn without waiting for them
+  ready(obj) { return Promise.resolve(renderer.compileAsync(obj, camera, scene)).then(() => firstUse(obj)); },
   // what `fn` adds to the scene is held back until it is ready to be drawn
   scope(fn) { depth++; try { return fn(); } finally { depth--; } },
   get waiting() { return held.size; },
@@ -104,6 +161,7 @@ export const warm = {
   onCard(t) { return !!renderer && renderer.properties.get(t).__webglTexture !== undefined; },
   // everything into the picture at once (nobody is watching the road: the menu, a jump across the map)
   flush() {
+    useFirsts(Infinity);
     if (!held.size) return;
     for (const o of [...held.keys()]) show(o);
     fresh.length = 0; stage = null;
@@ -114,8 +172,9 @@ export const warm = {
   // clock, with the street empty meanwhile.
   tick(k = 1) {
     if (off) return;
-    if (!jobs.live) { this.flush(); return; }
+    if (!jobs.live) { useFirsts(Infinity); this.flush(); return; }
     k = Math.max(1, Math.min(32, k));
+    if (firsts.length) { useFirsts(2 * k); if (firsts.length) return; }
     if (!stage) {
       if (!fresh.length) return;
       const list = fresh.splice(0, Math.round(40 * k)).filter((o) => { if (attached(o)) return true; show(o); return false; });
@@ -127,10 +186,17 @@ export const warm = {
     }
     const S = stage;
     if (S.mats.length) {                                   // shaders still compiling: wait (4 s at most, 1 s when in a hurry)
+      if (!S.all) S.all = S.mats;
       S.mats = S.mats.filter((m) => { const p = renderer.properties.get(m).currentProgram; return p && p.isReady && !p.isReady(); });
       if (S.mats.length && now() - S.t0 < (k > 8 ? 1000 : 4000)) return;
       S.mats = [];
     }
+    if (S.all) {                                           // then their first use, a program a frame (see firstUse)
+      const all = S.all;
+      S.all = null;
+      if (programsOf(all).length) { S.firsts = true; firstUse(all).then(() => { S.firsts = false; }); }
+    }
+    if (S.firsts) return;
     if (!S.tex) S.tex = texturesOf(S.list);
     if (S.k < S.tex.length) {                              // pictures: about 1.5 megapixels a frame
       // (and no further picture once this frame's sending has taken 4 ms, times k: on a slow computer one

@@ -51,7 +51,7 @@ const MAPS = {
   // where (load, menu, drive; tab: a new tab)|time on screen|script memory MB|pictures on the card (src/stats.js)
   death: [(k) => /^(desktop|phone|tablet)\|(Windows|macOS|iOS|Android|Linux|ChromeOS|other)\|m(\?|0\.25|0\.5|1|2|4|8|16|32)\|L\d{1,2}\|c\d{1,2}\|(load|menu|drive|tab)\|t(\?|<1|1-5|5-15|15\+)\|h(\?|<200|200-400|400-700|700\+)\|x(\?|<150|150-300|300-500|500\+)$/.test(k), 2],
   // what each freeze of 1 s or more while driving had going on (src/stats.js freeze()): "device:kind:value"
-  frz: [(k) => /^(desktop|phone|tablet|other):(why:(game:(build|draw|other)|page:[A-Za-z0-9._:-]{1,40}|paint)|new:(shaders|pictures|none)|gc:yes|os:(Windows|macOS|iOS|Android|Linux|ChromeOS|other)|mem:(\?|0\.25|0\.5|1|2|4|8|16|32)|lvl:(\?|1[0-5]|[0-9])|on:(0|1-9|10-29|30\+)|t:(<30s|30s-2m|2-10m|10m\+)|len:(1-3s|3-10s|10s\+)|do:(free|hotlap|race|stage)|kmh:(<5|5-50|50\+)|at:-?\d{1,3},-?\d{1,3})$/.test(k), 8],
+  frz: [(k) => /^(desktop|phone|tablet|other):(why:(game:(build|draw|other)|page:[A-Za-z0-9._:-]{1,40}|paint)|new:(shaders|pictures|none)|kpc:(yes|no)|gc:yes|os:(Windows|macOS|iOS|Android|Linux|ChromeOS|other)|mem:(\?|0\.25|0\.5|1|2|4|8|16|32)|lvl:(\?|1[0-5]|[0-9])|on:(0|1-9|10-29|30\+)|t:(<30s|30s-2m|2-10m|10m\+)|len:(1-3s|3-10s|10s\+)|do:(free|hotlap|race|stage)|kmh:(<5|5-50|50\+)|at:-?\d{1,3},-?\d{1,3})$/.test(k), 8],
   misc: [LIST('drives', 'water', 'mapjump', 'garage', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };

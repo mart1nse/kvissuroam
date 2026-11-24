@@ -360,7 +360,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (!best || !worst || bn < wn + LEAN_MARGIN) return;
     for (const o of others.values()) if (o.modelCar === worst) unModel(o);
     if (replay?.modelCar === worst) unModel(replay);
-    fadeWarm.delete(worst);
+    unFade(worst);
     kinds.delete(worst);
     dropModel(worst);
     kinds.add(best);
@@ -724,6 +724,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // (`warm`, once per kind of car) and only then used: until it is ready the car stays solid.
   const FADE_MIN = 0.1, FADE_AHEAD = 10, FADE_SIDE = 5, TAG_MIN = 0.6;
   const fadeWarm = new Map();        // car id -> 'busy' | true
+  const fadeKeep = new Map();        // car id -> the see-through clones that keep its programs (see warmFade)
+  const unFade = (id) => { fadeWarm.delete(id); for (const t of fadeKeep.get(id) || []) t.dispose(); fadeKeep.delete(id); };
   function fadeParts(o) {
     const m = o.model;
     if (m.fade && m.fade.first === m.group.children[0]) return m.fade;
@@ -754,7 +756,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         made.push(t);
         waits.push(Promise.resolve(warm(g)).catch(() => {}));
       }
-      Promise.all(waits).then(() => { fadeWarm.set(id, true); for (const t of made) t.dispose(); });
+      // (the clones are kept while this kind is about: a disposed material lets its program go when no other
+      // uses it, and the real see-through copies then built theirs anew in the frame that drew them)
+      Promise.all(waits).then(() => { if (fadeWarm.get(id) === 'busy') { fadeWarm.set(id, true); fadeKeep.set(id, made); } else for (const t of made) t.dispose(); });
     }, 'see-through car');
   }
   function setFade(o, a) {

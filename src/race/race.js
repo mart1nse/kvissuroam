@@ -14,6 +14,7 @@ import TRACK from './track.json';
 import { createDecor } from './decor.js';
 import { createLandmarks } from './landmarks.js';
 import { jobs } from '../jobs.js';
+import { warm } from '../warm.js';
 import { lapGates, lapGatesSteps, throughGate } from './lapgates.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
@@ -556,8 +557,9 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       const show = st.running || st.near;
       edges.update(x, z);
       edges.group.visible = show;
-      decor.update(x, z, performance.now() / 1000);
-      landmarks.update(x, z);
+      // (the boards, gantry and landmarks built as the car comes near: let into the picture once their shaders
+      // are ready, src/warm.js; on an iPhone the start boards' first frame waited for four new shaders)
+      warm.scope(() => { decor.update(x, z, performance.now() / 1000); landmarks.update(x, z); });
       decor.group.visible = show;
       panel.classList.toggle('hidden', !show);
       if (show) {

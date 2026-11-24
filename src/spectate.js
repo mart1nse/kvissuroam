@@ -7,6 +7,7 @@
 // Nothing is built for it: the watched car is the copy multiplayer.js already draws, the world streams in
 // around the camera's car instead of yours (main.js asks `focus`), and the HUD is the usual one, fed `view`.
 import { CARS } from './cars/specs.js';
+import { THUMB } from './net/people.js';
 
 const LOST_S = 30;                 // a watched player in the garage this long: on to the next player (or back to your car)
 const QUIET_S = 6;                 // and gone quiet any other way (another tab, app or lost signal; Martin 2026-11-24:
@@ -24,13 +25,22 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
   const el = document.createElement('div');
   el.id = 'watch';
   el.className = 'hidden';
-  el.innerHTML = '<div class="who"><span class="eye"></span><i></i><b></b><small class="car"></small><small class="st"></small></div>'
+  el.innerHTML = '<div class="who"><span class="eye"></span><i></i><b></b><small class="car"></small><small class="st"></small>'
+    // a thumbs up for the watched player (Martin, 2026-11-24), as the one in front of their name in the list
+    + `<button class="ku" data-act="watch-ku" title="Thumbs up">${THUMB}</button></div>`
     + '<button class="back" data-act="watch-back" title="Back to your own car (Esc)">BACK TO MY CAR <kbd>ESC</kbd></button>'
     + '<div class="hint"><kbd>←</kbd><kbd>→</kbd> OTHER PLAYERS</div>';
   document.querySelector('#hud').appendChild(el);
   const elDot = el.querySelector('.who i'), elName = el.querySelector('.who b'), elCar = el.querySelector('.who .car'), elSt = el.querySelector('.who .st');
   const elHint = el.querySelector('.hint');
   el.querySelector('.back').addEventListener('click', (e) => { e.stopPropagation(); stop(); });
+  const elKu = el.querySelector('.ku');
+  elKu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!id || !mp.kudos(id)) return;
+    elKu.classList.remove('sent'); void elKu.offsetWidth; elKu.classList.add('sent');
+    uiKey = ''; uiTimer = 0;
+  });
 
   // the players that can be watched, in the online list's order (by name), with your own car first
   const order = () => mp.players().filter((p) => p.id).sort((a, b) => a.name.localeCompare(b.name));
@@ -137,7 +147,8 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     const lap = mp.lastLap(o.name);
     const st = !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? 'ON A HOTLAP'
       : lap ? `LAST LAP ${fmt(lap.ms)}` : '';
-    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}`;
+    const wait = mp.kudosWait(id) > 0;
+    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${wait}|${mp.stealth}`;
     if (key === uiKey) return;
     uiKey = key;
     elDot.style.setProperty('--c', o.colour);
@@ -146,6 +157,8 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     elSt.textContent = st;
     elSt.classList.toggle('hot', !!(hot || race));
     elHint.classList.toggle('hidden', order().length < 2);
+    elKu.classList.toggle('wait', wait);
+    elKu.classList.toggle('hidden', !!mp.stealth);
   }
   const fmt = (ms) => `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, '0')}`;
 

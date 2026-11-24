@@ -1137,3 +1137,11 @@ body:not(.touch) #people .me.back:hover { background: rgba(255, 212, 94, .16); }
 body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: -7px .1em -7px -6px; box-sizing: content-box; }
 /* a player someone is watching: the count after their name, for everyone (no names: Martin 2026-11-23) */
 #people small.wn, #roster small.wn { margin-left: .5em; font-size: .78em; font-weight: 800; font-style: normal; letter-spacing: .14em; color: var(--cyan); text-shadow: 0 0 6px rgba(47, 243, 255, .6); }
+/* thumbs up for the watched player, at the right end of the WATCHING pill (Martin 2026-11-24) */
+#watch .who .ku { align-self: center; pointer-events: auto; cursor: pointer; border: none; background: none; padding: .1em .15em; margin: -.3em -.5em -.3em .1em;
+  width: 1.9em; height: 1.9em; color: var(--hot); filter: drop-shadow(0 0 4px var(--hot)); transition: opacity .3s, transform .15s; }
+#watch .who .ku svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; }
+#watch .who .ku:hover { transform: scale(1.15); color: #fff; }
+#watch .who .ku.wait { opacity: .3; filter: none; cursor: default; transform: none; }
+#watch .who .ku.sent { animation: kusent .5s ease-out; }
+#watch .who .ku.hidden { display: none; }

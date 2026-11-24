@@ -456,6 +456,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
     // another racer's place in the race we are in (1 = leading), or 0: not racing with us
     place(id) { return places.get(id) || 0; },
+    // the player who won (Martin 2026-11-24: WINNER instead of HOTLAP over their name): the first over the line in
+    // the race that is on, else the winner of the last race, so it lasts until the next race has its winner
+    winner(id) {
+      if (!r || !id) return false;
+      const best = (rs) => rs?.filter((x) => x.ms != null && !x.out).sort((p, q) => p.ms - q.ms)[0];
+      const w = (r.on && best(r.racers)) || best(r.last?.racers);
+      return !!w && w.id === id;
+    },
     // on the grid list before the lights: counted as driving even from the garage (a car change is allowed until then)
     get holding() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'count' || ph === 'grid'); },
     // where the car is held on the grid, or null

@@ -150,7 +150,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // midnight (Martin, 2026-11-24: a reload or a lost connection kept nothing) and told to the server in every
   // hello, so after a reconnect the others see the same count we do.
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
-  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: Array.isArray(v.kf) ? v.kf.filter((x) => typeof x === 'string').slice(-24) : [] }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
+  // (each received one: [sender id, their name then, when in ms]; a bare id from before 24 Nov)
+  const kudoList = (a) => (Array.isArray(a) ? a.map((x) => (typeof x === 'string' ? [x, '', 0] : Array.isArray(x) && typeof x[0] === 'string' ? [x[0], typeof x[1] === 'string' ? x[1] : '', Number(x[2]) || 0] : null)).filter(Boolean).slice(-24) : []);
+  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: kudoList(v.kf) }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
   const saveKudos = () => lsSet(KUDOS_KEY, JSON.stringify({ day: today(), kn: myKudos.kn, kf: myKudos.kf }));
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
@@ -274,7 +276,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.style.display = 'none';
     labels.appendChild(el);
     const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0,
-      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: Array.isArray(p.kf) ? p.kf.filter((x) => typeof x === 'string').slice(-24) : [] };
+      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: kudoList(p.kf) };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -425,7 +427,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'ku': {          // a thumbs up, from id to `to` (either may be us): see src/kudos.js
         if (typeof m.id !== 'string' || typeof m.to !== 'string') break;
         const o = m.to === myId ? myKudos : others.get(m.to);
-        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), m.id].slice(-24); if (o === myKudos) saveKudos(); }
+        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), [m.id, m.id === myId ? name : others.get(m.id)?.name || '', Date.now()]].slice(-24); if (o === myKudos) saveKudos(); }
         onKudos?.(m.id, m.to);
         break;
       }

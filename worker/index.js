@@ -41,6 +41,13 @@ const cleanName = (s) => String(s ?? '').normalize('NFC')
 const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) ? s : '');
 const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w === 'watch' ? w : '');
 // whom a spectator watches (Martin, 2026-11-23): another player's id, short letters and digits only
+// one received thumbs up: [sender id, their name then, when (ms)]; a bare id from pages before 24 Nov
+const cleanKudo = (v) => {
+  if (typeof v === 'string') { const id = cleanOn(v); return id ? [id, '', 0] : null; }
+  if (!Array.isArray(v)) return null;
+  const id = cleanOn(v[0]);
+  return id ? [id, cleanName(v[1]) || '', Number.isFinite(v[2]) ? Math.max(0, Math.floor(v[2])) : 0] : null;
+};
 const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
@@ -711,7 +718,7 @@ export class Lobby extends DurableObject {
       // thumbs up received today: the page's own count (kept in its browser till midnight, so a reload or a
       // lost connection keeps it), or what this socket had
       const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
-      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanOn).filter(Boolean).slice(-KUDOS_KEEP) : [];
+      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
@@ -755,7 +762,7 @@ export class Lobby extends DurableObject {
       for (const w of this.ctx.getWebSockets()) {
         const a = w.deserializeAttachment();
         if (a?.id !== to || a.ghost) continue;
-        a.kn = (a.kn || 0) + 1; a.kf = [...(a.kf || []), me.id].slice(-KUDOS_KEEP);
+        a.kn = (a.kn || 0) + 1; a.kf = [...(a.kf || []), [me.id, me.name, now]].slice(-KUDOS_KEEP);
         w.serializeAttachment(a);
       }
       this.broadcast({ t: 'ku', id: me.id, to });

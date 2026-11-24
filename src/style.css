@@ -1170,3 +1170,12 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #watch .who .ku.wait { opacity: .3; filter: none; cursor: default; transform: none; }
 #watch .who .ku.sent { animation: kusent .5s ease-out; }
 #watch .who .ku.hidden { display: none; }
+/* who gave a small thumbs up on a back window: a click or tap on it (src/kudos.js, Martin 2026-11-24) */
+#kudopop { position: absolute; left: 0; top: 0; pointer-events: none; padding: .45em .9em .5em; border-radius: .9em; background: rgba(18, 6, 43, .72);
+  color: #fff; font-size: clamp(11px, 1vw, 14px); letter-spacing: .08em; white-space: nowrap; transition: opacity .4s; box-shadow: 0 0 12px rgba(255, 43, 214, .35); }
+#kudopop.out { opacity: 0; }
+#kudopop div { line-height: 1.5; }
+#kudopop i { display: inline-block; width: .7em; height: .7em; margin: 0 .5em .05em 0; border-radius: 50%; vertical-align: middle; background: var(--c, var(--cyan)); box-shadow: 0 0 5px var(--c, var(--cyan)); }
+#kudopop b, #kudopop div { font-weight: 700; }
+#kudopop small { margin-left: .5em; opacity: .7; font-weight: 400; }
+#kudopop .more { opacity: .6; font-size: .9em; }

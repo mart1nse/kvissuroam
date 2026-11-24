@@ -80,7 +80,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
   let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, sentRf = null, sentRd = null, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
-  let watchCur = false;            // not in the race that is on: its live standings are showing (positions followed only then)
+  let watchCur = false;
+  let finAt = 0;                  // when we crossed the line (phones: the full results open 5 s later)            // not in the race that is on: its live standings are showing (positions followed only then)
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
   // each racer's place while we race too, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP);
   // worked out with the live order ten times a second, read by the name tags (changed only when a place changes)
@@ -363,8 +364,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       rows = standings(r.racers, true);
       const myRow = rows.findIndex((x) => x.id === mp.id);
       const done = r.racers.filter((x) => x.ms != null).length;
-      compact = finishedMs == null && active(mine);
-      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime(Math.max(0, t - r.tGreen) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
+      // (phones, Martin 2026-11-24: the small live list until 5 s after crossing the line, then the full results)
+      compact = (finishedMs == null && active(mine)) || (isTouch && finishedMs != null && t < finAt + 5000);
+      head = compact ? `<span class="pos"><b class="dot">●</b> P${myRow + 1}<small> / ${rows.length}</small></span><em class="rt">${fmtTime((finishedMs ?? Math.max(0, t - r.tGreen)) / 1000)}</em>` : '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = compact ? '' : `${done} OF ${r.racers.length} FINISHED · RACE CLOCK ${clock(t - r.tGreen)} / 7:00`;
     } else if (listOpen && !showLast && !mine && ph === 'race') {
       // (a race you are not in: its live standings)
@@ -477,6 +479,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       sentRf = { t: 'rf', ms: own, id: r.id };
       mp.raceSend(sentRf);
       finishedMs = own + Math.max(0, greenT(m) - r.tGreen);
+      finAt = now();
       // (the standings stay up until everyone is through, a new race starts or 7:00: Martin 2026-11-24)
       listOpen = true; showLast = false; listUntil = Infinity; hidFor = 0;
       // place: those already through with a better time, plus one (nobody still out there can beat it)

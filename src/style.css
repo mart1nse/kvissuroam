@@ -738,6 +738,7 @@ body.touch #ctlbtn { display: none; }
 /* the call to act (VOTE START, JOIN RACE, START NOW): a see-through pill with its letters in the cyan-to-pink
    gradient of the race card (Martin 2026-11-24: one colour scheme, no yellow), the pill breathing a soft glow */
 #rbtn span { display: block; }
+#rbtn.long { font-size: clamp(18px, 1.95vw, 35px); }   /* RACE FINISHED */
 #rbtn.lit, #rbtn.voted { text-shadow: none; }
 #rbtn.lit span, #rcount .btns .go span { color: transparent; -webkit-text-fill-color: transparent;
   background: linear-gradient(100deg, var(--cyan), #c08bff 55%, var(--hot)); -webkit-background-clip: text; background-clip: text;
@@ -863,6 +864,7 @@ body.touch #racebox { left: auto; right: var(--tbr); top: calc(var(--tbh) + 8px)
 body.touch #rbtn { grid-row: 1 / 3; }
 body.touch #racebox:has(#rchip.hidden) #rsub { grid-row: 1 / 3; }
 body.touch #rbtn { width: clamp(77px, 10.4vw, 104px); height: clamp(35px, 9.6vh, 45px); white-space: normal; font-size: clamp(13px, 1.9vw, 19px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }
+body.touch #rbtn.long { font-size: clamp(11px, 1.6vw, 16px); }
 body.touch #rsub { margin: 0; font-size: clamp(9px, 1.15vw, 11.5px); }
 body.touch #rchip { font-size: 9.5px; }
 /* phones: the race list in the lap timer's place (the lap timer hides while it shows), growing to the left */

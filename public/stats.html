@@ -19,6 +19,8 @@
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 16px 60px; }
   header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 18px; }
+  header > div:first-child { flex: 1 1 320px; min-width: 0; }
+  header .range { flex: none; }
   h1 { margin: 0; font: 900 italic clamp(26px, 4.4vw, 40px)/1 Montserrat, system-ui, sans-serif; letter-spacing: .02em;
        background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h1 a { color: inherit; text-decoration: none; }
@@ -92,7 +94,7 @@
   <header>
     <div>
       <h1><a href="/">LINNARING</a> · STATS</h1>
-      <p class="sub">How the game is played. Anonymous daily totals: no names, addresses or cookies are kept. 24 h is the last 24 hours; days are Tartu time.</p>
+      <p class="sub">How the game is played. Anonymous totals: no names, addresses or cookies are kept. Days are Tartu time.</p>
     </div>
     <div class="range" role="group" aria-label="Period">
       <button data-days="1">24 h</button><button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button>
@@ -415,17 +417,17 @@
   addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { if (lastHeat) drawMap(lastHeat[0], lastHeat[1]); }, 150); });
 
   // ---- period
-  var days = 30;
+  var days = 1;
   try { var m = /days=(\d+)/.exec(location.hash); if (m) days = +m[1]; } catch (e) {}
   function load(n) {
     days = n;
     document.querySelectorAll('.range button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.days === n)); });
-    try { history.replaceState(null, '', n === 30 ? location.pathname : '#days=' + n); } catch (e) {}
+    try { history.replaceState(null, '', n === 1 ? location.pathname : '#days=' + n); } catch (e) {}
     fetch('/api/stats?' + (n === 1 ? 'hours=24' : 'days=' + n), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(render, function () { out.innerHTML = '<p class="status">Could not load the stats just now. Try again in a minute.</p>'; });
   }
   document.querySelectorAll('.range button').forEach(function (b) { b.addEventListener('click', function () { load(+b.dataset.days); }); });
-  load([1, 7, 30, 90].indexOf(days) >= 0 ? days : 30);
+  load([1, 7, 30, 90].indexOf(days) >= 0 ? days : 1);
 })();
 </script>
 </body>

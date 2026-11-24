@@ -26,7 +26,9 @@ const CENTRE = [2650, 440], NEAR = 620;
 // (24 Nov "two stones here, one bigger one smaller ... 0,5 m to the left of the tape")
 // and a small rock left of the road in the wood loop's last bend, 1.4 m off it (24 Nov "Add rock (red circle)"), and a
 // boulder before it just short of where the tape on that side begins (24 Nov 12:04 "add one boulder, in greencircle")
-const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5], [2864.1, 452.1, 0.3], [2832.9, 624.2, 0.45], [2838.6, 618.6, 0.6]];
+const HAND = [[2557.9, 393.9, 0.32], [2705.6, 355.0, 0.3], [2861.8, 454.1, 0.5], [2864.1, 452.1, 0.3], [2832.9, 624.2, 0.45], [2838.6, 618.6, 0.6],
+  // two on the outside of the way in to the left-hander by the lake (Martin 24 Nov 14:50): one just off the edge, one by the tape
+  [2773.9, 487.5, 0.5], [2765.9, 487.4, 0.45]];
 // Stones of the air photo moved where Martin asked: [x, z of the stone, new x, z] (24 Nov "move boulder (green
 // arrow)": the boulder by the wood loop's right-hand bend, up the road to just before its tape, 0.9 m off the gravel)
 const MOVED = [[2858.1, 554.3, 2863.1, 558.3]];

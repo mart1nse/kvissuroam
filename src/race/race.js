@@ -19,7 +19,8 @@ import { lapGates, throughGate } from './lapgates.js';
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
 const NEAR = 45;               // within this of the track the edges and the lap panel show
-const CP_RADIUS = 28;          // how close a checkpoint has to be passed
+const CP_RADIUS = 14;          // how close a checkpoint has to be passed (beyond the road; was 28 until 24 Nov:
+                               // at the river and Vanemuise corners that let a car turn in over the garden or car park)
 const MIN_LAP = 30;            // seconds; anything faster is a glitch (a reset onto the line)
 const CUT_TEXT = 'SHORT CUT · LAP CANCELLED';
 const LOCAL_KEY = 'kvissuroam.laps';

@@ -270,3 +270,119 @@ Commits merged to main in the 24 h before the run:
 - 570747a Blow-off on turbo upshifts, in the gap before the gear bites (#470)
 - c436531 Narva mnt kaardista batch 6: Narva 86 to 149 up towards Peetri (#469)
 - 90407f8 Narva mnt kaardista batch 5: Narva 89 to 107 and the Jüri church (#468)
+
+## 2026-11-24 (main 5fb3c99, run 01:19 UTC)
+
+Every figure within budget.
+
+| Check | Figure | Budget | Result |
+|---|---|---|---|
+| Phone canvases at DRIVE | 80 | 230 | OK |
+| Phone graphics card at DRIVE | 187 | 250 | OK |
+| Phone JS heap at DRIVE | 242 | 420 | OK |
+| Phone total at DRIVE | 509 | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 611 | 740 | OK |
+| Phone graphics card peak in a map jump | 188 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 204 | 250 | OK |
+| Phone total after 2 km through the centre | 755 | 870 | OK |
+| Phone graphics card peak through the centre | 381 | 445 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 330 | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 541 | 760 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 75 | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.07 | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 6.7 | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 76 | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 84 | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.08 | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 6.5 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 95 | - | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 6 | 8 | OK |
+| Lap drive: times the game was busy for over 33 ms | 3 | 4 | OK |
+| Lap drive: longest the game was busy without a break (ms) | 53 | 100 | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 36 | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 128 | 165 | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 3 | 10 | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.39 | 2 | OK |
+| Lap drive: page errors | 0 | 0 | OK |
+| Lap drive: building work queued twice | 0 | 0 | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 36 | - | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 14 | - | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 30 | - | not judged |
+| Stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished) | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 25 ms | 3 | 8 | OK |
+| Stage drive: times the game was busy for over 33 ms | 1 | 4 | OK |
+| Stage drive: longest the game was busy without a break (ms) | 34 | 100 | OK |
+| Stage drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Stage drive: pictures sent to the graphics card (megapixels) | 24 | 40 | OK |
+| Stage drive: frames that sent over 1.1 megapixels of pictures | 0 | 4 | OK |
+| Stage drive: most megapixels of pictures sent in one frame | 1.05 | 2 | OK |
+| Stage drive: page errors | 0 | 0 | OK |
+| Stage drive: building work queued twice | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 16 ms, not judged | 9 | - | not judged |
+| Stage drive: game code in a frame, the longest (ms), not judged | 20 | - | not judged |
+
+Against the 23 Nov run 2: phone total at DRIVE 593 -> 509 MB (heap 267 -> 242, canvases 139 -> 80), centre total 834 -> 755. Grew by over 10 % (all short-hitch timings, which vary run to run): phone drive longest busy 46 -> 84 ms (data.js sector load and garbage collection), desktop drive longest 66 -> 75 ms, lap over 25 ms 3 -> 6 and over 33 ms 1 -> 3, lap longest 40 -> 53 ms (garbage collection). The 23 Nov 20:52 UTC run on 9b233b3 had lap 4 / 2 / 66 ms, so tonight sits in that range. Raadi stage (first time in this log): finished, 3 stretches over 25 ms, longest 34 ms, 24 MP sent.
+
+Commits merged to main in the 24 h before the run:
+
+- 5fb3c99 Raadi: tape is the border, finish tape, start beeps, heavier rounded bales, a stone (#599)
+- ae53dd7 Positions in bundles: one message per player 10x/s, far cars less often (#598)
+- eb0b15a Show the lap time with the lap record tag in the online list and over the car (#597)
+- 41881f8 Spectating: everyone sees WATCHED · N by a watched player's name (#596)
+- 2c2d14a Tyres: no "Tyres changed to" note in the garage (#595)
+- 25cb7bb Spectating stays anonymous: (watching) without a name, BEING WATCHED · N, WATCHING on your own line (#594)
+- d319beb Thumbs up between players: a neon sign in the receiver's back window (#593)
+- d6aec63 Spectator mode (desktop): click a player in the online list or their minimap arrow to follow their car (#592)
+- 6b264e0 Many players online: far cars as one-draw blocks, names over the nearest few within 150 m, position 3x/s with nobody near (#591)
+- 7ea61fb Quieter tyre squeal on electric cars (6 dB down) (#590)
+- f3723d8 Race: fewer votes needed to start a race with many on the map (5 up to 15 drivers, 6/7/8 above) (#589)
+- d5f291c Lap times: YOUR BEST column per car on Toomemägi and Raadi (#588)
+- 6e1af93 Options: notification sounds on/off; tyre squeal and grass marks choices removed (#587)
+- ee6ec91 Late join: straight to the lights, JOINING THE RACE, placed by the race's clock (#586)
+- a6c262a Start screen: circuit choice becomes big tiles on a taller phone (#585)
+- 53b5e31 Start screen on a taller phone: circuit pills, cards and DRIVE row grow with the free height (#584)
+- 5a83a41 Options: a tap or click outside the open panel closes it, and does nothing else (#583)
+- 7134d93 Phones: race standings one pedal wide, place, name and gap only, whole rows (#582)
+- 3be0704 Tyres: every way the game puts the car at a circuit fits its tyres (#581)
+- 135bc40 Tyres: picking a circuit on the start screen fits its tyres too (#580)
+- 510e3e5 Name tags over other players: plain lap-record line, whole tag raised off the racing line (#579)
+- eb9e563 Perf check: a full run of the Raadi rally stage, judged for short hitches like the lap (#578)
+- f646f16 Raadi: stones in size brackets, rounder second corner, fainter tracks, bale and tape moves (#577)
+- dba1f75 Bus: raise the chase camera so the road shows over the roof (#576)
+- 3484848 Grass marks C made even: one steady lit rut, no torn patches or clods on grass (#575)
+- c4154eb Vallikraavi bend: straight iron fence along Martin's red line, none before the corner (#574)
+- b4c80cd Raadi park stones the cars feel by their shape (#573)
+- 9d28aa8 Grass and earth tyre marks C to compare: real ruts lit by the sun (?grassmarks=c, K cycles A/B/C) (#572)
+- 2e168c0 Raadi stage: straight fence at the last corner, rounded glow in tight corners, first bale further in (#571)
+- cc09cb2 Soinaste: Rehetare tee 1 and the halls on Rehepapi tee, Rattasepa tee 5 and Rehepapi tee 4 (kaardista batches 1 and 2) (#570)
+- 8ea3a5c Raadi manor: the cream wall, the gatehouse and its portico, the TARTU VALD letters (kaardista batch 3) (#569)
+- 175e10d Raadi stage: start tape may be broken, joined tape, overshoot and missed bale judged later (#568)
+- 93f6671 Kaupmehe flats and the Coop by road 95, as seen from the road and the Raadi stage (kaardista batch 2) (#567)
+- 98c07af ERM: drive under the canopy, up the plates onto the roof and off any edge (kaardista batch 1) (#566)
+- 4bbc77a Raadi bales: a full-on hit costs more speed, brushes and half hits stay cheap (#565)
+- dd9c53f Aovere: the cars parked on Aasa tee are BMWs (#564)
+- 373176f Raadi stage: tape on sticks where the penalties begin, borders as drawn, one penalty text (#563)
+- f1b272f Aovere: road paint at the Haava junction (#562)
+- 1823f68 Fuel price boards: Estonian pump prices of 23 Nov 2026 (#561)
+- c801478 Aovere: Tõumesila bee farm on Kiigi tee (kaardista batch 4) (#560)
+- 041e649 Aovere: the farms round the Haava junction (kaardista batch 3) (#559)
+- 273331b Pootsmani 12 built by hand from Street View (#557)
+- 061a111 Raadi stage in neon orange on both maps, orange Raadi icon in the lap times (#558)
+- 7a6f2b0 Aovere: the Haava junction and Olerex (kaardista batch 2) (#556)
+- 05f3775 Raadi stage times kept on the server: records, board and track card (#555)
+- e0bf297 Aovere: the three houses on Aasa tee by the Haava junction (kaardista batch 1) (#554)
+- 93689e8 Raadi park: young trees, 369 stones and wider gravel from the air photo; stage time comes down away from the park (#553)
+- 0dca89a No FULL button on iPhone (Martin): the Home Screen hint goes; Android and computers keep it (#552)
+- ebe1a7c Start screen: phone layout fixed, larger track cards with the lapping dot; Raadi: bales off the gravel, track buttons under the top bar on phones, two start bulbs (#551)
+- b312bb8 Tyres: defaults only from the in-game circuit buttons, and a "Tyres changed to" note (#550)

@@ -434,7 +434,7 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online }) {
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -1032,6 +1032,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       const pose = startPose();
       place(pose);
       setup(pose);
+      onJump?.();          // (gravel tyres on, as the RAADI button does; Martin 24 Nov: "when goin into the halo i did not get gravel tires")
       st.jump = false;
       requestAnimationFrame(() => { fader.style.opacity = '0'; });
     }, FADE_S * 1000 + 20);

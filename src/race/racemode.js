@@ -66,7 +66,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     void splash.offsetWidth; splash.classList.add('go');
     document.body.classList.add('racesplash');
     clearTimeout(splashTimer); splashTimer = setTimeout(() => { splash.classList.add('hidden'); document.body.classList.remove('racesplash'); }, ms);
-    chime?.(kind === 'rec' ? 'record' : 'join');
+    chime?.(kind === 'rec' || kind === 'pb' ? 'record' : 'join');
   }
   // the record line: the car, and by how much the old best fell (and whose it was)
   function recLine(lap, prev) {
@@ -406,9 +406,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     // a lap was completed (race.js); info.rec: it is a lap record for the car, info.prev: the best it beat
     lap(lap, info) {
       const rec = info?.rec ? recLine(lap, info.prev) : null;
+      // a personal best that is not the car's record (info.own: your best it beat), banner like the record's
+      const pb = !rec && info?.own ? recLine(lap, { ms: info.own.ms }) : null;
       const m = me();
       if (!r || !m || !active(m) || phaseFor(m) !== 'race' || finishedMs != null) {
         if (rec) showSplash(`<div class="k">NEW LAP RECORD</div><div class="p tm">${fmtTime(lap.ms / 1000)}</div><div class="t">${rec.car} <em>${rec.gain}</em></div>`, 3600, 'rec');
+        else if (pb) showSplash(`<div class="k">NEW PERSONAL BEST</div><div class="p tm">${fmtTime(lap.ms / 1000)}</div><div class="t">${pb.car} <em>${pb.gain}</em></div>`, 3600, 'pb');
         return;
       }
       // (sent from our own lights; the server adds how late those went out, so the results, the splash and the
@@ -422,7 +425,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const pos = ahead + 1, n = r.racers.length;
       const word = pos === 1 ? (n > 1 ? 'WINNER!' : 'RACE COMPLETE') : `${pos}${['ST', 'ND', 'RD'][pos - 1] || 'TH'} OF ${n}`;
       showSplash(`<div class="k">RACE OVER · YOU FINISHED</div><div class="p">P${pos}</div><div class="t">${fmtTime(finishedMs / 1000)} <em>${word}</em></div>${
-        rec ? `<div class="k rk">NEW LAP RECORD</div><div class="p tm rtm">${fmtTime(lap.ms / 1000)}</div>` : ''}`, rec ? 5600 : 4800, rec ? 'rec' : '');
+        rec ? `<div class="k rk">NEW LAP RECORD</div><div class="p tm rtm">${fmtTime(lap.ms / 1000)}</div>`
+          : pb ? `<div class="k rk pk">NEW PERSONAL BEST</div><div class="p tm rtm">${fmtTime(lap.ms / 1000)}</div>` : ''}`, rec || pb ? 5600 : 4800, rec ? 'rec' : pb ? 'pb' : '');
     },
     // out of the race: kind 'off' (off the track), 'cut' (a short cut), 'jump' (a reset), 'car', 'start', 'map'
     out(kind) {

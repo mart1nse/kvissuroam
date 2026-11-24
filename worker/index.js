@@ -47,6 +47,7 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
                                   // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
 const IDLE_MS = 120000;           // in the garage, the menu or another tab this long: gives up the place when the server is full (seats)
+const WAIT_GONE = 90000;           // a refused page asks again every 20 to 40 s (longer in a hidden tab): quiet this long, it gave up
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 const DAY = 86400000;
@@ -151,6 +152,61 @@ export class Lobby extends DurableObject {
     this.hmac = null;
     this.race = new RaceDesk(this);   // the online race (worker/race.js)
     this.initPoses();
+    this.initLoad();
+  }
+
+  // ---- Demand (Martin 2026-11-24: how many would play online if the cap let them): once a minute the lobby
+  // tells the stats object how many are online and driving, how many pages are waiting outside (SERVER FULL,
+  // still asking every 20 to 40 s), how many were turned away and how many got in after waiting. Kept in
+  // memory only and sent from what already runs (the position bundles, sockets opening, messages), so it
+  // never keeps the object awake on its own.
+  initLoad() {
+    this.waiting = new Map();     // page id (?w= on the socket address, else the address) -> { first, last } asked while full
+    this.loadMin = 0;             // the minute last sent
+    this.load = { ref: 0, away: 0, joined: 0, waitMs: 0 };
+  }
+  waitKey(url, ip) {
+    const w = url.searchParams.get('w');
+    return typeof w === 'string' && /^[a-z0-9]{6,16}$/.test(w) ? `w|${w}` : `i|${ip}`;
+  }
+  // a page refused with SERVER FULL: a new waiting player unless it already asked within WAIT_GONE
+  refused(key, now) {
+    this.load.ref++;
+    const e = this.waiting.get(key);
+    if (e && now - e.last < WAIT_GONE) { e.last = now; return; }
+    if (this.waiting.size >= 2000) this.waitClean(now);
+    if (this.waiting.size >= 2000) return;
+    this.waiting.set(key, { first: now, last: now });
+    this.load.away++;
+  }
+  // a page that waited outside got its place
+  admitted(key, now) {
+    const e = this.waiting.get(key);
+    if (!e) return;
+    this.waiting.delete(key);
+    if (now - e.last < WAIT_GONE) { this.load.joined++; this.load.waitMs += now - e.first; }
+  }
+  waitClean(now) { for (const [k, e] of this.waiting) if (now - e.last >= WAIT_GONE) this.waiting.delete(k); }
+  loadTick(now = Date.now()) {
+    const min = Math.floor(now / 60000);
+    if (min === this.loadMin) return;
+    this.loadMin = min;
+    const st = this.env?.STATS;
+    if (!st) return;
+    this.waitClean(now);
+    let on = 0, drv = 0;
+    const seen = new Set();
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a?.id || a.ghost || seen.has(a.id) || !this.race.live(ws, a, now)) continue;
+      seen.add(a.id); on++;
+      if (a.drv) drv++;
+    }
+    const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
+    const s = { v: 1, t: now, on, drv, wait: this.waiting.size, cap: max, ...this.load };
+    this.load = { ref: 0, away: 0, joined: 0, waitMs: 0 };
+    const p = st.get(st.idFromName('stats')).addLoad(s).catch(() => {});
+    this.ctx.waitUntil?.(p);
   }
 
   // ---- Positions (see TICK): kept in memory only, they are stale a moment later anyway
@@ -185,6 +241,7 @@ export class Lobby extends DurableObject {
   }
   bundle() {
     const now = Date.now();
+    if (now - this.loadMin * 60000 >= 60000) this.loadTick(now);
     for (const [id, e] of this.poses) if (now - e.t > POSE_KEEP) this.poses.delete(id);
     if (!this.poses.size) { clearInterval(this.timer); this.timer = 0; return; }   // (nobody driving: the object may sleep)
     const own = new Map();
@@ -442,7 +499,10 @@ export class Lobby extends DurableObject {
       if (this.over(`c|${ip}`, 60, 300000)) return busy();
       // (a MAX_ONLINE variable on the Worker, set in the Cloudflare dashboard, overrides the cap without a deploy)
       const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
+      const wk = this.waitKey(url, ip), now = Date.now();
       if (this.seats(max) >= max) {
+        this.refused(wk, now);
+        this.loadTick(now);
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
@@ -454,6 +514,8 @@ export class Lobby extends DurableObject {
       let mine = 0;
       for (const ws of this.ctx.getWebSockets()) if (ws.deserializeAttachment()?.ip === ip) mine++;
       if (mine >= MAX_SOCKETS_IP) return busy();
+      this.admitted(wk, now);
+      this.loadTick(now);
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
       pair[1].serializeAttachment({ at: Date.now(), ip });
@@ -483,7 +545,10 @@ export class Lobby extends DurableObject {
       players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
       const ph = race.phase(now);
       // (total and drv count everyone: the list shows the first 60, and the page once counted only those, 24 Nov)
-      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
+      // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap
+      this.waitClean(now);
+      const cap = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
+      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, waiting: this.waiting.size, cap, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
         race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
     }
 
@@ -596,6 +661,7 @@ export class Lobby extends DurableObject {
       }
       return;
     }
+    if (now - this.loadMin * 60000 >= 60000) this.loadTick(now);
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return;

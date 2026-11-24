@@ -198,12 +198,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     return r && Number.isFinite(r.ms) ? fmtTime(r.ms / 1000) : '';
   }
 
+  const PAGE_W = Math.random().toString(36).slice(2, 12).padEnd(8, '0');
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
 
   async function connect() {
     await nameReady;
     await ticketReady;
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`;
+    // w: this page's own random id, so the server counts a page refused with SERVER FULL once however often it asks again
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}`;
     let sock;
     try { sock = new WebSocket(url); } catch { return schedule(); }
     ws = sock;

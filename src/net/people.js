@@ -63,7 +63,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const touch = document.body.classList.contains('touch');
   // phones: the room for the names, from under your line down to the gas pedal, and a row's height (read from the
   // page once a second at most, at the start of a frame before anything is written; the pedal and the list stand still)
-  let phoneAt = 0, phoneRoom = 0, phoneRh = 13;
+  let phoneAt = 0, phoneRoom = 0, phoneRh = 13, phonePush = 0;
   const gas = touch ? document.querySelector('[data-ctl="up"]') : null;
   function fitPhone() {
     const t = performance.now();
@@ -73,7 +73,13 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     if (!g || !g.height) return;
     phoneRh = (parseFloat(getComputedStyle(elWho).fontSize) || 10) * 1.45;
     // (the names start under the count and your line; on a short phone those two share a row)
-    const under = Math.max(elCount.getBoundingClientRect().bottom, elMe.getBoundingClientRect().bottom);
+    let under = Math.max(elCount.getBoundingClientRect().bottom, elMe.getBoundingClientRect().bottom);
+    // (Martin 2026-11-25: the race button stands a little into the list's width on a taller phone; the names go
+    // under it, only the count and your line beside it)
+    const b = document.getElementById('rbtn')?.getBoundingClientRect(), bx = box.getBoundingClientRect();
+    const push = b && b.height && b.right > bx.left ? Math.max(0, Math.ceil(b.bottom + 4 - under)) : 0;
+    if (push !== phonePush) { phonePush = push; elWho.style.marginTop = push ? `${push + 3}px` : ''; }
+    under += push;
     const room = Math.max(0, Math.floor(g.top - 6 - (under + 4)));
     if (room !== phoneRoom) { phoneRoom = room; elWho.style.maxHeight = `${room}px`; }
   }

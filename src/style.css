@@ -280,6 +280,7 @@ body.touch {
   --lapw: clamp(170px, 24vw, 230px);
   --lapr: calc(var(--tbr) + var(--tbw) + 12px);                    /* lap timer's right edge, from the right */
   --rbw: clamp(77px, 10.4vw, 104px);                               /* race button */
+  --rbs: 0px;                                                      /* race button moved in from the top bar's left edge */
   --rbt: calc(var(--tbh) + 8px);                                   /* race button's top, the online list's too */
   --gapl: calc(max(10px, env(safe-area-inset-left)) + var(--mm) + 10px);                 /* the gap right of the minimap ... */
   --gapw: calc(100vw - var(--lapr) - var(--lapw) - 8px - var(--gapl));                    /* ... up to the lap timer */
@@ -901,7 +902,14 @@ body.racesplash #lapsplit { visibility: hidden; }
 /* phones (Martin 2026-11-24): the button on the right under the top buttons, the online list beside it in place of
    the LAST RACE chip; the race line goes between the minimap and the lap timer, wrapping, and opens the results
    when there are some (the chip's job) */
-body.touch #racebox { left: auto; right: calc(var(--tbr) + var(--tbw) - var(--rbw)); top: var(--rbt); display: block; }
+body.touch #racebox { left: auto; right: calc(var(--tbr) + var(--tbw) - var(--rbw) - var(--rbs)); top: var(--rbt); display: block; }
+/* a taller phone (Martin 2026-11-25): the button one top button further right, under START; the count and your line
+   beside it, the names under it across the whole width (people.js pushes them down) */
+@media (min-height: 341px) {
+  body.touch { --rbs: calc(clamp(44px, 6vw, 60px) + 8px); }
+  body.touch #people { width: var(--tbw); }
+  body.touch #people :is(.count, .me) { max-width: calc(var(--tbw) - var(--rbw) - var(--rbs) - 10px); }
+}
 body.touch #rchip { display: none; }
 body.touch #rbtn { width: var(--rbw); height: clamp(35px, 9.6vh, 45px); white-space: normal; font-size: clamp(13px, 1.9vw, 19px); line-height: .95; padding: 0 4px; letter-spacing: .02em; }
 body.touch #rbtn.long { font-size: clamp(11px, 1.6vw, 16px); }
@@ -925,7 +933,7 @@ body.touch #rlist.live .hd button { width: 1.8em; height: 1.8em; }
 /* the standings (Martin 2026-11-24): between the minimap and rev counter column and the lap timer, under the race
    line (two lines of room kept for it), down to the right steering button */
 body.touch #rlist.live .tb { position: absolute; left: var(--gapl); width: min(200px, var(--gapw)); top: calc(max(10px, env(safe-area-inset-top)) + 36px);
-  --tbroom: max(40px, 100vh - max(10px, env(safe-area-inset-top)) - 36px - var(--padh) - 6px);
+  --tbroom: min(94px, max(40px, 100vh - max(10px, env(safe-area-inset-top)) - 36px - var(--padh) - 6px));   /* 5 rows at most (Martin 25 Nov), yours kept in view */
   max-height: var(--tbroom); max-height: calc(round(down, var(--tbroom) - 4px, 18px) + 4px);   /* whole rows only */
   box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 2px 4px; border-radius: 10px; background: rgba(18, 6, 43, .55);
   font-size: 10px; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .6) transparent; }
@@ -957,7 +965,7 @@ body.touch #rlights { top: 30%; font-size: 13px; }
   body.touch #street { top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) + clamp(10px, 2vw, 20px)); bottom: calc(var(--padh) + 6px); }
   body.touch #dash { --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - var(--padh) - 14px), 150px); }
   /* the street name stands over the right steering button here: the standings end above it */
-  body.touch #rlist.live .tb { --tbroom: max(36px, 100vh - max(10px, env(safe-area-inset-top)) - 36px - var(--padh) - 30px); }
+  body.touch #rlist.live .tb { --tbroom: min(94px, max(36px, 100vh - max(10px, env(safe-area-inset-top)) - 36px - var(--padh) - 30px)); }
 }
 
 /* race vote marks in the player lists (Martin, 2026-11-23): a lit tick for voted, a faint ring for not yet;

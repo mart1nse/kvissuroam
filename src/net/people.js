@@ -3,8 +3,10 @@
 // the menu or had the game in a background tab). On desktop (Martin, 2026-11-24) the list grows up from
 // the minimap: the count, your line over it, then the names going up as far as there is room under the race
 // button (its vote line and chip), then "+N MORE". While the race list or results show there, the race
-// panel comes first (down to your line at most) and the names fill what is left under it (Martin, 24 Nov). On phones (Martin, 2026-11-21) a short list sits under
-// the count, in the gap between the minimap and the rev counter: four names, then "+N MORE".
+// panel comes first (down to your line at most) and the names fill what is left under it (Martin, 24 Nov).
+// On phones (Martin, 2026-11-24) the list sits on the right, beside the race button and down to the gas pedal:
+// the count, your line, then as many names as fit there (a name with a lap record takes its line and a bit),
+// then "+N MORE". No joined/left notes on phones (no room there for them).
 // On the big map a list of everyone online; tapping a name centres the map on that car.
 // While a race vote has votes in (Martin, 2026-11-23), each name that may vote gets a small mark in
 // front: a lit tick when voted, a faint ring when not. Gone again when the vote is over.
@@ -20,7 +22,6 @@ import { CARS } from '../cars/specs.js';
 const NOTE_MS = 6000;
 const LIST_MAX = 60;              // rows of room on desktop at most (the list scrolls past them)
 const LIST_ALL = 120;             // names listed on desktop at most (the server lets 100 in)
-const LIST_MAX_PHONE = 5;
 export const ME_COLOUR = '#ffd45e';
 // the thumbs up button (src/kudos.js), the same neon thumb as the sign in the back window
 export const THUMB = '<svg viewBox="8 8 86 86" aria-hidden="true"><path d="M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z"/></svg>';    // your own arrow on the maps         // rows on a phone, "+N MORE" included
@@ -60,6 +61,32 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   });
   let shown = [], myCar = null, rosterKey = '';
   const touch = document.body.classList.contains('touch');
+  // phones: the room for the names, from under your line down to the gas pedal, and a row's height (read from the
+  // page once a second at most, at the start of a frame before anything is written; the pedal and the list stand still)
+  let phoneAt = 0, phoneRoom = 0, phoneRh = 13;
+  const gas = touch ? document.querySelector('[data-ctl="up"]') : null;
+  function fitPhone() {
+    const t = performance.now();
+    if (t < phoneAt) return;
+    phoneAt = t + 1000;
+    const g = gas?.getBoundingClientRect();
+    if (!g || !g.height) return;
+    phoneRh = (parseFloat(getComputedStyle(elWho).fontSize) || 10) * 1.45;
+    // (the names start under the count and your line; on a short phone those two share a row)
+    const under = Math.max(elCount.getBoundingClientRect().bottom, elMe.getBoundingClientRect().bottom);
+    const room = Math.max(0, Math.floor(g.top - 6 - (under + 4)));
+    if (room !== phoneRoom) { phoneRoom = room; elWho.style.maxHeight = `${room}px`; }
+  }
+  // phones: how many rows go in that room ("+N MORE" counted in when not all do); a lap record goes on a line under
+  // its name, so that row is 1.8 rows high (src/style.css gives the rows these heights)
+  const rowH = (p) => phoneRh * (mp.recordOf(p.name) ? 1.8 : 1);
+  function phoneCap(sorted) {
+    let h = 0, k = 0;
+    for (; k < sorted.length; k++) { const a = rowH(sorted[k]); if (h + a > phoneRoom + 0.5) break; h += a; }
+    if (k === sorted.length) return k;
+    while (k > 0 && h + phoneRh > phoneRoom + 0.5) h -= rowH(sorted[--k]);
+    return k + 1;
+  }
   // desktop: how many rows fit between your line and the race button, and whether the race list is up
   // (read from the page at most three times a second, never every frame)
   let fitAt = 0, fitRows = LIST_MAX, raceList = false, nNames = 0;
@@ -130,8 +157,8 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const elMe = box.querySelector('.me');
   let last = '', meLast = '', dirty = false;
   function refresh() {
-    if (!touch) fit();
-    const listMax = touch ? LIST_MAX_PHONE : fitRows;
+    if (!touch) fit(); else fitPhone();
+    const listMax = touch ? (phoneRoom >= phoneRh ? 1 : 0) : fitRows;
     // (stealth, ?off=100: a reminder that nobody else can see us)
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
@@ -146,7 +173,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     // (Martin, 2026-11-23) those in the garage are listed too, greyed, after the drivers on the map
     const inGarage = mp.online ? mp.roster().filter(idle) : [];
     const kuKey = onKudos ? drivers.filter((p) => mp.kudosWait(p.id) > 0).map((p) => p.id).join(',') : '';
-    const key = `${listMax}|${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.wn + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.w).join(',')}`;
+    const key = `${listMax}|${phoneRoom}|${n}|${mp.name}|${kuKey}|${vm?.key || ''}|${sp}|${drivers.map((p) => p.name + p.colour + p.car + p.w + p.wn + mp.recordOf(p.name)).join('|')}|${inGarage.map((p) => p.id + p.w).join(',')}`;
     if (key === last) return;
     last = key;
     // the city map's list follows the connection (lost, back) and the vote while the map is open
@@ -160,8 +187,8 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const ids = new Set(drivers.map((p) => p.id));
     const byName = (a, b) => a.name.localeCompare(b.name);
     const sorted = [...drivers.filter((p) => !idle(p)).sort(byName), ...drivers.filter(idle).sort(byName), ...inGarage.filter((p) => !ids.has(p.id)).sort(byName)];
-    // (desktop: every name, scrolled with the wheel; phones: a few, then "+N MORE")
-    const cap = touch ? listMax : LIST_ALL;
+    // (desktop: every name, scrolled with the wheel; phones: as many as fit, then "+N MORE")
+    const cap = touch ? phoneCap(sorted) : LIST_ALL;
     const more = sorted.length > cap ? sorted.length - cap + 1 : 0;
     if (!touch && sorted.length !== nNames) { nNames = sorted.length; fitAt = 0; }
     const want = sorted.slice(0, more ? cap - 1 : cap).map((p) => {
@@ -202,6 +229,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   function clearRows() { if (rowsById.size) { for (const r of rowsById.values()) r.li.remove(); rowsById.clear(); } rowCount = 0; }
 
   function note(text, kind) {
+    if (touch) return;
     const li = document.createElement('li');
     li.className = kind;
     li.textContent = text;

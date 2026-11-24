@@ -131,6 +131,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   // (finished or out of a race still running: the chip opens this race's list, not the one before, Martin 2026-11-24)
   const doneIn = (t = now()) => { const m = me(); return !!m && !active(m) && phaseFor(m, t) === 'race'; };
   chip.addEventListener('click', () => { showLast = !doneIn(); listOpen = true; listUntil = Infinity; hidFor = 0; render(); });
+  // phones (Martin 2026-11-24): no chip (the online list has its place), the race line itself opens the results
+  sub.addEventListener('click', () => { if (isTouch && sub.classList.contains('tap')) chip.click(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
   // otherwise it tucks the list away
   // racing and the only one still in the race (finished ones count as in), while others drive about
@@ -252,7 +254,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     show(btn, !!r && mp.online);
     // the finish glows for everyone once the racers are away from the start (not at their first pass)
     halo?.(!!r && mp.online && r.on && ph === 'race' && t - r.tGreen > 25000);
-    if (!r || !mp.online) { show(list, false); show(count, false); show(lights, false); show(chip, false); setText(sub, ''); return; }
+    if (!r || !mp.online) { show(list, false); show(count, false); show(lights, false); show(chip, false); setText(sub, ''); sub.classList.remove('tap'); return; }
     const v = r.vote, voted = v.ids.includes(mp.id), n = v.ids.length;
     const pips = (k, of) => `<span class="pips">${Array.from({ length: Math.min(of, 8) }, (_, i) => `<i class="${i < k ? 'on' : ''}"></i>`).join('')}</span>`;
     const key = isTouch ? 'TAP' : 'PRESS 1';
@@ -312,7 +314,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = `<span>${lab}</span>`; btn.className = cls; }
     btn.classList.toggle('away', away);
     show(btn, !away || joinable(ph));
-    setText(sub, away && !joinable(ph) ? '' : line);
+    const subLine = away && !joinable(ph) ? '' : line;
 
     // TO RACE START (the countdown)
     const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth && !(busy() && !mine);
@@ -349,7 +351,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     if (live && active(mine) && finishedMs == null) showLast = false;
     if (live && !listOpen && finishedMs == null && !showLast && hidFor !== r.id) { listOpen = true; listUntil = Infinity; }
     if (listOpen && t > listUntil) { listOpen = false; showLast = false; }
-    let rows = null, head = '', foot = '', compact = false;
+    let rows = null, head = '', foot = '', compact = false, chipTag = '';
     if (listOpen && live && !showLast) {
       rows = standings(r.racers, true);
       const myRow = rows.findIndex((x) => x.id === mp.id);
@@ -388,12 +390,18 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const still = r.racers.filter(active).length;
       show(chip, !rows);
       setText(chip, `<i class="flag"></i> ${at >= 0 ? `<em>P${at + 1}</em>` : 'OUT'}${isTouch ? '' : ` · ${still} STILL RACING`} · ${clock(t - r.tGreen)} / 7:00 ›`);
+      chipTag = at >= 0 ? `<em>P${at + 1}</em>` : 'OUT';
     } else {
       const lastRows = r.last ? standings(r.last.racers, false) : null;
       const myPos = lastRows ? lastRows.findIndex((x) => x.id === mp.id) : -1;
       show(chip, !!r.last && !rows && ph !== 'count' && ph !== 'grid');
       if (r.last) setText(chip, `<i class="flag"></i> LAST RACE · ${myPos >= 0 && !lastRows[myPos].out ? `<em>P${myPos + 1}</em>` : `${escapeHtml(lastRows[0]?.name || '')} WON`} ›`);
+      chipTag = myPos >= 0 && !lastRows[myPos].out ? `<em>P${myPos + 1}</em> RESULTS` : 'RESULTS';
     }
+    // phones: the race line between the minimap and the lap timer, and what the chip opens at its end
+    const tap = isTouch && !!subLine && !chip.classList.contains('hidden');
+    if (tap !== sub.classList.contains('tap')) sub.classList.toggle('tap', tap);
+    setText(sub, tap ? `${subLine} <span class="res"><i class="flag"></i> ${chipTag} ›</span>` : subLine);
   }
 
   return {

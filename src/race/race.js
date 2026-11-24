@@ -273,36 +273,53 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   panel.innerHTML = `<div class="lt"><span class="lbl">LAP</span><b id="laptime">0:00.00</b></div>
     <div class="lb"><span class="lbl">BEST <span id="lapcar"></span></span><b id="lapbest"></b></div>
     <ol id="laplast"></ol><div id="lapmsg"></div>`;
-  // checkpoint split: time at the checkpoint and +/- against this browser's best lap in this car,
-  // or, before there is one, against the lap record's splits
+  // checkpoint split: time at the checkpoint and, side by side, +/- against this browser's best lap
+  // in this car (BEST) and against the car's lap record (REC) (Martin 24 Nov). When the record is
+  // your own best, one figure shows as BEST · REC.
   const split = document.createElement('div');
   split.id = 'lapsplit';
   split.className = 'hidden';
   document.querySelector('#hud').appendChild(split);
   let splitTimer = 0;
+  const delta = (t, ref, lbl, tag) => {
+    if (ref == null) return '';
+    const d = t - ref, c = d <= 0 ? 'ahead' : 'behind';
+    return `<${tag} class="${c}"><em>${lbl}</em>${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</${tag}>`;
+  };
+  // ref: { own, rec } times in seconds (null where there is nothing to compare with)
   function showSplit(label, t, ref) {
-    const d = ref == null ? null : t - ref;
-    split.className = d == null ? '' : d <= 0 ? 'ahead' : 'behind';
-    split.innerHTML = `<span>${label}</span><b>${fmtTime(t)}</b>${d == null ? '' : `<i>${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</i>`}`;
-    st.lastSplit = `${label} · ${fmtTime(t)}${d == null ? '' : ` <i class="${d <= 0 ? 'ahead' : 'behind'}">${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}</i>`}`;
+    const same = ref?.own != null && ref.own === ref.rec;
+    const ds = (tag) => same ? delta(t, ref.own, 'BEST · REC', tag)
+      : delta(t, ref?.own, 'BEST', tag) + delta(t, ref?.rec, 'REC', tag);
+    split.className = '';
+    split.innerHTML = `<span>${label}</span><b>${fmtTime(t)}</b>${ds('i')}`;
+    st.lastSplit = `${label} · ${fmtTime(t)} ${ds('i')}`;
     clearTimeout(splitTimer);
     splitTimer = setTimeout(() => split.classList.add('hidden'), 3200);
   }
-  // the lap to compare with. Your best lap in this car (the YOUR BEST time) when it has checkpoint
-  // times for the current checkpoints. When it has none (driven before splits were kept, or on an
-  // older checkpoint layout), or there is no lap of yours yet, the fastest lap anyone drove in the
-  // car with split times (marked rec, shown as VS NAME), but only if it is no slower than your
-  // best: a slower lap would show green while you are behind your own best. Failing both, the
-  // checkpoints show no diff and the finish compares with your best time alone.
-  const bestSplits = (carId) => {
+  // the laps to compare with, picked at the first checkpoint and kept for the lap.
+  // own: your best lap in this car (the YOUR BEST time); its checkpoint times when it has them for the
+  // current checkpoints, else only its finish time. rec: the car's lap record. Its checkpoint times
+  // come from the fastest lap anyone drove in the car with split times (the server's refs); its finish
+  // time is the record itself (bestFor, which counts your own laps too). When your best is no slower
+  // than that, the record is yours and both are the same lap.
+  const refLaps = (carId) => {
     let b = null;
     for (const l of laps) if (l.car === carId && (!b || l.ms < b.ms)) b = l;
-    if (b?.splits && b.cp === CP_KEY && b.splits.length === TRACK.checkpoints.length) return b;
+    const own = b ? (b.splits && b.cp === CP_KEY && b.splits.length === TRACK.checkpoints.length ? b : { ms: b.ms }) : null;
+    const top = bestFor(carId);
     const r = refFor?.(carId, CP_KEY);
-    if (r && r.splits.length === TRACK.checkpoints.length && (!b || r.ms <= b.ms)) return { ...r, rec: true };
-    return b ? { ms: b.ms } : null;
+    if (own && (!top || own.ms <= top.ms) && (!r || own.ms <= r.ms)) return { own, rec: own };
+    let rec = null;
+    if (r && r.splits.length === TRACK.checkpoints.length) rec = { ms: Math.min(r.ms, top?.ms ?? r.ms), splits: r.splits };
+    else if (top) rec = { ms: top.ms };
+    return { own, rec };
   };
-  const vs = (ref) => (ref?.rec ? ` · VS ${escapeHtml(String(ref.name).toUpperCase())}` : '');
+  const at = (ref, k) => {
+    const v = k == null ? ref?.ms : ref?.splits?.[k];
+    return v == null ? null : v / 1000;
+  };
+  const refAt = (ref, k) => (ref ? { own: at(ref.own, k), rec: ref.rec === ref.own ? at(ref.own, k) : at(ref.rec, k) } : null);
   document.querySelector('#hud').appendChild(panel);
   const elTime = panel.querySelector('#laptime'), elBest = panel.querySelector('#lapbest'), elCar = panel.querySelector('#lapcar');
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
@@ -450,7 +467,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
                   const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
                   if ((st.tyT.gravel || 0) > (st.tyT.road || 0)) lap.ty = 'gravel';
-                  showSplit(`FINISH${vs(ref)}`, lapT, ref ? ref.ms / 1000 : null);
+                  showSplit('FINISH', lapT, refAt(ref || refLaps(carId), null));
                   // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
                   const b = bestFor(carId);
                   const pb = !b || lap.ms < b.ms;
@@ -476,9 +493,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               st.cps.add(cp.i);
               const t = time - st.t0;
               st.splits[k] = Math.round(t * 1000);
-              if (!st.ref) st.ref = bestSplits(carId);
-              const ref = st.ref?.splits?.[k];
-              showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}${vs(st.ref)}`, t, ref == null ? null : ref / 1000);
+              if (!st.ref) st.ref = refLaps(carId);
+              showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, refAt(st.ref, k));
             });
             if (st.running && !onTrack) {
               st.off += moved;

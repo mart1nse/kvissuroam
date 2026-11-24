@@ -85,17 +85,18 @@ export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
       ctx.fillStyle = '#ffd45e'; ctx.strokeStyle = '#160735'; ctx.lineWidth = 3;
       const used = new Set(), taken = [];
       roads.forEach((r, i) => {
-        if (!r.name || PATH.has(r.type) || used.has(r.name) || r.name.includes('juurdepääsutee')) return;
+        const name = r.label || r.name;                  // a state road's piece in town shows its street's name
+        if (!name || PATH.has(r.type) || used.has(name) || name.includes('juurdepääsutee')) return;
         const b = boxes[i];
         if (b[0] > vx1 || b[1] < vx0 || b[2] > vz1 || b[3] < vz0) return;
         const m = r.pts[r.pts.length >> 1];
         const px = (m[0] - cx) * k + W / 2, py = (m[1] - cz) * k + H / 2;
         if (px < 30 || px > W - 30 || py < 50 || py > H - 12) return;
-        const hw = ctx.measureText(r.name).width / 2 + 6;
+        const hw = ctx.measureText(name).width / 2 + 6;
         if (taken.some((t) => Math.abs(t[0] - px) < t[2] + hw && Math.abs(t[1] - py) < 16)) return;
         taken.push([px, py, hw]);
-        used.add(r.name);
-        ctx.strokeText(r.name, px, py); ctx.fillText(r.name, px, py);
+        used.add(name);
+        ctx.strokeText(name, px, py); ctx.fillText(name, px, py);
       });
     }
 
@@ -179,7 +180,7 @@ export function createBigMap(world, { onPick, onClose, drawUnder, drawOver }) {
         const dx = x1 - x0, dz = z1 - z0;
         const t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1)));
         const d = Math.hypot(x - x0 - dx * t, z - z0 - dz * t);
-        if (d < best) { best = d; hit = { x: x0 + dx * t, z: z0 + dz * t, yaw: Math.atan2(dx, -dz), d, w: r.w, name: r.name, e: r.e || 0 }; }
+        if (d < best) { best = d; hit = { x: x0 + dx * t, z: z0 + dz * t, yaw: Math.atan2(dx, -dz), d, w: r.w, name: r.label || r.name, e: r.e || 0 }; }
       }
     });
     return hit;

@@ -94,7 +94,7 @@ export function createHud(world) {
         const dx = x1 - x0, dz = z1 - z0;
         const t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1)));
         const d = Math.hypot(x - x0 - dx * t, z - z0 - dz * t) - road.w / 2;
-        if (d < best) { best = d; name = road.name; }
+        if (d < best) { best = d; name = road.label || road.name; }
       }
     }
     return name;

@@ -25,9 +25,9 @@ for (const spot of spots) {
     __game.place({ x: x - Math.sin(yaw) * 40, z: z + Math.cos(yaw) * 40, yaw });
   }, [+x, +z, yaw]);
   await p.waitForTimeout(14000);
-  const looks = await p.evaluate(([x, z, yaw, len, mode]) => {
+  const looks = await p.evaluate(([x, z, yaw, len, mode, top]) => {
     const g = __game, sk = g.skids(), fx = Math.sin(yaw), fz = -Math.cos(yaw);
-    const car = { x, z, y: g.world.heightAt(x, z), yaw, steer: 0, a: 1.3, b: 1.4, spec: { track: 1.55 }, skidF: 0, skidR: 0, rubF: 0, rubR: 0 };
+    const car = { x, z, y: top ? g.world.groundAt(x, z, 999) : g.world.heightAt(x, z), yaw, steer: 0, a: 1.3, b: 1.4, spec: { track: 1.55 }, skidF: 0, skidR: 0, rubF: 0, rubR: 0 };
     const seen = [];
     for (let d = 0; d <= len; d += 0.08) {
       const wig = Math.sin(d / 5) * 0.25;              // a slow wiggle: the tail out one way and the other
@@ -37,24 +37,26 @@ for (const spot of spots) {
         const R = len / 6, th = d / R, cx = x + fx * R * 2, cz = z + fz * R * 2;
         car.x = cx - Math.cos(th) * R; car.z = cz - Math.sin(th) * R; car.yaw = th + 0.5;
       }
-      car.y = g.world.heightAt(car.x, car.z);
+      car.y = top ? g.world.groundAt(car.x, car.z, car.y + 1) : g.world.heightAt(car.x, car.z);
       const slide = mode === 'slide' || mode === 'vary' || mode === 'arc' || (mode === 'mud' && d < len / 3);
       // vary: the slide builds and eases off again along the way
       car.skidR = mode === 'vary' ? 0.12 + 0.7 * Math.abs(Math.sin(d / 9)) : slide ? 0.75 : 0; car.rubR = slide ? 8 : 0; car.skidF = slide ? 0.3 : 0; car.rubF = slide ? 4 : 0;
       sk.update(car);
-      if (Math.abs(d % 2) < 0.08) seen.push(sk.lookAt ? sk.lookAt(car.x, car.z) : '?');
+      if (Math.abs(d % 2) < 0.08) seen.push(sk.lookAt ? sk.lookAt(car.x, car.z, car.y) : '?');
     }
     for (let k = 0; k < 4; k++) { car.skidR = car.skidF = 0; car.x += fx * 0.3; car.z += fz * 0.3; sk.update(car); }
     return seen.join('');
-  }, [+x, +z, yaw, +len, mode]);
+  }, [+x, +z, yaw, +len, mode, !!process.env.SKID_TOP]);
   // looking along the marks from behind and above, then down on them
   for (const [view, back, up, ahead] of [['along', 6, 1.8, 0.5], ['high', 3, 4.5, 0.35], ['close', -2, 1.6, 0.25]]) {
-    await p.evaluate(([x, z, yaw, len, back, up, ahead]) => {
+    await p.evaluate(([x, z, yaw, len, back, up, ahead, top]) => {
       const g = __game, fx = Math.sin(yaw), fz = -Math.cos(yaw);
       const ex = x - fx * back, ez = z - fz * back, tx = x + fx * len * ahead, tz = z + fz * len * ahead;
-      const y0 = g.world.heightAt(ex, ez), y1 = g.world.heightAt(tx, tz);
+      // SKID_TOP=1: marks on a roof or bridge deck (the topmost drivable ground there)
+      const h = top ? (a, b) => g.world.groundAt(a, b, 999) : (a, b) => g.world.heightAt(a, b);
+      const y0 = h(ex, ez), y1 = h(tx, tz);
       window.__cam = [ex, y0 + up, ez, tx, y1, tz, 55];
-    }, [+x, +z, yaw, +len, back, up, ahead]);
+    }, [+x, +z, yaw, +len, back, up, ahead, !!process.env.SKID_TOP]);
     await p.waitForTimeout(5000);
     const file = `${out}/${name}-${view}.png`;
     await p.screenshot({ path: file, timeout: 180000 });

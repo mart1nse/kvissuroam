@@ -26,6 +26,16 @@ export function haloTex() {
   });
 }
 
+// the column of light over the stage's start: bright at the foot, fading out up into the sky (1 px = 1 m of 256)
+export function beamTex() {
+  return canvasTex(8, 256, (g, w, h) => {
+    const f = g.createLinearGradient(0, h, 0, 0);
+    f.addColorStop(0, 'rgba(47,243,255,0.6)'); f.addColorStop(0.008, 'rgba(47,243,255,0.2)'); f.addColorStop(0.05, 'rgba(120,150,255,0.1)');
+    f.addColorStop(0.4, 'rgba(255,43,214,0.08)'); f.addColorStop(1, 'rgba(255,43,214,0)');
+    g.fillStyle = f; g.fillRect(0, 0, w, h);
+  });
+}
+
 export function chevronTex() {
   return canvasTex(512, 192, (g, w, h) => {
     g.fillStyle = 'rgba(18,6,43,0.35)';

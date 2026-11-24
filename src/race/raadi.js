@@ -24,13 +24,17 @@ import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
 import { createKnocks } from './knock.js';
-import { chevronTex, haloTex } from './decor.js';
+import { chevronTex, haloTex, beamTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
 import { SURFACE } from '../world/data.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
-const NEAR_START = 24;                     // within this of the start line (and not on a run) the car is put on it
+// Not on a run, a car that drives into the circle round the start spot is put on the line (Martin 24 Nov 15:32: "Make a
+// halo to the place the car will start from and extend it by 10 meters to each side so it becomes a circle with
+// roughly 20m diameter. have the halo go up to the sky ... so it is seen from far away ... make a quick fade out and
+// fade in, together like 0.5s"): START_R m round it, a column of light BEAM_H m high, the fade FADE_S each way.
+const START_R = 10, BEAM_H = 256, FADE_S = 0.2;
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -996,6 +1000,35 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     onRun?.('cancel');
   }
   function showAgain() { st.againUntil = performance.now() + 15000; again.classList.remove('hidden'); }
+  // the column of light over the start spot: one open cylinder, seen from far (no fog), while no run is on
+  let beam = null;
+  function showBeam(on) {
+    if (!on && !beam) return;
+    if (!beam) {
+      const sp = startPose(), geo = new THREE.CylinderGeometry(START_R, START_R, BEAM_H, 48, 1, true);
+      beam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
+      beam.position.set(sp.x, groundY(sp.x, sp.z) - 0.3 + BEAM_H / 2, sp.z);
+      beam.renderOrder = 5;
+      scene.add(beam);
+    }
+    beam.visible = on;
+  }
+  // a quick fade to dark and back over the whole screen, the car put on the line in the dark
+  const fader = document.createElement('div');
+  fader.style.cssText = `position:fixed;inset:0;background:#0b0420;opacity:0;pointer-events:none;z-index:9000;transition:opacity ${FADE_S}s ease`;
+  document.body.appendChild(fader);
+  function jumpToStart() {
+    st.jump = true;
+    fader.style.opacity = '1';
+    setTimeout(() => {
+      hideAgain();
+      const pose = startPose();
+      place(pose);
+      setup(pose);
+      st.jump = false;
+      requestAnimationFrame(() => { fader.style.opacity = '0'; });
+    }, FADE_S * 1000 + 20);
+  }
   function hideAgain() { st.againUntil = 0; again.classList.add('hidden'); }
 
   return {
@@ -1027,6 +1060,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
       const near = dMid < BUILD_R;
+      showBeam((st.phase === 'idle' || st.phase === 'done') && !st.jump && dMid < 3000);
       // (the whole stage's ground is fetched first: it is 560 m across, and the weakest setups only keep 420 m
       // of ground round the car, so from the start line the east loop would have no heights to stand things on)
       if (near && !built) {
@@ -1057,15 +1091,11 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       if (st.phase === 'done' && dMid > GONE_R) { st.phase = 'idle'; st.doneT = null; elMsg.textContent = ''; hideAgain(); }
 
       if (st.phase === 'idle' || st.phase === 'done') {
-        // up to the start: onto the line
-        const kmh = Math.abs(car.vx) * 3.6;
-        // (on the stage's own lane: Narva mnt and its cycle path run close by)
-        if (!st.cool && dStart < NEAR_START && kmh < 70 && nearestIn(x, z, 0, START + 14).d < HW[START] + 1.5) {
-          hideAgain();
-          const pose = startPose();
-          place(pose);
-          setup(pose);
-        }
+        // into the circle round the start spot: a quick fade and onto the line (after a run or a cancel there, only
+        // once the car has been out of it)
+        const sp = startPose(), dSpot = Math.hypot(x - sp.x, z - sp.z);
+        if (st.cool && dSpot > START_R + 3) st.cool = false;
+        if (!st.cool && !st.jump && dSpot < START_R) jumpToStart();
       }
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)

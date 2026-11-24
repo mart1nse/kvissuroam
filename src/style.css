@@ -519,7 +519,15 @@ body:not(.touch) #people { top: auto; left: max(14px, env(safe-area-inset-left))
 @keyframes notein { from { opacity: 0; transform: translateX(-8px); } }
 body:not(.touch) #people .feed { flex-direction: column-reverse; }
 #roster { position: absolute; left: max(10px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); max-height: 50vh; overflow: auto; min-width: 150px;
-  padding: 10px 16px 12px; background: rgba(18, 6, 43, .78); border: none; border-radius: 16px; }
+  padding: 10px 16px 12px; background: rgba(18, 6, 43, .78); border: none; border-radius: 16px;
+  max-width: min(270px, 42vw); box-sizing: border-box; overflow-x: hidden; }
+/* (Firefox: no ::-webkit-scrollbar; Chrome and Safari would drop the styled one below if these were set) */
+@supports not selector(::-webkit-scrollbar) { #roster { scrollbar-width: thin; scrollbar-color: rgba(255, 95, 162, .8) transparent; } }
+/* (Martin, 2026-11-24: narrower, and a slim neon scrollbar instead of the grey one) */
+#roster::-webkit-scrollbar { width: 5px; }
+#roster::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+#roster::-webkit-scrollbar-thumb { border-radius: 3px; background: linear-gradient(var(--cyan), var(--pink)); box-shadow: 0 0 6px rgba(255, 95, 162, .6); }
+#roster li { overflow: hidden; text-overflow: ellipsis; }
 #roster h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .2em; color: var(--cyan); }
 #roster h4.off { color: #ff9a3c; }
 #roster ul { list-style: none; margin: 0; padding: 0; }

@@ -46,6 +46,10 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   for (; car.rocket.reload && t < 200; t += dt) { stepCar(car, { boost: 1, flip: (t * 2) % 1 < 0.5 }, w, dt); if (t > 0.3 && car.rocket.reload && (car.rocket.flight || car.thrustN > 0)) moved = true; }   // (the valves take a moment to shut)
   check('the reload takes 120 s and locks both buttons', Math.abs(t - REFILL_S) < 0.5 && !moved && car.rocket.tank >= TANK_S - JUMP_S, `${t.toFixed(1)} s`);
   void v0;
+  // offline testing (?off=100): the reload takes 2 s
+  { const wq = world(), q = fresh(wq); q.rocket.tank = 0; q.rocket.reload = true; let tq = 0;
+    for (; q.rocket.reload && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
+    check('the quick reload of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
   check('...and the car weighs its full 1950 kg again', car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors
   const we = world(), e = fresh(we);

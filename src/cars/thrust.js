@@ -20,6 +20,7 @@
 export const TANK_S = 10;          // seconds of thrust in a full tank
 export const JUMP_S = 5;           // ...of which one FLIP takes this much
 export const REFILL_S = 120;       // an empty tank is full again after this long; nothing works meanwhile
+export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (offline testing, ?off=100: Martin 2026-11-25)
 
 const G = 9.81;
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
@@ -69,10 +70,11 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) { r.tank = 0; r.reload 
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
-// kickflip: a race, a timed lap, the Raadi stage).
+// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not 2 min).
 export function rocketStep(car, input, world, dt) {
   const r = car.rocket, T = car.spec.thrusters;
-  if (r.reload) { r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / REFILL_S); if (r.tank >= TANK_S) r.reload = false; }
+  r.refillS = input.quickRefill ? QUICK_REFILL_S : REFILL_S;
+  if (r.reload) { r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / r.refillS); if (r.tank >= TANK_S) r.reload = false; }
   // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
   car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
   if (r.flight) { fly(car, world, dt); return !!r.flight; }

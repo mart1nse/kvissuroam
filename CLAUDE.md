@@ -95,5 +95,10 @@ For the nightly run (and anyone reading its result):
   route=centre` on a dev server gives the whole list). The drive figures vary from run to run (the
   longest stretch by 20 or 30 ms): when one is over by a little, run the check once more with `--force`
   before blaming a commit, and say so if the second run is inside.
+- Run the check alone, with no other work going in the same session (a dev server, tests, a second check side by
+  side): its timing figures and the phone's memory through the centre read higher on a busy machine (25 Nov: main
+  read over on eight figures beside other work and inside on all of them alone). The check watches the rest of
+  the machine and prints THE MACHINE WAS BUSY when other work took the processor meanwhile; such a run is no
+  reason to blame a commit or to start a hunt: run it again alone with `--force`.
 - Do not change `tools/perf-budget.cjs` or `tools/perf-budget.json` to make a figure pass. If the check
   itself seems to measure wrongly, say so and leave the decision to Martin.

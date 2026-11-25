@@ -446,7 +446,7 @@ export function createBusStops(scene, world, opts = {}) {
     for (const q of extraPosters) {
       if (!shown(q.mesh)) continue;
       const h = caster.intersectObject(q.mesh, false)[0];
-      if (h && h.distance < bestT) { best = q; bestT = h.distance; }
+      if (h && h.distance < (best || !q.reach ? bestT : q.reach)) { best = q; bestT = h.distance; }   // (the big ones answer from further)
     }
     if (best && carNow) {
       const vx = carNow.x - o.x, vy = (carNow.y ?? 0) + 0.7 - o.y, vz = carNow.z - o.z, tc = vx * d.x + vy * d.y + vz * d.z;

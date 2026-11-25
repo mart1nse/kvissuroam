@@ -13,7 +13,7 @@ import { realTreeKit } from './scenery.js';
 import { paintScale } from './paintscale.js';
 import { medianShift } from './keskustee.js';
 import { jobs } from '../jobs.js';
-import { adAtlas, adCell, POSTER, clickablePoster } from './adverts.js';
+import { posterPlane } from './adverts.js';
 
 const O = [1659.6, 3088.7];                              // west corner of the roof (game x, z)
 const UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];     // along Küüni (to the south corner), along the park face (to the north corner)
@@ -289,17 +289,13 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
     // the TOREPOOD poster on the Küüni face: the poster's corner of the shared advert atlas, no texture of its
     // own; clicking it opens the shop like the ones in the bus shelters
     {
-      const S = SIDES.kuuni, [s0, s1, a, b] = KUUNI_POSTER, [u0, v0, u1, v1] = adCell(POSTER);
+      const S = SIDES.kuuni, [s0, s1, a, b] = KUUNI_POSTER;
       const [gx, gz] = S.at(INSET + (s0 + s1) / 2, 0.5), y = h(gx, gz);
-      const geo = new THREE.PlaneGeometry(s1 - s0, b - a), uv = geo.attributes.uv;
-      for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * (u1 - u0), v0 + uv.getY(k) * (v1 - v0));
-      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: adAtlas() }));
+      const m = posterPlane(s1 - s0, b - a);
       const [x, z] = S.at(INSET + (s0 + s1) / 2, -INSET + 0.12);
       m.position.set(x, y + (a + b) / 2, z);
       m.rotation.y = S.yaw;
-      m.receiveShadow = true;
       group.add(m);
-      clickablePoster(m);
     }
 
     // ---- Riia side: entrance canopy, the paved terrace behind its orange wall, the orange ramp down to the pavement

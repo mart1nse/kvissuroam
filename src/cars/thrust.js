@@ -65,8 +65,8 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 const TANKS = new Map();
 export function rocketState(id) {
   let r = TANKS.get(id);
-  if (!r) TANKS.set(id, r = { tank: TANK_S, reload: false, flight: null, up: 0, boost: 0, flipHeld: false, launched: null, landed: false, crashed: false, noz: new Float32Array(NOZ) });
-  r.flight = null; r.boost = 0; r.flipHeld = false; r.launched = null; r.landed = false; r.crashed = false; r.noz.fill(0);
+  if (!r) TANKS.set(id, r = { tank: TANK_S, reload: false, flight: null, up: 0, boost: 0, flipHeld: false, launched: null, landed: false, crashed: false, noz: new Float32Array(NOZ), lean: new Float32Array(4) });
+  r.flight = null; r.boost = 0; r.flipHeld = false; r.launched = null; r.landed = false; r.crashed = false; r.noz.fill(0); r.lean.fill(0);
   return r;
 }
 export function refillTank(id) { const r = TANKS.get(id); if (r) { r.tank = TANK_S; r.reload = false; } }
@@ -147,39 +147,98 @@ function heightAt(p, t, out) {
   out[0] = y; out[1] = v; out[2] = a;
   return out;
 }
-// How far round the roll is (0..1; a little over or under 1 while it hunts for level). One smooth turn (the
-// quintic 10s3 - 15s4 + 6s5) that does not come out level (Martin 2026-11-25: "some imperfectness ... tries to
-// balance it actively with the thruster ... one side then other ... never quite getting it 100%"): it goes OVER
-// by 10 to 16 degrees, is caught and pushed back, swings a little under, over again, each swing smaller, the
-// two sides' nozzles taking turns, and the wheels touch with a degree or two still in it for the springs to
-// take. How far over, and the second, quicker shake on top, differ from flight to flight, worked out from the
-// plan's own numbers so that every page shows the same flight.
+// The fight for balance (Martin 25 Nov, from stills of Tesla's film: "no movement works in balance ... it tries to
+// constantly find the balance"). Nothing in a flight is clean: the tail leaves the ground a moment before the
+// nose, the body trembles about its long axis from lift-off on and the roll starts and runs unevenly, level is
+// overshot and hunted for in several swings of unequal length ("not just one sideways struggle but a few of them,
+// one can be a bit faster"), and the nose nods and swings a little all the way ("front and rear height is trying
+// to find the balance"). How much of each, how fast and in what order differs from flight to flight, and is
+// worked out from the plan's own numbers, so every page shows the same flight; the jets are then opened by what
+// the body does (flightNozzles), so the two go together.
+const rnd = (h, i) => {
+  let x = (h + Math.imul(i + 1, 0x9e3779b9)) >>> 0;
+  x ^= x >>> 16; x = Math.imul(x, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+};
+const DEG = Math.PI / 180, TURN = 2 * Math.PI;
 const S5 = (x) => x * x * x * (10 - 15 * x + 6 * x * x);
-const OVER_MIN = 10 / 360, OVER_MORE = 6 / 360;   // the first overshoot, in turns
-const HUNT_W = (2 * Math.PI) / 0.5;               // one swing over and back under takes half a second...
-const HUNT_TAU = 0.4;                             // ...and each is this much smaller (the time to 37 %, s)
-function rollFrac(p, t) {
-  const T = Math.min(ROLL_T, p.tb - ROLL_T0), tE = ROLL_T0 + T, u = (t - ROLL_T0) / T;
-  if (u <= 0) return 0;
-  // (the time there is for catching it: a landing right after the roll gets a smaller overshoot)
-  const room = Math.max(0.05, p.tl - tE);
+const OVER_MIN = 10 / 360, OVER_MORE = 6 / 360;   // the first overshoot of the roll, in turns
+const HUNT_TAU = 0.4;                             // each swing back is this much smaller (the time to 37 %, s)
+const KICK_TAU = 0.3, KICK_W = TURN / 0.75;       // the nose-down kick of lift-off dies away and swings back like this
+const KICK_C = 1 / (Math.exp(-Math.atan(KICK_W * KICK_TAU) / (KICK_W * KICK_TAU)) * Math.sin(Math.atan(KICK_W * KICK_TAU)));
+const HALF_BASE = 1.5;                            // metres from the middle to an axle, and a little: the nose wheels stay over the ground
+const FIGHTS = new WeakMap();
+// the three trembles of one axis: [amplitude, turns a second, phase] each
+const trio = (h, i, amp, f0, f1) => [0, 1, 2].map((k) => [amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
+const sum3 = (w, t) => w[0][0] * Math.sin(w[0][1] * t + w[0][2]) + w[1][0] * Math.sin(w[1][1] * t + w[1][2]) + w[2][0] * Math.sin(w[2][1] * t + w[2][2]);
+function fight(p) {
+  let f = FIGHTS.get(p);
+  if (f) return f;
   const h = ((Math.round(p.x0 * 100) * 73856093) ^ (Math.round(p.z0 * 100) * 19349663)) >>> 0;
-  const a = (OVER_MIN + OVER_MORE * ((h % 1000) / 1000)) * Math.min(1, room / 0.5);
-  if (u < 1) return (1 + a) * S5(u);
-  const x = Math.min(t, p.tl) - tE, e = Math.exp(-x / HUNT_TAU), w = 1 - 0.5 * (x / room) ** 2;
-  const swing = Math.cos(HUNT_W * x) + Math.sin(HUNT_W * x) / (HUNT_W * HUNT_TAU);
-  const shake = 0.25 * Math.min(1, x / 0.15) ** 2 * Math.sin(2.3 * HUNT_W * x + ((h >>> 10) % 628) / 100);
-  return 1 + a * e * w * (swing + shake);
+  const T = Math.min(ROLL_T, p.tb - ROLL_T0), tE = ROLL_T0 + T;
+  // (the time there is for catching the roll: a landing right after it gets a smaller overshoot)
+  const room = Math.max(0.05, p.tl - tE);
+  f = {
+    T, tE, room, tb: p.tb, tl: p.tl,
+    over: (OVER_MIN + OVER_MORE * rnd(h, 0)) * Math.min(1, room / 0.5),
+    // the hunt for level: a slow swing and a quicker one on top, so no two swings are as long or as deep
+    w1: TURN / (0.46 + 0.14 * rnd(h, 1)), w2: TURN / (0.27 + 0.09 * rnd(h, 2)), mix: 0.3 + 0.15 * rnd(h, 3),
+    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9]),    // turns
+    pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8]),  // radians
+    yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8]),
+    kick: (3.2 + 1.4 * rnd(h, 4)) * DEG,          // the nose dips this far as the tail kicks up first
+    nose: (1 + 0.8 * rnd(h, 5)) * DEG,            // ...and is held this far up in the landing burn
+    flut: [0, 1, 2, 3].map((i) => TURN * (5 + 4 * rnd(h, 40 + i))), drift: [0, 1, 2, 3].map((i) => TURN * (0.6 + 0.9 * rnd(h, 44 + i))),
+  };
+  FIGHTS.set(p, f);
+  return f;
 }
-// ...and how hard the roll is being spun up (+) or stopped (-) just then, -1..1 (1: the hardest of a plain roll)
-function rollAt(p, t, out) {
-  const T = Math.min(ROLL_T, p.tb - ROLL_T0), d = 0.02;
-  const f = out[0] = rollFrac(p, t);
-  const acc = t <= ROLL_T0 - d || t >= p.tl ? 0 : (rollFrac(p, t + d) - 2 * f + rollFrac(p, t - d)) / (d * d);
-  out[1] = Math.max(-1, Math.min(1, (acc * T * T) / 5.7735));
-  return out;
+// (how much of the trembling there is: none on the wheels, all of it in the air, less of it into the touchdown)
+const settle = (f, t) => 1 - 0.6 * smooth((t - (f.tl - 0.35)) / 0.35);
+// The roll's own turn, 0 to 1 and a little over: one smooth turn (the quintic 10s3 - 15s4 + 6s5) that goes OVER
+// level by 10 to 16 degrees...
+function rollMain(f, t) {
+  const u = (t - ROLL_T0) / f.T;
+  return u <= 0 ? 0 : u < 1 ? (1 + f.over) * S5(u) : 1;
 }
-const tmpS = [0, 0];
+// ...and what is on top of it, in turns: the trembling all the way, and after the turn the hunt for level, the
+// overshoot caught and pushed back under, over again, each swing smaller and none like the last, with a degree or
+// two still in it as the wheels touch, for the springs to take
+function rollPlay(f, t) {
+  t = Math.min(t, f.tl);
+  let v = smooth(t / 0.3) * settle(f, t) * sum3(f.roll, t);
+  const x = t - f.tE;
+  if (x >= 0) {
+    const e = Math.exp(-x / HUNT_TAU), w = 1 - 0.5 * (x / f.room) ** 2;
+    const s1 = Math.cos(f.w1 * x) + Math.sin(f.w1 * x) / (f.w1 * HUNT_TAU), s2 = Math.cos(f.w2 * x) + Math.sin(f.w2 * x) / (f.w2 * HUNT_TAU);
+    v += f.over * e * w * ((1 - f.mix) * s1 + f.mix * s2);
+  }
+  return v;
+}
+// how far round the roll is (0..1; a little over or under 1 while it hunts for level)
+const rollFrac = (p, t) => { const f = fight(p); return rollMain(f, t) + rollPlay(f, t); };
+// The nose's nodding (radians, + up) apart from the lift-off kick: the trembling, stronger while the landing burn
+// holds the car up, and the nose held a little high in that burn
+function pitchPlay(f, t) {
+  t = Math.min(t, f.tl);
+  const burn = clamp01((t - f.tb) / (f.tl - f.tb)), sb = Math.sin(Math.PI * burn);
+  return smooth((t - 0.25) / 0.4) * (1 + 0.8 * smooth((t - f.tb) / 0.2)) * settle(f, t) * sum3(f.pitch, t) + f.nose * sb * sb;
+}
+// ...and the kick: the tail leaves the ground first, so the nose dips (never further than the lift so far has
+// room for: the nose wheels stay on the road until the car has risen), is caught, and swings a little high
+function pitchKick(p, f, t) {
+  const k = f.kick * KICK_C * Math.exp(-t / KICK_TAU) * Math.sin(KICK_W * t);
+  if (k <= 0) return -k;
+  const up = t < LIFT_T ? 0.5 * Math.max(0, (p.vl - p.v0) / LIFT_T) * t * t : 1e9;
+  return -Math.min(k, up / HALF_BASE);
+}
+// the nose's swinging from side to side (radians): the same trembling, gone by the touchdown
+const yawPlay = (f, t) => smooth((t - 0.2) / 0.4) * (1 - smooth((t - (f.tl - 0.4)) / 0.4)) * sum3(f.yaw, Math.min(t, f.tl));
+// how hard something is being turned just then (the second difference of one of the curves above, per s2)
+const PLAY_D = 0.02;
+const pushOf = (fn, f, t) => (fn(f, t + PLAY_D) - 2 * fn(f, t) + fn(f, t - PLAY_D)) / (PLAY_D * PLAY_D);
+// a valve that answers a push: shut for a small one, open quickly for more (the short and the long bursts)
+const burst = (x, dead) => { const a = Math.abs(x); return a <= dead ? 0 : Math.sign(x) * Math.min(1, (a - dead) / (0.4 * (1 - dead))); };
 
 // Where the car is at time t of its plan, written to out: x, y, z (of the car's origin, on the road between
 // its wheels when upright), yaw, pitch, roll, vertical speed. The roll turns the car about its middle, not
@@ -187,37 +246,58 @@ const tmpS = [0, 0];
 export function flightPose(p, t, out) {
   t = Math.max(0, Math.min(p.tl, t));
   heightAt(p, t, tmpY);
+  const f = fight(p);
   const yaw = p.yaw0 + p.yawR * YAW_TAU * (1 - Math.exp(-t / YAW_TAU));
   const k = smooth(t / p.tl);
-  const turn = p.side * 2 * Math.PI * rollAt(p, t, tmpS)[0];
+  const turn = p.side * TURN * (rollMain(f, t) + rollPlay(f, t));
   const h = p.cg, sn = Math.sin(turn);
   out.x = p.x0 + p.vx * t - Math.cos(yaw) * h * sn;
   out.z = p.z0 + p.vz * t - Math.sin(yaw) * h * sn;
   out.y = tmpY[0] + h * (1 - Math.cos(turn));
   out.vy = tmpY[1];
-  out.yaw = yaw;
-  out.pitch = p.p0 + (p.pl - p.p0) * k;
+  out.yaw = yaw + yawPlay(f, t);
+  out.pitch = p.p0 + (p.pl - p.p0) * k + pitchKick(p, f, t) + pitchPlay(f, t);
   out.roll = p.r0 + (p.rl - p.r0) * k + turn;
   return out;
 }
 
-// How hard each nozzle works at time t of a plan (0..1), into noz: what the flight needs of them.
-export function flightNozzles(p, t, noz, spec) {
+// How hard each nozzle works at time t of a plan (0..1), into noz: what the flight needs of them. And, into lean
+// (when given), how far each of the four corner jets is swung out sideways (radians, + to the car's right): in
+// the stills of Tesla's film the jets fan out, one straight down beside one blowing out to the side.
+const HUNT_REF = 25, NOD_REF = 5, SWING_REF = 5;   // rad/s2 that opens a valve fully: the roll's hunt, the nodding, the nose's swing
+const SPLAY = 0.2, SWING_AIR = 1.15, SWING_LIFT = 0.5;   // the corner jets lean out this much at rest, and this much more when their side gives way (rad)
+export function flightNozzles(p, t, noz, spec, lean) {
   noz.fill(0);
+  if (lean) lean.fill(0);
   if (t >= p.tl) return noz;
+  const f = fight(p);
   heightAt(p, t, tmpY);
   // the corner nozzles: whatever holds the car up against gravity beyond free fall...
   const lift = t < LIFT_T || t > p.tb ? clamp01((spec.mass * (tmpY[2] + G)) / spec.thrusters.down) : 0;
-  // ...and the roll: the left pair pushes its side up to spin the car to the right, the right pair stops it
-  const spin = rollAt(p, t, tmpS)[1] * p.side;       // + spinning up to the right or stopping a roll to the left
-  // (while they also hold the car up, in the landing burn, the other side eases off instead: the two sides are
-  // seen taking turns all the way down)
+  // ...and the roll. Its own turn is a long burn: one side's pair pushes its side up to spin the car, then the
+  // other's stops it. The hunt and the trembling are bursts, short for a small correction and longer for a big
+  // one, on whichever side the body is being pushed back from just then
+  const u = (t - ROLL_T0) / f.T;
+  const main = u > 0 && u < 1 ? (u * (60 + u * (-180 + 120 * u))) / 5.7735 : 0;
+  const spin = Math.max(-1, Math.min(1, 0.75 * main + burst((pushOf(rollPlay, f, t) * TURN) / HUNT_REF, 0.12))) * p.side;   // + turning it to the right
+  // the nodding: the front pair lifts the nose, the rear pair the tail
+  const nod = burst(pushOf(pitchPlay, f, t) / NOD_REF, 0.15);
   for (let i = 0; i < 4; i++) {
-    const left = i % 2 === 0, push = left === spin > 0, k = Math.abs(spin);
-    noz[NOZ_DOWN + i] = clamp01(lift * (push ? 1 : 1 - 0.5 * k) + (push ? 0.4 * k * (1 - lift) : 0));
+    const left = i % 2 === 0, front = i < 2;
+    const push = Math.max(0, left ? spin : -spin), ease = Math.max(0, left ? -spin : spin), pn = front ? nod : -nod;
+    // (the tail's pair opens first at lift-off: the rear kicks up a moment before the nose)
+    const open = front ? smooth((t - 0.05) / 0.09) : 1;
+    // while they hold the car up, the side that gives way eases off and swings out; in free flight the pushing
+    // side blows down and the other side blows out sideways (it pushes the floor across, the same way round)
+    const k = lift * open * (1 - 0.5 * ease) * (1 + 0.3 * pn) + (1 - lift) * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn));
+    noz[NOZ_DOWN + i] = clamp01(k * (0.9 + 0.1 * Math.sin(f.flut[i] * t + i * 1.7)));
+    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + ease * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift)) + 0.07 * Math.sin(f.drift[i] * t + i * 2.3);
   }
-  // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left)
+  // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
+  // and after that answer its trembling
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
+  const sw = burst(pushOf(yawPlay, f, t) / SWING_REF, 0.3);
+  if (sw) { const i = sw > 0 ? NOZ_YAW : NOZ_YAW + 1; noz[i] = Math.max(noz[i], 0.7 * Math.abs(sw)); }   // (+ yaw is to the right: the left one pushes the nose right)
   // (the four at the tail stay shut in a flight: they are BOOST's, and blow only when they push. Martin 25 Nov)
   return noz;
 }
@@ -312,7 +392,7 @@ function letGo(car, rollRate, crash, up) {
   const left = Math.abs(roll) < 0.05 ? 0 : rollRate >= 0 ? (roll <= 0 ? -roll : TAU - roll) : (roll >= 0 ? -roll : -TAU - roll);
   car.rollRate = Math.max(-8, Math.min(8, left / fall)); car.pitchRate = 0;
   car.airborne = true; car.load = 0;
-  r.noz.fill(0); r.flight = null;
+  r.noz.fill(0); r.lean.fill(0); r.flight = null;
   if (crash) r.crashed = true; else r.landed = true;
 }
 function fly(car, world, dt) {
@@ -351,15 +431,16 @@ function fly(car, world, dt) {
   if (!done) {
     car.roll = pose.roll;
     car.airborne = true; car.airTime += dt; car.load = 0;
-    flightNozzles(p, p.t, r.noz, s);
+    flightNozzles(p, p.t, r.noz, s, r.lean);
     return;
   }
   // (what is left of the roll's hunting is in the body as the wheels touch: the springs take it)
-  car.roll = p.rl + (rollFrac(p, p.tl) - 1) * 2 * Math.PI * p.side; car.pitch = p.pl;
+  // (and of the nose's nodding)
+  car.roll = p.rl + (rollFrac(p, p.tl) - 1) * 2 * Math.PI * p.side; car.pitch = pose.pitch;
   // (the plan ended over a drop: a deck's edge, a hole the planner's line did not see)
   if (pose.y - ground(world, pose.x, pose.z, pose.y) > 0.3) { letGo(car, 0, false, up); return; }
   // touchdown: on the ground at the ground's slope, the springs at rest, the tyres taking over
   car.airborne = false; car.airTime = 0; car.load = 1;
   car.landed = Math.max(car.landed || 0, 0.6);
-  r.noz.fill(0); r.flight = null; r.landed = true;
+  r.noz.fill(0); r.lean.fill(0); r.flight = null; r.landed = true;
 }

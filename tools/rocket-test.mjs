@@ -107,7 +107,8 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   let bounce = 0, air2 = 0;
   for (let u = 0; u < 1.5; u += dt) { stepCar(car, {}, w, dt); if (car.airborne) air2 += dt; bounce = Math.max(bounce, car.y - h(-car.z, car.x)); }
   // (one whole turn: just before touchdown the roll stands at a full circle, and it never goes past it)
-  const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.03;
+  // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
+  const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
   const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && car.rocket.tank === tank0 - JUMP_S;
   check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
@@ -183,39 +184,107 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   const w = world((s) => -0.05 * s), car = fresh(w, 120, 0);
   car.vx = 120 / 3.6;
   const plan = planFlip(car, w, 1), copy = JSON.parse(JSON.stringify(plan));
-  const a = {}, b = {}, na = new Float32Array(NOZ), nb = new Float32Array(NOZ);
+  const a = {}, b = {}, na = new Float32Array(NOZ), nb = new Float32Array(NOZ), la = new Float32Array(4), lb = new Float32Array(4);
   let same = true, lit = 0;
   for (let t = 0; t <= plan.tl; t += 0.05) {
     flightPose(plan, t, a); flightPose(copy, t, b);
-    flightNozzles(plan, t, na, spec); flightNozzles(copy, t, nb, spec);
+    flightNozzles(plan, t, na, spec, la); flightNozzles(copy, t, nb, spec, lb);
     for (const k of ['x', 'y', 'z', 'yaw', 'pitch', 'roll']) same &&= a[k] === b[k];
+    for (let i = 0; i < 4; i++) same &&= la[i] === lb[i];
     for (let i = 0; i < NOZ; i++) { same &&= na[i] === nb[i]; lit = Math.max(lit, na[i]); }
   }
   check('a plan sent as JSON flies the same flight', same && lit > 0.5, `${JSON.stringify(copy).length} bytes`);
 }
 
-// ---- the roll is not perfect: it goes past level, the side jets catch it and keep hunting to the ground
+// ---- nothing in a flight is in balance (Martin 25 Nov, from the stills of Tesla's film): the tail kicks up first,
+// the roll goes past level and is hunted for in several unequal swings, the nose nods, and the jets fire in short
+// and long bursts on the side the body is being pushed back from. Flights from different spots differ, so several
+// are flown.
 {
-  const w = world(), car = fresh(w, 60, 0);
-  car.vx = 60 / 3.6;
-  const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ);
-  let rear = 0, over = 0, under = 0, was = 0, swaps = 0, side = 0, maxStep = 0, prev = 0;
-  for (let t = 0; t <= plan.tl; t += 0.005) {
-    const off = (flightPose(plan, t, a).roll - 2 * Math.PI) * 180 / Math.PI;   // degrees past one whole turn
-    if (t > 0) maxStep = Math.max(maxStep, Math.abs(a.roll - prev)); prev = a.roll;
-    if (t > 1.5) { over = Math.max(over, off); if (was > 0) under = Math.min(under, off); if (off > 0) was = 1; }
-    flightNozzles(plan, t, n, spec);
-    const d = (n[4] + n[6]) - (n[5] + n[7]), sd = Math.abs(d) > 0.05 ? Math.sign(d) : 0;
-    if (t > 2 && sd && side && sd !== side) swaps++;
-    if (sd) side = sd;
-    rear = Math.max(rear, n[0], n[1], n[2], n[3]);
+  const D = 180 / Math.PI, STEP = 0.005;
+  const spots = [[0, 0], [12.34, -56.7], [-340.2, 88.1], [5.5, 5.5], [1000.01, 2000.02], [77.7, -3.2], [-15.5, 410.9], [3.21, 9.87]];
+  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [] };
+  let endSum = 0;
+  for (const [x, z] of spots) {
+    const w = world(), car = fresh(w, 60, 0);
+    car.x = x; car.z = z; car.vx = 60 / 3.6;
+    const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ), l = new Float32Array(4), at = `${x},${z}`;
+    const tE = 0.65 + Math.min(1.7, plan.tb - 0.65);
+    let over = 0, under = 0, swaps = 0, side = 0, maxStep = 0, prev = 0, sgn = 0, t0 = tE, tailUp = 0, dip = 0, orderOk = false;
+    let pMin = 9, pMax = -9, burnUp = -9, fanMax = 0, fanBad = false, yawMax = 0, agree = 0, judged = 0;
+    const halves = [], rolls = [], ds = [], runs = [[], [], [], []], since = [-1, -1, -1, -1];
+    for (let k = 0; k * STEP <= plan.tl; k++) {
+      const t = k * STEP;
+      flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
+      const off = (a.roll - 2 * Math.PI) * D;                              // degrees past one whole turn
+      if (k) maxStep = Math.max(maxStep, Math.abs(a.roll - prev)); prev = a.roll;
+      if (t >= tE) {
+        over = Math.max(over, off); under = Math.min(under, off);
+        const sg = Math.sign(off);
+        if (sg && sgn && sg !== sgn) { halves.push(t - t0); t0 = t; }
+        if (sg) sgn = sg;
+      }
+      const d = (n[4] + n[6]) - (n[5] + n[7]), sd = Math.abs(d) > 0.05 ? Math.sign(d) : 0;
+      if (t > 2 && sd && side && sd !== side) swaps++;
+      if (sd) side = sd;
+      rolls.push(a.roll); ds.push(d);
+      bad.rear = Math.max(bad.rear, n[0], n[1], n[2], n[3]);
+      // lift-off: the axles' heights (the car drives towards -z, level ground)
+      const half = spec.wheelbase / 2, yF = a.y + Math.sin(a.pitch) * half, yR = a.y - Math.sin(a.pitch) * half;
+      if (t < 0.5) { tailUp = Math.max(tailUp, yR - yF); dip = Math.min(dip, yF); }
+      if (Math.abs(t - 0.03) < STEP / 2) orderOk = n[6] > 0.5 && n[7] > 0.5 && n[4] < 0.1 && n[5] < 0.1;
+      if (t > 0.7 && t < plan.tb) { pMin = Math.min(pMin, a.pitch * D); pMax = Math.max(pMax, a.pitch * D); }
+      if (t > plan.tb) burnUp = Math.max(burnUp, a.pitch * D);
+      yawMax = Math.max(yawMax, Math.abs(a.yaw) * D);
+      for (let i = 0; i < 4; i++) {
+        const lit = n[4 + i] > 0.15, free = t > 0.5 && t < plan.tb;
+        if (lit && free && since[i] < 0) since[i] = t;
+        if ((!lit || !free) && since[i] >= 0) { runs[i].push(t - since[i]); since[i] = -1; }
+        if (n[4 + i] > 0.15) { fanMax = Math.max(fanMax, Math.abs(l[i])); if (Math.sign(l[i]) !== (i % 2 ? 1 : -1) || Math.abs(l[i]) > 1.5) fanBad = true; }
+      }
+    }
+    // the body and the jets go together: where a side's pair clearly blows harder, the roll is being pushed that way
+    for (let k = 4; k < rolls.length - 4; k++) {
+      const acc = (rolls[k + 4] - 2 * rolls[k] + rolls[k - 4]) / (16 * STEP * STEP);
+      if (Math.abs(ds[k]) < 0.3 || Math.abs(acc) < 4) continue;
+      judged++; if (Math.sign(acc) === Math.sign(ds[k])) agree++;
+    }
+    const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * D, endP = (a.pitch - plan.pl) * D;
+    const all = runs.flat(), short = all.filter((v) => v < 0.12).length, long = all.filter((v) => v > 0.25).length;
+    endSum += Math.abs(end);
+    const fmt = (v, dec = 1) => `${at}: ${typeof v === 'number' ? v.toFixed(dec) : v}`;
+    if (!(over > 8 && over < 20 && under < -2 && under > -10)) bad.over.push(fmt(`${over.toFixed(1)} over, ${(-under).toFixed(1)} under`));
+    if (halves.length < 2) bad.swings.push(fmt(halves.length, 0));
+    if (halves.length >= 2 && Math.max(...halves) > 1.25 * Math.min(...halves)) bad.uneven++;
+    if (swaps < 3) bad.swaps.push(fmt(swaps, 0));
+    if (!(Math.abs(end) < 4 && Math.abs(endP) < 1)) bad.end.push(fmt(`roll ${end.toFixed(2)}, nose ${endP.toFixed(2)}`));
+    if (maxStep >= 0.06) bad.step.push(fmt(maxStep * D, 2));
+    if (!(tailUp > 0.1 && tailUp < 0.25)) bad.tail.push(fmt(tailUp, 3));
+    if (dip < -0.005) bad.dip.push(fmt(dip, 3));
+    if (!orderOk) bad.order.push(at);
+    if (!(pMax - pMin > 1 && pMax - pMin < 6)) bad.nod.push(fmt(pMax - pMin, 2));
+    if (!(burnUp > 0.8 && burnUp < 4.5)) bad.nose.push(fmt(burnUp, 2));
+    if (!(judged > 100 && agree / judged > 0.9)) bad.sync.push(fmt(`${agree} of ${judged}`));
+    if (!(short >= 2 && long >= 2)) bad.bursts.push(fmt(`${short} short, ${long} long of ${all.length}`));
+    if (!(fanMax > 0.8) || fanBad) bad.fan.push(fmt(fanMax * D, 0));
+    if (!(yawMax > 0.3 && yawMax < 2.5)) bad.yaw.push(fmt(yawMax, 2));
+    if (verbose) console.log(`     ${at}: over ${over.toFixed(1)}, under ${(-under).toFixed(1)}, swings ${halves.map((v) => v.toFixed(2)).join(' ')} s, end ${end.toFixed(2)} / nose ${endP.toFixed(2)} deg, tail first by ${tailUp.toFixed(2)} m, nod ${(pMax - pMin).toFixed(1)} deg, burn nose-up ${burnUp.toFixed(1)} deg, jets with the body ${agree}/${judged}, bursts ${short} short ${long} long of ${all.length}, fan ${(fanMax * D).toFixed(0)} deg, yaw ${yawMax.toFixed(1)} deg`);
   }
-  const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * 180 / Math.PI;
-  check('the roll goes past level and comes back under it', over > 8 && over < 18 && under < -2 && under > -10, `${over.toFixed(1)} deg over, ${(-under).toFixed(1)} deg back under`);
-  check('...the side jets swap sides as they hunt for level', swaps >= 3, `${swaps} swaps after 2 s`);
-  check('...it lands nearly level, never quite', Math.abs(end) > 0.1 && Math.abs(end) < 4, `${end.toFixed(2)} deg at touchdown`);
-  check('...and the four tail jets stay shut for the whole flight', rear === 0);
-  check('...and turns smoothly all the way', maxStep < 0.06, `${(maxStep * 180 / Math.PI).toFixed(2)} deg in 5 ms at most`);
+  const none = (list) => list.length === 0, say = (list) => list.join('; ');
+  check('at lift-off the tail leaves the ground first (10 to 25 cm ahead of the nose)', none(bad.tail), say(bad.tail));
+  check('...its jets open before the front pair\'s', none(bad.order), say(bad.order));
+  check('...and the nose wheels never go under the road', none(bad.dip), say(bad.dip));
+  check('the roll goes past level and comes back under it', none(bad.over), say(bad.over));
+  check('...in at least three swings, in most flights of unequal length', none(bad.swings) && bad.uneven >= spots.length - 2, `${say(bad.swings)} ${bad.uneven} of ${spots.length} uneven`);
+  check('...the side jets swap sides as they hunt for level', none(bad.swaps), say(bad.swaps));
+  check('...it lands nearly level, never quite', none(bad.end) && endSum / spots.length > 0.3, `${say(bad.end)} ${(endSum / spots.length).toFixed(2)} deg off at touchdown on average`);
+  check('...and turns smoothly all the way', none(bad.step), say(bad.step));
+  check('the nose nods all the way (1 to 6 degrees in free flight) and is held up in the landing burn', none(bad.nod) && none(bad.nose), say([...bad.nod, ...bad.nose]));
+  check('...and swings a little from side to side', none(bad.yaw), say(bad.yaw));
+  check('the jets push the way the body is being turned (9 times in 10 where both are clear)', none(bad.sync), say(bad.sync));
+  check('...in short bursts and long ones', none(bad.bursts), say(bad.bursts));
+  check('...fanned out: each corner jet leans to its own side, at times far out', none(bad.fan), say(bad.fan));
+  check('...and the four tail jets stay shut for the whole flight', bad.rear === 0);
 }
 
 // ---- the jets blow (and sound) for as long as BOOST is held, smaller as the tank blows down, never shut

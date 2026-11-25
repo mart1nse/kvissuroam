@@ -811,6 +811,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const flown = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
   function jets(o, now, dt) {
     const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
+    if (!o.lean) o.lean = new Float32Array(4);                  // (how far its corner jets are swung out)
     const f = o.flip, t = f ? now - (bundled ? DELAY_BUNDLED : DELAY) - f.t0 : -1;
     if (f && (t > f.plan.tl || !p || !o.live)) o.flip = null;
     if (f && p && o.live && t >= 0 && t <= f.plan.tl) {
@@ -818,7 +819,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
       p[6] = f.plan.vx; p[7] = f.plan.vz;
       for (let k = 15; k < 20; k++) p[k] = 0;                    // (in the air: no tyre slides or marks)
-      flightNozzles(f.plan, t, n, o.spec);
+      flightNozzles(f.plan, t, n, o.spec, o.lean);
       return;
     }
     const rear = p && o.live && (p[20] & BOOSTING) ? 1 : 0, k = Math.min(1, dt / 0.05);
@@ -904,7 +905,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const sx = -fz, sz = fx, flags = p[20] || 0, has = p[14] !== undefined;
     r.id = o.id; r.spec = s;
     r.x = p[0]; r.z = p[1]; r.y = p[2]; r.yaw = p[3]; r.steer = p[8];
-    r.pitch = p[4]; r.roll = p[5]; r.noz = s.thrusters ? o.noz : null;   // (a Rocket's nozzles: see jets)
+    r.pitch = p[4]; r.roll = p[5]; r.noz = s.thrusters ? o.noz : null; r.lean = o.lean;   // (a Rocket's nozzles: see jets)
     r.a = s.wheelbase * s.cgFront; r.b = s.wheelbase * (1 - s.cgFront);
     r.vx = p[6] * fx + p[7] * fz; r.vy = p[6] * sx + p[7] * sz;
     r.reversing = !!p[10];

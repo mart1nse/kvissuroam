@@ -59,9 +59,11 @@ export function createPlumes() {
   const pos = new THREE.Vector3(), sc = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
   // each nozzle's turn from the cone's +y to the way its gas goes
   const turns = NOZZLES.map((n) => new THREE.Quaternion().setFromUnitVectors(up, dir.set(n[3], n[4], n[5]).normalize()));
+  const swung = new THREE.Quaternion();
   let n = 0, cars = 0, clock = 0;
-  // one car: where its body is (the middle of its wheelbase on the road) and how hard each nozzle blows (0..1)
-  function car(x, y, z, yaw, pitch, roll, noz) {
+  // one car: where its body is (the middle of its wheelbase on the road), how hard each nozzle blows (0..1) and
+  // how far each of the four corner jets is swung out sideways just then (lean, radians; none: straight down)
+  function car(x, y, z, yaw, pitch, roll, noz, lean) {
     if (cars >= CARS_MAX) return;
     let any = false;
     for (let i = 0; i < NOZ; i++) if (noz[i] > 0.02) { any = true; break; }
@@ -76,27 +78,30 @@ export function createPlumes() {
       const len = (big ? LEN_REAR : i < NOZ_YAW ? LEN_DOWN : LEN_YAW) * Math.sqrt(k) * (0.92 + 0.08 * Math.sin(clock * 61 + i * 2.1 + seed) + 0.05 * Math.sin(clock * 37 + i));
       const wide = (big ? 0.2 : i < NOZ_YAW ? 0.2 : 0.14) * (0.6 + 0.4 * k);
       pos.set(N[0], N[1], N[2]);
-      m.compose(pos, turns[i], sc.set(wide, len, wide)).premultiply(body);
+      let turn = turns[i];
+      const a = lean && i >= NOZ_DOWN && i < NOZ_YAW ? lean[i - NOZ_DOWN] : 0;
+      if (a) turn = swung.setFromUnitVectors(up, dir.set(Math.sin(a), -Math.cos(a), 0));
+      m.compose(pos, turn, sc.set(wide, len, wide)).premultiply(body);
       mesh.setMatrixAt(n++, m);
-      m.compose(pos, turns[i], sc.set(wide * 0.4, len * 0.75, wide * 0.4)).premultiply(body);
+      m.compose(pos, turn, sc.set(wide * 0.4, len * 0.75, wide * 0.4)).premultiply(body);
       mesh.setMatrixAt(n++, m);
     }
   }
   return {
     mesh,
     // ours: the car being driven (or null); list: the other players' cars as multiplayer.js hands them out
-    // (remotes(): x, y, z, yaw, pitch, roll, spec and noz for a Rocket); cam: the camera's place
+    // (remotes(): x, y, z, yaw, pitch, roll, spec, noz and lean for a Rocket); cam: the camera's place
     update(ours, list, cam, dt) {
       n = 0; cars = 0; clock = (clock + dt) % 1000;
       if (ours?.rocket) {
         const s = ours.spec, off = s.wheelbase * s.cgFront - s.wheelbase / 2;
-        car(ours.x + Math.sin(ours.yaw) * off, ours.y, ours.z - Math.cos(ours.yaw) * off, ours.yaw, ours.pitch, ours.roll, ours.rocket.noz);
+        car(ours.x + Math.sin(ours.yaw) * off, ours.y, ours.z - Math.cos(ours.yaw) * off, ours.yaw, ours.pitch, ours.roll, ours.rocket.noz, ours.rocket.lean);
       }
       for (let i = 0; i < list.length; i++) {
         const r = list[i];
         if (!r.noz || (r.x - cam.x) ** 2 + (r.z - cam.z) ** 2 > FAR * FAR) continue;
         const s = r.spec, off = s.wheelbase * s.cgFront - s.wheelbase / 2;
-        car(r.x + Math.sin(r.yaw) * off, r.y, r.z - Math.cos(r.yaw) * off, r.yaw, r.pitch, r.roll, r.noz);
+        car(r.x + Math.sin(r.yaw) * off, r.y, r.z - Math.cos(r.yaw) * off, r.yaw, r.pitch, r.roll, r.noz, r.lean);
       }
       if (mesh.count !== n) mesh.count = n;
       if (n) mesh.instanceMatrix.needsUpdate = true;

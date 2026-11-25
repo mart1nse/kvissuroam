@@ -15,6 +15,7 @@ import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
+import { flightPose, flightNozzles, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
@@ -40,6 +41,7 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const BOOSTING = 64;             // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js)
 const STAMP = 21;                // position's slot for when it was taken (see addPose)
 const POSE_SC = POSE_DEC.map((d) => 10 ** d);
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
@@ -615,6 +617,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         onKudos?.(m.id, m.to);
         break;
       }
+      case 'jmp': {         // a Rocket's kickflip (src/cars/thrust.js): its flight plan, and their clock at the press
+        const o = others.get(m.id), plan = unpackPlan(m.p);
+        if (!o || !plan || !o.spec.thrusters || !Number.isInteger(m.c)) break;
+        // (when it began, on the same clock as their positions: see addPose)
+        const raw = (((Date.now() - m.c) % 60000) + 60000) % 60000, now = performance.now() / 1000;
+        const late = o.base === undefined ? 0 : Math.max(0, Math.min(1500, ((raw - o.base + 90000) % 60000) - 30000));
+        o.flip = { plan, t0: now - late / 1000 };
+        break;
+      }
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
         if (o) o.w = typeof m.w === 'string' ? m.w : '';
@@ -747,6 +758,27 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     return p;
   }
 
+  // A Rocket (src/cars/thrust.js): during a kickflip its place and angles come from the flight plan it sent at the
+  // press (the 'jmp' message), not from its positions: ten a second make corners of an arc and of a whole turn
+  // about its long axis. And how hard each of its nozzles blows (o.noz), for the jets (src/cars/plumes.js) and
+  // the hiss: from the plan in a flight, the four at the tail while it sends the BOOST flag.
+  const flown = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
+  function jets(o, now, dt) {
+    const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
+    const f = o.flip, t = f ? now - (bundled ? DELAY_BUNDLED : DELAY) - f.t0 : -1;
+    if (f && (t > f.plan.tl || !p || !o.live)) o.flip = null;
+    if (f && p && o.live && t >= 0 && t <= f.plan.tl) {
+      flightPose(f.plan, t, flown);
+      p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
+      p[6] = f.plan.vx; p[7] = f.plan.vz;
+      for (let k = 15; k < 20; k++) p[k] = 0;                    // (in the air: no tyre slides or marks)
+      flightNozzles(f.plan, t, n, o.spec);
+      return;
+    }
+    const rear = p && o.live && (p[20] & BOOSTING) ? 1 : 0, k = Math.min(1, dt / 0.05);
+    for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN ? rear : 0) - n[i]) * k;
+  }
+
   function parkedPose(o) {
     const last = o.buf[o.buf.length - 1];
     if (o.parked?.from !== last) {
@@ -766,6 +798,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const o of others.values()) {
       const p = o.pose;
       if (!p || (p[20] & HOT)) continue;                         // they are on a lap: we pass through them
+      if (o.flip) continue;                                      // a Rocket in the air on a kickflip: over us
       if (racing(o.id)) continue;                                // in the race from the grid on, even before their flag arrives
       const dx = car.x - p[0], dz = car.z - p[1];
       if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) continue;
@@ -818,6 +851,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const sx = -fz, sz = fx, flags = p[20] || 0, has = p[14] !== undefined;
     r.id = o.id; r.spec = s;
     r.x = p[0]; r.z = p[1]; r.y = p[2]; r.yaw = p[3]; r.steer = p[8];
+    r.pitch = p[4]; r.roll = p[5]; r.noz = s.thrusters ? o.noz : null;   // (a Rocket's nozzles: see jets)
     r.a = s.wheelbase * s.cgFront; r.b = s.wheelbase * (1 - s.cgFront);
     r.vx = p[6] * fx + p[7] * fz; r.vy = p[6] * sx + p[7] * sz;
     r.reversing = !!p[10];
@@ -986,9 +1020,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass)
+    // the water is grass; 64 a Rocket's BOOST)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0);
     return out;
   }
   function update(car, dt, active) {
@@ -1017,6 +1051,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const ds = dsBuf;
     for (const o of replay ? [...others.values(), replay] : others.values()) {
       o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
+      if (o.spec.thrusters && !o.rp) jets(o, now, dt);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
       // off, so the camera is not left on an empty road; spectate.js moves on after a while)
       o.held = !o.pose && o.id === holdId && o.buf.length > 0;
@@ -1228,6 +1263,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get id() { return myId; },
     serverNow: () => Date.now() + clockOff,
     raceSend(m) { if (!STEALTH) send(m); },
+    // our Rocket has left the ground on a kickflip: the plan of the whole flight, for the others to fly it by
+    sendFlip(plan) { if (!STEALTH && others.size) send({ t: 'jmp', p: packPlan(plan), c: (((Date.now() - Math.round(plan.t * 1000)) % 60000) + 60000) % 60000 }); },
     // driving on the map (counts for the race votes), or in the garage / another tab
     // (leaving the map is told only after AWAY_S: a quick car change in the garage keeps your vote and place)
     // (now: told at once, as on a Raadi stage run, where a player is not counted for the race votes)

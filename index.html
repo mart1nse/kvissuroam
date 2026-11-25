@@ -233,6 +233,7 @@
         <div id="gear">D</div>
         <button id="tyre" data-act="tyres" title="Road or gravel tyres: click to change (Y)"></button>
       </div>
+      <div id="thrust" class="hidden"><div class="bar"><i></i></div><small></small></div>
       <div id="carname"></div>
     </div>
     <div id="toast"></div>
@@ -242,6 +243,10 @@
     <div class="pad left">
       <button data-ctl="left">◀</button>
       <button data-ctl="right">▶</button>
+    </div>
+    <div class="pad rocket hidden" id="rocketpad">
+      <button data-ctl="flip" class="flip"><i></i><b>FLIP</b><small></small></button>
+      <button data-ctl="boost" class="boost"><i></i><b>BOOST</b><small></small></button>
     </div>
     <div class="pad right">
       <button data-ctl="down" class="brake">▼<small>BRAKE / REVERSE</small></button>

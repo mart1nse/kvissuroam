@@ -32,6 +32,7 @@ export function spinAmount(c) {
 
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
+  let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
@@ -84,6 +85,13 @@ export function createAudio() {
     spinFilt = ctx.createBiquadFilter(); spinFilt.type = 'bandpass'; spinFilt.frequency.value = 800; spinFilt.Q.value = 6;
     spinGain = ctx.createGain(); spinGain.gain.value = 0;
     noise.connect(spinFilt).connect(spinGain).connect(bus);
+    // a Rocket's nozzles: the hiss of cold gas, and under it the rush of the four big ones at the tail
+    const jetF = ctx.createBiquadFilter(); jetF.type = 'bandpass'; jetF.frequency.value = 3200; jetF.Q.value = 0.35;
+    jetGain = ctx.createGain(); jetGain.gain.value = 0;
+    noise.connect(jetF).connect(jetGain).connect(bus);
+    const jetL = ctx.createBiquadFilter(); jetL.type = 'bandpass'; jetL.frequency.value = 380; jetL.Q.value = 0.6;
+    jetLow = ctx.createGain(); jetLow.gain.value = 0;
+    noise.connect(jetL).connect(jetLow).connect(bus);
     // and over it the tyres sing: one long squeal that follows the wheel spin (src/audio-tyres.js; V switches
     // between the held note and the modelled squeal of public/tyre-worklet.js)
     loadTyreWorklet(ctx, `${import.meta.env.BASE_URL}tyre-worklet.js`);
@@ -226,6 +234,28 @@ export function createAudio() {
     }
   }
 
+  // how hard a Rocket's nozzles blow, as two levels: all of them (1 = the four big ones wide open, or the four
+  // under the floor) and the big four alone
+  const jetOut = [0, 0];
+  function jetLevels(noz) {
+    let rear = 0, rest = 0;
+    if (noz) for (let i = 0; i < noz.length; i++) { if (i < 4) rear += noz[i]; else rest += noz[i]; }
+    jetOut[0] = Math.min(1.3, rear / 4 + rest / 4); jetOut[1] = rear / 4;
+    return jetOut;
+  }
+  // the valves snapping open for a kickflip's lift-off: a short hard burst
+  function jetPop(out, level) {
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 0.5;
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.exponentialRampToValueAtTime(2800, t + 0.2);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3 * level, t + 0.015);
+    g.gain.setTargetAtTime(0.0001, t + 0.12, 0.08);
+    src.connect(f).connect(g).connect(out);
+    src.start(t, Math.random()); src.stop(t + 0.6);
+  }
+
   // air brakes: the long, low hiss of the valves venting once a bus has braked to a stop
   function airPsh() {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -314,6 +344,15 @@ export function createAudio() {
     windFilt.frequency.setTargetAtTime(rumble ? 320 : 650 + Math.min(v, 50) * 9, t, 0.1);
     const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.115, v * 0.0025) * (flying ? 0.7 : 1);
     windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
+    // a Rocket's nozzles (told only while they change), the burst of a lift-off and the tyres meeting the road again
+    const jl = jetLevels(dead ? null : car.rocket?.noz);
+    if (jl[0] !== jetS || jl[1] !== jetR) {
+      jetS = jl[0]; jetR = jl[1];
+      jetGain.gain.setTargetAtTime(Math.pow(jetS, 0.7) * 0.13, t, 0.03);
+      jetLow.gain.setTargetAtTime(jetR * 0.22, t, 0.04);
+    }
+    const inFlight = !!car.rocket?.flight;
+    if (inFlight !== wasFlight) { wasFlight = inFlight; if (!dead && noiseBuf) { if (inFlight) jetPop(bus, 1); else thump(2.2); } }
     // only on paving, and only audible once the slide is well under way
     const k = dead || car.surface !== 1 ? 0 : Math.max(car.skidF || 0, car.skidR || 0);
     skid += (k - skid) * 0.2;
@@ -359,6 +398,7 @@ export function createAudio() {
     noiseSrc.connect(v.spinFilt).connect(v.spinGain).connect(v.mix);
     v.squeal = createSqueal(ctx, noiseSrc, v.mix, { voices: 1 });
     v.gravel = createGravel(ctx, v.mix); v.loose = 0;
+    v.jet = 0; v.jetGain = null;                                 // (a Rocket's nozzles: made when one is first heard)
     voices.push(v);
     return v;
   }
@@ -371,6 +411,7 @@ export function createAudio() {
   function bind(v, r, d) {
     const t = ctx.currentTime;
     v.id = r.id; v.carId = r.spec.id; v.skid = v.spin = v.lastBoost = 0;
+    if (v.jetGain) { v.jetGain.gain.setTargetAtTime(0, t, 0.03); v.jet = 0; }
     v.ev = r.spec.engine.type === 'ev';
     v.cfg = v.ev ? null : ENGINE_SOUNDS[r.spec.id] || null;
     if (v.cfg && workletReady && !v.synth) {
@@ -412,6 +453,18 @@ export function createAudio() {
         }
       } else v.whineGain.gain.setTargetAtTime(0, t, 0.05);
       if (v.synth && v.cfg) v.synth.port.postMessage({ state: { rpm: Math.max(r.rpm, e.idle * 0.8), throttle: r.throttle, boost: b, on: 1, redline: e.redline, idle: e.idle, cut: r.revCut ? 1 : 0, shift: 0 } });
+    }
+    // a Rocket's nozzles: the hiss, and the burst when it lifts off
+    const jet = r.noz ? jetLevels(r.noz)[0] : 0;
+    if (jet !== v.jet) {
+      if (!v.jetGain) {
+        const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 0.3;
+        v.jetGain = ctx.createGain(); v.jetGain.gain.value = 0;
+        noiseSrc.connect(f).connect(v.jetGain).connect(v.mix);
+      }
+      if (jet > 0.6 && v.jet < 0.2 && r.noz[4] > 0.5 && noiseBuf) jetPop(v.mix, 1);
+      v.jet = jet;
+      v.jetGain.gain.setTargetAtTime(Math.pow(jet, 0.7) * 0.22, t, 0.04);
     }
     const k = r.paved ? Math.max(r.skidF, r.skidR) : 0;
     v.skid += (k - v.skid) * 0.36;                              // (as 0.2 a frame at 60, now called 30 times a second)

@@ -40,6 +40,15 @@ const WATER = 4;
 export const NOZ = 10;
 export const NOZ_REAR = 0, NOZ_DOWN = 4, NOZ_SIDE = 8;
 
+// Where the nozzles are on the stand-in body and which way their gas goes: [x, y, z, dx, dy, dz] from the middle
+// of the wheelbase at road height, x to the right, z to the tail, in the order above. The body marks them
+// (src/cars/models/rocket.js) and the jets are drawn from them (src/cars/plumes.js).
+export const NOZZLES = [
+  [-0.48, 0.5, 2.18, 0, 0, 1], [-0.17, 0.5, 2.18, 0, 0, 1], [0.17, 0.5, 2.18, 0, 0, 1], [0.48, 0.5, 2.18, 0, 0, 1],
+  [-0.62, 0.14, -0.705, 0, -1, 0], [0.62, 0.14, -0.705, 0, -1, 0], [-0.62, 0.14, 0.705, 0, -1, 0], [0.62, 0.14, 0.705, 0, -1, 0],
+  [-0.97, 0.3, 0.1, -1, 0, 0], [0.97, 0.3, 0.1, 1, 0, 0],
+];
+
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 
@@ -281,6 +290,24 @@ function arc(car, world, p) {
       for (let b = 0; b < bs.length; b++) if (boxDist(bs[b], x, z) < (last ? hl : hw) + 0.2) return no('rail or divider');
     }
   }
+  return p;
+}
+
+// A plan as the other players get it (src/net/multiplayer.js: one message at the press, and every page flies
+// that car along the same curve): its numbers in this order, and back again. A list that is no plan (a word
+// among the numbers, a flight of a minute, a car thrown a kilometre up) comes back as null.
+const PLAN_KEYS = ['x0', 'z0', 'y0', 'vx', 'vz', 'v0', 'yaw0', 'yawR', 'p0', 'r0', 'cg', 'side', 'vl', 'tb', 'tl', 'yl', 'vland', 'pl', 'rl'];
+const PLAN_DEC = [2, 2, 3, 3, 3, 3, 4, 3, 4, 4, 3, 0, 3, 4, 4, 3, 3, 4, 4];
+export const PLAN_LEN = PLAN_KEYS.length;
+export function packPlan(p) { return PLAN_KEYS.map((k, i) => { const m = 10 ** PLAN_DEC[i]; return Math.round(p[k] * m) / m; }); }
+export function unpackPlan(a) {
+  if (!Array.isArray(a) || a.length !== PLAN_LEN) return null;
+  const p = { t: 0 };
+  for (let i = 0; i < PLAN_LEN; i++) { if (typeof a[i] !== 'number' || !Number.isFinite(a[i])) return null; p[PLAN_KEYS[i]] = a[i]; }
+  if (Math.abs(p.side) !== 1 || !(p.tl > LIFT_T && p.tl <= MAX_T + 1) || !(p.tb >= ROLL_T0 + ROLL_MIN - 0.02 && p.tb < p.tl)) return null;
+  if (Math.hypot(p.vx, p.vz) > 150 || Math.abs(p.v0) > 3 || !(p.vl > 0 && p.vl <= LIFT_V * 1.31) || Math.abs(p.vland) > 20) return null;
+  if (!(p.cg >= 0 && p.cg <= 1.5) || Math.abs(p.yawR) > 3.01 || Math.abs(p.yl - p.y0) > 200) return null;
+  if (Math.max(Math.abs(p.p0), Math.abs(p.r0), Math.abs(p.pl), Math.abs(p.rl)) > 1.2) return null;
   return p;
 }
 

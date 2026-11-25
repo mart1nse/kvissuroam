@@ -1495,7 +1495,10 @@ function substep(car, input, world, dt) {
   const shud = car.bite ? 0.6 + 0.4 * Math.cos((car.time - (car.biteAt ?? car.time)) * 53) : 0;
   // (and after a knock from a stone the body rocks on its springs: stoneKick)
   if (car.stone) stoneKick(car, dt);
-  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
+  // (thrusters push through the body's middle and do not lift its nose; s.squat: how much of the usual squat
+  // and dive a car's springs let through)
+  const axBody = (car.ax - (car.thrustN || 0) / car.spec.mass) * (car.spec.squat ?? 1);
+  const tPitch = car.groundPitch + axBody * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with

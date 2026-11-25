@@ -523,7 +523,7 @@ export const CARS = {
     blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
     mass: 1950,                 // estimate, with driver: one seat, the second gas tank in the other's place
     wheelbase: 2.65,
-    track: 1.66,
+    track: 1.64,
     cgFront: 0.52,
     cgHeight: 0.42,             // battery in the floor
     wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
@@ -534,7 +534,7 @@ export const CARS = {
     tc: 1,                      // the motors hold the tyres at their grip limit while the wheel is straight
     tcSlip: 1.5,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
-    fanDown: 12000,
+    fanDown: 12000, squat: 0.5,
     // cold-gas thrusters (N, all the nozzles of a kind together): 4 rear, 4 down, 2 side
     thrusters: { rear: 53000, down: 80000, side: 16000 },
     engine: {
@@ -620,11 +620,14 @@ for (const s of Object.values(CARS)) {
 
 export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'rocket', 'bus'];
 
+// Cars nobody is shown yet (Martin 2026-11-25: the Rocket is hidden from all until he says): not in the garage,
+// not on the lap board, not accepted by the server. Stealth mode (?off=100, src/net/stealth.js) drives them.
+export const HIDDEN_CARS = ['rocket'];
+
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [
   { name: 'EVERYDAY', ids: ['passat', 'crv', 'mazda6', 'rav4'] },
-  { name: 'ELECTRIC', ids: ['enyaq', 'bz4x'] },
+  { name: 'ELECTRIC', ids: ['enyaq', 'bz4x', 'rocket'] },
   { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt', 'impreza'] },
-  { name: 'ROCKET', ids: ['rocket'] },
   { name: 'LOCAL HEROES', ids: ['w201', 'audi200', 'bus'] },   // the old Merc, the Audi wagon and the line 8 bus
 ];

@@ -263,6 +263,33 @@ body:not(.touch) .touch-only { display: none; }
 .pad.right #carname { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap;
   bottom: calc(max(6px, env(safe-area-inset-bottom)) - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px));
   font-size: 8px; letter-spacing: .16em; color: #fff; opacity: .5; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
+/* The thrusters of a car that has them (the Roadster Rocket, src/rocketui.js). Phones: two round buttons left of
+   BRAKE, FLIP over BOOST; each is its own gauge, filling from the bottom with what is in the tank (FLIP in two
+   halves, one a jump), and during the reload filling up again with the time left. Desktop: a slim bar under
+   the rev counter with the keys. */
+.pad.rocket { right: calc(max(18px, env(safe-area-inset-right)) + 2 * clamp(72px, 13vw, 118px) + 2 * clamp(10px, 2vw, 20px));
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px)); flex-direction: column; gap: clamp(6px, 2vh, 10px); }
+.pad.rocket button { position: relative; overflow: hidden; width: clamp(50px, 15.5vh, 66px); height: clamp(50px, 15.5vh, 66px); border-radius: 50%; gap: 1px;
+  border-color: var(--cyan); color: #fff; font-size: 9px; letter-spacing: .08em; text-shadow: 0 0 6px var(--ink); }
+.pad.rocket button b { position: relative; font-weight: 800; }
+.pad.rocket button small { position: relative; font-size: 8px; min-height: 9px; opacity: 1; }
+.pad.rocket button i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: linear-gradient(to top, rgba(47, 243, 255, .75), rgba(160, 250, 255, .55)); }
+.pad.rocket button.flip { border-color: var(--hot); }
+.pad.rocket button.flip i { background: linear-gradient(to top, rgba(255, 43, 214, .75), rgba(255, 150, 235, .55)); }
+.pad.rocket button.flip::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: rgba(18, 6, 43, .7); }
+.pad.rocket button.no { opacity: .45; }
+.pad.rocket button.reload { border-style: dashed; }
+.pad.rocket button.reload i { background: rgba(255, 255, 255, .32); }
+.pad.rocket button.deny { border-color: var(--sun); color: var(--sun); animation: thrustdeny .3s 3; }
+@keyframes thrustdeny { 50% { opacity: .35; } }
+#thrust { width: calc(var(--d) * .62); margin: 2px 0 5px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+#thrust .bar { position: relative; width: 100%; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(18, 6, 43, .6); box-shadow: 0 0 0 1px rgba(47, 243, 255, .55); }
+#thrust .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(to right, var(--hot), var(--cyan)); }
+#thrust .bar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(18, 6, 43, .85); }
+#thrust small { font-size: 9px; letter-spacing: .14em; color: #fff; opacity: .8; text-shadow: 1px 1px 0 var(--ink); white-space: nowrap; }
+#thrust.reload .bar i { background: rgba(255, 255, 255, .45); }
+#thrust.deny small { color: var(--sun); opacity: 1; }
+body.touch #thrust { display: none; }
 /* phones: a still picture of the drone shot behind the opening menu (nothing is drawn in 3D until DRIVE) */
 body.still #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)),
   url('/menu-still.jpg') center / cover no-repeat, #12062b; }

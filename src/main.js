@@ -223,7 +223,11 @@ if (xlow) {
 }
 
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software && !xlow, powerPreference: 'high-performance' });
+// (?aatest: edge smoothing also when drawn in software, for test pictures: tools/ghost-fade-shots.mjs)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: (!isTouch && !gpu.software && !xlow) || params.has('aatest'), powerPreference: 'high-performance' });
+// samples of the picture's edge smoothing, 0 without (asked now, with the picture itself still the place drawn to):
+// how a see-through ghost car is drawn, see setFade in net/multiplayer.js
+const aaSamples = (() => { try { const gl = renderer.getContext(); return gl.getContextAttributes()?.antialias ? gl.getParameter(gl.SAMPLES) | 0 : 0; } catch { return 0; } })();
 // pictures of queued work go to the graphics card one by one (on phones as their small copy: see phonetex.js)
 const sendTex = (tex) => { shrinker?.texture(tex); renderer.initTexture(tex); };
 jobs.setUploader(sendTex);
@@ -903,6 +907,7 @@ async function boot() {
     stage: RAADI,
     // (a nearby ghost car's see-through shader, compiled before it is first used)
     warm: (obj) => warmer.ready(obj),
+    samples: aaSamples,
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,

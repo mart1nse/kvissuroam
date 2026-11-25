@@ -6,6 +6,7 @@
 // north. Body frame: vx forward, vy to the right, yawRate clockwise positive.
 
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
+import { rocketState, rocketStep } from './thrust.js';
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
@@ -186,6 +187,7 @@ export function createCar(spec, pose) {
     airborne: false, airTime: 0, landed: 0,
     pitchRate: 0, rollRate: 0,
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
+    rocket: spec.thrusters ? rocketState(spec.id) : null, thrustN: 0,
     steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
     slipV: 0, slipVF: 0, slipVR: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
     gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0, shaft: 0, carry: 0, revCut: 0, csHold: 0, csDir: 0,
@@ -586,6 +588,13 @@ function boxContact(car, b, list, fx, fz, rx, rz, hl, hw, contact) {
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
 // steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
+  // (a car with thrusters, thrust.js: its tank, its BOOST, and a kickflip in flight, which moves the car
+  // along its plan instead of on its tyres)
+  if (car.rocket && rocketStep(car, input, world, dtFrame)) {
+    car.time += dtFrame;
+    car.hit *= Math.exp(-dtFrame * 4); car.landed *= Math.exp(-dtFrame * 6);
+    return;
+  }
   const n = Math.max(1, Math.ceil(dtFrame / (1 / 240)));
   const dt = dtFrame / n;
   for (let i = 0; i < n; i++) substep(car, input, world, dt);
@@ -600,8 +609,10 @@ export function stepCar(car, input, world, dtFrame) {
 function substep(car, input, world, dt) {
   car.skidF = car.skidR = car.rubF = car.rubR = 0;
   const s = car.spec;
-  const m = s.mass, L = s.wheelbase;
-  const up = +input.up || 0, down = +input.down || 0;
+  // (the Rocket's tank: the gas that has gone is weight the car no longer carries, thrust.js)
+  const m = s.mass - (car.gasOut || 0), L = s.wheelbase;
+  // (BOOST holds the motors at full power too: a phone's thumb goes from GAS to BOOST)
+  const up = car.thrustN > 0 ? 1 : +input.up || 0, down = +input.down || 0;
   const sinY = Math.sin(car.yaw), cosY = Math.cos(car.yaw);
   const fx = sinY, fz = -cosY;      // forward
   const rx = cosY, rz = sinY;       // right
@@ -762,6 +773,8 @@ function substep(car, input, world, dt) {
     if (car.airborne) {
       if (car.airTime > 0.12) car.landed = Math.max(car.landed, Math.min(vGround, 0) - car.vyUp);
       car.airborne = false; car.airTime = 0;
+      // (a body that turned over in the air, a Rocket let go of in its roll: it rights itself the short way round)
+      if (Math.abs(car.roll) > Math.PI) car.roll = Math.atan2(Math.sin(car.roll), Math.cos(car.roll));
     }
   } else {
     car.airborne = true; car.airTime += dt;
@@ -778,7 +791,9 @@ function substep(car, input, world, dt) {
   const steerIn = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
   const maxLock = 0.6;
   const vS = Math.max(Math.abs(car.vx), 1);
-  const gripLock = Math.atan((1.25 * G * L) / (vS * vS));
+  // (suction fans, spec.fanDown: that much more weight on the tyres, so that much more lock at speed)
+  const fanK = s.fanDown ? 1 + s.fanDown / (m * G) : 1;
+  const gripLock = Math.atan((1.25 * fanK * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
   // In a slide the front wheels need the slide angle on top of the usual lock
   // to point where the car is going, so the limit is centred on that angle;
@@ -867,11 +882,14 @@ function substep(car, input, world, dt) {
   const sd = Math.sin(car.steer), cd = Math.cos(car.steer);
 
   // ---- vertical loads with longitudinal transfer
-  const transfer = (m * car.ax * s.cgHeight) / L;
+  // (a thruster's push goes through the body, not the tyres, and shifts no weight)
+  const transfer = ((m * car.ax - (car.thrustN || 0)) * s.cgHeight) / L;
   // (in the air a trace of load is kept so nothing below divides by zero)
   const tl = Math.max(load, 1e-4);
-  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl;
-  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl;
+  // (suction fans press the car down while it is near the road; they add no mass)
+  const fan = s.fanDown ? s.fanDown * Math.min(1, load * 4) : 0;
+  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + (fan * car.b) / L;
+  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + (fan * car.a) / L;
 
   // ---- slip angles
   const v0 = 2.0;
@@ -908,7 +926,7 @@ function substep(car, input, world, dt) {
   // (held on the brakes at a standstill, as in a burnout, the pads grip like static friction: whatever
   // pushes the car is met up to the brakes' and tyres' limit, so it creeps at most a few cm a second)
   const bSign = Math.max(-1, Math.min(1, car.vx / 0.05));
-  const brakeTotal = brake * (s.brakeG ?? 1.05) * m * G * Math.min(1, load * 4);
+  const brakeTotal = brake * (s.brakeG ?? 1.05) * (m * G + fan) * Math.min(1, load * 4);
   // (in a burnout the brake is held just hard enough to pin the front wheels rather than stamped on, so the
   // rear brakes fight the engine a little less: the 190E only just manages it, revs struggling; the front
   // brakes grip like static friction at a standstill, see bSign)
@@ -1102,7 +1120,8 @@ function substep(car, input, world, dt) {
   const slopeX = -m * G * Math.sin(car.groundPitch) * load;     // the slope pushes through the tyres
   const slopeY = m * G * Math.sin(car.groundRoll) * load;
 
-  const FX = fxF * cd - fyF * sd + fxR - drag - roll + slopeX;
+  // (rear thrusters, thrust.js: a push on the body itself, whatever the tyres are doing)
+  const FX = fxF * cd - fyF * sd + fxR - drag - roll + slopeX + (car.thrustN || 0);
   const FY = fyF * cd + fxF * sd + fyR + slopeY - 0.5 * RHO * s.cdA * 1.6 * car.vy * Math.abs(car.vy);
   let MZ = car.a * (fyF * cd + fxF * sd) - car.b * fyR;
   // Spinning wheels never bite evenly left and right, so a hard launch tugs
@@ -1479,7 +1498,10 @@ function substep(car, input, world, dt) {
   const shud = car.bite ? 0.6 + 0.4 * Math.cos((car.time - (car.biteAt ?? car.time)) * 53) : 0;
   // (and after a knock from a stone the body rocks on its springs: stoneKick)
   if (car.stone) stoneKick(car, dt);
-  const tPitch = car.groundPitch + car.ax * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
+  // (thrusters push through the body's middle and do not lift its nose; s.squat: how much of the usual squat
+  // and dive a car's springs let through)
+  const axBody = (car.ax - (car.thrustN || 0) / (car.spec.mass - (car.gasOut || 0))) * (car.spec.squat ?? 1);
+  const tPitch = car.groundPitch + axBody * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with
@@ -1510,4 +1532,5 @@ export function resetCar(car, pose) {
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
   car.rpm = car.spec.engine.idle ?? 0;
+  if (car.rocket) { car.rocket.flight = null; car.thrustN = 0; }
 }

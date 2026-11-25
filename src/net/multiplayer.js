@@ -16,6 +16,7 @@ import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
+import { flightPose, flightNozzles, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
@@ -44,6 +45,27 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
+// A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
+// samples given to the piece in the share of its strength (alpha to coverage), so many pixels a sample more and so
+// many a sample less by a fine pattern on the screen (the 4 by 4 ordered one; COVER_FADE is one sample's share).
+// Part of three's own shader text, behind a define that only those pieces set.
+THREE.ShaderChunk.alphatest_fragment = `
+#ifdef COVER_FADE
+  {
+    // (a cut-out picture, a badge: cut where it is cut at full strength, not wherever the fade takes it under the limit)
+    #ifdef USE_ALPHATEST
+      if (diffuseColor.a < alphaTest * opacity) discard;
+    #endif
+    ivec2 fadeP = ivec2(gl_FragCoord.xy) & 3;
+    int fadeX = fadeP.x ^ fadeP.y;
+    float fadeN = (float(((fadeX & 1) << 3) | ((fadeP.y & 1) << 2) | (fadeX & 2) | ((fadeP.y & 2) >> 1)) + 0.5) / 16.0;
+    diffuseColor.a = clamp(diffuseColor.a + (fadeN - 0.5) * COVER_FADE, 0.0, 1.0);
+  }
+#else
+${THREE.ShaderChunk.alphatest_fragment}
+#endif
+`;
 const STAMP = 21;                // position's slot for when it was taken (see addPose)
 const POSE_SC = POSE_DEC.map((d) => 10 ** d);
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
@@ -262,7 +284,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {}, onPlate = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -634,6 +656,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         onKudos?.(m.id, m.to);
         break;
       }
+      case 'jmp': {         // a Rocket's kickflip (src/cars/thrust.js): its flight plan, and their clock at the press
+        const o = others.get(m.id);
+        // (x: the flight ended early, against a house, a tree or a bank: from here it is where its positions say)
+        if (o && m.x) { o.flip = null; break; }
+        const plan = unpackPlan(m.p);
+        if (!o || !plan || !o.spec.thrusters || !Number.isInteger(m.c)) break;
+        // (when it began, on the same clock as their positions: see addPose)
+        const raw = (((Date.now() - m.c) % 60000) + 60000) % 60000, now = performance.now() / 1000;
+        const late = o.base === undefined ? 0 : Math.max(0, Math.min(1500, ((raw - o.base + 90000) % 60000) - 30000));
+        o.flip = { plan, t0: now - late / 1000 };
+        break;
+      }
       case 'at': {          // where they are: map, garage or away
         const o = others.get(m.id);
         if (o) o.w = typeof m.w === 'string' ? m.w : '';
@@ -766,6 +800,27 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     return p;
   }
 
+  // A Rocket (src/cars/thrust.js): during a kickflip its place and angles come from the flight plan it sent at the
+  // press (the 'jmp' message), not from its positions: ten a second make corners of an arc and of a whole turn
+  // about its long axis. And how hard each of its nozzles blows (o.noz), for the jets (src/cars/plumes.js) and
+  // the hiss: from the plan in a flight, the four at the tail while it sends the BOOST flag.
+  const flown = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
+  function jets(o, now, dt) {
+    const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
+    const f = o.flip, t = f ? now - (bundled ? DELAY_BUNDLED : DELAY) - f.t0 : -1;
+    if (f && (t > f.plan.tl || !p || !o.live)) o.flip = null;
+    if (f && p && o.live && t >= 0 && t <= f.plan.tl) {
+      flightPose(f.plan, t, flown);
+      p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
+      p[6] = f.plan.vx; p[7] = f.plan.vz;
+      for (let k = 15; k < 20; k++) p[k] = 0;                    // (in the air: no tyre slides or marks)
+      flightNozzles(f.plan, t, n, o.spec);
+      return;
+    }
+    const rear = p && o.live && (p[20] & BOOSTING) ? 1 : 0, k = Math.min(1, dt / 0.05);
+    for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN ? rear : 0) - n[i]) * k;
+  }
+
   function parkedPose(o) {
     const last = o.buf[o.buf.length - 1];
     if (o.parked?.from !== last) {
@@ -785,6 +840,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     for (const o of others.values()) {
       const p = o.pose;
       if (!p || (p[20] & HOT)) continue;                         // they are on a lap: we pass through them
+      if (o.flip) continue;                                      // a Rocket in the air on a kickflip: over us
       if (racing(o.id)) continue;                                // in the race from the grid on, even before their flag arrives
       const dx = car.x - p[0], dz = car.z - p[1];
       if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) continue;
@@ -837,6 +893,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const sx = -fz, sz = fx, flags = p[20] || 0, has = p[14] !== undefined;
     r.id = o.id; r.spec = s;
     r.x = p[0]; r.z = p[1]; r.y = p[2]; r.yaw = p[3]; r.steer = p[8];
+    r.pitch = p[4]; r.roll = p[5]; r.noz = s.thrusters ? o.noz : null;   // (a Rocket's nozzles: see jets)
     r.a = s.wheelbase * s.cgFront; r.b = s.wheelbase * (1 - s.cgFront);
     r.vx = p[6] * fx + p[7] * fz; r.vy = p[6] * sx + p[7] * sz;
     r.reversing = !!p[10];
@@ -862,6 +919,25 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // car gets see-through copies of its own, made the first time it comes close and kept; its lamp and soot
   // materials are its own already and are changed in place. See-through is another shader, compiled ahead
   // (`warm`, once per kind of car) and only then used: until it is ready the car stays solid.
+  // (Martin 2026-11-25: "ghosts look a bit patchy now". A faded car was blended over the picture piece by piece, and
+  // a scanned body is one piece that shows both its sides, its triangles in no order: where the far side or the
+  // inside came first it showed through the near side, where it came later it did not. With edge smoothing, a
+  // desktop with a graphics card, the solid pieces of a faded car are no longer blended: they are drawn with the
+  // solid things, each filling its strength's share of every pixel's samples (COVER_FADE above), all pieces the
+  // same samples, so the nearest surface is all that shows. No more work than blending: no sorting, nothing drawn
+  // twice, the same number of shaders. Without edge smoothing, phones and the weakest computers, that would be a
+  // screen door of whole pixels, plain to see as dots at their coarse picture, so there the pieces are blended as
+  // before, patches and all (one side of each piece only was tried: the scans' triangles face either way, and it
+  // looked worse). Glass and soot, see-through as they are, are blended as before everywhere.)
+  const cover = samples > 1;
+  // a solid piece's material see-through, or solid again
+  const see = (m, on) => {
+    if (cover) {
+      if (on) m.defines = { ...m.defines, COVER_FADE: (1 / samples).toFixed(4) }; else delete m.defines.COVER_FADE;
+      m.alphaToCoverage = on;
+    } else m.transparent = on;
+    m.needsUpdate = true;
+  };
   const FADE_MIN = 0.1, FADE_AHEAD = 10, FADE_SIDE = 5, TAG_MIN = 0.6;
   const fadeWarm = new Map();        // car id -> 'busy' | true
   const fadeKeep = new Map();        // car id -> the see-through clones that keep its programs (see warmFade)
@@ -885,12 +961,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function warmFade(o) {
     if (!warm) { fadeWarm.set(o.car, true); return; }
     fadeWarm.set(o.car, 'busy');
-    const id = o.car, list = fadeParts(o).list.map((e) => ({ geo: e.c.geometry, mat: e.base, rs: e.c.receiveShadow, cs: e.c.castShadow }));
+    // (what is see-through already is drawn faded by the shader it has)
+    const id = o.car, list = fadeParts(o).list.filter((e) => !e.tr).map((e) => ({ geo: e.c.geometry, mat: e.base, rs: e.c.receiveShadow, cs: e.c.castShadow }));
     jobs.add(function* fadeShaders() {
       const waits = [], made = [];
       for (const e of list) {
         yield 'frame';
-        const t = e.mat.clone(); t.transparent = true; t.opacity = 0.5;
+        const t = e.mat.clone(); see(t, true); t.opacity = 0.5;
         const q = new THREE.Mesh(e.geo, t); q.receiveShadow = e.rs; q.castShadow = e.cs;
         const g = new THREE.Group(); g.add(q);
         made.push(t);
@@ -907,10 +984,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (a === f.a) return;
     const solid = a >= 1;
     for (const e of f.list) {
-      if (!e.mine && !e.copy) e.copy = e.base.clone();
+      if (!e.mine && !e.copy) { e.copy = e.base.clone(); if (!e.tr) see(e.copy, true); }
       const m = e.copy;
-      const tr = solid ? e.tr : true;
-      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      if (e.mine && !e.tr && solid === !!e.on) see(m, (e.on = !solid));
       m.opacity = e.op * a;
       if (!e.mine) e.c.material = solid ? e.base : m;
     }
@@ -1005,9 +1081,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass)
+    // the water is grass; 64 a Rocket's BOOST)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0);
     return out;
   }
   function update(car, dt, active) {
@@ -1036,6 +1112,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const ds = dsBuf;
     for (const o of replay ? [...others.values(), replay] : others.values()) {
       o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
+      if (o.spec.thrusters && !o.rp) jets(o, now, dt);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
       // off, so the camera is not left on an empty road; spectate.js moves on after a while)
       o.held = !o.pose && o.id === holdId && o.buf.length > 0;
@@ -1258,6 +1335,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get id() { return myId; },
     serverNow: () => Date.now() + clockOff,
     raceSend(m) { if (!STEALTH) send(m); },
+    // our Rocket has left the ground on a kickflip: the plan of the whole flight, for the others to fly it by
+    sendFlip(plan) {
+      if (STEALTH || !others.size) return;
+      if (!plan) { send({ t: 'jmp', x: 1 }); return; }
+      send({ t: 'jmp', p: packPlan(plan), c: (((Date.now() - Math.round(plan.t * 1000)) % 60000) + 60000) % 60000 });
+    },
     // driving on the map (counts for the race votes), or in the garage / another tab
     // (leaving the map is told only after AWAY_S: a quick car change in the garage keeps your vote and place)
     // (now: told at once, as on a Raadi stage run, where a player is not counted for the race votes)

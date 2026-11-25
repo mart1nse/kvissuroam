@@ -7,11 +7,15 @@
 // and at speed the wind thins it out.
 // A car with spec.exhaust.flame also spits a small flame from its tailpipe when a downshift crackles (the
 // unburnt fuel of the blip going off in the hot exhaust): a quick lick or two, drawn with the same points.
+// And the white cloud a Rocket's thrusters blow up off the ground as it lifts off and sets down (mist).
 import * as THREE from 'three';
+import { NOZ_DOWN, NOZZLES } from './cars/thrust.js';
 
 const MAX = 700;           // puffs alive at once
 const RUB0 = 2.5;          // m/s of tread sliding before a tyre makes any smoke
 const RUB1 = 13;           // ... and where it makes the most
+const MIST_RATE = 32;      // puffs per second from one of a Rocket's corner nozzles blowing hard at the ground...
+const MIST_UP = 4;         // ...from under this many metres up
 const RATE = 24;           // puffs per second from one tyre at full smoke
 const WARM = 1.1;          // seconds for a tyre to come up to smoking heat
 const COOL = 0.7;
@@ -205,6 +209,37 @@ export function createSmoke(world) {
     }
   }
 
+  // A Rocket's corner nozzles blowing at the ground (src/cars/thrust.js: the lift-off push, the landing burn):
+  // the cold gas has nowhere to go but out over the road, as a white cloud rolling away from under the car (in
+  // Tesla's film the car leaves one where it took off and sets down in another). noz: how hard each of the
+  // car's nozzles blows; owed: the puffs each corner still owes.
+  function mist(car, noz, owed, dt) {
+    let any = false;
+    for (let i = NOZ_DOWN; i < NOZ_DOWN + 4; i++) if (noz[i] > 0.25) any = true;
+    if (!any) return;
+    const gyc = world.groundAt(car.x, car.z, car.y + 0.4), up = car.y - gyc;
+    if (up > MIST_UP) return;
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
+    const mid = car.a - car.spec.wheelbase / 2, wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy;
+    // (the nearer the ground, the more of the jet is turned aside into the cloud)
+    const near = 1 - 0.7 * Math.max(0, up) / MIST_UP;
+    for (let i = 0; i < 4; i++) {
+      const k = noz[NOZ_DOWN + i];
+      if (k <= 0.25) { owed[i] = 0; continue; }
+      owed[i] += MIST_RATE * Math.max(0.4, thinK) * k * near * dt;
+      if (owed[i] < 1) continue;
+      const N = NOZZLES[NOZ_DOWN + i], along = mid - N[2];
+      const x = car.x + fx * along + sx * N[0], z = car.z + fz * along + sz * N[0];
+      while (owed[i] >= 1) {
+        owed[i] -= 1;
+        // out along the ground, away from the middle of the car, any way round
+        const a = Math.atan2(sz * N[0] - fz * N[2], sx * N[0] - fx * N[2]) + (Math.random() - 0.5) * 2.6, v = 3 + 6 * Math.random();
+        puff(x, gyc + 0.15, z, wvx * 0.35 + Math.cos(a) * v, 0.4 + Math.random() * 1.2, wvz * 0.35 + Math.sin(a) * v, 0.6 + 0.6 * k);
+      }
+    }
+  }
+  const myMist = [0, 0, 0, 0];
+
   // car: the player's car after its physics step; active: false while the game is not being driven
   // others: other players' cars, [car-like] (multiplayer.js remotes()); only the ones near enough to see
   function update(car, dt, active, others = []) {
@@ -216,9 +251,11 @@ export function createSmoke(world) {
       if (!st) theirs.set(o.id, st = { soot: sootState(), tyres: tyreState() });
       if (o.soot) exhaust(o, dt, st.soot);
       if (o.tyres) tyres(o, dt, st.tyres);
+      if (o.noz) mist(o, o.noz, st.mist || (st.mist = [0, 0, 0, 0]), dt);
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
     if (active && car && !car.inWater) tyres(car, dt, myTyres);
+    if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
     else myTyres.heat[0] = myTyres.heat[1] = 0;
 
     if (!alive && !fresh) return;

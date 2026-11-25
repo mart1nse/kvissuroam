@@ -62,6 +62,11 @@ const IDLE_MS = 30000;            // in the garage, the menu or another tab this
 const WAIT_GONE = 90000;           // a refused page asks again every 20 to 40 s (longer in a hidden tab): quiet this long, it gave up
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
+// Messages other than positions and clock asks change something the others hear about or that is stored
+// (car, name, where, driving, race votes and joins, thumbs up): each goes to everyone online, and a race one is
+// written to storage too. The game sends a few a minute (a car pick waits till the browsing stops), so more than
+// this in 15 s is a script, and the socket is shut (25 Nov: one socket could make 100 others hear 30 a second).
+const LOUD_WINDOW = 15000, LOUD_MAX = 30;
 const DAY = 86400000;
 // Positions in bundles (Martin 2026-11-23, 22 online and more coming): a page that says so in its hello
 // (b: 1) gets every other car's newest position in ONE message ten times a second, instead of one
@@ -109,6 +114,15 @@ export default {
       // the page itself never gets here (a static asset; index.html moves the old addresses on), but
       // other paths on the old address go to www.linnaring.com (worker/moved.js)
       return moved(req, url) || (env.ASSETS ? env.ASSETS.fetch(req) : new Response('Not found', { status: 404 }));
+    }
+    // The old kvissuroam.parttime.workers.dev address does not pass Cloudflare's rate-limit rule for
+    // linnaring.com, so the game's server answers only there (25 Nov). Its page loads still move on to www.
+    if (url.hostname.endsWith('.workers.dev')) return json({ error: 'moved to www.linnaring.com' }, 410);
+    // Requests from one address are counted before they reach the lobby or the stats object, so a flood of
+    // them costs only the Worker (the rate-limit binding in wrangler.jsonc; the lobby keeps its own finer limits)
+    const ip = req.headers.get('cf-connecting-ip') || 'local';
+    if (env.API_LIMIT) {
+      try { if (!(await env.API_LIMIT.limit({ key: ip })).success) return json({ error: 'too many requests' }, 429); } catch { /* a limiter hiccup lets it through */ }
     }
     // the game only ever calls its own address: another website may not use a visitor's browser to
     // post laps or open sockets here
@@ -816,24 +830,31 @@ export class Lobby extends DurableObject {
     return json({ error: 'not found' }, 404);
   }
 
+  // a socket that sends far more than the game does: shut, once, and the others hear it left
+  flood(ws, r) {
+    r.shut = true;
+    const a = ws.deserializeAttachment();
+    try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
+    if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } this.shut(ws, a); }
+  }
+
   async webSocketMessage(ws, raw) {
     if (typeof raw !== 'string' || raw.length > 2000) return;
     // a socket that talks far faster than the game does is shut
     const now = Date.now();
     let r = this.rate.get(ws);
-    if (!r || now - r.t > MSG_WINDOW) { r = { t: now, n: 0 }; this.rate.set(ws, r); }
-    if (++r.n > MSG_MAX) {
-      if (r.n === MSG_MAX + 1) {
-        const a = ws.deserializeAttachment();
-        try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
-        if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } this.shut(ws, a); }
-      }
-      return;
-    }
+    if (!r) { r = { t: now, n: 0, lt: now, ln: 0 }; this.rate.set(ws, r); }
+    if (r.shut) return;
+    if (now - r.t > MSG_WINDOW) { r.t = now; r.n = 0; }
+    if (++r.n > MSG_MAX) { this.flood(ws, r); return; }
     if (now - this.loadMin * 60000 >= 60000) this.loadTick(now);
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return;
+    if (m.t !== 's' && m.t !== 'clock') {
+      if (now - r.lt > LOUD_WINDOW) { r.lt = now; r.ln = 0; }
+      if (++r.ln > LOUD_MAX) { this.flood(ws, r); return; }
+    }
     let me = ws.deserializeAttachment();
 
     // A ghost (the game's stealth mode, ?off=100) hears everything but is never heard: it is left out

@@ -7,6 +7,7 @@
 // Nothing is built for it: the watched car is the copy multiplayer.js already draws, the world streams in
 // around the camera's car instead of yours (main.js asks `focus`), and the HUD is the usual one, fed `view`.
 import { CARS } from './cars/specs.js';
+import { evKw } from './cars/physics.js';
 import { THUMB } from './net/people.js';
 
 const LOST_S = 30;                 // a watched player in the garage this long: on to the next player (or back to your car)
@@ -145,10 +146,12 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
         view.x = p[0]; view.z = p[1]; view.y = p[2]; view.yaw = p[3]; view.pitch = p[4]; view.roll = p[5];
         view.vx = p[6] * fx + p[7] * fz; view.vy = p[6] * rx + p[7] * rz;
         view.rpm = p[14] ?? 0; view.reversing = !!p[10]; view.inWater = !!((p[20] || 0) & 2);
+        // (an electric car's power dial, from what it sends: pedal, brake light, motor revs and speed)
+        view.kw = s.engine.type === 'ev' ? evKw(s, p[12] || 0, p[9] || 0, (view.rpm * Math.PI / 30 / s.gears[0]) * s.wheelRadius, Math.abs(view.vx), view.reversing) : 0;
         view.spec = s; view.halfLen = o.halfLen; view.halfWid = o.halfWid; view.mark = o.colour;
         shown = true;
       }
-    } else { view.vx = view.vy = view.rpm = 0; }    // (nothing heard of them at all: the dial is not left at their speed)
+    } else { view.vx = view.vy = view.rpm = view.kw = 0; }    // (nothing heard of them at all: the dial is not left at their speed)
     if ((uiTimer -= dt) > 0) return;
     uiTimer = 0.25;
     const hot = p && o.live && (p[20] & 8), race = racing(id);

@@ -242,6 +242,45 @@ const UP_HOLD = 1;              // s an automatic upshift on the throttle is kep
 // a repeatable 0..1 'random' number, so every car runs the same on every screen
 const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; return h - Math.floor(h); };
 
+// An electric car's motors. Their push at the tread (N) at this wheel speed: full force from a standstill, then
+// constant power, cut at the motors' and the car's speed limit.
+function evPush(s, wAbs, vAbs, reversing) {
+  const e = s.engine;
+  let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(wAbs, 0.5));
+  const wLim = (s.limiter || 180) / 3.6 * 1.15;      // motor speed limit
+  if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
+  const lim = reversing ? 30 : s.limiter;
+  if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
+  return f;
+}
+// Regeneration with the pedal let go (N against the motion). With engine.regenG and regenKw the car slows as
+// the real one does in its strongest setting (Martin 2026-11-25: his Enyaq shows up to -99.9 kW on lifting
+// off; VW gives 0.13 g for lifting off in B and motors alone up to about 0.25 g on the brake pedal): that many
+// g, as far as the battery takes the power, fading out under about 10 km/h so the car rolls the last metres
+// as before. Without them: the old gentle drag.
+const REGEN_PEDAL_G = 0.25;
+const regenFade = (vAbs) => Math.min(1, Math.max(0, (vAbs - 0.5) / 2.5));
+// (the car's stability control eases it back to that drag as the tyres near their cornering limit, as the real
+// ones do: lifting off mid corner on the edge of grip must not pull the tail round. `use`: 0..1 of the
+// cornering grip in use, the busier axle)
+const regenEase = (use) => Math.min(1, Math.max(0, (0.95 - use) / 0.35));
+function evRegen(s, vAbs, use = 0) {
+  if (vAbs <= 0.5) return 0;
+  const e = s.engine, gentle = Math.min(1800, 0.09 * s.mass * G * 0.35);
+  if (!e.regenG) return gentle;
+  return Math.max(gentle, Math.min(e.regenG * s.mass * G, (e.regenKw * 1000) / (s.efficiency * vAbs)) * regenFade(vAbs) * regenEase(use));
+}
+// What an electric car's battery gives (kW), or takes back (below zero), for the power dial. The brake pedal's
+// first quarter g counts as the motors' on the dial, as on the real cars; the braking itself is not changed
+// by it. Another player's car is worked out from the pedal, brake light and revs it sends (see spectate.js).
+export function evKw(s, throttle, brake, wAbs, vAbs, reversing, use = 0) {
+  const e = s.engine;
+  if (throttle > 0) return (evPush(s, wAbs, vAbs, reversing) * throttle * wAbs) / (s.efficiency * 1000);
+  let f = evRegen(s, vAbs, use);
+  if (brake > 0 && e.regenG) f = Math.max(f, Math.min(REGEN_PEDAL_G, e.regenG + brake * (s.brakeG ?? 1.05)) * s.mass * G * regenFade(vAbs));
+  return -Math.min(e.regenKw ?? 1e9, (f * vAbs * s.efficiency) / 1000);
+}
+
 function engineForce(car, throttle, dt, hb = 0) {
   // Returns the drive force at the wheels (N, signed along vx) and updates rpm / gear.
   // The engine turns with the driven wheels, so under wheelspin the revs follow
@@ -253,20 +292,17 @@ function engineForce(car, throttle, dt, hb = 0) {
   const vAbs = Math.abs(v);
   const wAbs = Math.abs(v + dir * car.slipV);
   if (e.type === 'ev') {
-    const ratio = s.gears[0];
-    car.rpm = (wAbs / s.wheelRadius) * ratio * (60 / (2 * Math.PI));
+    car.rpm = (wAbs / s.wheelRadius) * s.gears[0] * (60 / (2 * Math.PI));
     car.gear = 1;
-    let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(wAbs, 0.5));
-    const wLim = (s.limiter || 180) / 3.6 * 1.15;      // motor speed limit
-    if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
-    const lim = car.reversing ? 30 : s.limiter;
-    if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
     // (held on the race grid: a four-wheel-drive EV has no clutch to slip, so it waits with its power held
     // back, launch mode, and goes at the lights)
-    if (car.gridHold && s.drive === 'awd') return 0;
-    // one-pedal style regeneration when lifting off
-    if (throttle <= 0) return vAbs > 0.5 ? -Math.sign(v) * Math.min(1800, 0.09 * s.mass * G * 0.35) : 0;
-    return dir * f * throttle;
+    if (car.gridHold && s.drive === 'awd') { car.kw = 0; return 0; }
+    // (for the power dial: what the battery gives, or takes back when slowing)
+    const use = Math.max(car.useF, car.useR);
+    car.kw = evKw(s, throttle, car.brake || 0, wAbs, vAbs, car.reversing, use);
+    // regeneration when lifting off
+    if (throttle <= 0) return -Math.sign(v) * evRegen(s, vAbs, use);
+    return dir * evPush(s, wAbs, vAbs, car.reversing) * throttle;
   }
   const ratioOf = (g) => (car.reversing ? s.reverse : s.gears[g - 1]) * s.finalDrive;
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));
@@ -1531,6 +1567,6 @@ export function resetCar(car, pose) {
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
-  car.rpm = car.spec.engine.idle ?? 0;
+  car.rpm = car.spec.engine.idle ?? 0; car.kw = 0;
   if (car.rocket) { car.rocket.flight = null; car.thrustN = 0; }
 }

@@ -22,32 +22,49 @@ export function createHud(world) {
   let overlay = null;
   const face = $('#dial .face'), needle = $('#dial .needle');
   let dialMax = 8000, dialRed = 7000, needleShown = -999, needleV = 0, needleDrawn = -999, needleHot = false;
+  let dialMin = 0, dialKw = false, needleChg = false, kwText = null, kwShown = null;
 
   // The round rev counter: 270 degrees from bottom left round to bottom right, numbers in thousands,
-  // red from the rev limiter on (an EV: the motor's top speed).
+  // red from the rev limiter on.
+  // An electric car has one gear, so its revs would only be its speed again: its dial is a power meter
+  // (Martin 2026-11-25), the kW the battery is giving, with a green stretch below 0 for what slowing puts
+  // back (as far as engine.regenKw) and the figure itself under the speed.
   const SWEEP = 270, A0 = -135;
-  const ang = (rpm) => A0 + SWEEP * Math.min(1, Math.max(0, rpm / dialMax));
+  const ang = (v) => A0 + SWEEP * Math.min(1, Math.max(0, (v - dialMin) / (dialMax - dialMin)));
   function buildDial(e) {
-    const red = e.type === 'ev' ? e.maxRpm || 16000 : e.redline;
-    const step = red > 10000 ? 2000 : 1000;
-    dialRed = red;
-    dialMax = Math.ceil((red + 1) / step) * step;
-    if (dialMax - red < step * 0.6) dialMax += step;     // always a clear stretch of red past the limiter
+    dialKw = e.type === 'ev';
+    let step, red;
+    if (dialKw) {
+      const lo = e.regenKw || 0;
+      step = [10, 20, 50, 100, 200, 500].find((s) => Math.ceil(e.maxPowerKw / s) + Math.ceil(lo / s) <= 8) || 1000;
+      dialMin = -Math.ceil(lo / step) * step;
+      dialMax = Math.ceil(e.maxPowerKw / step) * step;
+      red = dialRed = Infinity;
+    } else {
+      red = e.redline;
+      step = red > 10000 ? 2000 : 1000;
+      dialRed = red; dialMin = 0;
+      dialMax = Math.ceil((red + 1) / step) * step;
+      if (dialMax - red < step * 0.6) dialMax += step;     // always a clear stretch of red past the limiter
+    }
     const pt = (a, r) => { const t = (a * Math.PI) / 180; return [(Math.sin(t) * r).toFixed(2), (-Math.cos(t) * r).toFixed(2)]; };
     const arc = (a0, a1, r) => { const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r); return `M${x0} ${y0}A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
-    let svg = `<path class="ring" d="${arc(A0, A0 + SWEEP, 92)}"/><path class="red" d="${arc(ang(red), A0 + SWEEP, 87.5)}"/>`;
-    const minor = step / 4;
-    for (let v = 0; v <= dialMax + 1; v += minor) {
-      const major = v % step === 0, mid = !major && v % (step / 2) === 0;
+    let svg = `<path class="ring" d="${arc(A0, A0 + SWEEP, 92)}"/>`;
+    if (!dialKw) svg += `<path class="red" d="${arc(ang(red), A0 + SWEEP, 87.5)}"/>`;
+    else if (dialMin < 0) svg += `<path class="chg" d="${arc(A0, ang(0), 87.5)}"/>`;
+    const minor = step / 4, n = Math.round((dialMax - dialMin) / minor);
+    for (let i = 0; i <= n; i++) {
+      const v = dialMin + i * minor, major = i % 4 === 0, mid = !major && i % 2 === 0;
       const [x0, y0] = pt(ang(v), 92), [x1, y1] = pt(ang(v), major ? 78 : mid ? 84 : 87);
       svg += `<line class="tick" x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke-width="${major ? 3.2 : mid ? 2 : 1.3}"/>`;
       if (major) {
-        const [tx, ty] = pt(ang(v), 66);
-        svg += `<text x="${tx}" y="${ty}"${v >= red ? ' class="hot"' : ''}>${v / 1000}</text>`;
+        const [tx, ty] = pt(ang(v), dialKw ? 64 : 66);
+        svg += `<text x="${tx}" y="${ty}"${v >= red ? ' class="hot"' : v < 0 ? ' class="chg"' : dialKw ? ' class="kws"' : ''}>${dialKw ? Math.abs(v) : v / 1000}</text>`;
       }
     }
-    svg += `<text class="x1000" x="0" y="45">×1000 RPM</text>`;
+    svg += dialKw ? `<text class="kw" x="0" y="46">0 kW</text>` : `<text class="x1000" x="0" y="45">×1000 RPM</text>`;
     face.innerHTML = svg;
+    kwText = dialKw ? face.querySelector('.kw') : null; kwShown = null;
     needleShown = -999;
   }            // extra drawing in world coordinates (race track, other players)
 
@@ -188,7 +205,7 @@ export function createHud(world) {
     // The needle moves every frame (the numbers only a few times a second), eased like a real needle
     // with a little mass, so the limiter bounce and the shifts sweep instead of jumping.
     needle(car, dt) {
-      const want = ang(car.rpm || 0);
+      const want = ang(dialKw ? car.kw || 0 : car.rpm || 0);
       if (needleShown < -900) { needleShown = want; needleV = 0; }
       // (a critically damped spring, about 50 ms to settle)
       const w = 38, n = Math.ceil(Math.min(dt, 0.1) * 240), h = Math.min(dt, 0.1) / n;
@@ -200,14 +217,21 @@ export function createHud(world) {
         needleDrawn = needleShown;
         needle.setAttribute('transform', `rotate(${needleShown.toFixed(2)})`);
       }
-      const hot = (car.rpm || 0) >= dialRed - 50;
+      const hot = !dialKw && (car.rpm || 0) >= dialRed - 50;
       if (hot !== needleHot) { needleHot = hot; needle.classList.toggle('hot', hot); }
+      // (an electric car's needle turns green while the battery is taking power back)
+      const chg = dialKw && (car.kw || 0) < (needleChg ? -0.5 : -1.5);
+      if (chg !== needleChg) { needleChg = chg; needle.classList.toggle('chg', chg); }
     },
     update(car) {
       elSpeed.textContent = Math.round(speedKmh(car));
       const ev = spec.engine.type === 'ev';
       // (M: a gear picked by hand with A / Z, held until the shift point)
       elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `${car.manual ? 'M' : 'D'}${car.gear}`;
+      if (kwText) {
+        const kw = Math.round(car.kw || 0);
+        if (kw !== kwShown) { kwShown = kw; kwText.textContent = `${kw < 0 ? '\u2212' + -kw : kw} kW`; }
+      }
       if (--streetTimer <= 0) {
         streetTimer = 5;
         const name = streetAt(car.x, car.z);

@@ -97,6 +97,8 @@ export const CARS = {
       maxPowerKw: 195,
       maxWheelForce: 11800,     // 425 Nm system torque through ~11:1 reduction
       maxRpm: 16000,
+      // lifting off slows it as in B (VW for this drivetrain: 0.13 g), up to the 100 kW Martin's own car shows
+      regenG: 0.13, regenKw: 100,
     },
     gears: [11.0],
     reverse: 11.0,
@@ -247,6 +249,8 @@ export const CARS = {
       maxPowerKw: 280,
       maxWheelForce: 17500,
       maxRpm: 16000,
+      // strongest of its four paddle levels: 100 kW at most (evkx.net); Toyota gives no g figure, an estimate
+      regenG: 0.12, regenKw: 100,
     },
     gears: [12.0],
     reverse: 12.0,

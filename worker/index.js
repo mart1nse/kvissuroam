@@ -765,16 +765,18 @@ export class Lobby extends DurableObject {
       // the names, cars and race places everyone in the game already sees, no ids or addresses.
       // Ghosts (stealth) and sockets silent for 80 s are left out, like in the game's own list.
       const now = Date.now(), race = this.race, seen = new Set(), players = [], at = {};
+      // (?all=1: everyone, for /stats' "and 24 more" tapped open, Martin 25 Nov; the cap keeps it at about 100)
+      const lim = url.searchParams.get('all') ? 200 : 60;
       const on = race.s.phase === 'on';
       for (const ws of this.ctx.getWebSockets()) {
         const a = ws.deserializeAttachment();
         if (!a?.id || a.ghost || seen.has(a.id) || !race.live(ws, a, now)) continue;
         seen.add(a.id);
         const r = on && race.s.racers.find((x) => x.id === a.id);
-        players.push({ name: a.name, car: a.car, drv: !!a.drv, since: a.at || now, race: r ? (r.ms != null ? 'fin' : r.out ? 'out' : 'in') : null });
+        const k = a.drv ? 'drv' : a.w === 'map' ? 'stage' : a.w === 'garage' || a.w === 'away' || a.w === 'watch' ? a.w : 'start';
+        players.push({ name: a.name, car: a.car, drv: !!a.drv, at: k, since: a.at || now, race: r ? (r.ms != null ? 'fin' : r.out ? 'out' : 'in') : null });
         // where the ones not driving are (Martin 25 Nov: 96 in the game, 54 driving: who are the rest?). On the
         // map and not driving: a Raadi stage run (not counted as driving for the race votes)
-        const k = a.drv ? 'drv' : a.w === 'map' ? 'stage' : a.w === 'garage' || a.w === 'away' || a.w === 'watch' ? a.w : 'start';
         at[k] = (at[k] || 0) + 1;
       }
       players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
@@ -783,7 +785,7 @@ export class Lobby extends DurableObject {
       // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap
       this.waitClean(now);
       const cap = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
-      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, at, waiting: this.waiting.size, queue: this.queue(now).length, cap, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
+      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, at, waiting: this.waiting.size, queue: this.queue(now).length, cap, players: players.slice(0, lim), more: Math.max(0, players.length - lim),
         race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
     }
 

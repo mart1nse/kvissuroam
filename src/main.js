@@ -271,13 +271,15 @@ function toCard(obj) {
         for (const m of [o.material].flat()) for (const v of Object.values(m || {})) if (v?.isTexture) texs.add(v);
         if (o.geometry?.attributes?.position) geos.add(o.geometry);
       });
-      for (const t of texs) { renderer.initTexture(t); yield (t.image?.width || 0) * (t.image?.height || 0) || 1; }
+      // (a phone that let the kind go meanwhile, dropCarModel, has freed all this: nothing more of it is sent)
+      for (const t of texs) { if (obj.userData.dropped) return; renderer.initTexture(t); yield (t.image?.width || 0) * (t.image?.height || 0) || 1; }
       let n = 0;
       const size = (a) => (a?.isInterleavedBufferAttribute ? a.data.array : a?.array)?.byteLength || 0;
       for (const g of geos) {
         const pos = g.attributes.position;
         for (const [k, a] of [...Object.entries(g.attributes), ['', g.index]]) {
           if (!a) continue;
+          if (obj.userData.dropped) return;
           // (a buffer that would take the step past CARD_MB starts the next frame's)
           if (n > 0 && n + size(a) > CARD_MB * 1048576) { n = 0; yield 4e5; }
           if (k) sendBuffer(pos, k, a, null); else sendBuffer(pos, '', null, a);

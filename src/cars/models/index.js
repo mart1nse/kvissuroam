@@ -205,6 +205,7 @@ export function dropCarModel(id, free) {
   const T = templates.get(id);
   if (!T) return;
   templates.delete(id);
+  T.group.userData.dropped = true;     // (toCard in main.js stops sending it to the graphics card)
   free(T.group);
 }
 

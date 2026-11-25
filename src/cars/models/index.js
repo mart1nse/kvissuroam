@@ -1,6 +1,7 @@
 // Procedural car models. See kit.js for the shared toolkit.
 import * as THREE from 'three';
-import { applyLights } from './kit.js';
+import { applyLights, forgetPlates } from './kit.js';
+import { setCarPlate } from '../plate.js';
 import { deserializeCar } from './serial.js';
 import { useGlbBody } from './glbbody.js';
 import { outside } from '../../hitches.js';
@@ -37,6 +38,7 @@ const BUILDERS = { w201: buildW201, crv: buildCRV, enyaq: buildEnyaq, rav4: buil
 export function buildCarModel(id, opts) {
   const build = BUILDERS[id];
   if (!build) throw new Error(`Unknown car model "${id}"`);
+  forgetPlates();                                    // (any left by a build that failed)
   return build(opts);
 }
 
@@ -256,6 +258,7 @@ function fill(car, T) {
   car.glbGlow = T.glbGlow;
   car.glbLoaded = !!T.glbLoaded;
   car.triangles = T.triangles;
+  car.plates = T.group.userData.plates;
   car.wheels = T.wheels && Object.fromEntries(Object.entries(T.wheels).map(([k, w]) => [k, { steer: objs.get(w.steer), spin: objs.get(w.spin) }]));
   if (T.soot) {
     const s = T.soot, mesh = objs.get(s.mesh), shell = s.shell && objs.get(s.shell);
@@ -265,4 +268,6 @@ function fill(car, T) {
     car.setSoot(car.soot.k);
   }
   applyLights(car, {});
+  // (a scanned body came: its own plate sheets carry the player's plate now)
+  if (car.plateText) setCarPlate(car, car.plateText);
 }

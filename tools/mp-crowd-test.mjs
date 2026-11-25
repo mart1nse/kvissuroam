@@ -1,4 +1,4 @@
-// Many players online: what do the other cars cost a frame?   node tools/mp-crowd-test.mjs [n=22] [pack=6] [port=5199] [touch] [secs=12] [models] [shot=file.png]
+// Many players online: what do the other cars cost a frame?   node tools/mp-crowd-test.mjs [plates=0|1] [n=22] [pack=6] [port=5199] [touch] [secs=12] [models] [shot=file.png]
 // Needs the dev server (npx vite --port 5199). No game server: the page's WebSocket is replaced by a fake
 // lobby that welcomes n made-up drivers and sends their positions ten times a second, as the real one
 // does. They drive along the race track around ours at different distances (a pack near us, the rest
@@ -36,14 +36,14 @@ await p.addInitScript(() => {
   P.deleteBuffer = function (b) { if (b) { buf -= sizes.get(b) || 0; sizes.delete(b); } return dB.apply(this, arguments); };
   window.__glMB = () => Math.round((tex + buf) / 1e6);
 });
-await p.addInitScript(([P, I0, N, CARS, PACK]) => {
+await p.addInitScript(([P, I0, N, CARS, PACK, PLATES]) => {
   // a lobby in the page: the offsets along the track (in points, 2 m each) of each made-up driver
   const at = [];
   for (let k = 0; k < N; k++) {
     if (k < PACK) at.push(8 + Math.round(k * 54 / PACK));          // a pack just ahead of us, 16 to 110 m
     else at.push(Math.round(((k - PACK + 1) / (N - PACK + 1)) * (P.length - 120)) + 60);   // the rest round the lap
   }
-  const players = at.map((a, k) => ({ id: `bot${k}`, name: `Driver${String(k).padStart(2, '0')}`, car: CARS[k % CARS.length], w: 'map' }));
+  const players = at.map((a, k) => ({ id: `bot${k}`, name: `Driver${String(k).padStart(2, '0')}`, car: CARS[k % CARS.length], w: 'map', ...(PLATES ? { pl: `${100 + k} ABC` } : {}) }));
   class FakeWS {
     constructor() {
       this.readyState = 0;
@@ -75,7 +75,7 @@ await p.addInitScript(([P, I0, N, CARS, PACK]) => {
     close() { clearInterval(this.timer); this.readyState = 3; }
   }
   window.WebSocket = FakeWS;
-}, [P, I0, N, CARS, PACK]);
+}, [P, I0, N, CARS, PACK, arg('plates', '1') === '1']);
 await p.goto(`http://localhost:${port}/?trees=old`, { timeout: 180000 });
 await p.waitForFunction(() => window.__game?.car, null, { timeout: 180000 });
 await p.evaluate(() => { __game.setCar('w201', true); __game.startDriving(); });

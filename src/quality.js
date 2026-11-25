@@ -230,7 +230,10 @@ export function createGpuTimer(gl) {
 // 21 Nov 2026). A marker goes in after each frame's calls; `behind` is how long the oldest marker the card
 // has not reached yet has been waiting (0 when it keeps up), `ms` how long the last one took.
 export function createLag(gl) {
-  const out = { ms: 0, behind: 0, available: !!(gl && gl.fenceSync), mark() {}, poll() {} };
+  // steps: how many pictures took at least `by` ms longer to be finished than the one before (poll(by): asked
+  // every screen refresh with 0.6 of a refresh). A picture that is finished a refresh later than the last one
+  // is shown a refresh later: an uneven step, though the game's own frames were on time (src/hitches.js).
+  const out = { ms: 0, behind: 0, steps: 0, available: !!(gl && gl.fenceSync), mark() {}, poll() {} };
   if (!out.available) return out;
   const open = [];
   out.mark = () => {
@@ -241,11 +244,12 @@ export function createLag(gl) {
     gl.flush();
   };
   // (a marker's state only changes between frames, so this is asked once a frame)
-  out.poll = () => {
+  out.poll = (by = 0) => {
     const t = performance.now();
     while (open.length && gl.getSyncParameter(open[0].sync, gl.SYNC_STATUS) === gl.SIGNALED) {
       const o = open.shift();
       gl.deleteSync(o.sync);
+      if (by > 0 && out.ms > 0 && t - o.t - out.ms > by) out.steps++;
       out.ms = t - o.t;
     }
     out.behind = open.length ? t - open[0].t : 0;

@@ -13,6 +13,7 @@ import { painter } from './kaubamaja.js';
 import { realTreeKit } from './scenery.js';
 import { leafyPlants, addHouseColours } from './streetkit.js';
 import { still } from '../still.js';
+import { posterPlane } from './adverts.js';
 
 const CENTRE = [1840, 3080];
 const COL = {
@@ -33,6 +34,7 @@ const KV_TURU = [
 ];
 const TASKU_CURVE = [[1927.1, 3020.3], [1919.2, 3026.3], [1895.6, 3043.0], [1879.8, 3055.4], [1870.0, 3065.8], [1865.9, 3070.8], [1864.1, 3077.2]];
 const TASKU_TURU = [[1877.5, 3092.6], [1896.2, 3111.4]];
+const TASKU_BANNER = [[1866.0, 3070.5], [1864.6, 3079.7]];        // where the curve ends at the corner, from its outside
 const TASKU_LOW = [[1896.2, 3111.4], [1922.8, 3137.8]];
 const TOWER = { a: [1915.2, 3008.5], b: [1947.8, 2981.6], sag: 10.5, top: 52.1 };
 const TURG = { a: [1759.4, 2992.2], b: [1791.0, 2961.6], c: [1810.6, 2983.0], d: [1779.6, 3013.0], y0: 5.4, top: 13.0 };
@@ -329,6 +331,17 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
       const q = curve.where(curve.len * 0.6, 0.3);
       sign('tasku', q[0] + q[3] * 0.4, 26.6, q[1] - q[2] * 0.4, 16, 4.6, yawOf(q[2], q[3]), '#bfe9ee', '500');
       for (const e of [-6, 0, 6]) p.box(0.14, 3.6, 0.14, COL.steel, q[0] + q[3] * 0.7 + q[2] * e, 25.4, q[1] - q[2] * 0.7 + q[3] * e);
+    }
+    {
+      // the TOREPOOD banner on the corner over the junction (Martin, 25 Nov), clickable like the bus stops' posters:
+      // hung flat across the end of the curve on two steel arms, facing Narva mnt (TASKU_BANNER: its two ends)
+      const [[ax, az], [bx, bz]] = TASKU_BANNER, l = Math.hypot(bx - ax, bz - az), tx = (bx - ax) / l, tz = (bz - az) / l;
+      const nx = -tz, nz = tx, mx = (ax + bx) / 2 + nx, mz = (az + bz) / 2 + nz, y = h(mx, mz), W = 9, H = W * 592 / 416;
+      const yaw = Math.atan2(nx, nz), m = posterPlane(W, H, 120);
+      m.position.set(mx, y + 7 + H / 2, mz); m.rotation.y = yaw;
+      m.userData.tasku = true;
+      group.add(m);
+      for (const yy of [y + 7 - 0.1, y + 7 + H + 0.1]) p.box(W + 0.2, 0.16, 1.1, COL.steel, mx - nx * 0.5, yy, mz - nz * 0.5, yaw);
     }
     {
       // the glass tower: a curved front on the river side, a flat back

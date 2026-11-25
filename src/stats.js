@@ -12,9 +12,9 @@ const params = new URLSearchParams(location.search);
 const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0, paceN = 0;
 const once = new Set();
 const errSeen = new Set();
 
@@ -53,7 +53,7 @@ function send(leaving = false, closing = false) {
   out.dev = dev;
   out.km = Math.round(out.km * 100) / 100;
   for (const k of ['menu', 'drive']) out[k] = Math.round(out[k] * 10) / 10;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat']) for (const [kk, v] of Object.entries(out[k])) out[k][kk] = Math.round(v * 10) / 10;
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'hitT']) for (const [kk, v] of Object.entries(out[k])) out[k][kk] = Math.round(v * 10) / 10;
   const body = JSON.stringify(out);
   sent = performance.now();
   const ok = () => {
@@ -72,7 +72,7 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz', 'hit', 'hitT']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
 }
 
@@ -159,9 +159,33 @@ function freeze(s, ms) {
   }, 1000);
 }
 
+// ---- Short hitches while driving (src/hitches.js; Martin 2026-11-25: stutters with 85 to 95 online that the
+// frame times on his screen did not show, and that no headless test drive can feel). Each late frame while
+// plain driving (up to 60 a visit) counts as "device:kind:value" in the bundle's `hit`:
+//   why  build | draw | online | game | card | page:net | page:car      what the frame before was busy with
+//   new  shaders | pictures | car | none      what that frame sent to the graphics card first
+//   len (ms), on (others online), t (since DRIVE)
+//   pace:<others online>     a picture shown a refresh later than the one before, the frame itself on time
+// and `hitT` the seconds of such driving per "device:others online", so /stats can say hitches per 10 minutes
+// alone and in a crowd.
+const crowd = (n) => bucket(n || 0, [1, 10, 30, 60], ['0', '1-9', '10-29', '30-59', '60+']);
+function hitch(h) {
+  const d = dev || 'other';
+  if (h.pace) { if (paceN++ < 400) inc(b.hit, `${d}:pace:${crowd(h.others)}`); return; }
+  if (hitN++ >= 60) return;
+  const facts = {
+    why: h.why, new: h.news, on: crowd(h.others),
+    len: bucket(h.ms, [50, 100, 250], ['<50', '50-100', '100-250', '250+']),
+    t: bucket(h.since, [30, 120, 600], ['<30s', '30s-2m', '2-10m', '10m+']),
+  };
+  for (const [k, v] of Object.entries(facts)) inc(b.hit, `${d}:${k}:${v}`);
+}
+
 let fpsT = 0, fpsN = 0;
 export const stats = {
   on,
+  // a short hitch while driving, or a picture held back (src/hitches.js)
+  hitch(h) { if (on) try { hitch(h); } catch { /* never in the way of the game */ } },
   // once, at the start: what kind of device this is
   start({ isTouch, lite, software, death }) {
     if (!on) return;
@@ -245,6 +269,7 @@ export const stats = {
     if (s.mode === 'menu') { b.menu += dt; return; }
     if (s.mode !== 'drive') return;
     b.drive += dt;
+    if (s.felt && s.raw < 1) inc(b.hitT, `${dev || 'other'}:${crowd(s.others)}`, dt);
     inc(b.car, s.car, dt);
     inc(b.inp, s.inp, dt);
     inc(b.view, s.view, dt);

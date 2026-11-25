@@ -171,7 +171,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     return `<small class="rec">${car ? `<span class="rc">${escapeHtml(car)}</span>` : ''}${escapeHtml(words.slice(car.length))}${tm ? ` <b>${tm}</b>` : ''}</small>`;
   };
   const elMe = box.querySelector('.me');
-  let last = '', meLast = '', dirty = false;
+  let last = '', meLast = '', dirty = false, lookAt = 0;
   function refresh() {
     if (!touch) fit(); else fitPhone();
     const listMax = touch ? (phoneRoom >= phoneRh ? 1 : 0) : fitRows;
@@ -270,11 +270,15 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       // that came in the meantime (with many online several come in one frame)
       dirty = true;
     },
+    // (Martin 2026-11-25, 90 online: the list was looked over every frame, everybody's name, car and place put
+    // together to see whether anything had changed. Now at once after an event, else five times a second.)
     update() {
+      const t = performance.now();
       if (dirty) {
         dirty = false; last = '';
         if (myCar && !list.classList.contains('hidden')) api.showRoster();
-      }
+      } else if (t < lookAt) return;
+      lookAt = t + 200;
       refresh();
     },
     // big map opened: list everyone driving, then those connected but not on the map (menu,

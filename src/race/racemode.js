@@ -141,7 +141,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     listOpen = on; showLast = !on; listUntil = Infinity; hidFor = 0; render();
   }
   chip.addEventListener('click', () => { if (curOn()) { openCur(true); return; } showLast = !doneIn(); listOpen = true; listUntil = Infinity; hidFor = 0; render(); });
-  // phones (Martin 2026-11-24): no chip (the online list has its place), the race line itself opens what the chip did
+  // phones (Martin 2026-11-24): no chip (the online list has its place), the race line's top line opens what the chip
+  // did (only that line takes taps, see style.css)
   sub.addEventListener('click', () => { if (isTouch && sub.classList.contains('tap')) chip.click(); });
   // the ✕ on the live list leaves the race (alone: ends it), after a second tap to confirm;
   // otherwise it tucks the list away
@@ -420,10 +421,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (r.last) setText(chip, `<i class="flag"></i> LAST RACE · ${myPos >= 0 && !lastRows[myPos].out ? `<em>P${myPos + 1}</em>` : `${escapeHtml(lastRows[0]?.name || '')} WON`} ›`);
       chipTag = myPos >= 0 && !lastRows[myPos].out ? `<em>P${myPos + 1}</em> RESULTS` : 'RESULTS';
     }
-    // phones: the race line between the minimap and the lap timer, and what the chip opens at its end
+    // phones: the race line between the minimap and the lap timer, and what the chip opens on a line of its own
+    // above it (Martin 2026-11-25: at the line's end it sat right on the race button, too close for a thumb; now the
+    // white line lies between the two, and only the top line opens the list)
     const tap = isTouch && !!subLine && !chip.classList.contains('hidden');
     if (tap !== sub.classList.contains('tap')) sub.classList.toggle('tap', tap);
-    setText(sub, tap ? `${subLine} <span class="res"><i class="flag"></i> ${chipTag} ›</span>` : subLine);
+    setText(sub, tap ? `<span class="res"><i class="flag"></i> ${chipTag} ›</span>${subLine}` : subLine);
   }
 
   return {

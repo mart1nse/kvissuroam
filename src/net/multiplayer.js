@@ -46,6 +46,26 @@ const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
 const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
+// A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
+// samples given to the piece in the share of its strength (alpha to coverage), so many pixels a sample more and so
+// many a sample less by a fine pattern on the screen (the 4 by 4 ordered one; COVER_FADE is one sample's share).
+// Part of three's own shader text, behind a define that only those pieces set.
+THREE.ShaderChunk.alphatest_fragment = `
+#ifdef COVER_FADE
+  {
+    // (a cut-out picture, a badge: cut where it is cut at full strength, not wherever the fade takes it under the limit)
+    #ifdef USE_ALPHATEST
+      if (diffuseColor.a < alphaTest * opacity) discard;
+    #endif
+    ivec2 fadeP = ivec2(gl_FragCoord.xy) & 3;
+    int fadeX = fadeP.x ^ fadeP.y;
+    float fadeN = (float(((fadeX & 1) << 3) | ((fadeP.y & 1) << 2) | (fadeX & 2) | ((fadeP.y & 2) >> 1)) + 0.5) / 16.0;
+    diffuseColor.a = clamp(diffuseColor.a + (fadeN - 0.5) * COVER_FADE, 0.0, 1.0);
+  }
+#else
+${THREE.ShaderChunk.alphatest_fragment}
+#endif
+`;
 const STAMP = 21;                // position's slot for when it was taken (see addPose)
 const POSE_SC = POSE_DEC.map((d) => 10 ** d);
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car
@@ -264,7 +284,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {}, onPlate = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -899,6 +919,25 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // car gets see-through copies of its own, made the first time it comes close and kept; its lamp and soot
   // materials are its own already and are changed in place. See-through is another shader, compiled ahead
   // (`warm`, once per kind of car) and only then used: until it is ready the car stays solid.
+  // (Martin 2026-11-25: "ghosts look a bit patchy now". A faded car was blended over the picture piece by piece, and
+  // a scanned body is one piece that shows both its sides, its triangles in no order: where the far side or the
+  // inside came first it showed through the near side, where it came later it did not. With edge smoothing, a
+  // desktop with a graphics card, the solid pieces of a faded car are no longer blended: they are drawn with the
+  // solid things, each filling its strength's share of every pixel's samples (COVER_FADE above), all pieces the
+  // same samples, so the nearest surface is all that shows. No more work than blending: no sorting, nothing drawn
+  // twice, the same number of shaders. Without edge smoothing, phones and the weakest computers, that would be a
+  // screen door of whole pixels, plain to see as dots at their coarse picture, so there the pieces are blended as
+  // before, patches and all (one side of each piece only was tried: the scans' triangles face either way, and it
+  // looked worse). Glass and soot, see-through as they are, are blended as before everywhere.)
+  const cover = samples > 1;
+  // a solid piece's material see-through, or solid again
+  const see = (m, on) => {
+    if (cover) {
+      if (on) m.defines = { ...m.defines, COVER_FADE: (1 / samples).toFixed(4) }; else delete m.defines.COVER_FADE;
+      m.alphaToCoverage = on;
+    } else m.transparent = on;
+    m.needsUpdate = true;
+  };
   const FADE_MIN = 0.1, FADE_AHEAD = 10, FADE_SIDE = 5, TAG_MIN = 0.6;
   const fadeWarm = new Map();        // car id -> 'busy' | true
   const fadeKeep = new Map();        // car id -> the see-through clones that keep its programs (see warmFade)
@@ -922,12 +961,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function warmFade(o) {
     if (!warm) { fadeWarm.set(o.car, true); return; }
     fadeWarm.set(o.car, 'busy');
-    const id = o.car, list = fadeParts(o).list.map((e) => ({ geo: e.c.geometry, mat: e.base, rs: e.c.receiveShadow, cs: e.c.castShadow }));
+    // (what is see-through already is drawn faded by the shader it has)
+    const id = o.car, list = fadeParts(o).list.filter((e) => !e.tr).map((e) => ({ geo: e.c.geometry, mat: e.base, rs: e.c.receiveShadow, cs: e.c.castShadow }));
     jobs.add(function* fadeShaders() {
       const waits = [], made = [];
       for (const e of list) {
         yield 'frame';
-        const t = e.mat.clone(); t.transparent = true; t.opacity = 0.5;
+        const t = e.mat.clone(); see(t, true); t.opacity = 0.5;
         const q = new THREE.Mesh(e.geo, t); q.receiveShadow = e.rs; q.castShadow = e.cs;
         const g = new THREE.Group(); g.add(q);
         made.push(t);
@@ -944,10 +984,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (a === f.a) return;
     const solid = a >= 1;
     for (const e of f.list) {
-      if (!e.mine && !e.copy) e.copy = e.base.clone();
+      if (!e.mine && !e.copy) { e.copy = e.base.clone(); if (!e.tr) see(e.copy, true); }
       const m = e.copy;
-      const tr = solid ? e.tr : true;
-      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      if (e.mine && !e.tr && solid === !!e.on) see(m, (e.on = !solid));
       m.opacity = e.op * a;
       if (!e.mine) e.c.material = solid ? e.base : m;
     }

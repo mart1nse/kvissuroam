@@ -20,7 +20,7 @@ export function createRocketUi({ pad, bar, touch, keys = () => 'SHIFT BOOST · X
       if (want !== shown) { shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch); last = ''; }
       if (!r) return;
       const pct = Math.round((r.tank / TANK_S) * 200) / 2;                 // half a per cent steps
-      const left = r.reload ? Math.ceil((1 - r.tank / TANK_S) * REFILL_S) : 0;
+      const left = r.reload ? Math.ceil((1 - r.tank / TANK_S) * (r.refillS || REFILL_S)) : 0;
       const canFlip = !off && !noFlip && !r.reload && r.tank >= JUMP_S - 1e-6, canBoost = !off && !r.reload && r.tank > 0;
       const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${noFlip ? 1 : 0}`;
       if (key === last) return;

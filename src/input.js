@@ -1,12 +1,13 @@
 // Keyboard (arrow keys) and on-screen touch pedals. Both write into one state object.
 
 export function createInput(root) {
-  const state = { up: 0, down: 0, left: 0, right: 0, handbrake: 0, look: 0 };
+  // (boost and flip: a car with thrusters, src/cars/thrust.js; they do nothing in any other car)
+  const state = { up: 0, down: 0, left: 0, right: 0, handbrake: 0, look: 0, boost: 0, flip: 0 };
   // Arrow keys drive. By default A and Z shift gears (see main.js); WASD mode (the options panel) makes
   // W/A/S/D drive instead and leaves the gearbox to the automatic. B is held to look back.
   const keys = new Map([
     ['ArrowUp', 'up'], ['ArrowDown', 'down'], ['ArrowLeft', 'left'], ['ArrowRight', 'right'],
-    ['Space', 'handbrake'], ['KeyB', 'look'],
+    ['Space', 'handbrake'], ['KeyB', 'look'], ['ShiftLeft', 'boost'], ['ShiftRight', 'boost'], ['KeyQ', 'boost'], ['KeyX', 'flip'],
   ]);
   const WASD = [['KeyW', 'up'], ['KeyA', 'left'], ['KeyS', 'down'], ['KeyD', 'right']];
   let wasd = false;
@@ -30,7 +31,7 @@ export function createInput(root) {
   const held = new Map();      // pointerId -> control
   const refresh = () => {
     const on = new Set(held.values());
-    for (const k of ['up', 'down', 'left', 'right']) {
+    for (const k of ['up', 'down', 'left', 'right', 'boost', 'flip']) {
       state[k] = on.has(k) ? 1 : 0;
       root.querySelector(`[data-ctl="${k}"]`)?.classList.toggle('held', on.has(k));
     }

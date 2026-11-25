@@ -16,7 +16,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { moved } from './moved.js';
 export { Stats } from './stats.js';
-import { CARS } from '../src/cars/specs.js';
+import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
@@ -50,7 +50,10 @@ const cleanName = (s) => String(s ?? '').normalize('NFC')
   .replace(/(\p{M}{2})\p{M}+/gu, '$1')
   .replace(/\s+/g, ' ').trim().slice(0, 20).trim();
 // only cars the game has (anything else, such as "constructor", broke the other browsers)
-const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) ? s : '');
+// (a car not shown to anyone yet is no car here: not driven online, no laps of it on the board; SHOW_HIDDEN=1
+// in a local test server's variables lets them in, for tools/rocket-online-test.mjs)
+let showHidden = false;
+const cleanCar = (s) => (typeof s === 'string' && Object.hasOwn(CARS, s) && (showHidden || !HIDDEN_CARS.includes(s)) ? s : '');
 const cleanWhere = (w) => (w === 'map' || w === 'garage' || w === 'away' || w === 'watch' ? w : '');
 // whom a spectator watches (Martin, 2026-11-23): another player's id, short letters and digits only
 // one received thumbs up: [sender id, their name then, when (ms)]; a bare id from pages before 24 Nov
@@ -270,6 +273,7 @@ function checkTrace(text, track, driving) {
 
 export class Lobby extends DurableObject {
   constructor(ctx, env) {
+    if (env?.SHOW_HIDDEN === '1') showHidden = true;
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS laps (
@@ -1102,6 +1106,17 @@ export class Lobby extends DurableObject {
         w.serializeAttachment(a);
       }
       this.broadcast({ t: 'ku', id: me.id, to });
+    } else if (m.t === 'jmp') {
+      // a Rocket's kickflip: the flight's plan (src/cars/thrust.js: 19 numbers) and the sender's clock at the
+      // press, told to the others so that each flies that car along the same curve. A tank holds two.
+      // (x: that flight ended early, against something in its way)
+      if (me.ghost || me.car !== 'rocket') return;
+      if (m.x === 1) { if (!this.over(`jx|${me.id}`, 4, 20000)) this.broadcast({ t: 'jmp', id: me.id, x: 1 }, ws); return; }
+      if (!Array.isArray(m.p) || m.p.length !== 19) return;
+      if (!m.p.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 100000)) return;
+      if (!Number.isInteger(m.c) || m.c < 0 || m.c >= 60000) return;
+      if (this.over(`j|${me.id}`, 4, 20000)) return;
+      this.broadcast({ t: 'jmp', id: me.id, p: m.p, c: m.c }, ws);
     }
   }
 

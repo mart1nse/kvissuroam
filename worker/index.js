@@ -22,6 +22,7 @@ import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { lapGates, throughGate } from '../src/race/lapgates.js';
 import { ADJ, NOUN } from '../src/net/names.js';
+import { badName } from './badnames.js';
 
 const TRACK = 'toomemagi';
 // The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
@@ -48,8 +49,10 @@ const cleanKudo = (v) => {
   if (typeof v === 'string') { const id = cleanOn(v); return id ? [id, '', 0] : null; }
   if (!Array.isArray(v)) return null;
   const id = cleanOn(v[0]);
-  return id ? [id, cleanName(v[1]) || '', Number.isFinite(v[2]) ? Math.max(0, Math.floor(v[2])) : 0] : null;
+  return id ? [id, okName(v[1]), Number.isFinite(v[2]) ? Math.max(0, Math.floor(v[2])) : 0] : null;
 };
+// a name others may see: clean, and not a racist slur ('' if it is one, see badnames.js)
+const okName = (s) => { const n = cleanName(s); return n && !badName(n) ? n : ''; };
 const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
@@ -715,6 +718,8 @@ export class Lobby extends DurableObject {
         // (penalty seconds: whole, and the driving itself must still be a believable time)
         const pen = track !== TRACK && Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
         if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || 60000) && ms <= 3600000)) continue;
+        // a time under a racist slur: answered as saved, so the browser stops sending it, and not kept
+        if (badName(name)) { ok.push(ms); continue; }
         if (!tickets.has(l.k)) tickets.set(l.k, await this.readTicket(l.k));
         const tk = tickets.get(l.k);
         if (!tk) continue;
@@ -852,7 +857,8 @@ export class Lobby extends DurableObject {
         }
       }
       if (!id) id = crypto.randomUUID().slice(0, 8);
-      const name = cleanName(m.name) || this.freshName();
+      // (a slur as a name: the others see the name this socket had, or a random one; the page is not told)
+      const name = okName(m.name) || me?.name || this.freshName();
       // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
       const ghost = !!m.ghost || !!me?.ghost;
       const w = cleanWhere(m.w) || me?.w;
@@ -875,7 +881,7 @@ export class Lobby extends DurableObject {
     if (!me?.id) return;
     if (this.race.message(ws, me, m)) return;
     if (m.t === 'name') {
-      const name = cleanName(m.name);
+      const name = okName(m.name);                                         // (a slur: silently not taken)
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)
       me.name = name; me.nt = now; ws.serializeAttachment(me);
       if (!me.ghost) { this.broadcast({ t: 'name', id: me.id, name }, ws); this.race.changed(me); }

@@ -93,6 +93,10 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
   if (tr && typeof tr === 'object' && !Array.isArray(tr)) {
     for (const k of ['glLost', 'stall', 'frz1', 'frz3', 'err', 'cap', 'vpWide']) { const v = num(tr[k], N); if (v) add((t.trouble ||= {}), `${dev}:${k}`, v); }
   }
+  // the seconds driven per kind of device (every bundle names its device), for the Devices card on /stats
+  // (Martin 2026-11-25: devices by time spent driving, not only by visits)
+  const drv = num(b.drive, SEC, 1);
+  if (drv) add((t.driveBy ||= {}), dev, drv);
   if (b.loaded === true) { add(t, 'loaded', 1); add((t.loadedBy ||= {}), dev, 1); }
   if (b.drove === true) add((t.droveBy ||= {}), dev, 1);
   if (b.drove === true) add(t, 'drove', 1);

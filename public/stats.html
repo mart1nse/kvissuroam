@@ -46,6 +46,9 @@
   .fold details[open] summary { margin-bottom: 6px; }
   .card h2 { margin: 0 0 2px; font: 800 15px/1.3 Montserrat, system-ui, sans-serif; letter-spacing: .03em; text-transform: uppercase; }
   .card .note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+  .card h3 { margin: 12px 0 6px; color: var(--muted); font: 600 12px/1.3 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+  .card h2 + h3 { margin-top: 8px; }
+  .card .note.foot { margin: 10px 0 0; }
   .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
   .bars li { display: grid; grid-template-columns: minmax(70px, 38%) 1fr auto; align-items: center; gap: 8px; font-size: 13.5px; }
   .bars .lab { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -287,7 +290,14 @@
 
     h += races(t, name);
 
-    h += card('Devices', null, bars(rowsOf(t.dev)));
+    // devices by visits and by time spent driving, in the same order so the two can be compared at a glance
+    // (the driving time per device is counted from the evening of 25 Nov 2026: worker/stats.js driveBy)
+    var dv = t.dev || {}, db = t.driveBy || {}, devName = { desktop: 'Desktop', phone: 'Phone', tablet: 'Tablet', other: 'Other' };
+    var devKeys = Object.keys(dv).concat(Object.keys(db).filter(function (k) { return !(k in dv); })).sort(function (a, b) { return (dv[b] || 0) - (dv[a] || 0) || (db[b] || 0) - (db[a] || 0); });
+    var devRows = function (o) { return devKeys.map(function (k) { return [devName[k] || k, o[k] || 0]; }); };
+    h += card('Devices', null, '<h3>Visits</h3>' + bars(devRows(dv), { keep: true }) +
+      '<h3>Time spent driving</h3>' + (sum(db) ? bars(devRows(db), { keep: true, show: dur, colour: C.sun }) : '<p class="empty">Nothing yet.</p>') +
+      '<p class="note foot">Driving time per device is counted from the evening of 25 Nov 2026.</p>');
     h += card('Systems', null, bars(rowsOf(t.os)));
     h += card('Browsers', null, bars(rowsOf(t.br)));
     h += card('Countries', null, bars(rowsOf(t.country, function (k) { try { return countries ? countries.of(k) : k; } catch (e) { return k; } }), { top: 10 }));

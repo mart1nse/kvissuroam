@@ -1,5 +1,5 @@
-// The Ko-fi link in the garage's top left corner (Martin 25 Nov): "TOETA LINNARINGI" over
-// "Ega token puu otsas kasva", a tree with coins for its crown, on a sunset rectangle.
+// The Ko-fi link in the garage's top left corner (Martin 25 Nov): "Ega token puu otsas kasva" over
+// "TOETA LINNARINGI" in the DRIVE button's letters, a tree with coins for its crown, in DRIVE's colours.
 // Only in stealth mode (?off=100) while Martin tries it. No coffee cup: he does not mention coffee.
 import { STEALTH } from './net/stealth.js';
 
@@ -8,6 +8,6 @@ const OUT = '<svg class="out" viewBox="0 0 12 12" aria-hidden="true"><path d="M4
 
 const a = document.querySelector('#kofi');
 if (a && STEALTH) {
-  a.innerHTML = `${TREE}<span class="tx"><small class="lb">TOETA LINNARINGI</small><b class="ln">Ega token puu otsas kasva</b></span>${OUT}`;
+  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span>${OUT}`;
   a.classList.remove('hidden');
 }

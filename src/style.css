@@ -322,26 +322,29 @@ body.touch .desktop-only { display: none; }
   #cards { --H: 8.6em; --T: 2.9em; font-size: 9px; }
 }
 
-/* Ko-fi (Martin 25 Nov): a small sunset rectangle in the garage's top left corner, the same on a computer and a phone
-   (on laptops the track outline steps aside into the top right). Only with ?off=100 for now (src/kofi.js) */
+/* Ko-fi (Martin 25 Nov): a small button in the garage's top left corner, the same on a computer and a phone
+   (on laptops the track outline steps aside into the top right), dressed like DRIVE: its gradient, glow, corners
+   and, for TOETA LINNARINGI, its letters. Only with ?off=100 for now (src/kofi.js) */
 #kofi {
   position: absolute; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left));
-  display: flex; align-items: center; gap: .6em; padding: .55em 1.15em .6em .8em; border-radius: .55em;
-  font-size: clamp(10px, 1.05vw, 14px); font-style: italic; font-weight: 700; letter-spacing: .04em; white-space: nowrap; line-height: 1.15;
-  color: #fff; text-decoration: none; text-shadow: 0 1px 0 rgba(43, 10, 92, .45);
-  background: linear-gradient(100deg, rgba(255, 138, 92, .92), rgba(255, 43, 214, .88) 55%, rgba(138, 63, 252, .88)); box-shadow: 0 0 14px rgba(255, 43, 214, .35);
-  transition: background .15s, box-shadow .2s, transform .12s;
+  display: flex; align-items: center; gap: .65em; padding: .6em 1.3em .65em .95em; border-radius: 1.15em;
+  font-size: clamp(10px, 1.05vw, 14px); white-space: nowrap; line-height: 1;
+  color: #fff; text-decoration: none; text-shadow: 0 2px 0 rgba(43, 10, 92, .55);
+  background: linear-gradient(100deg, var(--hot), var(--violet));
+  box-shadow: 0 0 18px rgba(255, 43, 214, .55), inset 0 0 12px rgba(255, 255, 255, .28);
+  transition: box-shadow .2s, transform .12s;
 }
-#kofi .ic { flex: none; width: 2.1em; height: 2.1em; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; }
-#kofi .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .15em; text-align: left; }
-#kofi .lb { font-size: .62em; font-style: normal; font-weight: 800; letter-spacing: .24em; color: #fff2b8; text-shadow: none; opacity: .95; }
-#kofi .out { flex: none; width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: .8; margin-left: -.1em; }
+#kofi .ic { flex: none; width: 2.2em; height: 2.2em; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; filter: drop-shadow(0 1px 0 rgba(43, 10, 92, .45)); }
+#kofi .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .32em; text-align: left; }
+#kofi .ln { font-size: .8em; font-style: italic; font-weight: 600; letter-spacing: .04em; opacity: .92; }
+#kofi .lb { font-size: 1.3em; font-style: italic; font-weight: 900; letter-spacing: .2em; margin-right: -.2em; }
+#kofi .out { flex: none; align-self: flex-start; width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: .8; margin: .1em -.4em 0 .1em; }
 #kofi:active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) {
-  #kofi:hover { background: linear-gradient(100deg, #ff8a5c, var(--hot) 55%, var(--violet)); box-shadow: 0 0 22px rgba(255, 43, 214, .6); }
+  #kofi:hover { box-shadow: 0 0 30px rgba(255, 43, 214, .9), inset 0 0 14px rgba(255, 255, 255, .4); }
 }
 /* (a narrow computer window: the title comes close) */
-@media (max-width: 1100px) { #kofi { font-size: 10px; } }
+@media (max-width: 1100px) and (min-height: 431px) { #kofi { font-size: 10px; padding-right: 1.05em; } #kofi .lb { letter-spacing: .1em; margin-right: -.1em; } }
 @media (max-height: 430px) { #kofi { top: max(8px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); font-size: 10px; } }
 /* a small phone (iPhone SE on its side): only the tree, the words would run into the title */
 @media (max-width: 760px) { #kofi { padding: .5em .6em; } #kofi .tx, #kofi .out { display: none; } }

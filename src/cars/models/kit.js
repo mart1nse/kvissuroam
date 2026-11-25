@@ -722,31 +722,19 @@ export function canvasTex(w, h, draw) {
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
-// Estonian plate: white, black border, blue EU strip with "EST". Draws into rect (x,y,w,h).
-export function drawPlate(g, x, y, w, h, text) {
-  g.save(); g.translate(x, y);
-  const r = h * 0.1;
-  g.fillStyle = '#111'; g.beginPath(); g.roundRect(0, 0, w, h, r); g.fill();
-  const b = h * 0.035;
-  g.fillStyle = '#f4f4f1'; g.beginPath(); g.roundRect(b, b, w - 2 * b, h - 2 * b, r * 0.7); g.fill();
-  const sw = w * 0.085;
-  g.save(); g.beginPath(); g.roundRect(b, b, w - 2 * b, h - 2 * b, r * 0.7); g.clip();
-  g.fillStyle = '#12399c'; g.fillRect(0, 0, sw + b, h);
-  g.restore();
-  g.fillStyle = '#f5c400';
-  for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; g.beginPath(); g.arc(b + sw / 2 + Math.cos(a) * sw * 0.27, h * 0.33 + Math.sin(a) * sw * 0.27, sw * 0.045, 0, 7); g.fill(); }
-  g.fillStyle = '#fff'; g.font = `bold ${h * 0.2}px Arial, Helvetica, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('EST', b + sw / 2, h * 0.76);
-  g.fillStyle = '#0c0c0c'; g.font = `bold ${h * 0.74}px "DIN Alternate", "Arial Narrow", Arial, Helvetica, sans-serif`;
-  const tx = sw + b + (w - sw - 2 * b) / 2;
-  g.save(); g.translate(tx, h * 0.54); g.scale(0.86, 1); g.fillText(text, 0, 0); g.restore();
-  g.restore();
-}
+// Estonian plate: white, black border, blue EU strip with "EST" (in its own small file, for src/cars/plate.js)
+export { drawPlate } from '../drawplate.js';
 // Number plate as geometry: returns { face (atlas uv), back (palette) } at position p, facing +z
 // when yaw = 0 (rear) or -z when front = true; tilt leans the top toward the car.
+// (each plate's corners are noted for assembleCar, which keeps them on the car: a player's own plate is laid
+// over them, src/cars/plate.js)
+let platesMade = [];
+export function forgetPlates() { platesMade = []; }
 export function plate(p, uvr, { front = false, tilt = 0, w = 0.52, h = 0.113 } = {}) {
   const m = M({ p, r: [front ? tilt : -tilt, front ? Math.PI : 0, 0] });
   const face = quad([-w / 2, -h / 2, 0.006], [w / 2, -h / 2, 0.006], [w / 2, h / 2, 0.006], [-w / 2, h / 2, 0.006], uvr).xform(m);
+  const q = face.p;
+  platesMade.push([...q.slice(0, 9), ...q.slice(15, 18)].map((x) => Math.round(x * 1e5) / 1e5));
   const back = box(w + 0.012, h + 0.012, 0.01, null, 'plastic').xform(m);
   return { face, back };
 }
@@ -757,6 +745,7 @@ export function plate(p, uvr, { front = false, tilt = 0, w = 0.52, h = 0.113 } =
 export function assembleCar({ id, dims, parts, tex = {}, wheel, wheelFront = null }) {
   const sh = sharedMaterials();
   const group = new THREE.Group(); group.name = id;
+  group.userData.plates = platesMade; platesMade = [];
   const mats = {
     paint: sh.paint, glass: sh.glass, pal: sh.pal,
     tail: new THREE.MeshStandardMaterial({ map: tex.tailMap || null, emissiveMap: tex.tailGlow || null, emissive: 0xff0000, emissiveIntensity: 0, roughness: 0.22, metalness: 0.1 }),

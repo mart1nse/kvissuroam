@@ -23,6 +23,7 @@ import STAGE from '../src/race/raadi.json';
 import { lapGates, throughGate } from '../src/race/lapgates.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
+import { cleanPlate } from '../src/net/plates.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -61,6 +62,9 @@ const cleanKudo = (v) => {
 };
 // a name others may see: clean, and not a racist slur ('' if it is one, see badnames.js)
 const okName = (s) => { const n = cleanName(s); return n && !badName(n) ? n : ''; };
+// a number plate others may see: "123 ABC" (src/net/plates.js), and no swearing or slur in it, read as a name
+// is, the letters alone too ('' if it is one: the player's car then keeps its own plate, and nobody is told)
+const okPlate = (s) => { const p = cleanPlate(s); return p && !badName(p) && !badName(p.slice(4)) ? p : ''; };
 const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '');
 
 // ---- Limits
@@ -475,7 +479,7 @@ export class Lobby extends DurableObject {
     const out = [], wn = this.watchCounts();
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.w ? { w: a.w } : {}), ...(wn.get(a.id) ? { wn: wn.get(a.id) } : {}), ...(a.kn ? { kn: a.kn, kf: a.kf } : {}) });
+      if (a?.id && !a.ghost) out.push({ id: a.id, name: a.name, car: a.car, ...(a.pl ? { pl: a.pl } : {}), ...(a.w ? { w: a.w } : {}), ...(wn.get(a.id) ? { wn: wn.get(a.id) } : {}), ...(a.kn ? { kn: a.kn, kf: a.kf } : {}) });
     }
     return out;
   }
@@ -980,11 +984,13 @@ export class Lobby extends DurableObject {
       // lost connection keeps it), or what this socket had
       const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
       const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(me?.pw ? { pw: me.pw } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
+      // (the plate: the one sent, or the one this socket had; a page that sends none keeps its cars' own)
+      const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && ghost) this.ghostHello(id);
-      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
+      if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(pl ? { pl } : {}), ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
       // (a spectator back on: the count of whom they watch)
       if (!ghost && (me?.on || '') !== on) this.watchTold([me?.on, on]);
       this.race.sendTo(ws);
@@ -997,6 +1003,13 @@ export class Lobby extends DurableObject {
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)
       me.name = name; me.nt = now; ws.serializeAttachment(me);
       if (!me.ghost) { this.broadcast({ t: 'name', id: me.id, name }, ws); this.race.changed(me); }
+    } else if (m.t === 'plate') {
+      // a new number plate ('' for the car's own); a bad one is silently not taken, as a name is
+      const pl = m.pl === '' ? '' : okPlate(m.pl);
+      if ((!pl && m.pl !== '') || pl === (me.pl || '') || now - (me.pt || 0) < 1500) return;
+      if (pl) me.pl = pl; else delete me.pl;
+      me.pt = now; ws.serializeAttachment(me);
+      if (!me.ghost) this.broadcast({ t: 'plate', id: me.id, pl }, ws);
     } else if (m.t === 'car') {
       const car = cleanCar(m.car);
       if (!car || car === me.car) return;

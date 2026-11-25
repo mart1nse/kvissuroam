@@ -541,7 +541,9 @@ export class Lobby extends DurableObject {
       const since = a.wt || a.at || now;
       if (since < now - idleMs && since < idleAt) { idle = { ws, a }; idleAt = since; }
     }
-    if (n >= max && idle) { this.release(idle.ws, idle.a, 4002, 'idle'); n--; }
+    // (from 90 % of the cap, 90 of 100, not only when full: Martin 25 Nov, so a place is ready before anyone is
+    // turned away; one released for each page that comes in, none while nobody new arrives)
+    if (n >= Math.max(1, Math.ceil(max * 0.9)) && idle) { this.release(idle.ws, idle.a, 4002, 'idle'); n--; }
     return n;
   }
 

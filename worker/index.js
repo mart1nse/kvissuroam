@@ -21,14 +21,13 @@ import { RaceDesk } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { lapGates, throughGate } from '../src/race/lapgates.js';
+import { ADJ, NOUN } from '../src/net/names.js';
 
 const TRACK = 'toomemagi';
 // The other circuits whose times are kept, with the shortest time that is believed. Raadi's stage is
 // 1.73 km of gravel: 45 s would be 138 km/h on average (the lap of Toomemägi, 4.9 km, has 60 s).
 const STAGES = { raadi: 45000 };
 const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
-const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital', 'Synth', 'Vapor', 'Electric', 'Midnight', 'Magenta', 'Cyber'];
-const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo', 'Tiger', 'Wave', 'Fox', 'Moose', 'Heron', 'Beaver', 'Hedgehog', 'Stork', 'Badger'];
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },

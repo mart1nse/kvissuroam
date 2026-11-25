@@ -84,7 +84,7 @@ async function page({ w = W(), k, where = 'map', name } = {}) {
     await sleep(25);
   }
 }
-const online = async () => (await fetch(`http://127.0.0.1:${PORT}/api/online`)).json();
+const online = async () => (await fetch(`http://127.0.0.1:${PORT}/api/online?t=${Date.now()}`)).json();   // (past the 10 s cache)
 
 // ---- the server
 let dev = null;
@@ -106,6 +106,13 @@ process.on('exit', stop);
 
 const ok = (s) => console.log(`  ok  ${s}`);
 try {
+  // 0. a lap ticket from the Worker in front (not the lobby) is one the lobby takes as its own
+  const tk = (await (await fetch(`http://127.0.0.1:${PORT}/api/ticket`)).json()).key;
+  const T = await page({ k: tk, name: 'Tess' });
+  assert.equal(T.key, tk, 'the lobby keeps a ticket the Worker made');
+  T.b.close(); await T.b.waitClose(); await sleep(200);
+  ok('a lap ticket made in the Worker is valid in the lobby');
+
   // 1. fill up, the next one is told FULL (and closed with 4001), not shown as a player
   const A = await page({ name: 'Anna' }), B = await page({ name: 'Bert' }), C = await page({ name: 'Cara' });
   assert.ok(!A.full && !B.full && !C.full, 'three get in');

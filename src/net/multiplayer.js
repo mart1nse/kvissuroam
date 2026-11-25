@@ -409,10 +409,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
   const kicked = () => { kickNote = false; toast('KICKED FOR INACTIVITY · ROAM OFFLINE, BACK ONLINE SOON', 6000); };
   function schedule() {
-    retry = Math.min(retry * 2, 15);
+    // (2, 4, 8, 16, 32 s, then about a minute, spread: a server swamped by a surge is not asked by everyone at once
+    // every 15 s, 25 Nov; a deploy is over within the first few)
+    retry = Math.min(retry * 2, 64);
     clearTimeout(wsRetry);
     // (near the front of the queue it asks sooner: a place is kept for the front, Martin 25 Nov)
-    const wait = !full ? retry * 1000 : qPos && qPos <= 3 ? 4000 + Math.random() * 2000 : qPos && qPos <= 10 ? 10000 + Math.random() * 5000 : 20000 + Math.random() * 20000;
+    // (far back, once a minute or so: 10,000 waiting after a surge must not swamp the one server, 25 Nov)
+    const r = Math.random(), q = qPos || 999;
+    const wait = !full ? retry * (retry > 8 ? 750 + r * 500 : 1000) : q <= 3 ? 4000 + r * 2000 : q <= 10 ? 8000 + r * 4000 : q <= 30 ? 20000 + r * 10000 : 60000 + r * 30000;
     wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, wait);
   }
   const soon = () => { if (wsRetry && !document.hidden) { clearTimeout(wsRetry); wsRetry = 0; connect(); } };

@@ -336,7 +336,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     return r && Number.isFinite(r.ms) ? fmtTime(r.ms / 1000) : '';
   }
 
-  const PAGE_W = Math.random().toString(36).slice(2, 12).padEnd(8, '0');
+  // (kept through a reload of this tab: the page id is left in the tab's sessionStorage as the page goes and
+  // taken back as it opens, so the server knows the new page is the old one and neither counts it twice at
+  // SERVER FULL nor shows it twice. Taken, not just read: a duplicated tab copies sessionStorage, and two tabs
+  // with one id would close each other's connection.)
+  const PAGE_W = (() => {
+    let w = '';
+    try { w = sessionStorage.getItem('kvissuroam.pw') || ''; sessionStorage.removeItem('kvissuroam.pw'); } catch { /* none */ }
+    return /^[a-z0-9]{8,12}$/.test(w) ? w : Math.random().toString(36).slice(2, 12).padEnd(8, '0');
+  })();
+  addEventListener('pagehide', () => { try { sessionStorage.setItem('kvissuroam.pw', PAGE_W); } catch { /* none */ } });
+  // (and taken again when the page comes back from the browser's back-forward cache)
+  addEventListener('pageshow', () => { try { sessionStorage.removeItem('kvissuroam.pw'); } catch { /* none */ } });
   function send(m) { if (ws && ws.readyState === 1) ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
 
   async function connect() {

@@ -459,6 +459,7 @@ export class Lobby extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
       const a = ws.deserializeAttachment();
+      if (a?.x) continue;
       const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
       if (Math.max(ping, a?.at || 0) > now - 80000) continue;
       this.release(ws, a, 1001, 'stale');
@@ -471,7 +472,14 @@ export class Lobby extends DurableObject {
   release(ws, a, code, why) {
     try { ws.close(code, why); } catch { /* already closed */ }
     this.dropPose(ws, a?.id);
+    this.shut(ws, a);
     if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
+  }
+  // A socket the server has closed can stay in getWebSockets until the other end answers the close (never,
+  // for a phone that lost its network). Marked x and stripped of its id, so it holds no place, is not
+  // released twice (a second place given for one freed, 25 Nov) and its late close is no second "left".
+  shut(ws, a) {
+    try { ws.serializeAttachment({ at: a?.at || 0, ip: a?.ip, x: 1 }); } catch { /* gone */ }
   }
 
   // The places taken toward the cap (Martin 2026-11-24: SERVER FULL with about 60 drivers on the map). Not
@@ -479,14 +487,18 @@ export class Lobby extends DurableObject {
   // hello, so a newcomer was counted against them first) and ghosts. If that is still the cap, the player who
   // has sat longest in the garage, the menu or another tab (over IDLE_MS) gives up the place: their page
   // knows why (code 4002) and joins again as soon as it is back on the map.
-  seats(max) {
+  // pw: the page asking (its ?w=). Its own older socket is not counted against it once (Martin 25 Nov: a
+  // phone whose network dropped came back to SERVER FULL, kept out by its own dead connection for 80 s,
+  // and lost its race); the hello then closes that old one.
+  seats(max, pw) {
     const gone = this.prune();
     const now = Date.now(), idleMs = (Number(this.env?.IDLE_S) || IDLE_MS / 1000) * 1000;   // (IDLE_S on the Worker changes it without a deploy)
-    let n = 0, idle = null, idleAt = Infinity;
+    let n = 0, idle = null, idleAt = Infinity, own = false;
     for (const ws of this.ctx.getWebSockets()) {
       if (gone.has(ws)) continue;
       const a = ws.deserializeAttachment();
-      if (a?.ghost) continue;
+      if (a?.ghost || a?.x) continue;
+      if (pw && a?.pw === pw && !own) { own = true; continue; }
       n++;
       if (!a?.id || (a.w !== 'garage' && a.w !== 'away') || this.race.racing(a.id)) continue;
       const since = a.wt || a.at || now;
@@ -642,7 +654,8 @@ export class Lobby extends DurableObject {
       // (a MAX_ONLINE variable on the Worker, set in the Cloudflare dashboard, overrides the cap without a deploy)
       const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
       const wk = this.waitKey(url, ip), now = Date.now();
-      if (this.seats(max) >= max) {
+      const pw = wk.startsWith('w|') ? wk.slice(2) : '';
+      if (this.seats(max, pw) >= max) {
         this.refused(wk, now);
         this.loadTick(now);
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
@@ -654,13 +667,13 @@ export class Lobby extends DurableObject {
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
       let mine = 0;
-      for (const ws of this.ctx.getWebSockets()) if (ws.deserializeAttachment()?.ip === ip) mine++;
+      for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment(); if (a?.ip === ip && !a.x) mine++; }
       if (mine >= MAX_SOCKETS_IP) return busy();
       this.admitted(wk, now);
       this.loadTick(now);
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
-      pair[1].serializeAttachment({ at: Date.now(), ip });
+      pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}) });
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -813,7 +826,7 @@ export class Lobby extends DurableObject {
       if (r.n === MSG_MAX + 1) {
         const a = ws.deserializeAttachment();
         try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
-        if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } ws.serializeAttachment({ at: a.at, ip: a.ip }); }
+        if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } this.shut(ws, a); }
       }
       return;
     }
@@ -844,19 +857,20 @@ export class Lobby extends DurableObject {
       // gave him a new id, so his finish was not his and the race ran on to 7:00 with "1 RACING".
       const tk = key ? await this.readTicket(key) : null;
       let id = me?.id;
-      if (!id && tk) {
-        id = (await this.sign(`id.${tk.sid}`)).slice(0, 8);
-        // the same page's old connection, not closed yet: it is this one now
+      if (!id && tk) id = (await this.sign(`id.${tk.sid}`)).slice(0, 8);
+      if (!id) id = crypto.randomUUID().slice(0, 8);
+      if (!me?.id) {
+        // the same page's old connection, not closed yet: it is this one now. Same id: a lost connection
+        // (quietly taken over). Same page id but another id: the tab was reloaded and its old socket lingers,
+        // so the others hear it left (25 Nov: a reload showed the driver twice and held two places).
         for (const old of this.ctx.getWebSockets()) {
           if (old === ws) continue;
           const oa = old.deserializeAttachment();
-          if (oa?.id !== id) continue;
-          this.dropPose(old, id);
-          old.serializeAttachment({ at: oa.at, ip: oa.ip });
-          try { old.close(1000, 'reconnected'); } catch { /* already closed */ }
+          if (!oa || oa.x || !((oa.id && oa.id === id) || (me?.pw && oa.pw === me.pw))) continue;
+          if (oa.id === id) { this.dropPose(old, id); this.shut(old, oa); try { old.close(1000, 'reconnected'); } catch { /* already closed */ } }
+          else this.release(old, oa, 1000, 'reconnected');
         }
       }
-      if (!id) id = crypto.randomUUID().slice(0, 8);
       // (a slur as a name: the others see the name this socket had, or a random one; the page is not told)
       const name = okName(m.name) || me?.name || this.freshName();
       // (once a ghost, always a ghost on this socket: a later hello cannot announce it)
@@ -869,7 +883,7 @@ export class Lobby extends DurableObject {
       // lost connection keeps it), or what this socket had
       const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
       const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(me?.pw ? { pw: me.pw } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }

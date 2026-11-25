@@ -184,49 +184,63 @@ const tracker = () => {
 
 // What the rest of the machine is doing while the check runs (Linux: /proc), in processor cores: all the work
 // done on the machine less this check's own (this process and everything it started: the game server, the
-// browsers; a child that has ended is counted through its parent's record of it).
-function otherCpu(everyMs = 5000) {
+// browsers and their helpers). Counted once a second on a thread of its own, so it goes on while the check
+// waits for a child (the graphics level tests). Each process is followed by itself from one count to the next,
+// and one that was the check's stays the check's after its parent has gone: a browser's helpers outlive it for
+// a moment, and their time must not turn up as somebody else's.
+function otherCpu() {
   const os = require('os');
-  const read = () => {
-    try {
-      const cpu = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0].trim().split(/\s+/).slice(1).map(Number);
-      const all = cpu[0] + cpu[1] + cpu[2] + cpu[5] + cpu[6] + cpu[7];      // user, nice, system, irq, softirq, steal
+  let Worker;
+  try { ({ Worker } = require('worker_threads')); fs.readFileSync('/proc/stat'); } catch { return { stop: async () => null }; }
+  const code = `
+    const fs = require('fs'), { parentPort, workerData } = require('worker_threads');
+    const ROOT = workerData.pid, HZ = 100;
+    const mine = new Map();              // 'pid:start time' -> processor ticks at the last count
+    const samples = [];
+    let lastAll = null, lastAt = 0;
+    const count = () => {
+      let all;
+      try {
+        const cpu = fs.readFileSync('/proc/stat', 'utf8').split('\\n')[0].trim().split(/\\s+/).slice(1).map(Number);
+        all = cpu[0] + cpu[1] + cpu[2] + cpu[5] + cpu[6] + cpu[7];      // user, nice, system, irq, softirq, steal
+      } catch { return; }
       const procs = new Map();
       for (const d of fs.readdirSync('/proc')) {
-        if (!/^\d+$/.test(d)) continue;
+        if (d.charCodeAt(0) < 48 || d.charCodeAt(0) > 57) continue;
         try {
-          const st = fs.readFileSync(`/proc/${d}/stat`, 'utf8'), f = st.slice(st.lastIndexOf(')') + 2).split(' ');
-          procs.set(+d, { ppid: +f[1], t: +f[11] + +f[12] + +f[13] + +f[14] });   // utime, stime and its ended children's
+          const st = fs.readFileSync('/proc/' + d + '/stat', 'utf8'), f = st.slice(st.lastIndexOf(')') + 2).split(' ');
+          procs.set(+d, { ppid: +f[1], t: +f[11] + +f[12], key: d + ':' + f[19] });   // utime + stime; start time
         } catch { /* gone meanwhile */ }
       }
       let own = 0;
+      const seen = new Set();
       for (const [pid, q] of procs) {
-        let k = pid, mine = false;
-        for (let n = 0; k > 1 && n < 64; n++) { if (k === process.pid) { mine = true; break; } k = procs.get(k)?.ppid ?? 0; }
-        if (mine) own += q.t;
+        let ours = mine.has(q.key);
+        for (let k = pid, n = 0; !ours && k > 1 && n < 64; n++) { const a = procs.get(k); if (k === ROOT || (a && mine.has(a.key))) ours = true; k = a ? a.ppid : 0; }
+        if (!ours) continue;
+        own += q.t - (mine.get(q.key) || 0);
+        mine.set(q.key, q.t); seen.add(q.key);
       }
-      return { all, own, at: Date.now() };
-    } catch { return null; }
-  };
-  const HZ = 100, samples = [];
-  let last = read();
-  const timer = last && setInterval(() => {
-    const now = read();
-    if (!now) return;
-    const s = (now.at - last.at) / 1000;
-    if (s > 0.5) samples.push({ s, cores: Math.max(0, (now.all - last.all) - (now.own - last.own)) / HZ / s });
-    last = now;
-  }, everyMs);
-  timer?.unref?.();
+      for (const k of mine.keys()) if (!seen.has(k)) mine.delete(k);
+      const at = Date.now();
+      if (lastAll != null) { const s = (at - lastAt) / 1000; if (s > 0.2) samples.push([s, Math.max(0, all - lastAll - own) / HZ / s]); }
+      lastAll = all; lastAt = at;
+    };
+    count();
+    const timer = setInterval(count, 1000);
+    parentPort.on('message', () => { clearInterval(timer); count(); parentPort.postMessage(samples); });
+  `;
+  let w;
+  try { w = new Worker(code, { eval: true, workerData: { pid: process.pid } }); w.unref(); w.on('error', () => {}); } catch { return { stop: async () => null }; }
   return {
-    stop() {
-      if (!timer) return null;
-      clearInterval(timer);
-      const secs = samples.reduce((a, x) => a + x.s, 0);
+    async stop() {
+      const samples = await new Promise((res) => { w.once('message', res); w.once('error', () => res([])); w.once('exit', () => res([])); w.postMessage('stop'); setTimeout(() => res([]), 5000).unref(); });
+      w.terminate();
+      const secs = samples.reduce((a, x) => a + x[0], 0);
       if (!secs) return null;
-      const avg = samples.reduce((a, x) => a + x.cores * x.s, 0) / secs;
-      const busySecs = samples.filter((x) => x.cores > 1).reduce((a, x) => a + x.s, 0);
-      return { cores: os.cpus().length, othersAvg: +avg.toFixed(2), othersMost: +Math.max(...samples.map((x) => x.cores)).toFixed(2), busySecs: Math.round(busySecs), busy: avg > 0.5 || busySecs >= 60 };
+      const avg = samples.reduce((a, x) => a + x[1] * x[0], 0) / secs;
+      const busySecs = samples.filter((x) => x[1] > 1).reduce((a, x) => a + x[0], 0);
+      return { cores: os.cpus().length, othersAvg: +avg.toFixed(2), othersMost: +Math.max(...samples.map((x) => x[1])).toFixed(2), busySecs: Math.round(busySecs), busy: avg > 0.5 || busySecs >= 60 };
     },
   };
 }
@@ -579,7 +593,7 @@ async function waitForServer(url, ms) {
       ['phone, shaders built the iPhone way: page errors', S ? S.errors.length : null, 0],
     );
   }
-  out.machine = watch.stop();
+  out.machine = await watch.stop();
   if (out.machine) checks.push(['the machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged', out.machine.othersAvg, null]);
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {

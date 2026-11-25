@@ -1,5 +1,5 @@
-// Driver names that are racist slurs (Martin, 25 Nov 2026): Estonian, English and Russian, the
-// Russian in Cyrillic or typed in Latin letters. The server keeps such a name from everyone else
+// Driver names that are racist slurs or common swearing (Martin, 25 Nov 2026): Estonian, English and
+// Russian, the Russian in Cyrillic or typed in Latin letters. The server keeps such a name from everyone else
 // without saying so (see where `badName` is used in index.js): a new name that is one is ignored,
 // a hello under one gets a random name, a lap under one is taken but not kept.
 //
@@ -24,6 +24,9 @@ const ANYWHERE = [
   'neeg', 'tibla', 'curka', 'tsurka', 'pilusilm', 'juudikas',
   // Russian (чурка, чучмек, черножопый, черномазый, узкоглазый, кацап, чухна, чухонец, жидовка, жидяра)
   'cucmek', 'cernozop', 'cernomaz', 'uzkoglaz', 'kacap', 'katsap', 'cuhna', 'cuhon', 'zidov', 'zidar', 'pindos',
+  // Russian swearing (пизда, блядь, ебать, пидор, мудак, гандон, залупа, говно, долбоёб, нахуй, похуй, хуйло, хуесос)
+  'pizd', 'bliat', 'bliad', 'blad', 'iebat', 'iebal', 'iobt', 'eblan', 'zaieb', 'pidor', 'pidar', 'pidr', 'mudak', 'mudil',
+  'gandon', 'zalupa', 'govno', 'dolbo', 'nahui', 'pohui', 'huilo', 'huies',
   // hatred of a race by its symbols
   'hitler', 'siegheil', 'vhitepover', 'vhitepride', 'kukluks', 'kukluh',
 ];
@@ -32,8 +35,26 @@ const WORDS = [
   'kafir', 'jap', 'dago', 'vop', 'kkk', 'rissa',
   // Russian: хач, хачик, жид, хохол, хохлы, москаль, нерусь
   'hac', 'hacik', 'zid', 'zidi', 'hohol', 'hohli', 'moskal', 'moskali', 'nerus',
+  // Russian swearing: хуй, сука, сучка, ебло
+  'hui', 'suka', 'sucka', 'eblo',
 ];
-const ALLOWED = ['montenegr', 'stonegr', 'inegr', 'egregi', 'vhittl', 'negroni', 'nigeri', 'niggl', 'niggard', 'zidk', 'docurk', 'antibla', 'ltibla'];
+
+// Swearing in English and Estonian (Martin, 25 Nov: the frequent ones). These are matched on a
+// plainer fold that keeps sh, ch, y and w as they are (shit would be sit in the fold above).
+const SWEAR_ANYWHERE = [
+  // English
+  'fuck', 'fuk', 'fck', 'fakk', 'cunt', 'shit', 'bitch', 'whore', 'motherf', 'dickhead', 'asshole', 'cocksuck', 'wank',
+  'twat', 'pussy', 'slut', 'faggot', 'retard', 'bastard', 'dildo', 'jizz', 'piss', 'penis', 'vagina', 'blowjob',
+  // Estonian (perse, sitapea, nussima, pederast, debiilik, mongoloid, munnipea, türapea, "on homo")
+  'perse', 'sitapea', 'sitane', 'nussi', 'pederast', 'debiil', 'mongoloid', 'munnipea', 'turapea', 'onhomo', 'putsi',
+];
+const SWEAR_WORDS = [
+  'fag', 'dick', 'cock', 'arse', 'tits', 'cum', 'rape', 'sex', 'wtf', 'stfu',
+  'cyka', 'sitt', 'puts', 'tura', 'munn', 'munni', 'pede', 'lits', 'hoor', 'vitt', 'raisk', 'rsk', 'homo', 'homod',
+];
+const SWEAR_ALLOWED = ['scunth', 'pussycat', 'sperse', 'yperse', 'uperse', 'perseus', 'persev', 'perseph', 'persec', 'shitake',
+  'twater', 'twatch', 'pissar', 'fuku', 'nonhomo', 'kapuuts', 'penistone'];
+const ALLOWED = ['montenegr', 'stonegr', 'inegr', 'egregi', 'vhittl', 'negroni', 'nigeri', 'niggl', 'niggard', 'zidk', 'docurk', 'antibla', 'ltibla', 'eieba', 'muudak', 'piebal', 'lapidar', 'muddil', 'oblad', 'bladd', 'blade'];
 const RAW = ['1488'];                                   // (digits that are not letters here)
 
 const CYR = {
@@ -52,11 +73,20 @@ function fold(s, digits = true) {
   return t.replace(/[^a-z]/g, '').replace(/kh|x/g, 'h').replace(/y/g, 'i').replace(/w/g, 'v').replace(/q/g, 'k');
 }
 
+// the plainer fold for the swear words: accents off and look-alikes as letters, nothing else changed
+function plain(s, digits = true) {
+  return s.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
+    .replace(/[0-9@$!|€]/g, (c) => (digits ? LEET[c] ?? '' : '')).replace(/[^a-z]/g, '');
+}
+
 // each letter may repeat: 'neeg' matches "neeeeggg" but not "neg"
 const loose = (w) => w.replace(/(.)\1*/g, (run, c) => `${c}{${run.length},}`);
 const ANY_RE = new RegExp(ANYWHERE.map(loose).join('|'));
 const WORD_RE = new RegExp(`^(?:${WORDS.join('|')})(?:s|ov)?$`);
 const ALLOW_RE = new RegExp(ALLOWED.map(loose).join('|'), 'g');
+const SWEAR_RE = new RegExp(SWEAR_ANYWHERE.map(loose).join('|'));
+const SWEAR_WORD_RE = new RegExp(`^(?:${SWEAR_WORDS.join('|')})s?$`);
+const SWEAR_ALLOW_RE = new RegExp(SWEAR_ALLOWED.map(loose).join('|'), 'g');
 
 export function badName(name) {
   const s = String(name ?? '');
@@ -64,8 +94,12 @@ export function badName(name) {
   if (RAW.some((r) => s.replace(/\D/g, '').includes(r))) return true;
   for (const digits of [true, false]) {
     if (ANY_RE.test(fold(s, digits).replace(ALLOW_RE, '-'))) return true;
+    if (SWEAR_RE.test(plain(s, digits).replace(SWEAR_ALLOW_RE, '-'))) return true;
     const words = s.replace(/([\p{Ll}])(\p{Lu})/gu, '$1 $2').split(/[\s_.,:;'"`*+\-\/\\()[\]{}~^#%&=?<>]+/);
-    for (const w of words) { const f = fold(w, digits); if (f && WORD_RE.test(f)) return true; }
+    for (const w of words) {
+      const f = fold(w, digits), g = plain(w, digits);
+      if ((f && WORD_RE.test(f)) || (g && SWEAR_WORD_RE.test(g))) return true;
+    }
   }
   return false;
 }

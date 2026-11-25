@@ -97,7 +97,9 @@ export function rocketStep(car, input, world, dt) {
   if (r.boost < 0.002) r.boost = 0;
   car.thrustN = r.boost * T.rear;
   const n = r.noz, k = Math.min(1, dt / OPEN_T);
-  for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN ? r.boost : 0) - n[i]) * k;
+  // (the jets show and sound the gas that leaves, and that is all of it for as long as the button is held, also
+  // near the top speed where it pushes less: Martin 25 Nov, the sound for the whole time Shift is down)
+  for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN && on ? 1 : 0) - n[i]) * k;
   return false;
 }
 
@@ -131,13 +133,36 @@ function heightAt(p, t, out) {
   out[0] = y; out[1] = v; out[2] = a;
   return out;
 }
-// how far round the roll is (0..1) and how hard it is being spun up (+) or stopped (-), -1..1: one smooth
-// turn (the quintic 10s3 - 15s4 + 6s5), at rest at both ends
+// How far round the roll is (0..1; a little over or under 1 while it hunts for level). One smooth turn (the
+// quintic 10s3 - 15s4 + 6s5) that does not come out level (Martin 2026-11-25: "some imperfectness ... tries to
+// balance it actively with the thruster ... one side then other ... never quite getting it 100%"): it goes OVER
+// by 10 to 16 degrees, is caught and pushed back, swings a little under, over again, each swing smaller, the
+// two sides' nozzles taking turns, and the wheels touch with a degree or two still in it for the springs to
+// take. How far over, and the second, quicker shake on top, differ from flight to flight, worked out from the
+// plan's own numbers so that every page shows the same flight.
+const S5 = (x) => x * x * x * (10 - 15 * x + 6 * x * x);
+const OVER_MIN = 10 / 360, OVER_MORE = 6 / 360;   // the first overshoot, in turns
+const HUNT_W = (2 * Math.PI) / 0.5;               // one swing over and back under takes half a second...
+const HUNT_TAU = 0.4;                             // ...and each is this much smaller (the time to 37 %, s)
+function rollFrac(p, t) {
+  const T = Math.min(ROLL_T, p.tb - ROLL_T0), tE = ROLL_T0 + T, u = (t - ROLL_T0) / T;
+  if (u <= 0) return 0;
+  // (the time there is for catching it: a landing right after the roll gets a smaller overshoot)
+  const room = Math.max(0.05, p.tl - tE);
+  const h = ((Math.round(p.x0 * 100) * 73856093) ^ (Math.round(p.z0 * 100) * 19349663)) >>> 0;
+  const a = (OVER_MIN + OVER_MORE * ((h % 1000) / 1000)) * Math.min(1, room / 0.5);
+  if (u < 1) return (1 + a) * S5(u);
+  const x = Math.min(t, p.tl) - tE, e = Math.exp(-x / HUNT_TAU), w = 1 - 0.5 * (x / room) ** 2;
+  const swing = Math.cos(HUNT_W * x) + Math.sin(HUNT_W * x) / (HUNT_W * HUNT_TAU);
+  const shake = 0.25 * Math.min(1, x / 0.15) ** 2 * Math.sin(2.3 * HUNT_W * x + ((h >>> 10) % 628) / 100);
+  return 1 + a * e * w * (swing + shake);
+}
+// ...and how hard the roll is being spun up (+) or stopped (-) just then, -1..1 (1: the hardest of a plain roll)
 function rollAt(p, t, out) {
-  const T = Math.min(ROLL_T, p.tb - ROLL_T0), u = (t - ROLL_T0) / T;
-  if (u <= 0) { out[0] = 0; out[1] = 0; }
-  else if (u < 1) { out[0] = u * u * u * (10 - 15 * u + 6 * u * u); out[1] = (60 * u - 180 * u * u + 120 * u * u * u) / 5.7735; }
-  else { out[0] = 1; out[1] = 0; }
+  const T = Math.min(ROLL_T, p.tb - ROLL_T0), d = 0.02;
+  const f = out[0] = rollFrac(p, t);
+  const acc = t <= ROLL_T0 - d || t >= p.tl ? 0 : (rollFrac(p, t + d) - 2 * f + rollFrac(p, t - d)) / (d * d);
+  out[1] = Math.max(-1, Math.min(1, (acc * T * T) / 5.7735));
   return out;
 }
 const tmpS = [0, 0];
@@ -171,9 +196,11 @@ export function flightNozzles(p, t, noz, spec) {
   const lift = t < LIFT_T || t > p.tb ? clamp01((spec.mass * (tmpY[2] + G)) / spec.thrusters.down) : 0;
   // ...and the roll: the left pair pushes its side up to spin the car to the right, the right pair stops it
   const spin = rollAt(p, t, tmpS)[1] * p.side;       // + spinning up to the right or stopping a roll to the left
+  // (while they also hold the car up, in the landing burn, the other side eases off instead: the two sides are
+  // seen taking turns all the way down)
   for (let i = 0; i < 4; i++) {
-    const left = i % 2 === 0;
-    noz[NOZ_DOWN + i] = clamp01(lift + (left === spin > 0 ? 0.4 * Math.abs(spin) : 0));
+    const left = i % 2 === 0, push = left === spin > 0, k = Math.abs(spin);
+    noz[NOZ_DOWN + i] = clamp01(lift * (push ? 1 : 1 - 0.5 * k) + (push ? 0.4 * k * (1 - lift) : 0));
   }
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left)
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
@@ -315,7 +342,8 @@ function fly(car, world, dt) {
     flightNozzles(p, p.t, r.noz, s);
     return;
   }
-  car.roll = p.rl; car.pitch = p.pl;
+  // (what is left of the roll's hunting is in the body as the wheels touch: the springs take it)
+  car.roll = p.rl + (rollFrac(p, p.tl) - 1) * 2 * Math.PI * p.side; car.pitch = p.pl;
   // (the plan ended over a drop: a deck's edge, a hole the planner's line did not see)
   if (pose.y - ground(world, pose.x, pose.z, pose.y) > 0.3) { letGo(car, 0, false, up); return; }
   // touchdown: on the ground at the ground's slope, the springs at rest, the tyres taking over

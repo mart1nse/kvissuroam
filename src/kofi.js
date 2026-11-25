@@ -14,26 +14,38 @@ const DOWN = '<svg class="out down" viewBox="0 0 12 12" aria-hidden="true"><path
 // first press. A click with Ctrl / Cmd / the middle button still opens ko-fi.com in a new tab, and so does the
 // ↗ in the panel's head (for when the payment wants a whole page). Ko-fi's page cannot be restyled from here,
 // so a lilac sheet multiplied over it turns its white lilac (Martin 25 Nov); it lets taps through.
-// Apple Pay does not show inside the frame (it would need linnaring.com registered with Ko-fi's payment
-// account), so on Apple's browsers a line under the panel opens Ko-fi's own page, where it does (Martin 25 Nov).
-const APPLE = typeof window.ApplePaySession === 'function';
 const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=true&preview=true';
 
 const a = document.querySelector('#kofi');
 if (a && STEALTH) {
-  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">SUPPORT LINNARING</b></span>${DOWN}`;
+  a.innerHTML = `${TREE}<span class="tx"><b class="lb">SUPPORT LINNARING</b><small class="ln">Ega token puu otsas kasva</small></span>${DOWN}`;
   a.classList.remove('hidden');
-  // its left edge lines up with the first car column (EVERYDAY), wherever the cards sit (Martin 25 Nov)
+  // Where it sits (Martin 25 Nov): on a computer just above the first car column (EVERYDAY), as wide as it, when
+  // there is room under the title there; otherwise in the top left corner, lined up with that column as far as
+  // the title lets it.
   const menu = document.querySelector('#menu');
+  const clash = (r, top, bottom) => [...menu.querySelectorAll('.logo, .tag, #tracks, #trackmap svg, #trackmap .cap')].some((el) => {
+    const q = el.getBoundingClientRect();
+    return q.width && getComputedStyle(el).display !== 'none' && q.left < r.right && q.right > r.left && q.top < bottom + 8 && q.bottom > top - 8;
+  });
   const align = () => {
     const g = document.querySelector('#cards .group');
     if (!g || menu.classList.contains('hidden')) return;
-    let x = g.getBoundingClientRect().left;
-    // (but never into the title: where the room is short it slides only as far as it can)
+    const r = g.getBoundingClientRect();
+    const h = a.offsetHeight;
+    const top = r.top - h - 10;
+    if (innerHeight > 430 && top > 10 && !clash(r, top, top + h)) {
+      menu.style.setProperty('--kofix', `${Math.round(r.left)}px`);
+      menu.style.setProperty('--kofiy', `${Math.round(top)}px`);
+      menu.style.setProperty('--kofiw', `${Math.round(r.width)}px`);
+      a.classList.add('over');
+      return;
+    }
+    a.classList.remove('over');
+    // (in the corner it never runs into the title: where the room is short it slides only as far as it can)
     const t = document.querySelector('#menu .logo span');
-    const room = t ? t.getBoundingClientRect().left - 14 - a.offsetWidth : x;
-    x = Math.max(10, Math.min(x, room));
-    menu.style.setProperty('--kofix', `${Math.round(x)}px`);
+    const room = t ? t.getBoundingClientRect().left - 14 - a.offsetWidth : r.left;
+    menu.style.setProperty('--kofix', `${Math.round(Math.max(10, Math.min(r.left, room)))}px`);
   };
   if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(align); ro.observe(menu); ro.observe(a); }
   new MutationObserver(align).observe(menu, { attributes: true, attributeFilter: ['class'] });
@@ -45,8 +57,8 @@ if (a && STEALTH) {
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'kofipanel';
-      panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">SUPPORT LINNARING</b></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
-        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>${APPLE ? `<a class="apple" href="https://ko-fi.com/linnaring" target="_blank" rel="noopener">Apple Pay? Open on ko-fi.com ${OUT}</a>` : ''}`;
+      panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><b class="lb">SUPPORT LINNARING</b><small class="ln">Ega token puu otsas kasva</small></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
+        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>`;
       panel.querySelector('.x').addEventListener('click', close);
       panel.querySelector('.shut').addEventListener('click', close);
       panel.querySelector('iframe').addEventListener('load', () => panel.classList.add('ready'));
@@ -54,8 +66,14 @@ if (a && STEALTH) {
       for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove']) panel.addEventListener(ev, (e) => e.stopPropagation());
       a.after(panel);
     }
-    // (it grows out of the button: the clip it starts from is the button's size)
+    // (it grows out of the button: the clip it starts from is the button's place and size; it starts where the
+    // button is, or higher where the panel would not fit below it)
     const r = a.getBoundingClientRect();
+    const box = menu.getBoundingClientRect();
+    const want = Math.min(730, box.height - 24);
+    const pt = innerHeight > 430 ? Math.max(12, Math.min(r.top - box.top, box.height - 12 - want)) : null;
+    if (pt === null) panel.style.removeProperty('--pt'); else panel.style.setProperty('--pt', `${pt}px`);
+    panel.style.setProperty('--bt', `${pt === null ? 0 : r.top - box.top - pt}px`);
     panel.style.setProperty('--bw', `${r.width}px`);
     panel.style.setProperty('--bh', `${r.height}px`);
     panel.classList.remove('hidden');

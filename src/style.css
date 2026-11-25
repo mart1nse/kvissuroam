@@ -335,7 +335,11 @@ body.touch .desktop-only { display: none; }
   transition: box-shadow .2s, transform .12s;
 }
 #kofi .ic { flex: none; width: 2.2em; height: 2.2em; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; filter: drop-shadow(0 1px 0 rgba(43, 10, 92, .45)); }
-#kofi .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .32em; text-align: left; }
+#kofi .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .38em; text-align: left; }
+/* (above the first car column, as wide as it; the arrow to the far end) */
+#kofi.over { top: var(--kofiy); width: var(--kofiw); padding-right: 1.1em; font-size: min(clamp(10px, 1.05vw, 14px), calc(var(--kofiw) / 22.5)); }
+#kofi.over .lb { letter-spacing: .1em; margin-right: -.1em; }
+#kofi.over .out.down { margin-left: auto; margin-right: -.2em; }
 #kofi .ln { font-size: .8em; font-style: italic; font-weight: 600; letter-spacing: .04em; opacity: .92; }
 #kofi .lb { font-size: 1.3em; font-style: italic; font-weight: 900; letter-spacing: .2em; margin-right: -.2em; }
 #kofi .out { flex: none; align-self: flex-start; width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: .8; margin: .1em -.4em 0 .1em; }
@@ -348,20 +352,20 @@ body.touch .desktop-only { display: none; }
 /* Ko-fi's own donation panel (src/kofi.js): the button turns into it where it stands, its head the button itself
    (tree, both lines) with ko-fi.com and a close beside, and the panel grows out of the button's corner */
 #kofipanel {
-  position: absolute; z-index: 30; left: var(--kofix, max(14px, env(safe-area-inset-left))); top: max(12px, env(safe-area-inset-top));
+  position: absolute; z-index: 30; left: var(--kofix, max(14px, env(safe-area-inset-left))); top: var(--pt, max(12px, env(safe-area-inset-top)));
   width: min(420px, calc(100vw - 28px)); height: min(730px, calc(100% - 2 * max(12px, env(safe-area-inset-top))));
   display: flex; flex-direction: column; border-radius: 1.15em; overflow: hidden; text-align: left;
   font-size: clamp(10px, 1.05vw, 14px);
   background: #160733; box-shadow: 0 0 28px rgba(255, 43, 214, .5), 0 10px 40px rgba(0, 0, 0, .5);
   animation: kofigrow .24s cubic-bezier(.2, .8, .2, 1);
 }
-@keyframes kofigrow { from { clip-path: inset(0 calc(100% - var(--bw, 200px)) calc(100% - var(--bh, 50px)) 0 round 1.15em); } to { clip-path: inset(0 0 0 0 round 1.15em); } }
+@keyframes kofigrow { from { clip-path: inset(var(--bt, 0px) calc(100% - var(--bw, 200px)) calc(100% - var(--bt, 0px) - var(--bh, 50px)) 0 round 1.15em); } to { clip-path: inset(0 0 0 0 round 1.15em); } }
 #kofipanel .head { flex: none; display: flex; align-items: center; gap: .65em; padding: .6em .55em .65em .95em; line-height: 1; white-space: nowrap; color: #fff;
   background: linear-gradient(100deg, var(--hot), var(--violet)); text-shadow: 0 2px 0 rgba(43, 10, 92, .55);
   box-shadow: inset 0 0 12px rgba(255, 255, 255, .28); }
 #kofipanel .shut { flex: 1; min-width: 0; display: flex; align-items: center; gap: .65em; padding: 0; border: none; background: none; color: inherit; text-shadow: inherit; text-align: left; }
 #kofipanel .ic { flex: none; width: 2.2em; height: 2.2em; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; filter: drop-shadow(0 1px 0 rgba(43, 10, 92, .45)); }
-#kofipanel .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .32em; }
+#kofipanel .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .38em; }
 #kofipanel .ln { font-size: .8em; font-style: italic; font-weight: 600; letter-spacing: .04em; opacity: .92; }
 #kofipanel .lb { font-size: 1.3em; font-style: italic; font-weight: 900; letter-spacing: .16em; }
 #kofipanel .head a { flex: none; display: grid; place-items: center; width: 2.3em; height: 2.3em; border-radius: 50%; background: rgba(18, 6, 43, .2); color: #fff; opacity: .9; }
@@ -372,10 +376,7 @@ body.touch .desktop-only { display: none; }
 #kofipanel iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity .25s; touch-action: auto; }
 #kofipanel.ready iframe { opacity: 1; }
 #kofipanel .wait { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 28px; letter-spacing: .2em; color: var(--violet); }
-#kofipanel .apple { flex: none; display: flex; align-items: center; justify-content: center; gap: .4em; margin: 0 6px 6px; padding: .75em; border-radius: .8em;
-  font-size: .9em; font-weight: 700; letter-spacing: .04em; color: #fff; text-decoration: none; background: #2c1658; }
-#kofipanel .apple svg { width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
-@media (hover: hover) and (pointer: fine) { #kofipanel .apple:hover { background: #3c1f74; } #kofipanel .head a:hover { opacity: 1; background: rgba(18, 6, 43, .45); } #kofipanel .head .x:hover { background: rgba(18, 6, 43, .6); } }
+@media (hover: hover) and (pointer: fine) { #kofipanel .head a:hover { opacity: 1; background: rgba(18, 6, 43, .45); } #kofipanel .head .x:hover { background: rgba(18, 6, 43, .6); } }
 /* a phone on its side: the whole height, wider */
 @media (max-height: 430px) {
   #kofipanel { top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); left: var(--kofix, max(10px, env(safe-area-inset-left))); height: auto; width: min(440px, 64vw); font-size: 10px; }

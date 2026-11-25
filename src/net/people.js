@@ -179,7 +179,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const myRec = mp.name ? mp.recordOf(mp.name) : '';
     const nm = mp.name ? `YOU: ${mp.name}` : '';
     const wn = mp.online ? mp.watchers() : 0, sp = watching();
-    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : mp.full ? ' · SERVER FULL' : ' · OFFLINE'}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
+    const nmMore = `${mp.stealth ? ' · HIDDEN' : ''}${mp.online ? '' : mp.full ? (mp.queuePos ? ` · SERVER FULL · QUEUE ${mp.queuePos}` : ' · SERVER FULL') : ' · OFFLINE'}${wn ? ` · WATCHED · ${wn}` : ''}${sp ? ' · WATCHING' : ''}`;
     const vm = mp.online ? votes?.() : null;
     // (phones, Martin 2026-11-24: the list is lined up on the right, so the colour dot goes at the right end of the
     // name; the thumb stays in front of it. The name in its own box, cut short there, so the dot is never cut off.)
@@ -291,7 +291,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       const sel = (p) => picked === (p.me ? 'me' : p.id) && canWatch(p);
       const tail = (p) => (sel(p) ? ` <small class="go">${p.me ? 'CLICK AGAIN TO DRIVE' : 'CLICK AGAIN TO WATCH'}</small>` : '');
       const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}${sel(p) ? ' sel' : ''}"${sel(p) ? ` title="${p.me ? 'Click again to drive your car' : 'Click again to watch'}"` : ''}>${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}${tail(p)}</li>`;
-      const head = mp.online ? `${driving.length + 1} ONLINE` : mp.full ? 'SERVER FULL · DRIVING OFFLINE' : 'OFFLINE · RECONNECTING';
+      const head = mp.online ? `${driving.length + 1} ONLINE` : mp.full ? `SERVER FULL · ${mp.queuePos ? `QUEUE ${mp.queuePos} · ` : ''}DRIVING OFFLINE` : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
       rosterKey = `${mp.online}|${others.length}|${vm?.key || ''}`;

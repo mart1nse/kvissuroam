@@ -16,6 +16,7 @@ import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
 import { STANDINS } from './standins.js';
+import { ADJ, NOUN } from './names.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -72,8 +73,6 @@ const cleanName = (s) => String(s || '').normalize('NFC')
 // a position from another browser: numbers only (the server checks too; a word in here used to stop the picture)
 const poseOk = (p) => Array.isArray(p) && p.length >= 9 && p.length <= 24 && p.every((v) => typeof v === 'number' && Number.isFinite(v));
 
-const ADJ = ['Neon', 'Chrome', 'Turbo', 'Pastel', 'Laser', 'Sunset', 'Retro', 'Velvet', 'Cosmic', 'Digital'];
-const NOUN = ['Otter', 'Falcon', 'Lynx', 'Comet', 'Dolphin', 'Palm', 'Flamingo', 'Tiger', 'Wave', 'Fox'];
 
 const KUDOS_KEY = 'kvissuroam.kudos';
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }

@@ -72,6 +72,13 @@
 //            Then 30 s of a race of 30 under way with us in it (Martin, 24 Nov: "almost 30 in the race"): each kind of
 //            car's see-through ghost shaders were made ready in one go when it first came close, 13 to 30 ms.
 //            The "online code" counts src/race/racemode.js (the live race list) too.
+//   new kinds of car in a crowd (tools/crowd-hitch.cjs kinds=1 dry, as a desktop, 60 online): everybody starts in
+//            one kind of car, and every 4 s a driver of the pack around us changes to a kind not met before; 40 s.
+//            Everything is made ready and sent to the graphics card as in play, only the draw calls do nothing (so
+//            the frames come 60 a second without a card). Judged: the frames that sent over 3 MB of model buffers.
+//            Why: Martin, 25 Nov 2026, 85 to 95 online on a fast desktop: stutters now and then that the frame times
+//            on his screen did not show. A kind of car's whole model (4 to 6 MB with a scanned body) went to the
+//            card in the frame that first drew such a car, each kind once, whenever one first came near.
 //   shaders the iPhone way (tools/crowd-hitch.cjs, as a phone, drawing on, 60 online): the menu's warm-up frames,
 //            DRIVE, 25 s standing where the game puts the car, with a graphics driver made to behave like an iPhone's:
 //            no KHR_parallel_shader_compile, and the first question about each new shader program waits 150 ms for it
@@ -371,6 +378,12 @@ async function waitForServer(url, ms) {
       out.crowdRace = { ...crowdSummary(r), errors: r.errs.slice(0, 5) };
       out.crowdRaceReport = crowdReport(r, 8);
     } catch (e) { out.crowdRace = null; out.crowdRaceReport = `the race of 30 failed: ${e.message}`; }
+    // ---- new kinds of car arriving in the pack (see the top): what a frame sends to the graphics card
+    try {
+      const r = await crowd({ port: PORT, n: 60, secs: 40, churn: 1, draw: true, dry: true, kinds: 1 });
+      const mb = (r.gl || []).map((g) => g[2]);
+      out.newCars = { framesOver3MB: mb.filter((x) => x > 3).length, mostMBInAFrame: +Math.max(0, ...mb).toFixed(2), sentMB: +mb.reduce((a, x) => a + x, 0).toFixed(1), mostMPInAFrame: +Math.max(0, ...(r.gl || []).map((g) => g[1])).toFixed(2), errors: r.errs.slice(0, 5) };
+    } catch (e) { out.newCars = null; console.warn(`the new-kinds-of-car run failed: ${e.message}`); }
     // ---- shaders the iPhone way (see the top): programs first used in the drawing of a frame after DRIVE
     try {
       const r = await crowd({ port: PORT, n: 60, secs: 25, touch: true, draw: true, slowLink: 150, menu: true });
@@ -489,6 +502,16 @@ async function waitForServer(url, ms) {
     );
   }
   {
+    // new kinds of car in a crowd (see the top)
+    const D = out.newCars, B = budget.newCars;
+    checks.push(
+      ['new kinds of car, 60 online: frames that sent over 3 MB of model to the graphics card', D?.framesOver3MB, B.framesOver3MB],
+      ['new kinds of car: page errors', D ? D.errors.length : null, 0],
+      ['new kinds of car: most model in one frame (MB), not judged', D?.mostMBInAFrame, null],
+      ['new kinds of car: most pictures in one frame (megapixels), not judged', D?.mostMPInAFrame, null],
+    );
+  }
+  {
     // shaders the iPhone way (see the top)
     const S = out.shaders, B = budget.shaders;
     checks.push(
@@ -513,6 +536,7 @@ async function waitForServer(url, ms) {
   }
   if (out.crowd) console.log(`60 players online ${JSON.stringify(out.crowd)}`);
   if (out.crowdRace) console.log(`a race of 30 ${JSON.stringify(out.crowdRace)}`);
+  if (out.newCars) console.log(`new kinds of car in a crowd ${JSON.stringify(out.newCars)}`);
   if (out.over.some((n) => n.startsWith('a race of 30')) && out.crowdRaceReport) console.log(`what the page was busy with, a race of 30:\n${out.crowdRaceReport}`);
   if (out.over.some((n) => n.startsWith('60 players')) && out.crowdReport) console.log(`what the page was busy with, 60 players online:\n${out.crowdReport}`);
   if (out.phone.errors?.length) console.log('page errors:', out.phone.errors.slice(0, 5).join(' | '));

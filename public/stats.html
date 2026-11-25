@@ -273,6 +273,7 @@
     h += crashes(t);
     h += deaths(t);
     h += freezes(t);
+    h += hitches(t);
     // where people drive
     h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button>' + (frzHeat(t) ? '<button id="frzmap" type="button">' + (frzMap ? 'Show driving' : 'Show freezes') + '</button>' : '') + '</div>', true);
 
@@ -526,6 +527,51 @@
     };
     var line = fmt(total[top]) + ' ' + name[top].toLowerCase() + ' freezes · ' + [most('why'), most('new')].filter(Boolean).join(', ');
     return fold('freezes', 'What the freezes had going on', line, 'Every freeze of 1 s or more while driving (up to 8 a visit), and the share of them that had each fact. "What held the picture": the game\'s own code, the page busy with something else, or neither (the graphics card or the phone). The map above can show where they were. Counted from 24 Nov 2026.', body);
+  }
+
+  // ---- short hitches while driving (src/hitches.js): how often, alone and in a crowd, and what each had going on
+  function hitches(t) {
+    var o = t.hit || {}, T = t.hitT || {}, total = {}, secs = {};
+    Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[1] === 'len') total[p[0]] = (total[p[0]] || 0) + o[k]; });
+    Object.keys(T).forEach(function (k) { var p = k.split(':'); secs[p[0]] = (secs[p[0]] || 0) + T[k]; });
+    var devs = ['phone', 'desktop', 'tablet'].filter(function (d) { return secs[d] >= 60; });
+    if (!devs.length) return '';
+    var name = { desktop: 'Desktop', phone: 'Phone', tablet: 'Tablet' };
+    var crowds = [['0', 'alone'], ['1-9', '1 to 9 others online'], ['10-29', '10 to 29 others'], ['30-59', '30 to 59 others'], ['60+', '60 and more others']];
+    var rate = function (n, s) { return s >= 60 ? '<td class="n"><b>' + fmt((n || 0) / s * 600, 1) + '</b><small>' + fmt(n || 0) + ' in ' + fmt(s / 3600, 1) + ' h</small></td>' : '<td class="n tr0">–</td>'; };
+    var body = '<table class="trouble"><thead><tr><th></th>' + devs.map(function (d) { return '<th class="n">' + name[d] + '<small>' + fmt(secs[d] / 3600, 1) + ' h driven</small></th>'; }).join('') + '</tr></thead><tbody>';
+    var rows = function (title, key) {
+      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>' + title + '</b></td></tr>';
+      crowds.forEach(function (c) {
+        if (!devs.some(function (d) { return T[d + ':' + c[0]] >= 60; })) return;
+        body += '<tr><td>' + c[1] + '</td>' + devs.map(function (d) { return rate(o[d + ':' + key + ':' + c[0]], T[d + ':' + c[0]] || 0); }).join('') + '</tr>';
+      });
+    };
+    rows('Hitches per 10 minutes of driving', 'on');
+    rows('Pictures held back per 10 minutes (the frame on time, its picture a screen refresh late)', 'pace');
+    var kinds = [
+      ['why', 'What the frame before was busy with', { build: 'building places and cars (queued work)', draw: 'handing the picture to the graphics card', online: 'the other players (cars, list, names, race)', game: 'the game\'s other frame code',
+        card: 'nothing on the page: the graphics card or the browser', 'page:net': 'messages from the server', 'page:car': 'a car model back from its worker' }],
+      ['new', 'New on the graphics card in that frame', { shaders: 'new shaders', pictures: 'new pictures', car: 'a step of another player\'s car', none: 'nothing new' }],
+      ['len', 'How long, ms', {}], ['t', 'Time since DRIVE', {}],
+    ];
+    kinds.forEach(function (kd) {
+      var vals = {};
+      Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[1] === kd[0]) { var v = p.slice(2).join(':'); vals[v] = (vals[v] || 0) + o[k]; } });
+      var keys = Object.keys(vals).sort(function (a, b) { return vals[b] - vals[a]; });
+      if (!keys.length) return;
+      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>' + kd[1] + '</b></td></tr>';
+      keys.forEach(function (v) {
+        body += '<tr><td>' + esc(kd[2][v] || v) + '</td>' + devs.map(function (d) {
+          var n = o[d + ':' + kd[0] + ':' + v] || 0;
+          return n && total[d] ? '<td class="n"><b>' + fmt(n / total[d] * 100, 0) + '%</b><small>' + fmt(n) + '</small></td>' : '<td class="n tr0">0</td>';
+        }).join('') + '</tr>';
+      });
+    });
+    body += '</tbody></table>';
+    var top = devs.slice().sort(function (a, b) { return secs[b] - secs[a]; })[0];
+    var line = name[top] + ': ' + fmt((total[top] || 0) / secs[top] * 600, 1) + ' hitches per 10 minutes of driving';
+    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. A picture held back is a frame that was on time whose picture was finished a screen refresh later than the one before: an uneven step that frame times do not show. Counted from 25 Nov 2026.', body);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

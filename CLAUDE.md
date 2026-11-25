@@ -14,7 +14,8 @@ enough to make that happen at DRIVE.
   (the page busy for over 25 ms, frames over 33 ms) and the pictures sent to the graphics card (the slight
   microfreezes on a MacBook Pro M3 after a night of new house fronts along the track, 22 Nov), and a full run
   of the Raadi rally stage (`?raadi=1`: in as the stage builds itself, the start clock, the stage to past the
-  finish) with the lap's budgets for short hitches, and a phone's memory along that stage; that run fails if the stage cancels it, so a new stage rule
+  finish) with the lap's budgets for short hitches, and a phone's memory along that stage, and what a frame sends to
+  the graphics card as new kinds of car arrive in a crowd of 60 (stutters with 85 to 95 online, 25 Nov); that run fails if the stage cancels it, so a new stage rule
   that the straight drive along the stage's line breaks needs `route=stage` in `tools/freeze-profile.cjs` updated.
   It takes about 11 minutes, so it is not run after every merge: if any thread ran it in the last 2 hours
   it only prints that result (the last run is noted in the project's shared folder). Use `--force` when
@@ -68,6 +69,15 @@ enough to make that happen at DRIVE.
   follows the level, or the lowest level grows heavier again. `node tools/freeze-profile.cjs
   route=centre slow=5` drives as such a computer (processor 5 times slower, 15 frames a second) and
   also shows how long built things waited to get into the picture.
+- Other players' cars (25 Nov: stutters with 85 to 95 online that the frame times did not show): a kind of car is
+  made ready once, with its scanned body on, and goes to the graphics card ahead of its first drawing, a picture or
+  about 2 MB of buffers a frame (`toCard` in `src/main.js`); until then such a car is its far stand-in. Whatever a
+  car model gains (a part, a picture, work done on the page when its scan arrives) must go the same way: steps in
+  the work queue (`useGlbBody` runs `onLoad` as a generator), nothing in one piece when the car is first seen.
+- The game keeps its own account of short hitches while driving and what each was (`src/hitches.js`: the options
+  window's last five minutes, `__game.hitches`, and the "Short hitches while driving" card on /stats, per 10
+  minutes alone and in a crowd). When a player reports stutter, read that card before guessing. Work done on the
+  page outside the frame (a message handler, a worker's answer) is timed with `outside.note(what, t0)`.
 - Reuse geometry and materials (instancing, merged meshes); dispose what is removed from the scene.
 - New shader variants: warm them (`renderer.compileAsync`) rather than compiling on the first frame.
 - Graphics quality follows the frame rate (`src/quality.js`); new effects should follow the level

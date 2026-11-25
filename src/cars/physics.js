@@ -141,8 +141,9 @@ const WIDE_LOOSE = 0.5;          // wide road tyres off paving: grip 1 - (spec.g
 // bite on gravel, dirt and grass and less on paving, a softer, later-peaking tread on tarmac, and the
 // wide performance rubber of spec.grip left in the garage (a gravel tyre is a gravel tyre on any car).
 // car.tyres = 'gravel' picks it; anything else is the road tyre.
-// (Martin 2026-11-23, after the first try: 5 % less on gravel and tarmac, 3 % less on dirt and grass)
-const GRAVEL_TYRE = [1.13 * 0.97, 0.85 * 0.95, 1.22 * 0.95, 1.2 * 0.97, 1.0];   // mu share per surface class
+// (Martin 2026-11-23, after the first try: 5 % less on gravel and tarmac, 3 % less on dirt and grass;
+// 2026-11-25: 2 % less again on gravel, dirt and grass)
+const GRAVEL_TYRE = [1.13 * 0.97 * 0.98, 0.85 * 0.95, 1.22 * 0.95 * 0.98, 1.2 * 0.97 * 0.98, 1.0];   // mu share per surface class
 const SURF_G = SURF.map((o, i) => ({
   ...o,
   mu: o.mu * GRAVEL_TYRE[i],

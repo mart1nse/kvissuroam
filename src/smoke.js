@@ -7,7 +7,8 @@
 // and at speed the wind thins it out.
 // A car with spec.exhaust.flame also spits a small flame from its tailpipe when a downshift crackles (the
 // unburnt fuel of the blip going off in the hot exhaust): a quick lick or two, drawn with the same points.
-// And the white cloud a Rocket's thrusters blow up off the ground as it lifts off and sets down (mist).
+// And the white cloud a Rocket's thrusters blow up off the ground as it lifts off and sets down (mist), and the
+// dust its suction fans pull off loose ground and blow out behind it (fanDust).
 import * as THREE from 'three';
 import { NOZ_DOWN, NOZZLES } from './cars/thrust.js';
 
@@ -16,6 +17,9 @@ const RUB0 = 2.5;          // m/s of tread sliding before a tyre makes any smoke
 const RUB1 = 13;           // ... and where it makes the most
 const MIST_RATE = 32;      // puffs per second from one of a Rocket's corner nozzles blowing hard at the ground...
 const MIST_UP = 4;         // ...from under this many metres up
+const FAN_DUST = 16;       // puffs per second from a fan car's suction fans at full speed on gravel...
+const FAN_GROUND = [0, 0, 1, 0.7];   // ...and each ground's share of that: grass, paving, gravel, dirt (physics.js SURF)
+const DUST = -0.85;        // a puff's shade for dust (below 0: towards the dust colour)
 const RATE = 24;           // puffs per second from one tyre at full smoke
 const WARM = 1.1;          // seconds for a tyre to come up to smoking heat
 const COOL = 0.7;
@@ -50,7 +54,7 @@ export function createSmoke(world) {
   geo.setAttribute('position', aPos); geo.setAttribute('aSize', aSize); geo.setAttribute('aAlpha', aAlpha); geo.setAttribute('aShade', aShade);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { uHalfH: { value: 400 }, uColor: { value: new THREE.Color(0xdcd9e6) }, uSoot: { value: new THREE.Color(0x1b1a19) },
+    uniforms: { uHalfH: { value: 400 }, uColor: { value: new THREE.Color(0xdcd9e6) }, uSoot: { value: new THREE.Color(0x1b1a19) }, uDust: { value: new THREE.Color(0xe9dfcd) },
       uFire: { value: new THREE.Color(0xff5a12) }, uCore: { value: new THREE.Color(0xfff0b8) } },
     vertexShader: `
       attribute float aSize; attribute float aAlpha; attribute float aShade;
@@ -64,14 +68,15 @@ export function createSmoke(world) {
         vShade = aShade;
       }`,
     fragmentShader: `
-      uniform vec3 uColor; uniform vec3 uSoot; uniform vec3 uFire; uniform vec3 uCore; varying float vAlpha; varying float vShade;
+      uniform vec3 uColor; uniform vec3 uSoot; uniform vec3 uDust; uniform vec3 uFire; uniform vec3 uCore; varying float vAlpha; varying float vShade;
       void main() {
         vec2 p = gl_PointCoord * 2.0 - 1.0;
         float r2 = dot(p, p);
         if (r2 > 1.0) discard;
         // soft ball, a little denser low down so it reads as a rolling cloud rather than a disc
         float a = (1.0 - r2) * (1.0 - r2) * (0.85 + 0.15 * p.y) * vAlpha;
-        gl_FragColor = vec4(mix(uColor, uSoot, min(vShade, 1.0)) * (0.92 - 0.1 * p.y), a);
+        // (shade 0..1 is smoke to soot, below 0 dust)
+        gl_FragColor = vec4(mix(uColor, vShade < 0.0 ? uDust : uSoot, min(abs(vShade), 1.0)) * (0.92 - 0.1 * p.y), a);
         // (shade 2..3 is a flame, 3 the hottest: a pale core in an orange ball, with a harder edge than smoke)
         if (vShade > 1.5) {
           float core = (1.0 - r2) * (1.0 - r2);
@@ -96,14 +101,14 @@ export function createSmoke(world) {
 
   function puff(x, y, z, vx, vy, vz, strength, dark = 0) {
     const i = next; next = (next + 1) % MAX; fresh = true;
-    shade[i] = dark; rise[i] = dark ? 0.3 : 0.55;
+    shade[i] = dark; rise[i] = dark > 0 ? 0.3 : dark < 0 ? 0.2 : 0.55;   // (soot and dust are heavier than smoke)
     pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
     vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
     age[i] = 0; life[i] = 1.7 + Math.random() * 1.5;
     s0[i] = 0.4 + Math.random() * 0.25; s1[i] = 1.6 + Math.random() * 1.3 + strength * 0.8;
     a0[i] = (0.1 + 0.2 * strength) * (0.7 + 0.6 * Math.random());
     gy[i] = y;
-    if (dark) {
+    if (dark > 0) {
       // soot: starts as a tight jet, swells into a heavy, dark cloud that hangs about
       s0[i] = 0.12 + Math.random() * 0.1; s1[i] = 1.3 + Math.random() * 1.2 + strength * 1.2;
       a0[i] = (0.3 + 0.45 * strength) * (0.75 + 0.5 * Math.random());
@@ -240,6 +245,34 @@ export function createSmoke(world) {
   }
   const myMist = [0, 0, 0, 0];
 
+  // A fan car's suction fans (spec.fanDown) on loose ground (Martin 25 Nov: "on fine looser ground like gravel
+  // should a bit throw up sand too"): they pull the air from under the floor, and the dust with it, and blow it
+  // out behind the car. They never stop, so a haze hangs about a standing car too; run up by the pedal or by
+  // speed they leave a thin trail. Light on purpose: a few of the same puffs as the smoke, sand coloured.
+  // kind: the ground under the car (physics.js SURF); st: the puffs it still owes.
+  function fanDust(car, kind, st, dt) {
+    const share = car.fanOff ? 0 : FAN_GROUND[kind] || 0;
+    if (!share) { st.owed = 0; return; }
+    const fan = 0.5 + 0.5 * Math.max(car.throttle || 0, Math.min(1, Math.abs(car.vx) / 14));
+    st.owed += FAN_DUST * share * fan * fan * thinK * dt;
+    if (st.owed < 1) return;
+    const gyc = world.groundAt(car.x, car.z, car.y + 0.4);
+    if (car.y - gyc > 0.3) { st.owed = 0; return; }                 // (in the air: nothing under the floor to pull at)
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
+    const wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy, ht = car.spec.track / 2;
+    while (st.owed >= 1) {
+      st.owed -= 1;
+      const r = () => Math.random() - 0.5;
+      // most of it out from under the tail, some from under a sill
+      const side = Math.random() < 0.3 ? Math.sign(r()) : 0;
+      const along = side ? r() * car.spec.wheelbase * 0.8 + (car.a - car.b) / 2 : -(car.b + 0.4 + Math.random() * 0.6), across = side ? side * ht : r() * ht * 1.6;
+      const out = (1.5 + 2.5 * Math.random()) * fan, bx = side ? sx * side : -fx, bz = side ? sz * side : -fz;
+      puff(car.x + fx * along + sx * across, gyc + 0.12, car.z + fz * along + sz * across,
+        wvx * 0.3 + bx * out + r() * 1.2, 0.3 + Math.random() * 0.6, wvz * 0.3 + bz * out + r() * 1.2, 0.5 + 0.6 * fan * share, DUST);
+    }
+  }
+  const myFan = { owed: 0 };
+
   // car: the player's car after its physics step; active: false while the game is not being driven
   // others: other players' cars, [car-like] (multiplayer.js remotes()); only the ones near enough to see
   function update(car, dt, active, others = []) {
@@ -252,11 +285,13 @@ export function createSmoke(world) {
       if (o.soot) exhaust(o, dt, st.soot);
       if (o.tyres) tyres(o, dt, st.tyres);
       if (o.noz) mist(o, o.noz, st.mist || (st.mist = [0, 0, 0, 0]), dt);
+      if (o.spec.fanDown) fanDust(o, o.ground, st.fan || (st.fan = { owed: 0 }), dt);
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
     if (active && car && !car.inWater) tyres(car, dt, myTyres);
     else myTyres.heat[0] = myTyres.heat[1] = 0;
     if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
+    if (active && car && car.spec.fanDown && !car.inWater) fanDust(car, car.surface, myFan, dt);
 
     if (!alive && !fresh) return;
     alive = 0; fresh = false;

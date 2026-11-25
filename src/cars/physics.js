@@ -827,8 +827,10 @@ function substep(car, input, world, dt) {
   const steerIn = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
   const maxLock = 0.6;
   const vS = Math.max(Math.abs(car.vx), 1);
-  // (suction fans, spec.fanDown: that much more weight on the tyres, so that much more lock at speed)
-  const fanK = s.fanDown ? 1 + s.fanDown / (m * G) : 1;
+  // (suction fans, spec.fanDown: that much more weight on the tyres, so that much more lock at speed; none of it
+  // with the fans switched off, car.fanOff: Martin 25 Nov, the fan icon is a switch)
+  const fanN = s.fanDown && !car.fanOff ? s.fanDown : 0;
+  const fanK = 1 + fanN / (m * G);
   const gripLock = Math.atan((1.25 * fanK * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
   // In a slide the front wheels need the slide angle on top of the usual lock
@@ -923,7 +925,7 @@ function substep(car, input, world, dt) {
   // (in the air a trace of load is kept so nothing below divides by zero)
   const tl = Math.max(load, 1e-4);
   // (suction fans press the car down while it is near the road; they add no mass)
-  const fan = s.fanDown ? s.fanDown * Math.min(1, load * 4) : 0;
+  const fan = fanN * Math.min(1, load * 4);
   const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + (fan * car.b) / L;
   const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + (fan * car.a) / L;
 

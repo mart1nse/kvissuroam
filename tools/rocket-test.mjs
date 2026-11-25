@@ -34,15 +34,15 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   check('0-100 km/h on the motors is 1.6 s', Math.abs(base.t100 - 1.6) < 0.08, `${base.t100.toFixed(2)} s`);
   check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
   const b = run({ up: 1, boost: 1 });
-  check('0-100 km/h with BOOST is about 0.5 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.45 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
+  check('0-100 km/h with BOOST is under 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
   check('BOOST blows a full tank down in under 6 s, then the reload starts', b.t > 5.4 && b.t < 6 && b.car.rocket.reload, `${b.t.toFixed(2)} s`);
-  check('BOOST tops out near 370 km/h', b.top > 355 && b.top < 385, `${b.top.toFixed(0)} km/h`);
+  check('BOOST tops out near 355 km/h', b.top > 345 && b.top < 370, `${b.top.toFixed(0)} km/h`);
   {
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
     for (; !ci.rocket.reload && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
-    check('...0-300 km/h in about 2.6 s', t300 > 2.3 && t300 < 2.9, `${t300.toFixed(2)} s`);
+    check('...0-300 km/h in about 2.8 s', t300 > 2.5 && t300 < 3.1, `${t300.toFixed(2)} s`);
     check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 140000 && first > 60000 && first < 80000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
   }
   // BOOST alone (no throttle key): the motors are held at full power too
@@ -59,13 +59,22 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   { const wq = world(), q = fresh(wq); q.rocket.tank = 0; q.rocket.reload = true; let tq = 0;
     for (; q.rocket.reload && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
     check('the quick reload of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
-  check('...and the car weighs its full 1950 kg again', car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+  check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors
   const we = world(), e = fresh(we);
   e.rocket.tank = 0; e.rocket.reload = true;
   let te = 0, e100 = null;
   for (; te < 5 && e100 === null; te += dt) { stepCar(e, { up: 1 }, we, dt); if (speedKmh(e) >= 100) e100 = te + dt; }
   check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 6 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
+}
+
+// ---- the suction fans can be switched off (car.fanOff, the fan icon): the tyres carry the weight alone
+{
+  const go = (fanOff) => { const w = world(), c = fresh(w); c.fanOff = fanOff; let t = 0; while (speedKmh(c) < 100 && t < 10) { stepCar(c, { up: 1 }, w, dt); t += dt; } return t; };
+  const stop = (fanOff) => { const w = world(), c = fresh(w, 100); c.fanOff = fanOff; for (let t = 0; t < 0.5; t += dt) { stepCar(c, {}, w, dt); c.vx = 100 / 3.6; } const z0 = c.z; let t = 0; while (c.vx > 0.3 && t < 10) { stepCar(c, { down: 1 }, w, dt); t += dt; } return Math.abs(c.z - z0); };
+  const g1 = go(false), g0 = go(true), s1 = stop(false), s0 = stop(true);
+  check('fans off: 0-100 km/h takes about 2.5 s, not 1.6', Math.abs(g1 - 1.6) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
+  check('...and stopping from 100 km/h about 36 m, not 21', s1 > 18 && s1 < 24 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
 }
 
 // ---- one FLIP: fly it and report
@@ -301,12 +310,12 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...and shut when it is let go', held > 0.8 && c2.rocket.noz[0] < 0.01);
 }
 
-// ---- puffs (src/smoke.js): the Rocket's additions leave every other car's tyre smoke as it was (25 Nov: the
-// mist's line had come between the tyre smoke and its `else`, and from 16:56 to the evening no car but the Rocket
-// smoked its own tyres)
+// ---- puffs (src/smoke.js): the fans raise dust on loose ground only, and the Rocket's additions leave every
+// other car's tyre smoke as it was (25 Nov: the mist's line had come between the tyre smoke and its `else`, and
+// no car but the Rocket smoked its own tyres for half a day)
 {
   const sw = { groundAt: () => 0, surfaceAt: () => 1 };
-  // the most puffs alive in `secs` of a car standing on a ground with these figures
+  // puffs alive after `secs` of a car standing (or driving at kmh) on a ground, pedal up or down
   const puffs = (sp, over, secs = 2) => {
     const sm = createSmoke(sw), car = { spec: sp, x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, throttle: 0, surface: 1, a: sp.wheelbase * sp.cgFront, b: sp.wheelbase * (1 - sp.cgFront), ...over };
     if (sp.thrusters) car.rocket = { noz: new Float32Array(NOZ) };
@@ -317,6 +326,9 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   const m3 = CARS.m3 || Object.values(CARS).find((c) => !c.thrusters && !c.dpfSmoke);
   const burn = puffs(m3, { rubR: 13, slipVR: 6 }, 3), rocketBurn = puffs(spec, { rubR: 13, slipVR: 6 }, 3);
   check('a burnout on paving smokes, for an ordinary car and for the Rocket', burn > 40 && rocketBurn > 40, `${burn} and ${rocketBurn} puffs`);
+  const idle = puffs(spec, { surface: 2 }, 4), full = puffs(spec, { surface: 2, throttle: 1 }, 4), dirt = puffs(spec, { surface: 3, throttle: 1 }, 4);
+  check('the fans raise a little dust on gravel standing still, more run up, less on dirt', idle >= 3 && idle <= 18 && full > idle * 2.5 && full <= 60 && dirt > 5 && dirt < full, `${idle} idling, ${full} run up, ${dirt} on dirt (puffs alive)`);
+  check('...none on paving or grass, none in the air, none from a car without fans', puffs(spec, { surface: 1, throttle: 1 }) === 0 && puffs(spec, { surface: 0, throttle: 1 }) === 0 && puffs(spec, { surface: 2, throttle: 1, y: 2 }) === 0 && puffs(m3, { surface: 2, throttle: 1 }) === 0);
 }
 
 process.exit(ok ? 0 : 1);

@@ -42,11 +42,11 @@ assert.equal(desk.s.phase, 'on');
 msg(2, { t: 'rj', on: 1 });     // c joins in the countdown
 clock = desk.s.tGrid + 100;
 msg(3, { t: 'rj', on: 1 });     // d late on the grid
-clock = desk.s.tGreen + 60000;
-msg(0, { t: 'rf', ms: 60000 });
+clock = desk.s.tGreen + 150000;
+msg(0, { t: 'rf', ms: 148000 });
 msg(1, { t: 'rd', why: 'off' });
-msg(2, { t: 'rf', ms: 65500 });
-msg(3, { t: 'rf', ms: 70000 });
+msg(2, { t: 'rf', ms: 149500 });
+msg(3, { t: 'rf', ms: 150000 });
 assert.equal(desk.s.phase, 'idle');
 const r1 = reports[1];
 assert.equal(r1.ran, true); assert.equal(r1.end, 'done'); assert.equal(r1.racers.length, 4);
@@ -84,8 +84,8 @@ reports.forEach((r, i) => assert.ok(addRace(days[i % 2], r, clock)));
 const tot = sumDays(days);
 assert.equal(tot.race.n, 3);
 assert.equal(tot.race.cancel, 1);
-assert.equal(tot.raceBest.w201, 60000);
-assert.equal(tot.raceBest.f40, 70000);
+assert.equal(tot.raceBest.w201, 148000);
+assert.equal(tot.raceBest.f40, 150000);
 assert.equal(tot.race.wins, 1);
 assert.equal(tot.race.late, 1);
 assert.equal(addRace({}, { v: 2 }), false);

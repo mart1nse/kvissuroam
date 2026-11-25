@@ -687,7 +687,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           // stored, already there, or refused as invalid: either way not worth sending again
           markSent(batch);
           queue.splice(0, batch.length);
-          if (r.ok) { const j = await r.json().catch(() => null); if (j?.board) setBoard(j.board); }
+          if (r.ok) {
+            const j = await r.json().catch(() => null);
+            if (j?.board) setBoard(j.board);
+            if (Array.isArray(j?.hold)) for (const h of j.hold) held.add(lapKey(h));
+          }
         } else failed = true;
       } catch { failed = true; }
     }
@@ -939,13 +943,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // Our record laps' replays: a lap's samples wait here (in memory only, they are big) until the server has the
   // lap, then go there only if the lap is the car's record on the board. One request a record; none otherwise.
   const traces = [];
+  // laps the server holds off the board until their replay has come (worker/index.js: a car's best of all time or of
+  // today needs its drive since 25 Nov 2026), by lapKey
+  const held = new Set();
   async function sendReplays() {
     for (let i = traces.length - 1; i >= 0; i--) {
       const { lap, trace } = traces[i];
       if (!sent.has(lapKey(lap))) continue;                       // (not answered yet)
       traces.splice(i, 1);
       const best = (lap.track ? board?.[lap.track] : board)?.allTime?.find((r) => r.car === lap.car);
-      if (!best || best.ms !== lap.ms || best.name !== name) continue;
+      if (!held.delete(lapKey(lap)) && (!best || best.ms !== lap.ms || best.name !== name)) continue;
       try {
         const z = await pack(trace, jobs);
         await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },

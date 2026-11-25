@@ -58,7 +58,7 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 // ---- Limits
 const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
                                   // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
-const IDLE_MS = 120000;           // in the garage, the menu or another tab this long: gives up the place when the server is full (seats)
+const IDLE_MS = 30000;            // in the garage, the menu or another tab this long: gives up the place when the server is full (seats; 2 min until Martin 25 Nov)
 const WAIT_GONE = 90000;           // a refused page asks again every 20 to 40 s (longer in a hidden tab): quiet this long, it gave up
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)

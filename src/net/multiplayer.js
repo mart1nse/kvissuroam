@@ -381,9 +381,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       online = false;
       if (ws === sock) ws = null;
       for (const id of [...others.keys()]) drop(id);
-      // the server was full and we sat in the garage, the menu or another tab for over 2 minutes: our place
+      // the server was full and we sat in the garage, the menu or another tab for over 30 s: our place
       // went to someone waiting, and we join again the moment we are back on the map (see setWhere)
       released = e?.code === 4002 && where !== 'map' && where !== 'watch';
+      // (Martin 25 Nov: said so once back on the map and still kept out; the garage hides messages)
+      if (e?.code === 4002) { full = true; kickNote = true; }
       onPeople?.('count');
       if (released) clearTimeout(wsRetry); else schedule();
     };
@@ -397,6 +399,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // so a freed place is not fought over by everyone waiting at the same moment).
   let full = false;
   let released = false;
+  let kickNote = false;
+  const kicked = () => { kickNote = false; toast('KICKED FOR INACTIVITY · ROAM OFFLINE, BACK ONLINE SOON', 6000); };
   function schedule() {
     retry = Math.min(retry * 2, 15);
     clearTimeout(wsRetry);
@@ -557,12 +561,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       }
       case 'full':
-        if (!full) toast(`SERVER FULL (${Number(m.max) || 100} ONLINE) · DRIVING OFFLINE, JOINING WHEN A PLACE FREES`, 5000);
+        if (kickNote) kicked();
+        else if (!full) toast(`SERVER FULL (${Number(m.max) || 100}) · DRIVING OFFLINE TILL A PLACE FREES`, 5000);
         full = true; online = false;
         onPeople?.('count');
         break;
       case 'welcome':
         if (full) toast('A PLACE FREED UP · ONLINE AGAIN', 3000);
+        kickNote = false;
         full = false;
         myId = m.id;
         myWn = Number.isInteger(m.wn) ? m.wn : 0;

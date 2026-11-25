@@ -25,7 +25,8 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
       }
       const r = car && car.rocket;
       const want = !!r;
-      if (want !== shown) { shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch); last = ''; }
+      // (body.rocketpad: the phone layout makes room for the two buttons, src/style.css)
+      if (want !== shown) { shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch); document.body.classList.toggle('rocketpad', want && touch); last = ''; }
       if (!r) return;
       const pct = Math.round((r.tank / TANK_S) * 200) / 2;                 // half a per cent steps
       const left = r.reload ? Math.ceil((1 - r.tank / TANK_S) * (r.refillS || REFILL_S)) : 0;

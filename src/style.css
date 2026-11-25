@@ -263,13 +263,23 @@ body:not(.touch) .touch-only { display: none; }
 .pad.right #carname { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap;
   bottom: calc(max(6px, env(safe-area-inset-bottom)) - max(14px, env(safe-area-inset-bottom)) - clamp(60px, 14vh, 110px));
   font-size: 8px; letter-spacing: .16em; color: #fff; opacity: .5; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
-/* The thrusters of a car that has them (the Roadster Rocket, src/rocketui.js). Phones: two round buttons left of
-   BRAKE, FLIP over BOOST; each is its own gauge, filling from the bottom with what is in the tank (FLIP in two
-   halves, one a jump), and during the reload filling up again with the time left. Desktop: a slim bar under
-   the rev counter with the keys. */
-.pad.rocket { right: calc(max(18px, env(safe-area-inset-right)) + 2 * clamp(72px, 13vw, 118px) + 2 * clamp(10px, 2vw, 20px));
-  bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px)); flex-direction: column; gap: clamp(6px, 2vh, 10px); }
-.pad.rocket button { position: relative; overflow: hidden; width: clamp(50px, 15.5vh, 66px); height: clamp(50px, 15.5vh, 66px); border-radius: 50%; gap: 1px;
+/* The thrusters of a car that has them (the Roadster Rocket, src/rocketui.js). Phones, as Martin drew them on a
+   screenshot (25 Nov): BOOST by the left thumb, right of the rev counter and level with its top; FLIP by the
+   right thumb, above BRAKE and beside the online list, whose names are kept short of it (body.rocketpad). Each
+   button is its own gauge, filling from the bottom with what is in the tank (FLIP in two halves, one a jump),
+   and during the reload filling up again with the time left. Desktop: a slim bar under the rev counter with
+   the keys. */
+.pad.rocket { position: static; display: contents; }
+.pad.rocket button.boost { left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2 + var(--td) / 2 + 5px); bottom: calc(var(--padh) + 6px + var(--td) * 1.08 - var(--rk) / 2); }
+.pad.rocket button.flip { right: calc(var(--flipr) - var(--rk) / 2);
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + clamp(24px, 30vh - 62px, 72px)); }
+/* (the street name ends short of BOOST: closer letters, and the longest names are cut; not on a short phone,
+   where the name stands over the right steering button) */
+@media (min-height: 341px) { body.touch.rocketpad #street { max-width: calc(var(--padw) / 2 + var(--td) / 2 + 1px); font-size: clamp(9px, 1.2vw, 11px); letter-spacing: .04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
+body.touch.rocketpad #people .who > li { max-width: calc(var(--flipr) - var(--rk) / 2 - var(--tbr) - 6px); }
+body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - var(--rk) / 2 - var(--tbr) - 6px - 3.2em); }
+.pad.rocket button { position: absolute; overflow: hidden; width: var(--rk); height: var(--rk); border-radius: 50%; gap: 1px;
   border-color: var(--cyan); color: #fff; font-size: 9px; letter-spacing: .08em; text-shadow: 0 0 6px var(--ink); }
 .pad.rocket button b { position: relative; font-weight: 800; }
 .pad.rocket button small { position: relative; font-size: 8px; min-height: 9px; opacity: 1; }
@@ -318,10 +328,15 @@ body.touch {
   --rbt: calc(var(--tbh) + 8px);                                   /* race button's top, the online list's too */
   --gapl: calc(max(10px, env(safe-area-inset-left)) + var(--mm) + 10px);                 /* the gap right of the minimap ... */
   --gapw: calc(100vw - var(--lapr) - var(--lapw) - 8px - var(--gapl));                    /* ... up to the lap timer */
+  /* the rev counter: as big as fits between the street name and the steering buttons */
+  --td: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px);
+  --rk: clamp(50px, 15.5vh, 66px);                                 /* a Rocket's BOOST and FLIP buttons */
+  /* FLIP's middle, from the right: a third of the way into BRAKE */
+  --flipr: calc(max(18px, env(safe-area-inset-right)) + 1.67 * var(--padw) + clamp(10px, 2vw, 20px));
 }
 /* the rev counter centred over the left steering button, as big as fits between the street name and the buttons */
 body.touch #dash { right: auto; top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2); bottom: calc(var(--padh) + 6px); transform: translateX(-50%);
-  --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px); }
+  --d: var(--td); }
 body.touch #toast { top: 34%; }
 body:not(.touch) #touch { display: none !important; }
 body.touch .desktop-only { display: none; }
@@ -1089,7 +1104,7 @@ body.touch #rlights { top: 30%; font-size: 13px; }
    above the right steering button, and the rev counter takes the room up to the minimap */
 @media (max-height: 340px) {
   body.touch #street { top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) + clamp(10px, 2vw, 20px)); bottom: calc(var(--padh) + 6px); }
-  body.touch #dash { --d: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - var(--padh) - 14px), 150px); }
+  body.touch { --td: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - var(--padh) - 14px), 150px); }
   /* the street name stands over the right steering button here: the standings end above it */
   body.touch #rlist.live .tb { --tbroom: min(94px, max(36px, 100vh - max(10px, env(safe-area-inset-top)) - 42px - var(--rbh) - var(--padh) - 30px)); }
 }
@@ -1232,11 +1247,11 @@ svg.trk.rd path { stroke: #ff8014; }      /* the Raadi stage: neon orange, as on
 #topbar button svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px var(--cyan)); }
 #fullbtn .out, #fullbtn.on .in { display: none; }
 #fullbtn.on .out { display: inline; }
-/* phones: the dial is small, so the tyre sits just outside it at the bottom right, thumb-sized */
-/* (Martin 23 Nov: the gear moves left and the tyre sits beside it, inside the dial's open bottom) */
-body.touch #gear { right: 22%; }
-body.touch #tyre { left: 53%; bottom: 2%; width: 18px; height: 22px; }
-body.touch #tyre::before { inset: -9px -10px -6px -8px; }
+/* phones (Martin 25 Nov, drawn on a screenshot): the tyre switcher stands at the dial's top left corner, just
+   outside the ring and under the street name; the gear is back in the middle of the dial's open bottom */
+/* (a small dial has less of a corner: there it stands further round to the left, clear of the minimap above) */
+body.touch #tyre { left: calc(41.7% - 43.7px); top: max(-10px, calc(19px - 25%)); bottom: auto; width: 18px; height: 22px; }
+body.touch #tyre::before { inset: -8px -8px -8px -10px; }
 @media (max-width: 1100px) {
   #tyrebtn span { display: none; }
   #tyrebtn { padding: 0; width: calc(var(--bh) * 1.1); justify-content: center; }

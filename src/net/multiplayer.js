@@ -18,8 +18,11 @@ import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
+import { cleanPlate } from './plates.js';
+import { setCarPlate, dropPlate } from '../cars/plate.js';
 
 const NAME_KEY = 'kvissuroam.name';
+const PLATE_KEY = 'kvissuroam.plate';     // our own number plate, '' for each car's own (src/net/plates.js)
 const PENDING_KEY = 'kvissuroam.pendingLaps';
 const SENT_KEY = 'kvissuroam.sentLaps';      // laps the server has confirmed, as car|ms
 const SEND_HZ = 10;
@@ -258,7 +261,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {} }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -270,6 +273,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // (a racist slur kept from before the server refused them: the browser gets a fresh random name)
   let name = lsGet(NAME_KEY) || '';
   if (badName(name)) name = '';
+  let plate = cleanPlate(lsGet(PLATE_KEY) || '');
+  if (plate && (badName(plate) || badName(plate.slice(4)))) plate = '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
@@ -362,7 +367,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false; bundled = false;
       // b: 1, everyone's positions in one message ten times a second (see TICK in worker/index.js)
-      send({ t: 'hello', b: 1, name, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined, kn: myKudos.kn || undefined, kf: myKudos.kn ? myKudos.kf : undefined });
+      send({ t: 'hello', b: 1, name, pl: plate, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined, kn: myKudos.kn || undefined, kf: myKudos.kn ? myKudos.kf : undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
       clockAsk(); setTimeout(clockAsk, 1500); setTimeout(clockAsk, 4000);
@@ -430,7 +435,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.style.display = 'none';
     labels.appendChild(el);
     const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0,
-      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: kudoList(p.kf) };
+      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: kudoList(p.kf), plate: cleanPlate(p.pl) };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -485,6 +490,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
   // a car's see-through copies, when it is taken away
   function dropFade(o) {
+    dropPlate(o.model);
     for (const e of o.model?.fade?.list || []) if (!e.mine) e.copy?.dispose();
     o.halo?.material.dispose();
   }
@@ -493,6 +499,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     o.modelCar = o.car;
     o.halo = null;
     o.model = buildModel(o.car);
+    if (o.plate) setCarPlate(o.model, o.plate);
     o.model.group.rotation.order = 'YXZ';
     o.model.group.userData.remoteCar = true;
     o.model.group.traverse((c) => { if (c.isMesh) c.castShadow = true; });
@@ -601,6 +608,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'name': {
         const o = others.get(m.id);
         if (o && typeof m.name === 'string') { onPeople?.('rename', m.name, o.name); o.name = m.name; o.el.textContent = m.name; }
+        break;
+      }
+      case 'plate': {      // their own number plate, or '' for their car's own
+        const o = others.get(m.id);
+        if (o && typeof m.pl === 'string') { o.plate = cleanPlate(m.pl); if (o.model) setCarPlate(o.model, o.plate); }
         break;
       }
       case 'car': {
@@ -1204,6 +1216,17 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       name = n; lsSet(NAME_KEY, n);
       send({ t: 'name', name: n });
       return name;
+    },
+    // our own number plate ('' for each car's own): a bad one is not taken, and the box flashes (race/board.js)
+    get plate() { return plate; },
+    setPlate(p) {
+      p = cleanPlate(p);
+      if (p && (badName(p) || badName(p.slice(4)))) return null;
+      if (p === plate) return plate;
+      plate = p; lsSet(PLATE_KEY, p);
+      send({ t: 'plate', pl: p });
+      onPlate?.(p);
+      return plate;
     },
     get car() { return carId; },
     // where we are (map, garage, away), told to the others when it changes

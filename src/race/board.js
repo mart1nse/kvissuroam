@@ -4,6 +4,8 @@ import { tyreIcon } from '../hud.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
 import { createTrackPicker, TRACK_ICON, TRACKS } from './trackpick.js';
+import { cleanPlate, typedPlate } from '../net/plates.js';
+import { OWN_PLATE } from '../cars/plate.js';
 
 // small marks for what drove a lap; laps from before this was kept count as keyboard
 const INP = {
@@ -24,8 +26,11 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   const row = document.createElement('div');
   row.id = 'menurow';
   // the row under the cars: DRIVE in the middle, the driver's name to its left and the lap times to its right
-  row.innerHTML = `<label id="driver" title="Your name on the lap times: type to change it"><span class="lbl">DRIVER</span><span class="field"><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" aria-label="Driver name" /><i class="caret"></i></span>
-    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17l1-4L14 3l3 3L7 16z M12 5l3 3"/></svg></label>`;
+  // (Martin 25 Nov: DRIVER sits over the name, which left room in the same box for the number plate, PLATE over it;
+  // the plate only on a computer, phones keep each car's own)
+  row.innerHTML = `<div id="driver"><label class="col" title="Your name on the lap times: type to change it"><span class="lbl">DRIVER</span><span class="field"><input id="drivername" maxlength="20" spellcheck="false" autocomplete="off" aria-label="Driver name" /><i class="caret"></i></span></label>
+    <label class="col plate desktop-only" title="Your number plate, on your car for everyone: 3 digits and 3 letters. Empty: the car's own"><span class="lbl">PLATE</span><span class="field"><input id="plate" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-label="Number plate" /></span></label>
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17l1-4L14 3l3 3L7 16z M12 5l3 3"/></svg></div>`;
   drive.replaceWith(row);
   row.appendChild(drive);
   const btn = document.createElement('button');
@@ -93,8 +98,34 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     e.stopPropagation();
     if (e.key === 'Enter') input.blur();
   });
+  // The number plate: typed as "123 ABC" (src/net/plates.js puts the space in and leaves out what cannot be on a
+  // plate). Empty is the car's own plate, shown grey in the box. One not whole, or one the server would refuse,
+  // goes back to the old one with the same pink blink as a refused name.
+  const plateIn = row.querySelector('#plate');
+  const platePh = () => { plateIn.placeholder = OWN_PLATE[mp.car] || '123 ABC'; };
+  plateIn.value = mp.plate;
+  platePh();
+  plateIn.addEventListener('focus', platePh);
+  // (the grey hint follows the car picked: DRIVE names it)
+  new MutationObserver(platePh).observe(drive, { childList: true, subtree: true, characterData: true });
+  plateIn.addEventListener('input', () => {
+    const v = typedPlate(plateIn.value);
+    if (v !== plateIn.value) plateIn.value = v;
+  });
+  const plateCommit = () => {
+    const v = plateIn.value.trim();
+    const p = v ? cleanPlate(v) : '';
+    const ok = (v === '' || p) && mp.setPlate(p) !== null;
+    plateIn.value = mp.plate;
+    if (!ok) { label.classList.remove('nope'); void label.offsetWidth; label.classList.add('nope'); }
+  };
+  plateIn.addEventListener('change', plateCommit);
+  plateIn.addEventListener('blur', plateCommit);
+  plateIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { if (e.key === 'Escape') plateIn.value = mp.plate; plateIn.blur(); } });
+  plateIn.addEventListener('keyup', (e) => e.stopPropagation());
+
   // pick the name every time the menu opens (start and back to the garage)
-  new MutationObserver(() => requestAnimationFrame(preselect)).observe(menu, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(() => requestAnimationFrame(() => { platePh(); preselect(); })).observe(menu, { attributes: true, attributeFilter: ['class'] });
   requestAnimationFrame(preselect);
   input.addEventListener('keyup', (e) => e.stopPropagation());
 

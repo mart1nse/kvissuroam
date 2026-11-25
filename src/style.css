@@ -412,9 +412,21 @@ body.touch #people :is(.who, .me) small.rec .rc { display: none; }
   height: var(--bh); display: flex; align-items: center; gap: .7em; border-radius: calc(var(--bh) * .4); max-width: 100%; min-width: 0;
   font-size: clamp(12px, 1.4vw, 18px); background: rgba(18, 6, 43, .72);
 }
-#driver { justify-self: end; padding: 0 1.1em 0 1.3em; border: none; cursor: text; transition: background .15s, box-shadow .15s; }
+#driver { justify-self: end; padding: 0 1.1em 0 1.3em; border: none; cursor: text; transition: background .15s, box-shadow .15s; gap: 1.1em; }
 #driver:focus-within { background: rgba(60, 36, 20, .8); box-shadow: 0 0 14px rgba(255, 212, 94, .35); }
-#driver .lbl { flex: none; font-size: .56em; font-weight: 800; letter-spacing: .24em; color: var(--sun); }
+/* (Martin 25 Nov: each label over its box, DRIVER over the name and PLATE over the number plate) */
+#driver .col { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: .05em; min-width: 0; cursor: text; }
+#driver .lbl { flex: none; font-size: .56em; font-weight: 800; letter-spacing: .24em; color: var(--sun); line-height: 1; }
+#driver .plate { padding-left: .3em; }
+body.touch #driver .plate { display: none; }     /* (phones keep each car's own plate) */
+#plate {
+  display: block; width: 5.6em; font: inherit; font-weight: 800; letter-spacing: .1em; color: #fff; text-transform: uppercase;
+  background: none; border: 0; padding: .2em 0; user-select: text; -webkit-user-select: text; font-variant-numeric: tabular-nums;
+}
+#plate:focus { outline: none; }
+#driver .col input { padding: .08em 0 0; line-height: 1.3; }
+#plate::placeholder { color: rgba(255, 255, 255, .32); }
+#plate::selection { background: rgba(255, 43, 214, .75); color: #fff; }
 #driver svg { flex: none; width: 1em; height: 1em; fill: none; stroke: var(--sun); stroke-width: 1.6; stroke-linejoin: round; opacity: .75; }
 #driver .field { position: relative; display: block; min-width: 0; }
 #drivername {

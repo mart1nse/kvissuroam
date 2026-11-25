@@ -147,6 +147,7 @@ import { createPhoneTextures } from './world/phonetex.js';
 import { slots as startSlots, pick as pickSlot } from './race/startslots.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
+import { setCarPlate } from './cars/plate.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
 import { createBoard } from './race/board.js';
@@ -845,6 +846,7 @@ async function boot() {
     // phones build other players' cars only near, and only a few kinds (memory)
     lean: () => isTouch,
     dropModel: (id) => carModels?.dropCarModel(id, freeModel),
+    onPlate: (p) => { if (model) setCarPlate(model, p); },
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},
@@ -1089,6 +1091,7 @@ function setCar(id, now = false) {
   }
   model.group.rotation.order = 'YXZ';
   model.group.traverse((o) => { o.layers.enable(1); if (o.isMesh) { o.castShadow = true; } });   // layer 1: drawn again over street photos
+  if (mp?.plate) setCarPlate(model, mp.plate);       // our own number plate (typed in the garage, src/race/board.js)
   scene.add(model.group);
   if (shrinker) { const m = model; m.ready?.then(() => { shrinker.again(m.group); shrinker.scan(m.group); }, () => {}); }   // (a scanned body arrives later, with its own pictures)
   audio.setCar(spec);

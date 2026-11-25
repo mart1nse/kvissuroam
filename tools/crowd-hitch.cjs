@@ -88,10 +88,11 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         const id = `bot${seq++}`;
         // a pack around us (16 to 130 m), the rest spread round the lap
         const pack = k < 8, at = pack ? 8 + k * 7 : Math.round(Math.random() * (P.length - 120)) + 60;
-        return { id, name: `Driver${String(seq).padStart(3, '0')}`, car: CARS[(seq * 7) % CARS.length], w: 'map', pack, at, speed: pack ? 6 : 12 + (seq % 5) * 3, ph: Math.random() * 6 };
+        // (each with a number plate of their own, 25 Nov: a picture per car on the page)
+        return { id, name: `Driver${String(seq).padStart(3, '0')}`, car: CARS[(seq * 7) % CARS.length], pl: `${String(100 + (seq % 900))} ÄBC`, w: 'map', pack, at, speed: pack ? 6 : 12 + (seq % 5) * 3, ph: Math.random() * 6 };
       };
       for (let k = 0; k < N; k++) bots.push(mk(k));
-      const pub = (o) => ({ id: o.id, name: o.name, car: o.car, w: o.w });
+      const pub = (o) => ({ id: o.id, name: o.name, car: o.car, pl: o.pl, w: o.w });
       class FakeWS {
         constructor() {
           this.readyState = 0;
@@ -148,6 +149,10 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
                   const o = bots[Math.floor(Math.random() * bots.length)];
                   o.car = CARS[(CARS.indexOf(o.car) + 1 + Math.floor(Math.random() * 5)) % CARS.length];
                   msg({ t: 'car', id: o.id, car: o.car });
+                  // and someone else their plate (a new picture for that car)
+                  const q = bots[Math.floor(Math.random() * 8)];
+                  q.pl = `${String(100 + Math.floor(Math.random() * 900))} XYZ`;
+                  msg({ t: 'plate', id: q.id, pl: q.pl });
                 } else {                        // into the garage and back, or a spectator
                   const o = bots[8 + Math.floor(Math.random() * (bots.length - 8))];
                   o.w = o.w === 'map' ? 'garage' : 'map';

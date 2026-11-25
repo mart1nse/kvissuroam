@@ -34,8 +34,16 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
   const b = run({ up: 1, boost: 1 });
   check('0-100 km/h with BOOST is about 0.5 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.45 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
-  check('BOOST runs for 10 s, then the reload starts', Math.abs(b.t - TANK_S) < 0.05 && b.car.rocket.reload, `${b.t.toFixed(2)} s`);
-  check('BOOST tops out near 400 km/h', b.top > 380 && b.top < 405, `${b.top.toFixed(0)} km/h`);
+  // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
+  check('BOOST blows a full tank down in under 6 s, then the reload starts', b.t > 5.4 && b.t < 6 && b.car.rocket.reload, `${b.t.toFixed(2)} s`);
+  check('BOOST tops out near 370 km/h', b.top > 355 && b.top < 385, `${b.top.toFixed(0)} km/h`);
+  {
+    const wi = world(), ci = fresh(wi);
+    let ti = 0, t300 = null, push = 0, first = 0;
+    for (; !ci.rocket.reload && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
+    check('...0-300 km/h in about 2.6 s', t300 > 2.3 && t300 < 2.9, `${t300.toFixed(2)} s`);
+    check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 140000 && first > 60000 && first < 80000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
+  }
   // BOOST alone (no throttle key): the motors are held at full power too
   const alone = run({ boost: 1 });
   check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
@@ -210,14 +218,17 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...and turns smoothly all the way', maxStep < 0.06, `${(maxStep * 180 / Math.PI).toFixed(2)} deg in 5 ms at most`);
 }
 
-// ---- the jets blow (and sound) for as long as BOOST is held, also where it pushes less near the top speed
+// ---- the jets blow (and sound) for as long as BOOST is held, smaller as the tank blows down, never shut
 {
   const w = world(), car = fresh(w);
-  let low = 1, t = 0;
-  for (; t < 9.5; t += dt) { stepCar(car, { up: 1, boost: 1 }, w, dt); if (t > 0.5) low = Math.min(low, car.rocket.noz[0]); }
-  check('BOOST held: the tail jets stay wide open to the top speed', low > 0.99 && speedKmh(car) > 380 && car.rocket.boost < 0.6, `least ${low.toFixed(2)} at ${speedKmh(car).toFixed(0)} km/h, push ${car.rocket.boost.toFixed(2)}`);
-  for (let k = 0; k < 30; k++) stepCar(car, { up: 1 }, w, dt);
-  check('...and shut when it is let go', car.rocket.noz[0] < 0.01);
+  let low = 1, t = 0, start = 0;
+  for (; !car.rocket.reload && t < 12; t += dt) { stepCar(car, { up: 1, boost: 1 }, w, dt); if (t > 0.5 && !car.rocket.reload) low = Math.min(low, car.rocket.noz[0]); if (t > 0.2 && !start) start = car.rocket.noz[0]; }
+  check('BOOST held: the tail jets blow until the tank is down', start > 0.9 && low > 0.2 && low < 0.4, `${start.toFixed(2)} at the start, least ${low.toFixed(2)}, ${t.toFixed(1)} s`);
+  const w2 = world(), c2 = fresh(w2);
+  for (let k = 0; k < 60; k++) stepCar(c2, { up: 1, boost: 1 }, w2, dt);
+  const held = c2.rocket.noz[0];
+  for (let k = 0; k < 30; k++) stepCar(c2, { up: 1 }, w2, dt);
+  check('...and shut when it is let go', held > 0.8 && c2.rocket.noz[0] < 0.01);
 }
 
 process.exit(ok ? 0 : 1);

@@ -21,6 +21,9 @@ const LATE_MS = 150000;          // join after the lights up to this long (Marti
 const LATE_GO = 2000;
 const HOLD_MIN = 300, HOLD_MAX = 1800;   // all five lit, then out after this (random, the same for all)
 const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
+const RACE_MIN_MS = 120000;     // no finish faster than this (a lap of Toomemägi: LAP_MIN in index.js)
+const FINISH_EARLY = 3000;      // a finish may claim this much more than the server's clock has run (clock sync)
+const FINISH_LATE = 10000;      // and at most this much less (the message on its way, a short dropout)
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
@@ -260,11 +263,16 @@ export class RaceDesk {
       }
       case 'rf': {          // finished: ms from lights out, by the browser's (synced) clock
         const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
-        const ms = Math.round(Number(m.ms));
-        if (!r || r.ms != null || r.out || !(ms >= 30000 && ms <= MAX_RACE_MS) || now < (r.go || this.s.tGreen) + 25000) return true;
+        // The time is the browser's own, so the server holds it against its clock (security review 25 Nov 2026: any
+        // racer could claim the win with a made-up time): it cannot be more than a moment past the time since that
+        // racer's lights went out, and not under a believable lap, and a message that comes late (a lost
+        // connection) is taken as finishing at most FINISH_LATE before it came.
+        const ms = Math.round(Number(m.ms)), since = now - (r ? r.go || this.s.tGreen : now);
+        if (!r || r.ms != null || r.out || !(ms >= RACE_MIN_MS && ms <= MAX_RACE_MS) || ms > since + FINISH_EARLY) return true;
+        const fin = Math.min(Math.max(ms, since - FINISH_LATE), MAX_RACE_MS);
         // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
         // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
-        r.ms = ms + (r.go ? Math.max(0, r.go - this.s.tGreen) : 0);
+        r.ms = fin + (r.go ? Math.max(0, r.go - this.s.tGreen) : 0);
         this.check(now); this.save(); this.send();
         return true;
       }

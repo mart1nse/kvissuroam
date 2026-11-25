@@ -20,21 +20,21 @@ const msg = (i, m) => { sockets[i].a.at = clock; desk.message(sockets[i], socket
 msg(0, { t: 'rv', on: 1 }); msg(1, { t: 'rv', on: 1 }); msg(2, { t: 'rj', on: 1 }); msg(3, { t: 'rj', on: 1 });
 assert.equal(desk.s.racers.length, 4);
 assert.equal(desk.s.phase, 'on');
-clock = desk.s.tGreen + 60000; alive();
+clock = desk.s.tGreen + 150000; alive();
 // c's page goes to sleep (no ping, no hello for 80 s); d is in another tab (drv off)
 sockets[2].ping = clock - 90000; sockets[2].a.at = clock - 90000;
 msg(3, { t: 'drv', on: 0 });
 assert.equal(desk.s.racers.find((r) => r.id === 'd').out, 'left', 'off the map: out');
-msg(0, { t: 'rf', ms: 60000 });
+msg(0, { t: 'rf', ms: 150000 });
 assert.equal(desk.s.racers.find((r) => r.id === 'c').out, 'left', 'asleep: out');
 assert.equal(desk.s.phase, 'on', 'b still racing');
 // b's finish is lost; the alarm alone does not close a race with b connected and driving
 clock += 15000; alive(); sockets[2].ping = 0; sockets[2].a.at = 0; desk.alarm();
 assert.equal(desk.s.phase, 'on');
 // b's page resends it when it sees it is still racing
-msg(1, { t: 'rf', ms: 70000 });
+msg(1, { t: 'rf', ms: 160000 });
 assert.equal(desk.s.phase, 'idle', 'all through: closed');
-assert.deepEqual(desk.s.last.racers.map((r) => [r.id, r.ms, r.out]), [['a', 60000, null], ['b', 70000, null], ['c', null, 'left'], ['d', null, 'left']]);
+assert.deepEqual(desk.s.last.racers.map((r) => [r.id, r.ms, r.out]), [['a', 150000, null], ['b', 160000, null], ['c', null, 'left'], ['d', null, 'left']]);
 
 // a racer just away from their lights is not put out (the grace after their own go)
 for (const s of sockets) s.a.drv = true;

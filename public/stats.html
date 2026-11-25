@@ -335,6 +335,12 @@
       [fmt(L.joined), 'got in after waiting', L.joined ? 'They waited ' + dur(L.waitAvg) + ' on average. The rest gave up or are still waiting.' : 'Nobody has got in after a wait yet.'],
       [dur(L.full * 60), 'with the server full', 'Minutes in which somebody was waiting outside. ' + fmt(L.ref) + ' join attempts refused in all.'],
     ];
+    // stealth mode (?off=100, Martin 25 Nov 2026: open to anyone who reads the code; left open, but counted)
+    var g = (d.total || {}).ghosts || 0;
+    if (g || L.ghc || L.ghMin) nums.push(
+      [fmt(g), 'stealth visitors', 'Different pages that joined in stealth mode (?off=100): they see everyone and nobody sees them. Counted since 25 November 2026.'],
+      [fmt(L.ghc || 0), 'stealth connections', 'Times a page joined in stealth mode. At most ' + fmt(L.ghMax || 0) + ' at once.'],
+      [dur((L.ghMin || 0) * 60), 'in stealth', 'Minutes online in stealth mode, all stealth pages together.']);
     h += card('Online demand', 'Counted each minute by the server since 24 November 2026: averages over every minute of the period, peaks from its busiest minute.', '<div class="nums">' + nums.map(function (x) {
       return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>', true);
     // the peak of each hour (24 h) or day: online, and waiting outside on top of it

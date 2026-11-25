@@ -186,6 +186,15 @@ export function addLoad(t, s) {
   if (typeof s.t === 'number') L.t0 = Math.min(L.t0 || Infinity, Math.floor(s.t / 60000) * 60000);
   const cap = num(s.cap, 1000);
   if (cap) L.cap = cap;
+  // stealth mode (?off=100, worker/index.js ghostHello): minutes online summed, connections, the most at once, and
+  // which pages (player ids, kept per day and hour only to count them; the answer gives the count, never the ids)
+  const gh = num(s.gh, 5000), ghc = num(s.ghc, 5000);
+  if (gh) { add(L, 'gh', gh); L.ghMax = Math.max(L.ghMax || 0, gh); }
+  if (ghc) add(L, 'ghc', ghc);
+  if (Array.isArray(s.ghIds)) {
+    const ids = (t.ghostIds ||= {});
+    for (const id of s.ghIds.slice(0, 200)) if (typeof id === 'string' && /^[\w-]{1,16}$/.test(id) && (ids[id] || Object.keys(ids).length < 1000)) ids[id] = 1;
+  }
   return true;
 }
 const mergeLoad = (d, s) => {
@@ -211,6 +220,7 @@ export function loadView(L, span) {
     onMax: L.onMax || 0, drvMax: L.drvMax || 0, waitMax: L.waitMax || 0, totMax: L.totMax || 0,
     ref: L.ref || 0, away: L.away || 0, joined: L.joined || 0, waitAvg: L.joined ? Math.round(L.waitMs / L.joined / 1000) : 0,
     full: L.full || 0,          // minutes with somebody waiting outside
+    gh: avg('gh'), ghMax: L.ghMax || 0, ghMin: L.gh || 0, ghc: L.ghc || 0,   // stealth: on average, most at once, minutes, connections
   };
 }
 
@@ -331,8 +341,9 @@ export class Stats extends DurableObject {
           const e = Object.entries(body.total.err || {}).sort((a, b) => b[1] - a[1]).slice(0, 100);
           return json({ days: body.days, hours: body.hours, from: body.from, to: body.to, visits: body.total.sessions || 0, err: e });
         }
-        const { err, ...total } = body.total;
-        return json({ ...body, total });
+        // (stealth pages: how many different ones, not which)
+        const { err, ghostIds, ...total } = body.total;
+        return json({ ...body, total: { ...total, ghosts: Object.keys(ghostIds || {}).length } });
       };
       if (url.searchParams.get('hours')) {
         // the last 24 hours: this hour so far and the 23 before it

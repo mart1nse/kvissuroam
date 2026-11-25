@@ -17,6 +17,7 @@ import { jobs } from '../jobs.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
+import { badName } from '../../worker/badnames.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PENDING_KEY = 'kvissuroam.pendingLaps';
@@ -266,7 +267,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let myWn = 0;                  // spectators watching our car (the server's count)
   let holdId = null;             // the car we spectate: drawn parked where it was last heard of when it goes quiet
   let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
+  // (a racist slur kept from before the server refused them: the browser gets a fresh random name)
   let name = lsGet(NAME_KEY) || '';
+  if (badName(name)) name = '';
   // the server's clock (the online race: src/race/racemode.js): offset from Date.now(), from the
   // quickest of the recent round trips
   let clockOff = 0, clockRtt = Infinity, clockTimer = 0, driving = false, drvOff = 0;
@@ -1163,6 +1166,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
     setName(n) {
       n = cleanName(n);
+      if (badName(n)) return null;           // a racist slur: not taken, the box flashes (race/board.js)
       if (!n || n === name) return name;
       name = n; lsSet(NAME_KEY, n);
       send({ t: 'name', name: n });

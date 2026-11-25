@@ -33,6 +33,7 @@ export function spinAmount(c) {
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
+  let fan = null, fanS = 0;   // a fan car's suction fans (spec.fanDown): made when such a car is first driven
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
@@ -255,6 +256,35 @@ export function createAudio() {
     jetOut[0] = Math.min(1.3, rear / 4 + rest / 4); jetOut[1] = rear / 4;
     return jetOut;
   }
+  // Suction fans under the floor (spec.fanDown): they turn all the time, so the car is never silent. Four fans a
+  // hair apart in speed beat against each other (the whir), and the air they pull through the floor hisses. They
+  // idle with the car at rest and run up with the pedal or the speed (FAN_UP s to follow).
+  const FAN_TONE = 0.05, FAN_AIR = 0.16, FAN_UP = 0.3;
+  function makeFan() {
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;
+    const air = ctx.createGain(); air.gain.value = 0;
+    noiseSrc.connect(f).connect(air).connect(bus);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = 0.5;
+    const tone = ctx.createGain(); tone.gain.value = 0;
+    const osc = [1, 1.017, 0.989, 1.5].map((k, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; g.gain.value = i < 3 ? 1 : 0.35;
+      o.connect(g).connect(lp); o.start();
+      return [o, k];
+    });
+    lp.connect(tone).connect(bus);
+    return { f, air, tone, osc };
+  }
+  function fanSound(car, dead, v) {
+    const want = dead || !car.spec.fanDown ? 0 : 0.5 + 0.5 * Math.max(car.throttle, Math.min(1, v / 14));
+    if (Math.abs(want - fanS) < 0.01 && (want > 0 || fanS === 0)) return;
+    if (!fan) { if (!noiseSrc) return; fan = makeFan(); }
+    const t = ctx.currentTime, on = want > 0, k = on ? want : fanS, tc = on ? FAN_UP : 0.08;
+    fanS = want;
+    for (const [o, r] of fan.osc) o.frequency.setTargetAtTime((120 + 260 * k) * r, t, tc);
+    fan.f.frequency.setTargetAtTime(450 + 700 * k, t, tc);
+    fan.tone.gain.setTargetAtTime(on ? FAN_TONE * Math.pow(k, 1.3) : 0, t, tc);
+    fan.air.gain.setTargetAtTime(on ? FAN_AIR * Math.pow(k, 1.3) : 0, t, tc);
+  }
   // the valves snapping open for a kickflip's lift-off: a short hard burst
   function jetPop(out, level) {
     const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -356,6 +386,7 @@ export function createAudio() {
     windFilt.frequency.setTargetAtTime(rumble ? 320 : 650 + Math.min(v, 50) * 9, t, 0.1);
     const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.115, v * 0.0025) * (flying ? 0.7 : 1);
     windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
+    fanSound(car, dead, v);
     // a Rocket's nozzles (told only while they change), the burst of a lift-off and the tyres meeting the road again
     const jl = jetLevels(dead ? null : car.rocket?.noz);
     if (jl[0] !== jetS || jl[1] !== jetR) {

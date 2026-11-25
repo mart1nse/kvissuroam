@@ -204,9 +204,7 @@ export function flightNozzles(p, t, noz, spec) {
   }
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left)
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
-  // rear nozzles: short puffs that give back what the air takes off the speed
-  const v = Math.hypot(p.vx, p.vz);
-  if (v > 3 && t > LIFT_T) { const puff = 0.12 + 0.1 * Math.sin(t * 40); for (let i = 0; i < 4; i++) noz[NOZ_REAR + i] = puff; }
+  // (the four at the tail stay shut in a flight: they are BOOST's, and blow only when they push. Martin 25 Nov)
   return noz;
 }
 

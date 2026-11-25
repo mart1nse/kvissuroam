@@ -137,7 +137,7 @@ function shopfront(P, s0, s1, gy, h = 4.2, fill = '#4c5670') {
 const ORANGE = '#f6a07a', ORANGE_LINE = '#e58a62';
 // where the TOREPOOD poster hangs on the Küüni face, by the lap start: s0..s1 along the body wall, a..b over
 // the ground at its middle (416 x 592, so 6.6 m by 9.4 m)
-const KUUNI_POSTER = [1.0, 7.6, 5.2, 14.6];
+const KUUNI_POSTER = [0.35, 6.95, 5.2, 14.6];
 
 // ---- the four body faces. s runs along the body wall (the roof edge side less the inset), gy(s) is the ground there
 const FACES = {

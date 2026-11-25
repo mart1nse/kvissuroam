@@ -244,6 +244,8 @@ function sendBuffer(pos, name, attr, index) {
     cardRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
     cardMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ fog: false, toneMapped: false }));
     cardMesh.frustumCulled = false;
+    // (one triangle of it is drawn: the whole buffer is sent all the same, and the card has nothing to work out)
+    cardMesh.geometry.setDrawRange(0, 3);
     cardCam = new THREE.Camera();
   }
   const g = cardMesh.geometry;

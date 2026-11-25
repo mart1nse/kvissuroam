@@ -6,10 +6,12 @@ import { STEALTH } from './net/stealth.js';
 const TREE = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22.5v-9M12 16.5l-3.2-2.6M12 15l3.2-2.4"/><circle cx="12" cy="6" r="3.6"/><circle cx="6.2" cy="11.2" r="3.1"/><circle cx="17.8" cy="10.6" r="3.1"/></svg>';
 const OUT = '<svg class="out" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7"/></svg>';
 
-// Pressed, it opens Ko-fi's own donation panel inside the game (Martin 25 Nov: "expand and use the widget in game"),
-// under the button on a computer and down the left side on a phone. The panel's page is loaded only on the
+// Pressed, the button turns into Ko-fi's own donation panel where it stands (Martin 25 Nov: "expand and use the
+// widget in game", then "when clicking it it is just replaced with the kofi thingy"): the panel's head is the
+// button itself, and the panel grows out of the button's corner. Down the whole left side on a phone. The panel's page is loaded only on the
 // first press. A click with Ctrl / Cmd / the middle button still opens ko-fi.com in a new tab, and so does the
-// link in the panel's head (for when the payment wants a whole page).
+// ↗ in the panel's head (for when the payment wants a whole page). Ko-fi's page cannot be restyled from here,
+// so a lilac sheet multiplied over it turns its white lilac (Martin 25 Nov); it lets taps through.
 const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=true&preview=true';
 
 const a = document.querySelector('#kofi');
@@ -23,15 +25,21 @@ if (a && STEALTH) {
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'kofipanel';
-      panel.innerHTML = `<div class="head"><b>TOETA LINNARINGI</b><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab">ko-fi.com ${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
-        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe></div>`;
+      panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
+        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>`;
       panel.querySelector('.x').addEventListener('click', close);
+      panel.querySelector('.shut').addEventListener('click', close);
       panel.querySelector('iframe').addEventListener('load', () => panel.classList.add('ready'));
       // (the menu's own taps and drags must not see what happens in the panel)
       for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove']) panel.addEventListener(ev, (e) => e.stopPropagation());
       a.after(panel);
     }
+    // (it grows out of the button: the clip it starts from is the button's size)
+    const r = a.getBoundingClientRect();
+    panel.style.setProperty('--bw', `${r.width}px`);
+    panel.style.setProperty('--bh', `${r.height}px`);
     panel.classList.remove('hidden');
+    panel.style.animation = 'none'; void panel.offsetWidth; panel.style.animation = '';
     a.classList.add('open');
   }
   function close() {

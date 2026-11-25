@@ -1,0 +1,108 @@
+// 2028 Tesla Roadster Rocket: a stand-in body until the scanned one arrives (Martin 2026-11-25). A low
+// two-seater drawn in the kit's way: long nose, short cabin under a dark glass roof, a fastback tail
+// with a full-width light bar. The ten cold-gas nozzles are marked where src/cars/plumes.js puts their
+// jets (NOZZLES in src/cars/thrust.js): four in a row in the diffuser, one under each corner, one each side of the nose.
+import { NOZZLES } from '../thrust.js';
+import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, buildWheel, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
+
+const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.64, wheelRadius: 0.34 };
+const ZF = -2.1, ZR = 2.2, HZ = DIMS.wheelbase / 2;
+
+// (the nozzles are marked where src/cars/plumes.js draws their jets; the scanned body will bring its own places)
+const ROCKET_NOZZLES = NOZZLES;
+
+function lampTextures() {
+  const tail = (glow) => (g, w, h) => {
+    g.fillStyle = glow ? '#160000' : '#3a0406'; g.fillRect(0, 0, w, h);
+    g.fillStyle = glow ? '#ffffff' : '#e21818'; g.fillRect(0, h * 0.25, w, h * 0.5);
+  };
+  const head = (glow) => (g, w, h) => {
+    g.fillStyle = glow ? '#000' : '#0c0e11'; g.fillRect(0, 0, w, h);
+    g.fillStyle = glow ? '#fff' : '#eaf2f8'; g.fillRect(w * 0.06, h * 0.3, w * 0.88, h * 0.28);
+  };
+  return { tailMap: canvasTex(128, 32, tail(false)), tailGlow: canvasTex(128, 32, tail(true)), headMap: canvasTex(128, 32, head(false)), headGlow: canvasTex(128, 32, head(true)) };
+}
+const AW = 512, AH = 256;
+const uvr = (x, y, w, h) => [x / AW, 1 - (y + h) / AH, (x + w) / AW, 1 - y / AH];
+const A_PLATE = uvr(0, 0, 416, 90), A_NAME = uvr(0, 110, 400, 60);
+function atlasTex() {
+  return canvasTex(AW, AH, (g) => {
+    g.clearRect(0, 0, AW, AH);
+    drawPlate(g, 0, 0, 416, 90, '001 RKT');
+    g.fillStyle = '#d6d8da'; g.textBaseline = 'middle'; g.textAlign = 'center'; g.font = 'bold 44px Arial, Helvetica, sans-serif';
+    'TESLA'.split('').forEach((c, i) => g.fillText(c, 40 + i * 80, 140));
+  });
+}
+
+export function buildRocket() {
+  const body = buildBody({
+    top: [[ZF, 0.4], [ZF + 0.006, 0.47, 0.03], [ZF + 0.12, 0.56, 0.08], [-1.6, 0.67, 0.4], [-0.9, 0.79, 0.2], [-0.76, 0.82, 0.05],
+      [0.02, 1.105, 0.2], [0.4, 1.135, 0.6], [1.2, 1.04, 0.5], [1.92, 0.9, 0.2], [ZR - 0.1, 0.87, 0.03], [ZR - 0.03, 0.82, 0.02], [ZR - 0.012, 0.56, 0.05], [ZR, 0.43]],
+    bottom: [[ZF, 0.4], [ZF + 0.006, 0.27, 0.03], [ZF + 0.12, 0.16, 0.04], [-1.7, 0.13, 0.1], [1.75, 0.14, 0.1], [ZR - 0.15, 0.25, 0.06], [ZR - 0.006, 0.33, 0.03], [ZR, 0.43]],
+    w: [[ZF, 0.8], [-1.9, 0.93], [-HZ, 0.975], [0, 0.955], [HZ, 0.98], [1.95, 0.95], [ZR, 0.88]],
+    yWaist: 0.62, tuck: 0.07, ySill: 0.15,
+    yBelt: [[ZF, 0.7], [-1.3, 0.76], [0, 0.82], [1.2, 0.88], [ZR, 0.86]],
+    sh: 0.03, ledge: 0.008, ledgeH: 0.02,
+    th: [[ZF, 0.3], [-0.76, 0.7], [1.2, 0.75], [1.9, 0.4], [ZR, 0.3]], thc: [[ZF, 0.2], [-0.76, 0.6], [1.2, 0.6], [1.9, 0.2], [ZR, 0.2]],
+    rr: [[ZF, 0.05], [-HZ, 0.1], [-0.76, 0.08], [0.4, 0.08], [1.2, 0.1], [HZ, 0.11], [ZR, 0.06]],
+    rs: 0.05,
+    crown: [[ZF, 0.02], [-HZ, 0.03], [-0.76, 0.03], [0.4, 0.04], [1.9, 0.03], [ZR, 0.02]],
+    bow: [[ZF, 0.26], [-1.9, 0.15], [-1.55, 0.05], [-1.0, 0], [1.6, 0], [1.95, 0.08], [ZR, 0.2]],
+    bowN: [[ZF, 2.6], [-1.5, 2.4], [1.5, 2.6], [ZR, 3.2]],
+  });
+  const raw = body.soup, pr = probe(raw);
+  const { soup: shell, liner } = cutArches(raw, [{ z: -HZ, y: 0.34, r: 0.385 }, { z: HZ, y: 0.34, r: 0.4 }], { halfWidth: 0.98 });
+  const dc = decals(shell);
+  const paint = new Soup().add(shell), glass = new Soup(), pal = new Soup().add(liner);
+  const tail = new Soup(), reverse = new Soup(), head = new Soup(), atlas = new Soup(), chmsl = new Soup();
+  const fr = { filter: (v) => v[2] > 1.6 }, ff = { filter: (v) => v[2] < -1.5 };
+
+  // --- glazing: windscreen running up into a glass roof, a slim side window, the fastback's rear glass
+  const dlo = rpoly([[-0.6, 0.86], [0.55, 0.9], [1.05, 0.95], [0.75, 1.02], [0.2, 1.07], [-0.1, 1.04]], 0.03, 3);
+  pal.add(dc.side(grow(dlo, 0.012), { offset: 0.003 }).pal('gloss').sym());
+  glass.add(dc.side(dlo, { offset: 0.005 }).sym());
+  const ws = rpoly([[-0.74, 0.85], [0.74, 0.85], [0.56, 1.1], [-0.56, 1.1]], 0.05);
+  pal.add(dc.front(grow(ws, 0.014), { offset: 0.003 }).pal('gloss'));
+  glass.add(dc.front(ws, { offset: 0.005 }));
+  pal.add(dc.top(rpoly([[-0.5, 0.0], [0.5, 0.0], [0.46, 1.75], [-0.46, 1.75]], 0.06), { offset: 0.004, minFacing: 0.4 }).pal('darkglass'));
+
+  // --- sills, splitter and diffuser in black; shut lines
+  pal.add(dc.side([rect(-HZ + 0.36, 0.13, HZ - 0.36, 0.25)], { offset: 0.003, minFacing: 0.1 }).pal('plastic').sym());
+  pal.add(dc.front(rect(-0.8, 0.16, 0.8, 0.3, 0.03), { offset: 0.004, minFacing: -0.3, ...ff }).pal('line'));
+  pal.add(dc.rear(rect(-0.86, 0.22, 0.86, 0.48), { offset: 0.003, minFacing: -0.3, filter: (v) => v[2] > 1.9 && v[1] < 0.51 }).pal('plastic'));
+  const lw = 0.007;
+  pal.add(dc.side([...stroke([[-0.72, 0.28], [-0.72, 0.84]], lw), ...stroke([[0.62, 0.28], [0.62, 0.9]], lw), ...stroke([[-0.72, 0.28], [0.62, 0.28]], lw)], { offset: 0.0055 }).pal('line').sym());
+
+  // --- full-width tail light bar, the lettering under it, the plate under that, over the nozzles in the diffuser
+  tail.add(dc.rear(rect(-0.86, 0.745, 0.86, 0.785, 0.01), { offset: 0.005, ...fr }));
+  chmsl.add(dc.rear(rect(-0.2, 0.8, 0.2, 0.812, 0.004), { offset: 0.005, minFacing: 0.1, ...fr }));
+  reverse.add(dc.rear(rect(0.6, 0.71, 0.8, 0.73, 0.005), { offset: 0.006, ...fr }).sym());
+  atlas.add(dc.rear(rect(-0.22, 0.66, 0.22, 0.715), { offset: 0.0065, ...fr }).uvRect(A_NAME));
+  const pl = plate([0, 0.575, pr.rearZ(0, 0.575) + 0.01], A_PLATE, { tilt: 0.05 });
+  atlas.add(pl.face); pal.add(pl.back);
+
+  // --- front: slim lamps, the plate low in the splitter
+  const hy = frontYaw(28, -1.95);
+  head.add(dc.any(hy)(rpoly([[-0.9, 0.555], [-0.5, 0.535], [-0.5, 0.57], [-0.88, 0.6]], 0.008), { offset: 0.005, minFacing: 0.03, box: [-0.5, 0.535, -0.9, 0.6], ...ff }));
+  head.add(head.mirrored());
+  const fp = plate([0, 0.36, pr.frontZ(0, 0.36) - 0.01], A_PLATE, { front: true, tilt: 0.06 });
+  atlas.add(fp.face); pal.add(fp.back);
+
+  // --- mirrors
+  const mx = pr.sideX(-0.62, 0.9);
+  pal.add(blob(0.2, 0.09, 0.09, { p: [mx + 0.09, 0.93, -0.62] }, 'gloss', 3.5).sym());
+
+  // --- the nozzles: a dark bell for each, set into the tail, the floor and the sills
+  for (const [x, y, z, dx, dy] of ROCKET_NOZZLES) {
+    const r = dy ? [0, 0, 0] : dx ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0];
+    const big = !dx && !dy;
+    pal.add(cyl(big ? 0.075 : 0.05, big ? 0.05 : 0.035, 0.06, 14, { p: [x - dx * 0.01, y - dy * 0.01, z - (big ? 0.01 : 0)], r }, 'darkalloy', true));
+    pal.add(cyl(big ? 0.048 : 0.033, big ? 0.048 : 0.033, 0.01, 12, { p: [x - dx * 0.035, y - dy * 0.035, z - (big ? 0.035 : 0)], r }, 'well'));
+  }
+  // (the shroud the four tail nozzles sit in)
+  pal.add(box(0.94, 0.17, 0.05, { p: [0, 0.36, pr.rearZ(0, 0.36) - 0.02] }, 'gloss'));
+
+  const wheel = { soup: buildWheel({ R: DIMS.wheelRadius, width: 0.27, rimR: 0.262, style: 'aero' }) };
+  const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
+  return tintPaint(car, 'rocket', 0xc3c7cc, { metalness: 0.8, roughness: 0.26, clearcoatRoughness: 0.04 });
+}

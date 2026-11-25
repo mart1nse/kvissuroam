@@ -21,6 +21,9 @@ export const ACTIONS = [
   { id: 'gearDown', label: 'GEAR DOWN' },
   { id: 'handbrake', label: 'HANDBRAKE', held: true },
   { id: 'look', label: 'LOOK BACK', held: true },
+  // (a car with thrusters only, src/cars/thrust.js)
+  { id: 'boost', label: 'BOOST (ROCKET)', held: true },
+  { id: 'flip', label: 'FLIP (ROCKET)', held: true },
   { id: 'view', label: 'DRONE VIEW' },
   { id: 'reset', label: 'LAST SPOT' },
   { id: 'home', label: 'BACK TO START' },
@@ -32,7 +35,7 @@ export const ACTIONS = [
 
 // the standard layout: 0 A/✕ 1 B/○ 2 X/□ 3 Y/△ 4 LB 5 RB 6 LT 7 RT 8 View/Share 9 Menu/Options
 // 10 L3 11 R3 12-15 d-pad up, down, left, right
-const PAD_BUTTONS = { gearUp: 1, gearDown: 2, handbrake: 0, look: 5, view: 3, reset: 4, home: 13, map: 8, laps: 12, options: 9, garage: -1 };
+const PAD_BUTTONS = { gearUp: 1, gearDown: 2, handbrake: 0, look: 5, view: 3, reset: 4, home: 13, map: 8, laps: 12, options: 9, garage: -1, boost: 11, flip: 15 };
 const XBOX = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'VIEW', 'MENU', 'L3', 'R3', 'D-PAD ↑', 'D-PAD ↓', 'D-PAD ←', 'D-PAD →', 'HOME'];
 const PS = ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'SHARE', 'OPTIONS', 'L3', 'R3', 'D-PAD ↑', 'D-PAD ↓', 'D-PAD ←', 'D-PAD →', 'PS'];
 
@@ -115,7 +118,7 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   try { const m = localStorage.getItem(MODE_KEY); if (m === 'kb' || m === 'pad') mode = m; } catch { /* private mode */ }
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(profiles)); } catch { /* private mode */ } };
 
-  const state = { up: 0, down: 0, left: 0, right: 0, steer: 0, handbrake: 0, look: 0, steerDirect: false };
+  const state = { up: 0, down: 0, left: 0, right: 0, steer: 0, handbrake: 0, look: 0, boost: 0, flip: 0, steerDirect: false };
   const prevBtn = new Map();      // gamepad index -> pressed flags of last frame
   const actionFns = new Map();
   const changeFns = [];
@@ -126,7 +129,16 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   const known = new Set();
 
   const list = () => (enabled && navigator.getGamepads ? [...navigator.getGamepads()].filter((g) => g && g.connected !== false) : []);
-  const profileOf = (gp) => profiles[gp.id] || (profiles[gp.id] = defaultProfile(gp));
+  const profileOf = (gp) => {
+    const prof = profiles[gp.id] || (profiles[gp.id] = defaultProfile(gp));
+    // (a profile saved before an action existed gets it: on its usual button when that one is still free)
+    for (const a of ACTIONS) {
+      if (prof.btn[a.id] !== undefined) continue;
+      const d = gp.mapping === 'standard' ? PAD_BUTTONS[a.id] ?? -1 : -1;
+      prof.btn[a.id] = d >= 0 && !Object.values(prof.btn).includes(d) ? d : -1;
+    }
+    return prof;
+  };
   const emit = () => { for (const f of changeFns) f(); };
 
   if (enabled) {
@@ -193,6 +205,8 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
       state.left = Math.max(0, -use.steer); state.right = Math.max(0, use.steer);
       state.handbrake = p.btn.handbrake >= 0 && pressed(g.buttons[p.btn.handbrake]) ? 1 : 0;
       state.look = p.btn.look >= 0 && pressed(g.buttons[p.btn.look]) ? 1 : 0;
+      state.boost = p.btn.boost >= 0 && pressed(g.buttons[p.btn.boost]) ? 1 : 0;
+      state.flip = p.btn.flip >= 0 && pressed(g.buttons[p.btn.flip]) ? 1 : 0;
     }
     return padDrives ? use : null;
   }

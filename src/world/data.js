@@ -96,6 +96,38 @@ export async function loadWorldData(onProgress = () => {}) {
     return null;
   }
 
+  // How high the houses stand, for a car in the air (a Rocket's kickflip, src/cars/thrust.js: the distance field
+  // below knows where a wall is, not how tall, and a garden wall is in it like a block of flats). A coarse grid
+  // over a sector, each square holding the top of the building triangles that lie over it, made the first time a
+  // flight comes near a wall there (a square of the centre: about a millisecond).
+  const RC = 4, RM = 8;      // metres to a square; squares of margin round the sector, for a house standing across its edge
+  const RN = Math.ceil(S / RC) + 2 * RM;
+  function roofGrid(s) {
+    if (s.roofs) return s.roofs;
+    const top = new Float32Array(RN * RN).fill(-1e9), b = s.buildings;
+    if (b && b.nv) {
+      const pq = b.skin ? b.skin.pq : new Int16Array(b.buf.slice(b.offset, b.offset + b.nv * 6));
+      const put = (x, z, y) => {
+        const c = Math.floor(x / RC) + RM, r = Math.floor(z / RC) + RM;
+        if (c >= 0 && r >= 0 && c < RN && r < RN && y > top[r * RN + c]) top[r * RN + c] = y;
+      };
+      for (let t = 0; t + 2 < b.nv; t += 3) {
+        const a = t * 3;
+        const ax = pq[a] * 0.05, az = pq[a + 2] * 0.05, ux = pq[a + 3] * 0.05 - ax, uz = pq[a + 5] * 0.05 - az, vx = pq[a + 6] * 0.05 - ax, vz = pq[a + 8] * 0.05 - az;
+        const y = Math.max(pq[a + 1], pq[a + 4], pq[a + 7]) * 0.01;
+        // (points over the triangle no further apart than half a square)
+        const n = Math.max(1, Math.ceil(Math.max(Math.abs(ux), Math.abs(uz), Math.abs(vx), Math.abs(vz)) / (RC / 2)));
+        for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) put(ax + (ux * i + vx * j) / n, az + (uz * i + vz * j) / n, y);
+      }
+    }
+    return (s.roofs = top);
+  }
+  const roofIn = (s, x, z) => {
+    if (s === undefined || s.state !== 'ready') return -1e9;
+    const c = Math.floor((x - s.x0) / RC) + RM, r = Math.floor((z - s.z0) / RC) + RM;
+    return c >= 0 && r >= 0 && c < RN && r < RN ? roofGrid(s)[r * RN + c] : -1e9;
+  };
+
   // a bucket grid over a sector's trees, built the first time a car comes near
   const TC = 16;
   function trunkGrid(s) {
@@ -395,7 +427,7 @@ export async function loadWorldData(onProgress = () => {}) {
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
-    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = s.kept = null;
+    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = s.kept = s.roofs = null;
     s.state = 'idle';
   }
 
@@ -791,7 +823,20 @@ export async function loadWorldData(onProgress = () => {}) {
       return out;
     },
 
-    // Signed distance (m) to the nearest solid obstacle, including the map edge.
+    // The top of the houses at a point (m, as heights are; far below the ground where no house stands within a
+    // couple of metres): what a car in the air has to be above to pass over the wall the distance field has there.
+    roofAt(x, z) {
+      const sx = Math.floor((x - G0) / S), sz = Math.floor((z - G0) / S);
+      let y = roofIn(sectors.get(key(sx, sz)), x, z);
+      // (near the square's edge: the next square's houses may stand across it)
+      const lx = x - G0 - sx * S, lz = z - G0 - sz * S, m = RM * RC;
+      const dx = lx < m ? -1 : lx > S - m ? 1 : 0, dz = lz < m ? -1 : lz > S - m ? 1 : 0;
+      if (dx) y = Math.max(y, roofIn(sectors.get(key(sx + dx, sz)), x, z));
+      if (dz) y = Math.max(y, roofIn(sectors.get(key(sx, sz + dz)), x, z));
+      if (dx && dz) y = Math.max(y, roofIn(sectors.get(key(sx + dx, sz + dz)), x, z));
+      return y;
+    },
+
     sdfAt(x, z) {
       const s = find(x, z);
       if (s === null) return 12;

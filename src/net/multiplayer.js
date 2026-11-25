@@ -48,6 +48,7 @@ const AWAY_S = 30;              // a driver who steps into the garage, the menu 
 const HOT = 8;                   // flag: this car's lap timer is running
 const FRESH = 64;                // flag: just put on the start and still in the start lane (src/race/startlane.js)
 const THRU = HOT | FRESH;        // either: nobody bumps this car
+const FANS_OFF = 256;            // flag: a fan car's suction fans are switched off (no dust from it)
 const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
 // A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
 // samples given to the piece in the share of its strength (alpha to coverage), so many pixels a sample more and so
@@ -915,7 +916,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     r.rpm = has ? p[14] : 0;
     r.slipV = r.slipVF = r.slipVR = has ? p[15] : 0;
     r.skidF = has ? p[16] : 0; r.skidR = has ? p[17] : 0; r.rubF = has ? p[18] : 0; r.rubR = has ? p[19] : 0;
-    r.revCut = flags & 1; r.inWater = !!(flags & 2); r.paved = !!(flags & 4);
+    r.revCut = flags & 1; r.inWater = !!(flags & 2); r.paved = !!(flags & 4); r.fanOff = !!(flags & FANS_OFF);
     // (the ground under it, for the sound of its wheels spinning on loose ground: 1 paved, 2 gravel, 3 dirt, 0 grass)
     r.ground = r.paved ? 1 : flags & 16 ? 2 : flags & 32 ? 3 : r.inWater ? 4 : 0;
     return r;
@@ -1094,9 +1095,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST)
+    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0);
     return out;
   }
   function update(car, dt, active) {

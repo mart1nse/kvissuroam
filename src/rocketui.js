@@ -9,7 +9,7 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
   const bBoost = pad.querySelector('.boost'), bFlip = pad.querySelector('.flip');
   const fill = { boost: bBoost.querySelector('i'), flip: bFlip.querySelector('i'), bar: bar.querySelector('i') };
   const text = { boost: bBoost.querySelector('small'), flip: bFlip.querySelector('small'), bar: bar.querySelector('small') };
-  let shown = null, last = '', fanOn = null, fanFull = null;
+  let shown = null, last = '', fanOn = null, fanFull = null, fanOff = null;
   const cls = (el, name, on) => { if (el.classList.contains(name) !== on) el.classList.toggle(name, on); };
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   return {
@@ -19,8 +19,10 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
       // (the suction fans, spec.fanDown: they never stop, and are run up by the pedal or by speed, as their
       // sound is in src/audio.js)
       if (fan) {
-        const on = !!(car && car.spec.fanDown), full = on && Math.max(car.throttle || 0, Math.abs(car.vx) / 14) > 0.5;
+        // (the icon is their switch, car.fanOff: off, it stands still and is struck through)
+        const on = !!(car && car.spec.fanDown), off = on && !!car.fanOff, full = on && !off && Math.max(car.throttle || 0, Math.abs(car.vx) / 14) > 0.5;
         if (on !== fanOn) { fanOn = on; fan.classList.toggle('hidden', !on); }
+        if (off !== fanOff) { fanOff = off; fan.classList.toggle('off', off); fan.title = off ? 'Suction fans are OFF: click to switch them on (U)' : 'Suction fans are on: click to switch them off (U)'; }
         if (full !== fanFull) { fanFull = full; fan.classList.toggle('full', full); }
       }
       const r = car && car.rocket;

@@ -1194,6 +1194,7 @@ function setCar(id, now = false) {
   const pose = car ? { x: car.x, z: car.z, yaw: car.yaw, y: car.y } : startPose;
   car = createCar(spec, pose);
   car.tyres = tyres;
+  car.fanOff = fansOff && !!spec.fanDown;
   if (model) { scene.remove(model.group); freeModel(model.group); }
   try {
     model = buildCarModel ? buildCarModel(id) : buildPlaceholder(spec);
@@ -1651,6 +1652,22 @@ function setTyres(k) {
   tyreToastT = setTimeout(() => tyreToast.classList.remove('show'), 1600);
 }
 input.on('KeyY', () => { if (mode === 'drive') setTyres(tyres === 'gravel' ? 'road' : 'gravel'); });
+// A fan car's suction fans (spec.fanDown) can be switched off (Martin 25 Nov: "make the fan icon clickable and you
+// can toggle fan off and on. When off then use those dynamics in car handling as well"): the fan in the rev
+// counter is the switch, U the key. Off, the tyres carry the car's weight alone (physics.js), the whir runs down
+// and no dust is raised. Not remembered: every visit starts with them on.
+let fansOff = false;
+function setFans(off) {
+  if (!car?.spec.fanDown) return;
+  fansOff = !!off;
+  car.fanOff = fansOff;
+  if (mode !== 'drive') return;
+  tyreToast.innerHTML = `<span>Suction fans: <b>${fansOff ? 'off' : 'on'}</b></span>`;
+  tyreToast.className = `show ${fansOff ? 'gravel' : 'road'}`;
+  clearTimeout(tyreToastT);
+  tyreToastT = setTimeout(() => tyreToast.classList.remove('show'), 1600);
+}
+input.on('KeyU', () => { if (mode === 'drive') setFans(!fansOff); });
 // Driving anywhere, onto a circuit too, keeps whatever is on. Only an explicit jump with the in-game
 // TOOMEMÄGI / RAADI buttons fits that circuit's tyres (road / gravel), once the car is down there and
 // GETTING READY is gone (Martin 2026-11-23).
@@ -1847,6 +1864,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'options') toggleOptions();
   else if (act === 'full') toggleFull();
   else if (act === 'tyres') { e.target.closest('[data-act]').blur?.(); setTyres(tyres === 'gravel' ? 'road' : 'gravel'); }
+  else if (act === 'fans') { e.target.closest('[data-act]').blur?.(); setFans(!fansOff); }
   else if (act === 'options-close') optEl.classList.add('hidden');
   else if (act === 'controls') { if (mode === 'drive') showOverlay('controls'); else setup.open(); }
 });

@@ -275,10 +275,11 @@ export function createAudio() {
     return { f, air, tone, osc };
   }
   function fanSound(car, dead, v) {
-    const want = dead || !car.spec.fanDown ? 0 : 0.5 + 0.5 * Math.max(car.throttle, Math.min(1, v / 14));
+    const want = dead || !car.spec.fanDown || car.fanOff ? 0 : 0.5 + 0.5 * Math.max(car.throttle, Math.min(1, v / 14));
     if (Math.abs(want - fanS) < 0.01 && (want > 0 || fanS === 0)) return;
     if (!fan) { if (!noiseSrc) return; fan = makeFan(); }
-    const t = ctx.currentTime, on = want > 0, k = on ? want : fanS, tc = on ? FAN_UP : 0.08;
+    // (switched off by the driver they run down, heard; a car left or wrecked is cut)
+    const t = ctx.currentTime, on = want > 0, k = on ? want : fanS, tc = on ? FAN_UP : car.fanOff && !dead ? 0.45 : 0.08;
     fanS = want;
     for (const [o, r] of fan.osc) o.frequency.setTargetAtTime((120 + 260 * k) * r, t, tc);
     fan.f.frequency.setTargetAtTime(450 + 700 * k, t, tc);

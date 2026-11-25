@@ -91,6 +91,15 @@
 // the biggest canvas makers (memory) or what the page was busy with in those stretches (drive), so the cause
 // is easy to find. The figures are also written as a list (`checks` in the JSON) for the nightly's table.
 //
+// Run it alone. The timing figures (the drives, the online parts) and the phone's memory through the centre
+// (pictures left behind rest as time passes) read higher when the machine is busy with something else: on
+// 25 Nov 2026 main read over on eight figures in a thread that had other work going beside the check (lap over
+// 25 ms 13, 60 online 21 times over 5 ms, a race of 30 16 times) and inside on all of them an hour later, alone
+// (2, 3, 0); the race of 30 alone read 0 and 3 times over 5 ms, two of them side by side 5 and 7, and with three
+// busy processes beside it 23, most 29.7 ms. So the check watches what the rest of the machine is doing while it
+// runs (otherCpu below) and says so, loudly, when other work took over half a processor core on average or over
+// a whole core for a minute: such a run is not a reason to blame a commit. It changes no figure and no verdict.
+//
 // What it cannot see: headless draws without a graphics card (SwiftShader), so real frame rates and the
 // graphics card's own time are not measured (what is sent to it on the lap is counted, not how long a
 // real card takes over it), the phone is Chromium dressed as an
@@ -118,7 +127,7 @@ if (!FORCE) {
     const ago = Date.now() - Date.parse(last.when);
     if (ago >= 0 && ago < EVERY_MS) {
       if (opt('--json') && last.full) fs.writeFileSync(opt('--json'), JSON.stringify(last.full, null, 1));
-      console.log(`perf check skipped: last run ${Math.round(ago / 60000)} min ago at commit ${last.commit}, ${last.over?.length ? 'OVER: ' + last.over.join(', ') : 'all within budget'}${last.total ? ` (phone total at DRIVE ${last.total} MB)` : ''}. Runs again after 2 h; --force runs it now.`);
+      console.log(`perf check skipped: last run ${Math.round(ago / 60000)} min ago at commit ${last.commit}, ${last.over?.length ? 'OVER: ' + last.over.join(', ') : 'all within budget'}${last.total ? ` (phone total at DRIVE ${last.total} MB)` : ''}${last.busy ? '; THE MACHINE WAS BUSY WITH OTHER WORK during that run, so its timing figures read high: run again alone with --force' : ''}. Runs again after 2 h; --force runs it now.`);
       process.exit(last.over?.length ? 1 : 0);
     }
   } catch { /* never run, or unreadable: run */ }
@@ -173,6 +182,69 @@ const tracker = () => {
   };
 };
 
+// What the rest of the machine is doing while the check runs (Linux: /proc), in processor cores: all the work
+// done on the machine less this check's own (this process and everything it started: the game server, the
+// browsers and their helpers). Counted once a second on a thread of its own, so it goes on while the check
+// waits for a child (the graphics level tests). Each process is followed by itself from one count to the next,
+// and one that was the check's stays the check's after its parent has gone: a browser's helpers outlive it for
+// a moment, and their time must not turn up as somebody else's.
+function otherCpu() {
+  const os = require('os');
+  let Worker;
+  try { ({ Worker } = require('worker_threads')); fs.readFileSync('/proc/stat'); } catch { return { stop: async () => null }; }
+  const code = `
+    const fs = require('fs'), { parentPort, workerData } = require('worker_threads');
+    const ROOT = workerData.pid, HZ = 100;
+    const mine = new Map();              // 'pid:start time' -> processor ticks at the last count
+    const samples = [];
+    let lastAll = null, lastAt = 0;
+    const count = () => {
+      let all;
+      try {
+        const cpu = fs.readFileSync('/proc/stat', 'utf8').split('\\n')[0].trim().split(/\\s+/).slice(1).map(Number);
+        all = cpu[0] + cpu[1] + cpu[2] + cpu[5] + cpu[6] + cpu[7];      // user, nice, system, irq, softirq, steal
+      } catch { return; }
+      const procs = new Map();
+      for (const d of fs.readdirSync('/proc')) {
+        if (d.charCodeAt(0) < 48 || d.charCodeAt(0) > 57) continue;
+        try {
+          const st = fs.readFileSync('/proc/' + d + '/stat', 'utf8'), f = st.slice(st.lastIndexOf(')') + 2).split(' ');
+          procs.set(+d, { ppid: +f[1], t: +f[11] + +f[12], key: d + ':' + f[19] });   // utime + stime; start time
+        } catch { /* gone meanwhile */ }
+      }
+      let own = 0;
+      const seen = new Set();
+      for (const [pid, q] of procs) {
+        let ours = mine.has(q.key);
+        for (let k = pid, n = 0; !ours && k > 1 && n < 64; n++) { const a = procs.get(k); if (k === ROOT || (a && mine.has(a.key))) ours = true; k = a ? a.ppid : 0; }
+        if (!ours) continue;
+        own += q.t - (mine.get(q.key) || 0);
+        mine.set(q.key, q.t); seen.add(q.key);
+      }
+      for (const k of mine.keys()) if (!seen.has(k)) mine.delete(k);
+      const at = Date.now();
+      if (lastAll != null) { const s = (at - lastAt) / 1000; if (s > 0.2) samples.push([s, Math.max(0, all - lastAll - own) / HZ / s]); }
+      lastAll = all; lastAt = at;
+    };
+    count();
+    const timer = setInterval(count, 1000);
+    parentPort.on('message', () => { clearInterval(timer); count(); parentPort.postMessage(samples); });
+  `;
+  let w;
+  try { w = new Worker(code, { eval: true, workerData: { pid: process.pid } }); w.unref(); w.on('error', () => {}); } catch { return { stop: async () => null }; }
+  return {
+    async stop() {
+      const samples = await new Promise((res) => { w.once('message', res); w.once('error', () => res([])); w.once('exit', () => res([])); w.postMessage('stop'); setTimeout(() => res([]), 5000).unref(); });
+      w.terminate();
+      const secs = samples.reduce((a, x) => a + x[0], 0);
+      if (!secs) return null;
+      const avg = samples.reduce((a, x) => a + x[1] * x[0], 0) / secs;
+      const busySecs = samples.filter((x) => x[1] > 1).reduce((a, x) => a + x[0], 0);
+      return { cores: os.cpus().length, othersAvg: +avg.toFixed(2), othersMost: +Math.max(...samples.map((x) => x[1])).toFixed(2), busySecs: Math.round(busySecs), busy: avg > 0.5 || busySecs >= 60 };
+    },
+  };
+}
+
 async function waitForServer(url, ms) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
@@ -188,6 +260,7 @@ async function waitForServer(url, ms) {
   const out = { when: new Date().toISOString(), commit: '', phone: {}, drive: {}, driveReport: {}, checks: [], over: [] };
   try { out.commit = require('child_process').execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim(); } catch {}
   let browser;
+  const watch = otherCpu();
   try {
     await waitForServer(url, 60000);
     browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-precise-memory-info', '--js-flags=--expose-gc'] });
@@ -520,6 +593,8 @@ async function waitForServer(url, ms) {
       ['phone, shaders built the iPhone way: page errors', S ? S.errors.length : null, 0],
     );
   }
+  out.machine = await watch.stop();
+  if (out.machine) checks.push(['the machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged', out.machine.othersAvg, null]);
   console.log(`perf budget, commit ${out.commit}, ${out.when}`);
   for (const [name, v, max] of checks) {
     const bad = v == null || (max != null && v > max);
@@ -534,6 +609,8 @@ async function waitForServer(url, ms) {
     // what ran in the busy stretches, when a drive figure is over (or the drive failed)
     if (out.over.some((n) => n.startsWith(who + ' drive')) && out.driveReport[who]) console.log(`what the page was busy with on the ${who} drive:\n` + out.driveReport[who].join('\n'));
   }
+  if (out.machine) console.log(`the machine ${JSON.stringify(out.machine)}`);
+  if (out.machine?.busy) console.log(`THE MACHINE WAS BUSY WITH OTHER WORK DURING THIS RUN: ${out.machine.othersAvg} of its ${out.machine.cores} processor cores on average, over one core for ${out.machine.busySecs} s. The timing figures (the drives, the online parts) and the phone's memory through the centre read higher than they are. Run the check again alone (--force) before blaming a commit.`);
   if (out.crowd) console.log(`60 players online ${JSON.stringify(out.crowd)}`);
   if (out.crowdRace) console.log(`a race of 30 ${JSON.stringify(out.crowdRace)}`);
   if (out.newCars) console.log(`new kinds of car in a crowd ${JSON.stringify(out.newCars)}`);
@@ -550,7 +627,7 @@ async function waitForServer(url, ms) {
   try {
     fs.mkdirSync(path.dirname(STAMP), { recursive: true });
     const d = out.phone.drive;
-    fs.writeFileSync(STAMP, JSON.stringify({ when: out.when, commit: out.commit, over: out.over, total: d ? d.canvas + d.gl + d.heap : null, full: out }, null, 1));
+    fs.writeFileSync(STAMP, JSON.stringify({ when: out.when, commit: out.commit, over: out.over, busy: !!out.machine?.busy, total: d ? d.canvas + d.gl + d.heap : null, full: out }, null, 1));
   } catch (e) { console.warn('could not save the last-run note:', e.message); }
   const json = opt('--json');
   if (json) fs.writeFileSync(json, JSON.stringify(out, null, 1));

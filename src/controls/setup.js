@@ -3,6 +3,8 @@
 // right, press the throttle, press the brake, which finds the axes and their travel whatever the
 // model. 3 TUNE: live bars, dead zone, sensitivity, response curve, steering style and the buttons.
 // Opened from the garage (CONTROLS next to DRIVE) and from the options while driving.
+// Step 1 also has a row for the Steam Controller, which no browser lists by itself: how to get it
+// through Steam, and in Chrome and Edge a CONNECT button that reads it directly (./steamhid.js).
 import { ACTIONS, buttonName, shortName, steerRaw, shapeSteer, pedal } from './pads.js';
 
 const CAL = [
@@ -40,14 +42,41 @@ export function createSetup({ pads, toast = () => {}, onClose = () => {} }) {
     const mode = pads.mode;
     const devs = list.map((g) => {
       const p = pads.profileOf(g);
-      return `<button class="dev${g.index === pick ? ' on' : ''}" data-s="pick" data-i="${g.index}"><b>${escape(shortName(g.id))}</b><small>${p.kind === 'wheel' ? 'WHEEL' : 'GAMEPAD'}${g.mapping === 'standard' ? ' · STANDARD LAYOUT' : ''}${p.thr && p.brk ? ' · READY' : ' · PEDALS NOT SET UP'}</small></button>`;
+      return `<button class="dev${g.index === pick ? ' on' : ''}" data-s="pick" data-i="${g.index}"><b>${escape(shortName(g.id))}</b><small>${p.kind === 'wheel' ? 'WHEEL' : 'GAMEPAD'}${g.direct ? ' · DIRECT' : g.mapping === 'standard' ? ' · STANDARD LAYOUT' : ''}${p.thr && p.brk ? ' · READY' : ' · PEDALS NOT SET UP'}</small></button>`;
     }).join('');
     const gp = gpNow(), prof = gp && pads.profileOf(gp);
     frame(`${devs ? `<div class="devs">${devs}</div>` : `<p class="none">No controller found. Plug in a gamepad or a steering wheel (USB or Bluetooth) and press any button on it: the browser only shows a controller once a button has been pressed.</p>`}
       ${prof ? `<div class="srow"><span><b>THIS IS A</b><small>A wheel turns the car by its own angle; a pad's stick asks for a share of the grip.</small></span><div class="seg" data-s="kind"><button data-v="pad" class="${prof.kind === 'pad' ? 'on' : ''}">GAMEPAD</button><button data-v="wheel" class="${prof.kind === 'wheel' ? 'on' : ''}">WHEEL</button></div></div>` : ''}
       <div class="srow"><span><b>DRIVE WITH</b><small>AUTO switches to whatever you touched last.</small></span><div class="seg" data-s="mode"><button data-v="auto" class="${mode === 'auto' ? 'on' : ''}">AUTO</button><button data-v="kb" class="${mode === 'kb' ? 'on' : ''}">KEYBOARD</button><button data-v="pad" class="${mode === 'pad' ? 'on' : ''}">CONTROLLER</button></div></div>
+      ${steamRow(list)}
       <p class="small">Xbox and PlayStation pads work as soon as they are plugged in. Wheels need step 2 once, for their pedals. Settings are kept per controller in this browser.</p>`,
     `<button class="neon" data-s="close">DONE</button>${gp ? '<button class="neon hot" data-s="next">CALIBRATE ›</button>' : ''}`);
+  }
+
+  // the Steam Controller: a mouse and keys to the computer until Steam, or this page, says otherwise
+  function steamRow(list) {
+    const st = pads.steam;
+    if (list.some((g) => g.direct)) return '';
+    const viaSteam = 'With Steam open it is a gamepad here when this browser is started from Steam (add the browser to Steam as a non-Steam game), or when Steam\'s Desktop Layout is set to a gamepad.';
+    return st?.supported
+      ? `<div class="srow"><span><b>STEAM CONTROLLER</b><small>Without Steam: CONNECT reads it straight from the browser, back grips included (R4 is BOOST, L4 is FLIP). ${viaSteam}</small></span><div class="seg"><button data-s="steam" class="${steamBusy ? 'on' : ''}">${steamBusy ? 'WAITING…' : 'CONNECT'}</button></div></div>`
+      : `<div class="srow"><span><b>STEAM CONTROLLER</b><small>${viaSteam} Without Steam it is only a mouse and keys; Chrome and Edge can connect it directly on this screen.</small></span></div>`;
+  }
+  let steamBusy = false, steamWait = 0;
+  function connectSteam() {
+    if (steamBusy) return;
+    steamBusy = true;
+    clearTimeout(steamWait);
+    pads.steam.request().then((n) => {
+      steamBusy = false;
+      if (!n) { if (step === 0 && isOpen()) renderDevice(); return; }
+      // it shows in the list (and says CONNECTED) with its first report; none within 3 s: say so
+      steamWait = setTimeout(() => {
+        if (!pads.list().some((g) => g.direct)) toast('NO SIGNAL FROM THE STEAM CONTROLLER · IS IT SWITCHED ON?', 4200);
+      }, 3000);
+      if (step === 0 && isOpen()) renderDevice();
+    }).catch(() => { steamBusy = false; if (step === 0 && isOpen()) renderDevice(); });
+    renderDevice();
   }
 
   // ---- 2 CALIBRATE
@@ -203,6 +232,7 @@ export function createSetup({ pads, toast = () => {}, onClose = () => {} }) {
     else if (s === 'next') go(step + 1);
     else if (s === 'back') go(step - 1);
     else if (s === 'pick') { pick = +b.dataset.i; renderDevice(); }
+    else if (s === 'steam') connectSteam();
     else if (s === 'kind' || s === 'mode' || s === 'direct' || s === 'bars') {
       const v = e.target.closest('[data-v]')?.dataset.v;
       if (v == null) return;
@@ -250,6 +280,7 @@ export function createSetup({ pads, toast = () => {}, onClose = () => {} }) {
   }, true);
   pads.onChange(() => { if (!el.classList.contains('hidden') && step === 0) renderDevice(); });
 
+  const isOpen = () => !el.classList.contains('hidden');
   function open() {
     el.classList.remove('hidden');
     pads.quiet = true;

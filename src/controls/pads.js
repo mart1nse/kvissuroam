@@ -11,6 +11,10 @@
 //
 // Which one drives: INPUT in the options (kvissuroam.input). AUTO uses whatever was touched last,
 // KEYBOARD ignores controllers, CONTROLLER ignores the driving keys (unless no controller is plugged in).
+//
+// A Steam Controller is a gamepad to the browser only through Steam; Chrome and Edge can also read it
+// directly (src/controls/steamhid.js), and then it stands in the list here like any other pad.
+import { createSteamHid, STEAM_L4, STEAM_R4 } from './steamhid.js';
 
 const STORE = 'kvissuroam.pads';
 const MODE_KEY = 'kvissuroam.input';
@@ -38,10 +42,15 @@ export const ACTIONS = [
 const PAD_BUTTONS = { gearUp: 1, gearDown: 2, handbrake: 0, look: 5, view: 3, reset: 4, home: 13, map: 8, laps: 12, options: 9, garage: -1, boost: 11, flip: 15 };
 const XBOX = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'VIEW', 'MENU', 'L3', 'R3', 'D-PAD ↑', 'D-PAD ↓', 'D-PAD ←', 'D-PAD →', 'HOME'];
 const PS = ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'SHARE', 'OPTIONS', 'L3', 'R3', 'D-PAD ↑', 'D-PAD ↓', 'D-PAD ←', 'D-PAD →', 'PS'];
+// (a Steam Controller or a Steam Deck; from 17 on only when it is read directly, src/controls/steamhid.js)
+const STEAM = ['A', 'B', 'X', 'Y', 'L1', 'R1', 'L2', 'R2', 'VIEW', 'MENU', 'L3', 'R3', 'D-PAD ↑', 'D-PAD ↓', 'D-PAD ←', 'D-PAD →', 'STEAM', 'L4', 'R4', 'L5', 'R5', '⋯', 'LEFT PAD', 'RIGHT PAD'];
+const NAMES = { ps: PS, steam: STEAM };
 
 const WHEEL_RE = /wheel|racing|G2[579]|G9[0-9]{2}|G923|driving force|thrustmaster|T150|T248|T300|T500|TMX|T-GT|fanatec|moza|simagic|logitech g pro|0+46d.*c2(4f|62|6[0-9a-f])/i;
 export function guessKind(id) { return WHEEL_RE.test(id) ? 'wheel' : 'pad'; }
 export function family(id) {
+  // (Valve first: Steam's stand-in pad calls itself an X-Box pad with Valve's maker number)
+  if (/28de|steam|valve/i.test(id)) return 'steam';
   if (/045e|xbox|xinput|x-box/i.test(id)) return 'xbox';
   if (/054c|dualshock|dualsense|playstation|^wireless controller|ps[345]/i.test(id)) return 'ps';
   return '';
@@ -53,7 +62,7 @@ export function shortName(id) {
 }
 export function buttonName(gp, i) {
   if (i == null || i < 0) return '–';
-  if (gp?.mapping === 'standard') { const f = family(gp.id); return (f === 'ps' ? PS : XBOX)[i] || `BUTTON ${i + 1}`; }
+  if (gp?.mapping === 'standard') return (NAMES[family(gp.id)] || XBOX)[i] || `BUTTON ${i + 1}`;
   return `BUTTON ${i + 1}`;
 }
 
@@ -73,7 +82,8 @@ export function defaultProfile(gp, kind = guessKind(gp.id)) {
     pedalDead: 0.04,
     direct: wheel,                   // a wheel turns the front wheels by its own angle; a stick asks for a share of the grip
     bars: wheel,                     // small pedal bars by the rev counter while driving
-    btn: std ? { ...PAD_BUTTONS } : Object.fromEntries(ACTIONS.map((a) => [a.id, -1])),
+    // (a Steam Controller read directly has its back grips: the thrusters go under the middle fingers)
+    btn: std ? { ...PAD_BUTTONS, ...(gp.direct ? { boost: STEAM_R4, flip: STEAM_L4 } : null) } : Object.fromEntries(ACTIONS.map((a) => [a.id, -1])),
     calibrated: false,
   };
 }
@@ -130,7 +140,13 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   const steerAt = new Map();       // gamepad index -> the steering it was last seen moved to
   const known = new Set();
 
-  const list = () => (enabled && navigator.getGamepads ? [...navigator.getGamepads()].filter((g) => g && g.connected !== false) : []);
+  let steam = null;                // Steam Controllers read directly (src/controls/steamhid.js)
+  const list = () => {
+    if (!enabled) return [];
+    const l = navigator.getGamepads ? [...navigator.getGamepads()].filter((g) => g && g.connected !== false) : [];
+    if (steam?.pads.length) { steam.sync(); l.push(...steam.pads); }
+    return l;
+  };
   const profileOf = (gp) => {
     const prof = profiles[gp.id] || (profiles[gp.id] = defaultProfile(gp));
     // (a profile saved before an action existed gets it: on its usual button when that one is still free)
@@ -143,25 +159,27 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   };
   const emit = () => { for (const f of changeFns) f(); };
 
+  function hello(gp) {
+    if (known.has(gp.id + gp.index)) return;
+    known.add(gp.id + gp.index);
+    const prof = profileOf(gp);
+    const ready = prof.thr && prof.brk;
+    toast(ready ? `${prof.kind === 'wheel' ? 'WHEEL' : 'CONTROLLER'} CONNECTED · ${shortName(gp.id).toUpperCase()}`
+      : `${prof.kind === 'wheel' ? 'WHEEL' : 'CONTROLLER'} CONNECTED · SET UP ITS PEDALS IN GARAGE › CONTROLS`, 4200);
+    emit();
+  }
+  function bye(gp) {
+    known.delete(gp.id + gp.index);
+    prevBtn.delete(gp.index);
+    steerAt.delete(gp.index);
+    if (active?.index === gp.index) { active = null; padAt = -1; }
+    toast('CONTROLLER DISCONNECTED', 2200);
+    emit();
+  }
   if (enabled) {
-    addEventListener('gamepadconnected', (e) => {
-      const gp = e.gamepad;
-      if (known.has(gp.id + gp.index)) return;
-      known.add(gp.id + gp.index);
-      const prof = profileOf(gp);
-      const ready = prof.thr && prof.brk;
-      toast(ready ? `${prof.kind === 'wheel' ? 'WHEEL' : 'CONTROLLER'} CONNECTED · ${shortName(gp.id).toUpperCase()}`
-        : `${prof.kind === 'wheel' ? 'WHEEL' : 'CONTROLLER'} CONNECTED · SET UP ITS PEDALS IN GARAGE › CONTROLS`, 4200);
-      emit();
-    });
-    addEventListener('gamepaddisconnected', (e) => {
-      known.delete(e.gamepad.id + e.gamepad.index);
-      prevBtn.delete(e.gamepad.index);
-      steerAt.delete(e.gamepad.index);
-      if (active?.index === e.gamepad.index) { active = null; padAt = -1; }
-      toast('CONTROLLER DISCONNECTED', 2200);
-      emit();
-    });
+    addEventListener('gamepadconnected', (e) => hello(e.gamepad));
+    addEventListener('gamepaddisconnected', (e) => bye(e.gamepad));
+    steam = createSteamHid({ onAdd: hello, onRemove: bye });
   }
 
   // read one controller into steer / throttle / brake, plus whether anything on it moved
@@ -175,7 +193,9 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   function poll(drive) {
     const pads = list();
     const wasPad = padAt > keyAt;
-    let use = null, changed = false;
+    // (the pad in use stays in use while it moves: a Steam Controller can be in the list twice, read
+    // directly and as Steam's stand-in, and the two must not take turns every frame)
+    let use = null, changed = false, first = null, firstR = null, activeMoved = false;
     for (const gp of pads) {
       const r = read(gp);
       const prof = r.prof;
@@ -199,11 +219,13 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
         actionFns.get('button')?.(gp, i);
       }
       if (moved) {
-        if (active?.index !== gp.index) { active = { index: gp.index, id: gp.id }; changed = true; }
+        if (active?.index === gp.index) activeMoved = true;
+        else if (!first) { first = gp; firstR = r; }
         padAt = performance.now();
       }
       if (active?.index === gp.index) use = r;
     }
+    if (first && !activeMoved) { active = { index: first.index, id: first.id }; use = firstR; changed = true; }
     if (!use && pads.length && mode === 'pad') use = read(pads[0]);
     if (changed || wasPad !== padAt > keyAt) emit();
     const padDrives = !!use && mode !== 'kb' && (mode === 'pad' || padAt > keyAt);
@@ -248,6 +270,8 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
       return { gp, prof: profileOf(gp) };
     },
     get connected() { return list().length; },
+    // Steam Controllers read directly: { supported, request() } (src/controls/steamhid.js), null on phones
+    get steam() { return steam; },
     // a pedal, a button or a turn of the wheel since this was last asked
     acted() { const a = acted; acted = false; return a; },
   };

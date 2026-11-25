@@ -23,6 +23,12 @@ export const REFILL_S = 120;       // an empty tank is full again after this lon
 export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (offline testing, ?off=100: Martin 2026-11-25)
 
 const G = 9.81;
+// The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
+// all, which is the tail's 80 kN for 2 s and no more. So BOOST's push follows the pressure, the share of the gas
+// still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
+// quite done; at EMPTY of a tank nothing useful is left and the reload starts. A FLIP is its fixed half tank.
+const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
+const EMPTY = 0.06;                // BOOST has blown the tank down to this share: the reload starts
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
 const FADE0 = 370 / 3.6, FADE1 = 400 / 3.6;   // BOOST eases off between these speeds (m/s)
 const LIFT_T = 0.45;               // the lift-off push lasts this long (s)...
@@ -91,15 +97,23 @@ export function rocketStep(car, input, world, dt) {
   r.flipHeld = flip;
   // BOOST
   const on = !!input.boost && !off && !r.reload && r.tank > 0;
-  if (on) use(r, dt);
-  const want = on ? clamp01((FADE1 - car.vx) / (FADE1 - FADE0)) : 0;
+  const full = r.tank / TANK_S;                                   // the pressure, as a share of a full tank's
+  if (on) {
+    // (gas out per second = push / GAS_V, so the tank empties by its own share every blowS seconds)
+    const blowS = (GAS_V * (T.gasKg || 250)) / T.rear;
+    use(r, (dt * r.tank) / blowS);
+    if (r.tank < EMPTY * TANK_S) use(r, r.tank);
+  }
+  const want = on ? full * clamp01((FADE1 - car.vx) / (FADE1 - FADE0)) : 0;
   r.boost += (want - r.boost) * Math.min(1, dt / OPEN_T);
   if (r.boost < 0.002) r.boost = 0;
   car.thrustN = r.boost * T.rear;
   const n = r.noz, k = Math.min(1, dt / OPEN_T);
-  // (the jets show and sound the gas that leaves, and that is all of it for as long as the button is held, also
-  // near the top speed where it pushes less: Martin 25 Nov, the sound for the whole time Shift is down)
-  for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN && on ? 1 : 0) - n[i]) * k;
+  // (the jets show and sound the gas that leaves for as long as the button is held, also near the top speed
+  // where it pushes less: Martin 25 Nov, the sound for the whole time Shift is down. They shrink with the
+  // pressure, by its root, so the last of a tank is still seen and heard.)
+  const jet = on ? Math.sqrt(full) : 0;
+  for (let i = 0; i < NOZ; i++) n[i] += ((i < NOZ_DOWN ? jet : 0) - n[i]) * k;
   return false;
 }
 

@@ -165,6 +165,7 @@ function createEdges(track, world) {
   const colours = [new THREE.Color(0xff2bd6), new THREE.Color(0x2ff3ff)];
   const CH = 40, H = 0.6;
   const chunks = [];
+  const shifts = new Map();          // track point -> how far its two kerbs were moved (fit), once that stretch is built
   for (let i0 = 0; i0 < N; i0 += CH) chunks.push({ i0, i1: Math.min(N, i0 + CH), mesh: null, cx: P[i0][0], cz: P[i0][1] });
 
   // The street centre lines are not always where the street is drawn: on Vallikraavi the line runs
@@ -200,6 +201,7 @@ function createEdges(track, world) {
     const n = ch.i1 - ch.i0 + 1;                 // one past, to close the gap to the next piece
     const pos = [], col = [], idx = [];
     const shift = fit(ch.i0, ch.i0 + n - 1);
+    for (const [i, v] of shift) shifts.set(i, v);
     // the ground is a 1 m grid with kerb steps: float the band just over the highest ground about it,
     // so that the ground does not poke through it in a zigzag
     const topNear = (x, z, i) => {
@@ -250,6 +252,9 @@ function createEdges(track, world) {
 
   return {
     group,
+    // how far the kerbs at track point i stand from the track's own width, [left, right] along the right-hand
+    // normal; nothing before that stretch is built (the start lane, startlane.js)
+    shift: (i) => shifts.get(i),
     update(x, z) {
       for (const ch of chunks) {
         if (ch.mesh || ch.queued || Math.hypot(ch.cx - x, ch.cz - z) > 700) continue;
@@ -424,6 +429,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
 
   return {
     track,
+    edgeShift: edges.shift,
     get running() { return st.running; },
     get passed() { return st.running ? st.cps.size : -1; },
     get laps() { return laps; },

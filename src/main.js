@@ -1878,31 +1878,40 @@ if (window.visualViewport) {
   });
 }
 // Chrome on an iPhone sometimes lays the page out wider than it shows it, so the side at the notch is cut off
-// and the page can be dragged sideways (Martin's and his son's iPhones, 22 to 24 Nov; ?vp=1 shows the sizes).
-// In landscape it shows the page between the notch and the other edge, narrower than the screen (750 of 844),
-// so a page as wide as the whole screen there is the fault: the viewport is set again so the browser lays the
-// page out anew, and the page is put back at its left edge whenever it has been dragged.
+// and the page can be dragged sideways (Martin's and his son's iPhones, 22 to 25 Nov; ?vp=1 shows the sizes).
+// In landscape it shows the page between the notch and the other edge, narrower than the screen (750 of 844).
+// Two faults: the page laid out as wide as the whole screen, or laid out right but drawn larger (zoomed by
+// 844/750, so the right side runs off: the garage on opening, 25 Nov). Either way the viewport is set to a
+// different value and back, which makes the browser lay the page out and scale it anew, and the page is put
+// back at its left edge whenever it has been dragged.
 if (/iPhone|iPod/.test(navigator.userAgent)) {
   const vp = document.querySelector('meta[name="viewport"]');
   const content = vp.content;
   const notched = Math.max(screen.width, screen.height) / Math.min(screen.width, screen.height) > 2;
-  let told = false, redo = 0;
+  const long = Math.max(screen.width, screen.height);
+  let told = false, redo = 0, busy = false, total = 0;
+  const off = () => {
+    const vv = window.visualViewport;
+    if (vv && (vv.scale > 1.01 || vv.width < innerWidth - 2)) return 'zoom';
+    if (!content.includes('cover') && notched && innerWidth > innerHeight && innerWidth >= long - 1) return 'wide';
+    return '';
+  };
   const fit = () => {
     if (scrollX || scrollY) scrollTo(0, 0);
-    const wide = !content.includes('cover') && notched && innerWidth > innerHeight && innerWidth >= Math.max(screen.width, screen.height) - 1;
-    if (!wide || redo > 3) return;
-    redo++;
+    if (busy || redo > 5 || total > 30 || !off()) return;   // (a browser it does not help is left alone)
+    redo++; total++; busy = true;
     if (!told) { told = true; stats.trouble('vpWide'); }
-    vp.content = content.replace('initial-scale=1', 'initial-scale=1.0001');
-    requestAnimationFrame(() => { vp.content = content; scrollTo(0, 0); });
+    vp.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1';
+    requestAnimationFrame(() => requestAnimationFrame(() => { vp.content = content; scrollTo(0, 0); busy = false; }));
   };
-  const soon = () => { redo = 0; for (const ms of [100, 500, 1500]) setTimeout(fit, ms); };
-  addEventListener('resize', soon);
-  addEventListener('orientationchange', soon);
+  const soon = () => { redo = 0; for (const ms of [50, 300, 800, 1600, 3000]) setTimeout(fit, ms); };
+  for (const ev of ['resize', 'orientationchange', 'pageshow', 'load']) addEventListener(ev, soon);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) soon(); });
   addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); }, { passive: true });
+  window.visualViewport?.addEventListener('resize', fit);
   window.visualViewport?.addEventListener('scroll', () => { if (visualViewport.scale <= 1.01 && (visualViewport.offsetLeft || scrollX)) scrollTo(0, 0); });
   soon();
-  setInterval(fit, 3000);
+  setInterval(() => { redo = Math.min(redo, 3); fit(); }, 2000);
 }
 
 // ---------------------------------------------------------------- frame loop

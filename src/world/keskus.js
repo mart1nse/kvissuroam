@@ -336,12 +336,14 @@ export function createKeskus(scene, world, { shadows = true } = {}) {
       // the TOREPOOD banner on the corner over the junction (Martin, 25 Nov), clickable like the bus stops' posters:
       // hung flat across the end of the curve on two steel arms, facing Narva mnt (TASKU_BANNER: its two ends)
       const [[ax, az], [bx, bz]] = TASKU_BANNER, l = Math.hypot(bx - ax, bz - az), tx = (bx - ax) / l, tz = (bz - az) / l;
-      const nx = -tz, nz = tx, mx = (ax + bx) / 2 + nx, mz = (az + bz) / 2 + nz, y = h(mx, mz), W = 9, H = W * 592 / 416;
+      // OUT m off the line: the curve's bend stands 0.9 m out of it, and a banner only 0.07 m clear of the glass was
+      // cut into strips by the glass on an iPhone 13 (Martin, 25 Nov: too little depth between them on its GPU)
+      const OUT = 2.5, nx = -tz, nz = tx, mx = (ax + bx) / 2 + nx * OUT, mz = (az + bz) / 2 + nz * OUT, y = h(mx, mz), W = 9, H = W * 592 / 416;
       const yaw = Math.atan2(nx, nz), m = posterPlane(W, H, 120);
       m.position.set(mx, y + 7 + H / 2, mz); m.rotation.y = yaw;
       m.userData.tasku = true;
       group.add(m);
-      for (const yy of [y + 7 - 0.1, y + 7 + H + 0.1]) p.box(W + 0.2, 0.16, 1.1, COL.steel, mx - nx * 0.5, yy, mz - nz * 0.5, yaw);
+      for (const yy of [y + 7 - 0.1, y + 7 + H + 0.1]) p.box(W + 0.2, 0.16, OUT + 0.1, COL.steel, mx - nx * OUT / 2, yy, mz - nz * OUT / 2, yaw);
     }
     {
       // the glass tower: a curved front on the river side, a flat back

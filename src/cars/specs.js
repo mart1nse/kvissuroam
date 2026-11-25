@@ -521,7 +521,7 @@ export const CARS = {
     tag: 'Rocket',
     year: 2028,
     blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
-    mass: 1950,                 // estimate, with driver: one seat, the second gas tank in the other's place
+    mass: 1950,                 // estimate, with driver and both gas tanks full: one seat, the second tank in the other's place
     wheelbase: 2.65,
     track: 1.64,
     cgFront: 0.52,
@@ -535,8 +535,10 @@ export const CARS = {
     tcSlip: 1.5,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     fanDown: 12000, squat: 0.5,
-    // cold-gas thrusters (N, all the nozzles of a kind together): 4 rear, 4 down, 2 side
-    thrusters: { rear: 53000, down: 80000, side: 16000 },
+    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
+    // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
+    // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty
+    thrusters: { rear: 80000, down: 64000, yaw: 20000, gasKg: 250 },
     engine: {
       type: 'ev',
       maxPowerKw: 1000,

@@ -618,7 +618,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       }
       case 'jmp': {         // a Rocket's kickflip (src/cars/thrust.js): its flight plan, and their clock at the press
-        const o = others.get(m.id), plan = unpackPlan(m.p);
+        const o = others.get(m.id);
+        // (x: the flight ended early, against a house, a tree or a bank: from here it is where its positions say)
+        if (o && m.x) { o.flip = null; break; }
+        const plan = unpackPlan(m.p);
         if (!o || !plan || !o.spec.thrusters || !Number.isInteger(m.c)) break;
         // (when it began, on the same clock as their positions: see addPose)
         const raw = (((Date.now() - m.c) % 60000) + 60000) % 60000, now = performance.now() / 1000;
@@ -1264,7 +1267,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     serverNow: () => Date.now() + clockOff,
     raceSend(m) { if (!STEALTH) send(m); },
     // our Rocket has left the ground on a kickflip: the plan of the whole flight, for the others to fly it by
-    sendFlip(plan) { if (!STEALTH && others.size) send({ t: 'jmp', p: packPlan(plan), c: (((Date.now() - Math.round(plan.t * 1000)) % 60000) + 60000) % 60000 }); },
+    sendFlip(plan) {
+      if (STEALTH || !others.size) return;
+      if (!plan) { send({ t: 'jmp', x: 1 }); return; }
+      send({ t: 'jmp', p: packPlan(plan), c: (((Date.now() - Math.round(plan.t * 1000)) % 60000) + 60000) % 60000 });
+    },
     // driving on the map (counts for the race votes), or in the garage / another tab
     // (leaving the map is told only after AWAY_S: a quick car change in the garage keeps your vote and place)
     // (now: told at once, as on a Raadi stage run, where a player is not counted for the race votes)

@@ -1,5 +1,5 @@
 // Two browsers in the same lobby: does B see A's Rocket fly its kickflip along the plan A sent (one smooth arc
-// and one whole turn about its long axis), and its nozzles blow?
+// and one whole turn about its long axis), and its nozzles blow, and stop flying it when A's flight ends at a wall?
 // Needs the game served with its server on :8787, with the hidden cars let in:
 //   npm run build && npx wrangler dev --port 8787 --var SHOW_HIDDEN:1
 // and Playwright. Usage: node tools/rocket-online-test.mjs [folder for the pictures]
@@ -48,7 +48,7 @@ await B.evaluate(() => { window.__seen.length = 0; });
 const y0 = await A.evaluate(() => __game.car.y);
 await key(A, 'keydown', 'KeyX'); await A.waitForTimeout(80); await key(A, 'keyup', 'KeyX');
 const plan = await A.evaluate(() => { const f = __game.car.rocket.flight; return f && { tl: f.tl, side: f.side }; });
-check('A is in the air', !!plan, plan ? `${plan.tl.toFixed(2)} s` : `refused: deny ${await A.evaluate(() => __game.car.rocket.deny)}`);
+check('A is in the air', !!plan, plan ? `${plan.tl.toFixed(2)} s` : '');
 await A.waitForTimeout(900);
 if (dir) { await B.evaluate(() => { const g = __game; g.renderer.realRender(g.scene, g.camera); }); await B.screenshot({ path: `${dir}/rocket-online.png` }); }
 await A.waitForTimeout(2500);
@@ -65,8 +65,27 @@ for (let i = 1; i < seen.length; i++) {
 check('B sees it rise', top - y0 > 1.5, `${(top - y0).toFixed(2)} m over the road, ${seen.length} frames`);
 check('B sees one whole turn', Math.abs(Math.abs(turned) - 2 * Math.PI) < 0.5, `${(turned / Math.PI * 180).toFixed(0)} degrees`);
 check('...turning smoothly', jump < 12, `fastest ${jump.toFixed(1)} rad/s`);
-check('...and no step in height', step < 12, `fastest ${step.toFixed(1)} m/s, ${at}`);
+// (the car falls at up to 10.6 m/s before its landing burn; measured over a tenth of a second, as one late frame
+// on this page shifts a single frame's reading by half a metre)
+let fall = 0;
+for (let i = 0, j = 0; i < seen.length; i++) { while (j < seen.length && seen[j][0] - seen[i][0] < 0.1) j++; if (j < seen.length && seen[j][0] - seen[i][0] < 0.3) fall = Math.max(fall, Math.abs(seen[j][2] - seen[i][2]) / (seen[j][0] - seen[i][0])); }
+check('...and no step in height', fall < 15, `fastest ${fall.toFixed(1)} m/s over a tenth of a second; in one frame ${step.toFixed(1)} m/s, ${at}`);
 check('B sees the nozzles under the floor blow', down > 0.5, `level ${down.toFixed(2)}`);
+// 3: a flight that ends against a house: B stops flying the plan there (it sees no landing burn)
+await place(A, 1700, 0);
+await A.waitForTimeout(2500);
+await A.evaluate(() => { const r = __game.car.rocket; r.tank = 10; r.reload = false; });
+await key(A, 'keydown', 'KeyX'); await A.waitForTimeout(80); await key(A, 'keyup', 'KeyX');
+await A.waitForTimeout(1000);
+await A.evaluate(() => { const w = __game.world; w.sdfWas = w.sdfAt; w.roofWas = w.roofAt; w.sdfAt = () => -1; w.roofAt = () => 1e9; });
+await A.waitForTimeout(200);
+const ended = await A.evaluate(() => { const w = __game.world; w.sdfAt = w.sdfWas; w.roofAt = w.roofWas; return !__game.car.rocket.flight; });
+check('A flies into a house: its flight ends there', ended);
+await A.waitForTimeout(500);
+await B.evaluate(() => { window.__seen.length = 0; });
+await A.waitForTimeout(2600);
+const burn = await B.evaluate(() => Math.max(0, ...window.__seen.map((s) => s[6])));
+check('B stops flying the plan (no landing burn)', burn < 0.05, `level ${burn.toFixed(2)}`);
 await ba.close(); await bb.close();
 console.log(bad ? `${bad} FAILED` : 'all ok');
 process.exit(bad ? 1 : 0);

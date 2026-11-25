@@ -144,6 +144,7 @@ import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createPlumes } from './cars/plumes.js';
 import { createRocketUi } from './rocketui.js';
+import { refillTank } from './cars/thrust.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
@@ -896,7 +897,11 @@ async function boot() {
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
     onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
-    onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k); },
+    onEvent: (k, cps) => {
+      stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
+      // (a Rocket starts every timed lap of its own with a full tank, so laps compare; in a race the tank is filled at the lights only)
+      if (k === 'start' && car.rocket && !raceMode?.ghost) refillTank(car.spec.id);
+    },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
@@ -1796,7 +1801,7 @@ let shrinkTick = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 const aloft = {};                  // our car as the things on the ground see it while it flies a kickflip
-let rocketOff = false;             // the thrusters' buttons do nothing just now (a race, the stage)
+let rocketOff = false, flipOff = false;   // the thrusters' buttons do nothing just now (waiting for a start); no kickflip (a race, a timed lap)
 
 // Coming back from another tab: the first frames arrive late and unevenly while the browser warms
 // up again. Don't count them as a struggling device, and ease the step size back in instead of
@@ -1896,9 +1901,14 @@ function frame(ts) {
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
     car.gridHold = !!(raceMode?.pin || stage?.pin);
-    // (a car with thrusters: BOOST and FLIP are for free driving and hotlaps, off in a race with others and
-    // on the Raadi stage)
-    if (car.rocket) ctl.rocketOff = rocketOff = !!(raceMode?.ghost || raceMode?.holding || raceMode?.pin || stage?.running || stage?.phase === 'count' || stage?.pin);
+    // (a car with thrusters, Martin 2026-11-25: in a race, on a timed lap and on the Raadi stage BOOST works,
+    // to be spent where it pays, and FLIP does not; neither does while the car waits for its start, where
+    // the tank is filled so that everybody sets off with the same)
+    if (car.rocket) {
+      ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
+      ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
+      if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
+    }
     if (mode === 'drive' && !watch?.active) stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
@@ -1911,8 +1921,11 @@ function frame(ts) {
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     // (a kickflip in flight, src/cars/thrust.js: the car is over the things it would knock into, which only
     // know where it is on the map, so for them it is far overhead; the others get the flight's plan once)
-    const hitCar = car.rocket?.flight ? Object.assign(aloft, car, { y: car.y + 100 }) : car;
+    // (low over the ground, at lift-off and coming down, it still knocks over what stands there)
+    const hitCar = car.rocket?.flight && car.rocket.up > 1.5 ? Object.assign(aloft, car, { y: car.y + 100 }) : car;
     if (car.rocket?.launched) { mp.sendFlip(car.rocket.launched); car.rocket.launched = null; }
+    // (a flight that met a house, a tree or a bank: the others stop flying its plan and see it fall)
+    if (car.rocket?.crashed) { mp.sendFlip(null); car.rocket.crashed = false; }
     // (what our car knocks over and bumps into: not while it waits for a spectator)
     if (!watch?.active) {
       // (behind the menu and in the garage the others do not see our car, so nobody pushes it: it stays on the
@@ -2204,7 +2217,7 @@ function frame(ts) {
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(hc); }
   if (mode === 'drive') hud.needle(hc, dt);
   showPedals();
-  rocketUi.update(mode === 'drive' && !watch?.active ? car : null, rocketOff);
+  rocketUi.update(mode === 'drive' && !watch?.active ? car : null, rocketOff, flipOff);
   audio.update(car, mode === 'drive' && !bigmap.isOpen && !watch?.active);
   audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
   audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen && !watch?.active);

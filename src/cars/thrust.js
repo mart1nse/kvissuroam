@@ -3,11 +3,16 @@
 // BOOST: the rear nozzles push the body forward for as long as the button is held, a second of tank a
 // second. FLIP: a kickflip jump that costs half a tank. The whole flight is worked out at the press
 // (planFlip): the lift-off push is the same every time, so the arc is too; the planner follows the line the
-// car is travelling along, finds where that arc comes down to the ground, checks the way and the spot are
-// clear, and the car then flies exactly that plan (flightPose) with the nozzles doing the work shown:
-// down nozzles lift it off, it rolls once round its long axis in free flight, and upright again the down
-// nozzles brake the fall so the wheels meet the ground at its slope with almost no vertical speed. The
-// speed it had is the speed it lands with. A plan is a short list of numbers, so the other players get it
+// car is travelling along and finds where that arc comes down to the ground, and the car then flies exactly
+// that plan (flightPose) with the nozzles doing the work shown. What stands in the way is the driver's to
+// look out for (Martin 2026-11-25: "allow to jump and crash"): a house, a tree or a bank met in the air ends
+// the flight there, and the car falls and hits it as any car would. On a clear way:
+// the four corner nozzles under the floor lift it off, it rolls once round its long axis in free flight (one
+// side's pair spins it up, the other side's stops it), and upright again they brake the fall so the wheels
+// meet the ground at its slope with almost no vertical speed. The speed it had is the speed it lands with.
+// The figures are those measured from Tesla's kickflip film (Martin 2026-11-25, skill-lync.com's analysis):
+// the car's middle 8.7 m up at the top, about 3 s in the air, the roll 1.7 s long and starting 0.65 s after
+// lift-off, a lift-off push of 0.45 s and a landing burn peaking at 3.3 g. A plan is a short list of numbers, so the other players get it
 // in one message and fly the same arc (src/net/multiplayer.js).
 //
 // Pure logic, no rendering: runs in Node for tools/rocket-test.mjs.
@@ -19,34 +24,31 @@ export const REFILL_S = 120;       // an empty tank is full again after this lon
 const G = 9.81;
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
 const FADE0 = 370 / 3.6, FADE1 = 400 / 3.6;   // BOOST eases off between these speeds (m/s)
-const LIFT_T = 0.25;               // the lift-off push lasts this long (s)...
-const LIFT_V = 6;                  // ...and leaves the car rising this fast (m/s): 2.6 m up, 1.8 s in the air on the level
-const BURN_A = 2 * G;              // the landing burn slows the fall by this much (m/s2; thrust of 3 g)
+const LIFT_T = 0.45;               // the lift-off push lasts this long (s)...
+const LIFT_V = 10.6;               // ...and leaves the car rising this fast (m/s): 8.1 m up, 3.1 s in the air on the level
+const BURN_A = 2.3 * G;            // the landing burn slows the fall by this much (m/s2; thrust of 3.3 g)
 const SINK = 0.3;                  // ...down to this, which the springs take (m/s)
-const ROLL_T0 = 0.6 * LIFT_T;      // the roll starts late in the lift-off push...
-const ROLL_MIN = 0.75;             // ...and needs at least this long before the landing burn (s)
-const ROLL_RAMP = 0.15;            // spinning it up, and stopping it (s)
+const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (s)...
+const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
+const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 const YAW_TAU = 0.12;              // the side nozzles stop the nose swinging in about this long (s)
 const MAX_T = 6;                   // no flight longer than this (s)
-const SLOPE_MAX = 0.35;            // no landing on ground steeper than this (rad)
-const ROLL_ROOM = 1.25;            // houses and walls this far from the car's middle are in the way of the roll (m)
-const LOW_CLEAR = 1.8;             // low things (rails, dividers) are flown over from this far above the ground (m)
-// when the spot is blocked: the same arc with a lift-off this much weaker or stronger, nearest first
-const SCALES = [1, 0.95, 1.05, 0.9, 1.1, 0.85, 1.15, 0.8, 1.2, 0.75, 1.25, 0.7, 1.3];
-const WATER = 4;
+const LOW_WALL = 1.5;              // a wall that belongs to no house stops the car only this low over the ground (m)
+const TREE_TOP = 6;                // a tree is flown over from this far above the ground (m), into below it
 
 // nozzle order in rocket.noz (0..1, how hard each works): 4 rear (left to right), down front-left,
-// front-right, rear-left, rear-right, side left, side right
+// front-right, rear-left, rear-right, and the two at the nose that turn it: left, right
 export const NOZ = 10;
-export const NOZ_REAR = 0, NOZ_DOWN = 4, NOZ_SIDE = 8;
+export const NOZ_REAR = 0, NOZ_DOWN = 4, NOZ_YAW = 8;
 
 // Where the nozzles are on the stand-in body and which way their gas goes: [x, y, z, dx, dy, dz] from the middle
-// of the wheelbase at road height, x to the right, z to the tail, in the order above. The body marks them
+// of the wheelbase at road height, x to the right, z to the tail, in the order above (the four at the tail close
+// together in a row in the diffuser, as in Tesla's film). The body marks them
 // (src/cars/models/rocket.js) and the jets are drawn from them (src/cars/plumes.js).
 export const NOZZLES = [
-  [-0.48, 0.5, 2.18, 0, 0, 1], [-0.17, 0.5, 2.18, 0, 0, 1], [0.17, 0.5, 2.18, 0, 0, 1], [0.48, 0.5, 2.18, 0, 0, 1],
+  [-0.36, 0.36, 2.18, 0, 0, 1], [-0.12, 0.36, 2.18, 0, 0, 1], [0.12, 0.36, 2.18, 0, 0, 1], [0.36, 0.36, 2.18, 0, 0, 1],
   [-0.62, 0.14, -0.705, 0, -1, 0], [0.62, 0.14, -0.705, 0, -1, 0], [-0.62, 0.14, 0.705, 0, -1, 0], [0.62, 0.14, 0.705, 0, -1, 0],
-  [-0.97, 0.3, 0.1, -1, 0, 0], [0.97, 0.3, 0.1, 1, 0, 0],
+  [-0.86, 0.36, -1.82, -1, 0, 0], [0.86, 0.36, -1.82, 1, 0, 0],
 ];
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -56,8 +58,8 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 const TANKS = new Map();
 export function rocketState(id) {
   let r = TANKS.get(id);
-  if (!r) TANKS.set(id, r = { tank: TANK_S, reload: false, flight: null, boost: 0, deny: 0, flipHeld: false, launched: null, landed: false, noz: new Float32Array(NOZ) });
-  r.flight = null; r.boost = 0; r.deny = 0; r.flipHeld = false; r.launched = null; r.landed = false; r.noz.fill(0);
+  if (!r) TANKS.set(id, r = { tank: TANK_S, reload: false, flight: null, up: 0, boost: 0, flipHeld: false, launched: null, landed: false, crashed: false, noz: new Float32Array(NOZ) });
+  r.flight = null; r.boost = 0; r.flipHeld = false; r.launched = null; r.landed = false; r.crashed = false; r.noz.fill(0);
   return r;
 }
 export function refillTank(id) { const r = TANKS.get(id); if (r) { r.tank = TANK_S; r.reload = false; } }
@@ -66,24 +68,23 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) { r.tank = 0; r.reload 
 
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
-// roll goes the way the wheel is held), rocketOff (the buttons do nothing: a race, the Raadi stage).
+// roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
+// kickflip: a race, a timed lap, the Raadi stage).
 export function rocketStep(car, input, world, dt) {
   const r = car.rocket, T = car.spec.thrusters;
   if (r.reload) { r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / REFILL_S); if (r.tank >= TANK_S) r.reload = false; }
-  r.deny = Math.max(0, r.deny - dt);
-  if (r.flight) { fly(car, dt); return true; }
+  // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
+  car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
+  if (r.flight) { fly(car, world, dt); return !!r.flight; }
   const off = !!input.rocketOff || car.inWater;
   const flip = !!input.flip;
-  if (flip && !r.flipHeld && !off && !r.reload && r.tank >= JUMP_S - 1e-6) {
+  if (flip && !r.flipHeld && !off && !input.flipOff && !r.reload && !car.airborne && r.tank >= JUMP_S - 1e-6) {
     const steer = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
-    const plan = car.airborne ? null : planFlip(car, world, steer < -0.3 ? -1 : 1);
-    if (plan) {
-      use(r, JUMP_S);
-      r.flight = plan; r.launched = plan; r.flipHeld = true; r.boost = 0; car.thrustN = 0;
-      fly(car, dt);
-      return true;
-    }
-    r.deny = 1.2;          // nowhere to land: no gas used, the button says so
+    const plan = planFlip(car, world, steer < -0.3 ? -1 : 1);
+    use(r, JUMP_S);
+    r.flight = plan; r.launched = plan; r.flipHeld = true; r.boost = 0; car.thrustN = 0;
+    fly(car, world, dt);
+    return true;
   }
   r.flipHeld = flip;
   // BOOST
@@ -99,13 +100,8 @@ export function rocketStep(car, input, world, dt) {
 }
 
 // ---------------------------------------------------------------------------------------------- the plan
-const tmpT = [], tmpB = [], tmpR = [0, 0, 0];
+const tmpT = [];
 const ground = (world, x, z, y) => (world.groundAt ? world.groundAt(x, z, y + 0.4) : world.heightAt(x, z));
-function boxDist(b, x, z) {
-  const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), px = x - b.x, pz = z - b.z;
-  const qx = Math.abs(px * c - pz * sn) - b.hx, qz = Math.abs(px * sn + pz * c) - b.hz;
-  return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
-}
 
 // height and vertical speed before the landing burn: the lift-off push, then free flight
 function rise(p, t, out) {
@@ -133,15 +129,12 @@ function heightAt(p, t, out) {
   out[0] = y; out[1] = v; out[2] = a;
   return out;
 }
-// how far round the roll is (0..1) and how hard it is being spun up (+) or stopped (-), -1..1
+// how far round the roll is (0..1) and how hard it is being spun up (+) or stopped (-), -1..1: one smooth
+// turn (the quintic 10s3 - 15s4 + 6s5), at rest at both ends
 function rollAt(p, t, out) {
-  const T = p.tb - ROLL_T0, u = (t - ROLL_T0) / T, r = ROLL_RAMP / T;
-  // (turning rate: up over r, steady, down over r; the steady rate is 1 / (1 - r) of a turn per T)
-  const w = 1 / (1 - r);
+  const T = Math.min(ROLL_T, p.tb - ROLL_T0), u = (t - ROLL_T0) / T;
   if (u <= 0) { out[0] = 0; out[1] = 0; }
-  else if (u < r) { out[0] = (0.5 * w * u * u) / r; out[1] = 1; }
-  else if (u < 1 - r) { out[0] = w * (u - 0.5 * r); out[1] = 0; }
-  else if (u < 1) { const d = 1 - u; out[0] = 1 - (0.5 * w * d * d) / r; out[1] = -1; }
+  else if (u < 1) { out[0] = u * u * u * (10 - 15 * u + 6 * u * u); out[1] = (60 * u - 180 * u * u + 120 * u * u * u) / 5.7735; }
   else { out[0] = 1; out[1] = 0; }
   return out;
 }
@@ -172,17 +165,16 @@ export function flightNozzles(p, t, noz, spec) {
   noz.fill(0);
   if (t >= p.tl) return noz;
   heightAt(p, t, tmpY);
-  // down nozzles: whatever holds the car up against gravity beyond free fall
+  // the corner nozzles: whatever holds the car up against gravity beyond free fall...
   const lift = t < LIFT_T || t > p.tb ? clamp01((spec.mass * (tmpY[2] + G)) / spec.thrusters.down) : 0;
+  // ...and the roll: the left pair pushes its side up to spin the car to the right, the right pair stops it
   const spin = rollAt(p, t, tmpS)[1] * p.side;       // + spinning up to the right or stopping a roll to the left
   for (let i = 0; i < 4; i++) {
     const left = i % 2 === 0;
-    noz[NOZ_DOWN + i] = clamp01(lift + (spin !== 0 ? (left === spin > 0 ? 0.3 : -0.15) : 0));
+    noz[NOZ_DOWN + i] = clamp01(lift + (left === spin > 0 ? 0.4 * Math.abs(spin) : 0));
   }
-  // side nozzles sit low on the sills: the right one pushes the floor left, which rolls the car to the right
-  if (spin > 0) noz[NOZ_SIDE + 1] = 1; else if (spin < 0) noz[NOZ_SIDE] = 1;
-  // (and the first moment of the flight they stop the nose swinging)
-  if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_SIDE : NOZ_SIDE + 1] = Math.max(noz[p.yawR > 0 ? NOZ_SIDE : NOZ_SIDE + 1], 0.6);
+  // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left)
+  if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
   // rear nozzles: short puffs that give back what the air takes off the speed
   const v = Math.hypot(p.vx, p.vz);
   if (v > 3 && t > LIFT_T) { const puff = 0.12 + 0.1 * Math.sin(t * 40); for (let i = 0; i < 4; i++) noz[NOZ_REAR + i] = puff; }
@@ -202,27 +194,15 @@ function stand(spec, world, x, z, yaw, y, out) {
 }
 const tmpG = [0, 0, 0];
 
-// The flight from where the car is now, or null when there is nowhere to land. side: 1 rolls to the right.
+// The flight from where the car is now. side: 1 rolls to the right. The landing burn is timed for the ground
+// the arc comes down to (its height, and its rise or fall along the way); the wheels are set down at its slope.
 export function planFlip(car, world, side = 1) {
   const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
-  const base = {
+  const p = {
     x0: car.x, z0: car.z, y0: car.hy, vx: car.vx * fx + car.vy * rx, vz: car.vx * fz + car.vy * rz,
     v0: Math.max(-1, Math.min(2, car.vyUp || 0)), yaw0: car.yaw, yawR: Math.max(-3, Math.min(3, car.yawRate || 0)),
-    p0: car.pitch, r0: car.roll, cg: car.spec.cgHeight, side, vl: 0, tb: 0, tl: 0, yl: 0, vland: 0, pl: 0, rl: 0, t: 0,
+    p0: car.pitch, r0: car.roll, cg: car.spec.cgHeight, side, vl: LIFT_V, tb: 0, tl: 0, yl: 0, vland: 0, pl: 0, rl: 0, t: 0,
   };
-  for (const k of SCALES) {
-    const p = arc(car, world, { ...base, vl: LIFT_V * k });
-    if (p) return p;
-  }
-  return null;
-}
-
-// (why the last arc tried was no good, for the test and for looking into a refusal)
-let why = '';
-export const flipRefusal = () => why;
-const no = (w) => { why = w; return null; };
-// one arc: when the landing burn must start for the car to arrive on the ground at the ground's own speed
-function arc(car, world, p) {
   const gAt = (t, y) => ground(world, p.x0 + p.vx * t, p.z0 + p.vz * t, y);
   // (the burn that starts at tb: how long it lasts, where it ends, and how far above the ground there)
   let tl = 0, vland = 0;
@@ -241,55 +221,23 @@ function arc(car, world, p) {
     }
     return yEnd - gAt(tl, yEnd);
   };
+  // the latest burn that still ends above the ground. Ground higher than the roll leaves time for (a bank, a
+  // deck) is flown into; with none in reach the flight ends in the air and the car falls the rest
   const first = ROLL_T0 + ROLL_MIN, step = 1 / 60;
-  let lo = first, mLo = miss(lo);
-  if (!(mLo > 0)) return no('ground too high');   // the roll would not be finished
-  let hi = 0;
-  for (let t = first + step; t < MAX_T; t += step) {
-    const m = miss(t);
-    if (m <= 0) { hi = t; break; }
-    lo = t; mLo = m;
+  let lo = first, hi = 0;
+  if (miss(lo) > 0) {
+    for (let t = first + step; t < MAX_T; t += step) { if (miss(t) <= 0) { hi = t; break; } lo = t; }
+    if (hi) for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (miss(mid) > 0) lo = mid; else hi = mid; }
   }
-  if (!hi) return no('no ground in reach');
-  for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (miss(mid) > 0) lo = mid; else hi = mid; }
-  const m = miss(lo);
-  if (Math.abs(m) > 0.12) return no('step in the ground');    // (a wall, a deck's edge) where it would come down
+  miss(lo);
   p.tb = lo; p.tl = tl; p.vland = vland;
   // the spot: the ground under the four wheels as the car will stand on it
   const yawL = p.yaw0 + p.yawR * YAW_TAU * (1 - Math.exp(-tl / YAW_TAU));
-  const xl = p.x0 + p.vx * tl, zl = p.z0 + p.vz * tl;
   rise(p, lo, tmpY);
-  stand(car.spec, world, xl, zl, yawL, tmpY[0] + 0.5 * (tmpY[1] + vland) * (tl - lo), tmpG);
-  p.yl = tmpG[0]; p.pl = tmpG[1]; p.rl = tmpG[2];
-  if (Math.abs(p.pl) > SLOPE_MAX || Math.abs(p.rl) > SLOPE_MAX) return no('too steep');
-  if (world.surfaceAt(xl, zl, p.yl + 0.4) === WATER) return no('water');
-  if (world.waterLevelAt && world.waterLevelAt(xl, zl) > p.yl + 0.3) return no('water');
-  if (world.railPush && world.railPush(xl, zl, p.yl + 0.4, car.halfWid, tmpR)) return no('railing');
-  if (world.ledgePush && world.ledgePush(xl, zl, p.yl + 0.4, car.halfWid + 0.25, tmpR)) return no('ledge');
-  // the way there, and the spot's surroundings
-  const hl = car.halfLen, hw = car.halfWid, n = Math.max(8, Math.ceil(tl * 30));
-  const fx = Math.sin(yawL), fz = -Math.cos(yawL), rx = Math.cos(yawL), rz = Math.sin(yawL);
-  for (let i = 0; i <= n; i++) {
-    const t = (tl * i) / n, x = p.x0 + p.vx * t, z = p.z0 + p.vz * t;
-    heightAt(p, t, tmpY);
-    const up = tmpY[0] - gAt(t, tmpY[0]);
-    const last = i === n;
-    if (t < 0.1 && !last) continue;                            // where the car stands now is where it stands
-    if (up < -0.05) return no('ground in the way');
-    // houses, walls, the map's edge: no telling how high, so never over them
-    if (world.sdfAt(x, z) < (last ? hw + 0.1 : ROLL_ROOM)) return no('house or wall');
-    if (last) for (let q = 0; q < 4; q++) {
-      const ox = fx * (q < 2 ? hl : -hl) + rx * (q % 2 ? hw : -hw), oz = fz * (q < 2 ? hl : -hl) + rz * (q % 2 ? hw : -hw);
-      if (world.sdfAt(x + ox, z + oz) < 0.15) return no('house or wall');
-    }
-    // trees
-    if (world.trunksNear && world.trunksNear(x, z, Math.hypot(hl, hw) + 0.6, tmpT).length) return no('tree');
-    // rails, dividers and low walls: only where the car is low over them
-    if (up < LOW_CLEAR && world.solidsNear) {
-      const bs = world.solidsNear(x, z, hl + 0.5, tmpB);
-      for (let b = 0; b < bs.length; b++) if (boxDist(bs[b], x, z) < (last ? hl : hw) + 0.2) return no('rail or divider');
-    }
-  }
+  const yEnd = tmpY[0] + 0.5 * (tmpY[1] + vland) * (tl - lo);
+  stand(car.spec, world, p.x0 + p.vx * tl, p.z0 + p.vz * tl, yawL, yEnd, tmpG);
+  const lim = (v) => Math.max(-0.6, Math.min(0.6, v));
+  p.yl = Math.abs(tmpG[0] - yEnd) < 0.5 ? tmpG[0] : yEnd; p.pl = lim(tmpG[1]); p.rl = lim(tmpG[2]);
   return p;
 }
 
@@ -313,11 +261,39 @@ export function unpackPlan(a) {
 
 // ---------------------------------------------------------------------------------------------- flying it
 const pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
-function fly(car, dt) {
+// The flight is over before its plan is (crash: something was in the way) or the plan ends over a drop: the car
+// is left to the ordinary physics as it is, in the air, to fall and hit what it hits. It goes on turning the way
+// it was, at the rate that has it the right way up as it comes down (up: metres of air under it).
+function letGo(car, rollRate, crash, up) {
+  const r = car.rocket, TAU = 2 * Math.PI;
+  const roll = car.roll = Math.atan2(Math.sin(car.roll), Math.cos(car.roll));
+  const vy = car.vyUp || 0, fall = (vy + Math.sqrt(vy * vy + 2 * G * Math.max(0.3, up))) / G;
+  const left = Math.abs(roll) < 0.05 ? 0 : rollRate >= 0 ? (roll <= 0 ? -roll : TAU - roll) : (roll >= 0 ? -roll : -TAU - roll);
+  car.rollRate = Math.max(-8, Math.min(8, left / fall)); car.pitchRate = 0;
+  car.airborne = true; car.load = 0;
+  r.noz.fill(0); r.flight = null;
+  if (crash) r.crashed = true; else r.landed = true;
+}
+function fly(car, world, dt) {
   const r = car.rocket, p = r.flight, s = car.spec;
+  const roll0 = car.roll;
   p.t += dt;
   const done = p.t >= p.tl;
   flightPose(p, p.t, pose);
+  // what is in the way: the ground itself (a bank), a house or a wall, a tree below its top
+  const up = r.up = pose.y - ground(world, pose.x, pose.z, pose.y);
+  if (p.t > 0.12) {
+    // (a wall is in the way when the house it belongs to stands higher than the car is; one with no house to it,
+    // a garden wall, a fence's footing, only low down)
+    let wall = world.sdfAt(pose.x, pose.z) < car.halfWid * 0.9;
+    if (wall && world.roofAt) {
+      let top = -1e9;
+      for (let k = 0; k < 5; k++) top = Math.max(top, world.roofAt(pose.x + (k === 1 ? 2 : k === 2 ? -2 : 0), pose.z + (k === 3 ? 2 : k === 4 ? -2 : 0)));
+      wall = top > -1e8 ? pose.y < top + 0.2 : up < LOW_WALL;
+    }
+    const tree = !wall && up < TREE_TOP && world.trunksNear && world.trunksNear(pose.x, pose.z, car.halfWid + 0.3, tmpT).length > 0;
+    if (wall || tree || (!done && up < -0.08)) { letGo(car, p.t > dt ? (pose.roll - roll0) / dt : p.side, true, up); return; }
+  }
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.pitch = pose.pitch;
   car.y = car.hy = pose.y; car.vyUp = pose.vy;
   const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
@@ -337,8 +313,10 @@ function fly(car, dt) {
     flightNozzles(p, p.t, r.noz, s);
     return;
   }
-  // touchdown: on the ground at the ground's slope, the springs at rest, the tyres taking over
   car.roll = p.rl; car.pitch = p.pl;
+  // (the plan ended over a drop: a deck's edge, a hole the planner's line did not see)
+  if (pose.y - ground(world, pose.x, pose.z, pose.y) > 0.3) { letGo(car, 0, false, up); return; }
+  // touchdown: on the ground at the ground's slope, the springs at rest, the tyres taking over
   car.airborne = false; car.airTime = 0; car.load = 1;
   car.landed = Math.max(car.landed || 0, 0.6);
   r.noz.fill(0); r.flight = null; r.landed = true;

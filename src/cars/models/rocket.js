@@ -1,7 +1,7 @@
 // 2028 Tesla Roadster Rocket: a stand-in body until the scanned one arrives (Martin 2026-11-25). A low
 // two-seater drawn in the kit's way: long nose, short cabin under a dark glass roof, a fastback tail
 // with a full-width light bar. The ten cold-gas nozzles are marked where src/cars/plumes.js puts their
-// jets (NOZZLES in src/cars/thrust.js): four across the tail, one under each corner, one low on each sill.
+// jets (NOZZLES in src/cars/thrust.js): four in a row in the diffuser, one under each corner, one each side of the nose.
 import { NOZZLES } from '../thrust.js';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, buildWheel, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
 
@@ -69,16 +69,16 @@ export function buildRocket() {
   // --- sills, splitter and diffuser in black; shut lines
   pal.add(dc.side([rect(-HZ + 0.36, 0.13, HZ - 0.36, 0.25)], { offset: 0.003, minFacing: 0.1 }).pal('plastic').sym());
   pal.add(dc.front(rect(-0.8, 0.16, 0.8, 0.3, 0.03), { offset: 0.004, minFacing: -0.3, ...ff }).pal('line'));
-  pal.add(dc.rear(rect(-0.86, 0.22, 0.86, 0.42), { offset: 0.003, minFacing: -0.3, filter: (v) => v[2] > 1.9 && v[1] < 0.45 }).pal('plastic'));
+  pal.add(dc.rear(rect(-0.86, 0.22, 0.86, 0.48), { offset: 0.003, minFacing: -0.3, filter: (v) => v[2] > 1.9 && v[1] < 0.51 }).pal('plastic'));
   const lw = 0.007;
   pal.add(dc.side([...stroke([[-0.72, 0.28], [-0.72, 0.84]], lw), ...stroke([[0.62, 0.28], [0.62, 0.9]], lw), ...stroke([[-0.72, 0.28], [0.62, 0.28]], lw)], { offset: 0.0055 }).pal('line').sym());
 
-  // --- full-width tail light bar, the lettering under it, the plate between the middle nozzles' shroud and the diffuser
+  // --- full-width tail light bar, the lettering under it, the plate under that, over the nozzles in the diffuser
   tail.add(dc.rear(rect(-0.86, 0.745, 0.86, 0.785, 0.01), { offset: 0.005, ...fr }));
   chmsl.add(dc.rear(rect(-0.2, 0.8, 0.2, 0.812, 0.004), { offset: 0.005, minFacing: 0.1, ...fr }));
   reverse.add(dc.rear(rect(0.6, 0.71, 0.8, 0.73, 0.005), { offset: 0.006, ...fr }).sym());
   atlas.add(dc.rear(rect(-0.22, 0.66, 0.22, 0.715), { offset: 0.0065, ...fr }).uvRect(A_NAME));
-  const pl = plate([0, 0.33, pr.rearZ(0, 0.33) + 0.01], A_PLATE, { tilt: 0.05 });
+  const pl = plate([0, 0.575, pr.rearZ(0, 0.575) + 0.01], A_PLATE, { tilt: 0.05 });
   atlas.add(pl.face); pal.add(pl.back);
 
   // --- front: slim lamps, the plate low in the splitter
@@ -100,9 +100,9 @@ export function buildRocket() {
     pal.add(cyl(big ? 0.048 : 0.033, big ? 0.048 : 0.033, 0.01, 12, { p: [x - dx * 0.035, y - dy * 0.035, z - (big ? 0.035 : 0)], r }, 'well'));
   }
   // (the shroud the four tail nozzles sit in)
-  pal.add(box(1.24, 0.2, 0.05, { p: [0, 0.5, pr.rearZ(0, 0.5) - 0.02] }, 'gloss'));
+  pal.add(box(0.94, 0.17, 0.05, { p: [0, 0.36, pr.rearZ(0, 0.36) - 0.02] }, 'gloss'));
 
   const wheel = { soup: buildWheel({ R: DIMS.wheelRadius, width: 0.27, rimR: 0.262, style: 'aero' }) };
   const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
-  return tintPaint(car, 'rocket', 0x9a0f14, { metalness: 0.5, roughness: 0.3, clearcoatRoughness: 0.04 });
+  return tintPaint(car, 'rocket', 0xc3c7cc, { metalness: 0.8, roughness: 0.26, clearcoatRoughness: 0.04 });
 }

@@ -609,7 +609,8 @@ export function stepCar(car, input, world, dtFrame) {
 function substep(car, input, world, dt) {
   car.skidF = car.skidR = car.rubF = car.rubR = 0;
   const s = car.spec;
-  const m = s.mass, L = s.wheelbase;
+  // (the Rocket's tank: the gas that has gone is weight the car no longer carries, thrust.js)
+  const m = s.mass - (car.gasOut || 0), L = s.wheelbase;
   // (BOOST holds the motors at full power too: a phone's thumb goes from GAS to BOOST)
   const up = car.thrustN > 0 ? 1 : +input.up || 0, down = +input.down || 0;
   const sinY = Math.sin(car.yaw), cosY = Math.cos(car.yaw);
@@ -772,6 +773,8 @@ function substep(car, input, world, dt) {
     if (car.airborne) {
       if (car.airTime > 0.12) car.landed = Math.max(car.landed, Math.min(vGround, 0) - car.vyUp);
       car.airborne = false; car.airTime = 0;
+      // (a body that turned over in the air, a Rocket let go of in its roll: it rights itself the short way round)
+      if (Math.abs(car.roll) > Math.PI) car.roll = Math.atan2(Math.sin(car.roll), Math.cos(car.roll));
     }
   } else {
     car.airborne = true; car.airTime += dt;
@@ -1497,7 +1500,7 @@ function substep(car, input, world, dt) {
   if (car.stone) stoneKick(car, dt);
   // (thrusters push through the body's middle and do not lift its nose; s.squat: how much of the usual squat
   // and dive a car's springs let through)
-  const axBody = (car.ax - (car.thrustN || 0) / car.spec.mass) * (car.spec.squat ?? 1);
+  const axBody = (car.ax - (car.thrustN || 0) / (car.spec.mass - (car.gasOut || 0))) * (car.spec.squat ?? 1);
   const tPitch = car.groundPitch + axBody * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
   const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
   if (car.airborne) {

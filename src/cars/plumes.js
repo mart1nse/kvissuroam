@@ -1,14 +1,16 @@
-// The Rocket's jets (src/cars/thrust.js): a white cone of cold gas at each nozzle that is blowing, as long as
+// The Rocket's jets (src/cars/thrust.js): a blue-white cone of cold gas at each nozzle that is blowing, as long as
 // the nozzle is open. Compressed air, so no flame: a tight bright core in a wider mist that thins out to nothing.
 // One instanced mesh for every Rocket in sight (ours and other players'), always in the scene, so its shader is
 // made with the rest at the start and a first BOOST costs nothing new; with no nozzle open it draws nothing.
 import * as THREE from 'three';
-import { NOZ, NOZ_DOWN, NOZZLES } from './thrust.js';
+import { NOZ, NOZ_DOWN, NOZ_YAW, NOZZLES } from './thrust.js';
 
 const CARS_MAX = 8;                 // Rockets with jets drawn at once (the nearest come first in the lists)
 const PER = NOZ * 2;                // a mist and a core for each nozzle
 const FAR = 300;                    // metres: no jets drawn further off
-const LEN_REAR = 2.4, LEN = 1.3;    // metres at full blow: the four big ones at the tail, the rest
+// metres at full blow: the four at the tail, the four under the corners (in Tesla's film the jets that roll the
+// car and set it down are longer than the car is wide), the two at the nose
+const LEN_REAR = 3.4, LEN_DOWN = 3.2, LEN_YAW = 1.3;
 
 export function createPlumes() {
   // a cone along +y from the nozzle (narrow, at 0) to its wide far end (at 1), and five rounds across it, so the
@@ -47,7 +49,7 @@ export function createPlumes() {
   g.putImageData(img, 0, 0);
   const map = new THREE.CanvasTexture(c);
   map.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.MeshBasicMaterial({ map, color: 0xf2f8ff, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+  const mat = new THREE.MeshBasicMaterial({ map, color: 0xdcecff, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
   const mesh = new THREE.InstancedMesh(geo, mat, CARS_MAX * PER);
   mesh.name = 'rocket jets';
   mesh.frustumCulled = false;
@@ -71,8 +73,8 @@ export function createPlumes() {
       if (k <= 0.02) continue;
       const N = NOZZLES[i], big = i < NOZ_DOWN;
       // (the jet shivers: its length by a tenth, quicker than the eye follows)
-      const len = (big ? LEN_REAR : LEN) * Math.sqrt(k) * (0.92 + 0.08 * Math.sin(clock * 61 + i * 2.1 + seed) + 0.05 * Math.sin(clock * 37 + i));
-      const wide = (big ? 0.2 : 0.14) * (0.6 + 0.4 * k);
+      const len = (big ? LEN_REAR : i < NOZ_YAW ? LEN_DOWN : LEN_YAW) * Math.sqrt(k) * (0.92 + 0.08 * Math.sin(clock * 61 + i * 2.1 + seed) + 0.05 * Math.sin(clock * 37 + i));
+      const wide = (big ? 0.2 : i < NOZ_YAW ? 0.2 : 0.14) * (0.6 + 0.4 * k);
       pos.set(N[0], N[1], N[2]);
       m.compose(pos, turns[i], sc.set(wide, len, wide)).premultiply(body);
       mesh.setMatrixAt(n++, m);

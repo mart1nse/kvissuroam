@@ -33,7 +33,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   check('0-100 km/h on the motors is 1.6 s', Math.abs(base.t100 - 1.6) < 0.08, `${base.t100.toFixed(2)} s`);
   check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
   const b = run({ up: 1, boost: 1 });
-  check('0-100 km/h with BOOST is about 0.6 s', b.t100 > 0.5 && b.t100 < 0.72, `${b.t100.toFixed(2)} s`);
+  check('0-100 km/h with BOOST is about 0.5 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.45 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
   check('BOOST runs for 10 s, then the reload starts', Math.abs(b.t - TANK_S) < 0.05 && b.car.rocket.reload, `${b.t.toFixed(2)} s`);
   check('BOOST tops out near 400 km/h', b.top > 380 && b.top < 405, `${b.top.toFixed(0)} km/h`);
   // BOOST alone (no throttle key): the motors are held at full power too
@@ -46,6 +46,13 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   for (; car.rocket.reload && t < 200; t += dt) { stepCar(car, { boost: 1, flip: (t * 2) % 1 < 0.5 }, w, dt); if (t > 0.3 && car.rocket.reload && (car.rocket.flight || car.thrustN > 0)) moved = true; }   // (the valves take a moment to shut)
   check('the reload takes 120 s and locks both buttons', Math.abs(t - REFILL_S) < 0.5 && !moved && car.rocket.tank >= TANK_S - JUMP_S, `${t.toFixed(1)} s`);
   void v0;
+  check('...and the car weighs its full 1950 kg again', car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+  // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors
+  const we = world(), e = fresh(we);
+  e.rocket.tank = 0; e.rocket.reload = true;
+  let te = 0, e100 = null;
+  for (; te < 5 && e100 === null; te += dt) { stepCar(e, { up: 1 }, we, dt); if (speedKmh(e) >= 100) e100 = te + dt; }
+  check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 6 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
 }
 
 // ---- one FLIP: fly it and report
@@ -58,11 +65,17 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   const in0 = { flip: 1, left: side < 0 ? 1 : 0, right: side > 0 ? 1 : 0 };
   stepCar(car, in0, w, dt);
   const plan = car.rocket.launched;
-  if (expect === 'refused') {
-    check(name, !plan && car.rocket.tank === tank0 && car.rocket.deny > 0, plan ? 'it jumped' : 'refused, no gas used');
-    return null;
+  if (!plan) { check(name, false, 'no jump'); return null; }
+  if (expect === 'crash') {
+    // it flies until something is in the way, is let go there, and ends up on the ground on its wheels
+    let t = dt, peak = 0;
+    while (car.rocket.flight && t < 20) { stepCar(car, {}, w, dt); t += dt; peak = Math.max(peak, car.y - h(-car.z, car.x)); }
+    const at = -car.z, crashed = car.rocket.crashed, air = t;
+    for (let u = 0; u < 4; u += dt) stepCar(car, {}, w, dt);
+    const down = !car.airborne && Math.abs(car.y - h(-car.z, car.x)) < 0.3 && Math.abs(car.roll) < 0.5 && Number.isFinite(car.x + car.z + car.vx);
+    check(name, crashed && down && car.rocket.tank === tank0 - JUMP_S, `${crashed ? 'let go' : 'not let go'} ${at.toFixed(1)} m on, ${air.toFixed(2)} s in, ${peak.toFixed(1)} m up; ${down ? 'on its wheels after' : 'not settled'}`);
+    return { at, air, car };
   }
-  if (!plan) { check(name, false, 'refused'); return null; }
   let t = dt, peak = 0, rollMax = 0, low = Infinity, nozMax = 0;
   const s0 = -car.z;
   while (car.rocket.flight && t < 20) {
@@ -84,15 +97,19 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   // (one whole turn: just before touchdown the roll stands at a full circle, and it never goes past it)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.03;
   const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && car.rocket.tank === tank0 - JUMP_S;
-  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
+  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
 
 const level = flip('FLIP on level ground at 100 km/h');
 // (the height is that of the car's floor: 2.6 m of flight plus the 0.84 m its floor swings up as it rolls about its middle)
-check('...is about 1.8 s, 50 m and 3.4 m high at the top of the roll', level && Math.abs(level.air - 1.8) < 0.15 && Math.abs(level.len - 50) < 5 && Math.abs(level.peak - 3.4) < 0.4);
+// (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
+// and, upside down there, 8.95 m)
+check('...is about 3.1 s, 85 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 3.1) < 0.15 && Math.abs(level.len - 85) < 5 && Math.abs(level.peak - 8.95) < 0.4);
 flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
+const film = flip('FLIP at the 47 km/h of Tesla\'s film', { kmh: 47.2 });
+check('...covers about 40 m', film && Math.abs(film.len - 40) < 3, film ? `${film.len.toFixed(1)} m` : '');
 flip('FLIP rolling left', { side: -1 });
 flip('FLIP in a slide flies along the slide', { kmh: 80, slide: 6 });
 // a 4 m drop 20 to 40 m ahead: lands lower, later
@@ -107,22 +124,34 @@ const downhill = flip('FLIP down an 8 % hill', { h: (s) => -0.08 * s });
 check('...lands tilted to the slope', downhill && Math.abs(downhill.plan.pl - Math.atan(-0.08)) < 0.02, downhill ? `${(downhill.plan.pl * 180 / Math.PI).toFixed(1)} deg` : '');
 flip('FLIP up an 8 % hill', { h: (s) => 0.08 * s });
 flip('FLIP across a slope leaning 6 %', { h: (s, x) => 0.06 * x });
-// ground higher than the arc: no jump
-flip('a 5 m bank ahead: refused, no gas used', { h: (s) => (s < 20 ? 0 : s < 30 ? (s - 20) * 0.5 : 5), expect: 'refused' });
-// a house across the way at 25 m: no jump (every arc passes through it)
-flip('a house across the flight: refused', { extra: { sdfAt: (x, z) => Math.abs(-z - 25) - 3 }, expect: 'refused' });
-// a house on the landing spot only (45 to 55 m): a shorter arc is found
-const short = flip('a house on the landing spot: a shorter arc', { extra: { sdfAt: (x, z) => Math.abs(-z - 51.5) - 4 } });
-check('...lands short of it', short && short.len < 46 && short.plan.vl < 6, short ? `${short.len.toFixed(1)} m` : '');
-// a tree on the landing spot
-const tree = flip('a tree on the landing spot: another arc', { extra: { trunksNear: (x, z, reach, out) => { out.length = 0; if (Math.hypot(x - 0.3, z + 50) < reach) out.push(0.3, -50, 0.3); return out; } } });
-check('...lands clear of it', tree && Math.abs(tree.len - 50) > 2.5, tree ? `${tree.len.toFixed(1)} m` : '');
-// a guard rail across the road in mid flight is flown over; one at the landing spot is not landed on
-flip('a guard rail under the top of the arc is flown over', { extra: { solidsNear: (x, z, reach, out) => { out.length = 0; out.push({ x: 0, z: -25, yaw: 0, hx: 6, hz: 0.15 }); return out; } } });
-const rail = flip('a guard rail on the landing spot: another arc', { extra: { solidsNear: (x, z, reach, out) => { out.length = 0; out.push({ x: 0, z: -50, yaw: 0, hx: 6, hz: 0.15 }); return out; } } });
-check('...lands clear of it', rail && Math.abs(rail.len - 50) > 2.5, rail ? `${rail.len.toFixed(1)} m` : '');
-// water where it would land
-flip('water at the landing spot: another arc or none', { extra: { surfaceAt: (x, z) => (-z > 30 ? 4 : 1) }, expect: 'refused' });
+// ground higher than the roll leaves time for: flown into
+const bank = flip('a 5 m bank ahead: lands on top of it', { h: (s) => (s < 20 ? 0 : s < 30 ? (s - 20) * 0.5 : 5) });
+check('...sooner than on the level', bank && level && bank.air < level.air - 0.3, bank ? `${bank.air.toFixed(2)} s` : '');
+flip('a 16 m bank ahead: flies into it', { h: (s) => (s < 20 ? 0 : s < 52 ? (s - 20) * 0.5 : 16), expect: 'crash' });
+// what stands in the way is hit (Martin 2026-11-25: "allow to jump and crash")
+const wall = flip('a house across the flight: hits it', { extra: { sdfAt: (x, z) => Math.abs(-z - 25) - 3 }, expect: 'crash' });
+check('...at its wall, not past it', wall && wall.at < 22.5 && wall.at > 15, wall ? `${wall.at.toFixed(1)} m` : '');
+// (where the world knows how high its houses stand: over a low one, into a tall one, and a wall with no house to it only low down)
+const house = (at, half, top) => ({ sdfAt: (x, z) => Math.abs(-z - at) - half, roofAt: (x, z) => (top !== null && Math.abs(-z - at) < half + 1 ? top : -1e9) });
+flip('a 5 m house under the top of the arc is flown over', { extra: house(42, 4, 5) });
+flip('a 12 m house under the top of the arc: hits it', { extra: house(42, 4, 12), expect: 'crash' });
+flip('a garden wall under the arc is flown over', { extra: house(42, 0.3, null) });
+flip('a garden wall just after lift-off: hits it', { extra: house(7, 0.3, null), expect: 'crash' });
+flip('a house on the landing spot: hits it', { extra: { sdfAt: (x, z) => Math.abs(-z - 84.7) - 4 }, expect: 'crash' });
+const trunk = (at) => ({ trunksNear: (x, z, reach, out) => { out.length = 0; if (Math.hypot(x - 0.3, z + at) < reach) out.push(0.3, -at, 0.3); return out; } });
+flip('a tree on the landing spot: hits it', { extra: trunk(84.7), expect: 'crash' });
+flip('a tree under the top of the arc is flown over', { extra: trunk(42) });
+flip('a guard rail under the top of the arc is flown over', { extra: { solidsNear: (x, z, reach, out) => { out.length = 0; out.push({ x: 0, z: -42, yaw: 0, hx: 6, hz: 0.15 }); return out; } } });
+
+// ---- FLIP switched off (a race, a timed lap): nothing happens and no gas goes; BOOST works as ever
+{
+  const w = world(), car = fresh(w, 100);
+  const tank0 = car.rocket.tank;
+  stepCar(car, { flip: 1, flipOff: true }, w, dt);
+  check('FLIP switched off: no jump, no gas used', !car.rocket.flight && car.rocket.tank === tank0);
+  for (let t = 0; t < 1; t += dt) stepCar(car, { boost: 1, flipOff: true }, w, dt);
+  check('...and BOOST still works', car.thrustN > 0 && car.rocket.tank < tank0 - 0.9, `${car.rocket.tank.toFixed(2)} s left`);
+}
 
 // ---- two flips, then nothing until the reload is over
 {

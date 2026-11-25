@@ -1037,7 +1037,10 @@ export class Lobby extends DurableObject {
     } else if (m.t === 'jmp') {
       // a Rocket's kickflip: the flight's plan (src/cars/thrust.js: 19 numbers) and the sender's clock at the
       // press, told to the others so that each flies that car along the same curve. A tank holds two.
-      if (me.ghost || me.car !== 'rocket' || !Array.isArray(m.p) || m.p.length !== 19) return;
+      // (x: that flight ended early, against something in its way)
+      if (me.ghost || me.car !== 'rocket') return;
+      if (m.x === 1) { if (!this.over(`jx|${me.id}`, 4, 20000)) this.broadcast({ t: 'jmp', id: me.id, x: 1 }, ws); return; }
+      if (!Array.isArray(m.p) || m.p.length !== 19) return;
       if (!m.p.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 100000)) return;
       if (!Number.isInteger(m.c) || m.c < 0 || m.c >= 60000) return;
       if (this.over(`j|${me.id}`, 4, 20000)) return;

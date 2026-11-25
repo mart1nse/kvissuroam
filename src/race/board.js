@@ -70,7 +70,15 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   mp.nameReady.then((n) => {
     if (document.activeElement !== input || fresh) { input.value = n; if (fresh) preselect(); }
   });
-  const commit = () => { input.value = mp.setName(input.value) || mp.name; };
+  // (a name the server would refuse, a racist slur, Martin 25 Nov: the box goes back to the old name and
+  // blinks twice, with no message)
+  const commit = () => {
+    const n = mp.setName(input.value);
+    input.value = n || mp.name;
+    if (n === null) { label.classList.remove('nope'); void label.offsetWidth; label.classList.add('nope'); }
+  };
+  const label = row.querySelector('#driver');
+  label.addEventListener('animationend', (e) => { if (e.animationName === 'nameblink') label.classList.remove('nope'); });
   input.addEventListener('change', commit);
   input.addEventListener('blur', () => { unfresh(); commit(); });
   input.addEventListener('pointerdown', unfresh);

@@ -45,7 +45,7 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
-const BOOSTING = 64;             // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js)
+const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
 const STAMP = 21;                // position's slot for when it was taken (see addPose)
 const POSE_SC = POSE_DEC.map((d) => 10 ** d);
 // Many players online (Martin 2026-11-23: 22 online felt laggy, and the names crowded the road). A car

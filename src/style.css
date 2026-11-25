@@ -346,7 +346,7 @@ body.touch .desktop-only { display: none; }
   #cards { --H: 8.6em; --T: 2.9em; font-size: 9px; }
 }
 
-/* Ko-fi (Martin 25 Nov), only with ?off=100 for now (src/kofi.js). It sits in the row under the cars: LAP TIMES
+/* Ko-fi (Martin 25 Nov, for everyone; src/kofi.js). It sits in the row under the cars: LAP TIMES
    over CONTROLS on the right of DRIVE and SUPPORT LINNARING beside them, a quiet dark tile with the letters in
    cyan to pink so it does not compete with DRIVE. With it the row lines up with the car columns: DRIVE a touch
    taller and in the middle, the same free space between all its parts, both sides as wide (`--sw`, set by
@@ -418,7 +418,9 @@ body.touch #kofi .ic { width: 2.2em; height: 2.2em; }
 #kofipanel .head .x { flex: none; width: 2.3em; height: 2.3em; border: none; border-radius: 50%; background: rgba(255, 255, 255, .12); font-size: 1.35em; line-height: 1; color: #fff; }
 #kofipanel .frame { position: relative; flex: 1; min-height: 0; margin: 6px 6px 0; border-radius: .8em; overflow: hidden; background: #e9defc; touch-action: auto; }
 #kofipanel .tint { position: absolute; inset: 0; pointer-events: none; background: #e9defc; mix-blend-mode: multiply; }
-#kofipanel iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity .25s; touch-action: auto; }
+/* (Ko-fi's page scrolls inside itself; its scrollbar is pushed past the frame's right edge, out of sight, and the
+   page still scrolls by wheel, touch and keys) */
+#kofipanel iframe { position: absolute; top: 0; left: 0; width: calc(100% + 18px); height: 100%; border: 0; opacity: 0; transition: opacity .25s; touch-action: auto; }
 #kofipanel.ready iframe { opacity: 1; }
 #kofipanel .wait { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 28px; letter-spacing: .2em; color: var(--violet); }
 @media (hover: hover) and (pointer: fine) { #kofipanel .head a:hover { opacity: 1; background: rgba(255, 255, 255, .18); } #kofipanel .head .x:hover { background: rgba(255, 255, 255, .24); } }

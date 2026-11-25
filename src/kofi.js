@@ -1,7 +1,6 @@
 // The Ko-fi button (Martin 25 Nov): SUPPORT LINNARING over "Ega token puu otsas kasva", a tree with coins for its
 // crown, in the row under the cars to the right of LAP TIMES and CONTROLS (src/style.css says how it looks).
-// Only in stealth mode (?off=100) while Martin tries it. No coffee cup: he does not mention coffee.
-import { STEALTH } from './net/stealth.js';
+// For everyone since 25 Nov (tried behind ?off=100 first). No coffee cup: he does not mention coffee.
 
 const TREE = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22.5v-9M12 16.5l-3.2-2.6M12 15l3.2-2.4"/><circle cx="12" cy="6" r="3.6"/><circle cx="6.2" cy="11.2" r="3.1"/><circle cx="17.8" cy="10.6" r="3.1"/></svg>';
 const OUT = '<svg class="out" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7"/></svg>';
@@ -17,7 +16,7 @@ const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=
 
 const a = document.querySelector('#kofi');
 const menu = document.querySelector('#menu');
-if (a && menu && STEALTH) {
+if (a && menu) {
   a.innerHTML = `${TREE}${TX}`;
   // Into the row under the cars once it is built (src/race/board.js, then the tyres in main.js): LAP TIMES over
   // CONTROLS, the button beside them. On phones LAP TIMES on two lines (CSS shows them stacked there).
@@ -95,7 +94,8 @@ if (a && menu && STEALTH) {
     const pw = Math.min(Math.max(r.width, phone ? Math.min(440, innerWidth * .64) : 420), box.width - 20);
     const pl = Math.max(10, Math.min(r.right - box.left - pw, box.width - 10 - pw));
     const foot = r.bottom - box.top;
-    const ph = phone ? foot - 8 : Math.min(730, foot - 12);
+    // (all the height above the button: Ko-fi's payment step is taller than its first page, Martin 25 Nov)
+    const ph = foot - (phone ? 8 : 12);
     const bx = r.left - box.left - pl;
     for (const [k, v] of [['--pl', pl], ['--pt', foot - ph], ['--pw', pw], ['--ph', ph], ['--bh', r.height], ['--ct', ph - r.height], ['--cl', bx], ['--cr', pw - bx - r.width]]) panel.style.setProperty(k, `${Math.round(v)}px`);
     panel.classList.remove('hidden');

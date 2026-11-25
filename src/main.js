@@ -150,6 +150,7 @@ import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
 import { slots as startSlots, pick as pickSlot } from './race/startslots.js';
+import { createStartLane } from './race/startlane.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
 import { setCarPlate } from './cars/plate.js';
@@ -456,6 +457,7 @@ let mode = 'loading';            // loading | menu | drive
 let buildCarModel = null, carModels = null;
 let startPose;
 let startSpots = null;            // where the start puts the car when its spot is busy (src/race/startslots.js)
+let lane = null;                  // the start lane: a car just put on the start passes through the others in it (src/race/startlane.js)
 // the start's spot, or with other cars on it a free one near it (Martin 24 Nov: with ~70 online everyone was put on
 // the one spot and the pushing apart sent cars up the park wall)
 function freeStart() {
@@ -892,7 +894,9 @@ async function boot() {
 
   const s = world.meta.start;
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
-  startSpots = startSlots(createTrack(), startPose);
+  const startTrack = createTrack();
+  startSpots = startSlots(startTrack, startPose);
+  lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
   rocketUi = createRocketUi({ pad: $('#rocketpad'), bar: $('#thrust'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
@@ -929,6 +933,8 @@ async function boot() {
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
+    // just put on the start and still on the lap's road before the line: the same, without the glow (Martin 25 Nov)
+    fresh: () => !!lane?.on && mode === 'drive',
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
     winner: (id) => !!raceMode?.winner(id),
@@ -1263,7 +1269,7 @@ function startDriving() {
     droveOnce = true;
   }
   // (the car waits on the start's spot behind the menu: if somebody is standing there now, a free spot near it)
-  if (!atRaadi() && Math.hypot(car.x - startPose.x, car.z - startPose.z) < 1) { const f = freeStart(); if (f !== startPose) place(f); }
+  if (!atRaadi() && Math.hypot(car.x - startPose.x, car.z - startPose.z) < 1) { const f = freeStart(); if (f !== startPose) place(f); lane?.begin(f.x, f.z); }
   parked.hold(8);                                   // phones: no parked car models built while the drive starts
   if (still) {
     // phones: from the still picture straight to behind the car
@@ -1422,7 +1428,9 @@ function goHome() {
   stage?.teleported();
   history.length = 0;
   wetAt = null;
-  place(freeStart());
+  const f = freeStart();
+  place(f);
+  lane?.begin(f.x, f.z);
 }
 
 // R: back to the newest remembered spot that is dry. After a plunge into the water that is a spot at
@@ -2031,6 +2039,7 @@ function frame(ts) {
     // on the race grid: held on the spot until the lights go out (the wheels may spin)
     const pin = raceMode?.pin || stage?.pin;
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
+    lane?.update(car);
     // (a kickflip in flight, src/cars/thrust.js: the car is over the things it would knock into, which only
     // know where it is on the map, so for them it is far overhead; the others get the flight's plan once)
     // (low over the ground, at lift-off and coming down, it still knocks over what stands there)
@@ -2406,7 +2415,7 @@ window.__game = {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

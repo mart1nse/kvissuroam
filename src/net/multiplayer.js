@@ -7,7 +7,8 @@
 // their name floating above them, and bump into ours: each browser pushes its own car out of
 // the other one, so both sides see the same knock. Except on a hotlap: a car whose lap timer is
 // running tells the others so (flag 8), wears a glow and a HOTLAP tag on their screens, and no car
-// bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress.
+// bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress. The same for a car
+// just put on the start, while it stays in the start lane (flag 64, src/race/startlane.js), without glow or tag.
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml, fmtTime } from '../race/race.js';
@@ -45,6 +46,8 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const FRESH = 64;                // flag: just put on the start and still in the start lane (src/race/startlane.js)
+const THRU = HOT | FRESH;        // either: nobody bumps this car
 const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
 // A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
 // samples given to the piece in the share of its strength (alpha to coverage), so many pixels a sample more and so
@@ -284,7 +287,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -833,17 +836,23 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
 
   // push our car out of anyone it overlaps; boxes as oriented rectangles (separating axis test)
+  // A pair that passed through each other (o.thru) does not start bumping while the two still overlap: a car
+  // leaving the start lane, or ending its lap, inside another one would be thrown out of it sideways. They bump
+  // again once they have come apart.
   function collide(car) {
-    if (hotlap()) return;                                        // on a lap of our own: nobody can touch us
     if (STEALTH) return;                                         // they cannot see us, so nobody bumps
+    // on a lap of our own, or just put on the start and in its lane: nobody can touch us
+    const mine = hotlap() || fresh();
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     for (const o of others.values()) {
       const p = o.pose;
-      if (!p || (p[20] & HOT)) continue;                         // they are on a lap: we pass through them
+      if (!p) continue;
       if (o.flip) continue;                                      // a Rocket in the air on a kickflip: over us
-      if (racing(o.id)) continue;                                // in the race from the grid on, even before their flag arrives
       const dx = car.x - p[0], dz = car.z - p[1];
-      if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) continue;
+      if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) { o.thru = false; continue; }
+      // they are on a lap or in the start lane: we pass through them (and in the race from the grid on, even
+      // before their flag arrives)
+      if (mine || (p[20] & THRU) || racing(o.id)) { o.thru = true; continue; }
       const gx = Math.sin(p[3]), gz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
       const axes = [[fx, fz], [rx, rz], [gx, gz], [sx, sz]];
       let best = Infinity, nx = 0, nz = 0;
@@ -855,7 +864,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (pen <= 0) { best = -1; break; }
         if (pen < best) { best = pen; const sg = dist >= 0 ? 1 : -1; nx = ax * sg; nz = az * sg; }
       }
-      if (best <= 0) continue;
+      if (best <= 0) { o.thru = false; continue; }
+      if (o.thru) continue;
       // half the overlap each (the other browser moves the other car)
       const push = Math.min(best, 1.5) * 0.5 + 0.01;
       car.x += nx * push; car.z += nz * push;
@@ -912,9 +922,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const v3 = new THREE.Vector3();
   let nearest = 0;                 // metres from our car to the nearest other one, last frame
   // Ghost cars fade near ours (Martin 2026-11-24): when we pass through each other (a hotlap, the online race,
-  // the Raadi stage, where everybody starts from one spot), a car on our spot is drawn at FADE_MIN and comes
-  // back gradually, solid once FADE_AHEAD metres ahead or behind or FADE_SIDE to the side. Its name, HOTLAP tag
-  // and glow fade too, but only a touch (to TAG_MIN). Free driving, where cars bump, is as it was.
+  // the Raadi stage, where everybody starts from one spot, the start lane of a car just put on the start), a car
+  // on our spot is drawn at FADE_MIN and comes back gradually, solid once FADE_AHEAD metres ahead or behind or
+  // FADE_SIDE to the side. Its name, HOTLAP tag and glow fade too, but only a touch (to TAG_MIN). Free driving,
+  // where cars bump, is as it was.
   // A car's pieces share their materials with every other copy of that car (cars/models/index.js), so a fading
   // car gets see-through copies of its own, made the first time it comes close and kept; its lamp and soot
   // materials are its own already and are changed in place. See-through is another shader, compiled ahead
@@ -1070,7 +1081,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // Our car as a position for the others (and for a lap's replay, src/race/replay.js): the first STAMP values of
   // what goes out, unrounded (the sender rounds them to POSE_DEC decimals). hot: flag 8, the lap timer is running.
   const sendPose = new Float64Array(STAMP);
-  function poseNow(car, out, hot = false) {
+  function poseNow(car, out, hot = false, lane = false) {
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     out[0] = car.x; out[1] = car.z; out[2] = car.y; out[3] = car.yaw; out[4] = car.pitch; out[5] = car.roll;
     out[6] = car.vx * fx + car.vy * rx; out[7] = car.vx * fz + car.vy * rz; out[8] = car.steer; out[9] = car.brake > 0 ? 1 : 0; out[10] = car.reversing ? 1 : 0;
@@ -1081,9 +1092,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass; 64 a Rocket's BOOST)
+    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0);
     return out;
   }
   function update(car, dt, active) {
@@ -1095,7 +1106,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
       sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
-      const p = poseNow(car, sendPose, hotlap());
+      const p = poseNow(car, sendPose, hotlap(), fresh());
       const out = new Array(STAMP + 1);
       for (let k = 0; k < STAMP; k++) out[k] = Math.round(p[k] * POSE_SC[k]) / POSE_SC[k];
       // when this position was taken, by our own clock (ms within the minute; see addPose)
@@ -1106,7 +1117,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     fxList.length = 0;
     tagList.length = 0;
     const pulse = 0.7 + 0.3 * Math.sin(now * 4.5);
-    const ghostMe = hotlap(), me = active && car, racingMe = !!myId && racing(myId);
+    const ghostMe = hotlap() || fresh(), me = active && car, racingMe = !!myId && racing(myId);
     const cam = camera.position, detail = low() ? DETAIL_LOW : DETAIL, farMax = Math.min(FAR, camera.far);
     let near2 = Infinity, copied = false;
     const ds = dsBuf;
@@ -1168,8 +1179,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         // passing through each other and close: see-through (FADE_MIN on our spot, solid FADE_AHEAD / FADE_SIDE away)
         let a = 1;
         // (made ready ahead, while the car is still a little way off)
-        if (me && d < FADE_EARLY && !fadeWarm.has(o.car) && (ghostMe || (p[20] & HOT) || racing(o.id))) warmFade(o);
-        if (me && (ghostMe || (p[20] & HOT) || racing(o.id))) {
+        if (me && d < FADE_EARLY && !fadeWarm.has(o.car) && (ghostMe || (p[20] & THRU) || racing(o.id))) warmFade(o);
+        if (me && (ghostMe || (p[20] & THRU) || racing(o.id))) {
           const dx = p[0] - me.x, dz = p[1] - me.z, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
           const k = Math.max(Math.abs(dx * sy - dz * cy) / FADE_AHEAD, Math.abs(dx * cy + dz * sy) / FADE_SIDE);
           if (k < 1) {

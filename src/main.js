@@ -173,6 +173,7 @@ import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
 import { createRecorder } from './race/replay.js';
+import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;

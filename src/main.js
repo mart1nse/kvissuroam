@@ -2093,7 +2093,7 @@ function frame(ts) {
   mp.setDriving(((mode === 'drive' && !document.hidden && !watch?.active) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : watch?.active ? 'watch' : mode === 'drive' ? 'map' : 'garage', watch?.id || '');   // (the menu is the garage)
   // a car left standing with nobody at the controls: a countdown, then the garage (src/idlepark.js)
-  idlePark.update(mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost && !stageBusy() && !readyOn && !dropping && !respawning, ctl, car, pads.acted());
+  idlePark.update(mode === 'drive' && !watch?.active && !readyOn && !dropping && !respawning, ctl, pads.acted(), !!(raceMode?.holding || raceMode?.pin || stage?.pin || stage?.phase === 'count'));
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();

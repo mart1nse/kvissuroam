@@ -97,6 +97,14 @@ const TICK = 100;                                     // ms between bundles
 const POSE_FAR = 600, POSE_FAR_MS = 300;              // further than this from the receiver: about 3 a second
 const POSE_VFAR = 2000, POSE_VFAR_MS = 1000;          // and once a second this far
 const POSE_KEEP = 5000;                               // a car that has not sent for this long is left out
+// A car standing on the map with nobody at the controls, on a page from before the game sent such a car to the
+// garage itself (src/idlepark.js, 25 Nov; those pages say i=1 as they connect and are not judged here). The pages
+// left open for hours with a bus across the race road are exactly the ones that never reload (Martin's picture
+// three hours after that rule). Its position says nobody is there: no throttle, no brake, wheels straight.
+// After MAP_IDLE_MS of that the page's connection is closed as for an idle garage (4002) and it is kept out for
+// MAP_OUT_MS, twice as long each time up to MAP_OUT_MAX. Back in, it has MAP_PROBE_MS to touch a pedal or the
+// wheel: then it is as anyone again, otherwise out again. (MAP_IDLE_S and MAP_OUT_S on the Worker change the first two.)
+const MAP_IDLE_MS = 180000, MAP_PROBE_MS = 20000, MAP_OUT_MS = 60000, MAP_OUT_MAX = 15 * 60000;
 const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
@@ -412,6 +420,8 @@ export class Lobby extends DurableObject {
     this.bund = new WeakMap();    // socket -> takes bundles (from its hello; read from the attachment after a wake-up)
     this.sentTo = new WeakMap();  // socket -> Map(player id -> { n, t }): what that page has had of each car
     this.timer = 0;
+    this.parked = new Map();      // page (as waitKey) -> { n: times put off the map, until: kept out till then, back: let in again at }
+    this.idleAt = 0;              // when idleCars last looked
   }
   takesBundles(ws) {
     let b = this.bund.get(ws);
@@ -423,7 +433,9 @@ export class Lobby extends DurableObject {
     const now = Date.now();
     const j = JSON.stringify(p);
     const e = this.poses.get(id);
-    if (e) { e.p = p; e.j = j; e.t = now; e.n++; e.ws = ws; } else this.poses.set(id, { p, j, t: now, n: 1, ws });
+    // (act: when somebody was last at its controls, t0: on the map since; for idleCars)
+    const act = p[12] > 0.02 || p[9] > 0 || Math.abs(p[8]) > 0.02;
+    if (e) { e.p = p; e.j = j; e.t = now; e.n++; e.ws = ws; if (act) e.act = now; } else this.poses.set(id, { p, j, t: now, n: 1, ws, t0: now, act: act ? now : 0 });
     let one = null;
     for (const o of this.ctx.getWebSockets()) {
       if (o === ws || this.takesBundles(o)) continue;
@@ -431,6 +443,23 @@ export class Lobby extends DurableObject {
       try { o.send(one); } catch { /* closing */ }
     }
     if (!this.timer) this.timer = setInterval(() => { try { this.bundle(); } catch (err) { console.error('bundle', err); } }, TICK);
+  }
+  // cars left standing on the map by pages that do not park them themselves (see MAP_IDLE_MS): every 5 s
+  idleCars(now) {
+    const idleMs = (Number(this.env?.MAP_IDLE_S) || MAP_IDLE_MS / 1000) * 1000, outMs = (Number(this.env?.MAP_OUT_S) || MAP_OUT_MS / 1000) * 1000;
+    for (const [key, k] of this.parked) if (now > k.until + 3600000) this.parked.delete(key);
+    for (const [id, e] of this.poses) {
+      const a = e.ws.deserializeAttachment();
+      if (!a?.id || a.x || a.i || a.ghost) continue;
+      if (this.race.racing(id)) { e.t0 = now; continue; }          // (from the count to the flag: as if just arrived)
+      const key = a.pw ? `w|${a.pw}` : `i|${a.ip}`;
+      let k = this.parked.get(key);
+      if (k?.back && e.act > k.back) { this.parked.delete(key); k = null; }
+      if (now - Math.max(e.act, e.t0, k?.back || 0) < (k?.back ? Math.min(MAP_PROBE_MS, idleMs) : idleMs)) continue;
+      const n = (k?.n || 0) + 1;
+      if (this.parked.size < 2000) this.parked.set(key, { n, until: now + Math.min(outMs * 2 ** (n - 1), MAP_OUT_MAX), back: 0 });
+      this.release(e.ws, a, 4002, 'idle');
+    }
   }
   dropPose(ws, id) {
     const e = id && this.poses.get(id);
@@ -441,6 +470,7 @@ export class Lobby extends DurableObject {
     if (now - this.loadMin * 60000 >= 60000) this.loadTick(now);
     for (const [id, e] of this.poses) if (now - e.t > POSE_KEEP) this.poses.delete(id);
     if (!this.poses.size) { clearInterval(this.timer); this.timer = 0; return; }   // (nobody driving: the object may sleep)
+    if (now - this.idleAt >= 5000) { this.idleAt = now; this.idleCars(now); }
     const own = new Map();
     for (const e of this.poses.values()) own.set(e.ws, e);
     const frag = new Map();
@@ -796,6 +826,17 @@ export class Lobby extends DurableObject {
       const pw = wk.startsWith('w|') ? wk.slice(2) : '';
       let q = this.queue(now);
       if (!q.idx.has(wk) && this.waiting.has(wk)) { this.qc = null; q = this.queue(now); }   // (joined it since)
+      // a page whose idle car was put off the map (idleCars): kept out for a while, told as when the server is full
+      // (no place in the queue: it asks again in a minute or so). A reload brings the game's own rule: let in.
+      const pk = this.parked.get(wk), self = url.searchParams.get('i') === '1';
+      if (pk && self) this.parked.delete(wk);
+      else if (pk && now < pk.until) {
+        const pair = new WebSocketPair();
+        pair[1].accept();
+        pair[1].send(JSON.stringify({ t: 'full', max, q: 0, qn: 0 }));
+        pair[1].close(4001, 'full');
+        return new Response(null, { status: 101, webSocket: pair[0] });
+      } else if (pk) pk.back = now;
       const n = this.seats(max, pw), qi = q.idx.get(wk) ?? -1, free = max - n;
       // (its own connection coming back skips the queue: it had the place a moment ago)
       if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.list.length + q.added >= free))) {
@@ -816,7 +857,7 @@ export class Lobby extends DurableObject {
       this.loadTick(now);
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
-      pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}) });
+      pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}), ...(self ? { i: 1 } : {}) });
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -1051,7 +1092,7 @@ export class Lobby extends DurableObject {
       const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
       // (the plate: the one sent, or the one this socket had; a page that sends none keeps its cars' own)
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && ghost) this.ghostHello(id);

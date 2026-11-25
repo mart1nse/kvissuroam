@@ -1,8 +1,8 @@
 // A car left standing with nobody at the controls goes back to the garage (src/idlepark.js; Martin 25 Nov: buses
 // parked across the entrances and left there). With ?idle=6 the countdown comes after 6 s and lasts 5 s.
 // Checks, on a desktop and on a landscape phone: the countdown shows and the garage follows with its note; a key,
-// a mouse move or a touch calls the countdown off; a held key or a car moved by a test keeps it away; DRIVE puts
-// the car back where it stood.
+// a mouse move or a touch calls the countdown off; a held key keeps it away; a car that is moved about with nobody
+// at its controls (shoved by others, rolling down a slope) is still sent; DRIVE puts the car back where it stood.
 // Run with the dev server on 5198: node tools/idle-park-test.mjs [folder for pictures]
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -51,19 +51,19 @@ async function run(name, opts, touch) {
     await p.waitForTimeout(300);
     s = await state(p);
     if (s.toast || s.mode !== 'drive') fail(`a key did not call it off: ${JSON.stringify(s)}`);
-    // 3. a held key (the handbrake: the car stands), then a car moved by a test, each for longer than the whole wait
+    // 3. a held key (the handbrake: the car stands) for longer than the whole wait
     await p.keyboard.down('Space');
     await p.waitForTimeout(13000);
     s = await state(p);
     if (s.toast || s.mode !== 'drive') fail(`a held key was taken for nobody there: ${JSON.stringify(s)}`);
     await p.keyboard.up('Space');
-    await p.evaluate(() => { const c = __game.car, x = c.x, z = c.z, t0 = performance.now(); window.__seen = ''; (function tick() { const t = (performance.now() - t0) / 1000; if (t > 13) { __game.place({ x, z, yaw: c.yaw }); window.__moved = true; return; } requestAnimationFrame(tick); window.__seen ||= document.querySelector('#toast.show')?.textContent || ''; __game.place({ x: x + Math.sin(t) * 6, z, yaw: c.yaw }); })(); });
+    // 4. shoved about with nobody at the controls (as a bus left on the race road is): still the countdown
+    await p.evaluate(() => { const c = __game.car, x = c.x, z = c.z, t0 = performance.now(); window.__seen = ''; (function tick() { const t = (performance.now() - t0) / 1000; window.__seen ||= document.querySelector('#toast.show')?.textContent || ''; if (window.__seen || t > 13) { __game.place({ x, z, yaw: c.yaw }); window.__moved = true; return; } requestAnimationFrame(tick); __game.place({ x: x + Math.sin(t) * 6, z, yaw: c.yaw }); })(); });
     await until(p, () => window.__moved, 20000);
-    s = await state(p);
     const seen = await p.evaluate(() => window.__seen);
-    if (seen.startsWith('IDLE') || s.mode !== 'drive') fail(`a moving car was taken for a parked one: ${seen} ${JSON.stringify(s)}`);
+    if (!seen.startsWith('IDLE')) fail('a car shoved about was taken for a driven one');
   }
-  // 4. left alone again: the garage
+  // 5. left alone again: the garage
   const t0 = Date.now();
   if (!(await until(p, () => __game.mode === 'menu', 20000))) fail('not sent to the garage');
   await p.waitForTimeout(400);
@@ -72,7 +72,7 @@ async function run(name, opts, touch) {
   if (!s.note) fail('no note in the garage');
   const stood = s;
   await shot('garage');
-  // 5. not judged in the garage; DRIVE: back where it stood, the note gone
+  // 6. not judged in the garage; DRIVE: back where it stood, the note gone
   await p.waitForTimeout(12000);
   s = await state(p);
   if (s.mode !== 'menu' || s.toast) fail(`judged in the garage: ${JSON.stringify(s)}`);

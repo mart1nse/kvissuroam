@@ -385,7 +385,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     await nameReady;
     await ticketReady;
     // w: this page's own random id, so the server counts a page refused with SERVER FULL once however often it asks again
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}`;
+    // i: this page sends its own idle car to the garage (src/idlepark.js), so the server does not judge it
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}&i=1`;
     let sock;
     try { sock = new WebSocket(url); } catch { return schedule(); }
     ws = sock;

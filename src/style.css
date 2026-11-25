@@ -628,6 +628,9 @@ body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; li
 #people .who li > i, #people .me > i { display: inline-block; width: max(7px, .7em); height: max(7px, .7em); margin: 0 .45em .06em .05em; border-radius: 50%; vertical-align: middle; background: var(--c, var(--cyan)); box-shadow: 0 0 5px var(--c, var(--cyan)); }
 #people .who li.more { opacity: .6; }
 #roster li small { font-size: 9px; letter-spacing: .15em; margin-left: 4px; }
+/* (desktop: a name clicked once; a second click watches that car, Martin 2026-11-25) */
+#roster li.sel { color: var(--sun); }
+#roster li small.go { display: block; margin: 3px 0 0 17px; color: var(--cyan); opacity: .9; }
 #people .me { margin-top: 2px; font-size: .9em; color: #fff; opacity: .75; letter-spacing: .12em; }
 
 /* The track map on the start screen (Martin, 2026-11-18): the lap as a neon tube with a dot lapping

@@ -22,7 +22,18 @@ export const adsReady = posterImg.decode().catch(() => {});
 // posters on hand-built shelters (the Emajõe one on the race track): a mesh showing the poster, clickable
 // like the ones on the bus stops (busstops.js bindClicks)
 export const extraPosters = [];
-export function clickablePoster(mesh) { extraPosters.push({ mesh }); }
+export function clickablePoster(mesh, reach) { extraPosters.push({ mesh, reach }); }
+// a big TOREPOOD poster on a building (Kaubamaja, Tasku; Martin, 25 Nov): a w x h m plane showing the poster's
+// corner of the atlas, all of them with one material, clickable from further away than a shelter's (reach, m)
+let bigMat = null;
+export function posterPlane(w, h, reach = 90) {
+  const [u0, v0, u1, v1] = adCell(POSTER), geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv;
+  for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * (u1 - u0), v0 + uv.getY(k) * (v1 - v0));
+  const m = new THREE.Mesh(geo, bigMat ||= new THREE.MeshLambertMaterial({ map: adAtlas() }));
+  m.receiveShadow = true;
+  clickablePoster(m, reach);
+  return m;
+}
 function drawPoster(g) {
   g.drawImage(posterImg, 2 * AD_W, 2 * AD_H, 2 * AD_W, 2 * AD_H);
   posterImg = null;                  // (the atlas holds it now)

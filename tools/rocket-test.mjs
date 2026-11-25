@@ -213,8 +213,8 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
 {
   const D = 180 / Math.PI, STEP = 0.005;
   const spots = [[0, 0], [12.34, -56.7], [-340.2, 88.1], [5.5, 5.5], [1000.01, 2000.02], [77.7, -3.2], [-15.5, 410.9], [3.21, 9.87]];
-  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [] };
-  let endSum = 0;
+  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [], pause: [], steady: [], sliver: [] };
+  let endSum = 0, shortSum = 0; const pausedAt = [];
   for (const [x, z] of spots) {
     const w = world(), car = fresh(w, 60, 0);
     car.x = x; car.z = z; car.vx = 60 / 3.6;
@@ -223,6 +223,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     let over = 0, under = 0, swaps = 0, side = 0, maxStep = 0, prev = 0, sgn = 0, t0 = tE, tailUp = 0, dip = 0, orderOk = false;
     let pMin = 9, pMax = -9, burnUp = -9, fanMax = 0, fanBad = false, yawMax = 0, agree = 0, judged = 0;
     const halves = [], rolls = [], ds = [], runs = [[], [], [], []], since = [-1, -1, -1, -1];
+    const openT = [-1, -1, -1, -1]; let briefest = 9, quietT = -1, quietDeg = 0, pauses = 0, allT = -1, steady = 0, firstPause = -1, slowest = 1e9;
     for (let k = 0; k * STEP <= plan.tl; k++) {
       const t = k * STEP;
       flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
@@ -250,8 +251,20 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
         const lit = n[4 + i] > 0.15, free = t > 0.5 && t < plan.tb;
         if (lit && free && since[i] < 0) since[i] = t;
         if ((!lit || !free) && since[i] >= 0) { runs[i].push(t - since[i]); since[i] = -1; }
+        // (an opening from shut to shut, whatever its strength)
+        if (n[4 + i] > 0.02 && openT[i] < 0) openT[i] = t;
+        if (n[4 + i] <= 0.02 && openT[i] >= 0) { briefest = Math.min(briefest, t - openT[i]); openT[i] = -1; }
         if (n[4 + i] > 0.15) { fanMax = Math.max(fanMax, Math.abs(l[i])); if (Math.sign(l[i]) !== (i % 2 ? 1 : -1) || Math.abs(l[i]) > 1.5) fanBad = true; }
       }
+      // a pause: every valve shut for a moment while the car is well into its turn (and still turning: degrees a second)
+      const deg = a.roll * D, turning = deg > 20 && deg < 340, quiet = turning && Math.max(n[4], n[5], n[6], n[7], n[8], n[9]) < 0.05;
+      if (quiet && quietT < 0) { quietT = t; quietDeg = deg; }
+      if (quiet && k) slowest = Math.min(slowest, (a.roll - rolls[k - 1]) * D / STEP);
+      if (!quiet && quietT >= 0) { if (t - quietT >= 0.08) { pauses++; if (firstPause < 0) firstPause = quietDeg; } quietT = -1; }
+      // a long steady burn: all four corners blowing together in free flight
+      const all4 = t > 0.5 && t < plan.tb && Math.min(n[4], n[5], n[6], n[7]) > 0.25;
+      if (all4 && allT < 0) allT = t;
+      if (!all4 && allT >= 0) { steady = Math.max(steady, t - allT); allT = -1; }
     }
     // the body and the jets go together: where a side's pair clearly blows harder, the roll is being pushed that way
     for (let k = 4; k < rolls.length - 4; k++) {
@@ -261,7 +274,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     }
     const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * D, endP = (a.pitch - plan.pl) * D;
     const all = runs.flat(), short = all.filter((v) => v < 0.12).length, long = all.filter((v) => v > 0.25).length;
-    endSum += Math.abs(end);
+    endSum += Math.abs(end); shortSum += short; if (firstPause >= 0) pausedAt.push(firstPause);
     const fmt = (v, dec = 1) => `${at}: ${typeof v === 'number' ? v.toFixed(dec) : v}`;
     if (!(over > 8 && over < 20 && under < -2 && under > -10)) bad.over.push(fmt(`${over.toFixed(1)} over, ${(-under).toFixed(1)} under`));
     if (halves.length < 2) bad.swings.push(fmt(halves.length, 0));
@@ -274,11 +287,14 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     if (!orderOk) bad.order.push(at);
     if (!(pMax - pMin > 1 && pMax - pMin < 6)) bad.nod.push(fmt(pMax - pMin, 2));
     if (!(burnUp > 0.8 && burnUp < 4.5)) bad.nose.push(fmt(burnUp, 2));
-    if (!(judged > 100 && agree / judged > 0.9)) bad.sync.push(fmt(`${agree} of ${judged}`));
-    if (!(short >= 2 && long >= 2)) bad.bursts.push(fmt(`${short} short, ${long} long of ${all.length}`));
+    if (!(judged > 60 && agree / judged > 0.9)) bad.sync.push(fmt(`${agree} of ${judged}`));
+    if (!(short >= 1 && long >= 2)) bad.bursts.push(fmt(`${short} short, ${long} long of ${all.length}`));
+    if (!(pauses >= 1 && pauses <= 3 && slowest > 60)) bad.pause.push(fmt(`${pauses} pauses, turning at ${slowest.toFixed(0)} deg/s at the least`));
+    if (!(steady > 0.22)) bad.steady.push(fmt(steady, 2));
+    if (briefest < 0.035) bad.sliver.push(fmt(briefest, 3));
     if (!(fanMax > 0.8) || fanBad) bad.fan.push(fmt(fanMax * D, 0));
     if (!(yawMax > 0.3 && yawMax < 2.5)) bad.yaw.push(fmt(yawMax, 2));
-    if (verbose) console.log(`     ${at}: over ${over.toFixed(1)}, under ${(-under).toFixed(1)}, swings ${halves.map((v) => v.toFixed(2)).join(' ')} s, end ${end.toFixed(2)} / nose ${endP.toFixed(2)} deg, tail first by ${tailUp.toFixed(2)} m, nod ${(pMax - pMin).toFixed(1)} deg, burn nose-up ${burnUp.toFixed(1)} deg, jets with the body ${agree}/${judged}, bursts ${short} short ${long} long of ${all.length}, fan ${(fanMax * D).toFixed(0)} deg, yaw ${yawMax.toFixed(1)} deg`);
+    if (verbose) console.log(`     ${at}: over ${over.toFixed(1)}, under ${(-under).toFixed(1)}, swings ${halves.map((v) => v.toFixed(2)).join(' ')} s, end ${end.toFixed(2)} / nose ${endP.toFixed(2)} deg, tail first by ${tailUp.toFixed(2)} m, nod ${(pMax - pMin).toFixed(1)} deg, burn nose-up ${burnUp.toFixed(1)} deg, jets with the body ${agree}/${judged}, bursts ${short} short ${long} long of ${all.length}, ${pauses} pauses (first at ${firstPause.toFixed(0)} deg), steady burn ${steady.toFixed(2)} s, fan ${(fanMax * D).toFixed(0)} deg, yaw ${yawMax.toFixed(1)} deg`);
   }
   const none = (list) => list.length === 0, say = (list) => list.join('; ');
   check('at lift-off the tail leaves the ground first (10 to 25 cm ahead of the nose)', none(bad.tail), say(bad.tail));
@@ -293,6 +309,11 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...and swings a little from side to side', none(bad.yaw), say(bad.yaw));
   check('the jets push the way the body is being turned (9 times in 10 where both are clear)', none(bad.sync), say(bad.sync));
   check('...in short bursts and long ones', none(bad.bursts), say(bad.bursts));
+  // (Martin 25 Nov, on seeing it fly: fewer of the smallest bursts, a few longer ones, a pause here or there in the turn)
+  check('...the short ones fewer than they were (10.8 a flight before, now 3 to 8), and none a mere flicker', shortSum / spots.length >= 3 && shortSum / spots.length <= 8 && none(bad.sliver), `${(shortSum / spots.length).toFixed(1)} a flight ${say(bad.sliver)}`);
+  check('...with a long steady burn of all four corners in every flight', none(bad.steady), say(bad.steady));
+  check('...and a pause or two in the turn with every valve shut, the car turning on', none(bad.pause), say(bad.pause));
+  check('...at a different place of the turn in each flight', pausedAt.length === spots.length && Math.max(...pausedAt) - Math.min(...pausedAt) > 120 && new Set(pausedAt.map((v) => Math.round(v / 10))).size >= 5, pausedAt.map((v) => v.toFixed(0)).join(', ') + ' deg');
   check('...fanned out: each corner jet leans to its own side, at times far out', none(bad.fan), say(bad.fan));
   check('...and the four tail jets stay shut for the whole flight', bad.rear === 0);
 }

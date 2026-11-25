@@ -189,7 +189,23 @@ function fight(p) {
     kick: (3.2 + 1.4 * rnd(h, 4)) * DEG,          // the nose dips this far as the tail kicks up first
     nose: (1 + 0.8 * rnd(h, 5)) * DEG,            // ...and is held this far up in the landing burn
     flut: [0, 1, 2, 3].map((i) => TURN * (5 + 4 * rnd(h, 40 + i))), drift: [0, 1, 2, 3].map((i) => TURN * (0.6 + 0.9 * rnd(h, 44 + i))),
+    acts: [],
   };
+  // The jets' own rhythm in free flight (Martin 25 Nov, on seeing it fly: fewer of the smallest bursts, "a few longer
+  // ones and perhaps a pause here or there when the car rotates, every time in a bit different place of the
+  // rotation"). The time between the lift-off push and the landing burn is cut into stretches of three kinds that
+  // follow each other: the bursts that answer the body, a long steady burn, and a pause with every valve shut while
+  // the car turns on by itself. One pause is somewhere in the turn itself, at the flight's own place, and the rest
+  // is laid out from it both ways, each stretch of its own length. A long burn is two unequal pairs across the
+  // corners (front-left with rear-right, the other two), so it turns nothing: the roll stays as even as it was.
+  // [from, to, kind (1 long burn, 2 pause), how hard the one pair blows, the other]
+  const way = rnd(h, 51) < 0.5 ? 1 : 2, t0 = LIFT_T + 0.06, t1 = p.tb - 0.04;
+  const len = (kind, i) => { const r = rnd(h, 53 + i * 3); return kind === 0 ? 0.25 + 0.3 * r : kind === 1 ? 0.28 + 0.26 * r : 0.15 + 0.13 * r; };
+  const add = (a, b, kind, i) => { if (kind && b - a > 0.12) f.acts.push([a, b, kind, 0.4 + 0.35 * rnd(h, 54 + i * 3), 0.4 + 0.35 * rnd(h, 55 + i * 3)]); };
+  const mid = ROLL_T0 + T * (0.24 + 0.52 * rnd(h, 50)), half = len(2, 0) / 2;
+  add(mid - half, mid + half, 2, 0);
+  for (let t = mid + half, kind = (2 + way) % 3, i = 1; i < 8 && t < t1; i++, kind = (kind + way) % 3) { const e = Math.min(t1, t + len(kind, i)); add(t, e, kind, i); t = e; }
+  for (let t = mid - half, kind = (5 - way) % 3, i = 8; i < 15 && t > t0; i++, kind = (kind + 3 - way) % 3) { const a = Math.max(t0, t - len(kind, i)); add(a, t, kind, i); t = a; }
   FIGHTS.set(p, f);
   return f;
 }
@@ -235,7 +251,9 @@ function pitchKick(p, f, t) {
 // the nose's swinging from side to side (radians): the same trembling, gone by the touchdown
 const yawPlay = (f, t) => smooth((t - 0.2) / 0.4) * (1 - smooth((t - (f.tl - 0.4)) / 0.4)) * sum3(f.yaw, Math.min(t, f.tl));
 // how hard something is being turned just then (the second difference of one of the curves above, per s2)
-const PLAY_D = 0.02;
+// (taken over a little more than a frame or two: a valve answers what the body does over some hundredths of a
+// second, not every quiver of it)
+const PLAY_D = 0.03;
 const pushOf = (fn, f, t) => (fn(f, t + PLAY_D) - 2 * fn(f, t) + fn(f, t - PLAY_D)) / (PLAY_D * PLAY_D);
 // a valve that answers a push: shut for a small one, open quickly for more (the short and the long bursts)
 const burst = (x, dead) => { const a = Math.abs(x); return a <= dead ? 0 : Math.sign(x) * Math.min(1, (a - dead) / (0.4 * (1 - dead))); };
@@ -265,12 +283,60 @@ export function flightPose(p, t, out) {
 // (when given), how far each of the four corner jets is swung out sideways (radians, + to the car's right): in
 // the stills of Tesla's film the jets fan out, one straight down beside one blowing out to the side.
 const HUNT_REF = 25, NOD_REF = 5, SWING_REF = 5;   // rad/s2 that opens a valve fully: the roll's hunt, the nodding, the nose's swing
+const HUNT_DEAD = 0.14, NOD_DEAD = 0.18, SWING_DEAD = 0.36;   // ...and the share of it a valve stays shut for (larger: fewer of the smallest bursts)
+const VALVE_T = 0.04;                              // a long burn comes on and a pause sets in over this long (s)
 const SPLAY = 0.2, SWING_AIR = 1.15, SWING_LIFT = 0.5;   // the corner jets lean out this much at rest, and this much more when their side gives way (rad)
+const TAB_DT = 0.01;                               // the valves' table has a row this often (s)
+const SLIVER = 1, GAP = 1;                         // a valve never opens for less than twice this many rows, nor shuts for less than twice this many
+const FAINT = 0.2;                                 // ...nor opens at all for less than this at its most
 export function flightNozzles(p, t, noz, spec, lean) {
   noz.fill(0);
   if (lean) lean.fill(0);
   if (t >= p.tl) return noz;
-  const f = fight(p);
+  const f = fight(p), tab = f.tab || (f.tab = valveTable(p, f, spec));
+  const x = Math.max(0, t) / TAB_DT, k = Math.min(tab.length / TAB_W - 2, Math.floor(x)), u = Math.min(1, x - k), o = k * TAB_W;
+  for (let i = 0; i < 6; i++) noz[NOZ_DOWN + i] = tab[o + i] + (tab[o + TAB_W + i] - tab[o + i]) * u;
+  if (lean) for (let i = 0; i < 4; i++) lean[i] = tab[o + 6 + i] + (tab[o + TAB_W + 6 + i] - tab[o + 6 + i]) * u;
+  // (the four at the tail stay shut in a flight: they are BOOST's, and blow only when they push. Martin 25 Nov)
+  return noz;
+}
+// A flight's valves, worked out once (half a millisecond) when its jets are first asked for: what the flight
+// asks of the four corner jets and the two at the nose a hundred times a second, and how far each corner jet leans
+// out. A valve opens for a burst, not for a sliver of one (where two stretches of the rhythm meet, or a push barely
+// gets over its threshold), and does not blink shut in the middle of one: openings shorter than 0.02 s or
+// fainter than a fifth are taken out and gaps shorter than 0.02 s filled, and the rest is as asked.
+const TAB_W = 10;
+function valveTable(p, f, spec) {
+  const n = Math.ceil(p.tl / TAB_DT) + 1, tab = new Float32Array(n * TAB_W), noz = new Float32Array(NOZ), lean = new Float32Array(4);
+  for (let k = 0; k < n; k++) {
+    valves(p, f, Math.min(p.tl - 1e-4, k * TAB_DT), noz, spec, lean);
+    for (let i = 0; i < 6; i++) tab[k * TAB_W + i] = noz[NOZ_DOWN + i];
+    for (let i = 0; i < 4; i++) tab[k * TAB_W + 6 + i] = lean[i];
+  }
+  const a = new Float32Array(n), b = new Float32Array(n);
+  // (the least, or the most, of a column's values within w rows either way)
+  const pass = (src, dst, w, most) => {
+    for (let k = 0; k < n; k++) {
+      let v = src[k];
+      for (let j = Math.max(0, k - w); j <= Math.min(n - 1, k + w); j++) v = most ? Math.max(v, src[j]) : Math.min(v, src[j]);
+      dst[k] = v;
+    }
+  };
+  for (let i = 0; i < 6; i++) {
+    for (let k = 0; k < n; k++) a[k] = tab[k * TAB_W + i];
+    pass(a, b, SLIVER, false); pass(b, a, SLIVER, true);
+    pass(a, b, GAP, true); pass(b, a, GAP, false);
+    // (and an opening that never gets anywhere, a faint flicker, is no opening)
+    for (let k = 0, from = -1, top = 0; k <= n; k++) {
+      const v = k < n ? a[k] : 0;
+      if (v > 0.02) { if (from < 0) from = k; top = Math.max(top, v); } else if (from >= 0) { if (top < FAINT) a.fill(0, from, k); from = -1; top = 0; }
+    }
+    for (let k = 0; k < n; k++) tab[k * TAB_W + i] = a[k];
+  }
+  return tab;
+}
+function valves(p, f, t, noz, spec, lean) {
+  noz.fill(0);
   heightAt(p, t, tmpY);
   // the corner nozzles: whatever holds the car up against gravity beyond free fall...
   const lift = t < LIFT_T || t > p.tb ? clamp01((spec.mass * (tmpY[2] + G)) / spec.thrusters.down) : 0;
@@ -279,9 +345,17 @@ export function flightNozzles(p, t, noz, spec, lean) {
   // one, on whichever side the body is being pushed back from just then
   const u = (t - ROLL_T0) / f.T;
   const main = u > 0 && u < 1 ? (u * (60 + u * (-180 + 120 * u))) / 5.7735 : 0;
-  const spin = Math.max(-1, Math.min(1, 0.75 * main + burst((pushOf(rollPlay, f, t) * TURN) / HUNT_REF, 0.12))) * p.side;   // + turning it to the right
+  const spin = Math.max(-1, Math.min(1, 0.75 * main + burst((pushOf(rollPlay, f, t) * TURN) / HUNT_REF, HUNT_DEAD))) * p.side;   // + turning it to the right
   // the nodding: the front pair lifts the nose, the rear pair the tail
-  const nod = burst(pushOf(pitchPlay, f, t) / NOD_REF, 0.15);
+  const nod = burst(pushOf(pitchPlay, f, t) / NOD_REF, NOD_DEAD);
+  // the stretch of the flight's rhythm this moment is in: a long burn's two pairs, or a pause (quiet: 1 = all shut)
+  let longA = 0, longB = 0, quiet = 0;
+  for (const a of f.acts) {
+    if (t <= a[0] || t >= a[1]) continue;
+    const e = smooth((t - a[0]) / VALVE_T) * smooth((a[1] - t) / VALVE_T);
+    if (a[2] === 1) { longA = e * a[3]; longB = e * a[4]; } else quiet = e;
+  }
+  const busy = Math.max(longA, longB) > 0 ? 0.45 : 1;
   for (let i = 0; i < 4; i++) {
     const left = i % 2 === 0, front = i < 2;
     const push = Math.max(0, left ? spin : -spin), ease = Math.max(0, left ? -spin : spin), pn = front ? nod : -nod;
@@ -289,17 +363,18 @@ export function flightNozzles(p, t, noz, spec, lean) {
     const open = front ? smooth((t - 0.05) / 0.09) : 1;
     // while they hold the car up, the side that gives way eases off and swings out; in free flight the pushing
     // side blows down and the other side blows out sideways (it pushes the floor across, the same way round)
-    const k = lift * open * (1 - 0.5 * ease) * (1 + 0.3 * pn) + (1 - lift) * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn));
+    // (in a long burn the bursts ride on it, smaller; in a pause there is nothing)
+    const free = (1 - quiet) * ((i === 0 || i === 3 ? longA : longB) + busy * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn)));
+    // (a valve does not dribble: what would be a faint flicker is nothing)
+    const k = lift * open * (1 - 0.5 * ease) * (1 + 0.3 * pn) + (1 - lift) * free * smooth((free - 0.08) / 0.14);
     noz[NOZ_DOWN + i] = clamp01(k * (0.9 + 0.1 * Math.sin(f.flut[i] * t + i * 1.7)));
-    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + ease * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift)) + 0.07 * Math.sin(f.drift[i] * t + i * 2.3);
+    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + ease * busy * (1 - quiet) * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift)) + 0.07 * Math.sin(f.drift[i] * t + i * 2.3);
   }
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
   // and after that answer its trembling
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
-  const sw = burst(pushOf(yawPlay, f, t) / SWING_REF, 0.3);
+  const sw = (1 - quiet) * burst(pushOf(yawPlay, f, t) / SWING_REF, SWING_DEAD);
   if (sw) { const i = sw > 0 ? NOZ_YAW : NOZ_YAW + 1; noz[i] = Math.max(noz[i], 0.7 * Math.abs(sw)); }   // (+ yaw is to the right: the left one pushes the nose right)
-  // (the four at the tail stay shut in a flight: they are BOOST's, and blow only when they push. Martin 25 Nov)
-  return noz;
 }
 
 // the ground under the four wheels of a car standing at (x, z, yaw): mean height, pitch and roll, as the physics has them

@@ -339,6 +339,7 @@ body.touch .desktop-only { display: none; }
 #kofi .ln { font-size: .8em; font-style: italic; font-weight: 600; letter-spacing: .04em; opacity: .92; }
 #kofi .lb { font-size: 1.3em; font-style: italic; font-weight: 900; letter-spacing: .2em; margin-right: -.2em; }
 #kofi .out { flex: none; align-self: flex-start; width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: .8; margin: .1em -.4em 0 .1em; }
+#kofi .out.down { align-self: center; width: 1.15em; height: 1.15em; stroke-width: 1.6; opacity: .9; stroke-linejoin: round; margin: 0 -.35em 0 .2em; }
 #kofi:active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) {
   #kofi:hover { box-shadow: 0 0 30px rgba(255, 43, 214, .9), inset 0 0 14px rgba(255, 255, 255, .4); }

@@ -183,6 +183,8 @@ export function createHud(world) {
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => elToast.classList.remove('show'), ms);
     },
+    // a message taken down early, if it is still the one showing (its first words)
+    untoast(start) { if (elToast.textContent.startsWith(start)) { clearTimeout(toastTimer); elToast.classList.remove('show'); } },
     // The needle moves every frame (the numbers only a few times a second), eased like a real needle
     // with a little mass, so the limiter bounce and the shifts sweep instead of jumping.
     needle(car, dt) {

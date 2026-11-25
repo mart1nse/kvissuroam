@@ -509,6 +509,51 @@ export const CARS = {
     limiter: null,              // no 180 km/h home-market cap: 5th runs out of revs at about 250
     ref: { zeroTo100: 4.7, top: 248, powerKw: 227 },   // the quickest road tests (they run 4.7 to 5.3 s); about 248 km/h unrestricted; power as measured, not the 206 kW on paper
   },
+  rocket: {
+    // 2028 Tesla Roadster Rocket (Martin 2026-11-25): drives like the Roadster Performance (0-100 km/h in 1.6 s on
+    // four underbody suction fans), plus ten cold-gas thrusters fed from one tank: BOOST and the kickflip
+    // jump, see thrust.js. Tesla has published neither mass, power nor size: those are estimates, and the
+    // wheelbase, track and size are the stand-in body's until the scanned one arrives.
+    tyreWidth: [0.245, 0.325],   // m, front and rear (for the tyre marks)
+    id: 'rocket',
+    name: 'Tesla Roadster Rocket',
+    short: 'Roadster Rocket',
+    tag: 'Rocket',
+    year: 2028,
+    blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
+    mass: 1950,                 // estimate, with driver and both gas tanks full: one seat, the second tank in the other's place
+    wheelbase: 2.65,
+    track: 1.64,
+    cgFront: 0.52,
+    cgHeight: 0.42,             // battery in the floor
+    wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
+    cdA: 0.31 * 1.95,
+    drive: 'awd',
+    rearShare: 0.6,             // one motor in front, two behind
+    grip: 1.2,
+    tc: 1,                      // the motors hold the tyres at their grip limit while the wheel is straight
+    tcSlip: 1.5,
+    // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
+    fanDown: 12000, squat: 0.5,
+    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
+    // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
+    // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty
+    thrusters: { rear: 80000, down: 64000, yaw: 20000, gasKg: 250 },
+    engine: {
+      type: 'ev',
+      maxPowerKw: 1000,
+      maxWheelForce: 44000,
+      maxRpm: 20000,
+    },
+    gears: [9.0],
+    reverse: 9.0,
+    finalDrive: 1.0,
+    efficiency: 0.93,
+    shiftTime: 0,
+    limiter: 340,               // "over 210 mph" on the motors; BOOST takes it on to about 400
+    abs: 0.5,
+    ref: { zeroTo100: 1.6, top: 340, powerKw: 1000 },
+  },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks
     id: 'bus',
@@ -575,12 +620,16 @@ for (const s of Object.values(CARS)) {
   for (const [rpm, nm] of e.torque) if (rpm <= e.redline && rpm * nm > best) { best = rpm * nm; e.hbRevs = rpm; }
 }
 
-export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'bus'];
+export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'rocket', 'bus'];
+
+// Cars nobody is shown yet (Martin 2026-11-25: the Rocket is hidden from all until he says): not in the garage,
+// not on the lap board, not accepted by the server. Stealth mode (?off=100, src/net/stealth.js) drives them.
+export const HIDDEN_CARS = ['rocket'];
 
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [
   { name: 'EVERYDAY', ids: ['passat', 'crv', 'mazda6', 'rav4'] },
-  { name: 'ELECTRIC', ids: ['enyaq', 'bz4x'] },
+  { name: 'ELECTRIC', ids: ['enyaq', 'bz4x', 'rocket'] },
   { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt', 'impreza'] },
   { name: 'LOCAL HEROES', ids: ['w201', 'audi200', 'bus'] },   // the old Merc, the Audi wagon and the line 8 bus
 ];

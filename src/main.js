@@ -9,7 +9,8 @@ import { createHitches, outside } from './hitches.js';
 import { skinLog } from './world/houseskin.js';
 import { warm as warmer } from './warm.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
-import { CARS, CAR_ORDER, CAR_GROUPS } from './cars/specs.js';
+import { CARS, CAR_ORDER as CAR_ORDER_ALL, CAR_GROUPS as CAR_GROUPS_ALL, HIDDEN_CARS } from './cars/specs.js';
+import { STEALTH } from './net/stealth.js';
 import { createGarage } from './garage.js';
 import { createCar, stepCar, resetCar, speedKmh, shiftGear, setDonutHelp, setTurnIn, setInward, setLaunch } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
@@ -142,6 +143,9 @@ import { jakobiLaiWalls, jakobiLaiVectors } from './race/jakobilai.js';
 import { realStreetNames } from './world/streetnames.js';
 import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
+import { createPlumes } from './cars/plumes.js';
+import { createRocketUi } from './rocketui.js';
+import { refillTank } from './cars/thrust.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
@@ -173,6 +177,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createIdlePark } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
@@ -225,7 +230,11 @@ if (xlow) {
 }
 
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.software && !xlow, powerPreference: 'high-performance' });
+// (?aatest: edge smoothing also when drawn in software, for test pictures: tools/ghost-fade-shots.mjs)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: (!isTouch && !gpu.software && !xlow) || params.has('aatest'), powerPreference: 'high-performance' });
+// samples of the picture's edge smoothing, 0 without (asked now, with the picture itself still the place drawn to):
+// how a see-through ghost car is drawn, see setFade in net/multiplayer.js
+const aaSamples = (() => { try { const gl = renderer.getContext(); return gl.getContextAttributes()?.antialias ? gl.getParameter(gl.SAMPLES) | 0 : 0; } catch { return 0; } })();
 // pictures of queued work go to the graphics card one by one (on phones as their small copy: see phonetex.js)
 const sendTex = (tex) => { shrinker?.texture(tex); renderer.initTexture(tex); };
 jobs.setUploader(sendTex);
@@ -396,12 +405,13 @@ const input = createInput(document.body);
 // Game controllers (desktop only): gradual throttle, brake and steering from a pad or a wheel. The one
 // touched last drives unless the options say KEYBOARD or CONTROLLER (src/controls/pads.js).
 const pads = createPads({ enabled: !isTouch, toast: (t, ms) => hud?.toast(t, ms) });
-const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyS', 'KeyD']);
+const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'KeyQ', 'KeyX']);
 addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === 'KeyA' && input.wasd)) pads.keyUsed(); }, true);
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
 let kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
+let rocketUi = null, plumes = null;               // the thrusters' tank on screen (src/rocketui.js)
 // thumbs up between players: a neon sign in the receiver's back window, then a small thumb in its row there
 // (bags: the cars near with thumbs received this session, ours too; colours as each sender's dot in our list)
 const kudosBags = [];
@@ -437,7 +447,12 @@ let roadFix = null;                 // what src/world/roadprops.js moved and lef
 let propThin = null;                // the crowded lights and poles src/world/propspacing.js left out (for tests)
 let dropping = false;
 let car = null, model = null, carId = localStorage.getItem('kvissuroam.car') || 'w201';
-if (!CARS[carId]) carId = 'w201';
+// (cars not shown to anyone yet, HIDDEN_CARS in specs.js: only in stealth mode, ?off=100)
+// (and on a test server on this computer with ?hidden=1: tools/rocket-online-test.mjs)
+const showHidden = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).get('hidden') === '1';
+const carShown = (id) => STEALTH || showHidden || !HIDDEN_CARS.includes(id);
+const CAR_ORDER = CAR_ORDER_ALL.filter(carShown), CAR_GROUPS = CAR_GROUPS_ALL.map((g) => ({ ...g, ids: g.ids.filter(carShown) })).filter((g) => g.ids.length);
+if (!CARS[carId] || !carShown(carId)) carId = 'w201';
 let mode = 'loading';            // loading | menu | drive
 let buildCarModel = null, carModels = null;
 let startPose;
@@ -883,6 +898,10 @@ async function boot() {
   startSpots = startSlots(startTrack, startPose);
   lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
+  rocketUi = createRocketUi({ pad: $('#rocketpad'), bar: $('#thrust'), touch: isTouch, keys: () => {
+    const a = ctl === pads.state ? pads.active : null;
+    return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
+  } });
   skids = createSkidMarks(world);
   skids.setGrass(grassMarks);
   skids.setSun(lights.sunOffset);
@@ -890,6 +909,8 @@ async function boot() {
   smoke = createSmoke(world);
   applyFx();
   scene.add(smoke.points);
+  plumes = createPlumes();
+  scene.add(plumes.mesh);
   const chimed = {};
   mp = createMultiplayer({
     scene, camera, toast: (t, ms) => hud.toast(t, ms),
@@ -908,6 +929,7 @@ async function boot() {
     stage: RAADI,
     // (a nearby ghost car's see-through shader, compiled before it is first used)
     warm: (obj) => warmer.ready(obj),
+    samples: aaSamples,
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
@@ -968,7 +990,11 @@ async function boot() {
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
     onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
-    onEvent: (k, cps) => { stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k); },
+    onEvent: (k, cps) => {
+      stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
+      // (a Rocket starts every timed lap of its own with a full tank, so laps compare; in a race the tank is filled at the lights only)
+      if (k === 'start' && car.rocket && !raceMode?.ghost) refillTank(car.spec.id);
+    },
     refFor: (id, cp) => mp.refFor(id, cp),
     bestFor: (id) => {
       const net = mp.bestFor(id);
@@ -1151,6 +1177,7 @@ function freeModel(group) {
   });
 }
 function setCar(id, now = false) {
+  if (!CARS[id] || !carShown(id)) return;
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
   // (behind the opening drone flight the car isn't on screen, so picking one only marks it: it is built
@@ -1221,6 +1248,7 @@ function startDriving() {
     return;
   }
   if (readyWait) { readyWait = 0; showReady(); }
+  $('#idlenote').classList.add('hidden');
   shadersReady();                                    // (where nothing waited for them: made ready from here on)
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
@@ -1327,6 +1355,22 @@ function openGarage() {
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
   car.vx = car.vy = car.yawRate = 0;
 }
+
+// A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
+// (src/idlepark.js; ?idle=<seconds> for trying it out, ?idle=0 never). The garage says why until the next DRIVE.
+// (an automated test run is never judged unless it asks: many of them leave a car standing for minutes)
+const idleS = params.has('idle') ? +params.get('idle') || Infinity : navigator.webdriver ? Infinity : undefined;
+const idlePark = createIdlePark({
+  idle: idleS, warn: idleS < 30 ? 5 : undefined,
+  show: (n) => hud.toast(`IDLE · BACK TO GARAGE IN ${n}`, 1600),
+  hide: () => hud.untoast('IDLE · '),
+  park() {
+    stats.count('idle');
+    closeOverlays();
+    openGarage();
+    $('#idlenote').classList.remove('hidden');
+  },
+});
 
 // A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
 // like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
@@ -1870,6 +1914,8 @@ let photos = null, treesHidden = false;
 let shrinkTick = 0, tileTimer = 0, hudTimer = 0, elapsed = 0, mapTimer = 0;
 const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
+const aloft = {};                  // our car as the things on the ground see it while it flies a kickflip
+let rocketOff = false, flipOff = false;   // the thrusters' buttons do nothing just now (waiting for a start); no kickflip (a race, a timed lap)
 
 // Coming back from another tab: the first frames arrive late and unevenly while the browser warms
 // up again. Don't count them as a struggling device, and ease the step size back in instead of
@@ -1973,6 +2019,14 @@ function frame(ts) {
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
     car.gridHold = !!(raceMode?.pin || stage?.pin);
+    // (a car with thrusters, Martin 2026-11-25: in a race, on a timed lap and on the Raadi stage BOOST works,
+    // to be spent where it pays, and FLIP does not; neither does while the car waits for its start, where
+    // the tank is filled so that everybody sets off with the same)
+    if (car.rocket) {
+      ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
+      ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
+      if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
+    }
     if (mode === 'drive' && !watch?.active) stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
     else {
       // choosing a car: let it settle on its springs but not roll or creep away
@@ -1984,19 +2038,26 @@ function frame(ts) {
     const pin = raceMode?.pin || stage?.pin;
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     lane?.update(car);
+    // (a kickflip in flight, src/cars/thrust.js: the car is over the things it would knock into, which only
+    // know where it is on the map, so for them it is far overhead; the others get the flight's plan once)
+    // (low over the ground, at lift-off and coming down, it still knocks over what stands there)
+    const hitCar = car.rocket?.flight && car.rocket.up > 1.5 ? Object.assign(aloft, car, { y: car.y + 100 }) : car;
+    if (car.rocket?.launched) { mp.sendFlip(car.rocket.launched); car.rocket.launched = null; }
+    // (a flight that met a house, a tree or a bank: the others stop flying its plan and see it fall)
+    if (car.rocket?.crashed) { mp.sendFlip(null); car.rocket.crashed = false; }
     // (what our car knocks over and bumps into: not while it waits for a spectator)
     if (!watch?.active) {
       // (behind the menu and in the garage the others do not see our car, so nobody pushes it: it stays on the
       // start's spot until DRIVE finds it a free one)
-      if (mode === 'drive') mp.collide(car);
-      trackside.collide(car);
-      props.update(car, dt);
-      updateShelters(car, dt, audio);           // bus shelters: shattered glass, bent frames
-      janese.update(car, dt);
-      aksi.update(car, dt);
-      if (orident.info()) orident.update(car, dt, audio);          // (built: its glass corner breaks, every frame)
-      discgolf.update(car, dt);
-      updateFences(car, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
+      if (mode === 'drive') mp.collide(hitCar);
+      trackside.collide(hitCar);
+      props.update(hitCar, dt);
+      updateShelters(hitCar, dt, audio);           // bus shelters: shattered glass, bent frames
+      janese.update(hitCar, dt);
+      aksi.update(hitCar, dt);
+      if (orident.info()) orident.update(hitCar, dt, audio);          // (built: its glass corner breaks, every frame)
+      discgolf.update(hitCar, dt);
+      updateFences(hitCar, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
     }
     warmer.scope(() => parked.update(car, dt, camera.position));
     busStops?.update(WV || car);
@@ -2019,6 +2080,7 @@ function frame(ts) {
     skids.updateOthers(mp.remotes(), WV || car);
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
+  plumes.update(mode === 'drive' && !watch?.active ? car : null, mp.remotes(), camera.position, dt);
   // (a spectator sends no position: the others do not see the parked car meanwhile)
   const n0 = performance.now();
   mp.update(car, dt, mode === 'drive' && !watch?.active);
@@ -2028,6 +2090,8 @@ function frame(ts) {
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
   mp.setDriving(((mode === 'drive' && !document.hidden && !watch?.active) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : watch?.active ? 'watch' : mode === 'drive' ? 'map' : 'garage', watch?.id || '');   // (the menu is the garage)
+  // a car left standing with nobody at the controls: a countdown, then the garage (src/idlepark.js)
+  idlePark.update(mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost && !stageBusy() && !readyOn && !dropping && !respawning, ctl, car, pads.acted());
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();
@@ -2284,6 +2348,7 @@ function frame(ts) {
   if (mode === 'drive' && hudTimer <= 0) { hudTimer = 0.06; hud.update(hc); }
   if (mode === 'drive') hud.needle(hc, dt);
   showPedals();
+  rocketUi.update(mode === 'drive' && !watch?.active ? car : null, rocketOff, flipOff);
   audio.update(car, mode === 'drive' && !bigmap.isOpen && !watch?.active);
   audio.updateRemotes(mp.remotes(), camera, mode === 'drive' && !bigmap.isOpen);
   audio.updateSpace(world, car, camera, dt, mode === 'drive' && !bigmap.isOpen && !watch?.active);

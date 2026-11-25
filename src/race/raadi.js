@@ -1003,7 +1003,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     showAgain();
     onRun?.('cancel');
   }
-  function showAgain() { st.againUntil = performance.now() + 15000; again.classList.remove('hidden'); }
+  // (Martin 25 Nov: gone sooner, 6 s, and more see-through; it fades out over its last seconds, style.css)
+  function showAgain() { st.againUntil = performance.now() + 6000; again.classList.remove('hidden'); }
   // the column of light over the start spot: one open cylinder, seen from far (no fog), while no run is on
   let beam = null;
   // (made through the work queue, so warm.js holds it back unseen until its shader and picture are on the card)

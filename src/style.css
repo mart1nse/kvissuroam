@@ -351,7 +351,7 @@ body.touch .desktop-only { display: none; }
   width: min(420px, calc(100vw - 28px)); height: min(730px, calc(100% - 2 * max(12px, env(safe-area-inset-top))));
   display: flex; flex-direction: column; border-radius: 1.15em; overflow: hidden; text-align: left;
   font-size: clamp(10px, 1.05vw, 14px);
-  background: rgba(18, 6, 43, .94); box-shadow: 0 0 28px rgba(255, 43, 214, .5), 0 10px 40px rgba(0, 0, 0, .5);
+  background: #160733; box-shadow: 0 0 28px rgba(255, 43, 214, .5), 0 10px 40px rgba(0, 0, 0, .5);
   animation: kofigrow .24s cubic-bezier(.2, .8, .2, 1);
 }
 @keyframes kofigrow { from { clip-path: inset(0 calc(100% - var(--bw, 200px)) calc(100% - var(--bh, 50px)) 0 round 1.15em); } to { clip-path: inset(0 0 0 0 round 1.15em); } }
@@ -371,7 +371,10 @@ body.touch .desktop-only { display: none; }
 #kofipanel iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity .25s; touch-action: auto; }
 #kofipanel.ready iframe { opacity: 1; }
 #kofipanel .wait { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 28px; letter-spacing: .2em; color: var(--violet); }
-@media (hover: hover) and (pointer: fine) { #kofipanel .head a:hover { opacity: 1; background: rgba(18, 6, 43, .45); } #kofipanel .head .x:hover { background: rgba(18, 6, 43, .6); } }
+#kofipanel .apple { flex: none; display: flex; align-items: center; justify-content: center; gap: .4em; margin: 0 6px 6px; padding: .75em; border-radius: .8em;
+  font-size: .9em; font-weight: 700; letter-spacing: .04em; color: #fff; text-decoration: none; background: #2c1658; }
+#kofipanel .apple svg { width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+@media (hover: hover) and (pointer: fine) { #kofipanel .apple:hover { background: #3c1f74; } #kofipanel .head a:hover { opacity: 1; background: rgba(18, 6, 43, .45); } #kofipanel .head .x:hover { background: rgba(18, 6, 43, .6); } }
 /* a phone on its side: the whole height, wider */
 @media (max-height: 430px) {
   #kofipanel { top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); height: auto; width: min(440px, 64vw); font-size: 10px; }

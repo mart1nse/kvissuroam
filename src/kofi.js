@@ -12,6 +12,9 @@ const OUT = '<svg class="out" viewBox="0 0 12 12" aria-hidden="true"><path d="M4
 // first press. A click with Ctrl / Cmd / the middle button still opens ko-fi.com in a new tab, and so does the
 // ↗ in the panel's head (for when the payment wants a whole page). Ko-fi's page cannot be restyled from here,
 // so a lilac sheet multiplied over it turns its white lilac (Martin 25 Nov); it lets taps through.
+// Apple Pay does not show inside the frame (it would need linnaring.com registered with Ko-fi's payment
+// account), so on Apple's browsers a line under the panel opens Ko-fi's own page, where it does (Martin 25 Nov).
+const APPLE = typeof window.ApplePaySession === 'function';
 const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=true&preview=true';
 
 const a = document.querySelector('#kofi');
@@ -26,7 +29,7 @@ if (a && STEALTH) {
       panel = document.createElement('div');
       panel.id = 'kofipanel';
       panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
-        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>`;
+        <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>${APPLE ? `<a class="apple" href="https://ko-fi.com/linnaring" target="_blank" rel="noopener">Apple Pay? Open on ko-fi.com ${OUT}</a>` : ''}`;
       panel.querySelector('.x').addEventListener('click', close);
       panel.querySelector('.shut').addEventListener('click', close);
       panel.querySelector('iframe').addEventListener('load', () => panel.classList.add('ready'));

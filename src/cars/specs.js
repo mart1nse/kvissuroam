@@ -548,6 +548,8 @@ export const CARS = {
       maxPowerKw: 1000,
       maxWheelForce: 44000,
       maxRpm: 20000,
+      // lifting off slows it as a Tesla on its standard setting does, about 0.2 g; the kW is an estimate
+      regenG: 0.2, regenKw: 200,
     },
     gears: [9.0],
     reverse: 9.0,

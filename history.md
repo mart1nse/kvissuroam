@@ -386,3 +386,136 @@ Commits merged to main in the 24 h before the run:
 - 0dca89a No FULL button on iPhone (Martin): the Home Screen hint goes; Android and computers keep it (#552)
 - ebe1a7c Start screen: phone layout fixed, larger track cards with the lapping dot; Raadi: bales off the gravel, track buttons under the top bar on phones, two start bulbs (#551)
 - b312bb8 Tyres: defaults only from the in-game circuit buttons, and a "Tyres changed to" note (#550)
+
+## 2026-11-25 (main aff05bb, run 01:19 UTC)
+
+Every figure within budget.
+
+| Check | Figure | Budget | Result |
+|---|---|---|---|
+| Phone canvases at DRIVE | 126 | 230 | OK |
+| Phone graphics card at DRIVE | 189 | 250 | OK |
+| Phone JS heap at DRIVE | 250 | 420 | OK |
+| Phone total at DRIVE | 565 | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 616 | 740 | OK |
+| Phone graphics card peak in a map jump | 223 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 206 | 250 | OK |
+| Phone total after 2 km through the centre | 843 | 870 | OK |
+| Phone graphics card peak through the centre | 428 | 445 | OK |
+| Phone total at the Raadi stage (?raadi=1) | 460 | 560 | OK |
+| Phone graphics card peak at the Raadi stage | 196 | 240 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 355 | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 507 | 760 | OK |
+| Lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 125 | 150 | OK |
+| Lowest graphics level along the Raadi stage: triangles in a frame (thousands) | 327 | 440 | OK |
+| Top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 546 | 800 | OK |
+| Top graphics level along the Raadi stage: triangles in a frame (thousands) | 1555 | 3200 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 55 | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.22 | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 7.4 | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 72 | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 96 | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.27 | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 6.8 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 68 | - | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 4 | 8 | OK |
+| Lap drive: times the game was busy for over 33 ms | 3 | 4 | OK |
+| Lap drive: longest the game was busy without a break (ms) | 77 | 100 | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 36 | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 133 | 165 | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 1 | 10 | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.39 | 2 | OK |
+| Lap drive: page errors | 0 | 0 | OK |
+| Lap drive: building work queued twice | 0 | 0 | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 22 | - | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 13 | - | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 24 | - | not judged |
+| Stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished) | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 25 ms | 3 | 8 | OK |
+| Stage drive: times the game was busy for over 33 ms | 1 | 4 | OK |
+| Stage drive: longest the game was busy without a break (ms) | 39 | 100 | OK |
+| Stage drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Stage drive: pictures sent to the graphics card (megapixels) | 24 | 40 | OK |
+| Stage drive: frames that sent over 1.1 megapixels of pictures | 0 | 4 | OK |
+| Stage drive: most megapixels of pictures sent in one frame | 1.05 | 2 | OK |
+| Stage drive: page errors | 0 | 0 | OK |
+| Stage drive: building work queued twice | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 16 ms, not judged | 10 | - | not judged |
+| Stage drive: game code in a frame, the longest (ms), not judged | 32 | - | not judged |
+| 60 players online: times the online code kept the page busy for over 5 ms in 40 s | 4 | 10 | OK |
+| 60 players online: the online code's most in one stretch (ms) | 8.6 | 12 | OK |
+| 60 players online: page errors | 0 | 0 | OK |
+| 60 players online: the online code per frame (ms), not judged | 0.71 | - | not judged |
+| 60 players online: times the game was busy for over 25 ms, not judged | 0 | - | not judged |
+| A race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s | 3 | 10 | OK |
+| A race of 30: the online code's most in one stretch (ms) | 5.6 | 12 | OK |
+| A race of 30: page errors | 0 | 0 | OK |
+| Phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE | 1 | 5 | OK |
+| Phone, shaders built the iPhone way: most such programs in one frame | 1 | 2 | OK |
+| Phone, shaders built the iPhone way: page errors | 0 | 0 | OK |
+
+Against the 24 Nov run: phone total at DRIVE 509 -> 565 MB (canvases 80 -> 126), centre total 755 -> 843 of 870 (card peak 381 -> 428 of 445), map jump card peak 188 -> 223. The same memory figures were already measured on ce140a6 (24 Nov 22:52 UTC, a thread's run), so the growth came in during the day on 24 Nov, not from tonight's last commits; the centre total has under 30 MB of room left. Short-hitch timings that grew by over 10 % (they vary run to run): desktop time over 50 ms 0.07 -> 0.22 s, phone drive longest 84 -> 96 ms and time over 50 ms 0.08 -> 0.27 s, lap longest 53 -> 77 ms, stage longest 34 -> 39 ms. Raadi stage finished, 3 over 25 ms; phone at the Raadi stage 460 MB. 60 online: 4 over 5 ms, most 8.6 ms; race of 30: 3, most 5.6 ms.
+
+Commits merged to main in the 24 h before the run:
+
+- aff05bb Raadi stage: more than 100 m the wrong way cancels the run (#680)
+- e2ff931 Invisible post at the end of the Vallikraavi fence: free the field where moved or cleared map trees stood (#679)
+- 1723ac8 Stand-ins: each car its own shape and colour, measured from its model (#678)
+- 9002f14 Phone race HUD: standings 5 rows at most, race button one place further right with the names under it (#677)
+- 588254a Phone freezes at DRIVE: shaders first used ahead of drawing, Raadi finish fix (#676)
+- 3566ea1 Replays: accept a lap with an R hop; keep refused replays with the reason (#675)
+- 5a7afd1 iPhone: the page can no longer be dragged sideways, and a page laid out wider than the screen is fitted again (#674)
+- 9a5c555 WINNER pill in HOTLAP's pink-violet, not gold (#673)
+- 8b8bd5a Phone online list: colour dot at the right end of the name, thumb stays in front (#672)
+- 48fca4c WINNER over a race winner's name instead of HOTLAP (#671)
+- b5af10c Phone online list lined up on the right, with the top buttons' right edge (#670)
+- e5342d0 Stats: dead pages and freeze details folded into one line each, open on a tap (#669)
+- 71b0e62 Toomemägi gates 50 m wide, one missed gate forgiven; remove the 42 cheated laps (#668)
+- 60af289 Toomemägi lap: wrong way over 100 m cancels, checkpoints within 14 m (#667)
+- c0590ac Toomemägi lap: hidden gates every 50 m, in order (closes Kroonuaia and Lai short cuts) (#666)
+- 28ada99 Phone HUD: online list beside the race button, race line and standings between minimap and lap timer (#665)
+- 9c9b7c1 Phones: the race list stays small until 5 s after you cross the line, then the full results (#664)
+- 9812e79 Race not in: the button and chip show the race that is on, live; last race only when none is on (#663)
+- bff90e3 Street label: real street names where the map names a state road by its route (#662)
+- e317469 Race results: the car raced in, not one taken after the finish (#661)
+- bc03e23 Stand-in cars: solid sides; car name tags keep off the HUD (#660)
+- deca297 Phones: the 3 built car kinds follow what is driven most (in a race, the racers) (#659)
+- 667e946 A pack of cars: nearest 10 whole, 4 with shadows; stand-ins look like cars; terrain lighter far away (#658)
+- 7d9bbad Stats: what each freeze of 1 s or more had going on, on /stats and its map (#657)
+- b28e135 Lap record replays: each car's record lap kept as movement and watched from the LAP TIMES board (#656)
+- 61d2462 Start: free spots up Vanemuise and in the theatre park bays when the start is busy (#655)
+- ecaa953 Race list: a racer's name follows their car on desktop, as in the online list (#654)
+- 5d4db57 Thumbs up: click or tap a small thumb to see who gave it (#653)
+- 36d36fb Stats: visits hour by hour on the 24 h tab, script errors moved to /stats-errors (#652)
+- 6dc2e8d Race: other racers' name tags show their place (P3) instead of HOTLAP, a bit larger (#651)
+- e30a830 Race button: RACE FINISHED once the winner is over the line (#650)
+- ddda035 City map players list: narrower, slim neon scrollbar (#649)
+- 35bd3e6 Race of 30: ghost car shaders made ready a piece a frame, race list written in parts (#648)
+- e6eef02 Many players online: no hitch when people come, go or vote (#647)
+- fba1208 Race: ends when all are through, standings and race clock stay up after you finish (#646)
+- 4203de5 Stats: online demand, players turned away by SERVER FULL, peaks and averages (#645)
+- 839f8bd Desktop online list: keep +N MORE over the scrolling names (#644)
+- 8128dc6 Stats: count everyone online, not just the 60 names listed (#643)
+- b839293 Online list on desktop: every name listed, mouse wheel scrolls it, no scrollbar (#642)
+- d6284d7 Online cap counts real players, frees idle garage places when full (#641)
+- 5fae5e3 Spectating: thumbs up button at the right end of the WATCHING pill (#640)
+- 5a37b41 Log clues when a page dies on screen, shown on /stats (#639)
+- ba3e9d9 Hotlap: NEW PERSONAL BEST banner, split labels ME and BEST (#638)
+- 0de5724 Hotlap splits: delta to your best and to the car's lap record side by side (#637)
+- dbaae8c Perf check: a phone's memory along the Raadi rally stage (#636)
+- 44b6f4b Thumbs up: small thumbs on the back window a touch bigger (#635)
+- 21020d3 Tyre marks on the ERM roof and bridge decks look like tarmac, not the grass below (#634)
+- 92485a5 Other cars glide evenly up close (sender time stamps, curved paths) (#633)
+- 1cd7395 Race: spectators can vote to start and join a race (#632)
+- 886d115 Raadi start circle: gravel tyres on the jump, column warmed through the work queue (#631)

@@ -326,7 +326,7 @@ body.touch .desktop-only { display: none; }
    (on laptops the track outline steps aside into the top right), dressed like DRIVE: its gradient, glow, corners
    and, for SUPPORT LINNARING, its letters. Only with ?off=100 for now (src/kofi.js) */
 #kofi {
-  position: absolute; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left));
+  position: absolute; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: var(--kofix, max(14px, env(safe-area-inset-left)));
   display: flex; align-items: center; gap: .65em; padding: .6em 1.3em .65em .95em; border-radius: 1.15em;
   font-size: clamp(10px, 1.05vw, 14px); white-space: nowrap; line-height: 1;
   color: #fff; text-decoration: none; text-shadow: 0 2px 0 rgba(43, 10, 92, .55);
@@ -348,7 +348,7 @@ body.touch .desktop-only { display: none; }
 /* Ko-fi's own donation panel (src/kofi.js): the button turns into it where it stands, its head the button itself
    (tree, both lines) with ko-fi.com and a close beside, and the panel grows out of the button's corner */
 #kofipanel {
-  position: absolute; z-index: 30; left: max(14px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top));
+  position: absolute; z-index: 30; left: var(--kofix, max(14px, env(safe-area-inset-left))); top: max(12px, env(safe-area-inset-top));
   width: min(420px, calc(100vw - 28px)); height: min(730px, calc(100% - 2 * max(12px, env(safe-area-inset-top))));
   display: flex; flex-direction: column; border-radius: 1.15em; overflow: hidden; text-align: left;
   font-size: clamp(10px, 1.05vw, 14px);
@@ -378,12 +378,12 @@ body.touch .desktop-only { display: none; }
 @media (hover: hover) and (pointer: fine) { #kofipanel .apple:hover { background: #3c1f74; } #kofipanel .head a:hover { opacity: 1; background: rgba(18, 6, 43, .45); } #kofipanel .head .x:hover { background: rgba(18, 6, 43, .6); } }
 /* a phone on its side: the whole height, wider */
 @media (max-height: 430px) {
-  #kofipanel { top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); height: auto; width: min(440px, 64vw); font-size: 10px; }
+  #kofipanel { top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); left: var(--kofix, max(10px, env(safe-area-inset-left))); height: auto; width: min(440px, 64vw); font-size: 10px; }
 }
 @media (max-width: 1100px) and (min-height: 431px) { #kofipanel { font-size: 10px; } #kofipanel .lb { letter-spacing: .1em; } }
 /* (a narrow computer window: the title comes close) */
 @media (max-width: 1100px) and (min-height: 431px) { #kofi { font-size: 10px; padding-right: 1em; } #kofi .lb { letter-spacing: .04em; margin-right: -.04em; } }
-@media (max-height: 430px) { #kofi { top: max(8px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); font-size: 10px; } }
+@media (max-height: 430px) { #kofi { top: max(8px, env(safe-area-inset-top)); left: var(--kofix, max(10px, env(safe-area-inset-left))); font-size: 10px; } }
 /* a small phone (iPhone SE on its side): only the tree, the words would run into the title */
 @media (max-width: 760px) { #kofi { padding: .5em .6em; } #kofi .tx, #kofi .out { display: none; } }
 

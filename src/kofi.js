@@ -23,6 +23,21 @@ const a = document.querySelector('#kofi');
 if (a && STEALTH) {
   a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">SUPPORT LINNARING</b></span>${DOWN}`;
   a.classList.remove('hidden');
+  // its left edge lines up with the first car column (EVERYDAY), wherever the cards sit (Martin 25 Nov)
+  const menu = document.querySelector('#menu');
+  const align = () => {
+    const g = document.querySelector('#cards .group');
+    if (!g || menu.classList.contains('hidden')) return;
+    let x = g.getBoundingClientRect().left;
+    // (but never into the title: where the room is short it slides only as far as it can)
+    const t = document.querySelector('#menu .logo span');
+    const room = t ? t.getBoundingClientRect().left - 14 - a.offsetWidth : x;
+    x = Math.max(10, Math.min(x, room));
+    menu.style.setProperty('--kofix', `${Math.round(x)}px`);
+  };
+  if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(align); ro.observe(menu); ro.observe(a); }
+  new MutationObserver(align).observe(menu, { attributes: true, attributeFilter: ['class'] });
+  requestAnimationFrame(align);
 
   let panel = null;
   const isOpen = () => panel && !panel.classList.contains('hidden');

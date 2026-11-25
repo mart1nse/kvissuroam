@@ -5,6 +5,8 @@ import { STEALTH } from './net/stealth.js';
 
 const TREE = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22.5v-9M12 16.5l-3.2-2.6M12 15l3.2-2.4"/><circle cx="12" cy="6" r="3.6"/><circle cx="6.2" cy="11.2" r="3.1"/><circle cx="17.8" cy="10.6" r="3.1"/></svg>';
 const OUT = '<svg class="out" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7"/></svg>';
+// (on the button an arrow down: it opens the panel below, Martin 25 Nov; ↗ stays for what opens a new tab)
+const DOWN = '<svg class="out down" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2v7.5M2.5 6l3.5 3.5L9.5 6"/></svg>';
 
 // Pressed, the button turns into Ko-fi's own donation panel where it stands (Martin 25 Nov: "expand and use the
 // widget in game", then "when clicking it it is just replaced with the kofi thingy"): the panel's head is the
@@ -19,7 +21,7 @@ const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=
 
 const a = document.querySelector('#kofi');
 if (a && STEALTH) {
-  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span>${OUT}`;
+  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span>${DOWN}`;
   a.classList.remove('hidden');
 
   let panel = null;

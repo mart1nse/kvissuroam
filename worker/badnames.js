@@ -45,12 +45,13 @@ const SWEAR_ANYWHERE = [
   // English
   'fuck', 'fuk', 'fck', 'fakk', 'cunt', 'shit', 'bitch', 'whore', 'motherf', 'dickhead', 'asshole', 'cocksuck', 'wank',
   'twat', 'pussy', 'slut', 'faggot', 'retard', 'bastard', 'dildo', 'jizz', 'piss', 'penis', 'vagina', 'blowjob',
-  // Estonian (perse, sitapea, nussima, pederast, debiilik, mongoloid, munnipea, türapea, "on homo")
-  'perse', 'sitapea', 'sitane', 'nussi', 'pederast', 'debiil', 'mongoloid', 'munnipea', 'turapea', 'onhomo', 'putsi',
+  // Estonian (perse, sitapea, nussima, pederast, mongoloid, munnipea, türapea, "on homo"; debiilik and raisk
+  // are fine, Martin 25 Nov)
+  'perse', 'sitapea', 'sitane', 'nussi', 'pederast', 'mongoloid', 'munnipea', 'turapea', 'onhomo', 'putsi',
 ];
 const SWEAR_WORDS = [
   'fag', 'dick', 'cock', 'arse', 'tits', 'cum', 'rape', 'sex', 'wtf', 'stfu',
-  'cyka', 'sitt', 'puts', 'tura', 'munn', 'munni', 'pede', 'lits', 'hoor', 'vitt', 'raisk', 'rsk', 'homo', 'homod',
+  'cyka', 'sitt', 'puts', 'tura', 'munn', 'munni', 'pede', 'lits', 'hoor', 'vitt', 'homo', 'homod',
 ];
 const SWEAR_ALLOWED = ['scunth', 'pussycat', 'sperse', 'yperse', 'uperse', 'perseus', 'persev', 'perseph', 'persec', 'shitake',
   'twater', 'twatch', 'pissar', 'fuku', 'nonhomo', 'kapuuts', 'penistone'];

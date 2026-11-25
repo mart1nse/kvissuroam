@@ -9,8 +9,8 @@ const bad = ['nigger', 'NiGgA', 'n1gg3r', 'n i g g e r', 'xXniggaXx', 'Neeger', 
   'sandnigger', 'jiggaboo', 'porch monkey', 'Hitler', 'Sieg Heil', 'WhitePower', 'KKK', '1488', 'ryssä', 'hohol',
   'Хохлы', 'moskal', 'pindos', 'nіgger', 'ｎｉｇｇｅｒ', 'Jap', 'yid',
   // swearing (25 Nov)
-  'FuckYou', 'fakk', 'ShitLord', 'b1tch', 'cunt', 'Motherfucker', 'Dick', 'perse', 'Sitapea', 'Põrka veel rsk', 'Raisk',
-  'türapea', 'Debiilik', 'mongoloid', 'Vuntsonhomo', 'pederast', 'блядь', 'Blyat', 'cyka', 'suka', 'хуй', 'nahui', 'pizdec',
+  'FuckYou', 'fakk', 'ShitLord', 'b1tch', 'cunt', 'Motherfucker', 'Dick', 'perse', 'Sitapea',
+  'türapea', 'mongoloid', 'Vuntsonhomo', 'pederast', 'блядь', 'Blyat', 'cyka', 'suka', 'хуй', 'nahui', 'pizdec',
   'пидор', 'mudak', 'gandon', 'долбоёб', 'govno'];
 const good = ['Montenegro', 'Montenegrin', 'Negroni', 'Nigeria', 'Niggle', 'niggardly', 'spicy', 'Raccoon', 'Tycoon',
   'Cocoon', 'Hachiko', 'Hachi', 'Khachapuri', 'Clarissa', 'Japan', 'Japp', 'Moskalenko', 'Gogol', 'mustikas', 'Zhidkiy',
@@ -18,7 +18,7 @@ const good = ['Montenegro', 'Montenegrin', 'Negroni', 'Nigeria', 'Niggle', 'nigg
   'winegrower', 'egregious', 'Vinegar', 'stoneground', 'Kolja', 'Vasja', 'VaporHeron', 'V4TYPE-R', '420BHR', 'M1ndFr3ak',
   'Blade', 'обладает', 'слуха', 'Perseus', 'superset', 'hypersonic', 'disperse', 'raiskamine', 'muudaks', 'kapuutsiga', 'kung-fu',
   'põrn', 'äss', 'Kurat', 'su ema', 'Scunthorpe', 'Peacock', 'Dickens', 'Cocktail', 'homogeneous', 'lapidary', 'piebald',
-  'eyeball', 'outwatch', 'Sussex', 'Pissarro', 'Penistone', 'fakir', 'Fukuoka', 'Assassin', 'Classic'];
+  'eyeball', 'outwatch', 'Cockroach', 'Hitchcock', 'Debiilik', 'Põrka veel rsk', 'Raisk', 'Sussex', 'Pissarro', 'Penistone', 'fakir', 'Fukuoka', 'Assassin', 'Classic'];
 
 const missed = bad.filter((n) => !badName(n)), wrong = good.filter(badName);
 console.log(`caught ${bad.length - missed.length}/${bad.length}, innocent wrongly caught ${wrong.length}/${good.length}`);

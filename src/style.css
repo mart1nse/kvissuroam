@@ -322,6 +322,64 @@ body.touch .desktop-only { display: none; }
   #cards { --H: 8.6em; --T: 2.9em; font-size: 9px; }
 }
 
+/* Ko-fi (Martin 25 Nov): a small link in the garage's top left corner, the same on a computer and a phone
+   (on laptops the track outline steps aside into the top right). Only with ?off=100 for now, and ?kofi=1..6
+   picks one of the looks being tried (src/kofi.js) */
+#kofi {
+  position: absolute; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: .6em; padding: .5em 1em .5em .75em; border-radius: 999px;
+  font-size: clamp(10px, 1.05vw, 14px); font-style: italic; font-weight: 700; letter-spacing: .04em; white-space: nowrap; line-height: 1.15;
+  color: rgba(255, 255, 255, .85); text-decoration: none; background: rgba(18, 6, 43, .6);
+  transition: background .15s, box-shadow .2s, color .15s, transform .12s, filter .15s;
+}
+#kofi .ic { flex: none; width: 1.5em; height: 1.5em; }
+#kofi .ic .ln1, #kofi .ic .ln2 { fill: none; stroke: url(#kofig); stroke-width: 1.5; stroke-linecap: round; }
+#kofi .ic .ln2 { stroke-width: 1; opacity: .6; }
+#kofi .ic .glint { fill: #fff; }
+#kofi .ic { filter: drop-shadow(0 0 3px rgba(255, 43, 214, .55)); }
+#kofi .tx { display: flex; flex-direction: column; align-items: flex-start; gap: .15em; text-align: left; }
+#kofi .lb { font-size: .62em; font-style: normal; font-weight: 800; letter-spacing: .24em; color: var(--sun); }
+#kofi .sub { font-size: .72em; font-style: normal; font-weight: 600; letter-spacing: .06em; color: var(--cyan); opacity: .85; }
+#kofi .out { flex: none; width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: .55; margin-left: -.1em; }
+#kofi:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) {
+  #kofi:hover { color: #fff; background: rgba(48, 14, 80, .8); box-shadow: 0 0 16px rgba(255, 43, 214, .45); }
+}
+/* 1: a plain dark rectangle, a token and the line */
+#kofi.v1 { border-radius: .45em; padding: .55em 1em .55em .75em; background: rgba(18, 6, 43, .7); }
+/* 2: a rectangle like the DRIVER box, a small yellow label over the line */
+#kofi.v2 { border-radius: .55em; padding: .55em 1.1em .6em .8em; background: rgba(18, 6, 43, .72); }
+#kofi.v2 .ic { width: 2.1em; height: 2.1em; }
+/* 3: a sunset rectangle, the Ko-fi avatar's colours as the fill */
+#kofi.v3 { border-radius: .45em; padding: .55em 1.1em .55em .8em; color: #fff; text-shadow: 0 1px 0 rgba(43, 10, 92, .5);
+  background: linear-gradient(100deg, rgba(255, 138, 92, .92), rgba(255, 43, 214, .88) 55%, rgba(138, 63, 252, .88)); box-shadow: 0 0 14px rgba(255, 43, 214, .35); }
+#kofi.v3 .ic { filter: none; }
+#kofi.v3 .ic .ln1 { stroke: #fff; }
+#kofi.v3 .out { opacity: .8; }
+@media (hover: hover) and (pointer: fine) { #kofi.v3:hover { background: linear-gradient(100deg, #ff8a5c, var(--hot) 55%, var(--violet)); box-shadow: 0 0 22px rgba(255, 43, 214, .6); } }
+/* 4: a tag in two parts, the words in cyan to pink letters and a pink KO-FI end */
+#kofi.v4 { border-radius: .45em; padding: 0; gap: 0; overflow: hidden; background: rgba(18, 6, 43, .72); align-items: stretch; }
+#kofi.v4 .tx { padding: .6em .9em .6em .8em; justify-content: center; }
+#kofi.v4 .ln { background: linear-gradient(90deg, var(--cyan), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .1em; }
+#kofi.v4 .kend { display: flex; align-items: center; gap: .45em; padding: 0 .85em 0 .7em; font-size: .78em; font-style: normal; font-weight: 800; letter-spacing: .18em; color: #fff; background: rgba(255, 43, 214, .75); }
+#kofi.v4 .kend .ic { width: 1.5em; height: 1.5em; filter: none; }
+#kofi.v4 .kend .ic .ln1, #kofi.v4 .kend .ic .ln2 { stroke: #fff; }
+#kofi.v4 .kend .ic .glint { fill: #fff; }
+/* 5: the Ko-fi page's sunset avatar beside two lines */
+#kofi.v5 { border-radius: .6em; padding: .45em 1.1em .45em .5em; background: rgba(18, 6, 43, .72); }
+#kofi.v5 .sun { flex: none; width: 2.3em; height: 2.3em; }
+/* 6: dark glass with a thin cyan to pink line along its foot, like the bars on the car cards */
+#kofi.v6 { position: absolute; border-radius: .35em; padding: .55em 1em .65em .75em; background: rgba(18, 6, 43, .55); overflow: hidden; }
+#kofi.v6::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, var(--cyan), var(--hot)); box-shadow: 0 0 8px var(--hot); }
+#kofi.v6 .ln { font-style: normal; font-weight: 600; letter-spacing: .08em; }
+#kofi.v6 .kend { display: flex; align-items: center; gap: .3em; margin-left: .3em; padding-left: .8em; font-size: .7em; font-style: normal; font-weight: 800; letter-spacing: .22em; color: var(--cyan); box-shadow: inset 1px 0 0 rgba(255, 255, 255, .15); }
+#kofi.v6 .kend .out { opacity: .8; }
+/* (a narrow computer window: the title comes close) */
+@media (max-width: 1100px) { #kofi { font-size: 10px; } #kofi.v6 .ln { letter-spacing: .02em; } #kofi.v6 .kend { letter-spacing: .12em; padding-left: .6em; margin-left: .2em; } }
+@media (max-height: 430px) { #kofi { top: max(8px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); font-size: 10px; } }
+/* a small phone (iPhone SE on its side): only the cup, the words would run into the title */
+@media (max-width: 760px) { #kofi { padding: .55em .7em; } #kofi .tx, #kofi .out, #kofi.v6 .kend { display: none; } #kofi.v4 .kend { padding: .55em .7em; } }
+
 /* ---- race: lap panel, names over other cars, driver name, lap times board */
 :is(#lap, #stage) {
   left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); min-width: 190px; padding: 6px 12px 7px;

@@ -89,9 +89,20 @@ export function createAudio() {
     const jetF = ctx.createBiquadFilter(); jetF.type = 'bandpass'; jetF.frequency.value = 3200; jetF.Q.value = 0.35;
     jetGain = ctx.createGain(); jetGain.gain.value = 0;
     noise.connect(jetF).connect(jetGain).connect(bus);
-    const jetL = ctx.createBiquadFilter(); jetL.type = 'bandpass'; jetL.frequency.value = 380; jetL.Q.value = 0.6;
+    // (the rush is what BOOST sounds like for as long as it is held: a wide roar from 150 Hz up to the hiss, loud
+    // enough to stay over the wind and the motors' whine at any speed, measured at the loudspeaker, and never
+    // quite steady, as a jet of gas tearing at still air is not)
+    const jetL = ctx.createBiquadFilter(); jetL.type = 'bandpass'; jetL.frequency.value = 420; jetL.Q.value = 0.35;
+    const jetM = ctx.createBiquadFilter(); jetM.type = 'bandpass'; jetM.frequency.value = 1300; jetM.Q.value = 0.5;
+    const jetMg = ctx.createGain(); jetMg.gain.value = 0.55;
     jetLow = ctx.createGain(); jetLow.gain.value = 0;
-    noise.connect(jetL).connect(jetLow).connect(bus);
+    const jetFl = ctx.createGain(); jetFl.gain.value = 1;
+    for (const [hz, depth] of [[6.3, 0.1], [10.9, 0.07], [17.2, 0.05]]) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = hz; g.gain.value = depth;
+      o.connect(g).connect(jetFl.gain); o.start();
+    }
+    noise.connect(jetL).connect(jetLow); noise.connect(jetM).connect(jetMg).connect(jetLow);
+    jetLow.connect(jetFl).connect(bus);
     // and over it the tyres sing: one long squeal that follows the wheel spin (src/audio-tyres.js; V switches
     // between the held note and the modelled squeal of public/tyre-worklet.js)
     loadTyreWorklet(ctx, `${import.meta.env.BASE_URL}tyre-worklet.js`);
@@ -237,6 +248,7 @@ export function createAudio() {
   // how hard a Rocket's nozzles blow, as two levels: all of them (1 = the four big ones wide open, or the four
   // under the floor) and the big four alone
   const jetOut = [0, 0];
+  const JET_RUSH = 0.5, JET_HISS = 0.03;   // the big four wide open: their roar, and what they add to the hiss
   function jetLevels(noz) {
     let rear = 0, rest = 0;
     if (noz) for (let i = 0; i < noz.length; i++) { if (i < 4) rear += noz[i]; else rest += noz[i]; }
@@ -348,8 +360,8 @@ export function createAudio() {
     const jl = jetLevels(dead ? null : car.rocket?.noz);
     if (jl[0] !== jetS || jl[1] !== jetR) {
       jetS = jl[0]; jetR = jl[1];
-      jetGain.gain.setTargetAtTime(Math.pow(jetS, 0.7) * 0.13, t, 0.03);
-      jetLow.gain.setTargetAtTime(jetR * 0.22, t, 0.04);
+      jetGain.gain.setTargetAtTime(Math.pow(jetS, 0.7) * 0.13 + jetR * JET_HISS, t, 0.03);
+      jetLow.gain.setTargetAtTime(jetR * JET_RUSH, t, 0.04);
     }
     const inFlight = !!car.rocket?.flight;
     if (inFlight !== wasFlight) { wasFlight = inFlight; if (!dead && noiseBuf) { if (inFlight) jetPop(bus, 1); else thump(2.2); } }

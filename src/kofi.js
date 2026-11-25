@@ -1,5 +1,5 @@
 // The Ko-fi link in the garage's top left corner (Martin 25 Nov): "Ega token puu otsas kasva" over
-// "TOETA LINNARINGI" in the DRIVE button's letters, a tree with coins for its crown, in DRIVE's colours.
+// "SUPPORT LINNARING" in the DRIVE button's letters, a tree with coins for its crown, in DRIVE's colours.
 // Only in stealth mode (?off=100) while Martin tries it. No coffee cup: he does not mention coffee.
 import { STEALTH } from './net/stealth.js';
 
@@ -21,7 +21,7 @@ const PANEL_URL = 'https://ko-fi.com/linnaring/?hidefeed=true&widget=true&embed=
 
 const a = document.querySelector('#kofi');
 if (a && STEALTH) {
-  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span>${DOWN}`;
+  a.innerHTML = `${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">SUPPORT LINNARING</b></span>${DOWN}`;
   a.classList.remove('hidden');
 
   let panel = null;
@@ -30,7 +30,7 @@ if (a && STEALTH) {
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'kofipanel';
-      panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">TOETA LINNARINGI</b></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
+      panel.innerHTML = `<div class="head"><button type="button" class="shut" aria-label="Close">${TREE}<span class="tx"><small class="ln">Ega token puu otsas kasva</small><b class="lb">SUPPORT LINNARING</b></span></button><a href="https://ko-fi.com/linnaring" target="_blank" rel="noopener" title="Open Ko-fi in a new tab" aria-label="Open Ko-fi in a new tab">${OUT}</a><button type="button" class="x" aria-label="Close">×</button></div>
         <div class="frame"><i class="wait">…</i><iframe src="${PANEL_URL}" title="Support LinnaRing on Ko-fi" allow="payment" loading="eager"></iframe><i class="tint"></i></div>${APPLE ? `<a class="apple" href="https://ko-fi.com/linnaring" target="_blank" rel="noopener">Apple Pay? Open on ko-fi.com ${OUT}</a>` : ''}`;
       panel.querySelector('.x').addEventListener('click', close);
       panel.querySelector('.shut').addEventListener('click', close);

@@ -1,20 +1,28 @@
 // What the driver sees of a car's thrusters (src/cars/thrust.js): the tank. On a phone the BOOST and FLIP
 // buttons are the gauge, each filling from the bottom (FLIP in two halves, one a jump); on a desktop a slim
 // bar under the rev counter with the keys. An empty tank reloads: the same shapes fill up again, with the
-// time left. Only shown while the car has thrusters; the DOM is touched only when something changes.
+// time left. Only shown while the car has thrusters; the DOM is touched only when something changes. And the
+// small fan in the rev counter of a car with suction fans.
 import { TANK_S, JUMP_S, REFILL_S } from './cars/thrust.js';
 
-export function createRocketUi({ pad, bar, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
+export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
   const bBoost = pad.querySelector('.boost'), bFlip = pad.querySelector('.flip');
   const fill = { boost: bBoost.querySelector('i'), flip: bFlip.querySelector('i'), bar: bar.querySelector('i') };
   const text = { boost: bBoost.querySelector('small'), flip: bFlip.querySelector('small'), bar: bar.querySelector('small') };
-  let shown = null, last = '';
+  let shown = null, last = '', fanOn = null, fanFull = null;
   const cls = (el, name, on) => { if (el.classList.contains(name) !== on) el.classList.toggle(name, on); };
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   return {
     // car: the car being driven (or null: nothing shown); off: neither button works just now (waiting for a
     // start); noFlip: no kickflip (a race, a timed lap)
     update(car, off = false, noFlip = false) {
+      // (the suction fans, spec.fanDown: they never stop, and are run up by the pedal or by speed, as their
+      // sound is in src/audio.js)
+      if (fan) {
+        const on = !!(car && car.spec.fanDown), full = on && Math.max(car.throttle || 0, Math.abs(car.vx) / 14) > 0.5;
+        if (on !== fanOn) { fanOn = on; fan.classList.toggle('hidden', !on); }
+        if (full !== fanFull) { fanFull = full; fan.classList.toggle('full', full); }
+      }
       const r = car && car.rocket;
       const want = !!r;
       if (want !== shown) { shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch); last = ''; }

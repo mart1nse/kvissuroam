@@ -280,6 +280,16 @@ body:not(.touch) .touch-only { display: none; }
 .pad.rocket button.no { opacity: .45; }
 .pad.rocket button.reload { border-style: dashed; }
 .pad.rocket button.reload i { background: rgba(255, 255, 255, .32); }
+/* a fan car's suction fans (spec.fanDown): a small fan left of the gear, turning for as long as they run (always),
+   faster when they are run up (src/rocketui.js) */
+#fan { position: absolute; left: 25%; bottom: 3.3%; width: calc(var(--d) * .12); height: calc(var(--d) * .12); }
+#fan svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.5px rgba(10, 2, 30, .95)) drop-shadow(0 0 4px rgba(47, 243, 255, .55)); }
+#fan .r { fill: rgba(18, 6, 43, .55); stroke: var(--cyan); stroke-width: 1.7; }
+#fan .b { fill: var(--cyan); animation: fanspin 1.1s linear infinite; }
+#fan .h { fill: #fff; }
+#fan.full .b { animation-duration: .38s; }
+#fan.hidden .b { animation: none; }
+@keyframes fanspin { to { transform: rotate(360deg); } }
 #thrust { width: calc(var(--d) * .62); margin: 2px 0 5px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 #thrust .bar { position: relative; width: 100%; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(18, 6, 43, .6); box-shadow: 0 0 0 1px rgba(47, 243, 255, .55); }
 #thrust .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(to right, var(--hot), var(--cyan)); }

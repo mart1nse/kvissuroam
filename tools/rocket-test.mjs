@@ -191,7 +191,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   const w = world(), car = fresh(w, 60, 0);
   car.vx = 60 / 3.6;
   const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ);
-  let over = 0, under = 0, was = 0, swaps = 0, side = 0, maxStep = 0, prev = 0;
+  let rear = 0, over = 0, under = 0, was = 0, swaps = 0, side = 0, maxStep = 0, prev = 0;
   for (let t = 0; t <= plan.tl; t += 0.005) {
     const off = (flightPose(plan, t, a).roll - 2 * Math.PI) * 180 / Math.PI;   // degrees past one whole turn
     if (t > 0) maxStep = Math.max(maxStep, Math.abs(a.roll - prev)); prev = a.roll;
@@ -200,11 +200,13 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     const d = (n[4] + n[6]) - (n[5] + n[7]), sd = Math.abs(d) > 0.05 ? Math.sign(d) : 0;
     if (t > 2 && sd && side && sd !== side) swaps++;
     if (sd) side = sd;
+    rear = Math.max(rear, n[0], n[1], n[2], n[3]);
   }
   const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * 180 / Math.PI;
   check('the roll goes past level and comes back under it', over > 8 && over < 18 && under < -2 && under > -10, `${over.toFixed(1)} deg over, ${(-under).toFixed(1)} deg back under`);
   check('...the side jets swap sides as they hunt for level', swaps >= 3, `${swaps} swaps after 2 s`);
   check('...it lands nearly level, never quite', Math.abs(end) > 0.1 && Math.abs(end) < 4, `${end.toFixed(2)} deg at touchdown`);
+  check('...and the four tail jets stay shut for the whole flight', rear === 0);
   check('...and turns smoothly all the way', maxStep < 0.06, `${(maxStep * 180 / Math.PI).toFixed(2)} deg in 5 ms at most`);
 }
 

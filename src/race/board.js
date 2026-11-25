@@ -71,7 +71,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     if (document.activeElement !== input || fresh) { input.value = n; if (fresh) preselect(); }
   });
   // (a name the server would refuse, a racist slur, Martin 25 Nov: the box goes back to the old name and
-  // blinks twice, with no message)
+  // blinks pink once, with no message)
   const commit = () => {
     const n = mp.setName(input.value);
     input.value = n || mp.name;

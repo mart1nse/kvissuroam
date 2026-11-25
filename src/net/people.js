@@ -7,7 +7,10 @@
 // On phones (Martin, 2026-11-24) the list sits on the right, beside the race button and down to the gas pedal:
 // the count, your line, then as many names as fit there (a name with a lap record takes its line and a bit),
 // then "+N MORE". No joined/left notes on phones (no room there for them).
-// On the big map a list of everyone online; tapping a name centres the map on that car.
+// On the big map a list of everyone online; tapping a name centres the map on that car. On desktop (Martin,
+// 2026-11-25) a second click on the same name closes the map and watches that car (src/spectate.js), and a
+// second click on your own line, while watching, takes you back to your car; the picked row says so. The car
+// icons on the map itself do not start watching (Martin: only the list).
 // While a race vote has votes in (Martin, 2026-11-23), each name that may vote gets a small mark in
 // front: a lit tick when voted, a faint ring when not. Gone again when the vote is over.
 // On desktop (Martin, 2026-11-23) a name in the list is a button: it follows that player's car as a spectator
@@ -57,9 +60,16 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const li = e.target.closest('[data-i]');
     if (!li) return;
     const p = shown[+li.dataset.i];
-    if (p && p.x !== undefined) onFocus(p.x, p.z);
+    if (!p || p.x === undefined) return;
+    const key = p.me ? 'me' : p.id;
+    if (picked === key && canWatch(p)) { picked = null; onWatch(p.me ? null : p.id); return; }
+    onFocus(p.x, p.z);
+    if (picked !== key) { picked = key; api.showRoster(); }
   });
   let shown = [], myCar = null, rosterKey = '';
+  let picked = null;                // big map, desktop: the row clicked once ('me' or a player id); a second click watches
+  // (a second click watches a player on the map, or on your own line takes you back while watching)
+  const canWatch = (p) => !touch && !!onWatch && (p.me ? !!watching() : p.x !== undefined && !idle(p));
   const touch = document.body.classList.contains('touch');
   // phones: the room for the names, from under your line down to the gas pedal, and a row's height (read from the
   // page once a second at most, at the start of a frame before anything is written; the pedal and the list stand still)
@@ -278,13 +288,15 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       const onMap = (p) => p.x !== undefined && !idle(p);
       const driving = others.filter(onMap), away = others.filter((p) => !onMap(p));
       shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
-      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}">${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}</li>`;
+      const sel = (p) => picked === (p.me ? 'me' : p.id) && canWatch(p);
+      const tail = (p) => (sel(p) ? ` <small class="go">${p.me ? 'CLICK AGAIN TO DRIVE' : 'CLICK AGAIN TO WATCH'}</small>` : '');
+      const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}${sel(p) ? ' sel' : ''}"${sel(p) ? ` title="${p.me ? 'Click again to drive your car' : 'Click again to watch'}"` : ''}>${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}${tail(p)}</li>`;
       const head = mp.online ? `${driving.length + 1} ONLINE` : mp.full ? 'SERVER FULL · DRIVING OFFLINE' : 'OFFLINE · RECONNECTING';
       list.innerHTML = `<h4${mp.online ? '' : ' class="off"'}>${head}</h4><ul>${shown.map(row).join('')}</ul>`;
       list.classList.remove('hidden');
       rosterKey = `${mp.online}|${others.length}|${vm?.key || ''}`;
     },
-    hideRoster() { list.classList.add('hidden'); },
+    hideRoster() { list.classList.add('hidden'); picked = null; },
   };
   return api;
 }

@@ -848,7 +848,8 @@ async function boot() {
   });
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},
-    onWatch: isTouch ? null : (id) => (id ? watch?.start(id) : watch?.stop()), watching: () => watch?.id || null });
+    // (from the big map's list, a second click on a name: the map closes first, then the camera goes to them)
+    onWatch: isTouch ? null : (id) => { if (bigmap?.isOpen) closeMap(); if (id) watch?.start(id); else watch?.stop(); }, watching: () => watch?.id || null });
   if (!isTouch) watch = createSpectate({
     mp, world, toast: (t, ms) => hud.toast(t, ms), racing: (id) => !!raceMode?.racing(id),
     busy: () => mode !== 'drive' || !!overlayOpen(),

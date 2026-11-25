@@ -182,11 +182,13 @@ const TAPE_OUT = 0.85;
 const NO_WIDE = [205, 429, 523, 550, 854], NO_APEX = [];
 //    Then, with the tape standing there (16:24): "In the start, allow to break the tape, penalize only 2 m to the
 //    left from the tape": the tape stays 1.35 m off the lane (`tape`) and the seconds begin 2 m beyond it.
+//    Then (25 Nov 09:09): "half of the car can be over the tape, but more than that and +2 starts": the +2 s
+//    begins with the car's middle at the tape, the +5 s 4 m further out.
 // And the way in to the wood loop's right-hander, past the new boulder (Martin 24 Nov 14:45: "cutting the tape here ...
 // should result already with the 5s penalty when cutting it even slightly. i can pass the new boulder on the left
 // with only 2s penalty"): the left-hand bend before it is its way in, so the tape there starts at 758 and crossing it
 // costs +5 s at once, +10 s deeper.
-const WIDE_AT = { 33: { from: START + 2, to: 30, pen: [[7.35, 5], [3.35, 2]], tape: 1.35 }, 402: { from: 371 }, 794: { from: 758, pen: [[7.2, 10], [3.6, 5]] } };
+const WIDE_AT = { 33: { from: START + 2, to: 30, pen: [[5.35, 5], [1.35, 2]], tape: 1.35 }, 402: { from: 371 }, 794: { from: 758, pen: [[7.2, 10], [3.6, 5]] } };
 // the way in to each corner: [first index, last index, side of the turn, steps], clear of the corner before it
 const ENTRY = STAGE.apex.map(([k, sd], n) => {
   const own = WIDE_AT[k] || {};

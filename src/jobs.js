@@ -104,4 +104,7 @@ export const jobs = {
   upload(tex) { if (uploader && live) { sent += (tex.image?.width || 0) * (tex.image?.height || 0) || 1; try { uploader(tex); } catch (err) { console.warn(err); } } },
   // pixels the queue has sent to the graphics card in this frame (the warmer then sends none of its own)
   get sentPx() { return sent; },
+  // something else sent this much in this frame (another player's car on its way to the card, main.js): counted
+  // with the queue's own, so the warmer sends no picture on top of it
+  tell(px) { sent += px || 1; },
 };

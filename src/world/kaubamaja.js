@@ -13,6 +13,7 @@ import { realTreeKit } from './scenery.js';
 import { paintScale } from './paintscale.js';
 import { medianShift } from './keskustee.js';
 import { jobs } from '../jobs.js';
+import { posterPlane } from './adverts.js';
 
 const O = [1659.6, 3088.7];                              // west corner of the roof (game x, z)
 const UA = [0.6943, 0.7197], UB = [0.7189, -0.6951];     // along Küüni (to the south corner), along the park face (to the north corner)
@@ -134,13 +135,18 @@ function shopfront(P, s0, s1, gy, h = 4.2, fill = '#4c5670') {
   }
 }
 const ORANGE = '#f6a07a', ORANGE_LINE = '#e58a62';
+// where the TOREPOOD poster hangs on the Küüni face, by the lap start: s0..s1 along the body wall, a..b over
+// the ground at its middle (416 x 592, so 6.6 m by 9.4 m)
+const KUUNI_POSTER = [0.35, 6.95, 5.2, 14.6];
 
 // ---- the four body faces. s runs along the body wall (the roof edge side less the inset), gy(s) is the ground there
 const FACES = {
   kuuni(P, len, gy) {
     stone(P, len, 0, 20);
     shopfront(P, 0, 12, gy, 3.6, '#59607a');
-    poster(P, 3.5, 9, gy(6) + 6, gy(6) + 15, '#d9434f', '#f08a8f', 'SUUR');
+    // the TOREPOOD poster hangs here (Martin, 25 Nov: in place of the red SUUR banner): its own small plane
+    // with the bus stops' advert atlas (KUUNI_POSTER), only a thin white frame is painted on the wall behind it
+    { const [s0, s1, a, b] = KUUNI_POSTER, y = gy((s0 + s1) / 2); P.rect(s0 - 0.18, s1 + 0.18, y + a - 0.18, y + b + 0.18, '#f7f6fa'); }
     P.glass(12, 22, gy(17) - 1, 19.4, '#4f5d7c', 1.25, 1.9);                    // the main entrance: glass to the roof
     P.rect(13.5, 20.5, gy(17), gy(17) + 2.7, '#2d3344');
     for (const s of [15.25, 17, 18.75]) P.rect(s - 0.05, s + 0.05, gy(17), gy(17) + 2.7, '#c9cfdd');
@@ -279,6 +285,17 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       FACES[name](P, len, gy);
       plane(S, INSET, S.len - INSET, 0, 20, -INSET + 0.07, P.texture());
       yield;
+    }
+    // the TOREPOOD poster on the Küüni face: the poster's corner of the shared advert atlas, no texture of its
+    // own; clicking it opens the shop like the ones in the bus shelters
+    {
+      const S = SIDES.kuuni, [s0, s1, a, b] = KUUNI_POSTER;
+      const [gx, gz] = S.at(INSET + (s0 + s1) / 2, 0.5), y = h(gx, gz);
+      const m = posterPlane(s1 - s0, b - a);
+      const [x, z] = S.at(INSET + (s0 + s1) / 2, -INSET + 0.12);
+      m.position.set(x, y + (a + b) / 2, z);
+      m.rotation.y = S.yaw;
+      group.add(m);
     }
 
     // ---- Riia side: entrance canopy, the paved terrace behind its orange wall, the orange ramp down to the pavement

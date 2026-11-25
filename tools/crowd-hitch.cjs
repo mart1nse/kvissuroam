@@ -1,4 +1,5 @@
 // Many players online: does the picture hitch?   node tools/crowd-hitch.cjs [n=60] [secs=30] [port=5198] [touch] [top=12] [churn=2]
+//                                                 [draw] [dry] [kinds=1] [fly=0.35] [settle=0] [race=30] [menu] [slowLink=150]
 //
 // Martin 2026-11-24: with 55 to 78 online, desktop at 59 FPS and the top level, "late frames 1 per 2 s,
 // longest 67 ms". Needs the dev server (npx vite --port 5198). No game server: the page's WebSocket is a fake
@@ -9,15 +10,23 @@
 // a graphics card, and our car stands on the race track with the pack around it. A CPU profile runs meanwhile.
 // Printed: the gaps between frames, the stretches of over 25 ms in which the page was busy, and what ran in them.
 // tools/perf-budget.cjs runs this as its many-players part (crowd()).
+// More (Martin 2026-11-25, stutters with 85 to 95 online that his frame times did not show):
+//   draw dry   everything is made ready and sent to the graphics card as in play, but the draw calls do nothing, so
+//              frames still come 60 a second: printed, the frames that sent pictures, model buffers or new programs
+//   kinds=1    everybody starts in one kind of car, and the pack's drivers change to the other kinds one by one:
+//              what a kind of car first met while playing costs
+//   fly=0.35   our car drives the lap (metres a frame) instead of standing
+//   settle=0   record from the moment the car is put down (the first cars of each kind arriving)
+// and the game's own hitch account (src/hitches.js) at the end.
 const { chromium, devices } = require('playwright');
 const { stretches } = require('./freeze-profile.cjs');
 
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
 
-async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0, slowLink = 0, menu = false } = {}) {
+async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0, slowLink = 0, menu = false, fly = 0, dry = false, settle = -1, kinds = 0 } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
-    const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: draw ? { width: 480, height: 270 } : { width: 1280, height: 720 } });
+    const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: draw && !dry ? { width: 480, height: 270 } : { width: 1280, height: 720 } });
     const p = await ctx.newPage();
     const errs = [];
     p.on('pageerror', (e) => errs.push(e.message));
@@ -59,6 +68,29 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         return link.call(this, prog);
       };
     });
+    await p.addInitScript(require('./freeze-fly.cjs'));
+    // dry: everything is prepared and sent to the graphics card as in play (programs, pictures, buffers), but the
+    // draw calls themselves do nothing, so that without a graphics card the frames still come 60 a second
+    if (dry) await p.addInitScript(() => {
+      const G = window.WebGL2RenderingContext?.prototype;
+      if (!G) return;
+      for (const k of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced', 'drawRangeElements']) G[k] = function () {};
+    });
+    // what each frame sends to the graphics card (draw only): pictures (megapixels), buffers (MB), new programs
+    await p.addInitScript(() => {
+      const cur = (window.__cur = { px: 0, buf: 0, link: 0, tex: 0 });
+      window.__gl = [];
+      const G = window.WebGL2RenderingContext?.prototype;
+      if (!G) return;
+      const wrap = (name, fn) => { const o = G[name]; G[name] = function (...a) { fn(a); return o.apply(this, a); }; };
+      const size = (a, k) => { const s = a[a.length - 1]; if (a.length >= 9 && typeof a[k] === 'number' && typeof a[k + 1] === 'number') return a[k] * a[k + 1]; return s && s.width ? (s.videoWidth || s.width) * (s.videoHeight || s.height) : 0; };
+      wrap('texImage2D', (a) => { cur.tex++; cur.px += a.length >= 9 ? a[3] * a[4] : size(a, 0); });
+      wrap('texSubImage2D', (a) => { cur.tex++; cur.px += a.length >= 9 ? a[4] * a[5] : size(a, 0); });
+      wrap('texStorage2D', (a) => { cur.px += 0; });
+      wrap('bufferData', (a) => { cur.buf += (a[1] && a[1].byteLength) || (typeof a[1] === 'number' ? a[1] : 0); });
+      wrap('bufferSubData', (a) => { cur.sub = (cur.sub || 0) + ((a[2] && a[2].byteLength) || 0); });
+      wrap('linkProgram', () => { cur.link++; });
+    });
     await p.addInitScript(() => {
       const raf = window.requestAnimationFrame.bind(window);
       window.__fr = [];
@@ -77,10 +109,12 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
       window.requestAnimationFrame = (f) => raf((ts) => {
         const t0 = performance.now(); f(ts);
         if (window.__rec && f.name === 'frame') __fr.push([t0, performance.now() - t0]);
+        const c = window.__cur;
+        if (c && f.name === 'frame') { if (window.__rec && (c.px > 20000 || c.buf > 100000 || c.link)) __gl.push([Math.round(t0), +(c.px / 1e6).toFixed(2), +(c.buf / 1e6).toFixed(2), c.link, +((c.sub || 0) / 1e6).toFixed(2)]); c.px = c.buf = c.link = c.tex = c.sub = 0; }
       });
     });
     const P = await (async () => JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../src/race/track.json'))).pts)();
-    await p.addInitScript(([P, N, CARS, CHURN, RACE]) => {
+    await p.addInitScript(([P, N, CARS, CHURN, RACE, KINDS]) => {
       const I0 = 1700;
       let seq = 0;
       const bots = [];
@@ -88,10 +122,13 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         const id = `bot${seq++}`;
         // a pack around us (16 to 130 m), the rest spread round the lap
         const pack = k < 8, at = pack ? 8 + k * 7 : Math.round(Math.random() * (P.length - 120)) + 60;
-        return { id, name: `Driver${String(seq).padStart(3, '0')}`, car: CARS[(seq * 7) % CARS.length], w: 'map', pack, at, speed: pack ? 6 : 12 + (seq % 5) * 3, ph: Math.random() * 6 };
+        // (kinds: everybody starts in the first `kinds` kinds of car, and the others arrive one by one in the pack
+        // as its drivers change cars: what a kind of car first met while playing costs)
+        // (each with a number plate of their own, 25 Nov: a picture per car on the page)
+        return { id, name: `Driver${String(seq).padStart(3, '0')}`, car: CARS[(seq * 7) % (KINDS || CARS.length)], pl: `${String(100 + (seq % 900))} ÄBC`, w: 'map', pack, at, speed: pack ? 6 : 12 + (seq % 5) * 3, ph: Math.random() * 6 };
       };
       for (let k = 0; k < N; k++) bots.push(mk(k));
-      const pub = (o) => ({ id: o.id, name: o.name, car: o.car, w: o.w });
+      const pub = (o) => ({ id: o.id, name: o.name, car: o.car, pl: o.pl, w: o.w });
       class FakeWS {
         constructor() {
           this.readyState = 0;
@@ -141,13 +178,17 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
                   const k = 8 + Math.floor(Math.random() * (bots.length - 8));
                   const gone = bots[k];
                   msg({ t: 'leave', id: gone.id });
-                  const nb = mk(k); nb.car = CARS[Math.floor(Math.random() * CARS.length)];
+                  const nb = mk(k); if (!KINDS) nb.car = CARS[Math.floor(Math.random() * CARS.length)];
                   bots[k] = nb;
                   msg({ t: 'join', ...pub(nb) });
                 } else if (r === 1) {           // someone changes car
-                  const o = bots[Math.floor(Math.random() * bots.length)];
-                  o.car = CARS[(CARS.indexOf(o.car) + 1 + Math.floor(Math.random() * 5)) % CARS.length];
+                  const o = KINDS ? bots[this.nk = ((this.nk ?? -1) + 1) % 8] : bots[Math.floor(Math.random() * bots.length)];
+                  o.car = KINDS ? CARS[(KINDS + (this.nc = (this.nc ?? -1) + 1)) % CARS.length] : CARS[(CARS.indexOf(o.car) + 1 + Math.floor(Math.random() * 5)) % CARS.length];
                   msg({ t: 'car', id: o.id, car: o.car });
+                  // and someone else their plate (a new picture for that car)
+                  const q = bots[Math.floor(Math.random() * 8)];
+                  q.pl = `${String(100 + Math.floor(Math.random() * 900))} XYZ`;
+                  msg({ t: 'plate', id: q.id, pl: q.pl });
                 } else {                        // into the garage and back, or a spectator
                   const o = bots[8 + Math.floor(Math.random() * (bots.length - 8))];
                   o.w = o.w === 'map' ? 'garage' : 'map';
@@ -162,7 +203,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         close() { clearInterval(this.timer); this.readyState = 3; }
       }
       window.WebSocket = FakeWS;
-    }, [P, n, CARS, churn, race]);
+    }, [P, n, CARS, churn, race, kinds]);
     await p.goto(`http://localhost:${port}/`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     const I0 = 1700, yaw0 = Math.atan2(P[I0 + 1][0] - P[I0][0], -(P[I0 + 1][1] - P[I0][1]));
@@ -174,22 +215,27 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
     } else await p.evaluate(async ([x, z, yaw, draw]) => { if (!draw) __game.renderer.render = () => {}; window.__drive0 = performance.now(); window.__progs0 = __game.renderer.info.programs?.length || 0; __game.startDriving(); await __game.world.loadAround(x, z, 260); __game.place({ x, z, yaw }); }, [P[I0][0], P[I0][1], yaw0, draw]);
     await p.waitForFunction(() => __game.mode === 'drive' && !__game.flying, null, { timeout: 180000 });
     // the place built and the first cars of each kind made (worker build, warm-up)
-    await p.waitForTimeout(touch ? 25000 : 20000);
+    // (settle: seconds to wait instead, 0 to see the first cars of each kind arrive)
+    await p.waitForTimeout(settle >= 0 ? settle * 1000 : touch ? 25000 : 20000);
     // (and the place around has finished building, so what is left to see is the other players)
-    await p.waitForFunction(() => !__game.jobs?.pending && !__game.warmer?.waiting, null, { timeout: 60000, polling: 500 }).catch(() => {});
-    await p.waitForTimeout(2000);
+    if (settle < 0) {
+      await p.waitForFunction(() => !__game.jobs?.pending && !__game.warmer?.waiting, null, { timeout: 60000, polling: 500 }).catch(() => {});
+      await p.waitForTimeout(2000);
+    }
     const cdp = await ctx.newCDPSession(p);
     await cdp.send('Profiler.enable');
     await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
     await cdp.send('Profiler.start');
     const linksBefore = await p.evaluate(() => __links.length);
     const tStart = await p.evaluate(() => { window.__rec = true; return performance.now(); });
+    // fly: our car drives the lap from where it stands, `fly` metres a frame, the crowd all round the lap
+    if (fly) await p.evaluate(([P, I0, step]) => { __fly([...P.slice(I0), ...P.slice(0, I0)], step); }, [P, I0, fly]);
     await p.waitForTimeout(secs * 1000);
     const { profile } = await cdp.send('Profiler.stop');
     if (shot) await p.screenshot({ path: shot });
-    const { fr, online, loaf, links, t0, progs, waits } = await p.evaluate(() => { window.__rec = false; return { fr: __fr, online: __game.mp().count, loaf: __loaf, links: __links, t0: window.__drive0 || 0, waits: (window.__waits || []).map(([t, w, g]) => { const q = (__game.renderer.info.programs || []).find((x) => x.program === g); return [t, w, q ? `${q.name || ''} ${String(q.cacheKey).split(',').filter((x) => x && x !== 'false' && x !== 'undefined' && x !== '0').slice(0, 3).join(' ')} ${String(q.cacheKey).slice(-60).replace(/\s+/g, ' ')}` : '(gone)']; }),
+    const { fr, online, loaf, links, t0, progs, waits, gl, hitches } = await p.evaluate(() => { window.__rec = false; if (window.__flyStat) __flyStat.done = true; return { fr: __fr, gl: window.__gl || [], hitches: __game.hitches ? { ...__game.hitches.recent, line: __game.hitches.line } : null, online: __game.mp().count, loaf: __loaf, links: __links, t0: window.__drive0 || 0, waits: (window.__waits || []).map(([t, w, g]) => { const q = (__game.renderer.info.programs || []).find((x) => x.program === g); return [t, w, q ? `${q.name || ''} ${String(q.cacheKey).split(',').filter((x) => x && x !== 'false' && x !== 'undefined' && x !== '0').slice(0, 3).join(' ')} ${String(q.cacheKey).slice(-60).replace(/\s+/g, ' ')}` : '(gone)']; }),
       progs: (__game.renderer.info.programs || []).slice(window.__progs0 || 0).map((q) => [q.name, q.cacheKey.split(',').filter((x) => x && x !== 'false' && x !== 'undefined' && x !== '0').slice(0, 40).join(' ')]) }; });
-    return { errs, fr, profile, tStart, online, secs, loaf, links, linksBefore, t0, progs, waits };
+    return { errs, fr, profile, tStart, online, secs, loaf, links, linksBefore, t0, progs, waits, gl, hitches };
   } finally { await b.close(); }
 }
 
@@ -237,10 +283,16 @@ module.exports = { crowd, summarise, report };
 if (require.main === module) {
   const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(k + '=')); return a ? a.slice(k.length + 1) : d; };
   (async () => {
-    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0), slowLink: +arg('slowLink', 0), menu: process.argv.includes('menu') });
+    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0), slowLink: +arg('slowLink', 0), menu: process.argv.includes('menu'), fly: +arg('fly', 0), dry: process.argv.includes('dry'), settle: +arg('settle', -1), kinds: +arg('kinds', 0) });
     if (r.errs.length) console.log('PAGE ERRORS', r.errs.slice(0, 5));
     console.log(JSON.stringify({ online: r.online, ...summarise(r) }));
     console.log(report(r, +arg('top', 12)));
+    if (r.hitches) console.log(`the game's own hitch account (src/hitches.js): ${r.hitches.line || 'nothing yet'}`);
+    if (r.gl?.length) {
+      console.log(`frames that sent something to the graphics card: ${r.gl.length} (at ms, pictures MP, buffers MB, new programs, buffer updates MB)`);
+      for (const g of [...r.gl].sort((a, b) => (b[1] + b[2] + b[3]) - (a[1] + a[2] + a[3])).slice(0, 25)) console.log('  ' + JSON.stringify(g));
+      console.log(`  in all: pictures ${r.gl.reduce((a, g) => a + g[1], 0).toFixed(1)} MP, buffers ${r.gl.reduce((a, g) => a + g[2], 0).toFixed(1)} MB, programs ${r.gl.reduce((a, g) => a + g[3], 0)}`);
+    }
     const lf = r.loaf.filter((e) => e.dur > 33).sort((a, b) => b.dur - a.dur);
     console.log(`long animation frames over 33 ms: ${lf.length}`);
     for (const e of lf.slice(0, +arg('loaf', 8))) console.log(`  ${e.dur} ms (render ${e.render}, style+layout ${e.style}): ${e.scripts.filter((x) => x.dur >= 2).map((x) => `${x.inv} ${x.fn} ${x.src} ${x.dur}${x.layout ? ` [forced layout ${x.layout}]` : ''}`).join(' | ')}`);

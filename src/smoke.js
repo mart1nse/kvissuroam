@@ -255,8 +255,8 @@ export function createSmoke(world) {
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
     if (active && car && !car.inWater) tyres(car, dt, myTyres);
-    if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
     else myTyres.heat[0] = myTyres.heat[1] = 0;
+    if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
 
     if (!alive && !fresh) return;
     alive = 0; fresh = false;

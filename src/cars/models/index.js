@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { applyLights } from './kit.js';
 import { deserializeCar } from './serial.js';
 import { useGlbBody } from './glbbody.js';
+import { outside } from '../../hitches.js';
 import { buildW201 } from './w201.js';
 import { buildCRV } from './crv.js';
 import { buildEnyaq } from './enyaq.js';
@@ -66,9 +67,12 @@ function template(id) {
 function adopt(id, T) {
   T.setLights({ brake: false, reverse: false, headlights: false });
   templates.set(id, T);
-  warmed(T, warm(T.group));
-  // the scanned body brings new materials: warm them too, then the copies take it (see instanceCarModel)
-  if (T.ready) T.ready = T.ready.then(() => { if (T.glbLoaded) { warmed(T, warm(T.group)); return T.warming; } });
+  // A scanned body still to come hides the modelled one: the car is made ready once, with the scan on (or after it
+  // failed to load), and the copies take it then (see instanceCarModel). Until then another player's car of this
+  // kind is its far stand-in. (Before 25 Nov 2026 the modelled body was made ready first and shown meanwhile: its
+  // shaders, pictures and model went to the graphics card for the second or two until the scan replaced it.)
+  if (T.ready) { T.warmed = false; T.ready = T.warming = T.ready.then(() => { warmed(T, warm(T.group)); return T.warming; }); }
+  else warmed(T, warm(T.group));
 }
 
 // Templates are built in a worker (worker.js) where the browser can: the car comes back as data and is
@@ -83,6 +87,10 @@ function startWorker() {
     worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
   } catch (e) { console.warn('car worker unavailable', e); workerOk = false; return null; }
   worker.onmessage = (e) => {
+    const t0 = performance.now();
+    try { carMessage(e); } finally { outside.note('car', t0); }      // (time outside the game's frame: src/hitches.js)
+  };
+  const carMessage = (e) => {
     const { id, key, data, error } = e.data;
     if (key != null) {                                 // an answer for the parked cars
       const done = asked.get(key);
@@ -213,8 +221,10 @@ export function instanceCarModel(id) {
   fill(car, T);
   // a scanned body still loading: copy the car again once it is on the template
   if (T.ready && !T.glbLoaded) T.ready.then(() => { if (T.glbLoaded) fill(car, T); });
-  // false while the template's shaders are still compiling: multiplayer.js waits with showing the car
-  Object.defineProperty(car, 'warmed', { get: () => T.warmed !== false || car.glbLoaded !== !!T.glbLoaded });
+  // false while the template is being made ready (shaders compiled, pictures and model on the graphics card), or
+  // this copy is not yet of the template as it now is (its scanned body just came): multiplayer.js waits with
+  // showing the car
+  Object.defineProperty(car, 'warmed', { get: () => T.warmed !== false && car.glbLoaded === !!T.glbLoaded });
   return car;
 }
 

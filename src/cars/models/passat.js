@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, tube, fromGeo, keyed, canvasTex, drawPlate, plate, assembleCar, arcPts, roofRail, tintPaint, tintGlass } from './kit.js';
 import { useGlbBody, glbHooks } from './glbbody.js';
+import { jobs } from '../../jobs.js';
 import { part, planLine, sideLine, sweep, clip2, foldFlanks, lathe } from './parts.js';
 
 // real car: 4680 x 1740 x 1500 mm (with rails), wheelbase 2703, track 1498 / 1500, 195/65 R15.
@@ -195,7 +196,9 @@ function sootMap(pipeX, pipeY) {
   return _sootMap;
 }
 // The scanned body's own soot: a shell over the back of the scan (glbHooks.passatSoot, called once it is on)
-function sootOnScan(meshes, car) {
+// (a generator: the shell is cut from every triangle of the scan, 20 to 55 ms in one piece, so it stops on the
+// way when it runs as queued work while somebody drives; see useGlbBody)
+function* sootOnScan(meshes, car) {
   const mat = new THREE.MeshStandardMaterial({ map: sootMap(-0.42, 0.27),   // the tailpipe (spec.exhaust)
      transparent: true, vertexColors: true, depthWrite: false, roughness: 0.95, metalness: 0,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
@@ -207,7 +210,7 @@ function sootOnScan(meshes, car) {
       .replace('#include <map_fragment>', `vec4 sm = texture2D( map, clamp( vMapUv, 0.0, 1.0 ) );
         diffuseColor = vec4( 0.022, 0.019, 0.017, sm.g * smoothstep( 0.8 * sm.r - 0.1, 0.8 * sm.r + 0.3, uK ) );`);
   };
-  const sh = car.soot.shell = new THREE.Mesh(sootShell(meshes), mat);
+  const sh = car.soot.shell = new THREE.Mesh(yield* sootShell(meshes), mat);
   sh.name = 'passat_soot_scan'; sh.renderOrder = 2; sh.visible = car.soot.k > 0.01;
   car.group.add(sh);
 }
@@ -221,7 +224,7 @@ export function setSoot(car, k) {
   s.mesh.visible = k > 0.01 && !car.glbLoaded;
   if (s.shell) { s.shell.material.userData.uK.value = k; s.shell.visible = k > 0.01; }
 }
-function sootShell(meshes) {
+function* sootShell(meshes) {
   const pos = [], nor = [], uv = [], col = [];
   const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const put = (x, y, z, nx, ny, nz, w) => { pos.push(x, y, z); nor.push(nx, ny, nz); uv.push((x + SOOT_X) / (2 * SOOT_X), (y - SOOT_Y0) / SOOT_H); col.push(1, 1, 1, w); };
@@ -244,18 +247,23 @@ function sootShell(meshes) {
       continue;
     }
     const off = decal ? 0.004 : 0.003;   // a plate sits proud of the body and hides the body's soot: it gets its own on top
-    for (let t = 0; t < I.count; t += 3) {
-      const a = I.getX(t), b = I.getX(t + 1), c = I.getX(t + 2);
-      // everything behind the rear wheels except what faces forward (inside faces of the scan)
-      if (P.getZ(a) + P.getZ(b) + P.getZ(c) < 5.1 || Q.getZ(a) + Q.getZ(b) + Q.getZ(c) < -0.6) continue;
-      for (const i of [a, b, c]) {
-        const nx = Q.getX(i), ny = Q.getY(i), nz = Q.getZ(i), y = P.getY(i);
-        // none on the flanks or the roof: it thins out as the panel turns away from the airflow behind the car
-        const w = (1 - ss(0.5, 0.92, Math.abs(nx))) * (1 - ss(0.4, 0.8, ny) * ss(1.0, 1.2, y)) * ss(-0.2, 0.05, nz + 0.4 * Math.abs(ny));
-        put(P.getX(i) + nx * off, y + ny * off, P.getZ(i) + nz * off, nx, ny, nz, w);
+    // (a plain function for the loop, a few thousand triangles a go: a loop in a generator's own body runs at half speed)
+    const some = (t0, t1) => {
+      for (let t = t0; t < t1; t += 3) {
+        const a = I.getX(t), b = I.getX(t + 1), c = I.getX(t + 2);
+        // everything behind the rear wheels except what faces forward (inside faces of the scan)
+        if (P.getZ(a) + P.getZ(b) + P.getZ(c) < 5.1 || Q.getZ(a) + Q.getZ(b) + Q.getZ(c) < -0.6) continue;
+        for (const i of [a, b, c]) {
+          const nx = Q.getX(i), ny = Q.getY(i), nz = Q.getZ(i), y = P.getY(i);
+          // none on the flanks or the roof: it thins out as the panel turns away from the airflow behind the car
+          const w = (1 - ss(0.5, 0.92, Math.abs(nx))) * (1 - ss(0.4, 0.8, ny) * ss(1.0, 1.2, y)) * ss(-0.2, 0.05, nz + 0.4 * Math.abs(ny));
+          put(P.getX(i) + nx * off, y + ny * off, P.getZ(i) + nz * off, nx, ny, nz, w);
+        }
       }
-    }
+    };
+    for (let t = 0; t < I.count; t += 6000) { some(t, Math.min(I.count, t + 6000)); if (jobs.late(4)) yield; }
   }
+  yield;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));

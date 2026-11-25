@@ -5,6 +5,7 @@ import { loadWorldData, SURFACE } from './world/data.js';
 import { createSky, createEnvironment, createLights, FOG_COLOR } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
 import { jobs } from './jobs.js';
+import { createHitches, outside } from './hitches.js';
 import { skinLog } from './world/houseskin.js';
 import { warm as warmer } from './warm.js';
 import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
@@ -225,6 +226,76 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && !gpu.s
 // pictures of queued work go to the graphics card one by one (on phones as their small copy: see phonetex.js)
 const sendTex = (tex) => { shrinker?.texture(tex); renderer.initTexture(tex); };
 jobs.setUploader(sendTex);
+// Another player's car on its way to the graphics card, before it is first drawn (Martin 2026-11-25, 85 to 95
+// online: "some stutters every now and then" on a desktop whose frame times read fine). A kind of car's pictures
+// went up one a frame already, but its model did not: the 4 to 13 MB of a car's pieces were all sent in the frame
+// that first drew a car of that kind whole, each kind once, whenever such a car first came near. Now a step a
+// frame, taken by the frame itself after the queued work (not in a frame where that sent a picture, and the
+// warmer then sends none of its own): one picture, or about CARD_MB of the model's buffers, sent by drawing them
+// into a picture of one pixel (three.js sends a buffer when it first draws with it, wherever that is).
+const CARD_MB = 2;
+const cardQueue = [];
+let cardRT = null, cardMesh = null, cardCam = null, cardWait = 0;
+// One buffer of a model (a piece's corners, its normals, its triangle list ...) to the graphics card: three.js
+// keeps a buffer by the attribute it came from, so sent here through a stand-in piece that borrows it, the real
+// piece finds it there when it is first drawn. `pos`: the piece's corners (a piece cannot be drawn without).
+function sendBuffer(pos, name, attr, index) {
+  if (!cardRT) {
+    cardRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    cardMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ fog: false, toneMapped: false }));
+    cardMesh.frustumCulled = false;
+    cardCam = new THREE.Camera();
+  }
+  const g = cardMesh.geometry;
+  for (const k of Object.keys(g.attributes)) g.deleteAttribute(k);
+  g.setAttribute('position', pos);
+  if (name && name !== 'position') g.setAttribute(name, attr);
+  g.setIndex(index || null);
+  const was = renderer.getRenderTarget(), auto = renderer.shadowMap.autoUpdate;
+  renderer.shadowMap.autoUpdate = false;
+  try { renderer.setRenderTarget(cardRT); renderer.render(cardMesh, cardCam); }
+  finally {
+    renderer.setRenderTarget(was); renderer.shadowMap.autoUpdate = auto;
+    // (let go of the borrowed buffers: the stand-in is never disposed, which would free them on the card)
+    for (const k of Object.keys(g.attributes)) g.deleteAttribute(k);
+    g.setIndex(null);
+  }
+}
+function toCard(obj) {
+  return new Promise((done) => cardQueue.push((function* () {
+    try {
+      const texs = new Set(), geos = new Set();
+      const shown = (o) => { for (let q = o; q && q !== obj.parent; q = q.parent) if (!q.visible) return false; return true; };
+      obj.traverse((o) => {
+        if (!o.isMesh || !shown(o)) return;          // (not the modelled body under a scanned one: it is never drawn)
+        for (const m of [o.material].flat()) for (const v of Object.values(m || {})) if (v?.isTexture) texs.add(v);
+        if (o.geometry?.attributes?.position) geos.add(o.geometry);
+      });
+      for (const t of texs) { renderer.initTexture(t); yield (t.image?.width || 0) * (t.image?.height || 0) || 1; }
+      let n = 0;
+      const size = (a) => (a?.isInterleavedBufferAttribute ? a.data.array : a?.array)?.byteLength || 0;
+      for (const g of geos) {
+        const pos = g.attributes.position;
+        for (const [k, a] of [...Object.entries(g.attributes), ['', g.index]]) {
+          if (!a) continue;
+          // (a buffer that would take the step past CARD_MB starts the next frame's)
+          if (n > 0 && n + size(a) > CARD_MB * 1048576) { n = 0; yield 4e5; }
+          if (k) sendBuffer(pos, k, a, null); else sendBuffer(pos, '', null, a);
+          n += size(a);
+        }
+      }
+    } catch (err) { console.warn(err); } finally { done(); }
+  })()));
+}
+// one step; gives the pixels (or 1) it sent, 0 with nothing waiting
+function cardStep() {
+  while (cardQueue.length) {
+    const r = cardQueue[0].next();
+    if (!r.done) return r.value;
+    cardQueue.shift();
+  }
+  return 0;
+}
 renderer.setPixelRatio(quality.pixelRatio);
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -245,6 +316,9 @@ scene.add(sky);
 const lights = createLights(scene, quality.shadow);
 const gpuTimer = createGpuTimer(renderer.getContext());
 const lag = createLag(renderer.getContext());   // how far the picture is behind the game (see createLag)
+// short hitches while driving and what each was (src/hitches.js), for the options window and /stats
+const hitches = createHitches({ report: (h) => stats.hitch(h) });
+let lagSteps = 0, driveT = 0;
 // how far the camera sees (the extra low level pulls it in): the haze ends just before it, the sky dome follows
 function setFar(m) {
   const far = Math.min(quality.far, m);
@@ -463,11 +537,11 @@ async function boot() {
     ({ buildCarModel } = carModels);
     // (a car's shaders compiled and its textures sent to the graphics card, one a frame, before it is shown)
     // (and the first use of its shader programs made ahead, a program a frame: see firstUse in src/warm.js)
+    // (and its model: see toCard, whose own one-pixel drawing is made ready here, behind the loading screen)
+    { const g = new THREE.PlaneGeometry(1, 1); sendBuffer(g.attributes.position, '', null, g.index); g.dispose(); }
     carModels.setCarWarmer(async (obj) => {
       await warmer.ready(obj);
-      const texs = new Set();
-      obj.traverse((o) => { if (o.isMesh) for (const m of [o.material].flat()) for (const v of Object.values(m)) if (v?.isTexture) texs.add(v); });
-      for (const t of texs) { await new Promise((r) => requestAnimationFrame(r)); renderer.initTexture(t); }
+      await toCard(obj);
     });
   } catch (err) {
     console.warn('Detailed car models unavailable, using placeholders', err);
@@ -1137,6 +1211,7 @@ function startDriving() {
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
   stats.drive();
+  driveT = performance.now();
   // the track picked on the start screen (?raadi=1): DRIVE starts there. With Raadi picked always, unless the
   // car is at Raadi already (the line under DRIVE says RAADI; Martin 23 Nov: H, then the menu, then DRIVE stayed
   // at Toomemägi). With Toomemägi picked the car is only fetched from Raadi, and only after a pick.
@@ -1535,7 +1610,7 @@ function showGfx(force) {
   for (const b of $('#opt-gfx').children) b.classList.toggle('on', b.dataset.gfx === gfx.mode);
   const l = gfx.levels[gfx.level];
   const m = gfx.meter;
-  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} [drawing ${part.draw.toFixed(1)}, building ${part.build.toFixed(1)}]${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms${lag.ms > m.frame * 2.5 ? `; picture ${Math.round(lag.ms)} ms behind` : ''})`;
+  const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} [drawing ${part.draw.toFixed(1)}, building ${part.build.toFixed(1)}]${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms${lag.ms > m.frame * 2.5 ? `; picture ${Math.round(lag.ms)} ms behind` : ''})${hitches.line ? ` · ${hitches.line}` : ''}`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
     : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
@@ -1831,7 +1906,9 @@ let quietAt = 0, frameTs = 0;
 // what the last frame did, for the stats' account of a freeze (src/stats.js freeze()): the game's own code, its
 // building and drawing parts (ms), new shader programs and new pictures on the graphics card, script memory
 // (kpc: the browser builds shader programs on its own thread and says when they are done, see src/warm.js)
-const lastFrame = { js: 0, build: 0, draw: 0, progs: 0, tex: 0, heap: 0, kpc: !!renderer.extensions.has('KHR_parallel_shader_compile') };
+// (net: the other players' part; car: a step of another player's car went to the graphics card, see toCard)
+const lastFrame = { js: 0, build: 0, draw: 0, net: 0, car: 0, progs: 0, tex: 0, heap: 0, kpc: !!renderer.extensions.has('KHR_parallel_shader_compile') };
+
 for (const [t, ev] of [[window, 'blur'], [window, 'focus'], [document, 'visibilitychange']]) t.addEventListener(ev, () => { quietAt = performance.now(); });
 function frame(ts) {
   requestAnimationFrame(frame);
@@ -1839,10 +1916,12 @@ function frame(ts) {
   rafLast = ts;
   if (gap > 2 && gap < 50) rafMs += (gap - rafMs) * 0.05;
   const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
+  // (asked at every refresh of the screen, also those the game leaves out on a 120 Hz screen: when the picture was
+  // finished is then known to a refresh)
+  lag.poll(rafMs * 0.6);
   if (++rafTick % every) return;
   const t0 = performance.now();
   if (readyOn) getReadyStep(t0);
-  lag.poll();
   clock.update(ts);
   const rawDt = clock.getDelta();
   const gapFrom = frameTs;
@@ -1924,6 +2003,7 @@ function frame(ts) {
     smoke.update(car, dt, mode === 'drive', mp.remotes());
   } else smoke.update(null, dt, false, mp.remotes());
   // (a spectator sends no position: the others do not see the parked car meanwhile)
+  const n0 = performance.now();
   mp.update(car, dt, mode === 'drive' && !watch?.active);
   warmer.scope(() => kudos.update(dt));   // (held unseen while a new small picture and its drawing are made ready)
   watch?.frame(dt);
@@ -1934,6 +2014,7 @@ function frame(ts) {
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();
+  const netMs = performance.now() - n0;       // (the other players' part of the frame, for the hitch account)
   if (bigmap.isOpen && mp.count && (mapTimer -= dt) <= 0) { mapTimer = 0.5; bigmap.redraw(); }
 
   if (mode === 'drive') {
@@ -1969,6 +2050,11 @@ function frame(ts) {
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,
     from: gapFrom, fz: lastFrame, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free' });
+  // short hitches (src/hitches.js): was the frame before late, and what was it busy with; and pictures that
+  // reached the screen later than the one before though the frames were on time
+  hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - driveT) / 1000 : 0 });
+  if (lag.steps !== lagSteps) { if (felt && rawDt < 0.05 && lag.steps - lagSteps < 3) hitches.pictureLate({ others: mp.count }); lagSteps = lag.steps; }
+  lastFrame.net = netMs; lastFrame.car = 0;
 
   // ---- car visuals
   const s = car.spec;
@@ -2163,6 +2249,9 @@ function frame(ts) {
   warmer.scope(() => jobs.tick(hurry ? Math.max(5, Math.min(50, frameMs * 0.5)) : Math.max(2.5, Math.min(14, frameMs * 0.3)), Math.max(12, frameMs * 0.25), hurry));
   // what all that added to the scene: made ready unseen, then let in (src/warm.js). Not in a frame where the
   // queue's step was a long one, and after a long step of its own the queue rests: one long thing a frame.
+  // (another player's car, a step of it: see toCard. Not on top of a picture the queue sent or a long step of
+  // it, but not kept waiting for more than a third of a second either)
+  if (cardQueue.length && ((!jobs.sentPx && performance.now() - q0 < 6) || ++cardWait > 20)) { cardWait = 0; const px = cardStep(); if (px) { jobs.tell(px); lastFrame.car = 1; } }
   const q1 = performance.now();
   if (!jobs.live || hurry || q1 - q0 < Math.max(8, frameMs * 0.15)) {
     warmer.tick((frameMs / 16.7) * (hurry ? 4 : 1));
@@ -2238,6 +2327,7 @@ function frame(ts) {
 
 // debug / test hook
 window.__game = {
+  hitches,
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,

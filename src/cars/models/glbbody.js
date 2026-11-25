@@ -6,6 +6,7 @@
 // Impreza), and bare metal parts with their colour in the vertices (material 'pipe', its tailpipe).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { jobs } from '../../jobs.js';
 
 const cache = new Map();
 function load(url) {
@@ -134,8 +135,11 @@ export function useGlbBody(car, file, opts = {}) {
   // (setLights is applyLights in kit.js: it lights car.lit.glb and car.lit.glbLamps, set below, with these intensities)
   car.glbGlow = { tail, brake };
   // resolves once the scanned body is on (or failed to load): instanceCarModel copies the car again then
-  car.ready = load(`${import.meta.env.BASE_URL}models/${file}`).then((meshes) => {
-    if (!meshes.length) return;
+  // (Martin 2026-11-25, stutters with 90 online: putting the scan on, its extras and the four arch liners were one
+  // piece of 25 to 105 ms on the page whenever the first car of a scanned kind arrived, another player's too. Now
+  // steps in the work queue: while somebody drives each liner and the extras get a frame of their own, and behind
+  // the menu or in the garage it all runs at once as before. onLoad may be a generator and stop on the way itself.)
+  const put = function* (meshes) {
     if (wheelOut) for (const [k, w] of Object.entries(car.wheels)) w.steer.position.x += Math.sign(w.steer.position.x) * (k[0] === 'f' ? wheelOut.front : wheelOut.rear);
     const keep = new Set(Object.values(car.wheels).map((w) => w.steer));
     for (const o of car.group.children) if (!keep.has(o)) o.visible = false;
@@ -149,14 +153,25 @@ export function useGlbBody(car, file, opts = {}) {
       car.triangles = (car.triangles || 0) + src.geometry.index.count / 3;
     }
     car.setLights();
-    onLoad?.(meshes, car);
+    if (onLoad) {
+      yield 'frame';
+      const more = onLoad(meshes, car);
+      if (more && typeof more.next === 'function') yield* more;
+    }
     // dark wheel wells: the scan has no arch liners, so without these you would see through the car.
     // Each liner is shaped to the arch: rays from the hub find the bodywork, so it never pokes through.
     if (liner) for (const w of Object.values(car.wheels)) {
+      yield 'frame';
       const p = w.steer.position.clone(); p.y += lower;
       const l = archLiner(meshes, p, liner, p.y + (liner.gap ?? 0.035)); l.position.y = -lower;
       car.group.add(l);
     }
+  };
+  car.ready = load(`${import.meta.env.BASE_URL}models/${file}`).then((meshes) => {
+    if (!meshes.length) return undefined;
+    return new Promise((done) => {
+      jobs.add(function* scanOn() { try { yield* put(meshes); } catch (e) { console.warn('glb body', file, e); } finally { done(); } }, 'scanned car body');
+    });
   }).catch((e) => console.warn('glb body', file, e));
   return car;
 }

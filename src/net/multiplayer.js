@@ -14,6 +14,7 @@ import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
+import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
@@ -372,9 +373,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     };
     sock.onmessage = (e) => {
       if (e.data === 'pong') return;
+      const t0 = performance.now();
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
       onMessage(m);
+      outside.note('net', t0);          // (time on the page outside the game's frame: src/hitches.js)
     };
     sock.onclose = (e) => {
       clearInterval(ping); clearInterval(clockTimer);

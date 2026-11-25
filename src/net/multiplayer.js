@@ -400,11 +400,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let full = false;
   let released = false;
   let kickNote = false;
+  let qPos = 0;                  // our place in the queue while the server is full (1: next in)
+  const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
   const kicked = () => { kickNote = false; toast('KICKED FOR INACTIVITY · ROAM OFFLINE, BACK ONLINE SOON', 6000); };
   function schedule() {
     retry = Math.min(retry * 2, 15);
     clearTimeout(wsRetry);
-    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, full ? 20000 + Math.random() * 20000 : retry * 1000);
+    // (near the front of the queue it asks sooner: a place is kept for the front, Martin 25 Nov)
+    const wait = !full ? retry * 1000 : qPos && qPos <= 3 ? 4000 + Math.random() * 2000 : qPos && qPos <= 10 ? 10000 + Math.random() * 5000 : 20000 + Math.random() * 20000;
+    wsRetry = setTimeout(() => { wsRetry = 0; connect(); }, wait);
   }
   const soon = () => { if (wsRetry && !document.hidden) { clearTimeout(wsRetry); wsRetry = 0; connect(); } };
   addEventListener('online', soon);
@@ -561,13 +565,16 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         break;
       }
       case 'full':
+        // (q: our place in the queue for the next free place, 0 from an older server)
+        qPos = Number.isInteger(m.q) && m.q > 0 ? m.q : 0;
         if (kickNote) kicked();
-        else if (!full) toast(`SERVER FULL (${Number(m.max) || 100}) · DRIVING OFFLINE TILL A PLACE FREES`, 5000);
+        else if (!full) toast(`SERVER FULL (${Number(m.max) || 100}) · ${qPos ? `${ordinal(qPos)} IN QUEUE` : 'DRIVING OFFLINE TILL A PLACE FREES'}`, 5000);
         full = true; online = false;
         onPeople?.('count');
         break;
       case 'welcome':
         if (full) toast('A PLACE FREED UP · ONLINE AGAIN', 3000);
+        qPos = 0;
         kickNote = false;
         full = false;
         myId = m.id;
@@ -1177,6 +1184,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get online() { return online; },
     // the server was full: driving offline until a place frees (see schedule)
     get full() { return full; },
+    // our place in the queue while full (0: not known)
+    get queuePos() { return qPos; },
     stealth: STEALTH,
     get count() { return others.size; },
     nameReady,

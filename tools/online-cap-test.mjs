@@ -153,7 +153,9 @@ try {
   o = await online();
   assert.equal(o.total, 3);
   assert.equal(o.players.filter((p) => p.name === 'Bert').length, 1, 'shown once');
-  assert.ok((await page({ name: 'Emil' })).full, 'still full');
+  const E4 = await page({ name: 'Emma' });
+  assert.ok(E4.full, 'still full');
+  assert.deepEqual([E.full && E4.full, E4.b.msgs.find((m) => m.t === 'full').q], [true, 2], 'Emma waits second in the queue, behind Emil');
   ok('a reloaded tab gets back in, shown once, its old socket closed and announced as left');
 
   // 5. a spectator and a driver on the map keep their places however long; one in the garage past IDLE_S gives
@@ -163,8 +165,8 @@ try {
   B2.b.deaf = true;
   B2.b.send({ t: 'at', w: 'garage' });
   await sleep(IDLE_S * 1000 + 600);
-  const E2 = await page({ name: 'Emil' });
-  assert.ok(!E2.full, 'the newcomer gets the idle place');
+  const E2 = await page({ w: E.w, name: 'Emil' });
+  assert.ok(!E2.full, 'the first in the queue gets the idle place');
   assert.equal((await B2.b.waitClose())?.code, 4002, 'the idle page is told why (4002)');
   assert.ok(!D2.b.closed && !A2.b.closed, 'the spectator and the driver keep theirs');
   const F = await page({ name: 'Finn' });
@@ -173,19 +175,31 @@ try {
   assert.equal(o.total, 3);
   ok('garage past IDLE_S frees one place (4002) for one newcomer; spectator and driver keep theirs');
 
-  // 6. a rush: one place, eight pages at the same moment: exactly one gets in
+  // 6. the queue: a place frees while Emma and Finn wait; eight pages that just opened all get FULL with places
+  //    behind them (the place is kept for the front), Emma gets in, then Finn is first
   E2.b.close(); await E2.b.waitClose();
   await sleep(200);
   const rush = await Promise.all(Array.from({ length: 8 }, (_, i) => page({ name: `Rush${i}` })));
-  assert.equal(rush.filter((r) => !r.full).length, 1, 'exactly one of eight gets the place');
+  assert.equal(rush.filter((r) => !r.full).length, 0, 'a place kept for the queue is not taken by pages that just opened');
+  assert.deepEqual(rush.map((r) => r.b.msgs.find((m) => m.t === 'full').q).sort((x, y) => x - y), [3, 4, 5, 6, 7, 8, 9, 10], 'each told its place in the queue');
+  o = await online();
+  assert.equal(o.queue, 10);
+  const E5 = await page({ w: E4.w, name: 'Emma' });
+  assert.ok(!E5.full, 'the front of the queue gets the kept place');
+  const F2 = await page({ w: F.w, name: 'Finn' });
+  assert.equal(F2.b.msgs.find((m) => m.t === 'full')?.q, 1, 'Finn is next');
+  // a rush for one place among pages all in the queue: only the front gets it
+  E5.b.close(); await E5.b.waitClose(); await sleep(200);
+  const again = await Promise.all([...rush.slice(0, 4).map((r) => page({ w: r.w })), page({ w: F.w, name: 'Finn' })]);
+  assert.deepEqual(again.map((r) => r.full), [true, true, true, true, false], 'of five asking at once, the front of the queue gets in');
   o = await online();
   assert.equal(o.total, 3);
-  ok('8 pages at once for 1 place: 1 in, 7 told FULL');
+  ok('queue: a freed place is kept for the front; 8 new pages told places 3-10; Emma, then Finn, in order');
 
   // 7. a page that goes silent while the server is not full keeps no place for long: after 80 s without a ping
   //    the next newcomer takes it (slow: only with `slow`)
   if (process.argv.includes('slow')) {
-    const winner = rush.find((r) => !r.full);
+    const winner = again[4];
     winner.b.silent = true; winner.b.deaf = true;
     await sleep(82000);
     for (const p of [A2, D2]) p.b.send('ping');

@@ -67,6 +67,7 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
                                   // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
 const IDLE_MS = 30000;            // in the garage, the menu or another tab this long: gives up the place when the server is full (seats; 2 min until Martin 25 Nov)
+const QUEUE_FRESH = 45000;        // a waiting page that asked again within this long holds its place in the queue (pages retry every 4 to 40 s)
 const WAIT_GONE = 90000;           // a refused page asks again every 20 to 40 s (longer in a hidden tab): quiet this long, it gave up
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
@@ -317,6 +318,13 @@ export class Lobby extends DurableObject {
     if (now - e.last < WAIT_GONE) { this.load.joined++; this.load.waitMs += now - e.first; }
   }
   waitClean(now) { for (const [k, e] of this.waiting) if (now - e.last >= WAIT_GONE) this.waiting.delete(k); }
+  // The queue (Martin 25 Nov: "show in queue"): pages waiting outside, first come first, that asked again lately.
+  // A freed place is kept for the front of it: a page that just opened waits its turn behind them.
+  queue(now) {
+    const q = [];
+    for (const [k, e] of this.waiting) if (now - e.last < QUEUE_FRESH) q.push([k, e.first]);
+    return q.sort((x, y) => x[1] - y[1]).map((x) => x[0]);
+  }
   loadTick(now = Date.now()) {
     const min = Math.floor(now / 60000);
     if (min === this.loadMin) return;
@@ -531,11 +539,12 @@ export class Lobby extends DurableObject {
     const gone = this.prune();
     const now = Date.now(), idleMs = (Number(this.env?.IDLE_S) || IDLE_MS / 1000) * 1000;   // (IDLE_S on the Worker changes it without a deploy)
     let n = 0, idle = null, idleAt = Infinity, own = false;
+    this.ownSeat = false;
     for (const ws of this.ctx.getWebSockets()) {
       if (gone.has(ws)) continue;
       const a = ws.deserializeAttachment();
       if (a?.ghost || a?.x) continue;
-      if (pw && a?.pw === pw && !own) { own = true; continue; }
+      if (pw && a?.pw === pw && !own) { own = this.ownSeat = true; continue; }
       n++;
       if (!a?.id || (a.w !== 'garage' && a.w !== 'away') || this.race.racing(a.id)) continue;
       const since = a.wt || a.at || now;
@@ -719,14 +728,17 @@ export class Lobby extends DurableObject {
       const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
       const wk = this.waitKey(url, ip), now = Date.now();
       const pw = wk.startsWith('w|') ? wk.slice(2) : '';
-      if (this.seats(max, pw) >= max) {
+      const n = this.seats(max, pw), q = this.queue(now), qi = q.indexOf(wk), free = max - n;
+      // (its own connection coming back skips the queue: it had the place a moment ago)
+      if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.length >= free))) {
         this.refused(wk, now);
         this.loadTick(now);
+        const qq = this.queue(now);
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
         pair[1].accept();
-        pair[1].send(JSON.stringify({ t: 'full', max }));
+        pair[1].send(JSON.stringify({ t: 'full', max, q: qq.indexOf(wk) + 1, qn: qq.length }));
         pair[1].close(4001, 'full');
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
@@ -752,7 +764,7 @@ export class Lobby extends DurableObject {
       // who is online now, for the stats page (Martin 2026-11-22: "sometimes check out of curiosity"):
       // the names, cars and race places everyone in the game already sees, no ids or addresses.
       // Ghosts (stealth) and sockets silent for 80 s are left out, like in the game's own list.
-      const now = Date.now(), race = this.race, seen = new Set(), players = [];
+      const now = Date.now(), race = this.race, seen = new Set(), players = [], at = {};
       const on = race.s.phase === 'on';
       for (const ws of this.ctx.getWebSockets()) {
         const a = ws.deserializeAttachment();
@@ -760,6 +772,10 @@ export class Lobby extends DurableObject {
         seen.add(a.id);
         const r = on && race.s.racers.find((x) => x.id === a.id);
         players.push({ name: a.name, car: a.car, drv: !!a.drv, since: a.at || now, race: r ? (r.ms != null ? 'fin' : r.out ? 'out' : 'in') : null });
+        // where the ones not driving are (Martin 25 Nov: 96 in the game, 54 driving: who are the rest?). On the
+        // map and not driving: a Raadi stage run (not counted as driving for the race votes)
+        const k = a.drv ? 'drv' : a.w === 'map' ? 'stage' : a.w === 'garage' || a.w === 'away' || a.w === 'watch' ? a.w : 'start';
+        at[k] = (at[k] || 0) + 1;
       }
       players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
       const ph = race.phase(now);
@@ -767,7 +783,7 @@ export class Lobby extends DurableObject {
       // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap
       this.waitClean(now);
       const cap = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
-      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, waiting: this.waiting.size, cap, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
+      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, at, waiting: this.waiting.size, queue: this.queue(now).length, cap, players: players.slice(0, 60), more: Math.max(0, players.length - 60),
         race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
     }
 

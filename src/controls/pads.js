@@ -123,6 +123,8 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
   let padAt = -1, keyAt = 0;       // when a controller / the keyboard was last used (performance.now)
   let capture = null;              // the setup screen wants the next button press
   let quiet = false;               // buttons do nothing (the setup screen is open)
+  let acted = false;               // somebody did something on a controller since acted() was last asked (src/idlepark.js)
+  const steerAt = new Map();       // gamepad index -> the steering it was last seen moved to
   const known = new Set();
 
   const list = () => (enabled && navigator.getGamepads ? [...navigator.getGamepads()].filter((g) => g && g.connected !== false) : []);
@@ -143,6 +145,7 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
     addEventListener('gamepaddisconnected', (e) => {
       known.delete(e.gamepad.id + e.gamepad.index);
       prevBtn.delete(e.gamepad.index);
+      steerAt.delete(e.gamepad.index);
       if (active?.index === e.gamepad.index) { active = null; padAt = -1; }
       toast('CONTROLLER DISCONNECTED', 2200);
       emit();
@@ -168,11 +171,16 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
       const now = gp.buttons.map(pressed);
       prevBtn.set(gp.index, now);
       let moved = Math.abs(r.steer) > 0.25 || r.thr > 0.1 || r.brk > 0.1;
+      // (a wheel left turned is not somebody driving: steering counts for the idle check only as it changes)
+      const sWas = steerAt.get(gp.index);
+      if (sWas === undefined) steerAt.set(gp.index, r.steer);
+      else if (Math.abs(r.steer - sWas) > 0.05) { steerAt.set(gp.index, r.steer); acted = true; }
+      if (r.thr > 0.1 || r.brk > 0.1) acted = true;
       for (let i = 0; i < now.length; i++) {
         if (!now[i] || was[i]) continue;
         // (a pedal on a button, such as a pad's triggers, is not a button press)
         if ((prof.thr?.src.t === 'b' && prof.thr.src.i === i) || (prof.brk?.src.t === 'b' && prof.brk.src.i === i)) continue;
-        moved = true;
+        moved = acted = true;
         if (capture) { const c = capture; capture = null; c(gp, i); continue; }
         if (quiet || mode === 'kb') continue;
         for (const a of ACTIONS) if (!a.held && prof.btn[a.id] === i) actionFns.get(a.id)?.(gp);
@@ -226,5 +234,7 @@ export function createPads({ enabled = true, toast = () => {} } = {}) {
       return { gp, prof: profileOf(gp) };
     },
     get connected() { return list().length; },
+    // a pedal, a button or a turn of the wheel since this was last asked
+    acted() { const a = acted; acted = false; return a; },
   };
 }

@@ -172,6 +172,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createIdlePark } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
@@ -1215,6 +1216,7 @@ function startDriving() {
     return;
   }
   if (readyWait) { readyWait = 0; showReady(); }
+  $('#idlenote').classList.add('hidden');
   shadersReady();                                    // (where nothing waited for them: made ready from here on)
   if (car.spec.id !== carId) setCar(carId, true);   // a car picked during the drone flight
   mode = 'drive';
@@ -1321,6 +1323,22 @@ function openGarage() {
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
   car.vx = car.vy = car.yawRate = 0;
 }
+
+// A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
+// (src/idlepark.js; ?idle=<seconds> for trying it out, ?idle=0 never). The garage says why until the next DRIVE.
+// (an automated test run is never judged unless it asks: many of them leave a car standing for minutes)
+const idleS = params.has('idle') ? +params.get('idle') || Infinity : navigator.webdriver ? Infinity : undefined;
+const idlePark = createIdlePark({
+  idle: idleS, warn: idleS < 30 ? 5 : undefined,
+  show: (n) => hud.toast(`IDLE · BACK TO GARAGE IN ${n}`, 1600),
+  hide: () => hud.untoast('IDLE · '),
+  park() {
+    stats.count('idle');
+    closeOverlays();
+    openGarage();
+    $('#idlenote').classList.remove('hidden');
+  },
+});
 
 // A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
 // like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
@@ -2019,6 +2037,8 @@ function frame(ts) {
   // for 30 s still counts, see AWAY_S; a racer before the lights counts from the garage too)
   mp.setDriving(((mode === 'drive' && !document.hidden && !watch?.active) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : watch?.active ? 'watch' : mode === 'drive' ? 'map' : 'garage', watch?.id || '');   // (the menu is the garage)
+  // a car left standing with nobody at the controls: a countdown, then the garage (src/idlepark.js)
+  idlePark.update(mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost && !stageBusy() && !readyOn && !dropping && !respawning, ctl, car, pads.acted());
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();

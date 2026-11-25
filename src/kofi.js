@@ -85,6 +85,12 @@ if (a && menu) {
       // (the menu's own taps and drags must not see what happens in the panel)
       for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove']) panel.addEventListener(ev, (e) => e.stopPropagation());
       menu.append(panel);
+      // (how wide this browser's scrollbars are, so the one in Ko-fi's page can be pushed just out of sight)
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:absolute;top:-200px;width:100px;height:100px;overflow:scroll;visibility:hidden';
+      document.body.append(probe);
+      panel.style.setProperty('--sbw', `${probe.offsetWidth - probe.clientWidth}px`);
+      probe.remove();
     }
     // (over the button, its right edge and foot where the button's are, as tall as the room above allows; it
     // grows out of the button: the clip it starts from is the button's place and size)

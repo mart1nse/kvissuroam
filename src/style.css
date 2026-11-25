@@ -1033,7 +1033,7 @@ body.touch #rsplash { top: 22%; font-size: 12px; }
 body.racesplash #lapsplit { visibility: hidden; }
 #rlights .sub { font-size: max(9.5px, .45em); font-weight: 700; letter-spacing: .1em; opacity: .85; }
 /* phones (Martin 2026-11-25): on the left, between the minimap and the lap timer: the race line (wrapping, two lines
-   of room kept, opens the results when there are some: the chip's job), and the button under it; the right side
+   of room kept, its top line opens the results when there are some: the chip's job), and the button under it; the right side
    under the top buttons is the online list's */
 body.touch #racebox { left: var(--gapl); top: max(10px, env(safe-area-inset-top)); width: var(--gapw); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 body.touch #rchip { display: none; }
@@ -1041,8 +1041,12 @@ body.touch #rbtn { order: 1; width: var(--rbw); height: var(--rbh); white-space:
 body.touch #rbtn.long { font-size: clamp(11px, 1.6vw, 16px); }
 body.touch #rsub { min-height: 2.6em; width: 100%; margin: 0;
   white-space: normal; overflow-wrap: anywhere; line-height: 1.3; font-size: clamp(9.5px, 1.3vw, 12px); }
-body.touch #rsub.tap { pointer-events: auto; }
-body.touch #rsub .res { white-space: nowrap; color: var(--cyan); margin-left: .5em; }
+/* what the line opens (LIVE RACE, RESULTS) on its own line at the top, the white words between it and the race button
+   (Martin 2026-11-25: the two were too close for a thumb); only that top line takes the tap, and its touch area
+   reaches up to the screen's edge and a little to the sides, not down */
+body.touch #rsub .res { display: block; width: max-content; max-width: 100%; box-sizing: content-box; white-space: nowrap; color: var(--cyan);
+  margin: calc(-1 * max(10px, env(safe-area-inset-top))) -12px 0 -8px; padding: max(10px, env(safe-area-inset-top)) 12px 3px 8px; }
+body.touch #rsub.tap .res { pointer-events: auto; }
 /* phones: the race list in the lap timer's place (the lap timer hides while it shows), growing to the left */
 body.touch #rlist { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); max-height: 70vh; box-sizing: border-box;
   width: min(380px, 100vw - var(--lapr) - max(10px, env(safe-area-inset-left)) - var(--mm) - 10px);   /* right of the minimap (Martin 22 Nov) */

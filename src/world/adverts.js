@@ -29,7 +29,8 @@ let bigMat = null;
 export function posterPlane(w, h, reach = 90) {
   const [u0, v0, u1, v1] = adCell(POSTER), geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * (u1 - u0), v0 + uv.getY(k) * (v1 - v0));
-  const m = new THREE.Mesh(geo, bigMat ||= new THREE.MeshLambertMaterial({ map: adAtlas() }));
+  // (drawn a little nearer than it is, so a wall close behind never shows through on a phone's coarser depth)
+  const m = new THREE.Mesh(geo, bigMat ||= new THREE.MeshLambertMaterial({ map: adAtlas(), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
   m.receiveShadow = true;
   clickablePoster(m, reach);
   return m;

@@ -71,8 +71,11 @@ const cleanOn = (v) => (typeof v === 'string' && /^[\w-]{1,16}$/.test(v) ? v : '
 const MAX_SOCKETS = 100;          // everyone with the game open (150 until 2026-11-24: Martin capped online play at 100, about the most
                                   // one lobby carries smoothly); the next one is told FULL and drives offline until a place frees
 const IDLE_MS = 30000;            // in the garage, the menu or another tab this long: gives up the place when the server is full (seats; 2 min until Martin 25 Nov)
-const QUEUE_FRESH = 45000;        // a waiting page that asked again within this long holds its place in the queue (pages retry every 4 to 40 s)
-const WAIT_GONE = 90000;           // a refused page asks again every 20 to 40 s (longer in a hidden tab): quiet this long, it gave up
+// (25 Nov, ready for a surge of thousands at once, a Reddit post: far back in the queue a page asks only every 60 to
+// 90 s, so 10,000 waiting are about 130 questions a second; the front asks every 4 to 6 s)
+const QUEUE_FRESH = 150000;       // a waiting page that asked again within this long holds its place in the queue
+const WAIT_GONE = 180000;          // quiet this long (no new question), a refused page gave up waiting
+const WAIT_MAX = 50000;            // pages remembered as waiting
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 // Messages other than positions and clock asks change something the others hear about or that is stored
@@ -120,6 +123,23 @@ const sameText = (a, b) => {
   return d === 0;
 };
 
+// Lap tickets made in the Worker, signed like the lobby's own (Lobby.newTicket), the secret fetched once per isolate
+let tkKey = null;
+const tkRate = new Map();
+async function edgeTicket(env, ip) {
+  const now = Date.now();
+  let e = tkRate.get(ip);
+  if (!e || now - e.t > 600000) { if (tkRate.size > 20000) tkRate.clear(); e = { t: now, n: 0 }; tkRate.set(ip, e); }
+  if (++e.n > 30) return json({ error: 'too many requests' }, 429);
+  if (!tkKey) {
+    const secret = await env.LOBBY.get(env.LOBBY.idFromName('lobby')).ticketSecret();
+    tkKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  }
+  const body = `${now.toString(36)}.${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  const sig = b64(await crypto.subtle.sign('HMAC', tkKey, new TextEncoder().encode(body))).slice(0, 27);
+  return json({ key: `${body}.${sig}` });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -152,7 +172,27 @@ export default {
       fwd.headers.set('x-country', String(req.cf?.country || ''));
       return env.STATS.get(env.STATS.idFromName('stats')).fetch(fwd);
     }
+    if (url.pathname === '/api/ticket') {
+      try { return await edgeTicket(env, ip); } catch { tkKey = null; /* the lobby makes it then */ }
+    }
     const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'));
+    // The lap board and the online list are the same for everyone: kept a few seconds in Cloudflare's cache at
+    // each data centre, so thousands of pages opening at once (a surge, 25 Nov) ask the one lobby only now and
+    // then. (The full list behind /stats' "more" too.)
+    const shared = req.method === 'GET' && (url.pathname === '/api/board' || url.pathname === '/api/online') && !url.search.replace(/^\?all=1$/, '');
+    if (shared && typeof caches !== 'undefined') {
+      const key = new Request(`${url.origin}${url.pathname}${url.search}`);
+      try { const hit = await caches.default.match(key); if (hit) return hit; } catch { /* no cache here */ }
+      const res = await stub.fetch(req);
+      if (res.ok) {
+        const body = await res.arrayBuffer(), headers = new Headers(res.headers);
+        headers.set('cache-control', `public, max-age=${url.pathname === '/api/board' ? 5 : 10}`);
+        const out = new Response(body, { status: res.status, headers });
+        try { await caches.default.put(key, out.clone()); } catch { /* no cache here */ }
+        return out;
+      }
+      return res;
+    }
     return stub.fetch(req);
   },
 };
@@ -309,9 +349,12 @@ export class Lobby extends DurableObject {
     this.load.ref++;
     const e = this.waiting.get(key);
     if (e && now - e.last < WAIT_GONE) { e.last = now; return; }
-    if (this.waiting.size >= 2000) this.waitClean(now);
-    if (this.waiting.size >= 2000) return;
+    // (the Map keeps the order of first asking, which is the queue's order: one that gave up and came back is new)
+    if (e) this.waiting.delete(key);
+    if (this.waiting.size >= WAIT_MAX && now - (this.cleanAt || 0) > 10000) { this.cleanAt = now; this.waitClean(now); }
+    if (this.waiting.size >= WAIT_MAX) return;
     this.waiting.set(key, { first: now, last: now });
+    if (this.qc) this.qc.added++;            // (behind everyone in the queue worked out last)
     this.load.away++;
   }
   // a page that waited outside got its place
@@ -319,15 +362,19 @@ export class Lobby extends DurableObject {
     const e = this.waiting.get(key);
     if (!e) return;
     this.waiting.delete(key);
+    this.qc = null;
     if (now - e.last < WAIT_GONE) { this.load.joined++; this.load.waitMs += now - e.first; }
   }
   waitClean(now) { for (const [k, e] of this.waiting) if (now - e.last >= WAIT_GONE) this.waiting.delete(k); }
   // The queue (Martin 25 Nov: "show in queue"): pages waiting outside, first come first, that asked again lately.
   // A freed place is kept for the front of it: a page that just opened waits its turn behind them.
+  // Worked out at most once a second (and after someone got in): with thousands waiting each question would
+  // otherwise walk the whole list. A page new to the queue is put at its end.
   queue(now) {
-    const q = [];
-    for (const [k, e] of this.waiting) if (now - e.last < QUEUE_FRESH) q.push([k, e.first]);
-    return q.sort((x, y) => x[1] - y[1]).map((x) => x[0]);
+    if (this.qc && now - this.qc.at < 1000) return this.qc;
+    const list = [];
+    for (const [k, e] of this.waiting) if (now - e.last < QUEUE_FRESH) list.push(k);
+    return (this.qc = { at: now, list, idx: new Map(list.map((k, i) => [k, i])), added: 0 });
   }
   loadTick(now = Date.now()) {
     const min = Math.floor(now / 60000);
@@ -460,6 +507,12 @@ export class Lobby extends DurableObject {
     }
     return b64(await crypto.subtle.sign('HMAC', this.hmac, new TextEncoder().encode(text))).slice(0, 27);
   }
+  // the signing secret, for the Worker in front (Durable Object RPC, no browser can call it): it hands out the
+  // lap tickets itself, so a surge of pages opening does not each ask the lobby (25 Nov)
+  async ticketSecret() {
+    await this.sign('');
+    return this.meta('secret');
+  }
   async newTicket() {
     const body = `${Date.now().toString(36)}.${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
     return `${body}.${await this.sign(body)}`;
@@ -568,15 +621,20 @@ export class Lobby extends DurableObject {
     }
   }
 
-  nameTaken(name) {
+  // (on: the names online, lower case; worked out once for all the tries of a fresh name, 25 Nov: each try read
+  // every socket, a surge of new visitors asks for thousands)
+  nameTaken(name, on) {
     if (this.sql.exec('SELECT 1 FROM laps WHERE name = ? COLLATE NOCASE LIMIT 1', name).toArray().length) return true;
-    return this.players().some((p) => p.name.toLowerCase() === name.toLowerCase());
+    on ??= new Set(this.players().map((p) => p.name.toLowerCase()));
+    return on.has(name.toLowerCase());
   }
 
   freshName() {
+    const on = new Set();
+    for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment(); if (a?.id && !a.ghost && a.name) on.add(a.name.toLowerCase()); }
     for (let k = 0; k < 200; k++) {
       const n = `${ADJ[Math.floor(Math.random() * ADJ.length)]}${NOUN[Math.floor(Math.random() * NOUN.length)]}${k < 100 ? '' : Math.floor(Math.random() * 90 + 10)}`;
-      if (!this.nameTaken(n)) return n;
+      if (!this.nameTaken(n, on)) return n;
     }
     return `Driver${Math.floor(Math.random() * 900000 + 100000)}`;
   }
@@ -732,17 +790,18 @@ export class Lobby extends DurableObject {
       const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
       const wk = this.waitKey(url, ip), now = Date.now();
       const pw = wk.startsWith('w|') ? wk.slice(2) : '';
-      const n = this.seats(max, pw), q = this.queue(now), qi = q.indexOf(wk), free = max - n;
+      let q = this.queue(now);
+      if (!q.idx.has(wk) && this.waiting.has(wk)) { this.qc = null; q = this.queue(now); }   // (joined it since)
+      const n = this.seats(max, pw), qi = q.idx.get(wk) ?? -1, free = max - n;
       // (its own connection coming back skips the queue: it had the place a moment ago)
-      if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.length >= free))) {
+      if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.list.length + q.added >= free))) {
         this.refused(wk, now);
         this.loadTick(now);
-        const qq = this.queue(now);
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
         pair[1].accept();
-        pair[1].send(JSON.stringify({ t: 'full', max, q: qq.indexOf(wk) + 1, qn: qq.length }));
+        pair[1].send(JSON.stringify({ t: 'full', max, q: qi >= 0 ? qi + 1 : q.list.length + q.added, qn: q.list.length + q.added }));
         pair[1].close(4001, 'full');
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
@@ -789,7 +848,7 @@ export class Lobby extends DurableObject {
       // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap
       this.waitClean(now);
       const cap = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
-      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, at, waiting: this.waiting.size, queue: this.queue(now).length, cap, players: players.slice(0, lim), more: Math.max(0, players.length - lim),
+      return json({ now, total: players.length, drv: players.filter((p) => p.drv).length, at, waiting: this.waiting.size, queue: ((q) => q.list.length + q.added)(this.queue(now)), cap, players: players.slice(0, lim), more: Math.max(0, players.length - lim),
         race: on ? { phase: ph, racers: race.s.racers.length, racing: race.active().filter((r) => r.ms == null).length, finished: race.finished().length, green: race.s.tGreen } : null });
     }
 

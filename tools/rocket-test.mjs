@@ -4,6 +4,7 @@
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar, speedKmh } from '../src/cars/physics.js';
 import { TANK_S, JUMP_S, REFILL_S, refillTank, planFlip, flightPose, flightNozzles, NOZ } from '../src/cars/thrust.js';
+import { createSmoke } from '../src/smoke.js';
 
 const spec = CARS.rocket;
 const verbose = process.argv.includes('--v');
@@ -298,6 +299,24 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   const held = c2.rocket.noz[0];
   for (let k = 0; k < 30; k++) stepCar(c2, { up: 1 }, w2, dt);
   check('...and shut when it is let go', held > 0.8 && c2.rocket.noz[0] < 0.01);
+}
+
+// ---- puffs (src/smoke.js): the Rocket's additions leave every other car's tyre smoke as it was (25 Nov: the
+// mist's line had come between the tyre smoke and its `else`, and from 16:56 to the evening no car but the Rocket
+// smoked its own tyres)
+{
+  const sw = { groundAt: () => 0, surfaceAt: () => 1 };
+  // the most puffs alive in `secs` of a car standing on a ground with these figures
+  const puffs = (sp, over, secs = 2) => {
+    const sm = createSmoke(sw), car = { spec: sp, x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, throttle: 0, surface: 1, a: sp.wheelbase * sp.cgFront, b: sp.wheelbase * (1 - sp.cgFront), ...over };
+    if (sp.thrusters) car.rocket = { noz: new Float32Array(NOZ) };
+    let most = 0;
+    for (let t = 0; t < secs; t += 1 / 60) { sm.update(car, 1 / 60, true, []); most = Math.max(most, sm.count); }
+    return most;
+  };
+  const m3 = CARS.m3 || Object.values(CARS).find((c) => !c.thrusters && !c.dpfSmoke);
+  const burn = puffs(m3, { rubR: 13, slipVR: 6 }, 3), rocketBurn = puffs(spec, { rubR: 13, slipVR: 6 }, 3);
+  check('a burnout on paving smokes, for an ordinary car and for the Rocket', burn > 40 && rocketBurn > 40, `${burn} and ${rocketBurn} puffs`);
 }
 
 process.exit(ok ? 0 : 1);

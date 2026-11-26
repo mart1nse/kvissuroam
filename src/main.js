@@ -1232,8 +1232,17 @@ function buildMenu() {
   garage = createGarage({ root: $('#cards'), cars: CARS, groups: defs, picked: carId, onPick: (id) => setCar(id) });
   layoutMenu();
   $('#drive').addEventListener('click', startDriving);
+  // (a key typed into the name or the plate never gets here: those boxes keep their keys to themselves)
   addEventListener('keydown', (e) => {
-    if (mode !== 'menu' || board?.open) return;
+    if (mode !== 'menu') return;
+    // the garage's own letter keys (Martin 26 Nov): L opens and closes the lap times as on the road, and G goes
+    // back to the car as Esc does, once there has been a drive to go back to (not the same G press that opened
+    // the garage: the driving keys mark theirs as used)
+    if (!e.repeat && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !setup.isOpen) {
+      if (e.code === 'KeyL') { e.preventDefault(); if (board?.open) board.hide(); else board?.show(); return; }
+      if (e.code === 'KeyG' && drivenOnce && !board?.open) { e.preventDefault(); startDriving(); return; }
+    }
+    if (board?.open) return;
     if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') garage.step(e.code === 'ArrowRight' ? 1 : -1);
     else if (e.code === 'ArrowDown') garage.slide(1);
     else if (e.code === 'ArrowUp') garage.slide(-1);

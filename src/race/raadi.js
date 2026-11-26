@@ -31,6 +31,7 @@ import { SURFACE } from '../world/data.js';
 // (the stage's rules, its tables and what a run is: src/race/raadirules.js, which the server runs too)
 import { OFF_LIMIT, BACK_LIMIT, BACK_WARN, FIN_FLAG, SHORT_M, P, HW, N, START, FIN, TAN, S, side, MORE_BALES, TRACK_ROUND, TRACK_W, ROUND, yawAt, LINES, ARCS, penText, resetText, judgeStep, markRun, resetRun } from './raadirules.js';
 import { buildLine } from './raadi-line.js';
+import { CRASH_PEN } from '../cars/crash.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 // Not on a run, a car that drives into the circle round the start spot is put on the line (Martin 24 Nov 15:32: "Make a
@@ -814,6 +815,12 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       log?.cancel();                         // (the wheels' way up to here is kept; a line with a hop in it is not one)
       toast(resetText, 2600);
       return true;
+    },
+    // a hard crash into a wall or a tree (cars/crash.js) in a run: CRASH_PEN seconds, as on a lap of Toomemägi
+    crashed() {
+      if (st.phase !== 'run') return;
+      st.pen += CRASH_PEN;
+      toast(`+${CRASH_PEN} S FOR THE CRASH`, 2600);
     },
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,

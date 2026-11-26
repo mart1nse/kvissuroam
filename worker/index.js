@@ -25,9 +25,12 @@ import { LAP_GATES, MAX_SKIPS } from './follow.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
-import { carLimitsSteps, judgeDrive, OVER_MAX } from '../src/race/plausible.js';
-import { OLD_PAGES_UNTIL } from './cutover.js';
+import { carLimitsSteps, judgeDrive, OVER_MAX, GAS_OVER } from '../src/race/plausible.js';
+import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
+import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
 import { stageCheck } from './stagecheck.js';
+import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
+import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -51,11 +54,11 @@ const LAPS_IP_HOUR = 120, LAPS_NAME_DAY = 300;
 // the lap time the page gives: the server's may be this much shorter (a mark slow on its way) or longer (the same,
 // and the 2 s of freezes a lap is forgiven: SLOW_FREE in src/race/race.js). Past that the lap was not driven in
 // real time (slow motion: the game slows down under 20 frames a second, and the lap clock once slowed with it).
-// (Martin 26 Nov 2026: "make sure nothing is dropped on the other side too heavily". The server's clock reading
-// less than the lap time helps no cheat (a start mark held up on its way is all it can be), so that side is wide.
-// More than the lap time is what slow motion looks like: 2 s the page's own clock may lose to slow frames
-// (SLOW_FREE in src/race/race.js) and 1.5 s for the finish mark's way here.)
-const CLOCK_UNDER = 5000, CLOCK_OVER = 3500;
+// How far the server's clock may be from a lap's time. More than the lap time is what slow motion looks like: 2 s
+// the page's own clock may lose to slow frames (SLOW_FREE in src/race/race.js) and 1.5 s for the finish mark's way
+// here. Less than the lap time is a start mark held up on its way: 1.5 s (5 s for an hour on 26 Nov 2026; Martin:
+// "this back to 1.5s actually instead of 5").
+const CLOCK_UNDER = 1500, CLOCK_OVER = 3500;
 const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -137,9 +140,10 @@ const POSE_KEEP = 5000;                               // a car that has not sent
 // ahead of the server's: how far ahead it has ever been is kept (top), and a stamp past that is not believed.
 // V_MAX is for any car; one seen going over V_ASK has its own top speed looked up (carLimit: the game's physics,
 // once per kind of car) and is held to TOP_K of that from then on.
-const V_MAX = 110, STEP_ROOM = 1;                     // m/s (396 km/h), and metres
+const V_MAX = 116, STEP_ROOM = 1;                     // m/s (418 km/h; 110 until the Roadster Rocket, shown to nobody yet, was given its 405), and metres
 const V_ASK = 45, V_TOP_K = 1.15, V_TOP_ROOM = 3;
 const GAP_MS = 1500, FRESH_MS = 2000, FLAG_FRESH = 64;
+const JMP_NEAR = 60;                                  // m from its last position a Rocket's kickflip may start ('jmp')
 const JUMPS_MAX = 12, JUMP_LEAK = 5000;
 const SPEED_K = 1.3, SPEED_ROOM = 4;                  // claimed speed: at most this share of the speed seen, plus m/s
 const STAMP = 21;                                     // a position's slot for when it was taken (ms within the minute, the sender's clock)
@@ -150,6 +154,9 @@ const STAMP = 21;                                     // a position's slot for w
 // After MAP_IDLE_MS of that the page's connection is closed as for an idle garage (4002) and it is kept out for
 // MAP_OUT_MS, twice as long each time up to MAP_OUT_MAX. Back in, it has MAP_PROBE_MS to touch a pedal or the
 // wheel: then it is as anyone again, otherwise out again. (MAP_IDLE_S and MAP_OUT_S on the Worker change the first two.)
+// (26 Nov, Martin: with room on the server a car may stand on the map for as long as it likes, so more players are
+// seen online. Such a page's car is judged only while the server is "tight", over ROOM_AT of its places taken, see
+// room(); a bus always, tight or not.)
 const MAP_IDLE_MS = 180000, MAP_PROBE_MS = 20000, MAP_OUT_MS = 60000, MAP_OUT_MAX = 15 * 60000;
 const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
@@ -296,11 +303,18 @@ function checkTrace(text, track, driving, drive = {}) {
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
   const g = GATES[track];
-  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0;
+  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0, fl = 0;
   const xs = drive.xs = new Float64Array(n), zs = drive.zs = new Float64Array(n), ys = drive.ys = new Float64Array(n);
+  // (and how far the car is rolled over, rad: a car with thrusters that turns over in the air has flown a kickflip)
+  const rolls = drive.roll = new Float64Array(n);
+  let roll = 0;
+  // (hard crashes into a wall, src/cars/crash.js: each is CRASH_PEN seconds in the lap's time)
+  const flags = new Int32Array(n);
+  for (let i = 0; i < n; i++) flags[i] = fl += a[4 + i * f + 20];
+  drive.crashes = crashesIn(flags);
   for (let i = 0; i < n; i++) {
-    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100;
-    xs[i] = x; zs[i] = z; ys[i] = y;
+    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100; roll += a[4 + i * f + 5] / 1000;
+    xs[i] = x; zs[i] = z; ys[i] = y; rolls[i] = roll;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
     if (i && Math.hypot(x - px, z - pz) > 12) {
       // R puts the car back on a spot it drove through at least 3 s before and the lap goes on (main.js
@@ -367,6 +381,12 @@ export class Lobby extends DurableObject {
     // how near play comes to each of the server's limits (margin(), GET /api/margins)
     this.sql.exec('CREATE TABLE IF NOT EXISTS margins (k TEXT NOT NULL, v REAL NOT NULL, at INTEGER NOT NULL)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS lapseen_sid ON lapseen (sid, ms)');
+    // (trail: where the car was seen during that lap, [tenths of a second after its start mark, x, z, ...]: livecheck.js)
+    if (!this.sql.exec('PRAGMA table_info(lapseen)').toArray().some((c) => c.name === 'trail')) this.sql.exec('ALTER TABLE lapseen ADD COLUMN trail TEXT');
+    // (fl: kickflips the car told of while the lap was on, see lapFlight)
+    if (!this.sql.exec('PRAGMA table_info(lapseen)').toArray().some((c) => c.name === 'fl')) this.sql.exec('ALTER TABLE lapseen ADD COLUMN fl INTEGER');
+    // the laps being driven now: sid -> { t0: the start mark, id: whose connection, last, pts } (lapPlace)
+    this.trails = new Map(); this.trailAsked = new Set();
     this.seenClean = 0;
     // where the cars drove a stage, a row a run (see LINES_MAX)
     this.sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, done INTEGER NOT NULL, ms INTEGER NOT NULL, pen INTEGER NOT NULL, n INTEGER NOT NULL, info TEXT NOT NULL, data BLOB NOT NULL)');
@@ -515,8 +535,8 @@ export class Lobby extends DurableObject {
     // does it hang together with the one before (see V_MAX)? fr: flagged until, st: the sender's time so far (s),
     // lead / top: how far its clock is ahead of ours and has ever been, ring: where it was lately [x, z, st, ...],
     // vo: the speed it is seen to move at (-1: not known yet)
-    let jump = !e, fast = false;
-    if (!e) this.poses.set(id, e = { p, j: '', t: now, n: 0, ws, t0: now, act: 0, fr: 0, jn: 0, jt: now, st: 0, lead: 0, top: 0, ring: [], vo: -1, car: ws.deserializeAttachment()?.car, vm: 0 });
+    let jump = !e, fast = false, att;
+    if (!e) this.poses.set(id, e = { p, j: '', t: now, n: 0, ws, t0: now, act: 0, fr: 0, jn: 0, jt: now, st: 0, lead: 0, top: 0, ring: [], vo: -1, car: (att = ws.deserializeAttachment())?.car, sid: att?.sid, vm: 0 });
     else {
       const dtA = Math.max(0, now - e.t) / 1000;
       let dt = dtA;
@@ -539,6 +559,8 @@ export class Lobby extends DurableObject {
       }
       e.st += dt;
     }
+    // (on a lap: where the car is, kept now and then for the judging of a record's drive: livecheck.js)
+    if (e.sid) this.lapPlace(e.sid, p[0], p[1], now, id);
     if (jump) {
       e.jn = Math.max(0, e.jn - (now - e.jt) / JUMP_LEAK); e.jt = now;
       if (e.jn >= JUMPS_MAX) return;
@@ -579,10 +601,13 @@ export class Lobby extends DurableObject {
   idleCars(now) {
     const idleMs = (Number(this.env?.MAP_IDLE_S) || MAP_IDLE_MS / 1000) * 1000, outMs = (Number(this.env?.MAP_OUT_S) || MAP_OUT_MS / 1000) * 1000;
     for (const [key, k] of this.parked) if (now > k.until + 3600000) this.parked.delete(key);
+    // (also every 5 s while anyone drives: is the server tight? A socket gone silent changes that with no event)
+    const tight = this.room();
     for (const [id, e] of this.poses) {
       const a = e.ws.deserializeAttachment();
       if (!a?.id || a.x || a.i || a.ghost) continue;
       if (this.race.racing(id)) { e.t0 = now; continue; }          // (from the count to the flag: as if just arrived)
+      if (!tight && !alwaysJudged(a.car)) continue;                // (room on the server: it may stand)
       const key = a.pw ? `w|${a.pw}` : `i|${a.ip}`;
       let k = this.parked.get(key);
       if (k?.back && e.act > k.back) { this.parked.delete(key); k = null; }
@@ -778,6 +803,28 @@ export class Lobby extends DurableObject {
     return n;
   }
 
+  // Is the server tight: more than ROOM_AT of its places taken (over 90 of 100, by MAX_ONLINE)? With room, a car
+  // standing on the map with nobody at its controls is left there (Martin 26 Nov: more players seen online, no harm
+  // in it); tight, the idle rule is on for everyone (src/idlepark.js on the page, idleCars here for the old pages).
+  // Every page hears it with its welcome and whenever it changes ({ t: 'room', tight }). Counted as seats counts
+  // (no ghosts, no closed sockets, none gone silent), without letting anyone go. `this.tight` is forgotten when the
+  // object sleeps: the first look after that tells everyone once more.
+  // except: a socket that is closing
+  room(except) {
+    const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS)), now = Date.now();
+    let n = 0;
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      const a = ws.deserializeAttachment();
+      if (a?.ghost || a?.x) continue;
+      const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
+      if (Math.max(ping, a?.at || 0) > now - 80000) n++;
+    }
+    const tight = n > max * ROOM_AT;
+    if (tight !== this.tight) { this.tight = tight; this.broadcast({ t: 'room', tight: tight ? 1 : 0 }, except); }
+    return tight;
+  }
+
   broadcast(msg, except) {
     const s = typeof msg === 'string' ? msg : JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
@@ -902,32 +949,92 @@ export class Lobby extends DurableObject {
   // connection, 'lm'; by POST /api/mark when it has none), and the server keeps how long that took by its own
   // clock. A lap that would be a car's best counts only if the two agree (lapClock). A drive that was not driven
   // but made up or copied has to be played out in real time for this, too.
-  lapMark(sid, e, ms, now = Date.now()) {
+  // (id: the connection the mark came over, none for a request)
+  lapMark(sid, e, ms, now = Date.now(), id = null) {
     if (!sid) return;
-    if (e === 's') { this.sql.exec('INSERT INTO lapmarks (sid, t0) VALUES (?, ?) ON CONFLICT (sid) DO UPDATE SET t0 = excluded.t0', sid, now); return; }
+    if (e === 's') {
+      this.sql.exec('INSERT INTO lapmarks (sid, t0) VALUES (?, ?) ON CONFLICT (sid) DO UPDATE SET t0 = excluded.t0', sid, now);
+      this.trails.set(sid, { t0: now, id, last: 0, pts: [] });
+      const pe = id && this.poses.get(id);
+      if (pe) pe.sid = sid;
+      return;
+    }
     if (e !== 'f') return;
+    const tr = this.trails.get(sid);
+    this.trails.delete(sid);
     const t0 = this.sql.exec('SELECT t0 FROM lapmarks WHERE sid = ?', sid).toArray()[0]?.t0;
     if (!t0) return;
     this.sql.exec('DELETE FROM lapmarks WHERE sid = ?', sid);
     ms = Math.round(Number(ms));
     if (!(ms >= MARK_MIN && ms <= 3600000)) return;
-    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at) VALUES (?, ?, ?, ?)', sid, ms, now - t0, now);
-    if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY); }
+    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at, trail, fl) VALUES (?, ?, ?, ?, ?, ?)', sid, ms, now - t0, now, tr?.t0 === t0 && tr.pts.length ? JSON.stringify(tr.pts) : null, tr?.t0 === t0 && tr.fl ? tr.fl : null);
+    if (now - this.seenClean > 3600000) {
+      this.seenClean = now;
+      this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY);
+      for (const [k, v] of this.trails) if (v.t0 < now - 3600000) this.trails.delete(k);
+      this.trailAsked.clear();
+    }
+  }
+  // A Rocket told the others of a kickflip (the 'jmp' message) while its lap or stage run was on. The game allows
+  // none then (src/main.js flipOff: "no flip when hotlap has started", Martin 26 Nov 2026), so the page is a changed
+  // one: the lap is marked, and cannot become a record (lapClock). A flight begun before the start line is told
+  // before the lap's start mark and is not counted; the game starts no lap while the car is in the air.
+  lapFlight(sid, id) {
+    const tr = sid && this.trails.get(sid);
+    if (tr && (!tr.id || !id || tr.id === id)) tr.fl = (tr.fl || 0) + 1;
+  }
+  // Where a car on a lap is, as its positions come in (pose) or by a request from a page with no connection: one
+  // place every LIVE_MS is kept from the lap's start mark to its finish, and goes into lapseen with the lap. After a
+  // restart of the server the lap's start is found again in lapmarks, and the places go on from there.
+  lapPlace(sid, x, z, now = Date.now(), id = null) {
+    let tr = this.trails.get(sid);
+    if (!tr) {
+      if (this.trailAsked.has(sid)) return;
+      this.trailAsked.add(sid);
+      const t0 = this.sql.exec('SELECT t0 FROM lapmarks WHERE sid = ?', sid).toArray()[0]?.t0;
+      if (!t0) return;
+      this.trails.set(sid, tr = { t0, id, last: 0, pts: [] });
+    }
+    // (a second window of the same browser has the same ticket: only the connection the lap was started over counts)
+    if (tr.id && id && tr.id !== id) return;
+    if (now - tr.last < LIVE_MS || tr.pts.length >= 3 * LIVE_MAX || !Number.isFinite(x) || !Number.isFinite(z)) return;
+    tr.last = now;
+    tr.pts.push(Math.round((now - tr.t0) / 100), Math.round(x), Math.round(z));
   }
   // what is wrong with a lap's time by the server's clock ('' for nothing)
-  lapClock(sid, ms) {
-    const rows = this.sql.exec('SELECT took FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
-    if (rows.some((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER)) return '';
-    if (rows.length) return `took ${rows[0].took} ms by the server's clock`;
-    // (no marks: a page from before they were sent, until those are gone: cutover.js)
-    return Date.now() < OLD_PAGES_UNTIL ? '' : 'no marks';
+  // (drive: the lap's replay { xs, zs }, held against where the car was seen while it was driven: livecheck.js. A
+  // lap the car was not seen on at all is from a page that does not send its places when alone, until those are
+  // gone: cutover.js)
+  lapClock(sid, ms, drive = null) {
+    const rows = this.sql.exec('SELECT took, trail, fl FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
+    const fit = rows.filter((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER);
+    if (fit.length && fit.every((r) => r.fl)) return `flight: ${fit[0].fl} kickflip${fit[0].fl > 1 ? 's' : ''} told of during the lap`;
+    if (!fit.length) {
+      if (rows.length) return `clock: took ${rows[0].took} ms by the server's clock`;
+      // (no marks: a page from before they were sent, until those are gone: cutover.js)
+      return Date.now() < OLD_PAGES_UNTIL ? '' : 'clock: no marks';
+    }
+    if (!drive) return '';
+    let why = '';
+    for (const r of fit) {
+      let pts = [];
+      try { pts = JSON.parse(r.trail || '[]'); } catch { /* none */ }
+      const c = liveCheck(pts, drive.xs, drive.zs, r.took);
+      if (c.n < LIVE_MIN) { if (Date.now() < LIVE_FROM) return ''; why ||= 'live: the car was not seen driving the lap'; continue; }
+      this.margin('live', c.miss / c.n);
+      if (liveOk(c)) return '';
+      why = `live: ${c.miss} of the ${c.n} places the car was seen at during the lap are not on its drive`;
+    }
+    return why;
   }
 
   // How near play comes to each of the server's limits (Martin 26 Nov 2026: "check other such places as well to make
   // sure nothing is dropped on the other side too heavily"): one figure for each thing judged, kept three days.
   // k: 'fin' the ms a racer's own finish time was before the server saw the car over the line (leeway SEEN_EARLY),
   // 'gaps' the gaps in a racer's positions that the lap was found again after (MAX_SKIPS), 'rcar' / 'car' the most
-  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX). The lap clock's own figures
+  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX), 'gas' the share of a tank a
+  // drive in a car with thrusters used over what the tank held (GAS_OVER), 'live' the share of the
+  // places a car was seen at during a lap that were not on its drive (LIVE_MISS). The lap clock's own figures
   // are in lapseen already. Read by GET /api/margins and the nightly look at the boards (tools/board-audit.mjs).
   margin(k, v, now = Date.now()) {
     if (Number.isFinite(v)) this.sql.exec('INSERT INTO margins (k, v, at) VALUES (?, ?, ?)', k, v, now);
@@ -944,7 +1051,7 @@ export class Lobby extends DurableObject {
     const kinds = { clock: sum(this.sql.exec('SELECT took - ms AS v FROM lapseen WHERE at >= ?', since).toArray().map((r) => r.v), -CLOCK_UNDER, CLOCK_OVER) };
     const by = {};
     for (const r of this.sql.exec('SELECT k, v FROM margins WHERE at >= ?', since).toArray()) (by[r.k] ||= []).push(r.v);
-    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX] };
+    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX], live: [0, LIVE_MISS], gas: [0, GAS_OVER] };
     for (const k of Object.keys(LIM)) kinds[k] = sum(by[k] || [], ...LIM[k]);
     return (this.marginsOut = { at: now, since, kinds });
   }
@@ -1035,25 +1142,32 @@ export class Lobby extends DurableObject {
     let best = bestNow(), had = hadNow();
     if (!lap.hold && best !== ms) return refuse('not the record', lap.name);
     if (!lap.hold && had && had.ms <= ms) return json({ ok: true });  // (that record's replay came already)
-    let bytes, why, told;
+    let bytes, why, told, launch;
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
       why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive);
+      // the seconds for its hard crashes into walls must be in its time (the page adds them; one that left them out)
+      const crashPen = (drive.crashes || 0) * CRASH_PEN;
+      if (!why && crashPen > (lap.pen || 0)) { why = `crash: the drive has ${drive.crashes} of them, its time ${lap.pen || 0} s of penalty`; told = 'crash'; }
       if (!why) {
         // the car itself: seconds of the drive over what this car can do (the list of refusals gets the figures,
         // the sender only that it was the car)
         // (if the limits cannot be worked out the drive is not judged: an honest record must not wait on a fault here)
         let lim = null;
         try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
-        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
-        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
+        // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
+        // the seconds it was turning over in the air, which is a kickflip inside the lap)
+        if (lim?.gas) this.margin('gas', j.gas);
+        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${lim?.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used; ${j.air} s of a kickflip` : ''})`; told = 'car'; }
+        launch = lim?.gas?.launch;
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
-      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, lap.pen || 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
-      if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000); if (c) { why = `clock: ${c}`; told = 'clock'; } }
+      if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }
     if (why) return refuse(why, lap.name, bytes?.length || 0, told);
     // (the lap as it is now: this waited for the unpacking and perhaps the car's limits, and the same replay sent
@@ -1113,6 +1227,7 @@ export class Lobby extends DurableObject {
       if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.list.length + q.added >= free))) {
         this.refused(wk, now);
         this.loadTick(now);
+        this.room();                      // (seats may have dropped silent sockets)
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
@@ -1129,6 +1244,7 @@ export class Lobby extends DurableObject {
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
       pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}), ...(self ? { i: 1 } : {}) });
+      this.room();                        // (one more place taken: tight now?)
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -1191,7 +1307,8 @@ export class Lobby extends DurableObject {
       for (const l of list) {
         const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms)), track = cleanTrack(l?.track);
         // (penalty seconds: whole, and the driving itself must still be a believable time)
-        const pen = track !== TRACK && Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
+        // (a stage's own, and on any track CRASH_PEN for each hard crash into a wall: the replay is asked again)
+        const pen = Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
         if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || LAP_MIN) && ms <= 3600000)) continue;
         // a time under a racist slur: answered as saved, so the browser stops sending it, and not kept
         if (badName(name)) { ok.push(ms); continue; }
@@ -1240,12 +1357,14 @@ export class Lobby extends DurableObject {
     if (path === '/api/mark' && req.method === 'POST') {
       // a lap's start or finish from a page that has no connection to the lobby (the server full, or the
       // connection down for a moment): {k: its lap ticket, e: 's' | 'f', ms: the lap time at the finish}
-      if (this.over(`m|${ip}`, 30, 60000)) return busy();
+      if (this.over(`m|${ip}`, 45, 60000)) return busy();
       let body;
       try { body = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
       const tk = await this.readTicket(body?.k);
       if (!tk) return json({ error: 'invalid' }, 400);
-      this.lapMark(tk.sid, body.e, body.ms);
+      // (e 'p': where its car is, every few seconds of a lap: lapPlace)
+      if (body.e === 'p') this.lapPlace(tk.sid, Number(body.x), Number(body.z));
+      else this.lapMark(tk.sid, body.e, body.ms);
       return json({ ok: true });
     }
 
@@ -1385,7 +1504,8 @@ export class Lobby extends DurableObject {
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
-      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
+      // (tight: the server over 90 % full, so a car left standing goes to the garage, see room())
+      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, ...(this.room() ? { tight: 1 } : {}), board: this.board() }));
       if (!me?.id && ghost) this.ghostHello(id);
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(pl ? { pl } : {}), ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
       // (a spectator back on: the count of whom they watch)
@@ -1396,7 +1516,7 @@ export class Lobby extends DurableObject {
     if (!me?.id) return;
     if (this.race.message(ws, me, m)) return;
     // a lap's start or finish, as it happens (see lapMark)
-    if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now); return; }
+    if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now, me.id); return; }
     if (m.t === 'name') {
       const name = okName(m.name);                                         // (a slur: silently not taken)
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)
@@ -1451,6 +1571,11 @@ export class Lobby extends DurableObject {
       if (!m.p.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 100000)) return;
       if (!Number.isInteger(m.c) || m.c < 0 || m.c >= 60000) return;
       if (this.over(`j|${me.id}`, 4, 20000)) return;
+      // (the flight starts where the car is and no faster than a car goes: a made-up plan would show the others a
+      // car in the air anywhere on the map for up to 9 s. JMP_NEAR: what a car covers between two positions, twice over)
+      const at = this.poses.get(me.id);
+      if (!at || Math.hypot(m.p[0] - at.p[0], m.p[1] - at.p[1]) > JMP_NEAR || Math.hypot(m.p[3], m.p[4]) > V_MAX) return;
+      this.lapFlight(me.sid, me.id);
       this.broadcast({ t: 'jmp', id: me.id, p: m.p, c: m.c }, ws);
     }
   }
@@ -1460,6 +1585,7 @@ export class Lobby extends DurableObject {
     try { ws.close(); } catch { /* already closed */ }
     this.dropPose(ws, me?.id);
     if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); if (me.on) this.watchTold([me.on], ws); }
+    this.room(ws);                        // (a place freed: room again?)
   }
 
   async webSocketError(ws) {

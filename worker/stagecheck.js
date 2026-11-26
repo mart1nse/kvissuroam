@@ -21,15 +21,19 @@ const LAUNCH_A = 14;             // m/s2: no car leaves a standstill harder (wor
 const HOP = 12, BACK_AGE = 20, BACK_R = 8;   // R, as the replay check knows it (worker/index.js checkTrace)
 
 // xs, zs: the run's places, 0.1 s apart from the green light to the finish line; pen: the penalty seconds in its time.
+// launch: how hard this car leaves a standstill when that is harder than LAUNCH_A (m/s2: a car with thrusters, whose
+// BOOST may be held from the green light: src/race/plausible.js gas.launch; an honest Rocket's start was 'a flying
+// start' until 26 Nov 2026, with BOOST and without).
 // '' when the run holds, else what is wrong with it.
-export function stageCheck(xs, zs, pen = 0) {
+export function stageCheck(xs, zs, pen = 0, launch = 0) {
+  const launchA = Math.max(LAUNCH_A, launch || 0);
   const n = xs.length;
   if (n < 20) return 'too short';
   const sx = P[START][0] - TAN[START][0] * START_BACK, sz = P[START][1] - TAN[START][1] * START_BACK;
   if (Math.hypot(xs[0] - sx, zs[0] - sz) > START_R) return 'not from the start line';
   for (let i = 1; i <= 10; i++) {
     const t = i * 0.1 + 0.2;
-    if (Math.hypot(xs[i] - xs[0], zs[i] - zs[0]) > 1 + 0.5 * LAUNCH_A * t * t) return 'a flying start';
+    if (Math.hypot(xs[i] - xs[0], zs[i] - zs[0]) > 1 + 0.5 * launchA * t * t) return 'a flying start';
   }
   const st = newRun(EASE), snap = new Array(n);
   st.prev = { x: xs[0], z: zs[0] };

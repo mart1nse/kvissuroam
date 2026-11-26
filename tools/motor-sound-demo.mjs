@@ -1,4 +1,4 @@
-// Listening clips of the Roadster Rocket's motor sounds (src/audio-motor.js), one clip a sound.
+// Listening clips of the electric cars' motor sounds (src/audio-motor.js), one clip a sound.
 //
 // The real physics drives the car on a flat road: away gently to 60 km/h, a cruise, the pedal let go, braked
 // to a stop; then floored to 200 km/h, the pedal let go for 3.5 s, floored again, let go and braked hard to a
@@ -7,7 +7,8 @@
 // clip is what the driver hears. --solo leaves fans and wind out.
 //
 // Run: NODE_PATH=$(npm root -g) node tools/motor-sound-demo.mjs <outdir> [kinds] [--solo] [--gain=<dB>]
-//   kinds: old (the plain sine the other electric cars have), gear (the Rocket's), none (fans and wind alone). Writes <outdir>/<kind>.wav and prints, for each part
+//   --car=<id> (default rocket; enyaq, bz4x). kinds: old (the plain sine of audio.js), the car's own sound (gear,
+//   enyaq, bz4x), none (fans and wind alone); default old and the car's own. Writes <outdir>/<kind>.wav and prints, for each part
 //   of the drive, the level and where the sound's weight lies. --gain: make-up for listening (default 13 dB,
 //   the same for every clip, so they compare as they would in the game). --top: another drive, floored from a
 //   standstill to 320 km/h on the motors alone, the pedal let go, braked hard to a stop (the pitch over 200 km/h).
@@ -19,22 +20,24 @@ import { fileURLToPath } from 'node:url';
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
 import { refillTank } from '../src/cars/thrust.js';
-import { motorRegen } from '../src/audio-motor.js';
+import { motorRegen, motorKind } from '../src/audio-motor.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (k) => process.argv.find((a) => a.startsWith(`--${k}`));
 const val = (k) => flag(`${k}=`)?.slice(k.length + 3);
 const out = pos[0] || 'motor-demo';
-const kinds = pos[1] ? pos[1].split(',') : ['old', 'gear'];
+
 const SOLO = !!flag('solo'), GAIN = 10 ** (Number(val('gain') ?? 13) / 20);
 const SR = 48000, FPS = 60, ID = val('car') || 'rocket';
 mkdirSync(out, { recursive: true });
 
 // ---- the drive
 const spec = CARS[ID];
+const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)];
+const FAST = Math.min(200, (spec.limiter || 250) - 8);   // the fast part's speed: 200 km/h, or what the car can do
 const world = { meta: { riverLevel: -100 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
-refillTank(ID);
+if (spec.thrusters) refillTank(ID);
 const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
 const kmh = () => Math.hypot(car.vx, car.vy) * 3.6;
 // (each step: what the driver does, and when it is over)
@@ -45,8 +48,8 @@ const steps = [
   ['pedal let go', () => ({}), (t) => t > 1.8],
   ['braked to a stop', () => ({ down: kmh() > 2 ? 0.3 : 0 }), (t) => kmh() < 0.5 || t > 6],
   ['rest', () => ({}), (t) => t > 0.9],
-  ['floored to 200', () => ({ up: 1 }), () => kmh() >= 200],
-  ['pedal let go at 200', () => ({}), (t) => t > 3.5],
+  [`floored to ${FAST}`, () => ({ up: 1 }), (t) => kmh() >= FAST || t > 40],
+  [`pedal let go at ${FAST}`, () => ({}), (t) => t > 3.5],
   ['floored again', () => ({ up: 1 }), (t) => t > 1.6],
   ['pedal let go', () => ({}), (t) => t > 0.6],
   ['braked hard to a stop', () => ({ down: kmh() > 3 ? 1 : 0 }), (t) => kmh() < 0.5 || t > 8],
@@ -117,7 +120,7 @@ for (const kind of kinds) {
     }
     if (!SOLO) {
       // the fans (audio.js makeFan, fanSound) ...
-      const FAN_TONE = 0.035, FAN_AIR = 0.11, FAN_UP = 0.3;
+      const FANS = spec.fanDown ? 1 : 0, FAN_TONE = 0.035 * FANS, FAN_AIR = 0.11 * FANS, FAN_UP = 0.3;   // (silent in a car without fans)
       const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;
       const air = ctx.createGain(); air.gain.value = 0;
       noise.connect(f).connect(air).connect(master);
@@ -147,7 +150,7 @@ for (const kind of kinds) {
     }
     const buf = await ctx.startRendering();
     await fetch(`/__out/${kind}`, { method: 'POST', body: buf.getChannelData(0) });
-  }, { kind, F, SR, FPS, T, SOLO, spec: { gears: spec.gears, wheelRadius: spec.wheelRadius } });
+  }, { kind, F, SR, FPS, T, SOLO, spec: { gears: spec.gears, wheelRadius: spec.wheelRadius, fanDown: spec.fanDown || 0 } });
   const b = files.get(`/__out/${kind}`), x = new Float32Array(b.buffer, b.byteOffset, b.length / 4);
   // how loud each part is, and its peak
   const db = (v) => (20 * Math.log10(Math.max(v, 1e-9))).toFixed(1);

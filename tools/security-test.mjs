@@ -154,10 +154,15 @@ assert.equal(all.find((x) => x.ms === 121000).hold, 1, 'the export marks it held
   await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
   r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
   assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
-  // the same lap time driven in real time, its start mark held up 4 s on its way here (Martin 26 Nov 2026: nothing
-  // dropped too heavily on the other side: the server's clock reading less than the lap time helps no cheat): on the board
+  // and 2 s less than it (a start mark sent late by that much): past the 1.5 s of leeway on that side
   await call('/api/mark', { k: k3, e: 's' }, ip);
-  clock += M3 - 4000;
+  clock += M3 - 2000;
+  await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
+  r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
+  // the same lap time driven in real time (0.4 s between the marks' ways here): on the board
+  await call('/api/mark', { k: k3, e: 's' }, ip);
+  clock += M3 + 400;
   await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
   r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
   assert.equal(r.status, 200, JSON.stringify(r.j));
@@ -183,12 +188,76 @@ assert.equal(all.find((x) => x.ms === 121000).hold, 1, 'the export marks it held
   assert.equal(r.status, 200, JSON.stringify(r.j));
   assert.equal((await call('/api/board')).j.allTime.find((x) => x.car === 'passat')?.name, 'Marked');
   sockets.length = 0;
-  // how near these came to the leeways can be read: four laps by the server's clock, two of them outside
+  // how near these came to the leeways can be read: five laps by the server's clock, three of them outside
   clock += 61000;
-  const mg = (await call('/api/margins')).j.kinds;
-  assert.equal(mg.clock.n, 4); assert.equal(mg.clock.out, 2); assert.equal(mg.clock.min, -4000); assert.equal(mg.clock.lo, -5000); assert.equal(mg.clock.hi, 3500);
+  let mg = (await call('/api/margins')).j.kinds;
+  assert.equal(mg.clock.n, 5); assert.equal(mg.clock.out, 3); assert.equal(mg.clock.min, -2000); assert.equal(mg.clock.lo, -1500); assert.equal(mg.clock.hi, 3500);
   // (and the car check's readings of every record drive sent in this test: the honest ones 0, the tuned ones outside)
   assert.ok(mg.car.n >= 3 && mg.car.p50 === 0 && mg.car.out >= 1 && mg.car.hi === 3, JSON.stringify(mg.car));
+}
+
+// 3c) a record's drive against where the server saw the car while the lap was driven (26 Nov 2026: the start mark
+// is the page's own word, so a changed page could drive in slow motion and send it late; worker/livecheck.js).
+// Places come by request here, every 2 s, as from a page with no connection.
+{
+  const { LIVE_FROM } = await import(root + '/worker/cutover.js');
+  const { gunzipSync } = await import('node:zlib');
+  const drive = (name) => {
+    const a = gunzipSync(readFileSync(new URL(`./fixtures/replays/${name}.gz`, import.meta.url))).toString().split(',').map(Number);
+    const [, f, ms, n] = a, xs = [], zs = [];
+    let x = 0, z = 0;
+    for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; xs.push(x / 100); zs.push(z / 100); }
+    return { ms, xs, zs, at: (t) => { const j = Math.max(0, Math.min(n - 1, Math.round(t * 10))); return { x: xs[j], z: zs[j] }; } };
+  };
+  // a lap of `d` that takes `slow` times its time on the real clock, its start mark sent `late` ms after the car
+  // left the line, the page's own clock `lag` s behind by slow frames; then its replay is sent. The answer.
+  let nth = 0;
+  const lap = async (car, d, { slow = 1, late = 0, lag = 0, places = true, hop = null } = {}) => {
+    const ip = `9.9.${++nth}.9`, k = await ticket(ip), real = Math.round(d.ms * slow) + lag * 1000;
+    clock += 60000;
+    const t0 = clock;
+    let marked = false;
+    for (let t = 0; t <= real; t += 2000) {
+      clock = t0 + t;
+      if (!marked && t >= late) { await call('/api/mark', { k, e: 's' }, ip); marked = true; }
+      const q = hop?.(t) || d.at(Math.max(0, t / 1000 - (lag * t) / real) / slow);
+      if (places) assert.equal((await call('/api/mark', { k, e: 'p', x: q.x, z: q.z }, ip)).status, 200);
+    }
+    clock = t0 + real;
+    await call('/api/mark', { k, e: 'f', ms: d.ms }, ip);
+    const l = await call('/api/lap', { name: `Live${nth}`, car, ms: d.ms, k, ago: 0 }, ip);
+    assert.deepEqual(l.j.hold, [{ car, ms: d.ms }], JSON.stringify(l.j));
+    return call('/api/replay', { k, car, ms: d.ms, z: fixture(car) }, ip);
+  };
+  const cgt = drive('cgt'), crv = drive('crv'), rav4 = drive('rav4'), bz = drive('bz4x');
+  // slow motion, one tenth slower, the start mark sent late by as much as it takes for the clock to agree
+  r = await lap('cgt', cgt, { slow: 1.1, late: Math.round(cgt.ms * 0.1) });
+  assert.equal(r.status, 400, JSON.stringify(r.j)); assert.equal(r.j.error, 'replay refused: live');
+  // one fiftieth slower: 3 s gained on the lap, still seen
+  r = await lap('cgt', cgt, { slow: 1.02, late: Math.round(cgt.ms * 0.02) });
+  assert.equal(r.status, 400, JSON.stringify(r.j)); assert.equal(r.j.error, 'replay refused: live');
+  // the car standing at the start while a made-up lap is told
+  r = await lap('cgt', cgt, { hop: () => cgt.at(0) });
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: live');
+  // not seen at all, after the pages that do not send their places alone are gone
+  // (before that day such a lap goes on the board: the passat's above)
+  assert.ok(clock < LIVE_FROM); clock = LIVE_FROM + 3600000;
+  r = await lap('cgt', cgt, { places: false });
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: live');
+  // the lap as it was driven: on the board
+  r = await lap('cgt', cgt);
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  // ... also from a page whose clock fell 2 s behind by slow frames, with a mark and places 1.2 s on their way
+  r = await lap('crv', crv, { lag: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  // ... and with a few places from elsewhere among them (one every 30 s)
+  r = await lap('rav4', rav4, { hop: (t) => (t % 30000 === 0 && t ? { x: 5000, z: 5000 } : null) });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  r = await lap('bz4x', bz, { slow: 1.005 });      // (0.8 s over the lap time on the clock: the leeway)
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  clock += 61000;
+  const live = (await call('/api/margins')).j.kinds.live;
+  assert.ok(live.n >= 7 && live.out >= 3 && live.p1 === 0 && live.hi === 0.15, JSON.stringify(live));
 }
 
 // 4) caps: a ticket saved for 10 days posts 3 batches of 50 laps at once: 120 from one address in the hour

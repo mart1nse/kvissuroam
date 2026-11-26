@@ -33,13 +33,29 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const base = run({ up: 1 }, 60);
   // (1.6 s until 26 Nov, when the fans went back to 12 kN so that the 250 kg added count: Martin, "a means to reduce
   // the insane acceleration, braking and cornering power")
-  check('0-100 km/h on the motors is 1.7 s at 2200 kg', Math.abs(base.t100 - 1.72) < 0.08, `${base.t100.toFixed(2)} s`);
-  check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
+  // (2100 kg from 26 Nov: "reduce tesla weight again, by 100kg")
+  check('0-100 km/h on the motors is 1.7 s at 2100 kg', Math.abs(base.t100 - 1.67) < 0.08, `${base.t100.toFixed(2)} s`);
+  // (Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg; it
+  // was 340 on the motors)
+  check('top speed on the motors is 389 km/h', Math.abs(base.top - 389) < 0.3, `${base.top.toFixed(1)} km/h`);
+  {
+    const w = world(), car = fresh(w); car.fanOff = true;
+    let top = 0;
+    for (let t = 0; t < 60; t += dt) { stepCar(car, { up: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
+    check('...and 405 km/h with the fans switched off', Math.abs(top - 405) < 0.3, `${top.toFixed(1)} km/h`);
+  }
   const b = run({ up: 1, boost: 1 });
   check('0-100 km/h with BOOST is about 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.64, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
   check('BOOST blows a full tank down in under 6 s, then its valves shut', b.t > 5.4 && b.t < 6 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
-  check('BOOST tops out near 355 km/h', b.top > 345 && b.top < 370, `${b.top.toFixed(0)} km/h`);
+  // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
+  check('BOOST takes it to about 385 km/h on one tank, and never past 389', b.top > 375 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
+  {
+    const w = world(), car = fresh(w, 387);
+    let top = 0;
+    for (let t = 0; t < 12; t += dt) { if (car.rocket.tank < 5) refillTank('rocket'); stepCar(car, { up: 1, boost: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
+    check('...however much gas there is', top < 389.3, `${top.toFixed(1)} km/h`);
+  }
   {
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
@@ -67,7 +83,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     for (; car.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(car, {}, w, dt);
     stepCar(car, {}, w, dt);
     check('...and left alone the tank fills to the top, a whole one in 60 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
-    check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+    check('...and the car weighs its full 2100 kg again', spec.mass === 2100 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   }
   {
     // a little used: the filling starts at once, and stops for as long as BOOST blows
@@ -113,7 +129,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const go = (fanOff) => { const w = world(), c = fresh(w); c.fanOff = fanOff; let t = 0; while (speedKmh(c) < 100 && t < 10) { stepCar(c, { up: 1 }, w, dt); t += dt; } return t; };
   const stop = (fanOff) => { const w = world(), c = fresh(w, 100); c.fanOff = fanOff; for (let t = 0; t < 0.5; t += dt) { stepCar(c, {}, w, dt); c.vx = 100 / 3.6; } const z0 = c.z; let t = 0; while (c.vx > 0.3 && t < 10) { stepCar(c, { down: 1 }, w, dt); t += dt; } return Math.abs(c.z - z0); };
   const g1 = go(false), g0 = go(true), s1 = stop(false), s0 = stop(true);
-  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.72) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
+  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.67) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
   check('...and stopping from 100 km/h about 36 m, not 22', s1 > 20.5 && s1 < 24.5 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
 }
 
@@ -159,7 +175,9 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   // (one whole turn: just before touchdown the roll stands at a full circle, and it never goes past it)
   // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
-  const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && tankL === tank0 - JUMP_S;
+  // (the flight ends at the wheels' first touch, 26 Nov: the body is still some 11 cm over its ride height there and
+  // sinking at up to 1 m/s, which the springs take without the car coming up again)
+  const pass = rel > -1.05 && rel < 0.1 && yL - gL > -0.03 && yL - gL < 0.2 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < Math.max(0.12, yL - gL + 0.03) && tankL === tank0 - JUMP_S;
   check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.3).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
@@ -169,7 +187,28 @@ const level = flip('FLIP on level ground at 100 km/h');
 // (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
 // and, upside down there, 8.95 m)
 // (3.1 s and 85 m until 26 Nov, when the last 3 m were made slow: a second more in the air)
-check('...is about 4.0 s, 111 m and 8.9 m high at the top of the roll', level && Math.abs(level.air - 4.0) < 0.15 && Math.abs(level.len - 111) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// (4.0 s and 111 m until the flight ended at the first touch and not at the plan's end, a quarter of a second sooner)
+check('...is about 3.8 s, 105 m and 8.9 m high at the top of the roll', level && Math.abs(level.air - 3.77) < 0.15 && Math.abs(level.len - 105) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// ---- the first touch (Martin 26 Nov: "as soon as there is just the slightest contact on the road then it acts as
+// turning input etc (even if the animation is still ending)"): the flight ends where the wheels, hanging under the
+// body, first meet the road, a quarter of a second before the plan's end, and the car answers at once
+{
+  const fly = (after) => {
+    const w = world(), car = fresh(w, 100);
+    for (let t = 0; t < 0.5; t += dt) { stepCar(car, { up: 0 }, w, dt); car.vx = 100 / 3.6; car.lastGround = null; }
+    stepCar(car, { flip: 1 }, w, dt);
+    const plan = car.rocket.launched;
+    let t = dt;
+    while (car.rocket.flight && t < 20) { stepCar(car, {}, w, dt); t += dt; }
+    const up = car.y, jets = Math.max(car.rocket.noz[4], car.rocket.noz[5], car.rocket.noz[6], car.rocket.noz[7]), yaw0 = car.yaw, v0 = car.vx;
+    for (let u = 0; u < 0.25; u += dt) stepCar(car, after, w, dt);
+    return { early: plan.tl - t, up, jets, turned: Math.abs(car.yaw - yaw0) * 180 / Math.PI, lost: (v0 - car.vx) * 3.6, jetsAfter: Math.max(car.rocket.noz[4], car.rocket.noz[5], car.rocket.noz[6], car.rocket.noz[7]) };
+  };
+  const a = fly({ right: 1 }), b = fly({ down: 1 }), c = fly({});
+  check('the flight ends at the wheels\' first touch, before the plan does', a.early > 0.15 && a.early < 0.4 && a.up > 0.05 && a.up < 0.18, `${a.early.toFixed(2)} s before the plan's end, the body ${(a.up * 100).toFixed(0)} cm over its ride height`);
+  check('...and from there the car answers the wheel and the brake', a.turned > 1.5 && a.turned > 5 * c.turned + 1 && b.lost > 8 && b.lost > c.lost + 6, `in a quarter of a second: turned ${a.turned.toFixed(1)} deg (${c.turned.toFixed(1)} hands off), ${b.lost.toFixed(0)} km/h braked off (${c.lost.toFixed(0)} coasting)`);
+  check('...while the jets die away by themselves', a.jets > 0.5 && a.jetsAfter < 0.1, `${a.jets.toFixed(2)} at the touch, ${a.jetsAfter.toFixed(2)} a quarter of a second on`);
+}
 // ---- the lift-off push and the way down (Martin 26 Nov): a slightly gentler, steady push with all four corner jets
 // as one; a quiet moment before the roll; the last metres slow and the last one slower still
 {
@@ -201,7 +240,8 @@ flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
 const film = flip('FLIP at the 47 km/h of Tesla\'s film', { kmh: 47.2 });
 // (the film's 40 m, and the second more of being let down slowly)
-check('...covers about 55 m', film && Math.abs(film.len - 55) < 3, film ? `${film.len.toFixed(1)} m` : '');
+// (52 m at the plan's end; the flight ends at the first touch, a quarter of a second sooner)
+check('...covers about 50 m', film && Math.abs(film.len - 50) < 3, film ? `${film.len.toFixed(1)} m` : '');
 flip('FLIP rolling left', { side: -1 });
 flip('FLIP in a slide flies along the slide', { kmh: 80, slide: 6 });
 // a 4 m drop 20 to 40 m ahead: lands lower, later
@@ -295,8 +335,8 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
 {
   const D = 180 / Math.PI, STEP = 0.005;
   const spots = [[0, 0], [12.34, -56.7], [-340.2, 88.1], [5.5, 5.5], [1000.01, 2000.02], [77.7, -3.2], [-15.5, 410.9], [3.21, 9.87]];
-  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [], pause: [], steady: [], sliver: [] };
-  let endSum = 0, shortSum = 0; const pausedAt = [];
+  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [], pause: [], steady: [], sliver: [], tips: [] };
+  let endSum = 0, shortSum = 0, tipMax = 0; const pausedAt = [];
   for (const [x, z] of spots) {
     const w = world(), car = fresh(w, 60, 0);
     car.x = x; car.z = z; car.vx = 60 / 3.6;
@@ -354,6 +394,11 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
       if (Math.abs(ds[k]) < 0.3 || Math.abs(acc) < 4) continue;
       judged++; if (Math.sign(acc) === Math.sign(ds[k])) agree++;
     }
+    // the hunt's turning points are round: how hard the roll is being turned at the moment it turns back (deg/s2)
+    let tip = 0;
+    for (let k = Math.round((tE - 0.1) / STEP); k < rolls.length - 1; k++) if ((rolls[k] - rolls[k - 1]) * (rolls[k + 1] - rolls[k]) < 0) tip = Math.max(tip, Math.abs(rolls[k + 1] - 2 * rolls[k] + rolls[k - 1]) * D / (STEP * STEP));
+    if (tip > 2000) bad.tips.push(`${at}: ${tip.toFixed(0)}`);
+    tipMax = Math.max(tipMax, tip);
     const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * D, endP = (a.pitch - plan.pl) * D;
     const all = runs.flat(), short = all.filter((v) => v < 0.12).length, long = all.filter((v) => v > 0.25).length;
     endSum += Math.abs(end); shortSum += short; if (firstPause >= 0) pausedAt.push(firstPause);
@@ -361,7 +406,8 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     if (!(over > 8 && over < 20 && under < -2 && under > -10)) bad.over.push(fmt(`${over.toFixed(1)} over, ${(-under).toFixed(1)} under`));
     if (halves.length < 2) bad.swings.push(fmt(halves.length, 0));
     if (halves.length >= 2 && Math.max(...halves) > 1.25 * Math.min(...halves)) bad.uneven++;
-    if (swaps < 3) bad.swaps.push(fmt(swaps, 0));
+    // (twice at the least, was three times: the hunt's turning points are rounder since 26 Nov, so there is less to catch)
+    if (swaps < 2) bad.swaps.push(fmt(swaps, 0));
     if (!(Math.abs(end) < 4 && Math.abs(endP) < 1)) bad.end.push(fmt(`roll ${end.toFixed(2)}, nose ${endP.toFixed(2)}`));
     if (maxStep >= 0.06) bad.step.push(fmt(maxStep * D, 2));
     if (!(tailUp > 0.1 && tailUp < 0.25)) bad.tail.push(fmt(tailUp, 3));
@@ -385,6 +431,9 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('the roll goes past level and comes back under it', none(bad.over), say(bad.over));
   check('...in at least three swings, in most flights of unequal length', none(bad.swings) && bad.uneven >= spots.length - 2, `${say(bad.swings)} ${bad.uneven} of ${spots.length} uneven`);
   check('...the side jets swap sides as they hunt for level', none(bad.swaps), say(bad.swaps));
+  // (Martin 26 Nov: "the extremums of the wobbles when it goes to an angle and comes back, make that curve a U shape
+  // instead of a V". Where the turn ended and the first swing back began the roll was turned at 3000 to 5000 deg/s2)
+  check('...each swing turns back in a round U, not a V (turned at under 2000 deg/s2 as it turns back)', none(bad.tips), `${say(bad.tips)} ${tipMax.toFixed(0)} deg/s2 at the sharpest`);
   check('...it lands nearly level, never quite', none(bad.end) && endSum / spots.length > 0.3, `${say(bad.end)} ${(endSum / spots.length).toFixed(2)} deg off at touchdown on average`);
   check('...and turns smoothly all the way', none(bad.step), say(bad.step));
   check('the nose nods all the way (1 to 6 degrees in free flight) and is held up in the landing burn', none(bad.nod) && none(bad.nose), say([...bad.nod, ...bad.nose]));

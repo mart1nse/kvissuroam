@@ -16,8 +16,9 @@ import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
-import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
-import { flightPose, flightNozzles, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
+import { POSE_DEC, pack, unpack, replayAt, turnedAbout } from '../race/replay.js';
+import { flightPose, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
+import { CRASH_FLAG } from '../cars/crash.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
@@ -300,7 +301,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let bundled = false;           // this connection's server sends positions in bundles
   let myWn = 0;                  // spectators watching our car (the server's count)
   let holdId = null;             // the car we spectate: drawn parked where it was last heard of when it goes quiet
-  let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
+  let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, placeTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   // (a racist slur kept from before the server refused them: the browser gets a fresh random name)
   let name = lsGet(NAME_KEY) || '';
   if (badName(name)) name = '';
@@ -438,6 +439,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // so a freed place is not fought over by everyone waiting at the same moment).
   let full = false;
   let released = false;
+  // the server is over 90 % full (it says so with the welcome and whenever that changes, see room() in
+  // worker/index.js): only then is a car left standing sent to the garage (src/idlepark.js)
+  let tight = false;
   let kickNote = false;
   let qPos = 0;                  // our place in the queue while the server is full (1: next in)
   const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
@@ -616,7 +620,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         qPos = Number.isInteger(m.q) && m.q > 0 ? m.q : 0;
         if (kickNote) kicked();
         else if (!full) toast(`SERVER FULL (${Number(m.max) || 100}) · ${qPos ? `${ordinal(qPos)} IN QUEUE` : 'DRIVING OFFLINE TILL A PLACE FREES'}`, 5000);
-        full = true; online = false;
+        full = true; online = false; tight = true;
         onPeople?.('count');
         break;
       case 'welcome':
@@ -625,6 +629,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         kickNote = false;
         full = false;
         myId = m.id;
+        tight = m.tight === 1;
         myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
         // the lap ticket: proof of when this browser came online, sent along with every lap (see
@@ -633,6 +638,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         for (const p of Array.isArray(m.players) ? m.players : []) add(p);
         onPeople?.('count');
         if (m.board) setBoard(m.board);
+        break;
+      case 'room':
+        tight = m.tight === 1;
         break;
       case 'join':
         if (!add(m)) break;
@@ -785,8 +793,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let p;
     if (A && t <= B.t) {
       const span = B.t - A.t || 1, f = Math.max(0, Math.min(1, (t - A.t) / span));
+      // (a crashed car landing end over end on its roof is from there on kept as turned about and rolled over,
+      // crash.js: the same lie of the body, with all three angles half a turn apart, and no way between them)
+      const flip = turnedAbout(A.p, B.p);
       p = A.p.map((v, k) => {
         if (k === 3 || k === 4 || k === 5 || k === 8) {            // angles
+          if (flip && k !== 8) return f < 0.5 ? v : B.p[k];
           let d = B.p[k] - v; d = Math.atan2(Math.sin(d), Math.cos(d));
           return v + d * f;
         }
@@ -820,8 +832,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
     if (!o.lean) o.lean = new Float32Array(4);                  // (how far its corner jets are swung out)
     const f = o.flip, t = f ? now - (bundled ? DELAY_BUNDLED : DELAY) - f.t0 : -1;
-    if (f && (t > f.plan.tl || !p || !o.live)) o.flip = null;
-    if (f && p && o.live && t >= 0 && t <= f.plan.tl) {
+    // (to its wheels' first touch, where its driver has the car again: thrust.js, touchTime)
+    const end = f ? touchTime(f.plan, o.spec) : 0;
+    if (f && (t > end || !p || !o.live)) o.flip = null;
+    if (f && p && o.live && t >= 0 && t <= end) {
       flightPose(f.plan, t, flown);
       p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
       p[6] = f.plan.vx; p[7] = f.plan.vz;
@@ -1113,9 +1127,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off)
+    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off; 512 thrown over by a hard crash)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0) | (car.crash ? CRASH_FLAG : 0);
     return out;
   }
   function update(car, dt, active) {
@@ -1125,7 +1139,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     // (in a race also with nobody else online: the server follows each racer's lap from these, worker/follow.js)
-    if (active && !STEALTH && (others.size || racing(myId)) && sendTimer <= 0 && ws && ws.readyState === 1) {
+    // (and on a lap: the server holds a record's drive against where it saw the car meanwhile, worker/livecheck.js)
+    if (active && !STEALTH && (others.size || racing(myId) || hotlap()) && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
       sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
       const p = poseNow(car, sendPose, hotlap(), fresh());
@@ -1135,6 +1150,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       out[STAMP] = Date.now() % 60000;
       send({ t: 's', p: out });
     }
+    // (on a lap with no connection, the server full or the line down for a moment: where the car is goes to the
+    // server every 3 s by a request, as the lap's marks do)
+    if (active && !STEALTH && ticket && hotlap() && !(ws && ws.readyState === 1 && myId)) {
+      placeTimer -= dt;
+      if (placeTimer <= 0) {
+        placeTimer = 3;
+        fetch('/api/mark', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e: 'p', x: Math.round(car.x), z: Math.round(car.z) }) }).catch(() => {});
+      }
+    } else placeTimer = 0;
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
     tagList.length = 0;
@@ -1313,6 +1337,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get online() { return online; },
     // the server was full: driving offline until a place frees (see schedule)
     get full() { return full; },
+    // the server is over 90 % full: a car left standing is sent to the garage (src/idlepark.js)
+    get tight() { return tight; },
     // our place in the queue while full (0: not known)
     get queuePos() { return qPos; },
     stealth: STEALTH,

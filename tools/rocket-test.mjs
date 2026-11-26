@@ -157,7 +157,7 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
   const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && tankL === tank0 - JUMP_S;
-  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
+  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.3).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
 
@@ -165,11 +165,36 @@ const level = flip('FLIP on level ground at 100 km/h');
 // (the height is that of the car's floor: 2.6 m of flight plus the 0.84 m its floor swings up as it rolls about its middle)
 // (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
 // and, upside down there, 8.95 m)
-check('...is about 3.1 s, 85 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 3.1) < 0.15 && Math.abs(level.len - 85) < 5 && Math.abs(level.peak - 8.95) < 0.4);
+// (3.1 s and 85 m until 26 Nov, when the last 3 m were made slow: a second more in the air)
+check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 4.2) < 0.15 && Math.abs(level.len - 116) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// ---- the lift-off push and the way down (Martin 26 Nov): a slightly gentler, steady push with all four corner jets
+// as one; a quiet moment before the roll; the last 3 m slow and the last metre slower still
+{
+  const w = world(), car = fresh(w, 100);
+  const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ), l = new Float32Array(4), S = 0.005;
+  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0;
+  for (let k = 0; k * S <= plan.tl; k++) {
+    const t = k * S;
+    flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
+    if (k && t < 0.6) gMax = Math.max(gMax, (a.vy - prevV) / S / 9.81);
+    prevV = a.vy;
+    if (t > 0.18 && t < 0.5) { const c = [n[4], n[5], n[6], n[7]]; spread = Math.max(spread, Math.max(...c) - Math.min(...c)); lo = Math.min(lo, ...c); hi = Math.max(hi, ...c); for (let i = 0; i < 4; i++) leanMax = Math.max(leanMax, Math.abs(Math.abs(l[i]) - 0.2)); }
+    if (t > 0.58 && t < 0.66) { coast += n[4] + n[5] + n[6] + n[7] + n[8] + n[9]; coastN++; }
+    if (k && a.y < prevY) rising = false;
+    if (!rising) { if (t3 === null && a.y <= 3) { t3 = t; v3 = -a.vy; } if (t1 === null && a.y <= 1) { t1 = t; v1 = -a.vy; } if (a.y < 3 && t > plan.tb) fastLow = Math.max(fastLow, -a.vy); }
+    prevY = a.y;
+  }
+  check('the lift-off push is a little gentler (2 g, was 2.4) and lasts 0.52 s', gMax > 1.85 && gMax < 2.15, `${gMax.toFixed(2)} g at the most`);
+  check('...with the four corner jets blowing as one, steadily, straight down', spread < 0.02 && hi - lo < 0.04 && lo > 0.8 && leanMax < 0.05, `${lo.toFixed(2)} to ${hi.toFixed(2)}, ${spread.toFixed(3)} apart at the most, lean ${leanMax.toFixed(3)} rad off its rest`);
+  check('...and a quiet moment before the roll starts', coast / coastN < 0.25, `${(coast / coastN).toFixed(2)} of one jet blowing, on average`);
+  check('the last 3 m down take about 1.5 s (0.5 s before), the last metre about 0.9 s', plan.tl - t3 > 1.3 && plan.tl - t3 < 1.8 && plan.tl - t1 > 0.75 && plan.tl - t1 < 1.1 && t1 - t3 < plan.tl - t1, `${(plan.tl - t3).toFixed(2)} s and ${(plan.tl - t1).toFixed(2)} s`);
+  check('...at 4.5 m/s through 3 m and 1.9 m/s through 1 m, never faster below', Math.abs(v3 - 4.5) < 0.5 && Math.abs(v1 - 1.9) < 0.3 && fastLow < v3 + 0.05, `${v3.toFixed(2)} and ${v1.toFixed(2)} m/s`);
+}
 flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
 const film = flip('FLIP at the 47 km/h of Tesla\'s film', { kmh: 47.2 });
-check('...covers about 40 m', film && Math.abs(film.len - 40) < 3, film ? `${film.len.toFixed(1)} m` : '');
+// (the film's 40 m, and the second more of being let down slowly)
+check('...covers about 55 m', film && Math.abs(film.len - 55) < 3, film ? `${film.len.toFixed(1)} m` : '');
 flip('FLIP rolling left', { side: -1 });
 flip('FLIP in a slide flies along the slide', { kmh: 80, slide: 6 });
 // a 4 m drop 20 to 40 m ahead: lands lower, later

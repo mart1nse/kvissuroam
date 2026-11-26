@@ -21,7 +21,7 @@ const F = LINE_FIELDS;
 const STEP = 0.75;                         // metres between samples
 const TURN = 0.07;                         // ... or this much turned (radians) after at least TURN_M of the way
 const TURN_M = 0.15;
-const MIN_M = 150;                         // a shorter run is not sent
+const MIN_M = 60;                          // a shorter run is not sent (a launch and the first corner is 100 m)
 const MAX_N = 8000;                        // samples at most (6 km)
 const TAIL_M = 150, TAIL_S = 8;            // past the finish: this far or this long, whichever comes first
 const JUMP = 30;                           // the car was moved (a new start, the map): the run's log ends

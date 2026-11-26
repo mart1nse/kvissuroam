@@ -412,6 +412,9 @@ export class Lobby extends DurableObject {
     this.waitClean(now);
     let on = 0, drv = 0;
     const seen = new Set(), ghosts = new Set(this.ghostNew);
+    // the names driving on the map this minute, a Raadi stage run too, for the top drivers on /stats (Martin
+    // 2026-11-26: "top 10 driving hours by player"; worker/stats.js addDrivers gives each name the minute)
+    const drivers = [];
     let gh = 0;
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
@@ -420,9 +423,10 @@ export class Lobby extends DurableObject {
       if (a.ghost) { gh++; if (ghosts.size < 200) ghosts.add(a.id); continue; }
       on++;
       if (a.drv) drv++;
+      if (a.name && (a.drv || a.w === 'map') && drivers.length < 150) drivers.push(a.name);
     }
     const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS));
-    const s = { v: 1, t: now, on, drv, wait: this.waiting.size, cap: max, ...this.load, gh, ghc: this.ghc, ghIds: [...ghosts] };
+    const s = { v: 1, t: now, on, drv, wait: this.waiting.size, cap: max, ...this.load, gh, ghc: this.ghc, ghIds: [...ghosts], drivers };
     this.load = { ref: 0, away: 0, joined: 0, waitMs: 0 };
     this.ghostNew = new Set(); this.ghc = 0;
     const p = st.get(st.idFromName('stats')).addLoad(s).catch(() => {});

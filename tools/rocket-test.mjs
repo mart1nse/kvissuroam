@@ -48,23 +48,23 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   // BOOST alone (no throttle key): the motors are held at full power too
   const alone = run({ boost: 1 });
   check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
-  // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 120 s, and nothing is locked:
+  // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 60 s (was 120), and nothing is locked:
   // with the button still held after running dry nothing blows, and it fills all the same
   const w = world(), car = b.car;
   let t = 0, moved = false;
   const dry0 = car.rocket.tank;
-  for (; t < 30; t += dt) { stepCar(car, { boost: 1 }, w, dt); if (t > 0.3 && car.thrustN > 0) moved = true; }   // (the valves take a moment to shut)
-  check('run dry with BOOST still held: nothing blows, and the tank fills', !moved && Math.abs(car.rocket.tank - dry0 - (30 * TANK_S) / REFILL_S) < 0.05, `${dry0.toFixed(2)} to ${car.rocket.tank.toFixed(2)} s of tank in 30 s`);
+  for (; t < 15; t += dt) { stepCar(car, { boost: 1 }, w, dt); if (t > 0.3 && car.thrustN > 0) moved = true; }   // (the valves take a moment to shut)
+  check('run dry with BOOST still held: nothing blows, and the tank fills', !moved && Math.abs(car.rocket.tank - dry0 - (15 * TANK_S) / REFILL_S) < 0.05, `${dry0.toFixed(2)} to ${car.rocket.tank.toFixed(2)} s of tank in 15 s`);
   // let go and pressed again: BOOST blows on what there is
   stepCar(car, {}, w, dt);
   for (let k = 0; k < 20; k++) stepCar(car, { boost: 1 }, w, dt);
   check('...let go and pressed again, BOOST blows on what there is', car.thrustN > 5000 && car.rocket.on, `${(car.thrustN / 1000).toFixed(0)} kN`);
   {
-    // left alone it fills to the top at a whole tank in 120 s (the cars of this file share the one tank, so this car first)
+    // left alone it fills to the top at a whole tank in 60 s (the cars of this file share the one tank, so this car first)
     const from = car.rocket.tank; let tf = 0;
     for (; car.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(car, {}, w, dt);
     stepCar(car, {}, w, dt);
-    check('...and left alone the tank fills to the top, a whole one in 120 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
+    check('...and left alone the tank fills to the top, a whole one in 60 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
     check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   }
   {
@@ -76,7 +76,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     const after6 = q.rocket.tank;
     for (; q.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(q, {}, wp, dt);
     check('a tank a little used starts filling at once', used < TANK_S - 3 && Math.abs(after6 - used - (6 * TANK_S) / REFILL_S) < 0.02 && Math.abs(tf + 6 - ((TANK_S - used) / TANK_S) * REFILL_S) < 0.5, `${used.toFixed(2)} s left after 1 s of BOOST, ${after6.toFixed(2)} s six seconds on, full ${(tf + 6).toFixed(0)} s after letting go`);
-    // from empty: 120 s to full; FLIP works with half a tank in it and not before, BOOST with a tenth
+    // from empty: 60 s to full; FLIP works with half a tank in it and not before, BOOST with a tenth
     const we0 = world(), z = fresh(we0); z.rocket.tank = 0;
     let tz = 0, boostAt = null, flipAt = null, early = false;
     for (; z.rocket.tank < TANK_S && tz < 200; tz += dt) {
@@ -88,21 +88,22 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
         if (z.rocket.launched) { flipAt = tz; if (z.rocket.tank < -1e-6) early = true; break; }
       }
     }
-    check('from empty: BOOST works with a tenth of a tank in it (12 s), FLIP with half (a minute)', boostAt > 11.5 && boostAt < 13 && flipAt > 59 && flipAt < 63 && !early, `BOOST after ${boostAt === null ? '-' : boostAt.toFixed(1)} s, FLIP after ${flipAt === null ? '-' : flipAt.toFixed(1)} s`);
+    check('from empty: BOOST works with a tenth of a tank in it (6 s), FLIP with half (half a minute)', boostAt > 5.5 && boostAt < 7 && flipAt > 29 && flipAt < 33 && !early, `BOOST after ${boostAt === null ? '-' : boostAt.toFixed(1)} s, FLIP after ${flipAt === null ? '-' : flipAt.toFixed(1)} s`);
     const wf = world(), ff = fresh(wf); ff.rocket.tank = 0; let tfull = 0;
     for (; ff.rocket.tank < TANK_S && tfull < 200; tfull += dt) stepCar(ff, {}, wf, dt);
-    check('...and an empty tank is full again in 120 s', Math.abs(tfull - REFILL_S) < 0.5, `${tfull.toFixed(1)} s`);
+    check('...and an empty tank is full again in a minute', Math.abs(tfull - REFILL_S) < 0.5, `${tfull.toFixed(1)} s`);
   }
   // offline testing (?off=100): the filling takes 2 s
   { const wq = world(), q = fresh(wq); q.rocket.tank = 0; let tq = 0;
     for (; q.rocket.tank < TANK_S && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
     check('the quick filling of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
-  // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors
+  // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors (the tank
+  // takes in about 6 kg during the run, filling at a whole one a minute)
   const we = world(), e = fresh(we);
   e.rocket.tank = 0;
   let te = 0, e100 = null;
   for (; te < 5 && e100 === null; te += dt) { stepCar(e, { up: 1 }, we, dt); if (speedKmh(e) >= 100) e100 = te + dt; }
-  check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 6 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
+  check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 9 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
 }
 
 // ---- the suction fans can be switched off (car.fanOff, the fan icon): the tyres carry the weight alone
@@ -157,7 +158,7 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
   const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && tankL === tank0 - JUMP_S;
-  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
+  check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.3).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
 
@@ -165,11 +166,36 @@ const level = flip('FLIP on level ground at 100 km/h');
 // (the height is that of the car's floor: 2.6 m of flight plus the 0.84 m its floor swings up as it rolls about its middle)
 // (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
 // and, upside down there, 8.95 m)
-check('...is about 3.1 s, 85 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 3.1) < 0.15 && Math.abs(level.len - 85) < 5 && Math.abs(level.peak - 8.95) < 0.4);
+// (3.1 s and 85 m until 26 Nov, when the last 3 m were made slow: a second more in the air)
+check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 4.2) < 0.15 && Math.abs(level.len - 116) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// ---- the lift-off push and the way down (Martin 26 Nov): a slightly gentler, steady push with all four corner jets
+// as one; a quiet moment before the roll; the last 3 m slow and the last metre slower still
+{
+  const w = world(), car = fresh(w, 100);
+  const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ), l = new Float32Array(4), S = 0.005;
+  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0;
+  for (let k = 0; k * S <= plan.tl; k++) {
+    const t = k * S;
+    flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
+    if (k && t < 0.6) gMax = Math.max(gMax, (a.vy - prevV) / S / 9.81);
+    prevV = a.vy;
+    if (t > 0.18 && t < 0.5) { const c = [n[4], n[5], n[6], n[7]]; spread = Math.max(spread, Math.max(...c) - Math.min(...c)); lo = Math.min(lo, ...c); hi = Math.max(hi, ...c); for (let i = 0; i < 4; i++) leanMax = Math.max(leanMax, Math.abs(Math.abs(l[i]) - 0.2)); }
+    if (t > 0.58 && t < 0.66) { coast += n[4] + n[5] + n[6] + n[7] + n[8] + n[9]; coastN++; }
+    if (k && a.y < prevY) rising = false;
+    if (!rising) { if (t3 === null && a.y <= 3) { t3 = t; v3 = -a.vy; } if (t1 === null && a.y <= 1) { t1 = t; v1 = -a.vy; } if (a.y < 3 && t > plan.tb) fastLow = Math.max(fastLow, -a.vy); }
+    prevY = a.y;
+  }
+  check('the lift-off push is a little gentler (2 g, was 2.4) and lasts 0.52 s', gMax > 1.85 && gMax < 2.15, `${gMax.toFixed(2)} g at the most`);
+  check('...with the four corner jets blowing as one, steadily, straight down', spread < 0.02 && hi - lo < 0.04 && lo > 0.8 && leanMax < 0.05, `${lo.toFixed(2)} to ${hi.toFixed(2)}, ${spread.toFixed(3)} apart at the most, lean ${leanMax.toFixed(3)} rad off its rest`);
+  check('...and a quiet moment before the roll starts', coast / coastN < 0.25, `${(coast / coastN).toFixed(2)} of one jet blowing, on average`);
+  check('the last 3 m down take about 1.5 s (0.5 s before), the last metre about 0.9 s', plan.tl - t3 > 1.3 && plan.tl - t3 < 1.8 && plan.tl - t1 > 0.75 && plan.tl - t1 < 1.1 && t1 - t3 < plan.tl - t1, `${(plan.tl - t3).toFixed(2)} s and ${(plan.tl - t1).toFixed(2)} s`);
+  check('...at 4.5 m/s through 3 m and 1.9 m/s through 1 m, never faster below', Math.abs(v3 - 4.5) < 0.5 && Math.abs(v1 - 1.9) < 0.3 && fastLow < v3 + 0.05, `${v3.toFixed(2)} and ${v1.toFixed(2)} m/s`);
+}
 flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
 const film = flip('FLIP at the 47 km/h of Tesla\'s film', { kmh: 47.2 });
-check('...covers about 40 m', film && Math.abs(film.len - 40) < 3, film ? `${film.len.toFixed(1)} m` : '');
+// (the film's 40 m, and the second more of being let down slowly)
+check('...covers about 55 m', film && Math.abs(film.len - 55) < 3, film ? `${film.len.toFixed(1)} m` : '');
 flip('FLIP rolling left', { side: -1 });
 flip('FLIP in a slide flies along the slide', { kmh: 80, slide: 6 });
 // a 4 m drop 20 to 40 m ahead: lands lower, later

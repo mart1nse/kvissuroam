@@ -54,6 +54,8 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   const field = row.querySelector('.field');
   // On desktop the name starts selected with a blinking caret after it, so it is plain that it can
   // be typed over. Until the player types, the menu keys (arrows, Enter, Space) still work.
+  // Only on the first garage of a visit (Martin 26 Nov): back from a drive nothing is picked, so the
+  // garage's keys (L, G, the arrows) do their own work instead of landing in the name; a click picks it.
   const desktop = matchMedia('(hover: hover) and (pointer: fine)').matches;
   let fresh = false;
   const measure = document.createElement('canvas').getContext('2d');
@@ -124,8 +126,17 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   plateIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { if (e.key === 'Escape') plateIn.value = mp.plate; plateIn.blur(); } });
   plateIn.addEventListener('keyup', (e) => e.stopPropagation());
 
-  // pick the name every time the menu opens (start and back to the garage)
-  new MutationObserver(() => requestAnimationFrame(() => { platePh(); preselect(); })).observe(menu, { attributes: true, attributeFilter: ['class'] });
+  // pick the name when the menu first opens. Once the menu has closed (a drive began) it is not picked again,
+  // and a box still holding the keys lets go of them (DRIVE from a gamepad left the name typing while driving)
+  let first = true;
+  new MutationObserver((recs) => {
+    if (menu.classList.contains('hidden')) {
+      if (recs.some((r) => !/\bhidden\b/.test(r.oldValue || ''))) first = false;      // (it was open: a drive began)
+      if (document.activeElement === input || document.activeElement === plateIn) document.activeElement.blur();
+      return;
+    }
+    requestAnimationFrame(() => { platePh(); if (first) preselect(); });
+  }).observe(menu, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
   requestAnimationFrame(preselect);
   input.addEventListener('keyup', (e) => e.stopPropagation());
 

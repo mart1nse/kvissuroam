@@ -273,9 +273,7 @@ body:not(.touch) .touch-only { display: none; }
    screenshot (25 Nov): BOOST by the left thumb, right of the rev counter and level with its top; FLIP by the
    right thumb, above BRAKE on the same line as BOOST (26 Nov: "a bit to the right and a bit down, perhaps on
    the same hor line") and beside the online list, whose names are kept short of it (body.rocketpad). Each
-   button is its own gauge, filling from the bottom with what is in the tank (FLIP in two halves, one a jump),
-   and FLIP shows the time until the tank holds a jump again. Desktop: a slim bar under the rev counter with
-   the keys. */
+   button is its own gauge (the look is further down). Desktop: a slim bar under the rev counter with the keys. */
 .pad.rocket { position: static; display: contents; }
 .pad.rocket button.boost { left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2 + var(--td) / 2 + 5px); bottom: calc(var(--padh) + 6px + var(--td) * 1.08 - var(--rk) / 2); }
 /* (FLIP on BOOST's line, but never nearer than 8px to BRAKE under it: a short phone's rev counter is small) */
@@ -287,17 +285,27 @@ body:not(.touch) .touch-only { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
 body.touch.rocketpad #people .who > li { max-width: calc(var(--flipr) - var(--rk) / 2 - var(--tbr) - 6px); }
 body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - var(--rk) / 2 - var(--tbr) - 6px - 3.2em); }
-.pad.rocket button { position: absolute; overflow: hidden; width: var(--rk); height: var(--rk); border-radius: 50%; gap: 1px;
-  border-color: var(--cyan); color: #fff; font-size: 9px; letter-spacing: .08em; text-shadow: 0 0 6px var(--ink); }
-.pad.rocket button b { position: relative; font-weight: 800; }
-.pad.rocket button small { position: relative; font-size: 8px; min-height: 9px; opacity: 1; }
-.pad.rocket button i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: linear-gradient(to top, rgba(47, 243, 255, .75), rgba(160, 250, 255, .55)); }
-.pad.rocket button.flip { border-color: var(--hot); }
-.pad.rocket button.flip i { background: linear-gradient(to top, rgba(255, 43, 214, .75), rgba(255, 150, 235, .55)); }
-.pad.rocket button.flip::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: rgba(18, 6, 43, .7); }
-.pad.rocket button.no { opacity: .45; }
-.pad.rocket button.reload { border-style: dashed; }
-.pad.rocket button.reload i { background: rgba(255, 255, 255, .32); }
+/* The look (Martin 26 Nov, his pick of four drafts: "A is best"): a dark glass disc with no border, the tank as a
+   ring round it that fills clockwise from the bottom, an icon and the name. FLIP's ring is in two halves, one a
+   jump: a whole half is lit, one still filling is pale, and under the name "x2" or "x1" says how many jumps the
+   tank holds, or the seconds until it holds one. BOOST shows the tank in per cent. */
+.pad.rocket button { --c: var(--cyan); position: absolute; overflow: visible; width: var(--rk); height: var(--rk); border-radius: 50%; gap: 0; border: none;
+  background: radial-gradient(circle at 50% 28%, rgba(84, 44, 150, .66), rgba(18, 6, 43, .8) 72%); box-shadow: 0 0 18px -4px var(--c), inset 0 1px 0 rgba(255, 255, 255, .2);
+  color: #fff; font-size: 7.5px; letter-spacing: .18em; text-shadow: none; }
+.pad.rocket button.flip { --c: var(--hot); }
+.pad.rocket .ring { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke-width: 7.5; pointer-events: none; filter: drop-shadow(0 0 3px var(--c)); }
+.pad.rocket .ring .bg { stroke: rgba(255, 255, 255, .17); }
+.pad.rocket .ring .fg { stroke: var(--c); stroke-dasharray: 0 400; }
+.pad.rocket .ring .fg.part, .pad.rocket button.reload .ring .fg { stroke: rgba(255, 255, 255, .5); }
+.pad.rocket .ic { position: relative; width: 36%; height: 36%; fill: none; stroke: var(--c); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 4px var(--c)); }
+.pad.rocket button b { position: relative; font-weight: 700; padding-left: .18em; line-height: 9px; }
+.pad.rocket button small { position: relative; font-size: 8.5px; font-weight: 800; letter-spacing: .06em; line-height: 10px; min-height: 10px; opacity: 1; color: var(--c); text-shadow: 0 0 6px var(--c); }
+.pad.rocket button.held { background: radial-gradient(circle at 50% 28%, rgba(150, 100, 235, .8), rgba(52, 22, 104, .86) 72%); box-shadow: 0 0 24px -2px var(--c), inset 0 1px 0 rgba(255, 255, 255, .3); }
+/* (cannot work just now: the glow goes, the icon and the name dim; the ring and the line under the name stay) */
+.pad.rocket button.no { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
+.pad.rocket button.no .ic { opacity: .35; filter: none; }
+.pad.rocket button.no b { opacity: .5; }
+.pad.rocket button.no small { color: #fff; text-shadow: none; }
 /* a fan car's suction fans (spec.fanDown): a small fan left of the gear, turning for as long as they run (always),
    faster when they are run up (src/rocketui.js) */
 #fan { position: absolute; left: 25%; bottom: 3.3%; width: calc(var(--d) * .12); height: calc(var(--d) * .12); padding: 0; border: none; background: none;

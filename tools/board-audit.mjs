@@ -161,6 +161,13 @@ if (mg?.kinds) {
     if (g?.n && g.max >= g.hi) notes.push(`a racer used all ${g.hi} gaps in positions a race allows`);
   }
   if (cr?.n) room.push(`record drives sent: ${cr.n}, at most ${cr.max} s over a limit, of ${cr.hi}`);
+  // (a record's drive against where the server saw the car while the lap was driven: worker/livecheck.js)
+  const lv = mg.kinds.live;
+  if (lv?.n) {
+    const pc = (v) => Math.round(v * 100);
+    room.push(`record drives against where the car was seen: ${lv.n}, at most ${pc(lv.max)} in 100 of the places off the drive (leeway ${pc(lv.hi)}), ${lv.out} beyond it`);
+    if (lv.p50 > 0.6 * lv.hi) notes.push(`half the record drives sent have over ${pc(0.6 * lv.hi)} in 100 of the places the car was seen at off the drive (leeway ${pc(lv.hi)}): the check is too tight or the places come late`);
+  }
 }
 
 out.notes = notes;

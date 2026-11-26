@@ -26,7 +26,8 @@ import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
 import { carLimitsSteps, judgeDrive, OVER_MAX } from '../src/race/plausible.js';
-import { OLD_PAGES_UNTIL } from './cutover.js';
+import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
+import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 
@@ -52,11 +53,11 @@ const LAPS_IP_HOUR = 120, LAPS_NAME_DAY = 300;
 // the lap time the page gives: the server's may be this much shorter (a mark slow on its way) or longer (the same,
 // and the 2 s of freezes a lap is forgiven: SLOW_FREE in src/race/race.js). Past that the lap was not driven in
 // real time (slow motion: the game slows down under 20 frames a second, and the lap clock once slowed with it).
-// (Martin 26 Nov 2026: "make sure nothing is dropped on the other side too heavily". The server's clock reading
-// less than the lap time helps no cheat (a start mark held up on its way is all it can be), so that side is wide.
-// More than the lap time is what slow motion looks like: 2 s the page's own clock may lose to slow frames
-// (SLOW_FREE in src/race/race.js) and 1.5 s for the finish mark's way here.)
-const CLOCK_UNDER = 5000, CLOCK_OVER = 3500;
+// How far the server's clock may be from a lap's time. More than the lap time is what slow motion looks like: 2 s
+// the page's own clock may lose to slow frames (SLOW_FREE in src/race/race.js) and 1.5 s for the finish mark's way
+// here. Less than the lap time is a start mark held up on its way: 1.5 s (5 s for an hour on 26 Nov 2026; Martin:
+// "this back to 1.5s actually instead of 5").
+const CLOCK_UNDER = 1500, CLOCK_OVER = 3500;
 const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -371,6 +372,10 @@ export class Lobby extends DurableObject {
     // how near play comes to each of the server's limits (margin(), GET /api/margins)
     this.sql.exec('CREATE TABLE IF NOT EXISTS margins (k TEXT NOT NULL, v REAL NOT NULL, at INTEGER NOT NULL)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS lapseen_sid ON lapseen (sid, ms)');
+    // (trail: where the car was seen during that lap, [tenths of a second after its start mark, x, z, ...]: livecheck.js)
+    if (!this.sql.exec('PRAGMA table_info(lapseen)').toArray().some((c) => c.name === 'trail')) this.sql.exec('ALTER TABLE lapseen ADD COLUMN trail TEXT');
+    // the laps being driven now: sid -> { t0: the start mark, id: whose connection, last, pts } (lapPlace)
+    this.trails = new Map(); this.trailAsked = new Set();
     this.seenClean = 0;
     // where the cars drove a stage, a row a run (see LINES_MAX)
     this.sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, done INTEGER NOT NULL, ms INTEGER NOT NULL, pen INTEGER NOT NULL, n INTEGER NOT NULL, info TEXT NOT NULL, data BLOB NOT NULL)');
@@ -519,8 +524,8 @@ export class Lobby extends DurableObject {
     // does it hang together with the one before (see V_MAX)? fr: flagged until, st: the sender's time so far (s),
     // lead / top: how far its clock is ahead of ours and has ever been, ring: where it was lately [x, z, st, ...],
     // vo: the speed it is seen to move at (-1: not known yet)
-    let jump = !e, fast = false;
-    if (!e) this.poses.set(id, e = { p, j: '', t: now, n: 0, ws, t0: now, act: 0, fr: 0, jn: 0, jt: now, st: 0, lead: 0, top: 0, ring: [], vo: -1, car: ws.deserializeAttachment()?.car, vm: 0 });
+    let jump = !e, fast = false, att;
+    if (!e) this.poses.set(id, e = { p, j: '', t: now, n: 0, ws, t0: now, act: 0, fr: 0, jn: 0, jt: now, st: 0, lead: 0, top: 0, ring: [], vo: -1, car: (att = ws.deserializeAttachment())?.car, sid: att?.sid, vm: 0 });
     else {
       const dtA = Math.max(0, now - e.t) / 1000;
       let dt = dtA;
@@ -543,6 +548,8 @@ export class Lobby extends DurableObject {
       }
       e.st += dt;
     }
+    // (on a lap: where the car is, kept now and then for the judging of a record's drive: livecheck.js)
+    if (e.sid) this.lapPlace(e.sid, p[0], p[1], now, id);
     if (jump) {
       e.jn = Math.max(0, e.jn - (now - e.jt) / JUMP_LEAK); e.jt = now;
       if (e.jn >= JUMPS_MAX) return;
@@ -931,32 +938,82 @@ export class Lobby extends DurableObject {
   // connection, 'lm'; by POST /api/mark when it has none), and the server keeps how long that took by its own
   // clock. A lap that would be a car's best counts only if the two agree (lapClock). A drive that was not driven
   // but made up or copied has to be played out in real time for this, too.
-  lapMark(sid, e, ms, now = Date.now()) {
+  // (id: the connection the mark came over, none for a request)
+  lapMark(sid, e, ms, now = Date.now(), id = null) {
     if (!sid) return;
-    if (e === 's') { this.sql.exec('INSERT INTO lapmarks (sid, t0) VALUES (?, ?) ON CONFLICT (sid) DO UPDATE SET t0 = excluded.t0', sid, now); return; }
+    if (e === 's') {
+      this.sql.exec('INSERT INTO lapmarks (sid, t0) VALUES (?, ?) ON CONFLICT (sid) DO UPDATE SET t0 = excluded.t0', sid, now);
+      this.trails.set(sid, { t0: now, id, last: 0, pts: [] });
+      const pe = id && this.poses.get(id);
+      if (pe) pe.sid = sid;
+      return;
+    }
     if (e !== 'f') return;
+    const tr = this.trails.get(sid);
+    this.trails.delete(sid);
     const t0 = this.sql.exec('SELECT t0 FROM lapmarks WHERE sid = ?', sid).toArray()[0]?.t0;
     if (!t0) return;
     this.sql.exec('DELETE FROM lapmarks WHERE sid = ?', sid);
     ms = Math.round(Number(ms));
     if (!(ms >= MARK_MIN && ms <= 3600000)) return;
-    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at) VALUES (?, ?, ?, ?)', sid, ms, now - t0, now);
-    if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY); }
+    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at, trail) VALUES (?, ?, ?, ?, ?)', sid, ms, now - t0, now, tr?.t0 === t0 && tr.pts.length ? JSON.stringify(tr.pts) : null);
+    if (now - this.seenClean > 3600000) {
+      this.seenClean = now;
+      this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY);
+      for (const [k, v] of this.trails) if (v.t0 < now - 3600000) this.trails.delete(k);
+      this.trailAsked.clear();
+    }
+  }
+  // Where a car on a lap is, as its positions come in (pose) or by a request from a page with no connection: one
+  // place every LIVE_MS is kept from the lap's start mark to its finish, and goes into lapseen with the lap. After a
+  // restart of the server the lap's start is found again in lapmarks, and the places go on from there.
+  lapPlace(sid, x, z, now = Date.now(), id = null) {
+    let tr = this.trails.get(sid);
+    if (!tr) {
+      if (this.trailAsked.has(sid)) return;
+      this.trailAsked.add(sid);
+      const t0 = this.sql.exec('SELECT t0 FROM lapmarks WHERE sid = ?', sid).toArray()[0]?.t0;
+      if (!t0) return;
+      this.trails.set(sid, tr = { t0, id, last: 0, pts: [] });
+    }
+    // (a second window of the same browser has the same ticket: only the connection the lap was started over counts)
+    if (tr.id && id && tr.id !== id) return;
+    if (now - tr.last < LIVE_MS || tr.pts.length >= 3 * LIVE_MAX || !Number.isFinite(x) || !Number.isFinite(z)) return;
+    tr.last = now;
+    tr.pts.push(Math.round((now - tr.t0) / 100), Math.round(x), Math.round(z));
   }
   // what is wrong with a lap's time by the server's clock ('' for nothing)
-  lapClock(sid, ms) {
-    const rows = this.sql.exec('SELECT took FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
-    if (rows.some((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER)) return '';
-    if (rows.length) return `took ${rows[0].took} ms by the server's clock`;
-    // (no marks: a page from before they were sent, until those are gone: cutover.js)
-    return Date.now() < OLD_PAGES_UNTIL ? '' : 'no marks';
+  // (drive: the lap's replay { xs, zs }, held against where the car was seen while it was driven: livecheck.js. A
+  // lap the car was not seen on at all is from a page that does not send its places when alone, until those are
+  // gone: cutover.js)
+  lapClock(sid, ms, drive = null) {
+    const rows = this.sql.exec('SELECT took, trail FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
+    const fit = rows.filter((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER);
+    if (!fit.length) {
+      if (rows.length) return `clock: took ${rows[0].took} ms by the server's clock`;
+      // (no marks: a page from before they were sent, until those are gone: cutover.js)
+      return Date.now() < OLD_PAGES_UNTIL ? '' : 'clock: no marks';
+    }
+    if (!drive) return '';
+    let why = '';
+    for (const r of fit) {
+      let pts = [];
+      try { pts = JSON.parse(r.trail || '[]'); } catch { /* none */ }
+      const c = liveCheck(pts, drive.xs, drive.zs, r.took);
+      if (c.n < LIVE_MIN) { if (Date.now() < LIVE_FROM) return ''; why ||= 'live: the car was not seen driving the lap'; continue; }
+      this.margin('live', c.miss / c.n);
+      if (liveOk(c)) return '';
+      why = `live: ${c.miss} of the ${c.n} places the car was seen at during the lap are not on its drive`;
+    }
+    return why;
   }
 
   // How near play comes to each of the server's limits (Martin 26 Nov 2026: "check other such places as well to make
   // sure nothing is dropped on the other side too heavily"): one figure for each thing judged, kept three days.
   // k: 'fin' the ms a racer's own finish time was before the server saw the car over the line (leeway SEEN_EARLY),
   // 'gaps' the gaps in a racer's positions that the lap was found again after (MAX_SKIPS), 'rcar' / 'car' the most
-  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX). The lap clock's own figures
+  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX), 'live' the share of the
+  // places a car was seen at during a lap that were not on its drive (LIVE_MISS). The lap clock's own figures
   // are in lapseen already. Read by GET /api/margins and the nightly look at the boards (tools/board-audit.mjs).
   margin(k, v, now = Date.now()) {
     if (Number.isFinite(v)) this.sql.exec('INSERT INTO margins (k, v, at) VALUES (?, ?, ?)', k, v, now);
@@ -973,7 +1030,7 @@ export class Lobby extends DurableObject {
     const kinds = { clock: sum(this.sql.exec('SELECT took - ms AS v FROM lapseen WHERE at >= ?', since).toArray().map((r) => r.v), -CLOCK_UNDER, CLOCK_OVER) };
     const by = {};
     for (const r of this.sql.exec('SELECT k, v FROM margins WHERE at >= ?', since).toArray()) (by[r.k] ||= []).push(r.v);
-    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX] };
+    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX], live: [0, LIVE_MISS] };
     for (const k of Object.keys(LIM)) kinds[k] = sum(by[k] || [], ...LIM[k]);
     return (this.marginsOut = { at: now, since, kinds });
   }
@@ -1082,7 +1139,7 @@ export class Lobby extends DurableObject {
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
       if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, lap.pen || 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
-      if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000); if (c) { why = `clock: ${c}`; told = 'clock'; } }
+      if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }
     if (why) return refuse(why, lap.name, bytes?.length || 0, told);
     // (the lap as it is now: this waited for the unpacking and perhaps the car's limits, and the same replay sent
@@ -1271,12 +1328,14 @@ export class Lobby extends DurableObject {
     if (path === '/api/mark' && req.method === 'POST') {
       // a lap's start or finish from a page that has no connection to the lobby (the server full, or the
       // connection down for a moment): {k: its lap ticket, e: 's' | 'f', ms: the lap time at the finish}
-      if (this.over(`m|${ip}`, 30, 60000)) return busy();
+      if (this.over(`m|${ip}`, 45, 60000)) return busy();
       let body;
       try { body = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
       const tk = await this.readTicket(body?.k);
       if (!tk) return json({ error: 'invalid' }, 400);
-      this.lapMark(tk.sid, body.e, body.ms);
+      // (e 'p': where its car is, every few seconds of a lap: lapPlace)
+      if (body.e === 'p') this.lapPlace(tk.sid, Number(body.x), Number(body.z));
+      else this.lapMark(tk.sid, body.e, body.ms);
       return json({ ok: true });
     }
 
@@ -1428,7 +1487,7 @@ export class Lobby extends DurableObject {
     if (!me?.id) return;
     if (this.race.message(ws, me, m)) return;
     // a lap's start or finish, as it happens (see lapMark)
-    if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now); return; }
+    if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now, me.id); return; }
     if (m.t === 'name') {
       const name = okName(m.name);                                         // (a slur: silently not taken)
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)

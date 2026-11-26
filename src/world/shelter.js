@@ -231,7 +231,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
 
   // ---- the car against the shelter: the closest point of its outline to the box; a hit is when it is up
   // against it and was coming in at speed the frame before
-  let prev = null, settled = true;
+  let prev = null, settled = true, onRoof = false;
   function update(car, dt, sound) {
     cool = Math.max(0, cool - dt);
     const dx = car.x - box.x, dz = car.z - box.z;
@@ -272,6 +272,22 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
       }
     }
     prev = near ? [vx, vz] : null;
+    // a car come down on its roof, at any speed: every pane bursts out under the weight, the frame stands as it
+    // was (Martin, 26 Nov: "make the bus shelter glass shatter when landing ontop of it with any speed.
+    // contsuction itself can remain sound")
+    const onIt = car.onTop === top;
+    if (onIt && !onRoof) {
+      const speed = 4 + Math.hypot(car.vx, car.vy);
+      let broke = 0;
+      for (const q of P) {
+        if (q.broken) continue;
+        const mx = (q.a[0] + q.b[0]) / 2 - box.x, mz = (q.a[1] + q.b[1]) / 2 - box.z, ml = Math.hypot(mx, mz) || 1;
+        shatter(q, mx / ml, mz / ml, speed);
+        broke++;
+      }
+      if (broke) { sound?.smash?.(broke, 1); stats.smash('glass', broke); settled = false; }
+    }
+    onRoof = onIt;
     if (!settled) {
       bendFrames(dt);
       const moving = shards.update(dt);

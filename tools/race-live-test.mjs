@@ -20,8 +20,10 @@ const drive = (name) => {
 };
 const CARS = (process.env.CARS || 'f40,m3').split(',');
 
+// (the server's own log: it writes a line for each finish it judged against the car)
+const LOG = `/tmp/race-live-${process.pid}.log`;
 const dev = spawn('npx', ['wrangler', 'dev', '--port', String(PORT), '--persist-to', `/tmp/race-live-${process.pid}`],
-  { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore', detached: true });
+  { cwd: new URL('..', import.meta.url).pathname, stdio: ['ignore', fs.openSync(LOG, 'w'), fs.openSync(LOG, 'a')], detached: true });
 const stop = () => { try { process.kill(-dev.pid); } catch { /* gone */ } };
 process.on('exit', stop);
 for (let t0 = Date.now(); ; await sleep(500)) {
@@ -128,6 +130,7 @@ for (const p of pages) {
 out.replays = {};
 for (const c of CARS) out.replays[c] = (await fetch(`${base}/api/replay?track=toomemagi&car=${c}`)).status;
 out.refused = await (await fetch(`${base}/api/replay?refused=1`)).json().catch(() => null);
+out.judged = fs.readFileSync(LOG, 'utf8').split('\n').filter((l) => l.includes('race judged')).map((l) => l.replace(/^.*race judged/, '').trim());
 console.log(JSON.stringify(out, null, 1));
 const bad = [];
 for (const q of out.pages) {
@@ -137,9 +140,10 @@ for (const q of out.pages) {
   else if (Math.abs(r.ms - want) > 1500) bad.push(`${q.car}: finish ${r.ms}, drove ${want}`);
   if (q.lapRes.some((l) => /clock/.test(l))) bad.push(`${q.car}: lap refused by the clock`);
   if (q.errs.length) bad.push(`${q.car}: page errors`);
+  if (!out.judged.some((l) => l.startsWith(q.car) && !l.includes('REFUSED'))) bad.push(`${q.car}: its drive was not judged against the car`);
 }
 const lr = out.racers.find((x) => x.name === 'OnlyTalk');
-if (!lr || lr.ms != null || lr.out !== 'cut') bad.push(`the liar: ${JSON.stringify(lr)}`);
+if (!lr || lr.ms != null || lr.out !== 'ref') bad.push(`the liar: ${JSON.stringify(lr)}`);
 console.log(bad.length ? `FAIL ${bad.join('; ')}` : 'ok: two pages raced and were followed to the finish; the racer that only talked is out');
 clearInterval(pinger); liar.close(); await b.close(); stop();
 process.exit(bad.length ? 1 : 0);

@@ -17,8 +17,9 @@
 // the lap's gates in order and cross the line, and at about the moment it saw that. (Until then "finished" was
 // the racer's word, and one sent two minutes after the lights won any race.)
 import { CARS } from '../src/cars/specs.js';
-import { follow, newFollow, finishInGap, PASS } from './follow.js';
+import { follow, newFollow, finishInGap, driven, PASS } from './follow.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
+import { judgeDrive } from '../src/race/plausible.js';
 
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
@@ -37,7 +38,7 @@ const CLAIM_WAIT = 3000;        // "finished" waits this long for the position t
 const SAVE_MS = 5000;           // what the server has seen of the racers is written down this often (a deploy restarts it mid-race)
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
-const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
+const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];   // (what a page may say; 'ref': the server did not take the finish)
 
 // votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one.
 // With many on the map half was too many to get a race going (Martin 2026-11-23): never more than 5 up to
@@ -228,8 +229,9 @@ export class RaceDesk {
     const r = s.racers.find((x) => x.id === id);
     if (!r || r.out || r.ms != null || now < (r.g ?? s.tGrid) - 500) return;
     let f = this.fol.get(id);
-    if (!f || f.race !== s.id) this.fol.set(id, f = newFollow(s.id));
-    const ev = follow(r, f, p[0], p[1], now, r.go || s.tGreen, !!CARS[r.car]?.thrusters, Number.isFinite(p[21]) ? p[21] : null);
+    // (and what the racer's car can do is worked out meanwhile, for the judging of its drive at the finish)
+    if (!f || f.race !== s.id) { this.fol.set(id, f = newFollow(s.id)); this.lobby.carLimit?.(r.car)?.catch?.(() => {}); }
+    const ev = follow(r, f, p[0], p[1], now, r.go || s.tGreen, !!CARS[r.car]?.thrusters, Number.isFinite(p[21]) ? p[21] : null, Number(p[2]) || 0);
     if (!ev) return;
     // (over the line with its "finished" already here: that is the finish)
     if (ev === 'finish' && r.cl) { this.settle(r, now); this.check(now); this.save(); this.send(); }
@@ -237,7 +239,7 @@ export class RaceDesk {
     else if (ev !== 'gate' || now - this.savedAt > SAVE_MS) this.save();
   }
   // A racer's word that they finished (r.cl: the time they give, and when it came) against what the server saw.
-  // true once it is decided: the finish taken, or the racer out as one who did not drive the lap ('cut').
+  // true once it is decided: the finish taken, or the racer out as one whose finish is not counted ('ref').
   settle(r, now) {
     const c = r.cl, s = this.s;
     if (!c || r.ms != null || r.out) { delete r.cl; return true; }
@@ -259,9 +261,21 @@ export class RaceDesk {
     }
     delete r.cl;
     if (fin != null && r.jp) fin = null;                      // (moved in a way no car drives)
+    // the car itself (26 Nov 2026): the lap as it was followed, held against what this car can do, as a record's
+    // drive is (src/race/plausible.js). Not judged when the car's limits are not at hand or the lap was not seen whole.
+    let car = '';
+    if (fin != null && r.fs != null) {
+      try {
+        const f = this.fol.get(r.id), lim = this.lobby.limitNow?.get(r.car), d = lim && f?.race === s.id ? driven(f) : null;
+        const j = d ? judgeDrive(d.xs, d.zs, d.ys, lim, { hop: d.hop }) : null;
+        // (a line in the log for each finish judged: how near honest racers come to the limits is worth knowing)
+        if (j) console.log(`race judged ${r.car} ${Math.round(fin)} ms, ${d.xs.length} samples, s over: pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}${j.why ? ' REFUSED' : ''}`);
+        if (j?.why) { car = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; fin = null; }
+      } catch (err) { console.error('race car check', err); }
+    }
     if (fin == null) {
-      r.out = 'cut';
-      this.lobby.raceRefused?.(r, c.ms, r.jp ? `jumped ${r.jp} times` : r.gt == null ? (r.arm ? 'never over the start line' : 'not seen standing on the grid') : `gates ${r.gt} of ${PASS.length}`);
+      r.out = 'ref';
+      this.lobby.raceRefused?.(r, c.ms, car || (r.jp ? `jumped ${r.jp} times` : r.gt == null ? (r.arm ? 'never over the start line' : 'not seen standing on the grid') : `gates ${r.gt} of ${PASS.length}`));
       return true;
     }
     // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is

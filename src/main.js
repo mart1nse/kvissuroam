@@ -1023,7 +1023,11 @@ async function boot() {
     // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
     // address only (?linelog=1 anywhere, ?linelog=0 nowhere); a test run does the same work and sends nothing.
     log: params.get('linelog') === '0' ? null : createLineLog({ jobs, track: 'raadi', send: params.get('linelog') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver) }),
-    onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); } },
+    // (the green light and the finish are told to the server as they happen: it times the run itself, as it does a lap)
+    onRun: (k, run, info) => {
+      if (k === 'start') mp.lapMark('s');
+      if (k === 'finish') { mp.lapMark('f', run.ms - (run.pen || 0) * 1000); mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); }
+    },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {
       const net = mp.bestFor(id, 'raadi'), own = stage.best(id).car, mine = own && { ms: own.ms, name: mp.name };

@@ -11,12 +11,20 @@
 // card, a card close to its limit counts as slow even at a full 60 FPS (frames then queue up and the
 // picture lags behind the keys), and a rung is only climbed when the card has room for it.
 //
+// The sharpest rungs (twice the pixels across, `sharp` below) ask more: the browser and the system then put a picture
+// of four times the pixels on the screen every refresh, work the card's timer does not see. Martin's MacBook,
+// 26 Nov 2026: at that sharpness, with the card at 10 to 12 of its 16.7 ms and every frame on time by the page's
+// clock, "stutters came back"; on MEDIUM "buttery smooth" (at lunch, on the rung below, it was smooth too). So such a
+// rung is held only while the card stays under 55% of the frame, climbed to only when it is expected under 45%,
+// and not held where the card cannot be timed (Safari: "also very laggy" at that sharpness).
+//
 // The levels are plain numbers; createQuality() applies them to the renderer, the sun and the trees. The governor is
 // pure logic so tools/quality-test.mjs can drive it with made-up frame times.
 
 // Rungs from the bottom (0) to the top. Every rung is a whole setting; the device caps (phones, a
 // 1x screen) are applied on top, and rungs that come out the same are merged.
 // (far: how far the camera sees, in metres; only the extra low rung pulls it in, the haze with it)
+const SHARP_HOLD = 0.55, SHARP_CLIMB = 0.45;    // the card's share of the frame on the sharpest rungs (see above)
 export const LADDER = [
   { dpr: 0.5,  shadow: 0,    trees: 40,  load: 340, far: 1500 },
   { dpr: 0.6,  shadow: 0,    trees: 45,  load: 420 },
@@ -50,9 +58,11 @@ export function deviceLadder(caps) {
 
 // The governor. feed(ms) once per drawn frame with that frame's length; it returns the new level
 // index when it decides to move, else -1. hold(s) pauses judging (after a change, a tab switch).
-export function createGovernor({ levels, start = levels - 1, top = levels - 1 }) {
+// sharp: the first of the sharpest rungs (see above), or levels when there is none
+export function createGovernor({ levels, start = levels - 1, top = levels - 1, sharp = levels }) {
   const WINDOW = 2000;              // ms of frames per verdict
-  let level = Math.max(0, Math.min(levels - 1, top, start));
+  // (a start on a sharpest rung begins one below it, and climbs when the card shows room)
+  let level = Math.max(0, Math.min(levels - 1, top, start, sharp > 0 ? sharp - 1 : levels));
   let ceiling = Math.max(0, Math.min(levels - 1, top));   // highest rung allowed (lowered by rungs that failed, or by a crash)
   let floor = 0;                   // lowest rung allowed (raised when stepping down did not help)
   let buf = [], sum = 0, gbuf = [];
@@ -106,6 +116,12 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
       } else { flat = 0; preFlat = level; }
     }
     const gpuBusy = load != null && load > 0.95;
+    // (a sharpest rung with the card over 55%, or not timed: one rung down, not judged as a slow frame rate)
+    if (level >= sharp && level > floor && fps >= downAt && !gpuBusy && (load == null || load > SHARP_HOLD)) {
+      highRun = 0;
+      if (++lowRun >= 2) return move(level - 1, 'sharp');
+      return null;
+    }
     if (fps < downAt || gpuBusy) {
       highRun = 0;
       lowRun++;
@@ -127,7 +143,8 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
       const next = level + 1;
       // room on the card for the next rung: this rung's time grown by what the step cost last time
       // (or by 1.4 when that is not known yet) must stay under 90% of the frame time
-      const cardRoom = load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
+      const cardRoom = next >= sharp ? load != null && gpu * (ratio[next] || 1.4) < budget * SHARP_CLIMB
+        : load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
       // the first minute (a fresh start, or AUTO picked again) climbs after 4 s with room, later after 8 s
       if (highRun >= (clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
     } else { lowRun = 0; highRun = 0; }
@@ -265,6 +282,8 @@ export const MODES = ['auto', 'high', 'medium', 'low'];
 // caps: the device's top settings. opts: { software, locked (fixed by ?q=low), headless (no auto) }.
 export function createQuality(hooks, caps, opts = {}) {
   const levels = deviceLadder(caps);
+  // the sharpest rungs, nearly twice the pixels across (a Retina screen's): see SHARP_HOLD
+  const sharp = ((k) => (k < 0 ? levels.length : k))(levels.findIndex((l) => l.dpr >= 1.75));
   const top = levels.length - 1;
   const fixed = { high: top, medium: Math.min(top, Math.max(0, levels.findIndex((l) => l.shadow > 0 && l.shadow < 2048))) , low: 0 };
   if (fixed.medium <= 0) fixed.medium = Math.round(top / 2);
@@ -366,7 +385,7 @@ export function createQuality(hooks, caps, opts = {}) {
   }
   let capMs = 0;                   // time on screen at the cap this visit (lifts it by one for the next)
 
-  let gov = createGovernor({ levels: levels.length, start, top: cap });
+  let gov = createGovernor({ levels: levels.length, start, top: cap, sharp });
   // the readout: averages, plus the frames that came more than half again later than the screen's
   // rate in the last two seconds (stutter the average hides) and the longest of them
   const meter = { frame: 16.7, js: 0, late: 0, worst: 0 };
@@ -461,7 +480,7 @@ export function createQuality(hooks, caps, opts = {}) {
       if (!MODES.includes(m) || mode === 'locked') return;
       mode = m;
       store(KEY, m);
-      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap });
+      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap, sharp });
       apply(m === 'auto' ? (auto ? gov.level : top) : levelFor(m));
     },
   };

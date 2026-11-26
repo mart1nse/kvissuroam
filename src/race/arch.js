@@ -216,46 +216,74 @@ function flameMesh(jets) {
       uniform float uT;
       varying vec2 vUv; varying float vSeed, vLife;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
       float noise(vec2 p) {
         vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
       }
       float fbm(vec2 p) {
         float s = 0.0, a = 0.5;
-        for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
-        return s / 0.9375;
+        for (int i = 0; i < 3; i++) { s += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+        return s / 0.875;
+      }
+      // round puffs of burning gas: x how high the domes of the nearby puffs stand (1 in a puff's middle, low between them),
+      // y how far it stands over the next one (0 in the creases between puffs), z that puff's own number
+      vec3 puffs(vec2 q, float t) {
+        vec2 i = floor(q), f = fract(q);
+        float a = 0.0, b = 0.0, id = 0.0, sum = 0.0;
+        for (int j = -1; j <= 1; j++) for (int k = -1; k <= 1; k++) {
+          vec2 o = vec2(float(j), float(k)), h = hash2(i + o);
+          vec2 d = (f - o - 0.25 - 0.5 * h) / ((0.78 + 0.45 * h.y) * (0.86 + 0.14 * sin(t * 3.0 + h.x * 6.28)));
+          float dome = max(0.0, 1.0 - dot(d, d));
+          sum += dome * dome;
+          if (dome > a) { b = a; a = dome; id = h.x; } else b = max(b, dome);
+        }
+        // (heights summed, so neighbouring puffs flow into each other instead of meeting at a seam)
+        return vec3(min(1.0, sqrt(sum) * 0.85), a - b, id);
       }
       void main() {
         float y = vUv.y, x = (vUv.x - 0.5) * 2.0, t = uT;
-        // turbulence rising through the column: a warped field, faster low down where the gas leaves the cannon
-        vec2 p = vec2(x * 1.5 + vSeed, y * 3.4 - t * 3.6);
-        vec2 w = vec2(fbm(p - vec2(0.0, t * 1.1)), fbm(p + vec2(5.2, 1.3) - vec2(0.0, t * 1.6)));
-        float n = fbm(p * 1.5 + w * 1.9 - vec2(0.0, t * 2.4));
-        // ---- the fire, in the lower part of the strip: narrow at the nozzle, swelling, torn into tongues at its top
         float fy = y / ${FIRE_TOP.toFixed(2)};
-        float r = mix(0.3, 0.82, smoothstep(0.0, 0.35, fy)) * (1.0 - 0.45 * smoothstep(0.72, 1.1, fy));
-        float dx = abs(x + (w.x - 0.5) * 0.6 * fy);
-        float shape = smoothstep(r, r * 0.2, dx - (n - 0.5) * 0.5 * (0.2 + fy));
-        float cut = smoothstep(1.08, 0.5, fy + (n - 0.5) * 0.8);
-        float T = shape * cut * (1.45 - fy * 0.75) * (0.6 + n);
-        // the colours of burning gas from hot to cool: white-yellow core, yellow, orange, deep red at the edges
-        vec3 c = vec3(0.42, 0.04, 0.0);
-        c = mix(c, vec3(0.92, 0.2, 0.02), smoothstep(0.06, 0.28, T));
-        c = mix(c, vec3(1.0, 0.52, 0.07), smoothstep(0.28, 0.52, T));
-        c = mix(c, vec3(1.0, 0.8, 0.32), smoothstep(0.52, 0.85, T));
-        c = mix(c, vec3(1.0, 0.96, 0.84), smoothstep(0.85, 1.2, T));
-        float e = smoothstep(0.03, 0.25, T);
-        vec3 light = c * e * (1.1 + 0.7 * smoothstep(0.6, 1.2, T));
-        // a short blue-white jet at the nozzle, and the hot air glowing round the body
-        light += vec3(0.55, 0.72, 1.0) * smoothstep(0.05, 0.0, y) * smoothstep(0.3, 0.0, abs(x)) * 0.9;
-        light += vec3(1.0, 0.42, 0.08) * exp(-dx * dx * 5.0) * smoothstep(1.0, 0.05, fy) * 0.22 * (1.0 - e);
-        // ---- smoke where the fire tears off: dark, curling, lit orange from below
-        float sm = fbm(p * 0.8 + w * 2.6 + vec2(3.1, -t * 0.5));
-        float sr = mix(0.25, 0.95, smoothstep(${(FIRE_TOP * 0.7).toFixed(2)}, 1.0, y));
-        float smoke = smoothstep(sr, sr * 0.25, abs(x + (w.y - 0.5) * 0.7) - (sm - 0.5) * 0.9);
-        smoke *= smoothstep(${(FIRE_TOP * 0.6).toFixed(2)}, ${(FIRE_TOP + 0.05).toFixed(2)}, y) * smoothstep(1.0, 0.82, y) * smoothstep(0.3, 0.62, sm) * 0.6;
-        vec3 soot = mix(vec3(0.07, 0.06, 0.06), vec3(0.32, 0.14, 0.05), smoothstep(${(FIRE_TOP + 0.12).toFixed(2)}, ${(FIRE_TOP * 0.8).toFixed(2)}, y));
-        float fa = e * 0.5, sa = smoke * (1.0 - fa);
+        // the column sways a little as a whole
+        vec2 p = vec2(x * 1.2 + vSeed, y * 2.6 - t * 1.4);
+        vec2 w = vec2(fbm(p), fbm(p + vec2(5.2, 1.3)));
+        float xs = x + (w.x - 0.5) * 0.45 * fy;
+        // puffs rising out of the jet, big ones with smaller ones on them
+        vec2 q = vec2(xs * 1.45 + vSeed, y * 10.5 - t * 4.5 + vSeed);
+        vec3 P = puffs(q, t), S = puffs(q * 2.3 + vec2(3.7, 1.1) - vec2(0.0, t * 3.0), t * 1.3);
+        float lump = smoothstep(0.08, 0.45, fy);
+        // the outline: a thin jet low down that opens into a ball of fire, its edge bulging round each puff
+        float jet = 0.14 + 0.16 * fy;
+        float ball = 0.92 * sqrt(max(0.0, 1.0 - pow((fy - 0.7) / 0.36, 2.0)));
+        float r = max(jet, ball);
+        float edge = abs(xs) - r - (P.x * 0.7 + S.x * 0.3 - 0.45) * 0.42 * lump - (w.y - 0.5) * 0.12;
+        float shape = smoothstep(0.035, -0.035, edge) * smoothstep(1.12, 1.0, fy + (S.x - 0.5) * 0.12);
+        // heat: hottest in the jet and deep inside the ball, each puff a little hotter in its middle than at its
+        // rim, darker in the creases, and each its own shade
+        float inner = clamp(-edge / max(r, 0.15), 0.0, 1.0);
+        float H = mix(0.95 - abs(xs) / jet * 0.25, 0.24 + 0.44 * inner, lump);
+        H += lump * ((P.x - 0.5) * 0.32 + (S.x - 0.5) * 0.08 - (1.0 - smoothstep(0.0, 0.15, P.y)) * 0.06 + (P.z - 0.5) * 0.16);
+        H -= smoothstep(0.75, 1.1, fy) * 0.12;
+        // grain in the gas, and the shades in steps rather than one smooth ramp
+        H += (noise(q * 4.0 + vec2(0.0, t * 2.0)) - 0.5) * 0.1 + (noise(q * 11.0 - vec2(0.0, t * 3.0)) - 0.5) * 0.1;
+        H = mix(H, floor(H * 8.0 + 0.5) / 8.0, 0.25);
+        vec3 c = vec3(0.45, 0.07, 0.01);
+        c = mix(c, vec3(0.86, 0.26, 0.03), smoothstep(0.1, 0.3, H));
+        c = mix(c, vec3(1.0, 0.47, 0.06), smoothstep(0.3, 0.5, H));
+        c = mix(c, vec3(1.0, 0.68, 0.16), smoothstep(0.5, 0.68, H));
+        c = mix(c, vec3(1.0, 0.86, 0.4), smoothstep(0.68, 0.86, H));
+        c = mix(c, vec3(1.0, 0.97, 0.84), smoothstep(0.86, 1.05, H));
+        vec3 light = c * shape * (0.95 + 0.5 * smoothstep(0.5, 1.0, H));
+        // the hot air glowing round it
+        light += vec3(1.0, 0.4, 0.08) * exp(-max(edge, 0.0) * 9.0) * 0.18 * (1.0 - shape) * smoothstep(1.1, 0.2, fy);
+        // ---- grey-brown smoke curling off its top and sides, in puffs too
+        vec3 D = puffs(vec2(x * 1.6 + vSeed + 2.0, y * 10.0 - t * 2.5), t * 0.7);
+        float sr = mix(0.3, 1.0, smoothstep(0.3, 1.0, y));
+        float smoke = smoothstep(0.1, -0.1, abs(x + (w.y - 0.5) * 0.8) - sr - (D.x - 0.5) * 0.5);
+        smoke *= smoothstep(${(FIRE_TOP * 0.35).toFixed(2)}, ${(FIRE_TOP * 0.9).toFixed(2)}, y) * smoothstep(1.0, 0.8, y) * (0.25 + 0.4 * D.x);
+        vec3 soot = mix(vec3(0.2, 0.19, 0.19), vec3(0.42, 0.36, 0.32), D.x) * mix(0.6, 1.0, D.z);
+        soot = mix(soot, vec3(0.5, 0.2, 0.06), smoothstep(${(FIRE_TOP + 0.1).toFixed(2)}, ${(FIRE_TOP * 0.8).toFixed(2)}, y) * 0.5);
+        float fa = shape * mix(0.55, 0.9, lump), sa = smoke * (1.0 - fa);
         vec3 rgb = light + soot * sa;
         float a = fa + sa;
         if (a < 0.004 && dot(rgb, rgb) < 0.0001) discard;

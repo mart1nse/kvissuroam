@@ -19,22 +19,24 @@ import { fileURLToPath } from 'node:url';
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
 import { refillTank } from '../src/cars/thrust.js';
-import { motorRegen } from '../src/audio-motor.js';
+import { motorRegen, motorKind } from '../src/audio-motor.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (k) => process.argv.find((a) => a.startsWith(`--${k}`));
 const val = (k) => flag(`${k}=`)?.slice(k.length + 3);
 const out = pos[0] || 'motor-demo';
-const kinds = pos[1] ? pos[1].split(',') : ['old', 'gear'];
+
 const SOLO = !!flag('solo'), GAIN = 10 ** (Number(val('gain') ?? 13) / 20);
 const SR = 48000, FPS = 60, ID = val('car') || 'rocket';
 mkdirSync(out, { recursive: true });
 
 // ---- the drive
 const spec = CARS[ID];
+const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)];
+const FAST = Math.min(200, (spec.limiter || 250) - 8);   // the fast part's speed: 200 km/h, or what the car can do
 const world = { meta: { riverLevel: -100 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
-refillTank(ID);
+if (spec.thrusters) refillTank(ID);
 const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
 const kmh = () => Math.hypot(car.vx, car.vy) * 3.6;
 // (each step: what the driver does, and when it is over)
@@ -45,8 +47,8 @@ const steps = [
   ['pedal let go', () => ({}), (t) => t > 1.8],
   ['braked to a stop', () => ({ down: kmh() > 2 ? 0.3 : 0 }), (t) => kmh() < 0.5 || t > 6],
   ['rest', () => ({}), (t) => t > 0.9],
-  ['floored to 200', () => ({ up: 1 }), () => kmh() >= 200],
-  ['pedal let go at 200', () => ({}), (t) => t > 3.5],
+  [`floored to ${FAST}`, () => ({ up: 1 }), (t) => kmh() >= FAST || t > 40],
+  [`pedal let go at ${FAST}`, () => ({}), (t) => t > 3.5],
   ['floored again', () => ({ up: 1 }), (t) => t > 1.6],
   ['pedal let go', () => ({}), (t) => t > 0.6],
   ['braked hard to a stop', () => ({ down: kmh() > 3 ? 1 : 0 }), (t) => kmh() < 0.5 || t > 8],
@@ -115,7 +117,7 @@ for (const kind of kinds) {
       const m = createMotor(ctx, master, noise, spec, kind);
       for (let i = 0; i < n; i++) m.step(i / FPS, F[i * 4], F[i * 4 + 2], F[i * 4 + 3], false);
     }
-    if (!SOLO) {
+    if (!SOLO && spec.fanDown) {
       // the fans (audio.js makeFan, fanSound) ...
       const FAN_TONE = 0.035, FAN_AIR = 0.11, FAN_UP = 0.3;
       const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;

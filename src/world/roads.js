@@ -102,15 +102,18 @@ export function createRoadMarkings(world) {
     if (r.s === 2 || r.s === 3) continue;                 // gravel and dirt carry no paint
     if (r.w < (main ? 5.5 : 6.4) || r.pts.length < 2) continue;
     level = r.e || 0;
+    const only = r.markKeep || null;                      // its lines only where this says so: a hand-painted stretch takes over part of the road (src/world/raadistart.js)
     if (r.w >= 11.5) {
-      if (r.noCentre) keep = (x, z) => !r.noCentre(x, z);  // a painted island instead (src/world/turupaint.js)
+      keep = r.noCentre ? (x, z) => !r.noCentre(x, z) && (!only || only(x, z)) : only;  // a painted island instead (src/world/turupaint.js)
       strokes(r.pts, 0, 4.5, 0, 10);                       // solid centre
-      keep = null;
+      keep = only;
       strokes(r.pts, r.w / 4, DASH, GAP, 12);
       strokes(r.pts, -r.w / 4, DASH, GAP, 12);
     } else {
+      keep = only;
       strokes(r.pts, r.mark || 0, DASH, GAP, 9);          // mark: a lane line moved off the centre
     }
+    keep = null;
   }
 
   // lines an area draws itself, such as hatched islands: [x1, z1, x2, z2, ...] on the ground

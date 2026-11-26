@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createMotor, motorKind, motorRegen } from './audio-motor.js';
+import { createMotor, motorKind, motorRegen, plainWhine } from './audio-motor.js';
 import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
@@ -336,11 +336,11 @@ export function createAudio() {
     if (ev) {
       engGain.gain.setTargetAtTime(0, t, 0.05);
       if (synth) synth.port.postMessage({ state: { on: 0 } });
-      // (a car with motors of its own sound has those instead of the plain whine)
+      // (a car with motors of its own sound has those instead of the plain whine, or with it: `blend`)
       if (motorWant && !motor && noiseSrc) { motor = createMotor(ctx, bus, noiseSrc, car.spec, motorWant); if (!motor) motorWant = null; }
       if (motor) motor.step(t, vw, car.throttle, motorRegen(car, v), dead);
       whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
-      whineGain.gain.setTargetAtTime(dead || motor ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
+      whineGain.gain.setTargetAtTime(dead || (motor && !motor.blend) ? 0 : plainWhine(vw, car.throttle), t, 0.08);
     } else {
       // turbos whistle as they spool, rising in pitch with boost and revs (inside the engine synthesiser;
       // the oscillator is only for browsers without it), and vent their boost when the throttle shuts
@@ -497,7 +497,7 @@ export function createAudio() {
       if (v.motorWant && !v.motor) { v.motor = createMotor(ctx, v.mix, noiseSrc, s, v.motorWant); if (!v.motor) v.motorWant = null; }
       if (v.motor) v.motor.step(t, vw, r.throttle, motorRegen(r, speed), false);
       v.whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
-      v.whineGain.gain.setTargetAtTime(v.motor ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + r.throttle * 0.5), t, 0.08);
+      v.whineGain.gain.setTargetAtTime(v.motor && !v.motor.blend ? 0 : plainWhine(vw, r.throttle), t, 0.08);
     } else {
       if (e.turbo) {
         const wh = e.turbo.whistle ?? 1;

@@ -25,6 +25,11 @@
 // visit used up its 60 rows in its first seconds). While four or more of the last 120 frames come late
 // the frame rate is uneven: that time is counted as such, and a hitch there is a frame 1.75 times those ordinary
 // late ones (29 ms and more on that phone), the step that stands out from the rest.
+//
+// A screen faster than 90 Hz shows every second (or third) picture (`every` in main.js frame): on a 120 Hz screen a
+// picture that misses its refresh is shown 25 ms instead of 16.7, under the 29 ms of a hitch and the readout's
+// late frames (Martin's Mac, 26 Nov 2026: "felt some stutters" at 1 or 2 hitches in 3 minutes). Such steps are
+// counted on their own, "one-refresh slips", and the line says what the screen runs at.
 
 // time taken on the page outside the game's frame, since the last frame: note(what, t0) from the handlers
 export const outside = {
@@ -42,19 +47,23 @@ export function createHitches({ report = null } = {}) {
   const log = [];                  // [driving clock s, ms, why, s since the drive began or the car was put somewhere]
   const win = new Float32Array(120), sorted = new Float32Array(120);
   const rough = new Float32Array(SPAN / 10), roughAt = new Int32Array(SPAN / 10).fill(-1);   // uneven seconds per 10 s of driving
-  let base = 16.7, top = 16.7, clock = 0, frames = 0, wi = 0, run = false, uneven = false;
+  const slips = [];                // driving clock s of each one-refresh slip
+  let base = 16.7, top = 16.7, clock = 0, frames = 0, wi = 0, run = false, uneven = false, hz = 0, every = 1;
   const usual = { js: 0, build: 0, draw: 0, net: 0 };
   return {
     // is the frame rate uneven now (four or more of the last 120 frames late)?
     get uneven() { return uneven; },
     // each frame. ms: how long the frame before lasted; felt: plain driving (see quietAt in main.js);
-    // f: what that frame did ({ js, build, draw, net, progs, tex, car }, ms); s: { others, since } for the report
-    frame(ms, felt, f, s = {}) {
+    // f: what that frame did ({ js, build, draw, net, progs, tex, car }, ms); s: { others, since } for the report;
+    // refresh: the screen's refresh (ms) and every: the refreshes a picture is meant to stay (main.js frame)
+    frame(ms, felt, f, s = {}, refresh = 0, each = 1) {
+      if (refresh > 0) { hz = 1000 / refresh; every = each; }
       const out = outside.take();
       if (!felt || !(ms > 0) || ms >= 1000) { run = false; return null; }
       clock += ms / 1000;
       frames++;
       while (log.length && clock - log[0][0] > SPAN) log.shift();
+      while (slips.length && clock - slips[0] > SPAN) slips.shift();
       // (judged against the frames before it, from the page's eighth frame of driving on)
       uneven = top >= lateAt(base);
       if (uneven) { const k = Math.floor(clock / 10), i = k % rough.length; if (roughAt[i] !== k) { roughAt[i] = k; rough[i] = 0; } rough[i] += ms / 1000; }
@@ -71,6 +80,9 @@ export function createHitches({ report = null } = {}) {
         top = n < 8 ? base : q[n - 1 - Math.min(3, n >> 3)];
       }
       if (!late) {
+        // (a picture meant to stay `every` refreshes that stayed one more: only where `every` is 2 or more, a missed
+        // refresh at 60 Hz being 33 ms and a hitch; and not on an uneven frame rate, which is counted as such)
+        if (refresh > 0 && each >= 2 && !uneven && wi >= 8 && ms > (each + 0.5) * refresh) slips.push(clock);
         run = false;
         for (const k in usual) usual[k] += ((f[k] || 0) - usual[k]) * 0.02;
         return null;
@@ -97,7 +109,7 @@ export function createHitches({ report = null } = {}) {
       const k0 = Math.floor(clock / 10);
       for (let i = 0; i < rough.length; i++) if (roughAt[i] > k0 - rough.length) un += rough[i];
       const secs = Math.min(clock, SPAN);
-      return { secs, n: log.length, worst, by: [...by].sort((a, b) => b[1] - a[1]), early, uneven: Math.min(un, secs), frames };
+      return { secs, n: log.length, worst, by: [...by].sort((a, b) => b[1] - a[1]), early, uneven: Math.min(un, secs), slips: slips.length, hz, every, frames };
     },
     // one line for the options window
     get line() {
@@ -105,7 +117,9 @@ export function createHitches({ report = null } = {}) {
       if (r.secs < 5) return '';
       const span = r.secs < 90 ? `${Math.round(r.secs)} s` : `${Math.round(r.secs / 60)} min`;
       const share = r.uneven / r.secs;
-      const rate = share >= 0.1 ? `frame rate uneven ${Math.round(share * 100)}% of the time · ` : '';
+      // (the screen: a 120 Hz one that shows every 2nd picture says so, and how many pictures stayed a refresh longer)
+      const scr = r.hz ? `screen ${Math.round(r.hz)} Hz${r.every >= 2 ? `, every ${r.every === 2 ? '2nd' : `${r.every}rd`} refresh drawn, ${r.slips} ${r.slips === 1 ? 'picture' : 'pictures'} a refresh late` : ''} · ` : '';
+      const rate = `${scr}${share >= 0.1 ? `frame rate uneven ${Math.round(share * 100)}% of the time · ` : ''}`;
       if (!r.n) return `${rate}no hitches in the last ${span} of driving`;
       const when = r.n === 1 ? (r.early ? ', in the first 30 s after a start' : '') : r.early ? `, ${r.early === r.n ? 'all' : r.early} of them in the first 30 s after a start` : ', none of them in the first 30 s after a start';
       return `${rate}${r.n} ${r.n === 1 ? 'hitch' : 'hitches'} in the last ${span} of driving, longest ${Math.round(r.worst)} ms (${r.by.map(([k, n]) => `${n} ${WHY[k] || k}`).join(', ')})${when}`;

@@ -2273,7 +2273,7 @@ function frame(ts) {
     from: gapFrom, fz: lastFrame, uneven: hitches.uneven, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free' });
   // short hitches (src/hitches.js): was the frame before late, and what was it busy with
   // (since: the time since the drive began or the car was last put somewhere, a race's grid or a stage's start)
-  hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - Math.max(driveT, placedAt || 0)) / 1000 : 0 });
+  hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - Math.max(driveT, placedAt || 0)) / 1000 : 0 }, rafMs, every);
   lastFrame.net = netMs; lastFrame.car = 0;
 
   // ---- car visuals

@@ -92,5 +92,25 @@ const drive = (h, secs, frame, since0 = 0) => {
   ok('none early: the line says so', /2 hitches .*, none of them in the first 30 s after a start$/.test(h.line), h.line);
 }
 
+// 9. a 120 Hz screen showing every 2nd refresh (Martin's Mac, 26 Nov 2026): a picture a refresh late (25 ms) is a slip,
+// not a hitch; two refreshes late (33 ms) is a hitch
+{
+  const h = createHitches(), R = 1000 / 120;
+  let n = 0;
+  for (let t = 0, i = 0; t < 60000; i++) { const ms = i % 300 === 299 ? 25 : i === 1000 ? 33.3 : 16.67; t += ms; if (h.frame(ms, true, F, { since: t / 1000 }, R, 2)) n++; }
+  const r = h.recent;
+  ok('120 Hz every 2nd: slips counted', r.slips >= 11 && r.slips <= 12, r.slips);
+  ok('120 Hz every 2nd: the 33 ms one is the one hitch', n === 1, n);
+  ok('120 Hz every 2nd: the line says it', /^screen 120 Hz, every 2nd refresh drawn, 1\d pictures a refresh late · 1 hitch/.test(h.line), h.line);
+  console.log('     ' + h.line);
+}
+// 10. a 60 Hz screen: no slips, the line names the screen only
+{
+  const h = createHitches();
+  for (let t = 0, i = 0; t < 30000; i++) { const ms = i === 900 ? 33.4 : 16.67; t += ms; h.frame(ms, true, F, { since: t / 1000 }, 16.67, 1); }
+  ok('60 Hz: no slips', h.recent.slips === 0, h.recent.slips);
+  ok('60 Hz: the line', /^screen 60 Hz · 1 hitch in the last 30 s/.test(h.line), h.line);
+}
+
 console.log(fails ? `\n${fails} failed` : '\nall ok');
 process.exit(fails ? 1 : 0);

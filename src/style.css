@@ -792,6 +792,10 @@ body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: colu
 /* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
 body:not(.touch) #people .who::-webkit-scrollbar { display: none; }
 body:not(.touch) #people .who > li { flex-shrink: 0; }
+/* (Martin 2026-11-26) those on a timed Majoraadi run: the same rows, under the MAJORAADI pill on the right (src/net/people.js),
+   top down, as many as there is room for above the speedometer, the wheel scrolls the rest */
+body:not(.touch) #people .who.st:not(.hidden) { position: fixed; right: max(10px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 68px + 34px);
+  flex-direction: column; align-items: flex-end; margin: 0; max-height: calc(100vh - 102px - clamp(170px, 24vw, 280px) - 70px); }
 #people .up { display: none; }
 body:not(.touch) #people .up:not(.hidden) { display: block; margin: 0 0 1px; color: #fff; opacity: .6; letter-spacing: .08em; white-space: nowrap; }
 body:not(.touch) #people .who.more-up { -webkit-mask-image: linear-gradient(transparent, #000 1.6em); mask-image: linear-gradient(transparent, #000 1.6em); }

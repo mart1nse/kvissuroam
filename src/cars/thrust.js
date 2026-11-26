@@ -215,7 +215,18 @@ const rnd = (h, i) => {
 const DEG = Math.PI / 180, TURN = 2 * Math.PI;
 const S5 = (x) => x * x * x * (10 - 15 * x + 6 * x * x);
 const OVER_MIN = 10 / 360, OVER_MORE = 6 / 360;   // the first overshoot of the roll, in turns
-const HUNT_TAU = 0.4;                             // each swing back is this much smaller (the time to 37 %, s)
+const HUNT_LEAD = 0.05;                           // the first swing back starts this long before the turn is quite done, so its top is rounded too (s)
+const HUNT_FLOOR = 1.1 / 360, HUNT_FLOOR_MORE = 0.7 / 360;   // no swing is smaller than this (turns): the car is never quite still, to the touchdown
+const HUNT_SMALL = 3.5 / 360, HUNT_SLOW = 0.2;    // a swing smaller than this takes up to this much longer (s)
+const HUNT_QUIVER = 0.7;                          // from the end of the turn on the trembling is this much of itself: the swings are seen more than the quiver
+// One swing of the hunt, from one turning point (0) to the next (1). Martin 26 Nov: "the extremums of the wobbles
+// when it goes to an angle and comes back, make that curve a U shape instead of a V for a logical smoother but
+// still very rapid movement", and "never make it perfectly sit at one angle but leave a very small gradual roll
+// from one to another". So: a wide round bottom at each end, where the car slows, creeps on a little, turns and
+// creeps back before it goes, and a steep run between. Nothing in it is sudden (the push grows from nothing at each
+// turning point, whatever the lengths of the swings either side), and it stands still for no longer than a moment.
+const U_Q = 2.4, U_ROUND = 0.2;
+const sway = (s) => { const a = Math.pow(s, U_Q), b = Math.pow(1 - s, U_Q); return (1 - U_ROUND) * (a / (a + b)) + U_ROUND * (0.5 - 0.5 * Math.cos(Math.PI * s)); };
 const KICK_TAU = 0.3, KICK_W = TURN / 0.75;       // the nose-down kick of lift-off dies away and swings back like this
 const KICK_C = 1 / (Math.exp(-Math.atan(KICK_W * KICK_TAU) / (KICK_W * KICK_TAU)) * Math.sin(Math.atan(KICK_W * KICK_TAU)));
 const HALF_BASE = 1.5;                            // metres from the middle to an axle, and a little: the nose wheels stay over the ground
@@ -233,8 +244,7 @@ function fight(p) {
   f = {
     T, tE, room, tb: p.tb, tl: p.tl,
     over: (OVER_MIN + OVER_MORE * rnd(h, 0)) * Math.min(1, room / 0.5),
-    // the hunt for level: a slow swing and a quicker one on top, so no two swings are as long or as deep
-    w1: TURN / (0.46 + 0.14 * rnd(h, 1)), w2: TURN / (0.27 + 0.09 * rnd(h, 2)), mix: 0.3 + 0.15 * rnd(h, 3),
+    hunt: [],
     roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9]),    // turns
     pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8]),  // radians
     yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8]),
@@ -259,6 +269,17 @@ function fight(p) {
   add(mid - half, mid + half, 2, 0);
   for (let t = mid + half, kind = (2 + way) % 3, i = 1; i < 8 && t < t1; i++, kind = (kind + way) % 3) { const e = Math.min(t1, t + len(kind, i)); add(t, e, kind, i); t = e; }
   for (let t = mid - half, kind = (5 - way) % 3, i = 8; i < 15 && t > t0; i++, kind = (kind + 3 - way) % 3) { const a = Math.max(t0, t - len(kind, i)); add(a, t, kind, i); t = a; }
+  // The hunt for level, as its turning points [when, how far over level in turns], to the touchdown and past it:
+  // over, back under by less, over again by less than that, each swing of its own length (a quick first one back,
+  // then some quick and some slow), so no two are as long or as deep, and never to nothing
+  for (let t = tE - HUNT_LEAD, a = f.over, i = 0; ; i++) {
+    f.hunt.push(t, a);
+    if (t > p.tl || i > 14) break;
+    const r = rnd(h, 60 + i * 2), r2 = rnd(h, 61 + i * 2);
+    a = -Math.sign(a || 1) * Math.max(Math.abs(a) * (i ? 0.42 + 0.26 * r2 : 0.32 + 0.12 * r2), HUNT_FLOOR + HUNT_FLOOR_MORE * r2);
+    // (the small swings at the end take their time: a slow roll from one side to the other)
+    t += i ? 0.21 + 0.25 * r * r + HUNT_SLOW * clamp01(1 - Math.abs(a) / HUNT_SMALL) : 0.26 + 0.05 * r;
+  }
   FIGHTS.set(p, f);
   return f;
 }
@@ -268,19 +289,19 @@ const settle = (f, t) => 1 - 0.6 * smooth((t - (f.tl - 0.35)) / 0.35);
 // level by 10 to 16 degrees...
 function rollMain(f, t) {
   const u = (t - ROLL_T0) / f.T;
-  return u <= 0 ? 0 : u < 1 ? (1 + f.over) * S5(u) : 1;
+  return u <= 0 ? 0 : (1 + f.over) * (u < 1 ? S5(u) : 1);
 }
-// ...and what is on top of it, in turns: the trembling all the way, and after the turn the hunt for level, the
-// overshoot caught and pushed back under, over again, each swing smaller and none like the last, with a degree or
-// two still in it as the wheels touch, for the springs to take
+// ...and what is on top of it, in turns: the trembling all the way, and from the end of the turn the hunt for
+// level, the overshoot caught and pushed back under, over again, each swing smaller and none like the last, with a
+// degree or two still in it as the wheels touch, for the springs to take
 function rollPlay(f, t) {
   t = Math.min(t, f.tl);
-  let v = smooth(t / 0.3) * settle(f, t) * sum3(f.roll, t);
-  const x = t - f.tE;
-  if (x >= 0) {
-    const e = Math.exp(-x / HUNT_TAU), w = 1 - 0.5 * (x / f.room) ** 2;
-    const s1 = Math.cos(f.w1 * x) + Math.sin(f.w1 * x) / (f.w1 * HUNT_TAU), s2 = Math.cos(f.w2 * x) + Math.sin(f.w2 * x) / (f.w2 * HUNT_TAU);
-    v += f.over * e * w * ((1 - f.mix) * s1 + f.mix * s2);
+  let v = smooth(t / 0.3) * settle(f, t) * (1 - (1 - HUNT_QUIVER) * smooth((t - (f.tE - 0.3)) / 0.3)) * sum3(f.roll, t);
+  const H = f.hunt;
+  if (t > H[0]) {
+    let k = 0;
+    while (k + 4 < H.length && t >= H[k + 2]) k += 2;
+    v += H[k + 1] + (H[k + 3] - H[k + 1]) * sway(Math.min(1, (t - H[k]) / (H[k + 2] - H[k]))) - f.over;
   }
   return v;
 }

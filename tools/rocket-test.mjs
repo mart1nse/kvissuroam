@@ -295,8 +295,8 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
 {
   const D = 180 / Math.PI, STEP = 0.005;
   const spots = [[0, 0], [12.34, -56.7], [-340.2, 88.1], [5.5, 5.5], [1000.01, 2000.02], [77.7, -3.2], [-15.5, 410.9], [3.21, 9.87]];
-  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [], pause: [], steady: [], sliver: [] };
-  let endSum = 0, shortSum = 0; const pausedAt = [];
+  const bad = { over: [], swings: [], uneven: 0, swaps: [], end: [], step: [], rear: 0, tail: [], dip: [], order: [], nod: [], nose: [], sync: [], bursts: [], fan: [], yaw: [], pause: [], steady: [], sliver: [], tips: [] };
+  let endSum = 0, shortSum = 0, tipMax = 0; const pausedAt = [];
   for (const [x, z] of spots) {
     const w = world(), car = fresh(w, 60, 0);
     car.x = x; car.z = z; car.vx = 60 / 3.6;
@@ -354,6 +354,11 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
       if (Math.abs(ds[k]) < 0.3 || Math.abs(acc) < 4) continue;
       judged++; if (Math.sign(acc) === Math.sign(ds[k])) agree++;
     }
+    // the hunt's turning points are round: how hard the roll is being turned at the moment it turns back (deg/s2)
+    let tip = 0;
+    for (let k = Math.round((tE - 0.1) / STEP); k < rolls.length - 1; k++) if ((rolls[k] - rolls[k - 1]) * (rolls[k + 1] - rolls[k]) < 0) tip = Math.max(tip, Math.abs(rolls[k + 1] - 2 * rolls[k] + rolls[k - 1]) * D / (STEP * STEP));
+    if (tip > 2000) bad.tips.push(`${at}: ${tip.toFixed(0)}`);
+    tipMax = Math.max(tipMax, tip);
     const end = (flightPose(plan, plan.tl, a).roll - 2 * Math.PI) * D, endP = (a.pitch - plan.pl) * D;
     const all = runs.flat(), short = all.filter((v) => v < 0.12).length, long = all.filter((v) => v > 0.25).length;
     endSum += Math.abs(end); shortSum += short; if (firstPause >= 0) pausedAt.push(firstPause);
@@ -361,7 +366,8 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     if (!(over > 8 && over < 20 && under < -2 && under > -10)) bad.over.push(fmt(`${over.toFixed(1)} over, ${(-under).toFixed(1)} under`));
     if (halves.length < 2) bad.swings.push(fmt(halves.length, 0));
     if (halves.length >= 2 && Math.max(...halves) > 1.25 * Math.min(...halves)) bad.uneven++;
-    if (swaps < 3) bad.swaps.push(fmt(swaps, 0));
+    // (twice at the least, was three times: the hunt's turning points are rounder since 26 Nov, so there is less to catch)
+    if (swaps < 2) bad.swaps.push(fmt(swaps, 0));
     if (!(Math.abs(end) < 4 && Math.abs(endP) < 1)) bad.end.push(fmt(`roll ${end.toFixed(2)}, nose ${endP.toFixed(2)}`));
     if (maxStep >= 0.06) bad.step.push(fmt(maxStep * D, 2));
     if (!(tailUp > 0.1 && tailUp < 0.25)) bad.tail.push(fmt(tailUp, 3));
@@ -385,6 +391,9 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('the roll goes past level and comes back under it', none(bad.over), say(bad.over));
   check('...in at least three swings, in most flights of unequal length', none(bad.swings) && bad.uneven >= spots.length - 2, `${say(bad.swings)} ${bad.uneven} of ${spots.length} uneven`);
   check('...the side jets swap sides as they hunt for level', none(bad.swaps), say(bad.swaps));
+  // (Martin 26 Nov: "the extremums of the wobbles when it goes to an angle and comes back, make that curve a U shape
+  // instead of a V". Where the turn ended and the first swing back began the roll was turned at 3000 to 5000 deg/s2)
+  check('...each swing turns back in a round U, not a V (turned at under 2000 deg/s2 as it turns back)', none(bad.tips), `${say(bad.tips)} ${tipMax.toFixed(0)} deg/s2 at the sharpest`);
   check('...it lands nearly level, never quite', none(bad.end) && endSum / spots.length > 0.3, `${say(bad.end)} ${(endSum / spots.length).toFixed(2)} deg off at touchdown on average`);
   check('...and turns smoothly all the way', none(bad.step), say(bad.step));
   check('the nose nods all the way (1 to 6 degrees in free flight) and is held up in the landing burn', none(bad.nod) && none(bad.nose), say([...bad.nod, ...bad.nose]));

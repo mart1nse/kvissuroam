@@ -297,6 +297,10 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
 .pad.rocket .ring .bg { stroke: rgba(255, 255, 255, .17); }
 .pad.rocket .ring .fg { stroke: var(--c); stroke-dasharray: 0 400; }
 .pad.rocket .ring .fg.part, .pad.rocket button.reload .ring .fg { stroke: rgba(255, 255, 255, .5); }
+/* (gas going out, BOOST blowing or a FLIP just made: the level runs down, src/rocketui.js, and is white hot while it does) */
+.pad.rocket .ring, .pad.rocket .ring .fg { transition: stroke .2s, filter .2s; }
+.pad.rocket button.use .ring { filter: drop-shadow(0 0 5px var(--c)) drop-shadow(0 0 2px #fff); }
+.pad.rocket button.use .ring .fg { stroke: #fff; }
 .pad.rocket .ic { position: relative; width: 36%; height: 36%; fill: none; stroke: var(--c); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 4px var(--c)); }
 .pad.rocket button b { position: relative; font-weight: 700; padding-left: .18em; line-height: 9px; }
 .pad.rocket button small { position: relative; font-size: 8.5px; font-weight: 800; letter-spacing: .06em; line-height: 10px; min-height: 10px; opacity: 1; color: var(--c); text-shadow: 0 0 6px var(--c); }
@@ -310,11 +314,12 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
    under the dial, and a mouse can hold BOOST or click FLIP. No name in them at that size, only the icon and the
    line under it. First over the speed, where he drew them; then, his second thought the same morning, "just
    above the other buttons and raise the speed number instead": side by side over the fan, the gear and the tyre,
-   between the dial's last two numbers, with the speed, its unit and the kW moved up to make room. */
-.pad.rocket.dial button { --rd: calc(var(--d) * .14); width: var(--rd); height: var(--rd); right: auto; bottom: auto; top: calc(var(--d) * .78 - var(--rd) / 2);
+   between the dial's last two numbers, with the speed and the kW moved up to make room. And "a touch more higher"
+   with no km/h under the speed ("on the tach you do not need km/h text showing"): level with those two numbers. */
+.pad.rocket.dial button { --rd: calc(var(--d) * .135); width: var(--rd); height: var(--rd); right: auto; bottom: auto; top: calc(var(--d) * .752 - var(--rd) / 2);
   padding: 0; pointer-events: auto; cursor: pointer; font-size: 0; box-shadow: 0 0 12px -4px var(--c), inset 0 1px 0 rgba(255, 255, 255, .2); -webkit-tap-highlight-color: transparent; }
-.pad.rocket.dial button.boost { left: calc(50% - var(--d) * .078 - var(--rd) / 2); }
-.pad.rocket.dial button.flip { left: calc(50% + var(--d) * .078 - var(--rd) / 2); }
+.pad.rocket.dial button.boost { left: calc(50% - var(--d) * .074 - var(--rd) / 2); }
+.pad.rocket.dial button.flip { left: calc(50% + var(--d) * .074 - var(--rd) / 2); }
 .pad.rocket.dial button b { display: none; }
 .pad.rocket.dial .ic { width: 42%; height: 42%; }
 .pad.rocket.dial button small { font-size: calc(var(--d) * .031); line-height: 1.05; min-height: 0; letter-spacing: 0; }
@@ -322,8 +327,8 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
 .pad.rocket.dial button.no { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); cursor: default; }
 @media (max-width: 950px) { .pad.rocket.dial button small { display: none; } .pad.rocket.dial .ic { width: 50%; height: 50%; } }
 body.rocketdial #speed { top: 38.5%; transform: translateY(-50%); font-size: calc(var(--d) * .26); }
-body.rocketdial #unit { top: 52.5%; }
-body.rocketdial #dial text.kw { transform: translateY(-22px); }   /* (in the dial's own units: from 73 % down the dial to 62 %) */
+body.rocketdial #unit { display: none; }
+body.rocketdial #dial text.kw { transform: translateY(-31px); }   /* (in the dial's own units: from 73 % down the dial to 57.5 %) */
 /* a fan car's suction fans (spec.fanDown): a small fan left of the gear, turning for as long as they run (always),
    faster when they are run up (src/rocketui.js) */
 #fan { position: absolute; left: 25%; bottom: 3.3%; width: calc(var(--d) * .12); height: calc(var(--d) * .12); padding: 0; border: none; background: none;
@@ -349,6 +354,7 @@ body.rocketdial #dial text.kw { transform: translateY(-22px); }   /* (in the dia
 #thrust .bar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(18, 6, 43, .85); }
 #thrust small { font-size: 9px; letter-spacing: .14em; color: #fff; opacity: .8; text-shadow: 1px 1px 0 var(--ink); white-space: nowrap; }
 #thrust.reload .bar i { background: rgba(255, 255, 255, .45); }
+#thrust.use .bar i { background: linear-gradient(to right, var(--hot), #fff 85%); box-shadow: 0 0 6px #fff; }
 body.touch #thrust { display: none; }
 /* phones: a still picture of the drone shot behind the opening menu (nothing is drawn in 3D until DRIVE) */
 body.still #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)),

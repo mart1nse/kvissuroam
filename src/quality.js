@@ -64,7 +64,6 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
   const fails = new Array(levels).fill(0), barredUntil = new Array(levels).fill(0);
   let fps = 0;
   let capFps = 0;                  // the rate the browser or the system holds the game at, once found (see 'no gain')
-  let blockUp = false;
 
   function move(to, why) {
     const from = level;
@@ -130,7 +129,7 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
       // (or by 1.4 when that is not known yet) must stay under 90% of the frame time
       const cardRoom = load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
       // the first minute (a fresh start, or AUTO picked again) climbs after 4 s with room, later after 8 s
-      if (highRun >= (clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom && !blockUp) { flat = 0; return move(next, 'room'); }
+      if (highRun >= (clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
     } else { lowRun = 0; highRun = 0; }
     return null;
   }
@@ -143,11 +142,9 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
     // what holds the frame rate may have changed (the charger went in or out): forget the cap and judge afresh
     recheck() { if (!capFps) return; capFps = 0; floor = 0; bestFps = 60; flat = 0; lowRun = highRun = 0; },
     hold(s) { holdMs = Math.max(holdMs, s * 1000); buf = []; sum = 0; gbuf = []; },
-    // ms: the frame's length; gpuMs: the graphics card's time for it if known; noClimb: no rung up for now (the
-    // sharpness is trimmed for even pictures, see createPacer: the card is at what it can show evenly).
+    // ms: the frame's length; gpuMs: the graphics card's time for it if known.
     // Returns { from, to, why } when the level changes.
-    feed(ms, gpuMs = null, noClimb = false) {
-      blockUp = noClimb;
+    feed(ms, gpuMs = null) {
       clock += ms;
       if (!(ms > 0)) return null;
       if (holdMs > 0) { holdMs -= ms; return null; }
@@ -162,57 +159,6 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1 })
       if (gbuf.length >= buf.length / 4) { gbuf.sort((a, b) => a - b); gpu = gbuf[gbuf.length >> 1]; }
       buf = []; sum = 0; gbuf = [];
       return verdict(median, spread, gpu);
-    },
-  };
-}
-
-// Even pictures. Martin 2026-11-26, MacBook Pro, AUTO at level 8 of 9: "60 FPS (game code 3.9, graphics card 9.6 of
-// 16.7 ms; late frames 0/2 s) · 1 hitch in the last 2 min of driving · picture held back 566 times", and stutter
-// felt every now and then. The frames were on time; nearly five pictures a second were finished a screen refresh
-// later than the one before, so what the screen showed came in uneven steps. The game's code and the card's work
-// together filled the frame, and the governor above, which asks only whether the card alone fits in it, saw room.
-// So AUTO also watches the pictures held back (createLag's steps) while plain driving, and when they stay over 4 in
-// 100 frames it trims the sharpness a little, a step at a time (TRIMS: 92, 85, 78% of the level's own), until they
-// stop: fewer pixels is what shortens the card's work most for the least to see. Once it has been even for a
-// minute it tries one step back, and if that brings the unevenness back it waits twice as long before the next try
-// (a heavy part of town is left behind in time; a card at its limit stays trimmed). Where the whole trim changes
-// nothing (the pictures are held back by something else) it is put back and left alone for the visit.
-// Pure logic, like the governor (tools/quality-test.mjs).
-export const TRIMS = [1, 0.92, 0.85, 0.78];
-export function createPacer({ steps = TRIMS.length } = {}) {
-  const WINDOW = 4000, DOWN = 0.04, UP = 0.01;      // (4 s: at 60 frames a second 4 in 100 is ten pictures, not a chance two or three)
-  let k = 0, off = false, rate = 0;
-  let n = 0, held = 0, sum = 0, skip = 0, bad = 0, good = 0, startRate = 0, clock = 0, upAt = -1e9;
-  let upWait = 15;                 // even windows before a step back up (a minute; doubled when the step does not hold)
-  return {
-    get step() { return k; }, get off() { return off; }, get rate() { return rate; }, get wait() { return upWait * WINDOW / 1000; },
-    reset() { k = 0; off = false; n = held = sum = skip = bad = good = startRate = rate = 0; upAt = -1e9; upWait = 15; },
-    // ms: a frame of plain driving in which nothing new went to the graphics card; heldN: pictures held back since
-    // the last call. Returns the new step into TRIMS when it changes, else -1.
-    feed(ms, heldN = 0) {
-      if (!(ms > 0) || ms > 1000) return -1;
-      clock += ms; n++; held += heldN; sum += ms;
-      if (sum < WINDOW) return -1;
-      rate = held / n; n = 0; held = 0; sum = 0;
-      if (off) return -1;
-      if (skip > 0) { skip--; return -1; }             // (the window in which the sharpness changed)
-      if (rate > DOWN) {
-        good = 0;
-        if (++bad < 2) return -1;
-        bad = 0;
-        if (k === 0) startRate = rate;
-        if (k < steps - 1) {
-          if (clock - upAt < 30000) upWait = Math.min(240, upWait * 2);   // the step back up did not hold
-          k++; skip = 1;
-          return k;
-        }
-        // the whole trim and still uneven: if it is not even clearly better, it was not the sharpness
-        if (rate > startRate * 0.6) { off = true; k = 0; return 0; }
-      } else if (rate < UP) {
-        bad = 0;
-        if (k > 0 && ++good >= upWait) { good = 0; k--; skip = 1; upAt = clock; return k; }
-      } else { bad = 0; good = 0; }
-      return -1;
     },
   };
 }
@@ -284,10 +230,7 @@ export function createGpuTimer(gl) {
 // 21 Nov 2026). A marker goes in after each frame's calls; `behind` is how long the oldest marker the card
 // has not reached yet has been waiting (0 when it keeps up), `ms` how long the last one took.
 export function createLag(gl) {
-  // steps: how many pictures took at least `by` ms longer to be finished than the one before (poll(by): asked
-  // every screen refresh with 0.6 of a refresh). A picture that is finished a refresh later than the last one
-  // is shown a refresh later: an uneven step, though the game's own frames were on time (src/hitches.js).
-  const out = { ms: 0, behind: 0, steps: 0, available: !!(gl && gl.fenceSync), mark() {}, poll() {} };
+  const out = { ms: 0, behind: 0, available: !!(gl && gl.fenceSync), mark() {}, poll() {} };
   if (!out.available) return out;
   const open = [];
   out.mark = () => {
@@ -298,12 +241,16 @@ export function createLag(gl) {
     gl.flush();
   };
   // (a marker's state only changes between frames, so this is asked once a frame)
-  out.poll = (by = 0) => {
+  // (26 Nov 2026: for a day this also counted the pictures finished a screen refresh later than the one before,
+  // "picture held back" in the options, and AUTO trimmed the sharpness while they kept coming. Live, the trim
+  // changed nothing on 265 of the 334 desktops it was tried on, Martin's among them: the count followed when the
+  // marker was read, not the graphics card's load. Both were taken out again. What a picture's own time on the
+  // way to the screen is, the page cannot see.)
+  out.poll = () => {
     const t = performance.now();
     while (open.length && gl.getSyncParameter(open[0].sync, gl.SYNC_STATUS) === gl.SIGNALED) {
       const o = open.shift();
       gl.deleteSync(o.sync);
-      if (by > 0 && out.ms > 0 && t - o.t - out.ms > by) out.steps++;
       out.ms = t - o.t;
     }
     out.behind = open.length ? t - open[0].t : 0;
@@ -411,16 +358,6 @@ export function createQuality(hooks, caps, opts = {}) {
   let win = [], winMs = 0;
   let current = -1, stableMs = 0, savedLevel = start, heldBest = -1, listeners = [];
   let warmFor = null, booted = false;              // the shadow setting being prepared in the background, if any
-  // the sharpness trimmed for even pictures (createPacer), AUTO only; ?even=0 switches it off
-  const pacer = createPacer(), even = opts.even !== false;
-  let trim = 1;
-  // (never under half sharpness, the bottom rung's own: a phone already there is not blurred further)
-  const sharp = (l) => Math.max(Math.min(l.dpr, 0.5), l.dpr * trim);
-  const setTrim = (k) => {
-    trim = TRIMS[k] || 1;
-    const l = levels[current];
-    if (l && hooks.renderer.getPixelRatio() !== sharp(l)) hooks.renderer.setPixelRatio(sharp(l));
-  };
 
   // Turning the sun's shadow on or off changes the shader of nearly every material, and building them
   // all at once stalls the game for a moment (half a second on a phone). So the shaders for the new
@@ -452,7 +389,7 @@ export function createQuality(hooks, caps, opts = {}) {
     if (i === current) return;
     current = i;
     if (typeof document === 'undefined' || !document.hidden) markAlive();
-    if (renderer.getPixelRatio() !== sharp(l)) renderer.setPixelRatio(sharp(l));
+    if (renderer.getPixelRatio() !== l.dpr) renderer.setPixelRatio(l.dpr);
     const want = l.shadow > 0;
     if (want && sun.shadow.mapSize.x !== l.shadow) {
       sun.shadow.mapSize.set(l.shadow, l.shadow);
@@ -473,18 +410,13 @@ export function createQuality(hooks, caps, opts = {}) {
     levels, get level() { return current; }, get mode() { return mode; }, get fps() { return gov.fps; }, meter,
     get auto() { return mode === 'auto' && auto; }, get cap() { return cap < top ? cap : null; }, crashed, death,
     get capped() { return mode === 'auto' && auto ? gov.capped : 0; },
-    // the part of the level's sharpness in use (1, or less while trimmed for even pictures), and whether the
-    // trim was tried and given up (it changed nothing)
-    get trim() { return trim; }, get trimOff() { return pacer.off; },
-    get sharpness() { return current >= 0 ? sharp(levels[current]) : 1; },      // the pixel ratio in use
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
     hold(s) { gov.hold(s); },
     recheck() { gov.recheck(); },
     // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
-    // browser and the graphics card), kept as a running average for the readout; pace: { held, count } pictures
-    // held back since the last frame, and whether this frame counts for them (plain driving, nothing new sent)
-    frame(ms, jsMs = 0, gpuMs = null, pace = null) {
+    // browser and the graphics card), kept as a running average for the readout
+    frame(ms, jsMs = 0, gpuMs = null) {
       if (ms > 0 && ms < 1000) {
         meter.frame += (ms - meter.frame) * 0.05; meter.js += (jsMs - meter.js) * 0.05;
         onScreenMs += ms;
@@ -498,11 +430,7 @@ export function createQuality(hooks, caps, opts = {}) {
         }
       }
       if (mode !== 'auto' || !auto) { if (mode !== 'locked') gov.feed(ms, gpuMs); return null; }   // (still measures, for the readout)
-      if (even && pace && pace.count) {
-        const k = pacer.feed(ms, pace.held);
-        if (k >= 0) { setTrim(k); hooks.trimmed?.(pacer.off ? 'off' : k); }
-      }
-      const ch = gov.feed(ms, gpuMs, trim < 1);
+      const ch = gov.feed(ms, gpuMs);
       if (ch) { apply(ch.to); stableMs = 0; return ch; }
       stableMs += ms;
       if (cap < top && current === cap && ms < 1000 && (capMs += ms) > 600000) {
@@ -518,8 +446,6 @@ export function createQuality(hooks, caps, opts = {}) {
       if (!MODES.includes(m) || mode === 'locked') return;
       mode = m;
       store(KEY, m);
-      pacer.reset(); trim = 1;                     // (a level picked by hand is shown as it is; AUTO starts afresh)
-      if (current >= 0) setTrim(0);
       if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap });
       apply(m === 'auto' ? (auto ? gov.level : top) : levelFor(m));
     },

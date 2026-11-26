@@ -722,7 +722,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         if (stage && m.run && typeof m.run.name === 'string' && m.run.name !== name) {
           const best = m.board[m.run.track]?.allTime?.find((b) => b.car === m.run.car);
           const short = Object.hasOwn(CARS, m.run.car) ? CARS[m.run.car].short.toUpperCase() : '';
-          if (best && best.ms === m.run.ms && best.name === m.run.name) { toast(`${m.run.name.toUpperCase()} SET A ${short} RAADI STAGE RECORD`, 3500); onRecord?.(m.run.name, m.run.car); }
+          if (best && best.ms === m.run.ms && best.name === m.run.name) { toast(`${m.run.name.toUpperCase()} SET A ${short} MAJORAADI STAGE RECORD`, 3500); onRecord?.(m.run.name, m.run.car); }
         }
         break;
       default:

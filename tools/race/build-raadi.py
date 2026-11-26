@@ -315,7 +315,7 @@ for n, idxs in nodeIdx.items():
 print('junctions', len(junctions), 'moving', sum(1 for j in junctions for b in j['b'] if not b['always']))
 
 out = {
-    'name': 'Raadi', 'stage': 'SSS16 Tartu vald', 'length': round(s[FIN] - s[START], 1),
+    'name': 'Majoraadi', 'stage': 'SSS16 Tartu vald', 'length': round(s[FIN] - s[START], 1),
     'start': START, 'finish': FIN, 'gravelFrom': GRAVEL,
     'pts': [[round(x, 2), round(z, 2)] for x, z in c], 'hw': [round(h, 2) for h in hw],
     'line': [round(o, 2) for o in off], 'apex': apex, 'junctions': junctions,

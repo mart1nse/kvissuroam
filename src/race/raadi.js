@@ -887,7 +887,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (and once each: a wait for loading after the first pip starts the same second again, unheard)
         const bn = green ? 0 : left <= LAST_S && e > 0.05 ? n : -1;
         if (bn >= 0 && bn !== st.beepN) { beep?.(bn === 0 ? 'go' : 'pip'); st.beepN = bn; }
-        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
+        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 MAJORAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0; st.lag = st.slow = 0;
@@ -966,7 +966,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       if (st.phase === 'done' && st.againUntil && performance.now() > st.againUntil) hideAgain();
     },
     // the start screen's and the HUD's names
-    name: 'RAADI',
+    name: 'MAJORAADI',
     escape: escapeHtml,
   };
 }

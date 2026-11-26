@@ -5,6 +5,10 @@
 // Then, the same day: "I think you can first reduce the gap front and back to just a touch over the front and end of
 // the car and then try to make the lens wider and the when i dont know at 2m on the side raise it up indeed".
 //
+// And later: "Make the 5 and 6 default visibility to leave more room around the car (bring the camera back at least
+// twice and then if a house is coming or a wall in the way then move closer and finally up. If a tree or other
+// greenery or bus shleter or other lower things are in the way then do not move in".
+//
 // 5 is the view from the car's left, 6 from its right; the same key again goes back to the view that was on (C's
 // chase or drone). The camera stands square to the heading the chase camera swings on, GAP metres out from the
 // car's flank, and looks at the car through a lens as wide as it takes for the picture to hold the car and a
@@ -13,9 +17,11 @@
 // Like the chase camera it only eases a few rig numbers (the turn round the car, how high it stands, the height it
 // looks at, how far out it is) and is then placed exactly from them, so an uneven frame cannot nudge the view.
 //
-// A house closer to the car than the camera would stand would have the camera inside it. Then the camera rises,
-// on an arc round the car at the same distance: just far enough that it is clear of the wall (it comes in over the
-// pavement, still beside the car, looking down on it), or that it looks over the house when that is the lower way.
+// A house or a tall wall closer to the car than the camera would stand would have the camera inside it. Then the
+// camera first comes in toward the car, to MIN_GAP from its flank at the nearest, the lens widening as it does;
+// where even that is not clear it rises, on an arc round the car: just far enough that it is clear of the wall (it
+// comes in over the pavement, looking down on the car), or that it looks over the house when that is the lower way.
+// Trees, hedges, bus shelters and other low things do not move it.
 // Banks and kerbs beside the road it looks over. It reads ahead along the road by where the car will be in a second
 // and more, comes up quickly and sinks slowly, so a row of houses with gaps does not make it bob.
 //
@@ -23,7 +29,11 @@
 // few metres, and the height it looks at follows the car softly: the car first rises or sinks in the picture, and
 // the further it gets from the middle the faster the camera goes after it, so a long fall is followed all the way.
 
-const GAP = 2;                // m from the car's flank to the camera
+const GAP = 4;                // m from the car's flank to the camera, in the open
+const FIT_GAP = 2;            // m out from the flank where the lens is fitted to the car (at GAP there is room round it)
+const MIN_GAP = 1.2;          // m: a house nearer than this and the camera rises instead of coming in further
+const TALL = 2.5;             // m: what stands this high over the road is a house or a wall; anything lower is passed
+const IN_W = 4, OUT_W = 1;    // how briskly it comes in toward the car, and how slowly it goes back out (1/s)
 const TOUCH = 0.5;            // m past the nose and the tail the picture holds
 const MIN_FOV = 50, MAX_FOV = 80;     // degrees, top to bottom: the lens's range
 const LOOK = 0.9;             // m over the road it looks at
@@ -46,9 +56,31 @@ export function createSideCam(getWorld) {
   let el = EL_MIN, elV = 0;     // how high on its arc, and how fast that is changing
   let y = 0, base = 0;          // the height the rig stands on (follows the car softly); the ground the car last stood on
   let air = 0;                  // 0 to 1: opened for a flight
+  let gap = GAP, gapV = 0;      // m out from the flank (eased), and how fast that is changing
+  let out_ = 0;                 // m further out in the air (eased)
   let fresh = true;             // the rig is not on a car yet: the next frame puts it there
   const needs = [0, 0]; let half = 0;   // what each half of the columns last asked for, and whose turn it is
   const out = { w: 0, fov: MIN_FOV, el: EL_MIN, r: 0, x: 0, y: 0, z: 0 };
+
+  // How far out from the car's flank the camera can stand: GAP, or less where a house or a tall wall stands nearer,
+  // to keep CLEAR from it. Read beside the car, and beside the road ahead as far as the car will be in AHEAD_S, where
+  // the camera will be. Only what stands TALL over the road: trees, hedges, bus shelters, garden walls, lamp posts
+  // are not in the houses' grid or are lower, and the camera stays where it is for them.
+  function room(world, tg, cx, cz, sx, sz, gap) {
+    let best = gap;
+    const lead = Math.max(-AHEAD_M, Math.min(AHEAD_M, (tg.vx || 0) * AHEAD_S)), l0 = Math.min(0, lead) - 1.5, l1 = Math.max(0, lead) + 1.5;
+    const n = Math.ceil((l1 - l0) / COL), s0 = tg.halfWid + 0.2;
+    for (let i = 0; i <= n; i++) {
+      const o = l0 + ((l1 - l0) * i) / n, ox = tg.x + cx * o, oz = tg.z + cz * o;
+      if ((o > 2 || o < -2) && world.sdfAt(ox, oz) < tg.halfWid) continue;    // (a bend: the straight line runs into the corner)
+      const g = world.heightAt(ox, oz);
+      for (let s = s0; s <= tg.halfWid + gap + CLEAR + 1e-6; s += 0.35) {
+        const px = ox + sx * s, pz = oz + sz * s;
+        if (world.sdfAt(px, pz) < CLEAR && world.roofAt(px, pz) - g > TALL) { best = Math.min(best, s - CLEAR - tg.halfWid); break; }
+      }
+    }
+    return best;
+  }
 
   // How high on its arc the camera has to stand (rad over level) so that nothing stands between it and the car and
   // the road beside it. It reads the ground between the car's flank and the camera, in the wedge its view of the car
@@ -80,7 +112,7 @@ export function createSideCam(getWorld) {
         // reaches a few metres past each house, so only where the wall is near)
         if (world.sdfAt(px, pz) < CLEAR) {
           const r = world.roofAt(px, pz);
-          if (r > -1e8) {
+          if (r - g > TALL) {
             const front = s - CLEAR >= far ? 0 : Math.acos(Math.max(0, (s - CLEAR) / far));
             el = Math.max(el, Math.min(front, Math.atan((r + OVER - g) / s + lift)));
           }
@@ -110,19 +142,35 @@ export function createSideCam(getWorld) {
       const sg = turn < 0 ? -1 : 1, w = smooth(Math.abs(turn)), a = sg * w * Math.PI / 2;
       const cx = Math.sin(yaw), cz = -Math.cos(yaw);          // the heading
       const sx = Math.cos(yaw) * sg, sz = Math.sin(yaw) * sg; // out to the side the camera stands on
-      // the car and a touch past both ends fit the picture GAP out from its flank, the lens as wide as that takes
-      // (past MAX_FOV the camera steps back instead: a bus, a narrow window); in the air it backs off AIR_BACK more
+      // The lens fits the car and a touch past both ends at FIT_GAP out from its flank, and the camera stands GAP out,
+      // so there is room round the car (the fit is taken at the near flank, so its corners are in too). A bus or a
+      // narrow window: the lens at MAX_FOV fits the car `fit` out at the least, and the camera keeps to that. In the
+      // air it backs off AIR_BACK more.
       const W = tg.halfLen + TOUCH;
       const flying = !!tg.rocket?.flight || (tg.airborne && tg.airTime > AIR_AFTER);
-      // (the fit is taken at the near flank, the nearest the car comes to the camera, so its corners are in too)
-      const R0 = tg.halfWid + Math.max(GAP, W / (Math.tan((MAX_FOV * Math.PI) / 360) * aspect));
-      const fov0 = Math.max(MIN_FOV, (Math.atan(W / ((R0 - tg.halfWid) * aspect)) * 360) / Math.PI);
+      const fit = W / (Math.tan((MAX_FOV * Math.PI) / 360) * aspect);
+      const far = Math.max(GAP, fit), near = Math.max(MIN_GAP, fit);
       if (!tg.airborne || fresh) base = tg.y;
       if (fresh) { air = flying ? 1 : 0; }
       else air += ((flying ? 1 : 0) - air) * (1 - Math.exp(-(flying ? 1.4 : 1) * dt));
-      const R = R0 + AIR_BACK * smooth(air);
-      if (fresh) needs[1 - half] = rise(world, tg, cx, cz, sx, sz, R, W, 1 - half);
-      needs[half] = rise(world, tg, cx, cz, sx, sz, R, W, half); half = 1 - half;
+      const back = AIR_BACK * smooth(air);
+      // first in toward the car, as far as a house leaves room (no further than near)...
+      const lim = room(world, tg, cx, cz, sx, sz, far + back), wantGap = Math.max(near, Math.min(far, lim));
+      if (fresh) { gap = wantGap; gapV = 0; }
+      else {
+        const om = wantGap < gap ? IN_W : OUT_W, x0 = gap - wantGap, k = (gapV + om * x0) * dt, ex = Math.exp(-om * dt);
+        gapV = (gapV - om * k) * ex; gap = wantGap + (x0 + k) * ex;
+      }
+      // (in the air it backs off as far as the houses leave room)
+      const wantOut = Math.max(0, Math.min(back, lim - gap));
+      out_ = fresh ? wantOut : out_ + (wantOut - out_) * (1 - Math.exp(-(wantOut < out_ ? IN_W : 3) * dt));
+      const R = tg.halfWid + gap + out_;
+      // (the lens: fitted at FIT_GAP, and wider when the camera comes nearer than that)
+      const fov0 = Math.min(MAX_FOV, Math.max(MIN_FOV, (Math.atan(W / (Math.max(fit, Math.min(FIT_GAP, gap)) * aspect)) * 360) / Math.PI));
+      // ...then up, where even that is not clear (read for where it is going, so it does not rise while it comes in)
+      const Rw = tg.halfWid + wantGap;
+      if (fresh) needs[1 - half] = rise(world, tg, cx, cz, sx, sz, Rw, W, 1 - half);
+      needs[half] = rise(world, tg, cx, cz, sx, sz, Rw, W, half); half = 1 - half;
       const need = Math.max(EL_MIN, Math.min(EL_MAX, Math.max(needs[0], needs[1])));
       if (fresh) { fresh = false; y = tg.y; el = need; elV = 0; }
       else {
@@ -140,7 +188,7 @@ export function createSideCam(getWorld) {
       let px = tg.x + ux * h, py = y + LOOK + R * Math.sin(el), pz = tg.z + uz * h;
       const floor = world.heightAt(px, pz) + 0.9;
       if (py < floor) py = floor;
-      out.el = el; out.r = R; out.x = px; out.y = py; out.z = pz;
+      out.el = el; out.r = R; out.gap = gap; out.x = px; out.y = py; out.z = pz;
       if (!show) { out.w = 0; return out; }
       pos.x += (px - pos.x) * w; pos.y += (py - pos.y) * w; pos.z += (pz - pos.z) * w;
       look.x += (tg.x - look.x) * w; look.y += (y + LOOK - look.y) * w; look.z += (tg.z - look.z) * w;

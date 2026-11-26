@@ -6,8 +6,8 @@
 // Checks, in a desktop browser:
 //  - the keys: 5 the left side, 6 the right, the same key again back to the view that was on, C back without
 //    switching chase and drone, nothing with the map open or in the garage;
-//  - the framing in three window shapes, a car and the bus: the camera square to the car, 2 m out from its flank
-//    in the open, the car's corners at the nose and the tail inside the picture with a touch to spare;
+//  - the framing in three window shapes, a car and the bus: the camera square to the car, 4 m out from its flank
+//    in the open (2 m for the lens), the car's corners at the nose and the tail inside the picture with a touch to spare;
 //  - two streets of houses on the lap: the camera is never inside a house, its line of sight to the car and to
 //    both ends of it clears the walls, on both sides, standing and driving down the street, and it rises and sinks
 //    without a jump;
@@ -61,7 +61,7 @@ const open = async (w, h, car) => {
       const inHouse = g.world.sdfAt(cam.position.x, cam.position.z) < 0 && cam.position.y < g.world.roofAt(cam.position.x, cam.position.z);
       return { nose: corner(far), tail: corner(-far), inHouse, dist: Math.hypot(rel[0], rel[2]), halfWid: c.halfWid, side: g.sideCam.side, w: g.sideCam.out.w, fov: cam.fov, fwd: rel[0] * f[0] + rel[2] * f[1], right: -rel[0] * f[1] + rel[2] * f[0], up: rel[1],
         ahead: __ndc(far), behind: __ndc(-far), car: __ndc(0, 0.6), clear: __clear(0), ends: Math.min(__clear(far), __clear(-far)), el: g.sideCam.out.el,
-        under: cam.position.y - g.world.heightAt(cam.position.x, cam.position.z), y: c.y, air: c.airborne, flight: !!c.rocket?.flight, kmh: c.vx * 3.6, t: performance.now() / 1000 };
+        gap: g.sideCam.out.gap, under: cam.position.y - g.world.heightAt(cam.position.x, cam.position.z), y: c.y, air: c.airborne, flight: !!c.rocket?.flight, kmh: c.vx * 3.6, t: performance.now() / 1000 };
     };
     // every frame's view, while asked
     window.__rec = null;
@@ -89,9 +89,9 @@ let v = await view(p);
 check('the chase view to begin with', v.side === 0 && v.fwd < -4 && Math.abs(v.right) < 0.5, `camera ${f(-v.fwd)} m behind`);
 await key(p, 'Digit5'); await p.waitForTimeout(1800);
 v = await view(p);
-check('5: the camera on the car\'s left, square to it, 2 m out from its flank', v.side === -1 && Math.abs(-v.right - v.halfWid - 2) < 0.4 && Math.abs(v.fwd) < 0.5, `${f(-v.right - v.halfWid)} m from the flank, ${f(v.up)} m up, ${f(v.fwd)} m along`);
-check('the car drives to the left of the picture there', v.nose[0] < -0.5 && v.tail[0] > 0.5);
-check('the whole car in the picture with a touch to spare', ends(v) < 0.97 && ends(v) > 0.6, `its corners ${f(ends(v))} of the way to the side, ${f(v.fov, 0)} degrees`);
+check('5: the camera on the car\'s left, square to it, 4 m out from its flank', v.side === -1 && Math.abs(-v.right - v.halfWid - 4) < 0.4 && Math.abs(v.fwd) < 0.5, `${f(-v.right - v.halfWid)} m from the flank, ${f(v.up)} m up, ${f(v.fwd)} m along`);
+check('the car drives to the left of the picture there', v.nose[0] < -0.3 && v.tail[0] > 0.3);
+check('the whole car in the picture with room round it', ends(v) < 0.75 && ends(v) > 0.3, `its corners ${f(ends(v))} of the way to the side, ${f(v.fov, 0)} degrees`);
 await shot(p, 'side-left-open');
 await key(p, 'Digit6'); await p.waitForTimeout(2600);
 v = await view(p);
@@ -159,9 +159,11 @@ await key(p, 'KeyC');
 // ---------------------------------------------------------------- houses in the way
 // (two streets of the lap: Vallikraavi's end, houses of two and three floors a few metres from the kerb on both
 // sides, Rüütli, 18 m of wall 4 or 5 m from the car's middle on both sides, and a wall 2 m from the car's middle
-// on its right in the old town, where the camera has to come in over the pavement or rise)
-for (const [street, pose, sides, pic] of [['a street of houses', TRACK(1160), ['left', 'right'], 'side-left-houses'], ['a street of tall houses close by', TRACK(800), ['left', 'right'], 'side-left-tall-houses'],
-  ['a wall right beside the car', TRACK(108), ['right'], 'side-right-wall']]) {
+// on its right in the old town, where the camera has to come in over the pavement and rise. expect: 'out' the
+// camera stays 4 m out and level, 'in' it comes in and stays level, 'up' it comes in as far as it goes and rises;
+// Rüütli's wall on the left stands over 5.4 m from the car's middle, out of the camera's way)
+for (const [street, pose, sides, pic, expects] of [['a street of houses', TRACK(1160), ['left', 'right'], 'side-left-houses', { left: 'out', right: 'out' }],
+  ['a street of tall houses close by', TRACK(800), ['left', 'right'], 'side-right-tall-houses', { left: 'out', right: 'in' }], ['a wall right beside the car', TRACK(108), ['right'], 'side-right-wall', { right: 'up' }]]) {
   console.log(street);
   for (const name of sides) {
     const code = name === 'left' ? 'Digit5' : 'Digit6';
@@ -172,6 +174,9 @@ for (const [street, pose, sides, pic] of [['a street of houses', TRACK(1160), ['
     await key(p, code); await p.waitForTimeout(2500);
     v = await view(p);
     check(`${name}: the camera is not in a house and sees the car`, !v.inHouse && v.clear > 0, `${f(Math.abs(v.right) - v.halfWid)} m out from the flank, ${f(v.up)} m up (${f(v.el * 57.3, 0)} degrees), clear by ${f(Math.min(v.clear, 9))} m`);
+    const flat = v.el < 0.2, expect = expects[name];
+    check(`${name}: ${expect === 'out' ? '4 m out and level' : expect === 'in' ? 'come in toward the car, still level' : 'in as far as it goes, then up'}`,
+      expect === 'out' ? v.gap > 3.8 && flat : expect === 'in' ? v.gap < 3.8 && flat : v.gap < 2 && !flat, `${f(v.gap)} m out from the flank on its arc, ${f(v.el * 57.3, 0)} degrees up`);
     check(`${name}: ...and both its ends`, v.ends > 0, `clear by ${f(Math.min(v.ends, 9))} m`);
     check(`${name}: the car's nose and tail in the picture`, ends(v) < 0.97 && Math.abs(v.fwd) < 0.5, `${f(ends(v))} of the way to the side`);
     if (name === sides[0]) await shot(p, pic);

@@ -196,5 +196,27 @@ function drop(v, { dl = 0, dw = 0, up = 1, kmh = 0, yaw = 0, secs = 4, gas = kmh
   world.removeSolids(walls);
 }
 
+// ---- 6. the shelter's glass (Martin, 26 Nov: "make the bus shelter glass shatter when landing ontop of it with any
+// speed. contsuction itself can remain sound"): src/world/shelter.js as the game makes one, a car let down on it
+{
+  globalThis.location ??= { search: '', hostname: 'localhost' };          // (src/stats.js reads the page's address)
+  const THREE = await import('three');
+  const { breakableShelter, updateShelters } = await import('../src/world/shelter.js');
+  const w = { setTops() {}, heightAt: () => 0, removeSolids() {}, addSolids() {} };
+  const box = { x: 0, z: 0, yaw: 0.3, hx: 2.6, hz: 0.875 };
+  const panes = [{ a: [-2.5, 0.8], b: [2.5, 0.8], y0: 0.2, y1: 2.2 }, { a: [-2.5, -0.8], b: [-2.5, 0.8], y0: 0.2, y1: 2.2 }, { a: [2.5, -0.8], b: [2.5, 0.8], y0: 0.2, y1: 2.2 }];
+  const s = breakableShelter(w, new THREE.Group(), { box, y: 0, H: 2.45, frame: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)), panes });
+  const car = { x: 30, z: 0, y: 0, yaw: 0, vx: 0, vy: 0, halfLen: 2, halfWid: 0.9, onTop: null };
+  let smashed = 0;
+  const sound = { smash: (n) => { smashed += n; } };
+  for (let i = 0; i < 30; i++) updateShelters(car, 1 / 60, sound);
+  const before = s.info().broken;
+  Object.assign(car, { x: 0.3, z: 0.1, y: 2.55, onTop: s.top });          // (let down still: no speed at all)
+  for (let i = 0; i < 120; i++) updateShelters(car, 1 / 60, sound);
+  const i = s.info();
+  check(before === 0 && i.broken === i.panes && smashed === i.panes && i.bend === 0 && !i.through, 'a car let down on a bus shelter\'s roof, still, bursts all its glass, the frame unbent', `${i.broken} of ${i.panes} panes, bend ${i.bend.toFixed(2)} m, ${i.shards} shards`);
+  s.remove();
+}
+
 console.log(`${checks - fails} of ${checks} checks passed`);
 process.exit(fails ? 1 : 0);

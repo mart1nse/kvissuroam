@@ -59,6 +59,12 @@ for (const [name, kind, dl, dw, up, cr, cu, cb, turn = 0] of shots) {
   }, [v, dl, dw, up, cr, cu, cb, turn]);
   await p.waitForTimeout(6000);
   await p.screenshot({ path: `${out}/${name}.png`, timeout: 180000 });
-  console.log(name, `${v.d.toFixed(0)} m from the stop: ${got[0].toFixed(2)} m over the street (its top ${got[4].toFixed(2)}), lean ${got[1].toFixed(0)} deg, nose ${got[2].toFixed(0)} deg, on it ${got[3]}`);
+  // (a shelter: how much of its glass the landing broke, and whether its frame bent)
+  const glass = kind !== 'shelter' ? '' : await p.evaluate(([x, z]) => {
+    const st = __game.busStops().stops.filter((st) => st.br).sort((a, b) => Math.hypot(a.box.x - x, a.box.z - z) - Math.hypot(b.box.x - x, b.box.z - z))[0];
+    const i = st.br.info();
+    return `, glass ${i.broken} of ${i.panes} panes broken, frame bent ${i.bend.toFixed(2)} m`;
+  }, [v.x, v.z]);
+  console.log(name, `${v.d.toFixed(0)} m from the stop: ${got[0].toFixed(2)} m over the street (its top ${got[4].toFixed(2)}), lean ${got[1].toFixed(0)} deg, nose ${got[2].toFixed(0)} deg, on it ${got[3]}${glass}`);
 }
 await b.close();

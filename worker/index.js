@@ -28,6 +28,7 @@ import { cleanPlate } from '../src/net/plates.js';
 import { carLimitsSteps, judgeDrive, OVER_MAX, GAS_OVER } from '../src/race/plausible.js';
 import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
 import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
+import { makeTops, addTop, newDay, topOf, placeOf } from './tops.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
@@ -401,6 +402,7 @@ export class Lobby extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, done INTEGER NOT NULL, ms INTEGER NOT NULL, pen INTEGER NOT NULL, n INTEGER NOT NULL, info TEXT NOT NULL, data BLOB NOT NULL)');
     this.lineN = null;            // track -> runs kept
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
+    this.tops = null;             // the five best drivers per car, made when first asked for (worker/tops.js, topsNow)
     this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
     this.limitNow = new Map();    // ... and the same once worked out (the race desk judges a finish without waiting)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
@@ -893,6 +895,7 @@ export class Lobby extends DurableObject {
   // Toomemägi's part is the board itself, as it always was (a page opened before a deploy still reads it);
   // each stage's part hangs under its name.
   rebuildBoard() {
+    this.tops = null;              // (made again from the table when next asked for)
     const day = tartuDay();
     // the fastest lap with split times per car and checkpoint layout: what a driver with no lap of
     // their own in that car compares their checkpoint times with
@@ -965,6 +968,17 @@ export class Lobby extends DurableObject {
       i = faster(b.refs, (r) => r.car === l.car && r.cp === l.cp);
       if (i !== null) b.refs[i] = { car: l.car, cp: l.cp, name: l.name, ms: l.ms, splits: l.splits };
     }
+    if (this.tops) { newDay(this.tops, day); addTop(this.tops, l); }
+  }
+
+  // The five best drivers per car on each circuit, of all time and of today (Martin 26 Nov 2026; worker/tops.js):
+  // made from the laps on the board once, then each new one is added (addToBoard). The board's own lists stay one
+  // lap a car, as every page is sent them on every new lap; these are asked for when LAP TIMES is open.
+  topsNow() {
+    const day = this.board().day;              // (moves the board on past midnight first)
+    if (!this.tops) this.tops = makeTops(this.sql.exec('SELECT track, car, name, ms, at, day, inp, ty, pen FROM laps WHERE hold IS NULL').toArray(), day);
+    newDay(this.tops, day);
+    return this.tops;
   }
 
   // ---- Replays (Martin 2026-11-24): the record lap of each car, as movement (src/race/replay.js). A browser sends
@@ -1293,6 +1307,27 @@ export class Lobby extends DurableObject {
     }
 
     if (path === '/api/board') return json(this.board());
+    if (path === '/api/top' && req.method === 'GET') {
+      // LAP TIMES with a car opened: its five best drivers of all time and of today, on each circuit, and the place
+      // the page's own best in each car would have among that car's drivers: ?me=<name>&toomemagi=car.ms,car.ms
+      // &raadi=... (the page's own laps; me's own times on the board do not count against them). Only read.
+      if (this.over(`T|${ip}`, 40, 60000)) return busy();
+      const t = this.topsNow(), me = cleanName(url.searchParams.get('me'));
+      const out = { day: t.day };
+      for (const track of [TRACK, ...Object.keys(STAGES)]) {
+        const cars = t.tracks[track] || {}, top = {}, place = {};
+        for (const [car, c] of Object.entries(cars)) {
+          if (!cleanCar(car)) continue;                    // (a car not shown to anyone yet)
+          top[car] = { all: topOf(c.all), today: topOf(c.today), n: c.all.size };
+        }
+        for (const p of String(url.searchParams.get(track) || '').split(',').slice(0, 40)) {
+          const [c0, m0] = p.split('.'), car = cleanCar(c0), ms = Number(m0);
+          if (car && top[car] && Number.isInteger(ms) && ms > 0 && ms <= 3600000) place[car] = [placeOf(cars[car].all, me, ms), ms];
+        }
+        out[track] = { top, place };
+      }
+      return json(out);
+    }
 
     if (path === '/api/online') {
       // who is online now, for the stats page (Martin 2026-11-22: "sometimes check out of curiosity"):

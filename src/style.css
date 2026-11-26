@@ -671,7 +671,7 @@ body.touch #driver .plate { display: none; }     /* (phones keep each car's own 
 #board { background: radial-gradient(circle at 50% 30%, rgba(58, 20, 112, .92), rgba(12, 4, 30, .97)); z-index: 12; justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
 #board h2 { margin: 6px 0 0; font-size: clamp(18px, 3.6vw, 34px); font-style: italic; font-weight: 900; color: var(--cyan); text-shadow: 2px 2px 0 var(--hot); letter-spacing: .06em; }
 #board .today { margin: 0; color: var(--sun); letter-spacing: .1em; font-size: clamp(11px, 1.5vw, 15px); }
-#board table { border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: min(560px, 92vw); }
+#board table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; min-width: min(560px, 92vw); }
 #board th, #board td { padding: 5px 12px; text-align: left; border-bottom: 1px solid rgba(255, 95, 162, .3); font-size: clamp(11px, 1.5vw, 15px); }
 #board thead th { font-size: 9px; letter-spacing: .22em; color: var(--pink); }
 #board tbody th { font-weight: 800; font-style: italic; }
@@ -1020,7 +1020,7 @@ body:not(.touch) #rlist:not(.hidden) { display: flex; flex-direction: column; }
 body:not(.touch) #rlist:not(.live) { width: max-content; min-width: min(460px, 40vw, calc(50vw - 225px)); max-width: min(680px, calc(50vw - 225px)); }
 /* (a narrower window: the results keep clear of the lap timer by leaving out WHERE, which mostly says FINISHED,
    and in a small one the car too) */
-@media (max-width: 1400px) { body:not(.touch) #rlist:not(.live) td.w { display: none; } body:not(.touch) #rlist:not(.live) td.n { max-width: 9em; } }
+@media (max-width: 1400px) { body:not(.touch) #rlist:not(.live) td.w { display: none; } body:not(.touch) #rlist:not(.live) td.n .nm { max-width: 9em; } }
 @media (max-width: 1100px) { body:not(.touch) #rlist:not(.live) td.c { display: none; } }
 body:not(.touch) #rlist .tb { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .5) transparent; }
 body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
@@ -1041,6 +1041,21 @@ body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rlist td.w { text-align: right; opacity: .75; font-size: .85em; }
 #rlist tr.me td { background: rgba(125, 255, 90, .12); } #rlist tr.me td.n { color: #7dff5a; }
 #rlist tr.out td { opacity: .5; }
+/* a thumbs up right after a driver's name in the results (Martin 2026-11-26), the online list's neon thumb: faint for
+   30 s after one and for the rest of the day once three went to that driver. A picture here, not markup in each row,
+   since the table is written anew whenever a gap changes. The name is cut short before it, so the thumb never is. */
+#rlist:not(.live) td.n { max-width: none; overflow: visible; }
+#rlist td.n .nm { display: inline-block; max-width: 12em; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+#rlist .ku { display: inline-block; width: 1.15em; height: 1.15em; margin: -.1em 0 -.1em .4em; vertical-align: top; cursor: pointer;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 8 86 86'%3E%3Cpath d='M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z' fill='none' stroke='%23ff2bd6' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E") content-box center / contain no-repeat;
+  filter: drop-shadow(0 0 3px var(--hot)); transition: opacity .3s, transform .15s; }
+#rlist .ku:hover { transform: scale(1.2); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 8 86 86'%3E%3Cpath d='M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z' fill='none' stroke='%23ffffff' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+#rlist .ku.wait { opacity: .3; filter: none; cursor: default; transform: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 8 86 86'%3E%3Cpath d='M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z' fill='none' stroke='%23ff2bd6' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+#rlist .ku.sent { animation: kusent .5s ease-out; }
+/* phones: a finger-sized target around the small thumb, the row as high as before */
+body.touch #rlist .ku { box-sizing: content-box; padding: 6px 8px; margin: -6px -8px -6px calc(.4em - 8px); }
+/* (desktop: the name's own light, that it follows the car, stays off while the pointer is on its thumb) */
+body:not(.touch) #rlist td.n[data-id]:has(.ku:hover) { background: none; }
 #rlist .ft { margin-top: 6px; font-size: .78em; font-weight: 700; letter-spacing: .08em; opacity: .85; }
 /* the live list during a race: half as wide, position, name, car and gap only */
 #rlist.live { width: min(310px, 23vw); padding: 10px 14px; }
@@ -1376,6 +1391,54 @@ body.touch #trackpick { flex: 1 1 0; min-height: 28px; max-height: 40vh; width: 
 /* your own best per car, beside the records (board.js) */
 #board th.you { color: var(--cyan); }
 #board td.you b { color: var(--cyan); }
+
+/* ---- the five best per car (board.js, Martin 26 Nov 2026). A car's row opens: its own line gets a soft band across
+   the table, and the next four hang under it as one lagoon-blue panel over the place number, BEST EVER and BEST TODAY
+   only, curving into the line above and rounded below; the car column and YOUR BEST stay empty and plain there. */
+#board { --band: rgba(47, 243, 255, .07); --well: rgba(22, 80, 132, .5); --sep: rgba(47, 243, 255, .12); --shade: rgba(0, 10, 40, .55); --glow: rgba(47, 243, 255, .4); }
+#board tbody.car > tr.main { cursor: pointer; }
+#board tbody.car > tr.main > th { white-space: nowrap; }
+#board td.rk0 { width: 1.9em; padding: 0; }
+#board .chev { display: inline-block; width: .62em; height: .62em; margin-right: .45em; vertical-align: .05em; transition: transform .15s; }
+#board .chev path { fill: none; stroke: var(--pink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
+#board tbody.car.open .chev { transform: rotate(90deg); }
+#board tbody.car.nomore .chev { visibility: hidden; }
+#board tbody.car.nomore > tr.main { cursor: default; }
+#board tbody.car.cur > tr.main > th { color: var(--cyan); }
+#board small.nm { display: inline-block; max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+#board small.me { color: var(--cyan); opacity: 1; font-weight: 700; }
+#board tbody.car > tr.more, #board tbody.car > tr.gap { display: none; }
+#board tbody.car.open > tr.more, #board tbody.car.open > tr.gap { display: table-row; }
+#board tbody.car.open > tr.main > * { background: var(--band); }
+#board tbody.car.open > tr.main > :is(.rk0, .ev, .td) { border-bottom-color: transparent; }
+#board tr.more > * { border-bottom: none; padding-top: 6px; padding-bottom: 6px; }
+#board tr.more > :is(.rk, .dw) { background: var(--well); }
+#board tr.more:not(.last) > :is(.rk, .dw) { border-bottom: 1px solid var(--sep); }
+#board tr.more.first > :is(.rk, .dw) { box-shadow: inset 0 10px 12px -10px var(--shade); }
+#board tr.more.last > :is(.rk, .dw) { box-shadow: 0 12px 18px -14px var(--glow); }
+#board tr.more.first.last > :is(.rk, .dw) { box-shadow: inset 0 10px 12px -10px var(--shade), 0 12px 18px -14px var(--glow); }
+#board tr.more.last > .rk { border-bottom-left-radius: 12px; }
+#board tr.more.last > .dw:last-of-type { border-bottom-right-radius: 12px; }
+#board tr.more > .rk { text-align: center; font-weight: 800; font-size: .78em; color: var(--pink); padding-left: 0; padding-right: 0; }
+#board tr.more > .dw { font-size: clamp(10px, 1.32vw, 14px); }
+#board tr.more > .dw b { font-weight: 600; }
+/* (the panel curves out into the car's line above it) */
+#board tr.more.first > td.side { position: relative; }
+#board tr.more.first > td.side::after { content: ''; position: absolute; top: 0; width: 12px; height: 12px; pointer-events: none; }
+#board tr.more.first > td.side:first-child::after { right: 0; background: radial-gradient(circle at 0 100%, transparent 11.5px, var(--well) 12px); }
+#board tr.more.first > td.side:last-child::after { left: 0; background: radial-gradient(circle at 100% 100%, transparent 11.5px, var(--well) 12px); }
+#board tr.gap > td { height: 8px; padding: 0; border: none; }
+#board tbody.car.open + tbody.car > tr.main > * { border-top: 1px solid rgba(255, 95, 162, .3); }
+/* your place among the car's drivers, after your best: filled in the top five */
+#board em.pl { font-style: normal; font-weight: 800; font-size: .7em; letter-spacing: .08em; padding: .18em .6em; border-radius: 999px; color: var(--cyan); background: rgba(47, 243, 255, .14); margin-left: -2px; vertical-align: .12em; white-space: nowrap; }
+#board em.pl.top { color: var(--ink); background: var(--cyan); box-shadow: 0 0 10px rgba(47, 243, 255, .45); }
+/* (both circuits side by side, and phones: your best without its day where it has a place, so the tables still fit) */
+#board .boards td.you:has(em.pl) small.date { display: none; }
+#board .boards td.rk0 { width: 1.6em; }
+@media (max-width: 760px), (max-height: 430px) {
+  #board small.nm { max-width: 6.6em; }
+  #board td.you:has(em.pl) small.date { display: none; }
+}
 
 /* ---- spectator mode (desktop only, src/spectate.js; Martin 2026-11-23): who is watched, and a soft pill back
    to your own car, bottom centre between the minimap and the rev counter. Borderless, like the race HUD. */

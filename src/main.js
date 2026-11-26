@@ -1050,7 +1050,7 @@ async function boot() {
     tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Majoraadi rally stage start">MAJORAADI</button>';
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId });
   {
     // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
     const drv = $('#driver'), left = document.createElement('div');

@@ -519,3 +519,152 @@ Commits merged to main in the 24 h before the run:
 - 92485a5 Other cars glide evenly up close (sender time stamps, curved paths) (#633)
 - 1cd7395 Race: spectators can vote to start and join a race (#632)
 - 886d115 Raadi start circle: gravel tyres on the jump, column warmed through the work queue (#631)
+
+## 2026-11-26 (main 142e57c, run 01:18 UTC)
+
+Every figure within budget. The run was alone on the machine (other work took 0.04 of its 4 processor cores on average).
+
+| Check | Figure | Budget | Result |
+|---|---|---|---|
+| Phone canvases at DRIVE | 93 | 230 | OK |
+| Phone graphics card at DRIVE | 189 | 250 | OK |
+| Phone JS heap at DRIVE | 252 | 420 | OK |
+| Phone total at DRIVE | 534 | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 571 | 740 | OK |
+| Phone graphics card peak in a map jump | 218 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 206 | 250 | OK |
+| Phone total after 2 km through the centre | 788 | 870 | OK |
+| Phone graphics card peak through the centre | 421 | 445 | OK |
+| Phone total at the Raadi stage (?raadi=1) | 441 | 560 | OK |
+| Phone graphics card peak at the Raadi stage | 196 | 240 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 357 | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 507 | 760 | OK |
+| Lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 125 | 150 | OK |
+| Lowest graphics level along the Raadi stage: triangles in a frame (thousands) | 327 | 440 | OK |
+| Top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 560 | 800 | OK |
+| Top graphics level along the Raadi stage: triangles in a frame (thousands) | 1502 | 3200 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 52 | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.1 | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 6.3 | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 52 | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 72 | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.07 | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 5.8 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 56 | - | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 5 | 8 | OK |
+| Lap drive: times the game was busy for over 33 ms | 2 | 4 | OK |
+| Lap drive: longest the game was busy without a break (ms) | 50 | 100 | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 36 | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 141 | 165 | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 5 | 10 | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.72 | 2 | OK |
+| Lap drive: page errors | 0 | 0 | OK |
+| Lap drive: building work queued twice | 0 | 0 | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 14 | - | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 3 | - | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 24 | - | not judged |
+| Stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished) | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 25 ms | 1 | 8 | OK |
+| Stage drive: times the game was busy for over 33 ms | 0 | 4 | OK |
+| Stage drive: longest the game was busy without a break (ms) | 28 | 100 | OK |
+| Stage drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Stage drive: pictures sent to the graphics card (megapixels) | 24 | 40 | OK |
+| Stage drive: frames that sent over 1.1 megapixels of pictures | 0 | 4 | OK |
+| Stage drive: most megapixels of pictures sent in one frame | 1.05 | 2 | OK |
+| Stage drive: page errors | 0 | 0 | OK |
+| Stage drive: building work queued twice | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 16 ms, not judged | 5 | - | not judged |
+| Stage drive: game code in a frame, the longest (ms), not judged | 12 | - | not judged |
+| 60 players online: times the online code kept the page busy for over 5 ms in 40 s | 5 | 10 | OK |
+| 60 players online: the online code's most in one stretch (ms) | 10.3 | 12 | OK |
+| 60 players online: page errors | 0 | 0 | OK |
+| 60 players online: the online code per frame (ms), not judged | 0.49 | - | not judged |
+| 60 players online: times the game was busy for over 25 ms, not judged | 0 | - | not judged |
+| A race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s | 1 | 10 | OK |
+| A race of 30: the online code's most in one stretch (ms) | 10 | 12 | OK |
+| A race of 30: page errors | 0 | 0 | OK |
+| New kinds of car, 60 online: frames that sent over 3 MB of model to the graphics card | 0 | 1 | OK |
+| New kinds of car: page errors | 0 | 0 | OK |
+| New kinds of car: most model in one frame (MB), not judged | 2.03 | - | not judged |
+| New kinds of car: most pictures in one frame (megapixels), not judged | 4.19 | - | not judged |
+| Phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE | 4 | 5 | OK |
+| Phone, shaders built the iPhone way: most such programs in one frame | 2 | 2 | OK |
+| Phone, shaders built the iPhone way: page errors | 0 | 0 | OK |
+| The machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged | 0.04 | - | not judged |
+
+Against the 25 Nov run: phone total at DRIVE 565 -> 534 MB (canvases 126 -> 93), peak after DRIVE 616 -> 571, centre total 843 -> 788 of 870 (card peak 428 -> 421 of 445), phone at the Raadi stage 460 -> 441. Figures that grew by over 10 % (the timing ones vary run to run): lap over 25 ms 4 -> 5 of 8, lap frames that sent over 1.1 megapixels 1 -> 5 of 10 and most in a frame 1.39 -> 1.72 of 2; 60 online over 5 ms 4 -> 5 of 10 and most 8.6 -> 10.3 of 12 ms; race of 30 most 5.6 -> 10 of 12 ms (times over 5 ms 3 -> 1); phone shaders first used inside a frame after DRIVE 1 -> 4 of 5, most in one frame 1 -> 2 of 2 (at its budget). Longest busy stretches fell: desktop drive 55 -> 52 ms, phone drive 96 -> 72, lap 77 -> 50, stage 39 -> 28. Raadi stage finished, 1 over 25 ms. New since the last run: new kinds of car in a crowd of 60 (0 frames over 3 MB of model, budget 1; most 2.03 MB) and the note of other work on the machine (#707, #730).
+
+Commits merged to main in the 24 h before the run:
+
+- 142e57c Rocket kickflip: fewer small bursts, long burns, pauses in the turn, more cloud at landing (#742)
+- 967ec3d Stats: the Devices card also shows time spent driving per device (#741)
+- 24080e3 Electric cars: regen blends in over a moment, the Rocket regenerates too, a pastel green on the dial (#740)
+- 7dfcac9 Rocket: fan dust on loose ground, a fan switch, 250 kg more (#739)
+- 2183995 Tyre smoke is back for every car (broken since #702) (#738)
+- 1a9a520 Rocket: the kickflip fights for balance all the way (#737)
+- acbefc2 Electric cars: the dial is a power meter in kW, lifting off regenerates as the real cars do (#736)
+- 152fbfa Rocket: BOOST's push follows the tank (the real gas budget) (#734)
+- 6e7f9ca Perf check: say when the machine was busy with other work during the run (#730)
+- 56f0dda Tasku TOREPOOD banner: stand it off the glass so iPhones don't cut it into strips (#735)
+- 057a896 Phones: LIVE RACE on its own line above the race text, away from JOIN RACE (#733)
+- 05b6833 iPhone Chrome: also refit a page drawn zoomed (the garage cut on the right on opening, 25 Nov) (#732)
+- c6c7fff Phones: tyre switcher at the dial's top left, the Rocket's BOOST by the left thumb and FLIP by the right (#731)
+- 76450e0 Rocket: tail jets shut in a jump, suction fans heard and shown (#728)
+- 517eb69 Idle cars: old pages put off the map by the server, a shoved car no longer counts as driven, racers judged after the lights (#727)
+- 0636045 Steam Controller: read directly in Chrome and Edge, back grips as BOOST and FLIP (#726)
+- c3063b8 Rocket: kickflip roll overshoots and hunts for level, BOOST roars for as long as it is held (#725)
+- e90b4c6 Ko-fi panel: no light strip on the left, page edge to edge again (#724)
+- 651eda1 Ko-fi Support button live for everyone, taller panel without a visible scrollbar (#723)
+- 2c7a2ed Ko-fi: Support joins the row under the cars, row lined up with the car columns (only ?off=100) (#722)
+- 29946d2 Start lane: a car just put on the start passes through the others up to the line (#721)
+- fb1321f Rocket: 2 s reload in offline mode (?off=100) (#720)
+- 99f2325 Idle cars on the map go back to the garage after 2 min, with a 15 s countdown (#719)
+- ae3126f Ghost cars: a see-through car no longer patchy on desktops, and lighter to draw (#718)
+- 69228a0 Tesla Roadster Rocket: thrusters, BOOST and the kickflip (hidden, only with ?off=100) (#702)
+- 608bf96 Ko-fi: SUPPORT LINNARING on top, button above the EVERYDAY column, Apple Pay line removed (#717)
+- d472966 Ko-fi button lines up with the EVERYDAY column, still ?off=100 only (#716)
+- 7ec839a Garage key hints: R back to last spot, N sound left out (#715)
+- 7c15556 Ko-fi button: SUPPORT LINNARING, still ?off=100 only (#714)
+- 69bdb3c Ko-fi button: arrow down instead of ↗, still ?off=100 only (#713)
+- 1491062 Ko-fi panel: "Apple Pay? Open on ko-fi.com" line on Apple browsers, still ?off=100 only (#712)
+- 8efe2ae Ko-fi: button turns into the panel in place, lilac tint, still ?off=100 only (#711)
+- 34353ec Ko-fi button opens the donation panel inside the game, still ?off=100 only (#710)
+- d55adbb Ko-fi link dressed like DRIVE, TOETA LINNARINGI big below, still ?off=100 only (#709)
+- 6b3ada6 Ko-fi link: one look, label and coin tree on the sunset fill, still ?off=100 only (#708)
+- c801fdd Garage: Ko-fi link "Ega token puu otsas kasva", hidden behind ?off=100 for testing (#706)
+- 9469634 Online stutters: other players' cars go to the graphics card ahead in small steps; the game counts its own short hitches (#707)
+- 4d3f7fe Tasku: big clickable TOREPOOD banner on the corner (#705)
+- 36be8f7 Surge safety: far back in the queue ask once a minute; board, online list and lap tickets kept off the lobby (#704)
+- 9b17366 Kaubamaja: TOREPOOD poster in place of the red SUUR banner (#703)
+- 6e98915 Own number plate: typed in the garage on a computer, on your car for everyone (#701)
+- 65ec0b0 /stats Online now: "and 24 more" opens the whole list; each player shows where they are (background tab, Raadi stage, watching) (#700)
+- 843d7ea Name filter: debiilik and raisk/rsk are allowed (#699)
+- 6a72b89 Server full: a queue. Waiters get in first come first, see their place; /stats says where the non-drivers are (#698)
+- d5ff6f5 Name filter: common swearing in Estonian, English and Russian too (#697)
+- 48ba82c Online cap: idle garage players give up their place from 90 % of the cap (90 of 100), not only when full (#696)
+- b858033 Security: believable lap floors, new bests wait for their replay, lap caps, race finish on server clock, stealth use on /stats (#695)
+- 4db30dc Server: per-address API limit before the Durable Objects, change-message budget per socket, /api closed on workers.dev (#694)
+- 9b31272 Server full: garage/menu/other-tab players give up their place after 30 s (was 2 min), told KICKED FOR INACTIVITY (#693)
+- 3ef6b13 Online cap: a dropped or reloaded page gets its own place back at SERVER FULL; a released socket holds no place (#692)
+- 843b48f Phone start screen: circuits fill the spare room above the cars, desktop details as height allows (#691)
+- b34c3a3 Gravel tyres: bring off-road grip back up 1 % (#690)
+- 9b5976c Raadi start stretch: +2 s once half the car is past the left tape (#689)
+- ebab236 Name box: one pink blink for a refused name (#688)
+- ec9c2a4 Name box refuses a racist-slur name: blinks twice, no message (#687)
+- 084dee6 Big map online list: a second click on the same name watches that player (desktop) (#686)
+- 4f7cf04 Gravel tyres: 2 % less grip on gravel, dirt and grass (#685)
+- eeb847f Keep racist slurs out of driver names, silently (#684)
+- 4bc853c More vaporwave words for new player names, one shared pool (#683)
+- 0b47aef Raadi: BACK TO STAGE START more see-through and gone after 6 s, fading out (#682)
+- 6af963a Phones: race button on the left under the race line, the right side all the online list's (#681)

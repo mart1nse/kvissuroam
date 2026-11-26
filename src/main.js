@@ -178,7 +178,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
-import { createIdlePark } from './idlepark.js';
+import { createIdlePark, alwaysJudged } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import { createLineLog } from './race/linelog.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
@@ -1392,10 +1392,13 @@ function openGarage() {
 
 // A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
 // (src/idlepark.js; ?idle=<seconds> for trying it out, ?idle=0 never). The garage says why until the next DRIVE.
+// Only while the server is over 90 % full, and a bus always (Martin 26 Nov); ?idle=<seconds> is judged whatever
+// the server says, unless &room=1 asks for the server's word to count.
 // (an automated test run is never judged unless it asks: many of them leave a car standing for minutes)
 const idleS = params.has('idle') ? +params.get('idle') || Infinity : navigator.webdriver ? Infinity : undefined;
+const idleAlways = params.has('idle') && !params.has('room');
 const idlePark = createIdlePark({
-  idle: idleS, warn: idleS < 30 ? 5 : undefined,
+  idle: idleS, warn: idleS < 30 ? 5 : undefined, spread: idleS < 30 ? 3 : undefined,
   show: (n) => hud.toast(`IDLE · BACK TO GARAGE IN ${n}`, 1600),
   hide: () => hud.untoast('IDLE · '),
   park() {
@@ -2160,7 +2163,8 @@ function frame(ts) {
   mp.setDriving(((mode === 'drive' && !document.hidden && !watch?.active) || !!raceMode?.holding) && !stageBusy(), stageBusy());
   mp.setWhere(document.hidden ? 'away' : watch?.active ? 'watch' : mode === 'drive' ? 'map' : 'garage', watch?.id || '');   // (the menu is the garage)
   // a car left standing with nobody at the controls: a countdown, then the garage (src/idlepark.js)
-  idlePark.update(mode === 'drive' && !watch?.active && !readyOn && !dropping && !respawning, ctl, pads.acted(), !!(raceMode?.holding || raceMode?.pin || stage?.pin || stage?.phase === 'count'));
+  idlePark.update(mode === 'drive' && !watch?.active && !readyOn && !dropping && !respawning, ctl, pads.acted(), !!(raceMode?.holding || raceMode?.pin || stage?.pin || stage?.phase === 'count'),
+    idleAlways || !!mp?.tight || alwaysJudged(car.spec.id));
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();

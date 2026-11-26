@@ -224,7 +224,7 @@ def blur(a, sigma):
     return out
 
 
-MARK_GRAVEL, MARK_ON, MARK_FADE = 0.9, 4.0, 6.0
+MARK_GRAVEL, MARK_ON, MARK_FADE = 0.9, 0.5, 3.0
 CUM0 = np.r_[0, np.cumsum(np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])))]
 TAR_R = 14.0                             # round the start, up to where the gravel begins: what is not gravel is tarmac
 
@@ -232,8 +232,8 @@ TAR_R = 14.0                             # round the start, up to where the grav
 def ground_masks():
     """(gravel, tarmac) round the stage, each 0..1 per cell. Gravel: the map's roads there at their widths, the stage
     at its own, the park's wider gravel, as tools/race/raadi-gravel.py takes it. Tarmac: the bands painted on the
-    start lane (raadipaths.json `paint`), and round the first corner, inside Narva mnt's paving, all that is not
-    gravel."""
+    start lane (raadipaths.json `paint`), and round the start and the first corner what the map paves and the
+    stage has not turned to gravel. Third: where a slide leaves a mark, 0..1."""
     V = json.load(open(ROOT + 'public/data/vectors.json'))
     S = 2                                        # (drawn at twice the grid, for smooth edges)
     def sheet():
@@ -264,12 +264,32 @@ def ground_masks():
     band(P[:R.get('gravelFrom', 0) + 2], 2 * TAR_R, d)
     zone = done(im)
     g = g * (1 - paint)
-    tar = np.maximum(paint, zone * (1 - g))
+    # what the map paves there, as the ground's painter takes it (src/world/roadtex.js): its areas, and its roads
+    # at their widths, but for the ones the stage has turned to gravel (raadiRoads in src/world/raadipaths.js)
+    im, d = sheet()
+    inside = lambda xs, zs: not (max(xs) < x0 or min(xs) > x1 or max(zs) < z0 or min(zs) > z1)
+    for a in V.get('areas', []):
+        if a.get('t') == 4 or not inside([q[0] for q in a['outer']], [q[1] for q in a['outer']]): continue
+        d.polygon([px(q) for q in a['outer']], fill=255)
+        for h in a.get('holes') or []: d.polygon([px(q) for q in h], fill=0)
+    near2 = lambda a, b: math.hypot(a[0] - b[0], a[1] - b[1]) < 0.5
+    def turned(r):
+        for q in PA['gravel']:
+            a, b = q['pts']
+            if len(r['pts']) == q['n'] and ((near2(r['pts'][0], a) and near2(r['pts'][-1], b)) or (near2(r['pts'][0], b) and near2(r['pts'][-1], a))): return True
+        return False
+    for r in V['roads']:
+        if r.get('s') in (2, 3, 4) or len(r['pts']) < 2 or not inside([q[0] for q in r['pts']], [q[1] for q in r['pts']]) or turned(r): continue
+        band(r['pts'], r.get('w', 4), d)
+    paved = done(im)
+    tar = np.maximum(paint, zone * paved * (1 - g))
     # where a slide leaves its mark: the tarmac, and (Martin 26 Nov 14:46) the gravel of the start stretch as well,
     # "most likely there is some pavement or concret or old ashpalt rith under it ... maybe with like 90% opacity",
     # and on into the first corner "until no asphalt is whon, like 10m or so into the corner and a bit onward": the
     # gravel road's first MARK_ON metres whole, fading out over the next MARK_FADE (15:15, after 14 m whole and a
-    # short end: "do a quicker fadeout of tire tracks while gravel")
+    # short end: "do a quicker fadeout of tire tracks while gravel"; 15:31, after 4 and 6 m: "perhaps even a more
+    # quicker fade right after gravel starts and replace it with this darker gradienty gravel patch/tone that was
+    # use on other gavel parts": the swept band of the picture takes over there)
     g0 = R.get('gravelFrom', 0) + 1
     far = int(np.searchsorted(CUM0, CUM0[g0] + MARK_ON + MARK_FADE)) + 2
     im, d = sheet()
@@ -287,7 +307,9 @@ def ground_masks():
         at[q] = t[np.argmin((cx[q, None] - lx[None]) ** 2 + (cz[q, None] - lz[None]) ** 2, 1)]
     on = np.zeros_like(near)
     on[zi, xi] = near[zi, xi] * (1 - sstep(0, 1, (at - CUM0[g0] - MARK_ON) / MARK_FADE))
-    return g, tar, blur(np.maximum(tar, MARK_GRAVEL * on), 0.4)
+    # (15:31: "the lines do not need to xtend to the gras. perhaops like 50cm gradula fadeout when grass is reached":
+    # no marks on what is neither tarmac nor gravel, and the edge smoothed over about half a metre)
+    return g, tar, blur(np.maximum(tar, MARK_GRAVEL * g * on), 0.2)
 
 
 def worn(runs, o):

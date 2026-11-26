@@ -3,7 +3,7 @@
 // BOOST: the rear nozzles push the body forward for as long as the button is held, a second of tank a
 // second. FLIP: a kickflip jump that costs half a tank. The tank fills again by itself whenever it is not full
 // and no nozzle is blowing (Martin 2026-11-26: "make the gas tank gradual fill start when there is less than
-// full tank"), a whole tank in two minutes; nothing is locked meanwhile: FLIP works with half a tank in it,
+// full tank"), a whole tank in a minute; nothing is locked meanwhile: FLIP works with half a tank in it,
 // BOOST with a tenth. The whole flight is worked out at the press
 // (planFlip): the lift-off push is the same every time, so the arc is too; the planner follows the line the
 // car is travelling along and finds where that arc comes down to the ground, and the car then flies exactly
@@ -22,7 +22,7 @@
 
 export const TANK_S = 10;          // seconds of thrust in a full tank
 export const JUMP_S = 5;           // ...of which one FLIP takes this much
-export const REFILL_S = 120;       // an empty tank is full again after this long (it fills whenever it is not full)
+export const REFILL_S = 60;        // an empty tank is full again after this long (it fills whenever it is not full; a minute: Martin 26 Nov, was two)
 export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (offline testing, ?off=100: Martin 2026-11-25)
 
 const G = 9.81;
@@ -87,7 +87,7 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) r.tank = 0; };
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
-// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not 2 min).
+// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not a minute).
 // r.on: BOOST's valves are open; r.dry: they shut for want of gas with the button still held (it must be let go).
 export function rocketStep(car, input, world, dt) {
   const r = car.rocket, T = car.spec.thrusters;

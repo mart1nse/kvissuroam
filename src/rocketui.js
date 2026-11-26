@@ -1,13 +1,18 @@
 // What the driver sees of a car's thrusters (src/cars/thrust.js): the tank. On a phone the BOOST and FLIP
-// buttons are the gauge, each filling from the bottom (FLIP in two halves, one a jump); on a desktop a slim
-// bar under the rev counter with the keys. The tank fills again by itself whenever it is not full; with less
-// than a jump's worth in it FLIP shows the time until there is one. Only shown while the car has thrusters; the DOM is touched only when something changes. And the
-// small fan in the rev counter of a car with suction fans.
+// buttons are the gauge, each a glass disc with the tank as a ring round it (Martin's pick of the drafts, 26 Nov).
+// BOOST's ring is the whole tank, with its per cent under the name. FLIP's is in two halves, one a jump: a whole
+// half is lit, one still filling is pale, and under the name stands "×2" or "×1" (the jumps in the tank) or, with
+// less than one in it, the seconds until there is one: the button is dim then, and its ring shows it filling. On
+// a desktop a slim bar under the rev counter with the keys and the same count. The tank fills again by itself
+// whenever it is not full. Only shown while the car has thrusters; the DOM is touched only when something
+// changes. And the small fan in the rev counter of a car with suction fans.
 import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN } from './cars/thrust.js';
 
 export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
   const bBoost = pad.querySelector('.boost'), bFlip = pad.querySelector('.flip');
-  const fill = { boost: bBoost.querySelector('i'), flip: bFlip.querySelector('i'), bar: bar.querySelector('i') };
+  // (the rings: a dash as long as the share that is in, of the circle's 290.6 and of each half's 138.8 units)
+  const ring = { boost: bBoost.querySelector('.fg'), flip: [...bFlip.querySelectorAll('.fg')] }, fill = { bar: bar.querySelector('i') };
+  const RING = 2 * Math.PI * 46.25, HALF = (172 / 180) * Math.PI * 46.25, JUMPS = Math.round(TANK_S / JUMP_S);
   const text = { boost: bBoost.querySelector('small'), flip: bFlip.querySelector('small'), bar: bar.querySelector('small') };
   let shown = null, last = '', fanOn = null, fanFull = null, fanOff = null;
   const cls = (el, name, on) => { if (el.classList.contains(name) !== on) el.classList.toggle(name, on); };
@@ -35,20 +40,25 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
       const short = r.tank < JUMP_S - 1e-6 && !r.flight;
       const left = short ? Math.ceil(((JUMP_S - r.tank) / TANK_S) * (r.refillS || REFILL_S)) : 0;
       const canFlip = !off && !noFlip && r.tank >= JUMP_S - 1e-6, canBoost = !off && (r.on || (!r.dry && r.tank >= BOOST_MIN * TANK_S));
+      const jumps = Math.floor(r.tank / JUMP_S + 1e-6);                    // kickflips in the tank
       const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${noFlip ? 1 : 0}`;
       if (key === last) return;
       last = key;
-      const label = off ? 'OFF' : '';
       if (touch) {
-        fill.boost.style.height = fill.flip.style.height = `${pct}%`;
-        text.boost.textContent = label;
-        text.flip.textContent = noFlip || off ? 'OFF' : short ? mmss(left) : '';
+        ring.boost.style.strokeDasharray = `${((pct / 100) * RING).toFixed(1)} 400`;
+        for (let i = 0; i < ring.flip.length; i++) {
+          const share = Math.max(0, Math.min(1, ((pct / 100) * JUMPS) - i));
+          ring.flip[i].style.strokeDasharray = `${(share * HALF).toFixed(1)} 400`;
+          cls(ring.flip[i], 'part', share < 1);
+        }
+        text.boost.textContent = off ? 'OFF' : `${Math.round(pct)}%`;
+        text.flip.textContent = noFlip || off ? 'OFF' : short ? (left < 60 ? `${left} s` : mmss(left)) : `×${jumps}`;
         cls(bBoost, 'no', !canBoost); cls(bFlip, 'no', !canFlip);
-        cls(bBoost, 'reload', !canBoost && !off); cls(bFlip, 'reload', short && !off && !noFlip);
+        cls(bBoost, 'reload', !canBoost && !off);
       } else {
         fill.bar.style.width = `${pct}%`;
         const k = keys();
-        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : noFlip ? `${k.split(' · ')[0]} · NO FLIP ON A TIMED RUN` : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : k;
+        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : noFlip ? `${k.split(' · ')[0]} · NO FLIP ON A TIMED RUN` : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;
         cls(bar, 'reload', !canBoost && !off);
       }
     },

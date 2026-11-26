@@ -187,6 +187,20 @@ export function createBales({ world, group, spots }) {
   const LIGHT_DEVICE = paintScale() < 1;
   const straw = createStraw({ world, group, max: LIGHT_DEVICE ? 130 : 320, wide: LIGHT_DEVICE });
   const ground = (x, z) => world.heightAt(x, z);
+  // The ground under a bale's foot. The park's ground is only held round the car: away on the other side of town
+  // it is let go, and what the map then gives is its rough far heights, over a metre out in places. A start from
+  // there put every bale back on those, and ten of 23 stood sunk to their tops or in the air for the whole run
+  // (Martin 26 Nov: "some haybales have sunken"). So a bale's own place keeps the height it had when the ground
+  // was there, and a bale put down without the ground is put down again the moment it has loaded.
+  let waiting = false;
+  const there = (x, z) => !world.ready || world.ready(x, z);
+  function groundOf(b) {
+    const s = b.home, home = b.x === s.x && b.z === s.z;
+    if (there(b.x, b.z)) { b.wait = false; b.gy = ground(b.x, b.z); if (home) s.y = b.gy; return b.gy; }
+    if (home && s.y !== undefined) { b.wait = false; return s.y; }
+    b.wait = waiting = true;
+    return b.gy ?? ground(b.x, b.z);
+  }
   const M = new THREE.Matrix4(), A = new THREE.Matrix4(), q = new THREE.Quaternion(), axis = new THREE.Vector3(), v3 = new THREE.Vector3(), sc = new THREE.Vector3();
 
   function draw(b) {
@@ -198,7 +212,7 @@ export function createBales({ world, group, spots }) {
     A.makeRotationY(b.ry); M.premultiply(A);
     axis.set(b.tdz, 0, -b.tdx);
     A.makeRotationAxis(axis, t); M.premultiply(A);
-    const y = ground(b.x, b.z) + (H / 2) * Math.cos(t) + R * Math.sin(t);
+    const y = groundOf(b) + (H / 2) * Math.cos(t) + R * Math.sin(t);
     // (leaning, it pivots on its lower rim: the middle moves that way too)
     const off = (H / 2) * Math.sin(t) + R * (1 - Math.cos(t));
     M.setPosition(b.x + b.tdx * off, y, b.z + b.tdz * off);
@@ -254,6 +268,7 @@ export function createBales({ world, group, spots }) {
     for (const b of bales) {
       const s = b.home;
       b.x = s.x; b.z = s.z; b.vx = b.vz = 0; b.wy = 0; b.tilt = 0; b.tv = 0; b.down = false; b.sq = 0; b.awake = false;
+      b.gy = undefined;
       b.dent.fill(0); b.ruf = 0; b.shed = 0;
       drawDents(b);
       // the banner's middle towards the cars coming: the side at u is at the angle u * 2 pi from +z, towards +x
@@ -289,6 +304,11 @@ export function createBales({ world, group, spots }) {
   // the car against each bale, then each moving bale against the ground
   function update(car, dt) {
     if (!meshes || dt <= 0) return;
+    // (bales put down before their ground had loaded: onto it as it comes)
+    if (waiting) {
+      waiting = false;
+      for (const b of bales) if (b.wait) { if (there(b.x, b.z)) draw(b); else waiting = true; }
+    }
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     const hl = car.halfLen, hw = car.halfWid, Mc = car.spec.mass, Iz = car.iz || Mc * 2;
     for (const b of bales) {

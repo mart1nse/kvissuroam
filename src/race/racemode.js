@@ -339,7 +339,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     // ?off=100 (Martin 2026-11-22): never in the vote pool or a race; the button only tells what the others do
     // on a Raadi stage run: nothing but a small JOIN while a race starts or can still be joined
     const away = busy() && !mine;
-    if (away) { label = ph === 'count' ? 'RACE STARTING' : 'RACE ON'; cls = 'lit'; line = `${r.racers.length} IN · JOIN?`; }
+    if (away) { label = ph === 'count' ? 'RACE STARTING' : 'RACE ON'; cls = ph === 'count' && !isTouch ? 'lit long' : 'lit'; line = `${r.racers.length} IN · JOIN?`; }
     if (mp.stealth) {
       label = 'HIDDEN'; cls = 'dim';
       line = ph === 'count' || ph === 'grid' ? `${r.racers.length} ON THE GRID` : ph === 'race' ? `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00`

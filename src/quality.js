@@ -311,12 +311,22 @@ export function createQuality(hooks, caps, opts = {}) {
   // died on screen: auto then keeps at least one level below that one (fewer streamed streets, smaller
   // shadow map), lower again after another crash. After 10 minutes on screen at that cap without a
   // crash, the next visit may go one level higher again.
+  // The mark is kept twice: for this tab (sessionStorage, which a tab keeps when it loads again after its
+  // page died) and for the browser (localStorage, for a death found only in a tab opened afterwards). The
+  // browser's is shared by every tab and window, so a second window of the game, on screen beside this one,
+  // left it there too (Martin's Mac, 26 Nov 2026: each start beside another window of the game was taken
+  // for a crash, two levels down each time, until the game sat at the bottom level with light mode and the
+  // simple ground). So the browser's mark counts only once nobody has written it for 25 s (a page on screen
+  // writes it every 10 s); this tab's own counts at once.
   const ALIVE = 'kvissuroam.alive2', CAPKEY = 'kvissuroam.gfxCap2';
+  const sess = () => { try { return typeof sessionStorage === 'undefined' ? null : sessionStorage; } catch { return null; } };
   let cap = top, crashed = false, death = null;
   try {
     const c = readLevel(CAPKEY, true);
     if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
-    const alive = readLevel(ALIVE);
+    let alive = null;
+    try { alive = JSON.parse(sess()?.getItem(ALIVE) || 'null'); } catch {}
+    if (!alive) { const shared = readLevel(ALIVE); if (shared && shared.t > 0 && Date.now() - shared.t > 25000) alive = shared; }
     if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
       crashed = true;
       // (two levels down when the last one was under half an hour ago: a phone far above what its memory
@@ -327,7 +337,7 @@ export function createQuality(hooks, caps, opts = {}) {
       // strong phone that lands at the bottom really run out of memory, or is the page killed for
       // something else? Only logged for now; the cap above is the same either way.)
       death = { level: alive.level, cap, s: alive.s ?? null, heap: alive.heap ?? null, tex: alive.tex ?? null };
-      store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap, t: Date.now() }));
+      store(CAPKEY, JSON.stringify({ ladder: ladderId, level: cap, t: Date.now(), v: 2 }));
       console.warn(`The last visit ended on screen at level ${alive.level + 1} (out of memory?): auto graphics stay at ${cap + 1} or lower`);
     }
   } catch {}
@@ -342,8 +352,13 @@ export function createQuality(hooks, caps, opts = {}) {
     const tex = hooks.renderer?.info?.memory?.textures ?? null;
     return { s: Math.round(onScreenMs / 1000), heap, tex };
   };
-  const markAlive = () => { if (!opts.headless && current >= 0) store(ALIVE, JSON.stringify({ ladder: ladderId, level: current, ...clue() })); };
-  const markGone = () => { try { localStorage.removeItem(ALIVE); } catch {} };
+  const markAlive = () => {
+    if (opts.headless || current < 0) return;
+    const m = JSON.stringify({ ladder: ladderId, level: current, ...clue(), t: Date.now() });
+    store(ALIVE, m);
+    try { sess()?.setItem(ALIVE, m); } catch {}
+  };
+  const markGone = () => { try { localStorage.removeItem(ALIVE); } catch {} try { sess()?.removeItem(ALIVE); } catch {} };
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => (document.hidden ? markGone() : markAlive()));
     addEventListener('pagehide', markGone);

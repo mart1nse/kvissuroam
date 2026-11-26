@@ -1041,6 +1041,17 @@ body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rlist td.w { text-align: right; opacity: .75; font-size: .85em; }
 #rlist tr.me td { background: rgba(125, 255, 90, .12); } #rlist tr.me td.n { color: #7dff5a; }
 #rlist tr.out td { opacity: .5; }
+/* through the line while the race still runs (Martin 2026-11-26): a small checkered flag by the place and the time in
+   gold; those still on their lap keep the cyan gap */
+#rlist td.f { width: 0; padding-left: 0; padding-right: .15em; }
+#rlist td.f i, body.touch #rlist.live tr.fin td.n::before { width: 1.04em; height: .78em; border-radius: 1.5px;
+  background: conic-gradient(#fff 0 25%, var(--ink) 0 50%, #fff 0 75%, var(--ink) 0) 0 0 / .52em .52em;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .5), 0 0 6px rgba(255, 212, 94, .6); }
+#rlist td.f i { display: block; }
+#rlist tr.fin td.g { color: var(--sun); }
+/* (phones' narrow live box: the flag before the name of those through, so the rows still racing keep their names whole) */
+body.touch #rlist.live td.f { display: none; }
+body.touch #rlist.live tr.fin td.n::before { content: ''; display: inline-block; margin-right: .4em; vertical-align: -.02em; }
 /* a thumbs up right after a driver's name in the results (Martin 2026-11-26), the online list's neon thumb: faint for
    30 s after one and for the rest of the day once three went to that driver. A picture here, not markup in each row,
    since the table is written anew whenever a gap changes. The name is cut short before it, so the thumb never is. */
@@ -1248,6 +1259,10 @@ body.touch #stageagain { top: calc(34% + 40px); }
 #trackpills button:active { transform: scale(.96); }
 #trackpills button.here { background: rgba(26, 84, 120, .7); color: #fff; }
 @media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
+/* each circuit's outline before its name (Martin 26 Nov), in the letters' colour: cyan, white on the stage's own pill */
+#trackpills button { display: inline-flex; align-items: center; }
+#trackpills svg.trk { width: 1.5em; height: 1.5em; margin: -.3em .5em -.3em 0; flex: none; }
+#trackpills svg.trk path { stroke: currentColor; stroke-width: 80; }
 /* phones: right under the top buttons, the race button and its chip one row lower (Martin 23 Nov: "move the raadi
    start and other track buttons upward to the right, maybe above the race button": they sat at the bottom between
    the pedals). Away while a race's lights or its standings show: those need the room, and nobody leaves then. */

@@ -158,6 +158,7 @@ import { setCarPlate } from './cars/plate.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
 import { createBoard } from './race/board.js';
+import { TRACK_ICON } from './race/trackpick.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches, cornerOverPaint } from './race/corners.js';
 import { junctionOverPaint } from './race/junctionkerbs.js';
@@ -227,6 +228,26 @@ if (gpu.software) console.warn('WebGL is running in software, without the graphi
 // anywhere, ?xlow=0 turns it off. The auto levels still work on top of it.
 const XLOW = 'kvissuroam.xlow';
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+// (26 Nov 2026: the crash guard took a second window of the game on screen for a page that had died, and each
+// start beside one put a desktop two levels lower, down to the bottom with extra low and light mode: Martin's
+// Mac. Fixed in src/quality.js. Once, a desktop's cap, steady level and extra low mark from before are dropped:
+// auto finds its level again within a minute, and a desktop that really is slow gets them back the same way.)
+if (!isTouch && !navigator.webdriver && !stored('kvissuroam.guard2')) {
+  try {
+    if (stored('kvissuroam.gfxCap2')) for (const k of ['kvissuroam.gfxCap2', 'kvissuroam.gfxAuto3', XLOW]) localStorage.removeItem(k);
+    localStorage.setItem('kvissuroam.guard2', '1');
+  } catch {}
+}
+// The game open in two tabs or windows at once (Martin 26 Nov: "perhaps show that game is open in another tab"):
+// both draw on the same graphics card and share the processor, which a player feels as stutter. Each page says
+// hello on a channel only its own site hears, the others answer, and every page that hears of another says so.
+let otherTab = false;
+const tellOtherTab = () => { if (otherTab) return; otherTab = true; try { hud?.toast('LINNARING IS OPEN IN ANOTHER TAB OR WINDOW TOO: CLOSE ONE FOR SMOOTH PLAY', 7000); } catch { /* (before the screen is made: said once it is) */ } };
+try {
+  const tabs = new BroadcastChannel('linnaring-tabs');
+  tabs.onmessage = (e) => { if (e.data === 'hello') tabs.postMessage('here'); if (e.data === 'hello' || e.data === 'here') tellOtherTab(); };
+  tabs.postMessage('hello');
+} catch { /* no BroadcastChannel: say nothing */ }
 const xlow = isTouch || params.get('xlow') === '0' ? '' : params.has('xlow') ? 'asked for with ?xlow'
   : navigator.webdriver ? '' : weakDesktop(gpu) || (stored('kvissuroam.gfx') === 'low' ? 'graphics set low' : stored(XLOW) ? 'slow last time' : '');
 if (xlow) {
@@ -536,15 +557,18 @@ function showReady() {
 // card (phones: world/phonetex.js). The car can be driven meanwhile.
 const readyEl = $('#getready');
 let readyOn = 0, readyMost = 0;   // when it came up (0: not shown), and the most pictures that were waiting
-function getReady() {
-  if (!readyOn) { readyMost = 0; readyEl.textContent = 'GETTING READY'; readyEl.classList.add('show'); }
+let readyAll = false;             // and it waits for the queued building work and the things held back as well
+function getReady(all = false) {
+  if (!readyOn) { readyMost = 0; readyAll = false; readyEl.textContent = 'GETTING READY'; readyEl.classList.add('show'); }
   readyOn = performance.now();
+  readyAll ||= all;
 }
 function getReadyStep(now) {
   const left = shrinker?.pending || 0;
   readyMost = Math.max(readyMost, left);
-  const busy = dropping || respawning || left > 0 || !world.ready(car.x, car.z);
-  if ((!busy && now - readyOn > 600) || now - readyOn > 20000) { readyOn = 0; readyEl.classList.remove('show'); return; }
+  // (all: as long as building work is queued or things are held back from the picture, 15 s at most)
+  const busy = dropping || respawning || left > 0 || !world.ready(car.x, car.z) || (readyAll && now - readyOn < 15000 && (jobs.pending > 0 || warmer.waiting > 0));
+  if ((!busy && now - readyOn > 600) || now - readyOn > 20000) { readyOn = 0; readyAll = false; readyEl.classList.remove('show'); return; }
   const text = readyMost > 3 && !dropping ? `GETTING READY ${Math.round(100 * (1 - left / readyMost))}%` : 'GETTING READY';
   if (readyEl.textContent !== text) readyEl.textContent = text;
 }
@@ -906,6 +930,7 @@ async function boot() {
   startSpots = startSlots(startTrack, startPose);
   lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
+  if (otherTab) { otherTab = false; tellOtherTab(); }    // (heard before there was a screen to say it on)
   rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
     return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
@@ -1020,7 +1045,11 @@ async function boot() {
   if (RAADI) stage = createStage({
     world, scene, camera, toast: (t, ms) => hud.toast(t, ms),
     // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
-    place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
+    // (from further than the stage is built from, or before it was: GETTING READY stays until the stage and the
+    // places round its start are built and on the graphics card, and the start lights wait for it. Martin 26 Nov,
+    // short hitches in the first seconds of a run after MAJORAADI: "load a bit longer before you show the car")
+    place: (pose) => { const far = Math.hypot(car.x - pose.x, car.z - pose.z) > 400; history.length = 0; place(pose); if (far && mode === 'drive') getReady(true); },
+    readying: () => readyOn > 0, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
@@ -1047,7 +1076,11 @@ async function boot() {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
     tp.id = 'trackpills';
-    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Majoraadi rally stage start">MAJORAADI</button>';
+    // each with its circuit's outline before the name, from the lap's and the stage's own lines (Martin 26 Nov: "a
+    // minioutline of the track and stage as an icon before the text"): the lists' marks (trackpick.js), drawn in
+    // the button's cyan, left out of what a screen reader says (the name follows)
+    const mark = (id) => TRACK_ICON[id].replace(/ role="img" aria-label="[^"]*"><title>[^<]*<\/title>/, ' aria-hidden="true">');
+    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>`;
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId });
@@ -1492,7 +1525,7 @@ function trackPills() {
   if (at === pillAt) return;
   pillAt = at;
   const b = document.querySelector('#trackpills [data-act="track-raadi"]');
-  if (b) { b.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
+  if (b) { b.lastChild.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
 }
 
 function goHome() {
@@ -2472,7 +2505,8 @@ function frame(ts) {
   // one late frame does not make the next one's share bigger and later still: in the check of 21 Nov two
   // 2048 px pictures went to the card in the frame after a long one, 150 ms.)
   pace = Math.max(4, pace + (Math.min(200, rawDt * 1000, pace * 1.25) - pace) * 0.05);
-  const frameMs = pace, hurry = jobs.live && (jobs.waited > 4000 || warmer.waited > 4000);
+  // (and while GETTING READY waits for it: the car is held at a start, nobody is watching the road go by)
+  const frameMs = pace, hurry = jobs.live && (jobs.waited > 4000 || warmer.waited > 4000 || (readyOn > 0 && readyAll));
   warmer.scope(() => jobs.tick(hurry ? Math.max(5, Math.min(50, frameMs * 0.5)) : Math.max(2.5, Math.min(14, frameMs * 0.3)), Math.max(12, frameMs * 0.25), hurry));
   // what all that added to the scene: made ready unseen, then let in (src/warm.js). Not in a frame where the
   // queue's step was a long one, and after a long step of its own the queue rests: one long thing a frame.

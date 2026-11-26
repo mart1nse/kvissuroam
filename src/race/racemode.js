@@ -244,7 +244,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     for (const x of rows) {
       if (x.out) { x.gap = 'OUT'; x.where = OUT_TEXT[x.out] || 'out'; continue; }
       // (in a race that still runs, a checkered flag by the place of each racer through the line, Martin 2026-11-26:
-      // the list told at a glance who has finished and who is still on the lap; the results after have it for all)
+      // the list tells at a glance who has finished and who is still on the lap; none in the results after the race)
       if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; x.fin = !!live; continue; }
       x.where = x.p?.prog != null ? (x.p.prog < 0 ? 'START' : `${(x.p.prog / 1000).toFixed(1)} KM`) : '';
       if (x === lead) { x.gap = isTouch ? '' : 'LEADER'; continue; }

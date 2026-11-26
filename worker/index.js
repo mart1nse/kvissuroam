@@ -20,11 +20,13 @@ import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
 import { RaceDesk } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
-import { lapGates, throughGate } from '../src/race/lapgates.js';
+import { throughGate } from '../src/race/lapgates.js';
+import { LAP_GATES } from './follow.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
 import { carLimitsSteps, judgeDrive } from '../src/race/plausible.js';
+import { OLD_PAGES_UNTIL } from './cutover.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -38,6 +40,11 @@ const STAGES = { raadi: 70000 };
 // post its laps all at once, 50 a request: thousands a minute from one script). A lap takes over 2 minutes, so one
 // player drives under 30 an hour; this leaves room for a household or a classroom behind one address.
 const LAPS_IP_HOUR = 120, LAPS_NAME_DAY = 300;
+// A lap as the server's own clock timed it, from the page's marks at its start and finish (see lapMark), against
+// the lap time the page gives: the server's may be this much shorter (a mark slow on its way) or longer (the same,
+// and the 2 s of freezes a lap is forgiven: SLOW_FREE in src/race/race.js). Past that the lap was not driven in
+// real time (slow motion: the game slows down under 20 frames a second, and the lap clock once slowed with it).
+const CLOCK_UNDER = 1500, CLOCK_OVER = 3500;
 const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -81,6 +88,10 @@ const QUEUE_FRESH = 150000;       // a waiting page that asked again within this
 const WAIT_GONE = 180000;          // quiet this long (no new question), a refused page gave up waiting
 const WAIT_MAX = 50000;            // pages remembered as waiting
 const MAX_SOCKETS_IP = 30;        // from one address (a household, a LAN party, a school or office behind one address: 12 until 2026-11-24)
+// ... while there is room. Once the server is IP_TIGHT_AT full a new connection is let in only up to IP_TIGHT from its
+// address (26 Nov 2026: one script could sit on 30 of the 100 places, four addresses on all of them). Those already
+// in stay: a classroom that came early keeps its places.
+const IP_TIGHT_AT = 0.8, IP_TIGHT = 8;
 const MSG_WINDOW = 2000, MSG_MAX = 60;   // messages a socket may send in two seconds (the game sends 20)
 // Messages other than positions and clock asks change something the others hear about or that is stored
 // (car, name, where, driving, race votes and joins, thumbs up): each goes to everyone online, and a race one is
@@ -98,6 +109,29 @@ const TICK = 100;                                     // ms between bundles
 const POSE_FAR = 600, POSE_FAR_MS = 300;              // further than this from the receiver: about 3 a second
 const POSE_VFAR = 2000, POSE_VFAR_MS = 1000;          // and once a second this far
 const POSE_KEEP = 5000;                               // a car that has not sent for this long is left out
+// Positions that hang together (26 Nov 2026: a script could put a car that does not exist onto any free-roaming
+// player at 540 km/h, and each page pushes its own car out of another's and takes a knock by the speed that car
+// claims). A page moves its own car and the server cannot know where it really is, but it can hold each position
+// against the one before:
+//   a jump    further than V_MAX allows for the time between the two: the car just appeared there (R, the map, the
+//             start, a made-up place), as it does with its first position and after a silence of GAP_MS. For
+//             FRESH_MS it goes on to the others flagged as a car just put on the start is (64): every page passes
+//             through such a car. A car may make JUMPS_MAX jumps at once and one more every JUMP_LEAK ms; past
+//             that its positions are not passed on until it calms down.
+//   its speed the speed a position claims is cut to what the car is seen to move at (from where it was half a
+//             second ago to where it is, and a little more): a car standing beside another cannot claim to hit it
+//             at 300.
+// The time between two positions is the sender's own (each carries when it was taken: positions reach the server in
+// bunches after a hiccup on the way, a tenth of a second apart in truth), as long as the sender's clock does not run
+// ahead of the server's: how far ahead it has ever been is kept (top), and a stamp past that is not believed.
+// V_MAX is for any car; one seen going over V_ASK has its own top speed looked up (carLimit: the game's physics,
+// once per kind of car) and is held to TOP_K of that from then on.
+const V_MAX = 110, STEP_ROOM = 1;                     // m/s (396 km/h), and metres
+const V_ASK = 45, V_TOP_K = 1.15, V_TOP_ROOM = 3;
+const GAP_MS = 1500, FRESH_MS = 2000, FLAG_FRESH = 64;
+const JUMPS_MAX = 12, JUMP_LEAK = 5000;
+const SPEED_K = 1.3, SPEED_ROOM = 4;                  // claimed speed: at most this share of the speed seen, plus m/s
+const STAMP = 21;                                     // a position's slot for when it was taken (ms within the minute, the sender's clock)
 // A car standing on the map with nobody at the controls, on a page from before the game sent such a car to the
 // garage itself (src/idlepark.js, 25 Nov; those pages say i=1 as they connect and are not judged here). The pages
 // left open for hours with a bus across the race road are exactly the ones that never reload (Martin's picture
@@ -231,7 +265,7 @@ async function gunzip(bytes, max) {
 // stage's start, a point every 80 along it, its finish
 const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
 const GATES = {
-  toomemagi: { first: near(0, LAP.pts, 30), pass: [...lapGates(LAP), near(0, LAP.pts, 30)] },
+  toomemagi: { first: near(0, LAP.pts, 30), pass: [...LAP_GATES, near(0, LAP.pts, 30)] },
   raadi: { first: near(STAGE.start, STAGE.pts, 30),
     pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
 };
@@ -315,6 +349,12 @@ export class Lobby extends DurableObject {
     // the record lap of each car on each circuit as movement, to be watched (see "Replays"); one row a car and circuit
     this.sql.exec('CREATE TABLE IF NOT EXISTS replay_refused (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, why TEXT NOT NULL, bytes INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS replays (track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, at TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (track, car))');
+    // laps as the server's clock timed them (see lapMark): the start of the lap a page is on, by its ticket, and the
+    // laps it finished with what the server measured
+    this.sql.exec('CREATE TABLE IF NOT EXISTS lapmarks (sid TEXT PRIMARY KEY, t0 INTEGER NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS lapseen (sid TEXT NOT NULL, ms INTEGER NOT NULL, took INTEGER NOT NULL, at INTEGER NOT NULL)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS lapseen_sid ON lapseen (sid, ms)');
+    this.seenClean = 0;
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
@@ -450,11 +490,60 @@ export class Lobby extends DurableObject {
   // a car's new position: to older pages at once, to the others with the next bundle
   pose(ws, id, p) {
     const now = Date.now();
-    const j = JSON.stringify(p);
-    const e = this.poses.get(id);
+    // (a racer's lap is followed from these, as they came: worker/follow.js)
+    try { this.race.seen(id, p, now); } catch (err) { console.error('follow', err); }
+    let e = this.poses.get(id);
     // (act: when somebody was last at its controls, t0: on the map since; for idleCars)
     const act = p[12] > 0.02 || p[9] > 0 || Math.abs(p[8]) > 0.02;
-    if (e) { e.p = p; e.j = j; e.t = now; e.n++; e.ws = ws; if (act) e.act = now; } else this.poses.set(id, { p, j, t: now, n: 1, ws, t0: now, act: act ? now : 0 });
+    // does it hang together with the one before (see V_MAX)? fr: flagged until, st: the sender's time so far (s),
+    // lead / top: how far its clock is ahead of ours and has ever been, ring: where it was lately [x, z, st, ...],
+    // vo: the speed it is seen to move at (-1: not known yet)
+    let jump = !e, fast = false;
+    if (!e) this.poses.set(id, e = { p, j: '', t: now, n: 0, ws, t0: now, act: 0, fr: 0, jn: 0, jt: now, st: 0, lead: 0, top: 0, ring: [], vo: -1, car: ws.deserializeAttachment()?.car, vm: 0 });
+    else {
+      const dtA = Math.max(0, now - e.t) / 1000;
+      let dt = dtA;
+      if (dtA * 1000 > GAP_MS) jump = true;
+      else if (p.length > STAMP && e.p.length > STAMP) {
+        let ds = (((p[STAMP] - e.p[STAMP]) % 60000) + 60000) % 60000;
+        if (ds > 30000) ds -= 60000;
+        ds /= 1000;
+        const lead = e.lead + ds - dtA;
+        e.top -= 0.002 * dtA;                                    // (a clock that drifts is followed)
+        // (in its first moments, flagged anyway, the clock is still being found: a first position that came late)
+        if (ds >= 0 && (now < e.fr || lead <= e.top + 0.05)) { dt = ds; e.lead = lead; if (lead > e.top) e.top = lead; } else e.lead = e.top;
+      }
+      if (!jump) {
+        // (over its own top speed but not over any car's: flagged, yet not counted as jumping about: a bus sent
+        // flying by a knock is still a bus on its way)
+        const d = Math.hypot(p[0] - e.p[0], p[1] - e.p[1]);
+        jump = d > V_MAX * dt + STEP_ROOM;
+        fast = !jump && e.vm > 0 && d > e.vm * dt + STEP_ROOM;
+      }
+      e.st += dt;
+    }
+    if (jump) {
+      e.jn = Math.max(0, e.jn - (now - e.jt) / JUMP_LEAK); e.jt = now;
+      if (e.jn >= JUMPS_MAX) return;
+      e.jn++;
+      e.fr = now + FRESH_MS; e.ring.length = 0; e.vo = -1; e.lead = e.top = 0;
+    } else if (fast) e.fr = now + FRESH_MS;
+    if (now < e.fr && p.length > 20) p[20] = (p[20] | 0) | FLAG_FRESH;
+    const r = e.ring;
+    r.push(p[0], p[1], e.st);
+    while (r.length > 6 && (r[5] <= e.st - 0.5 || r.length > 90)) r.splice(0, 3);
+    if (e.st - r[2] >= 0.4) e.vo = Math.max(Math.hypot(p[0] - r[0], p[1] - r[1]) / (e.st - r[2]), e.vo * 0.85);
+    if (e.vo > V_ASK && !e.vm) {
+      // (fast: what can this car do? vm: -1 while it is worked out, then its limit)
+      e.vm = -1;
+      this.carLimit(e.car).then((lim) => { e.vm = lim ? Math.min(V_MAX, lim.top * V_TOP_K + V_TOP_ROOM) : 2 * V_MAX; }, () => { e.vm = V_MAX; });
+    }
+    if (e.vo >= 0) {
+      const cap = e.vo * SPEED_K + SPEED_ROOM, v = Math.hypot(p[6], p[7]);
+      if (v > cap) { p[6] = Math.round((p[6] * cap * 100) / v) / 100; p[7] = Math.round((p[7] * cap * 100) / v) / 100; }
+    }
+    const j = JSON.stringify(p);
+    e.p = p; e.j = j; e.t = now; e.n++; e.ws = ws; if (act) e.act = now;
     let one = null;
     for (const o of this.ctx.getWebSockets()) {
       if (o === ws || this.takesBundles(o)) continue;
@@ -462,6 +551,12 @@ export class Lobby extends DurableObject {
       try { o.send(one); } catch { /* closing */ }
     }
     if (!this.timer) this.timer = setInterval(() => { try { this.bundle(); } catch (err) { console.error('bundle', err); } }, TICK);
+  }
+  // a finish the race desk did not take (the car was not followed round the lap): kept with the refused replays,
+  // so a racer who asks why can be told (GET /api/replay?refused=1)
+  raceRefused(r, ms, why) {
+    this.sql.exec('INSERT INTO replay_refused (at, track, car, ms, name, why, bytes) VALUES (?, ?, ?, ?, ?, ?, 0)', new Date().toISOString(), TRACK, r.car || '?', ms || 0, r.name || '', `race: ${why}`);
+    this.sql.exec('DELETE FROM replay_refused WHERE id <= (SELECT MAX(id) FROM replay_refused) - 50');
   }
   // cars left standing on the map by pages that do not park them themselves (see MAP_IDLE_MS): every 5 s
   idleCars(now) {
@@ -784,6 +879,33 @@ export class Lobby extends DurableObject {
   // Since 26 Nov 2026 (two Audi 200 records driven with the car's figures changed in the browser) the drive is also
   // held against the car: no more pull, grip or braking than the game's own physics gives it (src/race/plausible.js).
 
+  // ---- Laps timed by the server (26 Nov 2026). The lap time is the page's own, by the game's clock, and the game
+  // runs slower than real time when frames take over 50 ms: a page held under 20 frames a second drove its laps in
+  // slow motion. So the page says, as it happens, when its lap timer starts and when a lap is finished (over its
+  // connection, 'lm'; by POST /api/mark when it has none), and the server keeps how long that took by its own
+  // clock. A lap that would be a car's best counts only if the two agree (lapClock). A drive that was not driven
+  // but made up or copied has to be played out in real time for this, too.
+  lapMark(sid, e, ms, now = Date.now()) {
+    if (!sid) return;
+    if (e === 's') { this.sql.exec('INSERT INTO lapmarks (sid, t0) VALUES (?, ?) ON CONFLICT (sid) DO UPDATE SET t0 = excluded.t0', sid, now); return; }
+    if (e !== 'f') return;
+    const t0 = this.sql.exec('SELECT t0 FROM lapmarks WHERE sid = ?', sid).toArray()[0]?.t0;
+    if (!t0) return;
+    this.sql.exec('DELETE FROM lapmarks WHERE sid = ?', sid);
+    ms = Math.round(Number(ms));
+    if (!(ms >= LAP_MIN && ms <= 3600000)) return;
+    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at) VALUES (?, ?, ?, ?)', sid, ms, now - t0, now);
+    if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); }
+  }
+  // what is wrong with a lap's time by the server's clock ('' for nothing)
+  lapClock(sid, ms) {
+    const rows = this.sql.exec('SELECT took FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
+    if (rows.some((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER)) return '';
+    if (rows.length) return `took ${rows[0].took} ms by the server's clock`;
+    // (no marks: a page from before they were sent, until those are gone: cutover.js)
+    return Date.now() < OLD_PAGES_UNTIL ? '' : 'no marks';
+  }
+
   // What a car can do, measured on the game's physics the first time a replay of it comes (kept while this object
   // is awake). In slices of 150 steps with the event loop let in between: all at once it is 0.1 to 0.3 s in which
   // nobody's positions would go out.
@@ -843,6 +965,8 @@ export class Lobby extends DurableObject {
         const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
         if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
       }
+      // the lap by the server's own clock (Toomemägi; a stage run has its own start)
+      if (!why && track === TRACK) { const c = this.lapClock(tk.sid, ms); if (c) { why = `clock: ${c}`; told = 'clock'; } }
     } catch { why = 'unreadable'; }
     if (why) return refuse(why, lap.name, bytes?.length || 0, told);
     // (the lap as it is now: this waited for the unpacking and perhaps the car's limits, and the same replay sent
@@ -912,7 +1036,7 @@ export class Lobby extends DurableObject {
       }
       let mine = 0;
       for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment(); if (a?.ip === ip && !a.x) mine++; }
-      if (mine >= MAX_SOCKETS_IP) return busy();
+      if (mine >= (n >= max * IP_TIGHT_AT ? IP_TIGHT : MAX_SOCKETS_IP)) return busy();
       this.admitted(wk, now);
       this.loadTick(now);
       const pair = new WebSocketPair();
@@ -1024,6 +1148,18 @@ export class Lobby extends DurableObject {
       }
       // (hold: the laps of this batch that wait for their replay; the page sends it, see sendReplays in multiplayer.js)
       return json({ ok: true, saved: ok, board, ...(held.length ? { hold: held } : {}) });
+    }
+
+    if (path === '/api/mark' && req.method === 'POST') {
+      // a lap's start or finish from a page that has no connection to the lobby (the server full, or the
+      // connection down for a moment): {k: its lap ticket, e: 's' | 'f', ms: the lap time at the finish}
+      if (this.over(`m|${ip}`, 30, 60000)) return busy();
+      let body;
+      try { body = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const tk = await this.readTicket(body?.k);
+      if (!tk) return json({ error: 'invalid' }, 400);
+      this.lapMark(tk.sid, body.e, body.ms);
+      return json({ ok: true });
     }
 
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
@@ -1157,7 +1293,7 @@ export class Lobby extends DurableObject {
       const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
       // (the plate: the one sent, or the one this socket had; a page that sends none keeps its cars' own)
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
       if (!me?.id && ghost) this.ghostHello(id);
@@ -1169,6 +1305,8 @@ export class Lobby extends DurableObject {
     }
     if (!me?.id) return;
     if (this.race.message(ws, me, m)) return;
+    // a lap's start or finish, as it happens (see lapMark)
+    if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now); return; }
     if (m.t === 'name') {
       const name = okName(m.name);                                         // (a slur: silently not taken)
       if (!name || name === me.name || now - (me.nt || 0) < 1500) return;   // (and not a stream of renames)
@@ -1185,6 +1323,7 @@ export class Lobby extends DurableObject {
       const car = cleanCar(m.car);
       if (!car || car === me.car) return;
       me.car = car; ws.serializeAttachment(me);
+      { const e = this.poses.get(me.id); if (e) { e.car = car; e.vm = 0; } }        // (another car's top speed: pose)
       if (!me.ghost) { this.broadcast({ t: 'car', id: me.id, car }, ws); this.race.changed(me); }
     } else if (m.t === 'at') {
       // where a player is (map, garage, away in another tab), for the others' lists (Martin, 2026-11-23);

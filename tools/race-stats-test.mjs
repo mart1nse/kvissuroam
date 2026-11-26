@@ -6,6 +6,10 @@ import { register } from 'node:module';
 register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s, c, n) {
   if (s === 'cloudflare:workers') return { url: 'data:text/javascript,export class DurableObject {}', shortCircuit: true };
   return n(s, c);
+}
+export async function load(u, c, n) {
+  if (u.endsWith('.json')) return { format: 'json', source: (await import('node:fs')).readFileSync(new URL(u)), shortCircuit: true };
+  return n(u, c);
 }`));
 const root = new URL('..', import.meta.url).href.replace(/\/$/, '');
 const { RaceDesk } = await import(root + '/worker/race.js');
@@ -29,6 +33,8 @@ const L = mkLobby([{ id: 'a', car: 'w201' }, { id: 'b', car: 'f40' }, { id: 'c',
 for (const s of L.sockets) s.a.at = clock;
 const desk = new RaceDesk(L);
 const msg = (i, m) => { L.sockets[i].a.at = clock; desk.message(L.sockets[i], L.sockets[i].a, m); };
+// (the server saw that racer's car go round and cross the line at that time: worker/follow.js, tools/follow-test.mjs)
+const over = (i, ms) => { const r = desk.s.racers.find((x) => x.id === L.sockets[i].a.id); r.fs = (r.go || desk.s.tGreen) + ms + 50; };
 
 // 1) one start vote lapses
 msg(0, { t: 'rv', on: 1 });
@@ -43,10 +49,10 @@ msg(2, { t: 'rj', on: 1 });     // c joins in the countdown
 clock = desk.s.tGrid + 100;
 msg(3, { t: 'rj', on: 1 });     // d late on the grid
 clock = desk.s.tGreen + 150000;
-msg(0, { t: 'rf', ms: 148000 });
+over(0, 148000); msg(0, { t: 'rf', ms: 148000 });
 msg(1, { t: 'rd', why: 'off' });
-msg(2, { t: 'rf', ms: 149500 });
-msg(3, { t: 'rf', ms: 150000 });
+over(2, 149500); msg(2, { t: 'rf', ms: 149500 });
+over(3, 150000); msg(3, { t: 'rf', ms: 150000 });
 assert.equal(desk.s.phase, 'idle');
 const r1 = reports[1];
 assert.equal(r1.ran, true); assert.equal(r1.end, 'done'); assert.equal(r1.racers.length, 4);

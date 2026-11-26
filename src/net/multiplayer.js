@@ -48,6 +48,10 @@ const AWAY_S = 30;              // a driver who steps into the garage, the menu 
 const HOT = 8;                   // flag: this car's lap timer is running
 const FRESH = 64;                // flag: just put on the start and still in the start lane (src/race/startlane.js)
 const THRU = HOT | FRESH;        // either: nobody bumps this car
+// A car that just appeared where it is (its first position, R, the map, or a place a script made up) does not push
+// ours for this long (26 Nov 2026: a car that does not exist could be thrown at anyone driving freely). The server
+// flags such a car as FRESH for the same time (worker/index.js V_MAX), so pages from before this pass through it too.
+const NEW_S = 2;
 const FANS_OFF = 256;            // flag: a fan car's suction fans are switched off (no dust from it)
 const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
 // A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
@@ -585,6 +589,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       t = now - late / 1000;
     }
     if (last && t <= last.t) t = last.t + 0.001;
+    // (it just appeared there: its first position, or further from its last than a car goes in that time)
+    if (!last || Math.hypot(p[0] - last.p[0], p[1] - last.p[1]) > Math.max(40, 110 * (t - last.t) + 15)) o.newAt = now;
     b.push({ t, p });
     if (b.length > 30) b.shift();
   }
@@ -845,7 +851,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   function collide(car) {
     if (STEALTH) return;                                         // they cannot see us, so nobody bumps
     // on a lap of our own, or just put on the start and in its lane: nobody can touch us
-    const mine = hotlap() || fresh();
+    const mine = hotlap() || fresh(), nowS = performance.now() / 1000;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
     for (const o of others.values()) {
       const p = o.pose;
@@ -855,7 +861,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) { o.thru = false; continue; }
       // they are on a lap or in the start lane: we pass through them (and in the race from the grid on, even
       // before their flag arrives)
-      if (mine || (p[20] & THRU) || racing(o.id)) { o.thru = true; continue; }
+      if (mine || (p[20] & THRU) || racing(o.id) || nowS - (o.newAt || 0) < NEW_S) { o.thru = true; continue; }
       const gx = Math.sin(p[3]), gz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
       const axes = [[fx, fz], [rx, rz], [gx, gz], [sx, sz]];
       let best = Infinity, nx = 0, nz = 0;
@@ -1062,7 +1068,19 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // laps the server holds off the board until their replay has come (worker/index.js: a car's best of all time or of
   // today needs its drive since 25 Nov 2026), by lapKey
   const held = new Set();
+  // The lap timer started (e 's') or a lap of ms was finished (e 'f'), told to the server at that moment: it times
+  // the lap by its own clock, and a lap that would be a record counts only if that agrees with the lap time
+  // (worker/index.js lapMark). Over the connection, or by a request when there is none (the server full).
+  let marksDone = Promise.resolve();
+  function lapMark(e, ms) {
+    if (STEALTH) return;
+    if (ws && ws.readyState === 1 && myId) { send(e === 'f' ? { t: 'lm', e, ms } : { t: 'lm', e }); return; }
+    if (!ticket) return;
+    const p = fetch('/api/mark', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e, ms }) }).catch(() => {});
+    marksDone = marksDone.then(() => p);
+  }
   async function sendReplays() {
+    await marksDone;                                               // (the lap's marks are there before its drive is)
     for (let i = traces.length - 1; i >= 0; i--) {
       const { lap, trace } = traces[i];
       if (!sent.has(lapKey(lap))) continue;                       // (not answered yet)
@@ -1106,7 +1124,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     sendTimer -= dt;
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
-    if (active && !STEALTH && others.size && sendTimer <= 0 && ws && ws.readyState === 1) {
+    // (in a race also with nobody else online: the server follows each racer's lap from these, worker/follow.js)
+    if (active && !STEALTH && (others.size || racing(myId)) && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
       sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
       const p = poseNow(car, sendPose, hotlap(), fresh());
@@ -1393,6 +1412,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
     recordTime,
+    lapMark,
     // trace: the lap's samples (src/race/replay.js), sent on if the lap is the car's record
     submitLap(lap, trace) {
       if (STEALTH) return;                                       // kept in this browser only (race.js)

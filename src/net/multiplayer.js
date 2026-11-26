@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml, fmtTime } from '../race/race.js';
 import { STEALTH } from './stealth.js';
-import { KUDOS_GAP_S } from '../kudos.js';
+import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from './kudosrules.js';
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt, turnedAbout } from '../race/replay.js';
@@ -321,8 +321,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // hello, so after a reconnect the others see the same count we do.
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
   // (each received one: [sender id, their name then, when in ms]; a bare id from before 24 Nov)
-  const kudoList = (a) => (Array.isArray(a) ? a.map((x) => (typeof x === 'string' ? [x, '', 0] : Array.isArray(x) && typeof x[0] === 'string' ? [x[0], typeof x[1] === 'string' ? x[1] : '', Number(x[2]) || 0] : null)).filter(Boolean).slice(-24) : []);
-  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return { kn: v.kn, kf: kudoList(v.kf) }; } catch { /* none */ } return { kn: 0, kf: [] }; })();
+  const kudoList = (a) => (Array.isArray(a) ? a.map((x) => (typeof x === 'string' ? [x, '', 0] : Array.isArray(x) && typeof x[0] === 'string' ? [x[0], typeof x[1] === 'string' ? x[1] : '', Number(x[2]) || 0] : null)).filter(Boolean).slice(-KUDOS_KEEP) : []);
+  // (at most KUDOS_PAIR from any one player, src/net/kudosrules.js: a day saved before that rule loses the rest)
+  const myKudos = (() => { try { const v = JSON.parse(lsGet(KUDOS_KEY)); if (v?.day === today() && Number.isInteger(v.kn)) return kudosFair(v.kn, kudoList(v.kf)); } catch { /* none */ } return { kn: 0, kf: [] }; })();
   const saveKudos = () => lsSet(KUDOS_KEY, JSON.stringify({ day: today(), kn: myKudos.kn, kf: myKudos.kf }));
   const clockAsk = () => send(raceSeen ? { t: 'clock', c: Date.now() } : { t: 'clock', c: Date.now(), r: 1 });
   let carId = 'w201';
@@ -402,6 +403,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     sock.onopen = () => {
       retry = 1; online = true; raceSeen = false; bundled = false;
       // b: 1, everyone's positions in one message ten times a second (see TICK in worker/index.js)
+      // (our day's thumbs up as the server keeps them: at most KUDOS_PAIR from one player, see src/net/kudosrules.js)
+      Object.assign(myKudos, kudosFair(myKudos.kn, myKudos.kf));
       send({ t: 'hello', b: 1, name, pl: plate, car: carId, k: ticket || undefined, ghost: STEALTH ? 1 : undefined, w: where || undefined, on: whereOn || undefined, kn: myKudos.kn || undefined, kf: myKudos.kn ? myKudos.kf : undefined });
       ping = setInterval(() => send('ping'), 25000);
       clockRtt = Infinity;
@@ -482,7 +485,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.style.display = 'none';
     labels.appendChild(el);
     const o = { id: p.id, name: p.name, colour: freeColour(), car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: typeof p.w === 'string' ? p.w : '', wn: Number.isInteger(p.wn) ? p.wn : 0,
-      kn: Number.isInteger(p.kn) ? p.kn : 0, kf: kudoList(p.kf), plate: cleanPlate(p.pl) };
+      ...kudosFair(Number.isInteger(p.kn) ? p.kn : 0, kudoList(p.kf)), plate: cleanPlate(p.pl) };
     others.set(p.id, o);
     setRemoteCar(o, p.car);
     return o;
@@ -676,7 +679,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       case 'ku': {          // a thumbs up, from id to `to` (either may be us): see src/kudos.js
         if (typeof m.id !== 'string' || typeof m.to !== 'string') break;
         const o = m.to === myId ? myKudos : others.get(m.to);
-        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), [m.id, m.id === myId ? name : others.get(m.id)?.name || '', Date.now()]].slice(-24); if (o === myKudos) saveKudos(); }
+        if (o) { o.kn = (o.kn || 0) + 1; o.kf = [...(o.kf || []), [m.id, m.id === myId ? name : others.get(m.id)?.name || '', Date.now()]].slice(-KUDOS_KEEP); if (o === myKudos) saveKudos(); }
         onKudos?.(m.id, m.to);
         break;
       }
@@ -1438,24 +1441,25 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     colourOf(id) { return others.get(id)?.colour; },
     // another player's car as drawn now (null when far: then nobody sees a sign on it), and its kind
     carOf(id) { const o = others.get(id); return o?.model && o.near ? { group: o.model.group, car: o.modelCar } : null; },
-    // a thumbs up for another player (src/kudos.js): false while the last one to them is under KUDOS_GAP_S old
-    // (the server holds to the same), or in stealth
+    // a thumbs up for another player (src/kudos.js): false while the last one to them is under KUDOS_GAP_S old,
+    // once we gave them KUDOS_PAIR today (src/net/kudosrules.js; the server holds to the same), or in stealth
     kudos(id) {
       if (STEALTH || !online || !others.has(id)) return false;
       const t = performance.now() / 1000;
-      if (t - (kudosAt.get(id) ?? -1e9) < KUDOS_GAP_S) return false;
+      if (t - (kudosAt.get(id) ?? -1e9) < KUDOS_GAP_S || kudosFrom(others.get(id).kf, myId, name) >= KUDOS_PAIR) return false;
       kudosAt.set(id, t);
       send({ t: 'ku', to: id });
       return true;
     },
-    // seconds until another thumbs up may go to this player (0: now)
     // thumbs up received this session: ours, and those of each other car drawn whole now
     get myKudos() { return myKudos; },
     kudosCars(out) {
       for (const o of others.values()) if (o.kn && o.model && o.near) out.push({ group: o.model.group, car: o.modelCar, n: o.kn, from: o.kf });
       return out;
     },
-    kudosWait(id) { return Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
+    // seconds until another thumbs up may go to this player (0: now; Infinity: we gave them KUDOS_PAIR today,
+    // their collection's share for one player)
+    kudosWait(id) { return kudosFrom(others.get(id)?.kf, myId, name) >= KUDOS_PAIR ? Infinity : Math.max(0, KUDOS_GAP_S - (performance.now() / 1000 - (kudosAt.get(id) ?? -1e9))); },
     // "M3 LAP RECORD 1:23.45" for a driver who set a record lately (and still holds it), else ''
     recordOf,
     recordTime,

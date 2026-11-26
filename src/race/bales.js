@@ -2,8 +2,8 @@
 // round bales standing on end, 1.2 m across and high, in netting, with a white TARTU VALD banner wrapped
 // half way round; every few a bale in white wrap.
 //
-// A bale weighs about 260 kg (a round bale of dry straw this size) and drags over the grass with a friction of
-// about 0.75. The car and a bale trade momentum where they touch (the car's mass and turning inertia
+// A bale weighs about 340 kg (a round bale of straw this size, damp from standing out) and drags over the grass
+// with a friction of about 0.75. The car and a bale trade momentum where they touch (the car's mass and turning inertia
 // against the bale's), so a brush at walking pace only nudges it and friction stops it within a hand's
 // width, a clip at speed sends it sliding and spinning and takes a good bite out of the car's speed and
 // line, and a square hit lifts its far edge: under about 45 degrees it drops back, over that it goes over
@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
 
-const R = 0.6, H = 1.2, MASS = 260, MU = 0.75, REST = 0, G = 9.81;   // (straw does not bounce; its rim digs into the turf as it slides)
+const R = 0.6, H = 1.2, MASS = 340, MU = 0.75, REST = 0, G = 9.81;   // (straw does not bounce; its rim digs into the turf as it slides)
 // How heavy a bale is to the car depends on how squarely it is met (Martin 23 Nov: "If I hit a bale full on with
 // throttle on, it hardly slows my pace, maybe add a bit of weight. Just brushing it and like halfway hits do not
 // penalize that much"): square on the nose or tail, within SQUARE of the bumper's half width from its middle, the
@@ -20,7 +20,9 @@ const R = 0.6, H = 1.2, MASS = 260, MU = 0.75, REST = 0, G = 9.81;   // (straw d
 // round its own axis and only LIGHT kg of it are in the way; in between, in between.
 // (Martin 23 Nov 23:56, more: "a bit more weight ... more of a penalty when hitting them, still edges less hit, middle
 // full hit impact": square on 480 to 680 kg, the edges 230 to 260)
-const HEAVY = 680, LIGHT = 260, SQUARE = 0.3, SQUARE_END = 0.8;
+// (Martin 26 Nov: "add more weight to the haybales": square on 680 to 950 kg, the edges 260 to 340, and as much
+// heavier to turn about its axis)
+const HEAVY = 950, LIGHT = 340, SQUARE = 0.3, SQUARE_END = 0.8;
 const IY = 0.5 * MASS * R * R;                 // turning about its own axis
 const TIP = Math.atan2(R, H / 2);              // lean past which it falls over (45 degrees for this shape)
 const CORNER = 0.45;                           // how round the car's corners are taken to be (m)

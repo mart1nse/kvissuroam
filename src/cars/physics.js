@@ -781,12 +781,13 @@ function substep(car, input, world, dt) {
     RG[o] = g; RG[o + 1] = x; RG[o + 2] = z;
     return g;
   };
-  if (roofs) world.onRoof = false;
+  if (roofs) { world.onRoof = false; world.topHit = null; }
   let hFL = gAt(0, pFLx, pFLz, car.a, -hw);
   let hFR = gAt(1, pFRx, pFRz, car.a, hw);
   let hRL = gAt(2, pRLx, pRLz, -car.b, -hw);
   let hRR = gAt(3, pRRx, pRRz, -car.b, hw);
   const onRoof = roofs && world.onRoof;        // (a wheel is on a house's roof, however low)
+  car.onTop = roofs ? world.topHit : null;     // (or on another vehicle's top: src/cars/tops.js, it carries the car)
   // stones under the wheels (src/cars/stones.js): each wheel stands as high as a tyre rolls up them
   let stn = null;
   if (world.stonesNear && (car.stone || world.stoneCount)) {
@@ -1803,7 +1804,7 @@ export function resetCar(car, pose) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.y = pose.y ?? car.y;
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
-  car.tip = null; car.tipped = 0; car.roofG?.fill(NaN); car.highAt = undefined; car.onHigh = false; car.rise = 0;
+  car.tip = null; car.tipped = 0; car.roofG?.fill(NaN); car.highAt = undefined; car.onHigh = false; car.rise = 0; car.onTop = car.carriedBy = null;
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;

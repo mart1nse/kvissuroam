@@ -50,7 +50,7 @@ export function shelterSolids(box) {
   const ux = Math.cos(box.yaw), uz = -Math.sin(box.yaw), nx = Math.sin(box.yaw), nz = Math.cos(box.yaw);
   box.solids = pieces(box).map(([s0, s1, n0, n1], k) => {
     const s = (s0 + s1) / 2, n = (n0 + n1) / 2;
-    return { x: box.x + ux * s + nx * n, z: box.z + uz * s + nz * n, yaw: box.yaw, hx: (s1 - s0) / 2, hz: (n1 - n0) / 2, removable: k === 0 };
+    return { x: box.x + ux * s + nx * n, z: box.z + uz * s + nz * n, yaw: box.yaw, hx: (s1 - s0) / 2, hz: (n1 - n0) / 2, removable: k === 0, tall: 2.6 };   // (tall: up to the roof, which a car may land on)
   });
   Object.defineProperty(box, 'solids', { enumerable: false });
   return box.solids;
@@ -231,7 +231,7 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
 
   // ---- the car against the shelter: the closest point of its outline to the box; a hit is when it is up
   // against it and was coming in at speed the frame before
-  let prev = null, settled = true;
+  let prev = null, settled = true, onRoof = false;
   function update(car, dt, sound) {
     cool = Math.max(0, cool - dt);
     const dx = car.x - box.x, dz = car.z - box.z;
@@ -272,6 +272,22 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
       }
     }
     prev = near ? [vx, vz] : null;
+    // a car come down on its roof, at any speed: every pane bursts out under the weight, the frame stands as it
+    // was (Martin, 26 Nov: "make the bus shelter glass shatter when landing ontop of it with any speed.
+    // contsuction itself can remain sound")
+    const onIt = car.onTop === top;
+    if (onIt && !onRoof) {
+      const speed = 4 + Math.hypot(car.vx, car.vy);
+      let broke = 0;
+      for (const q of P) {
+        if (q.broken) continue;
+        const mx = (q.a[0] + q.b[0]) / 2 - box.x, mz = (q.a[1] + q.b[1]) / 2 - box.z, ml = Math.hypot(mx, mz) || 1;
+        shatter(q, mx / ml, mz / ml, speed);
+        broke++;
+      }
+      if (broke) { sound?.smash?.(broke, 1); stats.smash('glass', broke); settled = false; }
+    }
+    onRoof = onIt;
     if (!settled) {
       bendFrames(dt);
       const moving = shards.update(dt);
@@ -280,8 +296,12 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     }
   }
 
+  // its roof, for a car to come down on (src/cars/tops.js; Martin, 26 Nov: "I would like to land on bus shelters
+  // too"): flat, the sheet over the box a hand's width all round
+  const top = { x: box.x, z: box.z, y, yaw: -box.yaw, hl: box.hz + 0.08, hw: box.hx + 0.08, h: H + 0.1, flat: true, dx: 0, dz: 0, dyaw: 0, vx: 0, vz: 0 };
+  topWorld = world;
   const info = () => ({ box, y, broken: P.filter((q) => q.broken).length, panes: P.length, bend: total, shards: shards.count, through });
-  const rec = { update, hit, box, info };
+  const rec = { update, hit, box, info, top };
   // has it been hit at all (a damaged shelter is kept as it is while its piece of the map is loaded)
   rec.damaged = () => total > 0 || shards.count > 0;
   rec.through = () => through;
@@ -296,8 +316,16 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
   return rec;
 }
 
+// (and the roofs of those near the car, as tops it can stand on; one crashed through has none)
+const roofs = [];
+let topWorld = null;
 export function updateShelters(car, dt, sound) {
-  for (const s of shelters) s.update(car, dt, sound);
+  roofs.length = 0;
+  for (const s of shelters) {
+    s.update(car, dt, sound);
+    if (!s.through() && Math.abs(s.box.x - car.x) < 25 && Math.abs(s.box.z - car.z) < 25) roofs.push(s.top);
+  }
+  topWorld?.setTops?.('shelters', roofs);
 }
 
 // (for the tools: where the shelters are and how broken)

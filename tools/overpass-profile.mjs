@@ -16,7 +16,7 @@ globalThis.fetch = async (name) => {
 const dir = mkdtempSync(join(tmpdir(), 'lr-'));
 // (data.js hands long work to the page's work queue, src/jobs.js: here its jobs are run at once)
 writeFileSync(join(dir, 'jobs.mjs'), 'export const jobs = { add(f) { const g = f(); if (g && g.next) for (const _ of g); }, late: () => false };\n');
-writeFileSync(join(dir, 'data.mjs'), readFileSync(join(root, 'src/world/data.js'), 'utf8').replace('import.meta.env.BASE_URL', "''").replace("'../jobs.js'", "'./jobs.mjs'"));
+writeFileSync(join(dir, 'data.mjs'), readFileSync(join(root, 'src/world/data.js'), 'utf8').replace('import.meta.env.BASE_URL', "''").replace("'../jobs.js'", "'./jobs.mjs'").replace("'../cars/tops.js'", `'${pathToFileURL(join(root, 'src/cars/tops.js')).href}'`));
 const { loadWorldData } = await import(pathToFileURL(join(dir, 'data.mjs')));
 const world = await loadWorldData();
 const [X, Z, R = 4] = process.argv.slice(2).map(Number);

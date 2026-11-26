@@ -4,12 +4,11 @@
 // to a stop; then floored to 200 km/h, the pedal let go for 3.5 s, floored again, let go and braked hard to a
 // stop. The sound is made by the game's own code in Chromium's OfflineAudioContext, stepped at 60 Hz as the game
 // steps it, at the game's levels, with the Rocket's fans and the wind as audio.js plays them (copied below), so a
-// clip is what the driver hears. --solo leaves fans and wind out; --nowhine leaves the plain whine out of a car
-// whose motors are heard with it (the Enyaq, the bZ4X), to measure the motors' share.
+// clip is what the driver hears. --solo leaves fans and wind out.
 //
 // Run: NODE_PATH=$(npm root -g) node tools/motor-sound-demo.mjs <outdir> [kinds] [--solo] [--gain=<dB>]
-//   --car=<id> (default rocket; enyaq, bz4x). kinds: old (the plain sine of audio.js), the car's own sound (gear,
-//   enyaq, bz4x), none (fans and wind alone); default old and the car's own. Writes <outdir>/<kind>.wav and prints, for each part
+//   --car=<id> (default rocket; another car for its drive). kinds: old (the plain sine of audio.js), whine (that sine
+//   as the car has it, with the fifth beside it in the Enyaq and the bZ4X), the car's own sound (gear), none (fans and wind alone); default old and the car's own. Writes <outdir>/<kind>.wav and prints, for each part
 //   of the drive, the level and where the sound's weight lies. --gain: make-up for listening (default 13 dB,
 //   the same for every clip, so they compare as they would in the game). --top: another drive, floored from a
 //   standstill to 320 km/h on the motors alone, the pedal let go, braked hard to a stop (the pitch over 200 km/h).
@@ -29,13 +28,13 @@ const flag = (k) => process.argv.find((a) => a.startsWith(`--${k}`));
 const val = (k) => flag(`${k}=`)?.slice(k.length + 3);
 const out = pos[0] || 'motor-demo';
 
-const SOLO = !!flag('solo'), NOWHINE = !!flag('nowhine'), GAIN = 10 ** (Number(val('gain') ?? 13) / 20);
+const SOLO = !!flag('solo'), GAIN = 10 ** (Number(val('gain') ?? 13) / 20);
 const SR = 48000, FPS = 60, ID = val('car') || 'rocket';
 mkdirSync(out, { recursive: true });
 
 // ---- the drive
 const spec = CARS[ID];
-const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)];
+const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)].filter(Boolean);
 const FAST = Math.min(200, (spec.limiter || 250) - 8);   // the fast part's speed: 200 km/h, or what the car can do
 const world = { meta: { riverLevel: -100 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
 if (spec.thrusters) refillTank(ID);
@@ -99,8 +98,8 @@ page.on('pageerror', (e) => console.log('  [page error]', e.message));
 await page.goto(`http://127.0.0.1:${srv.address().port}/`);
 
 for (const kind of kinds) {
-  await page.evaluate(async ({ kind, F, SR, FPS, T, SOLO, NOWHINE, spec }) => {
-    const { createMotor, plainWhine, plainWhineHz } = await import('/src/audio-motor.js');
+  await page.evaluate(async ({ kind, F, SR, FPS, T, SOLO, spec }) => {
+    const { createMotor, plainWhine, plainWhineHz, hasFifth, fifthShare, FIFTH } = await import('/src/audio-motor.js');
     const ctx = new OfflineAudioContext(1, Math.ceil(T * SR), SR);
     const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);   // (audio.js: master 0.5; an electric car's bus goes to it dry)
     const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
@@ -108,20 +107,20 @@ for (const kind of kinds) {
     const noise = ctx.createBufferSource(); noise.buffer = nb; noise.loop = true; noise.start(0);
     const n = F.length / 4;
     // the motors
-    // (none: fans and wind alone. A car's own motors are heard as the game plays them: where they go with the
-    // plain whine, with it, unless --nowhine)
-    let plain = kind === 'old';
-    if (kind !== 'none' && kind !== 'old') {
+    // (none: fans and wind alone)
+    if (kind !== 'none' && kind !== 'old' && kind !== 'whine') {
       const m = createMotor(ctx, master, noise, spec, kind);
       for (let i = 0; i < n; i++) m.step(i / FPS, F[i * 4], F[i * 4 + 2], F[i * 4 + 3], false);
-      plain = m.blend && !NOWHINE;
     }
-    if (plain) {
-      const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0; o.connect(g).connect(master); o.start(0);
+    if (kind === 'old' || kind === 'whine') {
+      const sine = () => { const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0; o.connect(g).connect(master); o.start(0); return [o, g]; };
+      const [o, g] = sine(), [o5, g5] = sine(), five = kind === 'whine' && hasFifth(spec);
       for (let i = 0; i < n; i++) {
-        const t = i / FPS, vw = F[i * 4], thr = F[i * 4 + 2];
+        const t = i / FPS, vw = F[i * 4], thr = F[i * 4 + 2], G = plainWhine(vw, thr), f = five ? fifthShare(vw) : 0;
         o.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
-        g.gain.setTargetAtTime(plainWhine(vw, thr), t, 0.08);
+        g.gain.setTargetAtTime(G * Math.sqrt(1 - f * f), t, 0.08);
+        o5.frequency.setTargetAtTime(plainWhineHz(vw) * FIFTH, t, 0.05);
+        g5.gain.setTargetAtTime(G * f, t, 0.08);
       }
     }
     if (!SOLO) {
@@ -156,7 +155,7 @@ for (const kind of kinds) {
     }
     const buf = await ctx.startRendering();
     await fetch(`/__out/${kind}`, { method: 'POST', body: buf.getChannelData(0) });
-  }, { kind, F, SR, FPS, T, SOLO, NOWHINE, spec: { gears: spec.gears, wheelRadius: spec.wheelRadius, fanDown: spec.fanDown || 0 } });
+  }, { kind, F, SR, FPS, T, SOLO, spec: { id: spec.id, gears: spec.gears, wheelRadius: spec.wheelRadius, fanDown: spec.fanDown || 0 } });
   const b = files.get(`/__out/${kind}`), x = new Float32Array(b.buffer, b.byteOffset, b.length / 4);
   // how loud each part is, and its peak
   const db = (v) => (20 * Math.log10(Math.max(v, 1e-9))).toFixed(1);

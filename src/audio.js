@@ -9,7 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
-import { createMotor, motorKind, motorRegen, plainWhine, plainWhineHz } from './audio-motor.js';
+import { createMotor, motorKind, motorRegen, plainWhine, plainWhineHz, hasFifth, fifthShare, FIFTH } from './audio-motor.js';
 import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
@@ -32,12 +32,12 @@ export function spinAmount(c) {
 }
 
 export function createAudio() {
-  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
+  let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, fifth, fifthGain, skidGain, skidFilt, spinGain, spinFilt;
   let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
   let fan = null, fanS = 0;   // a fan car's suction fans (spec.fanDown): made when such a car is first driven
   let motor = null, motorWant = null;   // the Rocket's motors (src/audio-motor.js): made when it is first driven
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
-  let muted = false, ev = false, turbo = false, background = false;
+  let muted = false, fifthOn = false, ev = false, turbo = false, background = false;
   let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
   let bus = null, space = null;
   let synth = null, synthGain = null, synthCfg = null, carId = null, punch = null, growl = 0, room = 0, roomGear = 0, roomDown = 0;
@@ -69,6 +69,10 @@ export function createAudio() {
     whine = ctx.createOscillator(); whine.type = 'sine';
     whineGain = ctx.createGain(); whineGain.gain.value = 0;
     whine.connect(whineGain).connect(bus); whine.start();
+    // (the second whine of a car with two motors, src/audio-motor.js fifthShare)
+    fifth = ctx.createOscillator(); fifth.type = 'sine';
+    fifthGain = ctx.createGain(); fifthGain.gain.value = 0;
+    fifth.connect(fifthGain).connect(bus); fifth.start();
 
     const len = ctx.sampleRate * 2;
     const buf = noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -336,11 +340,14 @@ export function createAudio() {
     if (ev) {
       engGain.gain.setTargetAtTime(0, t, 0.05);
       if (synth) synth.port.postMessage({ state: { on: 0 } });
-      // (a car with motors of its own sound has those instead of the plain whine, or with it: `blend`)
+      // (a car with motors of its own sound has those instead of the plain whine)
       if (motorWant && !motor && noiseSrc) { motor = createMotor(ctx, bus, noiseSrc, car.spec, motorWant); if (!motor) motorWant = null; }
       if (motor) motor.step(t, vw, car.throttle, motorRegen(car, v), dead);
+      const g = dead || motor ? 0 : plainWhine(vw, car.throttle), f = fifthOn ? fifthShare(vw) : 0;
       whine.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
-      whineGain.gain.setTargetAtTime(dead || (motor && !motor.blend) ? 0 : plainWhine(vw, car.throttle), t, 0.08);
+      whineGain.gain.setTargetAtTime(g * Math.sqrt(1 - f * f), t, 0.08);
+      fifth.frequency.setTargetAtTime(plainWhineHz(vw) * FIFTH, t, 0.05);
+      fifthGain.gain.setTargetAtTime(g * f, t, 0.08);
     } else {
       // turbos whistle as they spool, rising in pitch with boost and revs (inside the engine synthesiser;
       // the oscillator is only for browsers without it), and vent their boost when the throttle shuts
@@ -363,6 +370,7 @@ export function createAudio() {
         }
         wasShift = !!car.shiftCut;
       } else whineGain.gain.setTargetAtTime(0, t, 0.05);
+      fifthGain.gain.setTargetAtTime(0, t, 0.05);
       const e = car.spec.engine;
       // a downshift blips, crackles and clunks, an upshift barks as it bites; too far down by hand, the
       // engine is dragged over its limit
@@ -439,6 +447,9 @@ export function createAudio() {
     v.whine = ctx.createOscillator(); v.whine.type = 'sine';
     v.whineGain = ctx.createGain(); v.whineGain.gain.value = 0;
     v.whine.connect(v.whineGain).connect(v.mix); v.whine.start();
+    v.fifth = ctx.createOscillator(); v.fifth.type = 'sine';
+    v.fifthGain = ctx.createGain(); v.fifthGain.gain.value = 0;
+    v.fifth.connect(v.fifthGain).connect(v.mix); v.fifth.start();
     v.tyreFilt = ctx.createBiquadFilter(); v.tyreFilt.type = 'bandpass'; v.tyreFilt.frequency.value = 1300; v.tyreFilt.Q.value = 5;
     v.tyreGain = ctx.createGain(); v.tyreGain.gain.value = 0;
     noiseSrc.connect(v.tyreFilt).connect(v.tyreGain).connect(v.mix);
@@ -464,7 +475,7 @@ export function createAudio() {
     const t = ctx.currentTime;
     v.id = r.id; v.carId = r.spec.id; v.skid = v.spin = v.lastBoost = 0;
     if (v.jetGain) { v.jetGain.gain.setTargetAtTime(0, t, 0.03); v.jet = 0; }
-    v.ev = r.spec.engine.type === 'ev';
+    v.ev = r.spec.engine.type === 'ev'; v.fifthOn = v.ev && hasFifth(r.spec);
     v.cfg = v.ev ? null : ENGINE_SOUNDS[r.spec.id] || null;
     // (a car with motors of its own sound, src/audio-motor.js: made when it is first heard, taken apart when let go)
     v.motorWant = v.ev ? motorKind(r.spec) : null;
@@ -496,8 +507,11 @@ export function createAudio() {
     if (v.ev) {
       if (v.motorWant && !v.motor) { v.motor = createMotor(ctx, v.mix, noiseSrc, s, v.motorWant); if (!v.motor) v.motorWant = null; }
       if (v.motor) v.motor.step(t, vw, r.throttle, motorRegen(r, speed), false);
+      const g = v.motor ? 0 : plainWhine(vw, r.throttle), f = v.fifthOn ? fifthShare(vw) : 0;
       v.whine.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
-      v.whineGain.gain.setTargetAtTime(v.motor && !v.motor.blend ? 0 : plainWhine(vw, r.throttle), t, 0.08);
+      v.whineGain.gain.setTargetAtTime(g * Math.sqrt(1 - f * f), t, 0.08);
+      v.fifth.frequency.setTargetAtTime(plainWhineHz(vw) * FIFTH, t, 0.05);
+      v.fifthGain.gain.setTargetAtTime(g * f, t, 0.08);
     } else {
       if (e.turbo) {
         const wh = e.turbo.whistle ?? 1;
@@ -509,6 +523,7 @@ export function createAudio() {
           v.lastBoost = 0;
         }
       } else v.whineGain.gain.setTargetAtTime(0, t, 0.05);
+      v.fifthGain.gain.setTargetAtTime(0, t, 0.05);
       if (v.synth && v.cfg) v.synth.port.postMessage({ state: { rpm: Math.max(r.rpm, e.idle * 0.8), throttle: r.throttle, boost: b, on: 1, redline: e.redline, idle: e.idle, cut: r.revCut ? 1 : 0, shift: 0 } });
     }
     // a Rocket's nozzles: the hiss, and the burst when it lifts off
@@ -690,7 +705,7 @@ export function createAudio() {
     setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {
-      ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0; shiftSound.reset();
+      ev = spec.engine.type === 'ev'; fifthOn = ev && hasFifth(spec); turbo = !!spec.engine.turbo; lastBoost = 0; shiftSound.reset();
       applySpace();
       carId = ev ? null : spec.id;
       motorWant = ev ? motorKind(spec) : null;

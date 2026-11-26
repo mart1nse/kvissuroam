@@ -271,14 +271,16 @@ body:not(.touch) .touch-only { display: none; }
   font-size: 8px; letter-spacing: .16em; color: #fff; opacity: .5; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
 /* The thrusters of a car that has them (the Roadster Rocket, src/rocketui.js). Phones, as Martin drew them on a
    screenshot (25 Nov): BOOST by the left thumb, right of the rev counter and level with its top; FLIP by the
-   right thumb, above BRAKE and beside the online list, whose names are kept short of it (body.rocketpad). Each
+   right thumb, above BRAKE on the same line as BOOST (26 Nov: "a bit to the right and a bit down, perhaps on
+   the same hor line") and beside the online list, whose names are kept short of it (body.rocketpad). Each
    button is its own gauge, filling from the bottom with what is in the tank (FLIP in two halves, one a jump),
-   and during the reload filling up again with the time left. Desktop: a slim bar under the rev counter with
+   and FLIP shows the time until the tank holds a jump again. Desktop: a slim bar under the rev counter with
    the keys. */
 .pad.rocket { position: static; display: contents; }
 .pad.rocket button.boost { left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2 + var(--td) / 2 + 5px); bottom: calc(var(--padh) + 6px + var(--td) * 1.08 - var(--rk) / 2); }
+/* (FLIP on BOOST's line, but never nearer than 8px to BRAKE under it: a short phone's rev counter is small) */
 .pad.rocket button.flip { right: calc(var(--flipr) - var(--rk) / 2);
-  bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + clamp(24px, 30vh - 62px, 72px)); }
+  bottom: max(calc(var(--padh) + 6px + var(--td) * 1.08 - var(--rk) / 2), calc(max(14px, env(safe-area-inset-bottom)) + clamp(60px, 14vh, 110px) + clamp(72px, 24vh, 118px) + 8px)); }
 /* (the street name ends short of BOOST: closer letters, and the longest names are cut; not on a short phone,
    where the name stands over the right steering button) */
 @media (min-height: 341px) { body.touch.rocketpad #street { max-width: calc(var(--padw) / 2 + var(--td) / 2 + 1px); font-size: clamp(9px, 1.2vw, 11px); letter-spacing: .04em;
@@ -346,8 +348,8 @@ body.touch {
   /* the rev counter: as big as fits between the street name and the steering buttons */
   --td: clamp(76px, min(31vh, 100vh - max(8px, env(safe-area-inset-top)) - var(--mm) - 26px - var(--padh) - 10px), 150px);
   --rk: clamp(50px, 15.5vh, 66px);                                 /* a Rocket's BOOST and FLIP buttons */
-  /* FLIP's middle, from the right: a third of the way into BRAKE */
-  --flipr: calc(max(18px, env(safe-area-inset-right)) + 1.67 * var(--padw) + clamp(10px, 2vw, 20px));
+  /* FLIP's middle, from the right: over the middle of BRAKE */
+  --flipr: calc(max(18px, env(safe-area-inset-right)) + 1.5 * var(--padw) + clamp(10px, 2vw, 20px));
 }
 /* the rev counter centred over the left steering button, as big as fits between the street name and the buttons */
 body.touch #dash { right: auto; top: auto; left: calc(max(18px, env(safe-area-inset-left)) + var(--padw) / 2); bottom: calc(var(--padh) + 6px); transform: translateX(-50%);

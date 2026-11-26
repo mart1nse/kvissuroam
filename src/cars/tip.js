@@ -17,7 +17,7 @@
 const G = 9.81;
 export const HANG = 0.55;                    // m a wheel's ground lies below the others' for it to hang
 const V_FULL = 30 / 3.6, V_NONE = 55 / 3.6;  // full below, none above (m/s)
-const CLEAR = 0.16;                          // m from the ground to the car's belly
+export const CLEAR = 0.16;                          // m from the ground to the car's belly
 const LET_GO = 0.08;                         // m of car still over the edge when it is let go
 const D_MAX = 1.3, W_MAX = 3.5;              // most it tips before the air has it (rad), fastest (rad/s)
 const STEEP = 1.0;                           // the top's steepest slope along the car (a 45 degree roof)
@@ -36,8 +36,10 @@ const which = (t) => (t.ax === 0 ? (t.sg > 0 ? 0 : 1) : t.sg > 0 ? 2 : 3);
 // Does an edge run under the car? h: the ground under the wheels [FL, FR, RL, RR] (one wheel alone over an edge
 // is given the height the other three stand at, so the car stays on three); sets car.tip when an axle or a side
 // hangs. (fx, fz) forward, (rx, rz) to the right, gy the height the ground is asked at.
-export function edgeStart(car, world, h, fx, fz, rx, rz, gy) {
-  if (car.airborne || car.inWater || car.load < 0.3 || edgeFade(car) <= 0) return;
+// landing: a car in the air that has come down to the highest of that ground (on the edge of a roof with one end
+// or one side: those wheels have landed, the mean of the four has not).
+export function edgeStart(car, world, h, fx, fz, rx, rz, gy, landing = false) {
+  if (car.inWater || edgeFade(car) <= 0 || (!landing && (car.airborne || car.load < 0.3))) return;
   const s = car.spec, L = s.wheelbase, hw = s.track / 2;
   const mx = car.x + fx * (car.a - L / 2), mz = car.z + fz * (car.a - L / 2);       // the middle of the four wheels
   const hC = at(world, mx, mz, gy);
@@ -55,6 +57,8 @@ export function edgeStart(car, world, h, fx, fz, rx, rz, gy) {
     // end is down already, the body's own lean as it comes to the edge)
     const ref = pitchAx ? Math.atan2(sg * (hC - hL), m) : Math.atan2(sg * (hL - hC), m);
     const d = pitchAx ? sg * (ref - car.pitch) : sg * (car.roll - ref);
+    // (a body that lies quite otherwise than the top does, on the facets of a roof: no edge it is driving off)
+    if (d < -0.15 || d > 0.4) continue;
     car.tip = { ax: pitchAx ? 0 : 1, sg, ref, d: Math.max(-0.1, Math.min(0.3, d)), w: 0, hS, h1: h[c1], h2: h[c2], dm: 0, last: car.time };
     return;
   }
@@ -67,10 +71,16 @@ export function edgeStart(car, world, h, fx, fz, rx, rz, gy) {
 
 const out = { ax: 0, y: 0, gp: 0, gr: 0, ang: 0, rate: 0 };
 // The car is let go into the air, turning as it was.
-function letGo(car, t) {
+// below: the ground under its hanging wheels. Where that is nearer under the car than its nose (or its side) will
+// reach as it lies now (a step from one roof down to the next, a low terrace), it has no room to fly on turning
+// and come down on that end: it is let go with its turning stopped, and is simply on the ground below.
+function letGo(car, t, below) {
+  car.tip = null; car.lastGround = null;
+  const reach = (t.ax === 0 ? car.halfLen : car.halfWid) * Math.sin(Math.min(D_MAX, Math.max(0, t.d)));
+  if (car.hy - below < reach) { if (t.ax === 0) car.pitchRate = 0; else car.rollRate = 0; return null; }
   const w = Math.min(W_MAX, Math.max(0, t.w));
   if (t.ax === 0) car.pitchRate = -t.sg * w; else car.rollRate = t.sg * w;
-  car.tip = null; car.tipped = 0.3; car.lastGround = null;      // (tipped: also the pace it falls back at once down, physics.js)
+  car.tipped = 0.3;      // (tipped: also the pace it falls back at once down, physics.js)
   return null;
 }
 
@@ -84,9 +94,9 @@ export function edgeStep(car, world, h, fx, fz, rx, rz, dt) {
   if (car.time - t.last > 0.1 || car.airborne || car.inWater) { car.tip = null; return null; }
   t.last = car.time;
   const k = which(t), [c1, c2] = CARRY[k], [g1, g2] = HUNG[k], pitchAx = t.ax === 0;
-  const f = edgeFade(car);
+  const f = edgeFade(car), below = Math.max(h[g1], h[g2]);
   // a carrying wheel has gone over as well (the car turned, or the last of it has passed)
-  if (f <= 0 || h[c1] < t.h1 - HANG || h[c2] < t.h2 - HANG) return letGo(car, t);
+  if (f <= 0 || h[c1] < t.h1 - HANG || h[c2] < t.h2 - HANG) return letGo(car, t, below);
   const hS = (h[c1] + h[c2]) / 2;
   t.h1 = h[c1]; t.h2 = h[c2]; t.hS = hS;
   const span = pitchAx ? L : 2 * hw, m = span / 2;
@@ -98,14 +108,14 @@ export function edgeStep(car, world, h, fx, fz, rx, rz, dt) {
   // where the edge is, from the carrying wheels towards the hanging ones
   const beta = pitchAx ? t.sg * t.ref : -t.sg * t.ref, tb = Math.tan(beta), gy = hS + 0.4;
   const onTop = (d) => at(world, sx + ux * d, sz + uz * d, gy) > hS + d * tb - HANG / 2;
-  if (!onTop(0)) return letGo(car, t);
+  if (!onTop(0)) return letGo(car, t, below);
   let se = span;
   if (!onTop(span)) {
     let lo = 0, hi = span;
     for (let i = 0; i < 6; i++) { const mid = (lo + hi) / 2; if (onTop(mid)) lo = mid; else hi = mid; }
     se = (lo + hi) / 2;
   }
-  if (se < LET_GO) return letGo(car, t);
+  if (se < LET_GO) return letGo(car, t, below);
   // gravity turns the hanging end down: about the carrying wheels, until the belly lies on the edge; about the
   // edge once the car's weight is past it
   const dm = Math.asin(Math.min(1, CLEAR / se));
@@ -116,8 +126,16 @@ export function edgeStep(car, world, h, fx, fz, rx, rz, dt) {
   if (t.d > D_MAX) { t.d = D_MAX; t.w = 0; }
   t.w = Math.min(t.w, W_MAX); t.dm = dm;
   // the ground line under the body: through the carrying wheels, or lifted to lie on the edge by the belly
-  const ang = beta - t.d, sin = Math.sin(ang);
-  const y = Math.max(hS + m * sin, hS + se * tb - CLEAR + (m - se) * sin);
+  let ang = beta - t.d, sin = Math.sin(ang);
+  let y = Math.max(hS + m * sin, hS + se * tb - CLEAR + (m - se) * sin);
+  // the end of the body that hangs has come down on what is below (a lower roof a step down): it rests there
+  const far = span + (pitchAx ? car.halfLen - (t.sg > 0 ? car.a : car.b) : car.halfWid - hw), reach = far * Math.cos(ang);
+  const under = at(world, sx + ux * reach, sz + uz * reach, gy), end = y + (far - m) * sin;
+  if (end < under) {
+    t.d = Math.max(-0.1, t.d - Math.min(0.2, (under - end) / far)); t.w = 0;
+    ang = beta - t.d; sin = Math.sin(ang);
+    y = Math.max(hS + m * sin, hS + se * tb - CLEAR + (m - se) * sin);
+  }
   // the hanging wheels have come down on something
   if (Math.max(h[g1], h[g2]) >= y + m * sin - 0.03) { car.tip = null; return null; }
   const past = se < arm ? (arm - se) / arm : 0;      // how much of the car's weight is over the edge: it slides on

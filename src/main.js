@@ -169,7 +169,7 @@ import { playtechWalls } from './race/playtech.js';
 import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
-import { pickFromHistory, searchDry, dryLevel } from './respawn.js';
+import { pickFromHistory, searchDry, dryLevel, roofLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
 import { createRaceMode } from './race/racemode.js';
@@ -1450,7 +1450,7 @@ function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
-  wetAt = null; wreckAt = null;
+  wetAt = null; wreckAt = null; roofPut = null;
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
@@ -1483,12 +1483,28 @@ function goHome() {
 // R: back to the newest remembered spot that is dry. After a plunge into the water that is a spot at
 // least three seconds before the car went in and 15 m from where it did, with no water round it (on a
 // bridge: the whole car on the deck); if no such spot is remembered, the nearest dry street.
+// Up on a house's roof (Martin, 26 Nov 2026: "if there is a house you cannot get down from, like some sharp edges
+// round the roof edge, then the first R puts you back on the roof and the next R puts you somewhere near it"): the
+// spots remembered on the roof are tried first, as any are; R again from where that put the car, before it has
+// driven ROOF_R_FAR from there, is the street next to the house.
+const ROOF_R_FAR = 6;
+let roofPut = null;                // where R last put the car back on a roof
 let respawning = false;
 async function goLastSpot() {
   if (respawning) return;
   respawning = true;
   try {
     const sx = wetAt ? wetAt.x : car.x, sz = wetAt ? wetAt.z : car.z;
+    if (roofPut && !wetAt && Math.hypot(car.x - roofPut.x, car.z - roofPut.z) < ROOF_R_FAR && Math.abs(car.y - roofPut.y) < 3) {
+      for (let i = history.length - 1; i >= 0; i--) if (history[i].roof) history.splice(i, 1);
+      const down = searchDry(world, sx, sz, bigmap.nearestRoad, { from: 0, to: 250 });
+      if (down) {
+        place(down);
+        race?.hopped(down.x, down.z);
+        stage?.reset(car.time);
+        return;
+      }
+    }
     // (off its roof after a crash: a spot at least three seconds before the wall, so lying there a while buys nothing)
     const opts = wetAt ? { ref: wetAt.t, sx, sz, minAge: 3, minDist: 15 } : { ref: wreckAt ? wreckAt.t : car.time, sx, sz, minAge: 3, minDist: 0 };
     let pick = pickFromHistory(world, history, opts);
@@ -1506,6 +1522,7 @@ async function goLastSpot() {
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
+    if (pick.roof) roofPut = { x: pick.x, z: pick.z, y: pick.y };
     race?.hopped(pick.x, pick.z);
     stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
@@ -2193,12 +2210,16 @@ function frame(ts) {
     // and on a timed lap or stage run every such crash is seconds, however the car lands (race.js, raadi.js)
     if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); race?.crashed(); stage?.crashed(); }
     else if (!car.crash) wreckAt = null;
-    if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
+    // (up on a house's roof, where the walls are below the car: a spot there is one to be put back on, the first
+    // R; see goLastSpot)
+    const onRoof = histTimer <= 0 && car.onHigh && !car.inWater && !car.airborne && !car.tip && !car.tipped && !car.crash
+      && roofLevel(world, car) !== null;
+    if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && (onRoof || world.sdfAt(car.x, car.z) > 1.6)) {
       histTimer = 0.5;
       // (standing still adds nothing: the list then reaches further back along the route)
       const last = history[history.length - 1];
       if (!last || Math.hypot(car.x - last.x, car.z - last.z) > 3) {
-        history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time });
+        history.push({ x: car.x, z: car.z, yaw: car.yaw, y: car.y, t: car.time, roof: onRoof });
         if (history.length > 120) history.shift();
       }
     }

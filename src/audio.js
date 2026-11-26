@@ -9,6 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
+import { createMotor, motorKind, motorRegen } from './audio-motor.js';
 import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 
 const ENGINE_LEVEL = 0.4;
@@ -34,6 +35,7 @@ export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, skidGain, skidFilt, spinGain, spinFilt;
   let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
   let fan = null, fanS = 0;   // a fan car's suction fans (spec.fanDown): made when such a car is first driven
+  let motor = null, motorWant = null;   // the Rocket's motors (src/audio-motor.js): made when it is first driven
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, ev = false, turbo = false, background = false;
   let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
@@ -334,8 +336,11 @@ export function createAudio() {
     if (ev) {
       engGain.gain.setTargetAtTime(0, t, 0.05);
       if (synth) synth.port.postMessage({ state: { on: 0 } });
+      // (a car with motors of its own sound has those instead of the plain whine)
+      if (motorWant && !motor && noiseSrc) { motor = createMotor(ctx, bus, noiseSrc, car.spec, motorWant); if (!motor) motorWant = null; }
+      if (motor) motor.step(t, vw, car.throttle, motorRegen(car, v), dead);
       whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
-      whineGain.gain.setTargetAtTime(dead ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
+      whineGain.gain.setTargetAtTime(dead || motor ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + car.throttle * 0.5), t, 0.08);
     } else {
       // turbos whistle as they spool, rising in pitch with boost and revs (inside the engine synthesiser;
       // the oscillator is only for browsers without it), and vent their boost when the throttle shuts
@@ -680,6 +685,8 @@ export function createAudio() {
       ev = spec.engine.type === 'ev'; turbo = !!spec.engine.turbo; lastBoost = 0; shiftSound.reset();
       applySpace();
       carId = ev ? null : spec.id;
+      motorWant = ev ? motorKind(spec) : null;
+      if (motor && motor.kind !== motorWant) { motor.stop(); motor = null; }
       if (ctx) sendConfig();
     },
     setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m || background ? 0 : 0.5, ctx.currentTime, 0.05); },
@@ -694,6 +701,8 @@ export function createAudio() {
     setNotify(on) { notify = !!on; }, get notify() { return notify; },
     // the tyre squeal: 'note' (the held note) or 'real' (modelled, public/tyre-worklet.js)
     setSquealKind, get squealKind() { return squealKind(); },
+    // (for tests: which of the motor sounds of src/audio-motor.js our car has, null for none)
+    get motorKind() { return motor?.kind || null; },
     // (for tests: which other cars have a voice, how far off they are and how loud)
     get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, node: v.out })); },
   };

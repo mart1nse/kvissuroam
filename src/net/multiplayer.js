@@ -1464,6 +1464,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // (garage, menu, another tab) for less than AWAY_S
     drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
+    // how many other cars are on a timed run within r of (x, z) now: their lap timer running (flag 8) and still
+    // sending (the Majoraadi pill's count, main.js trackPills)
+    hotNear(x, z, r) {
+      let n = 0;
+      for (const o of others.values()) { const p = o.pose; if (p && o.live && (p[20] & HOT) && (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) n++; }
+      return n;
+    },
     setName(n) {
       n = cleanName(n);
       if (badName(n)) return null;           // a racist slur: not taken, the box flashes (race/board.js)

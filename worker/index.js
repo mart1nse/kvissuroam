@@ -27,6 +27,7 @@ import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
 import { carLimitsSteps, judgeDrive } from '../src/race/plausible.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
+import { stageCheck } from './stagecheck.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -34,6 +35,7 @@ const TRACK = 'toomemagi';
 // 2:40.25). Toomemägi, 4.9 km: 2:00 is 147 km/h on average through the town. Raadi's stage, 1.73 km of gravel:
 // 70 s is 89 km/h (the best so far is 3:16).
 const LAP_MIN = 120000;
+const MARK_MIN = 30000;      // a lap or stage run timed by the server's clock is at least this long (each track's own least time is asked of the lap itself)
 // the other circuits whose times are kept, with that shortest time
 const STAGES = { raadi: 70000 };
 // Where the cars drive a stage (src/race/linelog.js; Martin 26 Nov 2026: the stage's painted wheel tracks are to be
@@ -365,6 +367,7 @@ export class Lobby extends DurableObject {
     this.lineN = null;            // track -> runs kept
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
+    this.limitNow = new Map();    // ... and the same once worked out (the race desk judges a finish without waiting)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
     // (checkpoint 2 about 10 s early, the audi200 record's replay shows the route) and the replay of that record.
     // The new gates (src/race/lapgates.js) stop such laps; the lap board is made again from what is left.
@@ -901,7 +904,7 @@ export class Lobby extends DurableObject {
     if (!t0) return;
     this.sql.exec('DELETE FROM lapmarks WHERE sid = ?', sid);
     ms = Math.round(Number(ms));
-    if (!(ms >= LAP_MIN && ms <= 3600000)) return;
+    if (!(ms >= MARK_MIN && ms <= 3600000)) return;
     this.sql.exec('INSERT INTO lapseen (sid, ms, took, at) VALUES (?, ?, ?, ?)', sid, ms, now - t0, now);
     if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); }
   }
@@ -928,7 +931,7 @@ export class Lobby extends DurableObject {
           await new Promise((go) => setTimeout(go, 0));
         }
       })();
-      p.catch(() => this.limits.delete(car));
+      p.then((lim) => this.limitNow.set(car, lim), () => this.limits.delete(car));
       this.limits.set(car, p);
     }
     return p;
@@ -1014,8 +1017,10 @@ export class Lobby extends DurableObject {
         const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
         if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
       }
-      // the lap by the server's own clock (Toomemägi; a stage run has its own start)
-      if (!why && track === TRACK) { const c = this.lapClock(tk.sid, ms); if (c) { why = `clock: ${c}`; told = 'clock'; } }
+      // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, lap.pen || 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
+      if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000); if (c) { why = `clock: ${c}`; told = 'clock'; } }
     } catch { why = 'unreadable'; }
     if (why) return refuse(why, lap.name, bytes?.length || 0, told);
     // (the lap as it is now: this waited for the unpacking and perhaps the car's limits, and the same replay sent
@@ -1220,7 +1225,7 @@ export class Lobby extends DurableObject {
       // "Authorization: Bearer <key>", and stays in the table.)
       const key = this.env.ADMIN_KEY, all = !!key && sameText(req.headers.get('authorization') || '', `Bearer ${key}`);
       const rows = this.sql.exec('SELECT at, track, car, ms, name, why, bytes FROM replay_refused ORDER BY id DESC').toArray();
-      return json(all ? rows : rows.map((r) => (r.why.startsWith('car') ? { ...r, why: 'car' } : r)));
+      return json(all ? rows : rows.map((r) => (r.why.startsWith('car') ? { ...r, why: 'car' } : r.why.startsWith('race: car') ? { ...r, why: 'race: car' } : r)));
     }
     if (path === '/api/replay') {
       // a record's replay: the gzipped samples as they came, with whose lap it is and its time in headers

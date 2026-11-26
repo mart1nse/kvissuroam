@@ -6,7 +6,8 @@
 // 1) Made-up drives along the stage through the stage's own judge (as tools/raadi-wrongway-test.mjs), at speeds a
 //    car can do, with the stage's `reset` called as main.js calls it: a short hop back, a long one (70 m: over 40 m
 //    ended the run until now), one back over a bale just passed (that bale is to be passed again), two in one run.
-// 2) The last of them sent to the server for real: on the board with its seconds, its replay kept, none refused.
+// 2) The last of them sent to the server for real. The server judges it by the stage's rules and times it by its own
+//    clock: a run made up in a second holds on everything but the clock.
 // 3) The real key: a run started, driven down the first straight by the physics, R pressed: the car is back up the
 //    road, the run goes on, +5 s on the panel, the toast; R again, +10.
 // Needs the game served with its server: npm run build && npx wrangler dev --port 8787 --persist-to <empty dir>
@@ -129,18 +130,18 @@ if (sendLap) {
   const wait = opened + driven + 15000 - Date.now();
   if (wait > 0) { console.log(`     (waiting ${Math.round(wait / 1000)} s: the server wants the run to fit inside the time the page has been open)`); await page.waitForTimeout(wait); }
   await page.evaluate(() => { const mp = __game.mp(), { lap, trace } = window.__sent; mp.submitLap = window.__submit; mp.submitLap({ ...lap, at: new Date().toISOString(), track: 'raadi' }, trace); });
-  let row = null;
-  for (let k = 0; k < 40 && !row; k++) {
+  // (26 Nov, later: the server times a run by its own clock and judges it by the stage's own rules, worker/stagecheck.js.
+  // This run was made up in a second or two, so the clock must refuse it, and the clock alone: it is asked last, so
+  // the run's start, its way round the bales, its two hops and their 10 s, and the car all held.)
+  let list = [];
+  for (let k = 0; k < 40 && !list.length; k++) {
     await page.waitForTimeout(1500);
-    const b = await (await fetch(new URL('/api/board', base))).json();
-    row = b.raadi?.allTime?.find((r) => r.car === sendLap.car && r.ms === sendLap.run.ms) || null;
+    const refused = await (await fetch(new URL('/api/replay?refused=1', base))).json().catch(() => null);
+    list = (Array.isArray(refused) ? refused : refused?.refused || []).filter((r) => r.ms === sendLap.run.ms);
   }
-  check(!!row && row.pen === sendLap.run.pen, `server: the run is on the board${row ? ` (${(row.ms / 1000).toFixed(2)} s, pen ${row.pen})` : ', NOT'}`);
-  const refused = await (await fetch(new URL('/api/replay?refused=1', base))).json().catch(() => null);
-  const list = Array.isArray(refused) ? refused : refused?.refused || [];
-  check(list.length === 0, `server: no replay refused${list.length ? `: ${JSON.stringify(list)}` : ''}`);
-  const rp = await fetch(new URL(`/api/replay?track=raadi&car=${sendLap.car}`, base));
-  check(rp.ok, `server: the replay with both hops in it is kept (${rp.status})`);
+  check(list.length === 1 && /^clock: took \d+ ms/.test(list[0].why), `server: the made-up run is refused by the clock alone${list.length ? ` (${list[0].why})` : ': NOT REFUSED'}`);
+  const b = await (await fetch(new URL('/api/board', base))).json();
+  check(!b.raadi?.allTime?.some((r) => r.car === sendLap.car && r.ms === sendLap.run.ms), 'server: it is not on the board');
 }
 
 // ---- 3) the key

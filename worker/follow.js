@@ -40,6 +40,7 @@ const V_MAX = 110, STEP_ROOM = 1; // m/s, m: no car goes faster (the fastest: 95
 const LEAD_MAX = 1500;           // ms the sender's clock may get ahead of ours (positions held up on the way come in a bunch)
 const HOP = 20;                  // m between two positions that is still driving, where the sender's time is not known or not believed
 const HOP_V = 100;               // m/s: there, further than this for the time between two positions is no gap but a jump
+const KEEP_MAX = 9000;            // positions of a lap kept (7 minutes at ten a second: 4200)
 const RE_GRACE = 100;            // positions after a restart of the server in which R cannot be told from a jump
 const BACK_AGE = 20, BACK_R = 8; // R: back within this of a place of its own at least this many positions old
 const MAX_HOPS = 20;
@@ -52,7 +53,8 @@ const NEAR_ROAD = 25;            // m beyond the road: a car found again must be
 // what is kept in memory of one racer while the race runs (the racer's own record r, in the race desk's stored
 // state, carries what must outlive a restart: gt, gs, arm, fs, sk, skm, jp)
 export function newFollow(race) {
-  return { race, n: 0, px: 0, pz: 0, pt: 0, st: null, lead: 0, re: false, at: null, xs: [], zs: [], hops: 0, g0: 0, g1: 0 };
+  // (xs, zs, ys: the lap's places as they came; ss, as: when, by the sender's stamps and by the clock here; back: which of them R put there)
+  return { race, n: 0, px: 0, pz: 0, pt: 0, st: null, lead: 0, S: 0, re: false, at: null, xs: [], zs: [], ys: [], ss: [], as: [], back: [], hops: 0, g0: 0, g1: 0 };
 }
 
 // gates behind a car at lap point i
@@ -102,19 +104,23 @@ export function finishInGap(r, f, at, fin) {
 
 // One position of a racer. r: the racer's record, f: newFollow(), (x, z): the place, now: the server's clock,
 // go: when this racer's lights went out; free: a car that is not held to the grid's launch (thrusters);
-// st: the sender's own stamp of the position (ms of its clock, mod a minute), if it sent one.
+// st: the sender's own stamp of the position (ms of its clock, mod a minute), if it sent one; y: its height.
 // Returns what happened: '' | 'arm' | 'start' | 'gate' | 'finish'.
-export function follow(r, f, x, z, now, go, free = false, st = null) {
+export function follow(r, f, x, z, now, go, free = false, st = null, y = 0) {
   const first = f.n === 0, px = f.px, pz = f.pz;
   const d = first ? 0 : Math.hypot(x - px, z - pz), da = first ? 0 : now - f.pt;
   // The time between this position and the last. Positions come in bunches after a stall on the way, so the
   // sender's stamps say it better than their arrival does; they are believed while the sender's clock has not run
   // ahead of ours by more than a stall explains.
-  let dt = da, sure = false;
+  let dt = da, sure = false, ds = da;
   if (!first && st != null && f.st != null) {
-    const ds = (((st - f.st) % 60000) + 60000) % 60000, lead = Math.max(0, f.lead + ds - da);
+    ds = (((st - f.st) % 60000) + 60000) % 60000;
+    const lead = Math.max(0, f.lead + ds - da);
     if (ds < 10000 && lead <= LEAD_MAX) { f.lead = lead; dt = ds; sure = true; }
+    else if (ds >= 10000) ds = da;
   }
+  f.S += ds;                                              // (the sender's clock, summed: driven() sets it against ours)
+  const keep = () => { if (f.xs.length < KEEP_MAX) { f.xs.push(x); f.zs.push(z); f.ys.push(y); f.ss.push(f.S); f.as.push(now); } };
   if (first || da > GAP_MS) { f.g0 = first ? r.gs || 0 : f.pt; f.g1 = now; }
   if (first && r.gt != null) f.re = true;                 // (the server was restarted mid-lap: the car's path so far is not known)
   f.px = x; f.pz = z; f.pt = now; f.st = st; f.n++;
@@ -143,18 +149,18 @@ export function follow(r, f, x, z, now, go, free = false, st = null) {
       }
     }
     if (r.gt == null) return ev;
-    f.xs.length = f.zs.length = 0;
-    f.xs.push(x); f.zs.push(z);
+    f.xs.length = f.zs.length = f.ys.length = f.ss.length = f.as.length = f.back.length = 0;
+    keep();
     return ev;
   }
   // ---- on the lap
-  f.xs.push(x); f.zs.push(z);
+  keep();
   if (far) {
     // R: back on a place of its own (it passes no gate by that). Any other jump is not a car driving: its finish
     // will not be taken (a race has no other way to move a car and stay in it, src/race/race.js)
     let back = false;
     if (f.hops < MAX_HOPS) for (let j = f.xs.length - 1 - BACK_AGE; j >= 0; j--) if (Math.hypot(f.xs[j] - x, f.zs[j] - z) < BACK_R) { back = true; break; }
-    if (back) f.hops++;
+    if (back) { f.hops++; f.back.push(f.xs.length - 1); }
     else if (!(f.re && f.n < RE_GRACE)) { r.jp = (r.jp || 0) + 1; return 'jump'; }
     return '';
   }
@@ -171,4 +177,29 @@ export function follow(r, f, x, z, now, go, free = false, st = null) {
   // places can miss the gates of a bend; two of them behind the car and it is found again as after a gap
   if (!ev && d > HOP && findAgain(r, x, z, now, 2)) ev = 'gate';
   return ev;
+}
+
+// The lap as it was followed, for the judging of the car itself (src/race/plausible.js judgeDrive): its places
+// `step` s apart, { xs, zs, ys, hop } (hop: the samples round an R, which are not driving), or null when too little
+// of it is known (the server restarted near the end). Each position's time is the sender's own stamp, carried over
+// to the clock here by the quickest way any of them came: so positions that arrive in a bunch are spread out as
+// they were driven, and nothing can be claimed to have taken longer than it did by more than LEAD_MAX.
+export function driven(f, step = 0.1) {
+  const n = f.xs.length;
+  if (n < 50) return null;
+  let off = Infinity;
+  for (let i = 0; i < n; i++) off = Math.min(off, f.as[i] - f.ss[i]);
+  const T = new Float64Array(n);
+  for (let i = 0; i < n; i++) { T[i] = Math.min(f.as[i], Math.max(f.ss[i] + off, f.as[i] - LEAD_MAX)); if (i && T[i] < T[i - 1]) T[i] = T[i - 1]; }
+  const ms = step * 1000, m = Math.floor((T[n - 1] - T[0]) / ms) + 1;
+  if (m < 50) return null;
+  const xs = new Float64Array(m), zs = new Float64Array(m), ys = new Float64Array(m), hop = new Uint8Array(m);
+  for (let k = 0, j = 0; k < m; k++) {
+    const t = T[0] + k * ms;
+    while (j < n - 2 && T[j + 1] <= t) j++;
+    const span = T[j + 1] - T[j], u = span > 0 ? Math.min(1, Math.max(0, (t - T[j]) / span)) : 1;
+    xs[k] = f.xs[j] + (f.xs[j + 1] - f.xs[j]) * u; zs[k] = f.zs[j] + (f.zs[j + 1] - f.zs[j]) * u; ys[k] = f.ys[j] + (f.ys[j + 1] - f.ys[j]) * u;
+  }
+  for (const i of f.back) { const k0 = Math.round((T[i] - T[0]) / ms); for (let k = Math.max(0, k0 - 14); k < Math.min(m, k0 + 14); k++) hop[k] = 1; }
+  return { xs, zs, ys, hop };
 }

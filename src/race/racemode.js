@@ -13,6 +13,7 @@ const ROW = 5;                    // cars side by side on the grid
 const MAX_MS = 7 * 60000;
 const LATE_MS = 150000;           // a late joiner may come in up to this long after the lights (worker/race.js)
 const MAX_RACERS = 30;
+const STALE_MS = 3000;            // a racer not followed this long (a hidden tab, no word from their car): found afresh
 
 const hash = (seed, id) => {
   let h = seed >>> 0;
@@ -81,11 +82,12 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   let r = null;                   // the server's latest word on the race (between messages the phase follows mp.serverNow)
   let placedFor = 0, pin = null, dismissed = 0, finishedMs = null, outSent = 0, sentRf = null, sentRd = null, askQuit = 0, quitFor = 0, hidFor = 0;
   let listUntil = 0, listOpen = false, showLast = false;
-  let watchCur = false;
-  let finAt = 0;                  // when we crossed the line (phones: the full results open 5 s later)            // not in the race that is on: its live standings are showing (positions followed only then)
+  let finAt = 0;                  // when we crossed the line (phones: the full results open 5 s later)
   const track_ = new Map();       // racer id -> { hint, prog, crossed, marks[], t }
-  // each racer's place while we race too, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP);
-  // worked out with the live order ten times a second, read by the name tags (changed only when a place changes)
+  // each racer's place, for the tag over their car (Martin 2026-11-24: P3 instead of HOTLAP, for those racing with
+  // us; 2026-11-26: for everyone else too, so a player who comes across a racer sees where they are in the race).
+  // Worked out on each page from the positions it already gets, with the live order ten times a second: nothing
+  // more is sent. Read by the name tags (changed only when a place changes).
   const places = new Map();
   let tick = 0, sample = 0;
 
@@ -140,7 +142,6 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   // (not in it: the race that is on, live, Martin 2026-11-24; the last race only when none is on)
   const curOn = (t = now()) => !me() && phaseOf(t) === 'race';
   function openCur(on) {
-    if (on && !watchCur) track_.clear();      // (positions were not followed while the list was shut: start afresh)
     listOpen = on; showLast = !on; listUntil = Infinity; hidFor = 0; render();
   }
   chip.addEventListener('click', () => { if (curOn()) { openCur(true); return; } showLast = !doneIn(); listOpen = true; listUntil = Infinity; hidFor = 0; render(); });
@@ -199,6 +200,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   function progress(id, x, z, t, rt) {
     let p = track_.get(id);
     if (!p) track_.set(id, (p = { hint: -1, prog: null, crossed: false, first: true, marks: [], t: 0 }));
+    // (not followed for a while: the tab was hidden, or no position came. Where they are now is far from where
+    // they were, which would read as a jump at every look from now on: found afresh, as at a first sighting)
+    else if (p.prog != null && t - p.t > STALE_MS) { p.hint = -1; p.prog = null; p.first = true; }
     const n = track.nearest(x, z, p.hint, 80);
     if (n.i < 0 || n.d > 80) return p;
     p.hint = n.d < 30 ? n.i : -1;
@@ -414,7 +418,6 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       head = '<h3><i class="flag"></i> RACE RESULTS</h3>';
       foot = `TOOMEMÄGI · 1 LAP · ${new Date(r.last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     }
-    watchCur = !!rows && !mine && ph === 'race' && !showLast;
     show(list, !!rows);
     document.body.classList.toggle('racelist', !!rows);
     list.classList.toggle('live', compact);
@@ -484,14 +487,15 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       render();
     },
     act,
-    // (the race as the server last told it: the tests read it)
+    // (the race as the server last told it, and how far round the lap a racer is as this page follows them: the tests read them)
     view: () => r,
+    prog: (id) => track_.get(id)?.prog ?? null,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
     // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
     // (Martin, 2026-11-22: from lights out, not only from the start line)
     racing(id) { const ph = phaseOf(); if (ph !== 'grid' && ph !== 'race') return false; const x = r.racers.find((q) => q.id === id); return active(x); },
-    // another racer's place in the race we are in (1 = leading), or 0: not racing with us
+    // a racer's place in the race that is on (1 = leading), whether we race in it or not; 0: not racing
     place(id) { return places.get(id) || 0; },
     // the player who won (Martin 2026-11-24: WINNER instead of HOTLAP over their name): the first over the line in
     // the race that is on, else the winner of the last race, so it lasts until the next race has its winner
@@ -572,9 +576,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (!m) placedFor = 0;                                  // (left on the grid, then back in late: placed again)
       // the race closed by the clock without a word from the server yet
       if (ph === 'race' && t > r.tGreen + MAX_MS + 3000) r.on = false;
-      // live order: positions ten times a second
+      // live order: positions ten times a second, on every page (racing or not: the places over the racers' cars)
       sample -= dt;
-      if (ph === 'race' && (m || watchCur) && sample <= 0) {
+      if (ph === 'race' && sample <= 0) {
         sample = 0.1;
         for (const x of r.racers) {
           if (!active(x)) continue;
@@ -585,12 +589,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         }
         // (the same order as the live list: finished by time, then by distance; those out have no place)
         places.clear();
-        if (m) {
-          const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
-          const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
-          for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
-        }
-      } else if (places.size && !(ph === 'race' && m)) places.clear();
+        const score = (x) => (x.ms != null ? 3e9 - x.ms : (track_.get(x.id)?.prog ?? -1000));
+        const on = r.racers.filter((x) => !x.out).sort((p, q) => score(q) - score(p));
+        for (let i = 0; i < on.length; i++) places.set(on[i].id, i + 1);
+      } else if (places.size && ph !== 'race') places.clear();
       tick -= dt;
       if (tick <= 0) { tick = 0.25; render(); }
     },

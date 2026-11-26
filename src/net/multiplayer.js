@@ -1331,7 +1331,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const p = o.pose;
       const hot = o.live && !!(p[20] & HOT);
       if (hot !== !!o.hot) { o.hot = hot; o.el.classList.toggle('hot', hot); }
-      // in a race with us: their place instead of HOTLAP (Martin 2026-11-24), written only when it changes
+      // racing: their place instead of HOTLAP (Martin 2026-11-24), seen by everyone, in the race or not (26 Nov);
+      // written only when it changes
       const pl = place(o.id);
       if (pl !== (o.pl || 0)) { o.pl = pl; if (pl) o.el.dataset.pos = `P${pl}`; else delete o.el.dataset.pos; }
       // won the last race (or is first over the line in this one): WINNER over their name instead of HOTLAP

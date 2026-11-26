@@ -1,5 +1,5 @@
 // Many players online: does the picture hitch?   node tools/crowd-hitch.cjs [n=60] [secs=30] [port=5198] [touch] [top=12] [churn=2]
-//                                                 [draw] [dry] [kinds=1] [fly=0.35] [settle=0] [race=30] [menu] [slowLink=150]
+//                                                 [draw] [dry] [kinds=1] [fly=0.35] [settle=0] [race=30] [onlook] [menu] [slowLink=150]
 //
 // Martin 2026-11-24: with 55 to 78 online, desktop at 59 FPS and the top level, "late frames 1 per 2 s,
 // longest 67 ms". Needs the dev server (npx vite --port 5198). No game server: the page's WebSocket is a fake
@@ -17,13 +17,15 @@
 //              what a kind of car first met while playing costs
 //   fly=0.35   our car drives the lap (metres a frame) instead of standing
 //   settle=0   record from the moment the car is put down (the first cars of each kind arriving)
+//   onlook     with race=N: a race of N under way that we are not in (Martin 2026-11-26: every page follows the
+//              racers for the places over their cars)
 // and the game's own hitch account (src/hitches.js) at the end.
 const { chromium, devices } = require('playwright');
 const { stretches } = require('./freeze-profile.cjs');
 
 const CARS = ['impreza', 'f40', 'w201', 'm3', 'cgt', 'audi200', 'enyaq', 'passat', 'rav4', 'bz4x', 'crv', 'mazda6'];
 
-async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0, slowLink = 0, menu = false, fly = 0, dry = false, settle = -1, kinds = 0 } = {}) {
+async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2, draw = false, shot = '', race = 0, onlook = false, slowLink = 0, menu = false, fly = 0, dry = false, settle = -1, kinds = 0 } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: draw && !dry ? { width: 480, height: 270 } : { width: 1280, height: 720 } });
@@ -114,7 +116,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
       });
     });
     const P = await (async () => JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../src/race/track.json'))).pts)();
-    await p.addInitScript(([P, N, CARS, CHURN, RACE, KINDS]) => {
+    await p.addInitScript(([P, N, CARS, CHURN, RACE, KINDS, ONLOOK]) => {
       const I0 = 1700;
       let seq = 0;
       const bots = [];
@@ -157,11 +159,11 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
               }
               msg({ t: 'S', b: out });
               // a race vote filling up, one vote a second, then over (each vote changes every row's mark in the list)
-              // or (race=N) a race of N under way, us in it, as the server tells it: started 10 s ago
+              // or (race=N) a race of N under way, us in it (onlook: not), as the server tells it: started 10 s ago
               if (RACE && !this.raced) {
                 this.raced = true;
                 const g = Date.now() - 10000;
-                const racers = [{ id: 'me', name: 'Tester', car: 'm3' }, ...bots.slice(0, RACE - 1).map((o) => ({ id: o.id, name: o.name, car: o.car }))];
+                const racers = [...(ONLOOK ? [] : [{ id: 'me', name: 'Tester', car: 'm3' }]), ...bots.slice(0, RACE - (ONLOOK ? 0 : 1)).map((o) => ({ id: o.id, name: o.name, car: o.car }))];
                 msg({ t: 'race', r: { id: 1, on: true, seed: 1, tGrid: g - 10000, tGreen: g, racers, vote: { kind: 'none', ids: [], need: 1 } } });
               }
               const vt = Math.floor(t) % 20;
@@ -203,7 +205,7 @@ async function crowd({ port = 5198, n = 60, secs = 30, touch = false, churn = 2,
         close() { clearInterval(this.timer); this.readyState = 3; }
       }
       window.WebSocket = FakeWS;
-    }, [P, n, CARS, churn, race, kinds]);
+    }, [P, n, CARS, churn, race, kinds, onlook]);
     await p.goto(`http://localhost:${port}/`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     const I0 = 1700, yaw0 = Math.atan2(P[I0 + 1][0] - P[I0][0], -(P[I0 + 1][1] - P[I0][1]));
@@ -283,7 +285,7 @@ module.exports = { crowd, summarise, report };
 if (require.main === module) {
   const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(k + '=')); return a ? a.slice(k.length + 1) : d; };
   (async () => {
-    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0), slowLink: +arg('slowLink', 0), menu: process.argv.includes('menu'), fly: +arg('fly', 0), dry: process.argv.includes('dry'), settle: +arg('settle', -1), kinds: +arg('kinds', 0) });
+    const r = await crowd({ port: +arg('port', 5198), n: +arg('n', 60), secs: +arg('secs', 30), touch: process.argv.includes('touch'), churn: +arg('churn', 2), draw: process.argv.includes('draw'), shot: arg('shot', ''), race: +arg('race', 0), onlook: process.argv.includes('onlook'), slowLink: +arg('slowLink', 0), menu: process.argv.includes('menu'), fly: +arg('fly', 0), dry: process.argv.includes('dry'), settle: +arg('settle', -1), kinds: +arg('kinds', 0) });
     if (r.errs.length) console.log('PAGE ERRORS', r.errs.slice(0, 5));
     console.log(JSON.stringify({ online: r.online, ...summarise(r) }));
     console.log(report(r, +arg('top', 12)));

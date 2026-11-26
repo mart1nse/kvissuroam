@@ -15,6 +15,16 @@
 //  - the second corner's inside is rounded on the ground as well (Martin 23 Nov 20:15, a blue curve on the air
 //    photo: "the second corner is actually more round on the gravel parts as well"): `fillets`, by hand, the 4 m
 //    arc the stage's glow takes there (ROUND in src/race/raadi.js).
+//  - the track from the stage's last corner past the finish is the same gravel road as the one into that corner
+//    (Martin 26 Nov 10:07: "the road from the last corner ... cuts to regular road form the middle of the last
+//    corner"): the map has it as a bare earth track 3.6 m wide, which the ground draws darker and narrower. The
+//    third entry of `gravel`: 4.6 m of gravel to its far end, 65 m past the stage's last point.
+//  - six more insides of bends are round (Martin 26 Nov 10:07, pink lines drawn on six overhead screenshots: "a
+//    few squared corner apexes stand out ... will draw the extension of the gravel road to make the parts more
+//    smooth"): stage points 126 and 127 (the junction), 228 to 239, 318, 429, 834 to 842 and the last corner's
+//    inside, 850 to 867. Each is one more outline in `fillets`, the gravel out to his line (the line put on the
+//    ground from the drone camera of the shot), and the seven `aprons` that stood squared beyond a line are cut
+//    back to it. Only the ground: the stage's edge and its penalties stay where they were.
 // The same list is read by tools/race/build-raadi.py, which routes the stage over these paths.
 import PATHS from './raadipaths.json';
 import { surfaceStrip, surfaceArea, SURFACE } from './data.js';
@@ -50,6 +60,7 @@ function distTo(pts, x, z) {
   return d;
 }
 
+const LAST_CORNER = [[[2732.5, 645.1], [2725.7, 632.8], [2723.4, 631.3], [2715.2, 631.1], [2712.6, 631.0]], [[2715.1, 628.6], [2715.2, 631.1], [2717.2, 658.2]]];
 export function raadiRoads(vectors) {
   const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.5;
   const over = [], tone = [];
@@ -65,6 +76,9 @@ export function raadiRoads(vectors) {
     tone.push({ outer, tone: `rgb(${Math.round((cr + cg + cb) / 3)},${128 + cr - cb},0)` });
   }
   for (const outer of APRONS) over.push({ cover: 'rgb(0,0,138)', outer });
+  // (the earth path that comes down to the last corner from the north is toned as bare earth for 3 m either side
+  // of itself, squarely to its end, which lay across the stage's gravel there as a dark block: the usual tone again)
+  for (const pts of LAST_CORNER) tone.push({ outer: band(pts, 5.6), tone: 'rgb(183,136,0)' });
   vectors.overPaint = [...(vectors.overPaint || []), ...over];
   vectors.toneOver = [...(vectors.toneOver || []), ...tone];
   for (const r of PATHS.add) vectors.roads.push({ ...r });

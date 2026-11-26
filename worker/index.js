@@ -31,6 +31,7 @@ import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './liv
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
+import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from '../src/net/kudosrules.js';
 
 const TRACK = 'toomemagi';
 const TOP_N = 10;                 // a lap among its car's ten best waits for its drive to be judged (wouldLead)
@@ -163,7 +164,10 @@ const STAMP = 21;                                     // a position's slot for w
 // r=1 as they connect): in the garage or another tab that long it gives up its place with room too (restOld).
 const MAP_IDLE_MS = 180000, MAP_PROBE_MS = 20000, MAP_OUT_MS = 60000, MAP_OUT_MAX = 15 * 60000;
 const LOOSE_MS = 20 * 60000;
-const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
+// a thumbs up (src/net/kudosrules.js): one sender to one receiver once in 30 s and KUDOS_PAIR a day, at most 8 a
+// minute from one sender, and from one internet address to one receiver KUDOS_ADDR an hour (several tabs or
+// private windows, each a new player)
+const KUDOS_GAP = KUDOS_GAP_S * 1000, KUDOS_MAX = 8, KUDOS_ADDR = KUDOS_PAIR * 2;
 const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
@@ -1533,8 +1537,11 @@ export class Lobby extends DurableObject {
       this.bund.set(ws, b);
       // thumbs up received today: the page's own count (kept in its browser till midnight, so a reload or a
       // lost connection keeps it), or what this socket had
-      const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
-      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
+      // (at most KUDOS_PAIR from any one player: a day saved before that rule, or by an old page, loses the rest)
+      const { kn, kf } = (() => {
+        const n = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
+        return kudosFair(n, ((me?.kn || 0) >= n ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : []) || []);
+      })();
       // (the plate: the one sent, or the one this socket had; a page that sends none keeps its cars' own)
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(me?.r ? { r: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
@@ -1584,9 +1591,13 @@ export class Lobby extends DurableObject {
     } else if (m.t === 'ku') {
       // a thumbs up for another player (Martin, 2026-11-23): told to everyone, sender too, since all who are
       // near see it as a sign in the receiver's back window (src/kudos.js). Not from or to a ghost or oneself.
+      // One player to the same player at most KUDOS_PAIR a day (Martin 2026-11-26: one filled another's bus window
+      // with about 30), counted in the receiver's collection, which their page keeps through the day.
       const to = cleanOn(m.to);
-      if (me.ghost || !to || to === me.id || !this.players().some((p) => p.id === to)) return;
+      const rc = me.ghost || !to || to === me.id ? null : this.players().find((p) => p.id === to);
+      if (!rc || kudosFrom(rc.kf, me.id, me.name) >= KUDOS_PAIR) return;
       if (this.over(`k|${me.id}`, KUDOS_MAX, 60000) || this.over(`k|${me.id}|${to}`, 1, KUDOS_GAP)) return;
+      if (this.over(`ki|${me.ip}|${to}`, KUDOS_ADDR, 3600000)) return;
       // the receiver's count for this session and the last senders, for those who come later (src/kudos.js:
       // the small thumbs on that car's back window)
       for (const w of this.ctx.getWebSockets()) {

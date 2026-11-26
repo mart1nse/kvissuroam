@@ -173,7 +173,9 @@ function gantry(b, a, clear) {
 }
 
 // ---- fire from the cannons
-const FIRE_W = 3.4, FIRE_H = 16, FIRE_TOP = 0.74;      // the fire's width and height; its share of the strip (smoke above)
+// the fire's width for a fire FIRE_SHAPE m high (a lower fire is narrower in step, so that it keeps its shape), its
+// usual height (Martin: "less power or thrust so that they sit a bit lower") and its share of the strip (smoke above)
+const FIRE_W = 3.4, FIRE_SHAPE = 16, FIRE_H = 10, FIRE_TOP = 0.74;
 function flameMesh(jets) {
   const pos = [], corner = [], idx = [];
   jets.forEach(([x, y, z], j) => {
@@ -209,7 +211,7 @@ function flameMesh(jets) {
         vSeed = j * 7.31;
         // (wider far off, so that from the first corner, 360 m away, a column is still a few pixels across)
         float far = max(1.0, -c.z / 140.0);
-        c.xyz += side * corner.x * ${(FIRE_W / 2).toFixed(2)} * far * (0.6 + corner.y * 1.3) + up * corner.y * h;
+        c.xyz += side * corner.x * ${(FIRE_W / 2 / FIRE_SHAPE).toFixed(4)} * uH * far * (0.6 + corner.y * 1.3) + up * corner.y * h;
         gl_Position = projectionMatrix * c;
       }`,
     fragmentShader: `

@@ -55,7 +55,7 @@ const ARCH_START = { at: START + 6, off: 1.9, clear: 3.6 }, ARCH_FIN = { at: FIN
 // goes over the line (or max 5 sec)": once a run, from FLAME_FROM along the stage (the last corner's apex is 854,
 // the finish 875, the arch in sight all the way), the car pointing at the arch within FLAME_COS, for at most
 // FLAME_S; they die down as the car crosses the line.
-const START_FIRE = [1.1, 4], FLAME_FROM = 856, FLAME_COS = 0.7, FLAME_S = 5;
+const START_FIRE = [1.1, 3], FLAME_FROM = 856, FLAME_COS = 0.7, FLAME_S = 5;
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's

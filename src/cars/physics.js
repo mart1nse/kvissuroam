@@ -637,9 +637,10 @@ function boxContact(car, b, list, fx, fz, rx, rz, hl, hw, contact) {
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
 // steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
-  // (a car that met a wall too fast and too squarely is going over onto its roof, or lies on it: crash.js)
+  // (a car that met a wall too fast and too squarely is being thrown over, or lies where it came down: crash.js)
   if (car.crash) {
     crashStep(car, world, dtFrame);
+    if (car.crash.done) standUp(car);
     car.time += dtFrame;
     car.hit *= Math.exp(-dtFrame * 4); car.landed *= Math.exp(-dtFrame * 6);
     if (car.kerbHit) car.kerbHit = 0;
@@ -1584,6 +1585,16 @@ function substep(car, input, world, dt) {
   car.wheelSpin += roll1;
   car.wheelSpinF += roll1 + car.slipVF * k1;
   car.wheelSpinR += roll1 + car.slipVR * k1;
+}
+
+// A crashed car that has come back down onto its wheels (crash.js) is the driver's again: where it stands, as it
+// rolls, its engine started, nothing left of the crash. (Also for a car left lying when the garage opens.)
+export function standUp(car) {
+  const vx = car.vx, vy = car.vy, soot = car.sootKm;
+  const wheels = car.crash && car.crash.ph === 'settle';
+  resetCar(car, { x: car.x, z: car.z, yaw: car.yaw, y: car.y });
+  car.sootKm = soot;
+  if (wheels) { car.vx = vx; car.vy = vy; }
 }
 
 export function resetCar(car, pose) {

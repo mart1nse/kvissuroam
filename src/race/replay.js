@@ -20,9 +20,15 @@ const MAX_S = 900;                                // a lap or a run longer than 
 const ANG = new Set([3, 4, 5, 8]);                // yaw, pitch, roll, steering: the short way round
 const SMOOTH = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19]);   // (the rest are on/off: the nearer one)
 
+// Two positions of one car that are the same lie of the body written two ways: a crashed car that landed on its
+// roof end over end is kept from there on as turned about and rolled over (cars/crash.js), pitch and roll both half
+// a turn from the frame before. There is no way between the two to draw: the nearer one is taken.
+export const turnedAbout = (a, b) => Math.abs(Math.atan2(Math.sin(b[4] - a[4]), Math.cos(b[4] - a[4]))) > 2.4 && Math.abs(Math.atan2(Math.sin(b[5] - a[5]), Math.cos(b[5] - a[5]))) > 2.4;
+
 function mix(a, b, f, out) {
+  const flip = turnedAbout(a, b);
   for (let k = 0; k < FIELDS; k++) {
-    if (!SMOOTH.has(k)) { out[k] = f < 0.5 ? a[k] : b[k]; continue; }
+    if (!SMOOTH.has(k) || (flip && k >= 3 && k <= 5)) { out[k] = f < 0.5 ? a[k] : b[k]; continue; }
     let d = b[k] - a[k];
     if (ANG.has(k)) d = Math.atan2(Math.sin(d), Math.cos(d));
     out[k] = a[k] + d * f;

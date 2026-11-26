@@ -30,6 +30,7 @@ import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
 import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
+import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -302,11 +303,15 @@ function checkTrace(text, track, driving, drive = {}) {
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
   const g = GATES[track];
-  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0;
+  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0, fl = 0;
   const xs = drive.xs = new Float64Array(n), zs = drive.zs = new Float64Array(n), ys = drive.ys = new Float64Array(n);
   // (and how far the car is rolled over, rad: a car with thrusters that turns over in the air has flown a kickflip)
   const rolls = drive.roll = new Float64Array(n);
   let roll = 0;
+  // (hard crashes into a wall, src/cars/crash.js: each is CRASH_PEN seconds in the lap's time)
+  const flags = new Int32Array(n);
+  for (let i = 0; i < n; i++) flags[i] = fl += a[4 + i * f + 20];
+  drive.crashes = crashesIn(flags);
   for (let i = 0; i < n; i++) {
     x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100; roll += a[4 + i * f + 5] / 1000;
     xs[i] = x; zs[i] = z; ys[i] = y; rolls[i] = roll;
@@ -1142,6 +1147,9 @@ export class Lobby extends DurableObject {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
       why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive);
+      // the seconds for its hard crashes into walls must be in its time (the page adds them; one that left them out)
+      const crashPen = (drive.crashes || 0) * CRASH_PEN;
+      if (!why && crashPen > (lap.pen || 0)) { why = `crash: the drive has ${drive.crashes} of them, its time ${lap.pen || 0} s of penalty`; told = 'crash'; }
       if (!why) {
         // the car itself: seconds of the drive over what this car can do (the list of refusals gets the figures,
         // the sender only that it was the car)
@@ -1157,7 +1165,7 @@ export class Lobby extends DurableObject {
         launch = lim?.gas?.launch;
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
-      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, lap.pen || 0, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
       if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }
@@ -1299,7 +1307,8 @@ export class Lobby extends DurableObject {
       for (const l of list) {
         const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms)), track = cleanTrack(l?.track);
         // (penalty seconds: whole, and the driving itself must still be a believable time)
-        const pen = track !== TRACK && Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
+        // (a stage's own, and on any track CRASH_PEN for each hard crash into a wall: the replay is asked again)
+        const pen = Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
         if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || LAP_MIN) && ms <= 3600000)) continue;
         // a time under a racist slur: answered as saved, so the browser stops sending it, and not kept
         if (badName(name)) { ok.push(ms); continue; }

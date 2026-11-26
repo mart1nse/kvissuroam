@@ -226,14 +226,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   text-shadow: 0 0 12px rgba(47, 243, 255, .8); opacity: 0; transition: opacity .15s; white-space: nowrap; }
 #getready.show { opacity: 1; }
 body.touch #getready { top: 46%; }
-/* on its roof after a crash (cars/crash.js): the one way back, R or a tap */
-#roofed { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 9; padding: .5em 1.3em .55em; border: 0; border-radius: 999px; cursor: pointer;
-  background: rgba(12, 4, 30, .78); font: inherit; font-size: clamp(13px, 2vw, 22px); font-style: italic; font-weight: 900; letter-spacing: .16em; color: var(--hot);
-  text-shadow: 0 0 12px rgba(255, 60, 172, .7); white-space: nowrap; text-align: center; }
-#roofed b { display: block; }
-#roofed small { display: block; margin-top: .25em; font-size: .55em; font-weight: 800; letter-spacing: .2em; color: var(--cyan); text-shadow: 0 0 10px rgba(47, 243, 255, .7); }
-#roofed.hidden { display: none; }
-body.touch #roofed { top: 36%; }
 
 /* ---- city map */
 #minimap { pointer-events: auto; cursor: pointer; }

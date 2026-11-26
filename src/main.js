@@ -1315,9 +1315,11 @@ function startDriving() {
   input.enable(true);
   if (resume?.pose && !resume.told) { resume.told = true; setTimeout(() => hud.toast('BACK WHERE YOU WERE', 2500), 700); }
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
-  // what DRIVE itself put in the scene (the race lights, markers, the car's own bits): its shaders now, at the
-  // press of the button, and not in the first frames of the drive (see shadersReady)
-  try { warmer.firstUse(renderer.compile(scene, camera)); } catch (err) { console.warn(err); }
+  // what DRIVE itself put in the scene (the race lights, markers, the car's own bits): its shaders built off the
+  // page where the browser can (compileAsync), then first used a couple a frame by the work queue (see shadersReady).
+  // Not all at once in the click: /stats of 25 Nov had 105 desktop freezes of 1-3 s inside the DRIVE button,
+  // the menu's not yet finished shaders and DRIVE's own all waited for in one go.
+  warmer.ready(scene).catch((err) => console.warn(err));
 }
 
 // Full screen on phones. The browser drops it when you switch to another app and only lets a page ask

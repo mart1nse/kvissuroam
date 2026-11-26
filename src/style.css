@@ -203,6 +203,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   background: linear-gradient(to bottom, #fff 20%, var(--cyan) 60%, var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(2px 2px 0 var(--hot)); }
 #unit { position: absolute; left: 0; right: 0; top: 63%; text-align: center; font-size: calc(var(--d) * .05); letter-spacing: .3em; padding-left: .3em; color: var(--pink); }
+/* an electric car: no "km/h" under the speed, its kW in that place (in the dial's own units: from 73 % down the dial to 68 %) */
+#tach.kw #unit { display: none; }
+#tach.kw text.kw { transform: translateY(-10px); }
 #gear { position: absolute; left: 0; right: 0; bottom: 3%; text-align: center; font-size: calc(var(--d) * .1); font-weight: 900; font-style: italic; color: var(--sun); text-shadow: 0 0 10px rgba(255, 180, 60, .8); }
 /* the tyre on the car, beside the gear (Martin 2026-11-23): a click or tap switches road / gravel; the hit area
    reaches past the small icon (it stays clear of the steering pads on phones, which sit below the dial) */
@@ -333,7 +336,6 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
 .pad.rocket.dial button.no { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); cursor: default; }
 @media (max-width: 950px) { .pad.rocket.dial button small { display: none; } .pad.rocket.dial .ic { width: 50%; height: 50%; } }
 body.rocketdial #speed { top: 38.5%; transform: translateY(-50%); font-size: calc(var(--d) * .26); }
-body.rocketdial #unit { display: none; }
 body.rocketdial #dial text.kw { transform: translateY(-31px); }   /* (in the dial's own units: from 73 % down the dial to 57.5 %) */
 /* a fan car's suction fans (spec.fanDown): a small fan left of the gear, turning for as long as they run (always),
    faster when they are run up (src/rocketui.js) */

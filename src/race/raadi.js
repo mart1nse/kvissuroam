@@ -230,7 +230,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
   const signMat = new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide });
   const postMat = new THREE.MeshLambertMaterial({ color: 0x8a8d92 });
   const barriers = [];
-  let barMesh = null, kit = null, halo = null;
+  let barMesh = null, kit = null, halo = null, barWait = false;
   // a bale 1.1 m inside the path's edge at each apex, its banner towards the cars coming
   const bales = createBales({ world, group, spots: STAGE.apex.map(([k, , x, z]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] }))
     .concat(MORE_BALES.map(([x, z, k]) => ({ x, z, tx: TAN[k][0], tz: TAN[k][1] }))) });
@@ -620,7 +620,10 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       const x = b.x + rx * off, z = b.z + rz * off;
       b.px = x; b.pz = z; b.rot = -b.yaw + e * Math.PI / 2; b.sx = (b.w + 0.6) * (b.point || 1);
       qy.setFromAxisAngle(up, b.rot);
-      m4.compose(av.set(x, groundY(x, z), z), qy, b.broken ? as.set(0, 0, 0) : as.set(b.sx, 1, 1));
+      // (on the ground as it is known near the car: drawn from far off, before the park's ground has loaded again,
+      // a barrier keeps the height it last stood at and is put down properly when the ground comes, see barWait)
+      if (world.ready(x, z)) b.py = groundY(x, z); else { barWait = true; b.py ??= groundY(x, z); }
+      m4.compose(av.set(x, b.py, z), qy, b.broken ? as.set(0, 0, 0) : as.set(b.sx, 1, 1));
       barMesh.setMatrixAt(n, m4);
     });
     barMesh.instanceMatrix.needsUpdate = true;
@@ -1017,6 +1020,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
         let moving = false;
         for (const b of barriers) if (b.t !== b.want) { b.t += Math.sign(b.want - b.t) * Math.min(Math.abs(b.want - b.t), dt * 1.2); moving = true; }
         if (moving) drawBarriers();
+        else if (barWait && barriers.every((b) => world.ready(b.px, b.pz))) { barWait = false; drawBarriers(); }
       }
       // the finish arch's flames: once a run, out of the last corner facing it (they die down at the line, above)
       if (st.phase === 'run' && !st.flamed && st.prog >= FLAME_FROM && arches[1]) {

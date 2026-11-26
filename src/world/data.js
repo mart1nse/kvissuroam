@@ -728,12 +728,17 @@ export async function loadWorldData(onProgress = () => {}) {
       return Math.max(t, hit.y);
     },
 
+    // The deck a car at height y is on at the point, or null.
+    deckUnder(x, z, y) { return decks.length !== 0 && deckAt(x, z, y + UNDER) ? hit.deck : null; },
     // Railing of a bridge span: when a car at height y is against it, writes the push direction and
-    // depth to out[0..2] and returns true.
-    railPush(x, z, y, halfWidth, out) {
+    // depth to out[0..2] and returns true. With only (a deck, from deckUnder): the railings of that deck alone,
+    // for a car's nose and tail, which are held in by the railing of the deck its middle is on and not drawn in
+    // by the next deck's as they reach over to it.
+    railPush(x, z, y, halfWidth, out, only) {
       if (piers.length !== 0 && pierPush(x, z, y, halfWidth + 0.25, out)) return true;
       if (decks.length === 0 || !deckAt(x, z, y + UNDER)) return false;
       const d = hit.deck;
+      if (only !== undefined && d !== only) return false;
       const sgn = hit.lat > 0 ? -1 : 1;
       if (d.rs !== null) { if (!(d.rs[hit.seg] & d.rs[hit.seg + 1] & (hit.lat > 0 ? 1 : 2))) return false; }
       else if (d.rail === null || hit.seg < d.rail[0] || hit.seg >= d.rail[1]) return false;

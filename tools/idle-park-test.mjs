@@ -155,7 +155,8 @@ async function room() {
 
 // With room still a limit (Martin 26 Nov, tabs open for days): a car standing `loose` goes to the garage, and with
 // nobody there for `rest` the page goes offline, from the garage and from a hidden tab, and is back online the
-// moment somebody is. ?loose=10&rest=40 for 20 minutes each.
+// moment somebody is. ?loose=50&rest=40 for 20 minutes each (standing longer than the page's own rest, so the
+// map is seen not to put it offline).
 async function rest() {
   console.log('rest');
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 810 } });
@@ -167,20 +168,25 @@ async function rest() {
     ws.onClose(() => { closes++; });
     ws.onMessage((raw) => { if (raw === 'ping') return ws.send('pong'); let m; try { m = JSON.parse(raw); } catch { return; } if (m.t === 'hello') ws.send(JSON.stringify({ t: 'welcome', id: 'me000001', key: null, players: [], wn: 0 })); });
   });
-  await p.goto(`${base}/?idle=6&room=1&loose=10&rest=40&q=low&trees=old`, { timeout: 180000 });
+  await p.goto(`${base}/?idle=6&room=1&loose=50&rest=40&q=low&trees=old`, { timeout: 180000 });
   await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
   await p.evaluate(() => { const r = __game.renderer; r.render = () => {}; });
   if (!(await until(p, () => __game.mp()?.online, 30000))) fail('not online with the stand-in server');
   await p.evaluate(() => __game.startDriving());
   await until(p, () => __game.mode === 'drive', 60000);
-  // 1. room, standing: the garage after 10 s and its countdown
+  // 1. room, standing: the garage after 50 s and its countdown, online all the while
   let t0 = Date.now();
-  if (!(await until(p, () => __game.mode === 'menu', 25000))) fail('with room, a car stood past the loose limit');
-  else console.log(`  room, standing: the garage ${((Date.now() - t0) / 1000).toFixed(1)} s later`);
-  if ((Date.now() - t0) / 1000 < 13) fail('with room, sent to the garage before the loose limit and its countdown');
-  // 2. in the garage with nobody there: offline 40 s after the last sign of anybody (the page opening)
-  if (!(await until(p, () => __game.mp().resting, 45000)) || !closes) fail(`nobody there, and the page stayed online (socket closed: ${closes})`);
-  else console.log(`  nobody there: offline ${((Date.now() - t0) / 1000).toFixed(1)} s after the drive began (socket closed: ${closes})`);
+  if (!(await until(p, () => __game.mode === 'menu', 65000))) fail('with room, a car stood past the loose limit');
+  else console.log(`  room, standing: the garage ${((Date.now() - t0) / 1000).toFixed(1)} s later, still online: ${await p.evaluate(() => !__game.mp().resting)}`);
+  if ((Date.now() - t0) / 1000 < 53) fail('with room, sent to the garage before the loose limit and its countdown');
+  // 2. not offline while standing on the map (the page opened 40 s and more ago by now), and in the garage with
+  // nobody there: offline 40 s after the car was sent there, not sooner (Martin 26 Nov: 20 min, then 20 more)
+  const parkedAt = Date.now();
+  if (await p.evaluate(() => __game.mp().resting)) fail('offline before the garage\'s own wait');
+  await p.waitForTimeout(30000);
+  if (await p.evaluate(() => __game.mp().resting)) fail('offline 30 s into the garage, before its 40 s');
+  if (!(await until(p, () => __game.mp().resting, 15000)) || !closes) fail(`nobody there, and the page stayed online (socket closed: ${closes})`);
+  else console.log(`  nobody there: offline ${((Date.now() - parkedAt) / 1000).toFixed(1)} s after the garage (socket closed: ${closes})`);
   const before = opens;
   await p.waitForTimeout(6000);
   if (opens !== before) fail(`resting, and it asked the server again (${opens - before} times)`);

@@ -21,7 +21,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired', ref: 'not counted' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, noRace = () => false, onWatch = null, watching = () => null }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, noRace = () => false, staged = () => false, onWatch = null, watching = () => null }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -301,7 +301,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       // drivers on the map the server does not count: a page from before race mode (it cannot vote
       // until it is reloaded)
       // (nor one in a car that does not race: that is no old page)
-      const old = mp.drivers().filter((d) => !cars[d.car]?.thrusters).length + (mp.counted && !noRace() ? 1 : 0) - v.of;
+      // (nor one on a stage run: the server leaves them out of the vote, and every such player read as an old page)
+      const old = mp.drivers().filter((d) => !cars[d.car]?.thrusters && !staged(d.id)).length + (mp.counted && !noRace() ? 1 : 0) - v.of;
       if (old > 0) line += isTouch ? ` · ${old} OLD PAGE${old > 1 ? 'S' : ''}` : ` · ${old} ON AN OLD PAGE`;
     } else {
       label = 'RACE ON'; cls = 'dim';

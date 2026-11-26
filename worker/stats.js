@@ -60,6 +60,11 @@ const MAPS = {
   hit: [(k) => /^(desktop|phone|tablet|other):(why:(build|draw|online|game|card|page:(net|car))|new:(shaders|pictures|car|none)|len:(<50|50-100|100-250|250\+)|on:(0|1-9|10-29|30-59|60\+)|t:(<30s|30s-2m|2-10m|10m\+)|pace:(0|1-9|10-29|30-59|60\+)|trim:(0|1|2|3|off))$/.test(k), 400],
   hitT: [(k) => /^(desktop|phone|tablet|other):(0|1-9|10-29|30-59|60\+|uneven)$/.test(k), SEC],
   misc: [LIST('drives', 'water', 'roof', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
+  // the Majoraadi stage (src/stats.js stage(), from its launch on 26 Nov 2026): put on the line, started, finished,
+  // why a run ended without a finish, R hops and crashes in runs, and the finished runs' tyres and penalty seconds
+  stage: [LIST('line', 'start', 'finish', 'reset', 'crash', 'x:cut', 'x:off', 'x:wrong', 'x:corner', 'x:garage', 'x:race', 'x:moved', 'x:restart', 'x:quit', 'x:lights',
+    'ty:gravel', 'ty:road', 'pen:0', 'pen:1-4', 'pen:5-9', 'pen:10+'), N],
+  stageCar: [(k) => Object.hasOwn(CARS, k), N],               // finished stage runs per car
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };
 
@@ -445,7 +450,7 @@ export class Stats extends DurableObject {
           return { at: a, ...loadView(r.data.load, loadSpan(r.data.load, a, Math.min(now, a + HOUR))) };
         });
         // visits hour by hour, the 24 h tab's columns (the other tabs have them per day)
-        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0 }));
+        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0 }));
         const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
           load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits, drivers: this.topDrivers('drive_hours', 'hour', from) };
         this.cache.set('h24', { at: Date.now(), body });
@@ -461,7 +466,7 @@ export class Stats extends DurableObject {
       const daySpan = (day, L) => { const a = tartuStart(day); return loadSpan(L, a, Math.min(now, a + 86400000)); };
       const daily = rows.map((r) => {
         const lv = loadView(r.data.load, daySpan(r.day, r.data.load));
-        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
+        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
           load: lv && { on: lv.on, onMax: lv.onMax, wait: lv.wait, waitMax: lv.waitMax, tot: lv.tot, totMax: lv.totMax, away: lv.away } };
       });
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));

@@ -42,7 +42,8 @@ const ME = 'Martin';
 const own = { w201: 190000, audi200: 176420, passat: 193030, crv: 195000, enyaq: 179150, rav4: 190630, mazda6: 191140, bz4x: 174000, m3: 171840, impreza: 168060, f40: 168930, cgt: 173850, bus: 293060 };
 const at = (d) => `2026-11-${d}T12:00:00.000Z`;
 const ownLaps = Object.entries(own).map(([car, ms], i) => ({ ms, car, carShort: car, at: at(17 + (i % 8)), inp: 'kb' }));
-const ownRuns = [{ ms: 124120, car: 'impreza', at: at(26), ty: 'gravel', inp: 'kb' }, { ms: 129800, car: 'audi200', at: at(26), ty: 'gravel', inp: 'kb' }];
+// (stage runs from before the stage opened to everyone, 26 Nov 16:00 UTC, are test runs the page leaves out: src/race/raadi.js)
+const ownRuns = [{ ms: 124120, car: 'impreza', at: at(27), ty: 'gravel', inp: 'kb' }, { ms: 129800, car: 'audi200', at: at(27), ty: 'gravel', inp: 'kb' }];
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const asked = [];

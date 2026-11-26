@@ -178,6 +178,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createSideCam } from './sidecam.js';
 import { createIdlePark, alwaysJudged } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import { createLineLog } from './race/linelog.js';
@@ -1863,6 +1864,7 @@ let droneYaw = 0;
 const droneDir = new THREE.Vector2(0, -1);   // the car's travel direction, averaged (x, z)
 let camView = localStorage.getItem('kvissuroam.view') === 'drone' ? 'drone' : 'chase';
 input.on('KeyC', unlessMap(() => {
+  if (sideCam.side) { sideCam.off(); return; }   // (from a side view C goes back to the one it left)
   camView = camView === 'chase' ? 'drone' : 'chase';
   droneYaw = camYaw; droneDir.set(Math.sin(camYaw), -Math.cos(camYaw));
   try { localStorage.setItem('kvissuroam.view', camView); } catch {}
@@ -1871,6 +1873,10 @@ input.on('KeyC', unlessMap(() => {
 // out around the car every frame and the camera is placed between them, so it never trails the car.
 const VIEW_BLEND = 0.8;
 let droneMix = camView === 'drone' ? 1 : 0;
+// 5 and 6: the car from its left and from its right side (src/sidecam.js); the same key again, or C, goes back to
+// the view that was on
+const sideCam = createSideCam(() => world);
+for (const [code, side] of [['Digit5', -1], ['Numpad5', -1], ['Digit6', 1], ['Numpad6', 1]]) input.on(code, unlessMap(() => sideCam.press(side)));
 // a click or tap on a small thumbs up on a back window (src/kudos.js, Martin 2026-11-24): who gave it, and when,
 // in a small label there for a few seconds; on the +N place the older ones. Only work at the click itself.
 let kudoPop = null, kudoPopT = 0;
@@ -2265,6 +2271,7 @@ function frame(ts) {
       const fall = (world.groundAt(tg.x - cx * 4, tg.z - cz * 4, gy) - world.groundAt(tg.x + cx * 4, tg.z + cz * 4, gy)) / 8;
       camSlope += (Math.max(-0.3, Math.min(0.3, fall)) - camSlope) * ease(2.5);
     }
+    const camSnap0 = camSnap;
     if (camSnap) { camSnap = false; camDist = wantDist; camY = top; camSlope = 0; }
     else {
       camDist += (wantDist - camDist) * ease(5);
@@ -2320,6 +2327,10 @@ function frame(ts) {
       camLook.lerp(droneLook.set(tg.x + dx * ahead, camY, tg.z + dz * ahead), dw);
       wantFov += (55 - wantFov) * dw; warp *= 1 - dw;
     }
+    // 5 / 6: round to the car's side from whichever of those it is (B held looks back as ever)
+    if (camSnap0) sideCam.snap();
+    const sv = sideCam.update(tg, camYaw, dt, camera.aspect, camPos, camLook, !(ctl.look && !board?.open));
+    if (sv.w > 0) { wantFov += (sv.fov - wantFov) * sv.w; warp *= 1 - sv.w; }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
     if (flyIn) {
       flyIn.t = Math.min(1, flyIn.t + dt / FLY_IN);
@@ -2503,7 +2514,7 @@ window.__game = !devHook ? { hitches } : {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

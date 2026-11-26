@@ -455,7 +455,9 @@ export function createAudio() {
     const t = ctx.currentTime;
     v.id = null;
     v.out.gain.setTargetAtTime(0, t, 0.08);
-    if (v.motor) { v.motor.stop(); v.motor = null; }
+    // (its motors are only hushed: the next car this voice gets is often of the same kind, and making them anew
+    // is many words to the sound thread; bind() takes them apart when the next car has others or none)
+    if (v.motor) v.motor.step(t, 0, 0, 0, true);
     if (v.synth) v.synth.port.postMessage({ state: { on: 0 } });
   }
   function bind(v, r, d) {

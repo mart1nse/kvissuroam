@@ -6,7 +6,7 @@
 // A car must never pass through, must never end up deep inside one, and must always get clear again.
 // Run: node tools/barrier-test.mjs  (add `quick` for two cars only)
 import { CARS } from '../src/cars/specs.js';
-import { createCar, stepCar } from '../src/cars/physics.js';
+import { createCar, stepCar, resetCar } from '../src/cars/physics.js';
 
 const dt = 1 / 60;
 const RES = 0.5, DMIN = -4, DSPAN = 16, N = 241, X0 = -60, Z0 = -60;   // a 120 m field round the start
@@ -76,7 +76,7 @@ const quick = process.argv.includes('quick');
 const only = process.argv.find((a) => a.startsWith('car='));
 const ids = only ? [only.slice(4)] : quick ? ['w201', 'bus'] : Object.keys(CARS);
 const exact = !process.argv.includes('old');
-let fails = 0, runs = 0, worstPen = 0;
+let fails = 0, runs = 0, worstPen = 0, roofed = 0;
 const t0 = Date.now();
 for (const id of ids) {
   const spec = CARS[id];
@@ -98,6 +98,9 @@ for (const id of ids) {
           const away = yaw > 0 ? { up: 0.6, left: 0.6 } : { up: 0.6, right: 0.6 };
           for (let t = 0; t < 8; t += dt) {
             const inp = t < 2.5 ? { up: 1 } : t < 5 ? { down: 1 } : away;
+            // (fast and square it ends on its roof, src/cars/crash.js, tools/wall-crash-test.mjs: it must not pass
+            // through on the way; then it is stood on its wheels where it lies, to get away like the rest)
+            if (car.crash && t >= 2.5) { roofed++; resetCar(car, { x: car.x, z: car.z, yaw: car.yaw, y: 0 }); }
             stepCar(car, inp, w, dt);
             maxPen = Math.max(maxPen, overlap(car, wall));
             if (side(wall, car.x, car.z) !== startSide) crossed = true;
@@ -185,6 +188,6 @@ for (const id of ids) {
   fails += through + stuck + deep;
 }
 function car0(spec, yaw) { const c = createCar(spec, { x: 0, z: 0, yaw: 0, y: 0 }); return Math.abs(Math.cos(yaw)) * c.halfLen + Math.abs(Math.sin(yaw)) * c.halfWid; }
-console.log(`\n${runs} barrier runs, deepest overlap ${worstPen.toFixed(2)} m (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+console.log(`\n${runs} barrier runs, deepest overlap ${worstPen.toFixed(2)} m, ${roofed} ended on the roof (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
 console.log(fails ? `${fails} FAILURES` : 'barriers OK');
 process.exit(fails ? 1 : 0);

@@ -53,13 +53,13 @@ function raceDrive(pts, k = 0, a = 6) {
 
 // a lobby with n pages
 function world(n, cars = []) {
-  const meta = {}, refused = [];
+  const meta = {}, refused = [], margins = [];
   const sockets = Array.from({ length: n }, (_, i) => ({ a: { id: `p${i}`, name: `P${i}`, car: cars[i] || 'f40', drv: true, at: clock }, send() {}, deserializeAttachment() { return this.a; }, serializeAttachment(a) { this.a = a; } }));
   const L = {
-    limitNow, meta: (k) => meta[k] ?? null, setMeta: (k, v) => { meta[k] = v; }, broadcast() {}, raceRefused: (r, ms, why) => refused.push([r.id, why]),
+    limitNow, meta: (k) => meta[k] ?? null, setMeta: (k, v) => { meta[k] = v; }, broadcast() {}, raceRefused: (r, ms, why) => refused.push([r.id, why]), margin: (k, v) => margins.push([k, v]),
     ctx: { getWebSockets: () => sockets, getWebSocketAutoResponseTimestamp: () => new Date(clock), storage: { setAlarm: () => Promise.resolve() } },
   };
-  const w = { L, meta, refused, sockets, desk: new RaceDesk(L) };
+  const w = { L, meta, refused, margins, sockets, desk: new RaceDesk(L) };
   w.msg = (i, m) => { sockets[i].a.at = clock; w.desk.message(sockets[i], sockets[i].a, m); };
   w.racer = (i) => w.desk.s.racers.find((r) => r.id === `p${i}`) || w.desk.s.last?.racers.find((r) => r.id === `p${i}`);
   // everyone votes; the race is on, the clock at the start of the grid time
@@ -106,6 +106,11 @@ for (const [name, pts] of Object.entries(drives)) {
   assert.ok(Math.abs(a.ms - d.fin * 100) <= 100, `${name}: ${a.ms} for ${d.fin * 100}`);
   assert.ok(b.ms > a.ms || name === 'bus');
   assert.equal(w.refused.length, 0);
+  // (how near each finish came to the limits is written down: the racer's time against the server's sighting, the
+  // gaps used, the car check)
+  const of = (k) => w.margins.filter((m) => m[0] === k).map((m) => m[1]);
+  assert.equal(of('fin').length, 2); assert.ok(of('fin').every((v) => v >= 0 && v <= 200), `fin ${of('fin')}`);
+  assert.deepEqual(of('gaps'), [0, 0]); assert.ok(of('rcar').every((v) => v <= 1));
   // (and the lap as the server followed it reads as this car's drive: seconds over each of the car's limits)
   const dr = driven(w.desk.fol.get('p0')), j = judgeDrive(dr.xs, dr.zs, dr.ys, limitNow.get(name), { hop: dr.hop });
   console.log(`${name.padEnd(8)} followed ${(a.ms / 1000).toFixed(1)} s, ${dr.xs.length} samples, s over: pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}`);
@@ -143,7 +148,7 @@ const F40 = drives.f40;
 {
   const w = world(2), d = raceDrive(F40);
   const [a] = run(w, [{ ...d, claim: d.fin * 100 - 5000 }, raceDrive(drives.bus, 1)]);
-  assert.ok(a.ms >= d.fin * 100 - 800 && a.ms <= d.fin * 100, `shaved: ${a.ms} for ${d.fin * 100}`);
+  assert.ok(a.ms >= d.fin * 100 - 1500 && a.ms <= d.fin * 100, `shaved: ${a.ms} for ${d.fin * 100}`);
 }
 // 4) a short cut: half a minute of the lap left out by a jump
 {

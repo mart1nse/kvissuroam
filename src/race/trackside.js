@@ -34,6 +34,7 @@ import { createUueturu, uueturuClear, uueturuProps } from './uueturu.js';
 import { createPlaytech, playtechProps } from './playtech.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
+import { crashHit } from '../cars/crash.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -594,6 +595,7 @@ export function createTrackside(world, scene) {
           const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
           const vn = wvx * nx + wvz * nz;
           if (vn < 0) {
+            crashHit(car, nx, nz, wvx, wvz);          // (fast and square: onto its roof, cars/crash.js)
             const nvx = wvx - 1.25 * vn * nx, nvz = wvz - 1.25 * vn * nz;
             car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
             car.yawRate *= 0.6;

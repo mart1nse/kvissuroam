@@ -33,13 +33,29 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const base = run({ up: 1 }, 60);
   // (1.6 s until 26 Nov, when the fans went back to 12 kN so that the 250 kg added count: Martin, "a means to reduce
   // the insane acceleration, braking and cornering power")
-  check('0-100 km/h on the motors is 1.7 s at 2200 kg', Math.abs(base.t100 - 1.72) < 0.08, `${base.t100.toFixed(2)} s`);
-  check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
+  // (2100 kg from 26 Nov: "reduce tesla weight again, by 100kg")
+  check('0-100 km/h on the motors is 1.7 s at 2100 kg', Math.abs(base.t100 - 1.67) < 0.08, `${base.t100.toFixed(2)} s`);
+  // (Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg; it
+  // was 340 on the motors)
+  check('top speed on the motors is 389 km/h', Math.abs(base.top - 389) < 0.3, `${base.top.toFixed(1)} km/h`);
+  {
+    const w = world(), car = fresh(w); car.fanOff = true;
+    let top = 0;
+    for (let t = 0; t < 60; t += dt) { stepCar(car, { up: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
+    check('...and 405 km/h with the fans switched off', Math.abs(top - 405) < 0.3, `${top.toFixed(1)} km/h`);
+  }
   const b = run({ up: 1, boost: 1 });
   check('0-100 km/h with BOOST is about 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.64, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
   check('BOOST blows a full tank down in under 6 s, then its valves shut', b.t > 5.4 && b.t < 6 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
-  check('BOOST tops out near 355 km/h', b.top > 345 && b.top < 370, `${b.top.toFixed(0)} km/h`);
+  // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
+  check('BOOST takes it to about 385 km/h on one tank, and never past 389', b.top > 375 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
+  {
+    const w = world(), car = fresh(w, 387);
+    let top = 0;
+    for (let t = 0; t < 12; t += dt) { if (car.rocket.tank < 5) refillTank('rocket'); stepCar(car, { up: 1, boost: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
+    check('...however much gas there is', top < 389.3, `${top.toFixed(1)} km/h`);
+  }
   {
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
@@ -67,7 +83,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     for (; car.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(car, {}, w, dt);
     stepCar(car, {}, w, dt);
     check('...and left alone the tank fills to the top, a whole one in 60 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
-    check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+    check('...and the car weighs its full 2100 kg again', spec.mass === 2100 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   }
   {
     // a little used: the filling starts at once, and stops for as long as BOOST blows
@@ -113,7 +129,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const go = (fanOff) => { const w = world(), c = fresh(w); c.fanOff = fanOff; let t = 0; while (speedKmh(c) < 100 && t < 10) { stepCar(c, { up: 1 }, w, dt); t += dt; } return t; };
   const stop = (fanOff) => { const w = world(), c = fresh(w, 100); c.fanOff = fanOff; for (let t = 0; t < 0.5; t += dt) { stepCar(c, {}, w, dt); c.vx = 100 / 3.6; } const z0 = c.z; let t = 0; while (c.vx > 0.3 && t < 10) { stepCar(c, { down: 1 }, w, dt); t += dt; } return Math.abs(c.z - z0); };
   const g1 = go(false), g0 = go(true), s1 = stop(false), s0 = stop(true);
-  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.72) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
+  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.67) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
   check('...and stopping from 100 km/h about 36 m, not 22', s1 > 20.5 && s1 < 24.5 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
 }
 

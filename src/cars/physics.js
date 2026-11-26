@@ -246,12 +246,17 @@ const hash = (x) => { const h = Math.sin(x * 12.9898 + 78.233) * 43758.5453; ret
 
 // An electric car's motors. Their push at the tread (N) at this wheel speed: full force from a standstill, then
 // constant power, cut at the motors' and the car's speed limit.
-function evPush(s, wAbs, vAbs, reversing) {
+// A car's speed limit (km/h) as it stands: a fan car with its fans switched off has a little more of it, when its
+// spec says so (limiterNoFans. Martin 26 Nov, of the Roadster Rocket: "shouldn't it get a higher top speed when the
+// fan is turned off? If yes, then leave it as an easter egg")
+export const topKmh = (car) => (car.fanOff && car.spec.limiterNoFans) || car.spec.limiter;
+// (top: the car's speed limit just then, km/h, where it is not the spec's: topKmh)
+function evPush(s, wAbs, vAbs, reversing, top = s.limiter) {
   const e = s.engine;
   let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(wAbs, 0.5));
-  const wLim = (s.limiter || 180) / 3.6 * 1.15;      // motor speed limit
+  const wLim = (top || 180) / 3.6 * 1.15;            // motor speed limit
   if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
-  const lim = reversing ? 30 : s.limiter;
+  const lim = reversing ? 30 : top;
   if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
   return f;
 }
@@ -279,9 +284,9 @@ function evRegen(s, vAbs, use = 0, inK = 1) {
 // What an electric car's battery gives (kW), or takes back (below zero), for the power dial. The brake pedal's
 // first quarter g counts as the motors' on the dial, as on the real cars; the braking itself is not changed
 // by it. Another player's car is worked out from the pedal, brake light and revs it sends (see spectate.js).
-export function evKw(s, throttle, brake, wAbs, vAbs, reversing, use = 0, inK = 1, pedalK = 1) {
+export function evKw(s, throttle, brake, wAbs, vAbs, reversing, use = 0, inK = 1, pedalK = 1, top = s.limiter) {
   const e = s.engine;
-  if (throttle > 0) return (evPush(s, wAbs, vAbs, reversing) * throttle * wAbs) / (s.efficiency * 1000);
+  if (throttle > 0) return (evPush(s, wAbs, vAbs, reversing, top) * throttle * wAbs) / (s.efficiency * 1000);
   let f = evRegen(s, vAbs, use, inK);
   if (brake > 0 && e.regenG) f += Math.max(0, Math.min(REGEN_PEDAL_G, e.regenG + brake * (s.brakeG ?? 1.05)) * s.mass * G * regenFade(vAbs) - f) * pedalK;
   return -Math.min(e.regenKw ?? 1e9, (f * vAbs * s.efficiency) / 1000);
@@ -307,10 +312,10 @@ function engineForce(car, throttle, dt, hb = 0) {
     const use = Math.max(car.useF, car.useR);
     car.regenIn = throttle <= 0 ? Math.min(1, (car.regenIn || 0) + dt / REGEN_IN) : 0;
     car.pedalIn = throttle <= 0 && car.brake > 0 ? Math.min(1, (car.pedalIn || 0) + dt / REGEN_PEDAL_IN) : Math.max(0, (car.pedalIn || 0) - dt / REGEN_PEDAL_IN);
-    car.kw = evKw(s, throttle, car.brake || 0, wAbs, vAbs, car.reversing, use, car.regenIn, car.pedalIn);
+    car.kw = evKw(s, throttle, car.brake || 0, wAbs, vAbs, car.reversing, use, car.regenIn, car.pedalIn, topKmh(car));
     // regeneration when lifting off
     if (throttle <= 0) return -Math.sign(v) * evRegen(s, vAbs, use, car.regenIn);
-    return dir * evPush(s, wAbs, vAbs, car.reversing) * throttle;
+    return dir * evPush(s, wAbs, vAbs, car.reversing, topKmh(car)) * throttle;
   }
   const ratioOf = (g) => (car.reversing ? s.reverse : s.gears[g - 1]) * s.finalDrive;
   const rpmAt = (g) => (vAbs / s.wheelRadius) * ratioOf(g) * (60 / (2 * Math.PI));

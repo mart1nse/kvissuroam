@@ -34,7 +34,8 @@ const GAS_V = 650;                 // cold gas leaves a nozzle at about this spe
 const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
 export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
-const FADE0 = 370 / 3.6, FADE1 = 400 / 3.6;   // BOOST eases off between these speeds (m/s)
+const TOP_SHORT = 1.2 / 3.6;       // the motors' push meets the air's a little under the limiter: BOOST's ends there too
+const FADE = 30 / 3.6;             // BOOST eases off over this much speed, to nothing at the car's top speed (m/s)
 // (Martin 26 Nov: "the ground launch acceleration curve just a tad slower": the push was 0.45 s to 10.6 m/s, 2.4 g;
 // now 2 g for a little longer, to the same height)
 const LIFT_T = 0.52;               // the lift-off push lasts this long (s)...
@@ -129,7 +130,8 @@ export function rocketStep(car, input, world, dt) {
     const blowS = (GAS_V * (T.gasKg || 250)) / T.rear;
     use(r, (dt * r.tank) / blowS);
   }
-  const want = on ? full * clamp01((FADE1 - car.vx) / (FADE1 - FADE0)) : 0;
+  // (to nothing where the motors stop pushing too, a little under the car's limiter: 389 km/h, and 405 with the fans off)
+  const want = on ? full * clamp01((((car.fanOff && car.spec.limiterNoFans) || car.spec.limiter || 400) / 3.6 - TOP_SHORT - car.vx) / FADE) : 0;
   r.boost += (want - r.boost) * Math.min(1, dt / OPEN_T);
   if (r.boost < 0.002) r.boost = 0;
   car.thrustN = r.boost * T.rear;

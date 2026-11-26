@@ -14,7 +14,7 @@ const EVERY = 300000;
 
 const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0, paceN = 0, trimN = 0;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0;
 const once = new Set();
 const errSeen = new Set();
 
@@ -165,14 +165,11 @@ function freeze(s, ms) {
 //   why  build | draw | online | game | card | page:net | page:car      what the frame before was busy with
 //   new  shaders | pictures | car | none      what that frame sent to the graphics card first
 //   len (ms), on (others online), t (since DRIVE)
-//   pace:<others online>     a picture shown a refresh later than the one before, the frame itself on time
-//   trim:<step>     AUTO graphics trimmed the sharpness for even pictures: to step 1, 2 or 3, back to 0, or 'off'
 // and `hitT` the seconds of such driving per "device:others online", so /stats can say hitches per 10 minutes
 // alone and in a crowd.
 const crowd = (n) => bucket(n || 0, [1, 10, 30, 60], ['0', '1-9', '10-29', '30-59', '60+']);
 function hitch(h) {
   const d = dev || 'other';
-  if (h.pace) { if (paceN++ < 400) inc(b.hit, `${d}:pace:${crowd(h.others)}`); return; }
   if (hitN++ >= 60) return;
   const facts = {
     why: h.why, new: h.news, on: crowd(h.others),
@@ -185,11 +182,8 @@ function hitch(h) {
 let fpsT = 0, fpsN = 0;
 export const stats = {
   on,
-  // a short hitch while driving, or a picture held back (src/hitches.js)
+  // a short hitch while driving (src/hitches.js)
   hitch(h) { if (on) try { hitch(h); } catch { /* never in the way of the game */ } },
-  // AUTO graphics trimmed the sharpness for even pictures (src/quality.js createPacer): the step it went to
-  // (1 to 3, 0 back to full) or 'off' (the whole trim changed nothing)
-  trim(k) { if (on) try { if (trimN++ < 12 && b) inc(b.hit, `${dev || 'other'}:trim:${k}`); } catch { /* never in the way of the game */ } },
   // once, at the start: what kind of device this is
   start({ isTouch, lite, software, death }) {
     if (!on) return;

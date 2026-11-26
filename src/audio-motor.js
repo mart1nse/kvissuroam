@@ -15,11 +15,14 @@
 // under them a hum of the motors that grows with the pull. Over 200 km/h its pitch all but stops rising (his
 // wish: "reaches like some max point but ever so slightly gets higher").
 //
-// The road cars ("pair"): the same two whines rising together, one for each axle's motor, but clean and quiet as
-// a family car's are, and each car its own: the Enyaq is led by its rear motor and the front one joins a third
-// higher when the pedal asks for it (as the real 80x's front motor does); the bZ4X's two are equals a fifth
-// apart, each a pair of tones a hair apart, so it shimmers. The intervals are chosen by ear's rules, not from the
-// real cars' gear teeth.
+// The road cars ("pair"): the same two whines rising together, one for each axle's motor, but clean as a family
+// car's are, and each car its own: the Enyaq is led by its rear motor and the front one joins a third higher when
+// the pedal asks for it (as the real 80x's front motor does); the bZ4X's two are equals a fifth apart, each a pair
+// of tones a hair apart, so it shimmers. The intervals are chosen by ear's rules, not from the real cars' gear
+// teeth. They do not stand in for the plain whine but go with it (Martin 26 Nov, having driven them: "make it a
+// blend of the initial regular hiss sound and this two motor thingy. reduce two engine thing to 70% of the hiss"):
+// the old sine sounds as it always did and the two motors follow its level at 0.7 of it, whatever the speed and
+// the pedal, which only move the balance between the two whines.
 //
 // All of it tuned by measurement and spectrograms (tools/motor-sound-demo.mjs), not by ear.
 
@@ -128,30 +131,46 @@ function gear(k, sum) {
   };
 }
 
-// ---- a road car with a motor at each axle
-// o: rear, front: the two whines, so many to a turn of the shaft; timbre: the strengths of a whine's harmonics;
-// apart: Hz between the two tones each whine is made of (0: one tone); idle, pull, hold: each whine's level with the
-// pedal let go, how much the pedal adds and how much the motors holding the car back add, [rear, front]; hum: the
-// motors' own low note under load; full: the speed (m/s) by which the whines have their level; level: all of it
+// the plain whine every electric car has had from the start, as audio.js plays it: its level (the gain of one sine)
+// at this wheel speed (m/s) and pedal
+export const plainWhine = (vw, throttle) => Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + throttle * 0.5);
+// and its pitch (Hz). It does not follow the wheels in proportion: 180 Hz standing still, 38 Hz more for each m/s
+export const plainWhineHz = (vw) => 180 + vw * 38;
+
+// ---- a road car with a motor at each axle, heard with the plain whine
+// Its two whines are tuned to the plain whine, not to the wheels (Martin 26 Nov: "check if there is a clash of
+// frequencies on both sound now together and blend them in more nicely and evenly and complementing each other").
+// Tied to the wheels they slid past it, as it starts at 180 Hz and they at nothing: in the Enyaq the front whine
+// crossed it at 70 km/h (within 32 Hz of it from 50 to 90, a rough beat) and in the bZ4X the rear at 40; at other
+// speeds they stood at odd intervals from it that kept changing. Now each is a fixed share of its pitch, below
+// it, so all of it is one chord that rises with the car: every tone and every harmonic is a whole multiple of one
+// low note, and none comes near another without meeting it exactly.
+// o: rear, front: the two whines as shares of the plain whine's pitch; timbre: the strengths of a whine's
+// harmonics; apart: Hz between the two tones each whine is made of (0: one tone); idle, pull, hold: each whine's
+// weight with the pedal let go, how much the pedal adds and how much the motors holding the car back add, [rear,
+// front]; hum: the motors' own low note under load, also a share of the whine's pitch; share: how loud all of it
+// is, as a part of the plain whine's loudness
 function pair(o) {
   return (k, sum) => {
-    const wave = k.wave(o.timbre);
+    const wave = k.wave(o.timbre), amp = o.apart ? 0.3 : 0.5;
     const whine = (order) => {
       const g = k.gain(0);
-      if (o.apart) { k.tone(order, wave, 0.3, g, -o.apart / 2); k.tone(order, wave, 0.3, g, o.apart / 2); } else k.tone(order, wave, 0.5, g);
+      if (o.apart) { k.tone(order, wave, amp, g, -o.apart / 2); k.tone(order, wave, amp, g, o.apart / 2); } else k.tone(order, wave, amp, g);
       g.connect(sum);
       return g;
     };
     const rear = whine(o.rear), front = whine(o.front);
     const hum = k.gain(0);
     k.tone(o.hum, 'sine', 0.4, hum); k.tone(o.hum * 2, 'sine', 0.12, hum); hum.connect(sum);
+    // how loud one whine and the hum are at a weight of 1 (root mean square), so the three weights can be scaled
+    // to make all of it just as loud whatever their balance
+    const W = amp * Math.sqrt((o.apart ? 2 : 1) * o.timbre.reduce((a, x) => a + x * x, 0) / 2), H = Math.sqrt((0.4 * 0.4 + 0.12 * 0.12) / 2);
     return {
-      out: sum, level: o.level,
+      out: sum, share: o.share, pitch: plainWhineHz,
       set(t, v, load, rg) {
-        const sp = ramp(v, 0, o.full);
-        to(rear.gain, sp * (o.idle[0] + o.pull[0] * load + o.hold[0] * rg), t);
-        to(front.gain, sp * (o.idle[1] + o.pull[1] * load + o.hold[1] * rg), t);
-        to(hum.gain, (0.2 + 0.8 * sp) * (load + 0.3 * rg), t, 0.05);
+        const r = o.idle[0] + o.pull[0] * load + o.hold[0] * rg, f = o.idle[1] + o.pull[1] * load + o.hold[1] * rg, h = 0.6 * (load + 0.3 * rg);
+        const n = 1 / Math.hypot(r * W, f * W, h * H);
+        to(rear.gain, r * n, t); to(front.gain, f * n, t); to(hum.gain, h * n, t, 0.05);
       },
     };
   };
@@ -160,9 +179,12 @@ function pair(o) {
 const BUILD = {
   gear,
   // Škoda Enyaq 80x: the rear motor does the work and is always heard; the front one joins when the pedal asks
-  enyaq: pair({ rear: 8, front: 10.05, timbre: [1, 0.3, 0.1], apart: 0, idle: [0.5, 0.1], pull: [0.5, 0.9], hold: [0.45, 0.1], hum: 4, full: 26, level: 0.072 }),
-  // Toyota bZ4X AWD: two equal motors, a fifth apart, and a shimmer in each
-  bz4x: pair({ rear: 10.5, front: 7, timbre: [1, 0.14, 0.05], apart: 1.6, idle: [0.42, 0.42], pull: [0.58, 0.58], hold: [0.3, 0.3], hum: 3.5, full: 26, level: 0.085 }),
+  // (rear an octave under the plain whine, front a fifth over the rear, the hum an octave under the rear)
+  enyaq: pair({ rear: 1 / 2, front: 3 / 4, timbre: [1, 0.3, 0.1], apart: 0, idle: [0.5, 0.1], pull: [0.5, 0.9], hold: [0.45, 0.1], hum: 1 / 4, share: 0.7 }),
+  // Toyota bZ4X AWD: two equal motors, and a shimmer in each
+  // (one over the plain whine and one under it, which it sits between: rear a fifth over it, front an octave under,
+  // the hum two octaves under. A fourth under it at first, with the rear a fifth under, was rough below 30 km/h)
+  bz4x: pair({ rear: 3 / 2, front: 1 / 2, timbre: [1, 0.14, 0.05], apart: 1.6, idle: [0.42, 0.42], pull: [0.58, 0.58], hold: [0.3, 0.3], hum: 1 / 4, share: 0.7 }),
 };
 
 // The motors of one car: `noise` is a running noise source, `out` where the sound goes. step() each frame with
@@ -180,16 +202,22 @@ export function createMotor(ctx, out, noise, spec, kind) {
   let load = 0, was = -1;
   return {
     kind,
+    blend: !!v.share,   // heard with the plain whine of audio.js, not in its place
     step(t, vw, throttle, regen, dead) {
       const w = Math.abs(vw), over = w - v.knee;
-      // (past the knee the note nears a top and then only creeps on: at 300 km/h it is where 226 would be, at 370 where 233)
-      const hz = (over > 0 ? v.knee + v.ease * (1 - v.creep) * (1 - Math.exp(-over / v.ease)) + v.creep * over : w) * perMs;
-      to(k.shaft.offset, hz, t, 0.04);
+      // (past the knee the note nears a top and then only creeps on: at 300 km/h it is where 226 would be, at 370 where
+      // 233. A sound tuned to the plain whine follows its pitch, glide and all, so the two never part)
+      const hz = v.pitch ? v.pitch(vw) : (over > 0 ? v.knee + v.ease * (1 - v.creep) * (1 - Math.exp(-over / v.ease)) + v.creep * over : w) * perMs;
+      to(k.shaft.offset, hz, t, v.pitch ? 0.05 : 0.04);
       // (the motors answer the pedal at once, but not in one frame: a click otherwise)
       load += (throttle - load) * 0.35;
       v.set(t, w, load, regen, hz);
       const on = dead ? 0 : 1;
-      if (on !== was) { was = on; to(level.gain, on * v.level, t, 0.06); }
+      // (a sound that goes with the plain whine follows that whine's level: a sine of gain g is g / √2 loud. The motors
+      // come in as the car gets going, all there by 30 km/h: tuned to the whine they would sound standing still, and
+      // the lowest of their notes, close together down there, only muddied it about the car park)
+      if (v.share) to(level.gain, on * v.share * Math.SQRT1_2 * plainWhine(w, throttle) * ramp(w, 1, 8.3), t, 0.08);
+      else if (on !== was) { was = on; to(level.gain, on * v.level, t, 0.06); }
     },
     // (faded out first, so that taking it apart is not heard)
     stop() {

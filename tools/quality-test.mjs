@@ -1,6 +1,6 @@
 // Drives the graphics governor (src/quality.js) with made-up frame times and checks it settles
 // without flicker: node tools/quality-test.mjs
-import { createGovernor, createPacer, createQuality, deviceLadder, LADDER, TRIMS } from '../src/quality.js';
+import { createGovernor, createQuality, deviceLadder, LADDER } from '../src/quality.js';
 
 let failed = 0;
 const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
@@ -134,67 +134,6 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   check(d2 && d2.s === null && d2.heap === null && d2.cap === 2, `an old mark without clues (${JSON.stringify(d2)})`);
   check(visit().death === null, 'no death after a visit that closed in the ordinary way');
   delete globalThis.localStorage;
-}
-
-// 13. even pictures (26 Nov 2026, a MacBook Pro at a steady 60 FPS with 566 pictures held back in 2 minutes): AUTO
-// trims the sharpness a step at a time while pictures keep being finished a refresh late, and not otherwise.
-// rateAt(step, t) -> the share of frames whose picture is held back at that trim step
-{
-  const pace = (rateAt, seconds, counts = () => true) => {
-    const p = createPacer(), moves = [];
-    let t = 0, seed = 7, acc = 0;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    while (t < seconds * 1000) {
-      t += 16.67;
-      if (!counts(t)) continue;
-      const held = rnd() < rateAt(p.step, t) ? 1 : 0;
-      const k = p.feed(16.67, held);
-      if (k >= 0) moves.push(`${Math.round(t / 1000)}s ${p.off ? 'off' : k}`);
-    }
-    return { p, moves };
-  };
-  check(TRIMS[0] === 1 && TRIMS.every((x, i) => i === 0 || x < TRIMS[i - 1]), `trim steps go down from full sharpness (${TRIMS.join(', ')})`);
-  // an ordinary desktop (the live average, 25 Nov: about 0.7 in 100 frames): never trimmed
-  { const { moves } = pace(() => 0.007, 900); check(moves.length === 0, `an even picture is left alone (${moves.length} moves)`); }
-  // the MacBook Pro: 8 in 100 at full sharpness, 1.5 one step down: trims once, early, and stays
-  { const { p, moves } = pace((k) => [0.08, 0.015, 0.01, 0.005][k], 1800); check(p.step === 1 && moves.length === 1 && parseInt(moves[0]) < 15, `uneven pictures trim the sharpness one step and stay there (${moves.join(', ')})`); }
-  // a card further over: goes on down until it is even
-  { const { p, moves } = pace((k) => [0.2, 0.12, 0.06, 0.02][k], 900); check(p.step === 3 && moves.length === 3, `a card further over is trimmed all the way (${moves.join(', ')})`); }
-  // quite even one step down: after a minute a try back up, which does not hold; the next tries come twice as far apart
-  { const { p, moves } = pace((k) => [0.08, 0.002, 0, 0][k], 3600); const ups = moves.filter((m) => m.endsWith(' 0')).map((m) => parseInt(m)); check(p.step === 1 && ups.length >= 3 && ups.length <= 6 && ups[ups.length - 1] - ups[ups.length - 2] > (ups[1] - ups[0]) * 1.5, `tries back to full sharpness come further and further apart (${moves.join(', ')})`); }
-  // what made it uneven goes away (a heavy part of town left behind): back to full and staying there
-  { const { p, moves } = pace((k, t) => (t < 120000 ? [0.08, 0.002, 0, 0][k] : 0.002), 1800); check(p.step === 0 && !p.off && moves.length <= 4, `full sharpness comes back when the pictures stay even (${moves.join(', ')})`); }
-  // pictures held back by something the sharpness does not change: the whole trim is tried once, then put back for good
-  { const { p, moves } = pace(() => 0.08, 1800); check(p.step === 0 && p.off && moves.length === 4 && parseInt(moves[3]) < 60, `a trim that changes nothing is put back and left alone (${moves.join(', ')})`); }
-  // the town loading, the garage, a jump: frames that do not count never trim
-  { const { moves } = pace(() => 0.3, 600, () => false); check(moves.length === 0, 'frames that do not count never trim'); }
-  // and through createQuality: the pixel ratio follows, a rung is not climbed while trimmed, a level picked by hand is whole again
-  {
-    const mem = new Map();
-    globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
-    const caps = { dpr: 1, shadow: 2048, trees: 150, load: 1000 };
-    let ratio = 1; const told = [];
-    const q = createQuality({ renderer: { getPixelRatio: () => ratio, setPixelRatio(x) { ratio = x; }, shadowMap: {} }, sun: { shadow: { mapSize: { x: 0, set() {} }, map: null } }, quality: {}, setTrees() {}, trimmed: (k) => told.push(k) }, caps, {});
-    for (let i = 0; i < 60 * 60; i++) q.frame(16.67, 4, 9.6, { held: q.trim === 1 && i % 12 === 0 ? 1 : 0, count: true });
-    check(q.trim < 1 && Math.abs(ratio - q.levels[q.level].dpr * q.trim) < 1e-9 && ratio === q.sharpness && told[0] === 1, `the picture's pixel ratio follows the trim (${ratio.toFixed(2)}, told ${told.join(', ')})`);
-    q.setMode('high');
-    check(q.trim === 1 && ratio === q.levels[q.level].dpr, `a level picked by hand has its whole sharpness (${ratio})`);
-    const off = createQuality({ renderer: { getPixelRatio: () => 1, setPixelRatio() {}, shadowMap: {} }, sun: { shadow: { mapSize: { x: 0, set() {} }, map: null } }, quality: {}, setTrees() {} }, caps, { even: false });
-    off.setMode('auto');
-    for (let i = 0; i < 60 * 60; i++) off.frame(16.67, 4, 9.6, { held: i % 12 === 0 ? 1 : 0, count: true });
-    check(off.trim === 1, '?even=0 leaves the sharpness alone');
-    delete globalThis.localStorage;
-  }
-  // the governor does not climb while the sharpness is trimmed
-  {
-    const g = createGovernor({ levels: N, start: N - 3 });
-    let ups = 0;
-    for (let t = 0; t < 120000; t += 16.67) { const ch = g.feed(16.67, 5, true); if (ch && ch.to > ch.from) ups++; }
-    const g2 = createGovernor({ levels: N, start: N - 3 });
-    let ups2 = 0;
-    for (let t = 0; t < 120000; t += 16.67) { const ch = g2.feed(16.67, 5, false); if (ch && ch.to > ch.from) ups2++; }
-    check(ups === 0 && ups2 > 0, `no rung is climbed while the sharpness is trimmed (${ups} against ${ups2})`);
-  }
 }
 
 process.exit(failed ? 1 : 0);

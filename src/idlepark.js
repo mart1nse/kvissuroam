@@ -22,8 +22,10 @@
 // countdown is over calls it off.
 // With room there is still a limit, LOOSE_S (Martin 26 Nov: "otherwise 7 days old tabs still hold the old client
 // and the server is already changed"): 20 minutes, then the same countdown and the garage.
-// And wherever the page is (the map, the garage, another tab), with nobody there for REST_S by the wall clock it
-// goes offline altogether until somebody is back (`here`, rest() in src/net/multiplayer.js).
+// And in the garage or another tab, with nobody there for REST_S by the wall clock, the page goes offline altogether
+// until somebody is back (`here`, rest() in src/net/multiplayer.js). A car sent to the garage by this rule starts
+// that clock afresh (Martin 26 Nov: "after 20 min push to garage and then get the additional 20 min"): 20 minutes
+// standing on the map, then 20 in the garage. On the map itself only this rule counts (restCheck in main.js).
 export const IDLE_S = 120, WARN_S = 15, SPREAD_S = 20, LOOSE_S = 1200, REST_S = 1200;
 export const ROOM_AT = 0.9;
 // (kinds of car judged whether there is room or not; the server asks the same of an old page's car)
@@ -74,7 +76,7 @@ export function createIdlePark({ idle = IDLE_S, loose = LOOSE_S, warn = WARN_S, 
       if (!told && now - last > lim * 1000) last = now - lim * 1000;
       const quiet = (now - last) / 1000;
       if (quiet < lim) return;
-      if (quiet >= lim + warn) { told = 0; hide(); last = now; park(); return; }
+      if (quiet >= lim + warn) { told = 0; hide(); last = now; here = Date.now(); park(); return; }
       const n = Math.ceil(lim + warn - quiet);
       if (n !== told) { told = n; show(n); }
     },

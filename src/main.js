@@ -338,8 +338,7 @@ const gpuTimer = createGpuTimer(renderer.getContext());
 const lag = createLag(renderer.getContext());   // how far the picture is behind the game (see createLag)
 // short hitches while driving and what each was (src/hitches.js), for the options window and /stats
 const hitches = createHitches({ report: (h) => stats.hitch(h) });
-let lagSteps = 0, driveT = 0;
-const heldPics = { held: 0, count: false };       // for AUTO graphics: pictures held back since the last frame (createPacer in src/quality.js)
+let driveT = 0;
 // how far the camera sees (the extra low level pulls it in): the haze ends just before it, the sky dome follows
 function setFar(m) {
   const far = Math.min(quality.far, m);
@@ -348,8 +347,8 @@ function setFar(m) {
   sky.scale.setScalar(far * 0.9);
   scene.fog.far = far < quality.far ? far * 0.95 : 2800;
 }
-const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o), trimmed: (k) => stats.trim(k) }, gfxCaps, {
-  locked: lockedLow, software: gpu.software, even: params.get('even') !== '0',
+const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o) }, gfxCaps, {
+  locked: lockedLow, software: gpu.software,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
 // Effects follow the graphics level too: once auto has had to go below full sharpness the tyre and
@@ -1432,10 +1431,12 @@ const idlePark = createIdlePark({
 });
 
 // nobody at this page for restS (an hour while watching someone): offline until somebody is back. Each frame, and
-// every 30 s for a hidden tab, which draws none
+// every 30 s for a hidden tab, which draws none. Not on the map in view: there the idle rule sends the car to the
+// garage first, and the garage starts this clock afresh (Martin 26 Nov: 20 minutes standing, then 20 in the garage)
 function restCheck() {
   if (!mp) return;
-  if (Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
+  const map = mode === 'drive' && !document.hidden && !watch?.active;
+  if (!map && Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
 }
 setInterval(restCheck, 30000);
 
@@ -1779,7 +1780,7 @@ function showGfx(force) {
   const m = gfx.meter;
   const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} [drawing ${part.draw.toFixed(1)}, building ${part.build.toFixed(1)}]${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms${lag.ms > m.frame * 2.5 ? `; picture ${Math.round(lag.ms)} ms behind` : ''})${hitches.line ? ` · ${hitches.line}` : ''}`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(gfx.sharpness * 100)}% sharpness${gfx.sharpness < l.dpr ? ' (trimmed for even pictures)' : ''}, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.trimOff ? ' · less sharpness did not even the pictures out' : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -2100,12 +2101,10 @@ function frame(ts) {
   rafLast = ts;
   if (gap > 2 && gap < 50) rafMs += (gap - rafMs) * 0.05;
   const every = gfx.mode === 'high' ? 1 : Math.max(1, Math.ceil((1000 / rafMs - 5) / 90));
-  // (asked at every refresh of the screen, also those the game leaves out on a 120 Hz screen: when the picture was
-  // finished is then known to a refresh)
-  lag.poll(rafMs * 0.6);
   if (++rafTick % every) return;
   const t0 = performance.now();
   if (readyOn) getReadyStep(t0);
+  lag.poll();
   clock.update(ts);
   const rawDt = clock.getDelta();
   const gapFrom = frameTs;
@@ -2265,16 +2264,8 @@ function frame(ts) {
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,
     from: gapFrom, fz: lastFrame, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free' });
-  // short hitches (src/hitches.js): was the frame before late, and what was it busy with; and pictures that
-  // reached the screen later than the one before though the frames were on time
+  // short hitches (src/hitches.js): was the frame before late, and what was it busy with
   hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - driveT) / 1000 : 0 });
-  const heldNow = lag.steps - lagSteps;
-  if (heldNow) { if (felt && rawDt < 0.05 && heldNow < 3) hitches.pictureLate({ others: mp.count }); lagSteps = lag.steps; }
-  // (AUTO trims the sharpness when pictures keep being held back: counted in plain driving only, not in the first
-  // 45 s after DRIVE while the town loads, and not where the frame before sent something new to the card or built
-  // a lot, which fewer pixels would not help)
-  heldPics.held = heldNow < 3 ? heldNow : 0;
-  heldPics.count = felt && rawDt < 0.05 && driveT > 0 && t0 - driveT > 45000 && !lastFrame.progs && !lastFrame.tex && !lastFrame.car && !(lastFrame.build > 2);
   lastFrame.net = netMs; lastFrame.car = 0;
 
   // ---- car visuals
@@ -2532,7 +2523,7 @@ function frame(ts) {
   const jsMs = performance.now() - t0;
   lastFrame.js = jsMs;
   if (stats.on) lastFrame.heap = performance.memory?.usedJSHeapSize || 0;
-  const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms, heldPics);
+  const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms);
   if (back) {
     back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);
     const since = performance.now() - back.at;

@@ -2187,8 +2187,10 @@ function frame(ts) {
       discgolf.update(hitCar, dt);
       updateFences(hitCar, dt, audio);                             // breakable picket fences (Jakobi to Lai turn, Veski 20): src/world/breakfence.js
     }
-    warmer.scope(() => parked.update(car, dt, camera.position));
-    busStops?.update(WV || car);
+    // (a replay's slider being slid, src/spectate.js: nothing new is streamed in round each still frame it shows)
+    const scrubbing = !!watch?.scrubbing;
+    warmer.scope(() => parked.update(car, dt, scrubbing ? WF : camera.position));
+    busStops?.update(scrubbing ? WF : WV || car);
     vabadusLights.update(performance.now() / 1000);          // clock time: the lights fade at their own pace
     // The hand-made places build themselves when the car comes near. One at a time while driving: after one
     // has built (a long step), the others wait for later frames, and so does the queued work (src/jobs.js).
@@ -2455,7 +2457,7 @@ function frame(ts) {
     // (spectating: around the watched car, and a little around our own, which is where we come back to)
     else if (watch?.active) world.update(WF.x, WF.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
-    terrain.update(camera.position);
+    terrain.update(watch?.scrubbing ? WF : camera.position);      // (a replay's slider being slid: see parked above)
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
   }
   // queued building work (map squares, painted fronts, ground tiles): a few milliseconds of it every frame
@@ -2559,7 +2561,7 @@ window.__game = !devHook ? { hitches } : {
   hitches,
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

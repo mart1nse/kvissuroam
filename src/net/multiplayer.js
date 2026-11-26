@@ -1063,13 +1063,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const REPLAY_ID = '~replay';           // (not a server id: those are letters and digits, see cleanOn in worker/index.js)
   let replay = null;
   // seconds into the lap: they run once the camera is on it and the car is built (spectate.js sets rp.run)
+  // (rp.hold: the replay's slider is held, spectate.js, and rp.t is where it points: a still frame, silent, with no
+  // smoke or tyre marks, until it is let go and the lap plays on from there)
   function replayPose(o, dt) {
     const r = o.rp, dur = r.ms / 1000;
-    if (r.run && o.model && o.modelCar === o.car && o.model.warmed !== false && !r.ended) {
+    if (r.run && !r.hold && o.model && o.modelCar === o.car && o.model.warmed !== false && !r.ended) {
       r.t += Math.min(dt, 0.25);
       if (r.t >= dur) { r.t = dur; r.ended = performance.now() / 1000; }
     }
-    o.live = !r.ended;
+    o.live = !r.ended && !r.hold;
     replayAt(r, r.t, r.out);
     if (r.ended) { r.out[6] = r.out[7] = 0; for (let k = 9; k < STAMP; k++) r.out[k] = 0; }    // (stopped past the line, engine off)
     return r.out;
@@ -1091,7 +1093,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     el.style.display = 'none';
     labels.appendChild(el);
     const o = { id: REPLAY_ID, name: rp.name, colour: '#ff9a3c', car: null, model: null, modelCar: null, el, tagOn: false, buf: [], pose: null, wheel: 0, w: '', wn: 0, kn: 0, kf: [],
-      rp: { ...rp, t: 0, run: false, ended: 0, out: new Array(STAMP).fill(0), tag: `REPLAY · ${fmtTime((rp.lapMs || rp.ms) / 1000)}` } };
+      rp: { ...rp, t: 0, run: false, hold: false, ended: 0, out: new Array(STAMP).fill(0), tag: `REPLAY · ${fmtTime((rp.lapMs || rp.ms) / 1000)}` } };
     setRemoteCar(o, rp.car);
     o.pose = replayAt(o.rp, 0, o.rp.out);
     replay = o;
@@ -1283,7 +1285,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         g.rotation.set(p[4], -p[3], -p[5]);
         const w = o.model.wheels;
         const speed = p[6] * fx + p[7] * fz;
-        o.wheel = (o.wheel + (speed / (o.spec.wheelRadius || 0.32)) * dt) % (Math.PI * 2);
+        if (!o.rp?.hold) o.wheel = (o.wheel + (speed / (o.spec.wheelRadius || 0.32)) * dt) % (Math.PI * 2);   // (a replay's still frame: the wheels stand)
         if (w) {
           w.fl.steer.rotation.y = w.fr.steer.rotation.y = -p[8];
           w.fl.spin.rotation.x = w.fr.spin.rotation.x = w.rl.spin.rotation.x = w.rr.spin.rotation.x = -o.wheel;

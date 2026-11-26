@@ -16,9 +16,14 @@ const QUIET_S = 6;                 // and gone quiet any other way (another tab,
                                    // where it was last heard of (multiplayer.js `hold`), at 0 km/h, this long
 const END_S = 2.5;                 // a replay's car waits this long past the finish before the camera comes back
 const JUMP = 60;                   // m between two frames: they were put somewhere else (map, R, H), the camera cuts
+const SCRUB_REST = 0.4;            // s the pointer rests on one spot of a replay's slider before the map comes in there
 
 export function createSpectate({ mp, world, toast, canStart, busy, onStart, onStop, racing = () => false }) {
   let id = null, shown = false, lostAt = 0, uiTimer = 0, uiKey = '', snap = false;
+  // a lap record replay's slider while it is held: { id: the pointer, x0, w: the bar on the page, x: where the pointer
+  // is, still: since when it has stood there (ms) }; heldT the moment the camera was last cut to; held: the map stays
+  // streamed in where it was meanwhile (see frame)
+  let scrub = null, heldT = -1, held = false, barF = -1, barTxt = '';
   // the watched car as the camera and the HUD want a car: the fields of our own after its physics step
   const view = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vx: 0, vy: 0, yawRate: 0, hit: 0, rpm: 0, gear: '', manual: false,
     reversing: false, airborne: false, inWater: false, waterTime: 0, spec: null, halfLen: 2.2, halfWid: 0.9, mark: '#2ff3ff' };
@@ -30,6 +35,8 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
   el.innerHTML = '<div class="who"><span class="eye"></span><i></i><b></b><small class="car"></small><small class="st"></small>'
     // a thumbs up for the watched player (Martin, 2026-11-24), as the one in front of their name in the list
     + `<button class="ku" data-act="watch-ku" title="Thumbs up">${THUMB}</button></div>`
+    // a lap record replay's slider (Martin, 2026-11-26): see scrubbing below
+    + '<div class="scrub hidden"><span class="now"></span><div class="rail" title="Hold and slide to any moment of the lap"><i class="fill"></i><span class="run"><i class="knob"></i></span></div><span class="end"></span></div>'
     + '<button class="back" data-act="watch-back" title="Back to your own car (Esc)">BACK TO MY CAR <kbd>ESC</kbd></button>'
     + '<div class="hint"><kbd>←</kbd><kbd>→</kbd> OTHER PLAYERS</div>';
   document.querySelector('#hud').appendChild(el);
@@ -44,6 +51,60 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     uiKey = ''; uiTimer = 0;
   });
 
+  // ---- A lap record replay's slider (Martin, 2026-11-26: "some slider which you keep mouse pressed and slide from
+  // left to right and back and it shows the specific still frame of that place, letting go keep playing from the place
+  // where it is let go"). Held, the replay stands still at the moment under the pointer, silent, and the camera cuts
+  // to the car there each time it moves; let go, the lap plays on from there. A mouse, a finger or a pen alike.
+  // Nothing is built for it and nothing is loaded while it slides: the car's pose is read from the recorded lap
+  // (multiplayer.js replayPose), and the map stays streamed in where it was until the pointer rests on one spot for
+  // SCRUB_REST or lets go. Only then does the world come in round the car, through the work queue as when driving.
+  const elScrub = el.querySelector('.scrub'), elBar = elScrub.querySelector('.rail'), elFill = elScrub.querySelector('.fill');
+  const elRun = elScrub.querySelector('.run'), elNow = elScrub.querySelector('.now'), elEnd = elScrub.querySelector('.end');
+  const replayCar = () => { const o = id && mp.remote(id); return o?.rp ? o : null; };
+  const built = (o) => !!(o.model && o.modelCar === o.car && o.model.warmed !== false);
+  function seek(x) {
+    const o = replayCar();
+    if (!o || !scrub) return;
+    o.rp.t = Math.max(0, Math.min(1, (x - scrub.x0) / scrub.w)) * o.rp.ms / 1000;
+    o.rp.ended = 0;
+  }
+  elBar.addEventListener('pointerdown', (e) => {
+    const o = replayCar();
+    if (!o || !shown || !built(o) || e.button > 0 || scrub) return;
+    e.preventDefault(); e.stopPropagation();
+    try { elBar.setPointerCapture(e.pointerId); } catch { /* (a pointer already gone) */ }
+    const r = elBar.getBoundingClientRect();             // (once a drag: the page is not measured while it slides)
+    scrub = { id: e.pointerId, x0: r.left, w: Math.max(1, r.width), x: e.clientX, still: performance.now() };
+    o.rp.hold = true;
+    seek(e.clientX);
+    el.classList.add('scrubbing');
+  });
+  elBar.addEventListener('pointermove', (e) => {
+    if (!scrub || e.pointerId !== scrub.id) return;
+    if (Math.abs(e.clientX - scrub.x) < 0.5) return;
+    scrub.x = e.clientX; scrub.still = performance.now();
+    seek(e.clientX);
+  });
+  function letGo(e) {
+    if (!scrub || (e && e.pointerId !== scrub.id)) return;
+    scrub = null;
+    const o = replayCar();
+    if (o) o.rp.hold = false;
+    el.classList.remove('scrubbing');
+  }
+  for (const k of ['pointerup', 'pointercancel', 'lostpointercapture']) elBar.addEventListener(k, letGo);
+  // the slider's fill, knob and clock: moved, not laid out again (only when they change)
+  function showBar(o) {
+    const dur = o.rp.ms / 1000, f = Math.max(0, Math.min(1, o.rp.t / dur));
+    if (Math.abs(f - barF) > 1e-4) {
+      barF = f;
+      elFill.style.transform = `scaleX(${f.toFixed(4)})`;
+      elRun.style.transform = `translateX(${(f * 100).toFixed(2)}%)`;
+    }
+    const txt = clock(o.rp.t);
+    if (txt !== barTxt) { barTxt = txt; elNow.textContent = txt; }
+  }
+
   // the players that can be watched, in the online list's order (by name), with your own car first
   const order = () => mp.players().filter((p) => p.id).sort((a, b) => a.name.localeCompare(b.name));
   // (one that can be watched now: on the map and sending)
@@ -57,6 +118,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     if (!id && !canStart()) return;
     const was = id;
     if (was) { const w = mp.remote(was); w?.el.classList.remove('watched'); if (w?.rp) mp.stopReplay(); }
+    letGo(); held = false; heldT = -1; barF = -1; barTxt = '';
     id = to; lostAt = 0; uiKey = ''; uiTimer = 0;
     mp.hold?.(to);
     o.el.classList.add('watched');                // (their name is in the pill)
@@ -72,6 +134,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     const o = mp.remote(id);
     o?.el.classList.remove('watched');
     if (o?.rp) mp.stopReplay();                  // (a lap record's replay: gone with the watching)
+    letGo(); held = false;
     id = null; shown = false;
     mp.hold?.(null);
     el.classList.add('hidden');
@@ -119,11 +182,10 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
   function frame(dt) {
     if (!id) return;
     const o = mp.remote(id);
-    // a lap record's replay (src/race/replay.js) needs no connection; it runs once the camera is on it, and
-    // after the finish line the car waits there a moment before the camera comes back to yours
+    // a lap record's replay (src/race/replay.js) needs no connection; after the finish line the car waits there a
+    // moment before the camera comes back to yours (not while the slider is held there)
     if (o?.rp) {
-      o.rp.run = shown;
-      if (o.rp.ended && performance.now() / 1000 - o.rp.ended > END_S) return stop('REPLAY FINISHED');
+      if (o.rp.ended && !o.rp.hold && performance.now() / 1000 - o.rp.ended > END_S) return stop('REPLAY FINISHED');
     } else if (!mp.online) return stop('CONNECTION LOST');
     if (!o) {
       // gone offline: on to the next one, if there is anyone left to watch
@@ -137,11 +199,21 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     else lostAt = 0;
     if (!id || id !== o.id) return;               // (moved on)
     if (p) {
-      focus.x = p[0]; focus.z = p[1];
-      // (the ground where they are must be in before the camera goes there: until then it stays put)
-      if (world.ready(p[0], p[1])) {
+      const rp = o.rp, hold = !!rp?.hold;
+      // (a replay's slider held and moving: the map stays streamed in where it was, see scrubbing above)
+      held = hold && !!scrub && performance.now() - scrub.still < SCRUB_REST * 1000;
+      if (!held) { focus.x = p[0]; focus.z = p[1]; }
+      const ready = world.ready(p[0], p[1]);
+      // a replay runs once the camera is on it and the ground where the car is has come in (let go of the slider
+      // somewhere not loaded yet, it waits there a moment)
+      if (rp) rp.run = shown && ready;
+      // (the ground where they are must be in before the camera goes there: until then it stays put. A replay
+      // once shown keeps the camera on its car: it waits, or it is a still frame of the slider)
+      if (ready || (rp && shown)) {
         const fx = Math.sin(p[3]), fz = -Math.cos(p[3]), rx = Math.cos(p[3]), rz = Math.sin(p[3]);
-        if (!shown || Math.hypot(p[0] - view.x, p[1] - view.z) > JUMP) snap = true;
+        // (the slider moved the car: the camera cuts to it there, straight behind, as a still picture)
+        if (!shown || Math.hypot(p[0] - view.x, p[1] - view.z) > JUMP || (hold && rp.t !== heldT)) snap = true;
+        heldT = hold ? rp.t : -1;
         const s = o.spec || CARS[o.car] || CARS.w201;
         view.x = p[0]; view.z = p[1]; view.y = p[2]; view.yaw = p[3]; view.pitch = p[4]; view.roll = p[5];
         view.vx = p[6] * fx + p[7] * fz; view.vy = p[6] * rx + p[7] * rz;
@@ -152,26 +224,36 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
         shown = true;
       }
     } else { view.vx = view.vy = view.rpm = view.kw = 0; }    // (nothing heard of them at all: the dial is not left at their speed)
+    if (o.rp) {
+      showBar(o);
+      const can = shown && built(o);
+      if (can !== elScrub.classList.contains('ready')) elScrub.classList.toggle('ready', can);
+    }
     if ((uiTimer -= dt) > 0) return;
     uiTimer = 0.25;
     const hot = p && o.live && (p[20] & 8), race = racing(id);
     const lap = mp.lastLap(o.name);
-    const st = o.rp ? (!shown ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY · ${secs(o.rp.t)} / ${fmt(o.rp.ms)}`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? (Math.hypot(p[0] - 2660, p[1] - 470) < 600 ? 'ON THE STAGE' : 'ON A HOTLAP')
+    // (a replay's moment and length are on its slider)
+    const wait = o.rp && (!shown || !built(o) || (!o.rp.run && !o.rp.hold && !o.rp.ended));
+    const st = o.rp ? (wait ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? (Math.hypot(p[0] - 2660, p[1] - 470) < 600 ? 'ON THE STAGE' : 'ON A HOTLAP')
       : lap ? `LAST LAP ${fmt(lap.ms)}` : '';
-    const wait = mp.kudosWait(id) > 0;
-    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${wait}|${mp.stealth}`;
+    const kuWait = mp.kudosWait(id) > 0;
+    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${kuWait}|${mp.stealth}|${!!o.rp}`;
     if (key === uiKey) return;
     uiKey = key;
+    elScrub.classList.toggle('hidden', !o.rp);
+    if (o.rp) elEnd.textContent = fmt(o.rp.ms);
     elDot.style.setProperty('--c', o.colour);
     elName.textContent = o.name.toUpperCase();
     elCar.textContent = CARS[o.car]?.short || '';
     elSt.textContent = st;
     elSt.classList.toggle('hot', !!(hot || race || o.rp));
     elHint.classList.toggle('hidden', order().length < 2 || !!o.rp);
-    elKu.classList.toggle('wait', wait);
+    elKu.classList.toggle('wait', kuWait);
     elKu.classList.toggle('hidden', !!mp.stealth || !!o.rp);
   }
-  const secs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  // (a moment of a replay, to the tenth: 1:07.4)
+  const clock = (t) => { const d = Math.floor(t * 10); return `${Math.floor(d / 600)}:${String(Math.floor((d % 600) / 10)).padStart(2, '0')}.${d % 10}`; };
   const fmt = (ms) => `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, '0')}`;
 
   return {
@@ -184,5 +266,8 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     get focus() { return id ? focus : null; },
     // the camera should cut to the car instead of easing (a new car, or a jump across the map)
     takeSnap() { const s = snap; snap = false; return s; },
+    // a replay's slider is being slid: what streams in round the camera (ground pictures, parked cars) stays where
+    // `focus` is meanwhile
+    get scrubbing() { return !!id && held; },
   };
 }

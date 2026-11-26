@@ -2,6 +2,7 @@
 // The map is cut into square sectors that are streamed in around the car.
 
 import { jobs } from '../jobs.js';
+import { topAt } from '../cars/tops.js';
 const BASE = `${import.meta.env.BASE_URL}data/`;
 
 async function fetchBuf(name) {
@@ -628,6 +629,8 @@ export async function loadWorldData(onProgress = () => {}) {
   const ROOF_MAKE = 1.6;    // ...and from this far its map square's roofs are put in their grid when it is at a house (a car that hops on the street asks too)
   const ROOF_AHEAD = 3;     // ...and from this far, in the work queue ahead of need, wherever it is in the square
   let roofMake = true, roofAhead = false;
+  const tops = new Map();      // vehicles a car can stand on (setTops)
+  let topCount = 0;
 
   // Piers under the long spans: [x, z, along x, along z, half width across, top]. Only a car below the deck meets them.
   const piers = [];
@@ -714,6 +717,7 @@ export async function loadWorldData(onProgress = () => {}) {
   const world = {
     meta, vectors, walls, sectors, coarse: C, decks,
     onRoof: false,
+    topHit: null,      // the vehicle whose top groundAt last gave (see setTops)
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
@@ -876,7 +880,8 @@ export async function loadWorldData(onProgress = () => {}) {
     // yRoof: the houses' roofs count below this height (the physics gives each wheel its own: what the wheel
     // is over, or what it was on a step ago carried on; a roof whose wall it stands at does not)
     // (onRoof is set when the answer is a roof: the physics clears it before asking for a car's wheels)
-    groundAt(x, z, y, yRoof = y + UNDER) {
+    groundAt(x, z, y, yAsk) {
+      const yRoof = yAsk ?? y + UNDER;
       let t = this.heightAt(x, z);
       if (slabs.length !== 0) { const r = slabAt(x, z, y + UNDER); if (r > t) t = r; }
       // (a house's roof, for a car that is up over the ground: one driving along the street never asks)
@@ -884,7 +889,28 @@ export async function loadWorldData(onProgress = () => {}) {
       // deck too and not on it; a wheel over a bank or the wall of a quay is not that)
       const deck = decks.length !== 0 && deckAt(x, z, y + UNDER) ? hit.y : -Infinity;
       if (y - t > ROOF_UP) { roofMake = y - t > ROOF_MAKE; roofAhead = y - t > ROOF_AHEAD && y - deck > ROOF_AHEAD; const r = roofOver(x, z, yRoof); roofMake = true; roofAhead = false; if (r > t) { t = r; this.onRoof = true; } }
-      return deck > t ? deck : t;
+      if (deck > t) t = deck;
+      // (another vehicle's top, src/cars/tops.js: below the height the physics gives each wheel, or for anyone else
+      // asking from that height or over it; a car beside one on the street, or a look along the road from the
+      // camera, does not stand on it)
+      if (topCount !== 0) {
+        const yMax = yAsk ?? y;
+        for (const list of tops.values()) for (let i = 0; i < list.length; i++) {
+          const v = list[i];
+          if (Math.abs(x - v.x) > v.hl + v.hw || Math.abs(z - v.z) > v.hl + v.hw) continue;
+          const h = topAt(v, x, z);
+          if (h > t && h < yMax) { t = h; this.onRoof = true; this.topHit = v; }
+        }
+      }
+      return t;
+    },
+    // Vehicles a car can come down on, from one source (the parked cars, the other players): a list of
+    // { x, z, y, yaw, hl, hw, h, bus, dx, dz, dyaw }, the ones near the car, given anew each frame; dx, dz, dyaw how far
+    // each moved since the last frame, so that a car standing on one is carried with it (src/cars/tops.js).
+    setTops(from, list) {
+      if (list.length) tops.set(from, list); else tops.delete(from);
+      topCount = 0;
+      for (const l of tops.values()) topCount += l.length;
     },
     // The same without the houses' roofs: what a fence, a barrier or a parked car at the point stands on.
     floorAt(x, z, y) {

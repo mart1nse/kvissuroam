@@ -24,6 +24,7 @@ import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
 import { cleanPlate } from './plates.js';
 import { setCarPlate, dropPlate } from '../cars/plate.js';
+import { onTopOf } from '../cars/tops.js';
 
 const NAME_KEY = 'kvissuroam.name';
 const PLATE_KEY = 'kvissuroam.plate';     // our own number plate, '' for each car's own (src/net/plates.js)
@@ -870,20 +871,41 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // A pair that passed through each other (o.thru) does not start bumping while the two still overlap: a car
   // leaving the start lane, or ending its lap, inside another one would be thrown out of it sideways. They bump
   // again once they have come apart.
+  // Their tops, for our car to come down on (src/cars/tops.js): the ones near it that it would bump, with how far
+  // each moved since the last frame, so that our car standing on one is carried along with it.
+  const tops = [];
+  const ourTop = { x: 0, z: 0, y: 0, yaw: 0, hl: 0, hw: 0, h: 1.45, bus: false };
+  function topOf(o, p) {
+    const v = o.top || (o.top = { x: p[0], z: p[1], y: p[2], yaw: p[3], hl: 0, hw: 0, h: 1.45, bus: false, dx: 0, dz: 0, dyaw: 0 });
+    v.dx = p[0] - v.x; v.dz = p[1] - v.z; v.dyaw = p[3] - v.yaw;
+    // (a step of more than a car's length, a pose put somewhere new: not a move to carry anyone along)
+    if (v.dx * v.dx + v.dz * v.dz > 4 || Math.abs(v.dyaw) > 0.5) v.dx = v.dz = v.dyaw = 0;
+    v.x = p[0]; v.z = p[1]; v.y = p[2]; v.yaw = p[3]; v.hl = o.halfLen; v.hw = o.halfWid; v.vx = p[6] || 0; v.vz = p[7] || 0;
+    v.bus = o.spec?.id === 'bus'; v.h = o.model?.size?.height || (v.bus ? 3.3 : 1.45);
+    return v;
+  }
   function collide(car) {
+    tops.length = 0;
     if (STEALTH) return;                                         // they cannot see us, so nobody bumps
     // on a lap of our own, or just put on the start and in its lane: nobody can touch us
     const mine = hotlap() || fresh(), nowS = performance.now() / 1000;
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
+    ourTop.x = car.x; ourTop.z = car.z; ourTop.y = car.y; ourTop.yaw = car.yaw; ourTop.hl = car.halfLen; ourTop.hw = car.halfWid;
+    ourTop.bus = car.spec?.id === 'bus'; ourTop.h = car.topH || (ourTop.bus ? 3.3 : 1.45);
     for (const o of others.values()) {
       const p = o.pose;
-      if (!p) continue;
-      if (o.flip) continue;                                      // a Rocket in the air on a kickflip: over us
+      if (!p) { o.top = null; continue; }
+      if (o.flip) { o.top = null; continue; }                    // a Rocket in the air on a kickflip: over us
       const dx = car.x - p[0], dz = car.z - p[1];
-      if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) { o.thru = false; continue; }
+      if (dx * dx + dz * dz > 225) { o.thru = false; o.top = null; continue; }
       // they are on a lap or in the start lane: we pass through them (and in the race from the grid on, even
       // before their flag arrives)
-      if (mine || (p[20] & THRU) || racing(o.id) || nowS - (o.newAt || 0) < NEW_S) { o.thru = true; continue; }
+      if (mine || (p[20] & THRU) || racing(o.id) || nowS - (o.newAt || 0) < NEW_S) { o.thru = true; o.top = null; continue; }
+      const v = topOf(o, p);
+      tops.push(v);
+      if (dx * dx + dz * dz > 64 || Math.abs(car.y - p[2]) > 2.5) { o.thru = false; continue; }
+      // (one of us up on the other, or coming down on it: no bump sideways, the one stands on the other's top)
+      if (onTopOf(car.y, v, car.x, car.z) || onTopOf(p[2], ourTop, p[0], p[1])) continue;
       const gx = Math.sin(p[3]), gz = -Math.cos(p[3]), sx = Math.cos(p[3]), sz = Math.sin(p[3]);
       const axes = [[fx, fz], [rx, rz], [gx, gz], [sx, sz]];
       let best = Infinity, nx = 0, nz = 0;
@@ -1343,6 +1365,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   return {
     update,
     collide,
+    get tops() { return tops; },
     carsNear,
     get name() { return name; },
     get online() { return online; },

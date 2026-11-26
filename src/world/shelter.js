@@ -50,7 +50,7 @@ export function shelterSolids(box) {
   const ux = Math.cos(box.yaw), uz = -Math.sin(box.yaw), nx = Math.sin(box.yaw), nz = Math.cos(box.yaw);
   box.solids = pieces(box).map(([s0, s1, n0, n1], k) => {
     const s = (s0 + s1) / 2, n = (n0 + n1) / 2;
-    return { x: box.x + ux * s + nx * n, z: box.z + uz * s + nz * n, yaw: box.yaw, hx: (s1 - s0) / 2, hz: (n1 - n0) / 2, removable: k === 0 };
+    return { x: box.x + ux * s + nx * n, z: box.z + uz * s + nz * n, yaw: box.yaw, hx: (s1 - s0) / 2, hz: (n1 - n0) / 2, removable: k === 0, tall: 2.6 };   // (tall: up to the roof, which a car may land on)
   });
   Object.defineProperty(box, 'solids', { enumerable: false });
   return box.solids;
@@ -280,8 +280,12 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
     }
   }
 
+  // its roof, for a car to come down on (src/cars/tops.js; Martin, 26 Nov: "I would like to land on bus shelters
+  // too"): flat, the sheet over the box a hand's width all round
+  const top = { x: box.x, z: box.z, y, yaw: -box.yaw, hl: box.hz + 0.08, hw: box.hx + 0.08, h: H + 0.1, flat: true, dx: 0, dz: 0, dyaw: 0, vx: 0, vz: 0 };
+  topWorld = world;
   const info = () => ({ box, y, broken: P.filter((q) => q.broken).length, panes: P.length, bend: total, shards: shards.count, through });
-  const rec = { update, hit, box, info };
+  const rec = { update, hit, box, info, top };
   // has it been hit at all (a damaged shelter is kept as it is while its piece of the map is loaded)
   rec.damaged = () => total > 0 || shards.count > 0;
   rec.through = () => through;
@@ -296,8 +300,16 @@ export function breakableShelter(world, group, { box, y, H, frame, bendAlso = []
   return rec;
 }
 
+// (and the roofs of those near the car, as tops it can stand on; one crashed through has none)
+const roofs = [];
+let topWorld = null;
 export function updateShelters(car, dt, sound) {
-  for (const s of shelters) s.update(car, dt, sound);
+  roofs.length = 0;
+  for (const s of shelters) {
+    s.update(car, dt, sound);
+    if (!s.through() && Math.abs(s.box.x - car.x) < 25 && Math.abs(s.box.z - car.z) < 25) roofs.push(s.top);
+  }
+  topWorld?.setTops?.('shelters', roofs);
 }
 
 // (for the tools: where the shelters are and how broken)

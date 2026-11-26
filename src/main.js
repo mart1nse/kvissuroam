@@ -1518,13 +1518,19 @@ function place(pose) {
 function homeHere() {
   if (stage && mode === 'drive' && atRaadi()) { raceMode?.out('map'); stage.goStart(); } else goHome();
 }
-let pillAt = null;
+// (after the name, in brackets, how many are on a timed stage run now, on the line or past green, ourselves too
+// (Martin 26 Nov: "After majoraadi text, show in brackets how many are on an active timed stage"); nothing when
+// nobody is. The others by what their cars send, as `staged` for the race vote)
+let pillAt = null, pillN = -1;
 function trackPills() {
-  const at = atRaadi();
-  if (at === pillAt) return;
-  pillAt = at;
+  const at = atRaadi(), n = (mp?.hotNear(2660, 470, 600) || 0) + (stageBusy() ? 1 : 0);
+  if (at === pillAt && n === pillN) return;
+  pillAt = at; pillN = n;
   const b = document.querySelector('#trackpills [data-act="track-raadi"]');
-  if (b) { b.lastChild.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
+  if (!b) return;
+  b.lastChild.textContent = (at ? '↺ MAJORAADI START' : 'MAJORAADI') + (n ? ` (${n})` : '');
+  b.classList.toggle('here', at);
+  b.title = (at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start') + (n ? ` · ${n} on a timed run now` : '');
 }
 
 function goHome() {

@@ -1028,7 +1028,12 @@ export class Lobby extends DurableObject {
 
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
     if (path === '/api/replay' && url.searchParams.get('refused')) {
-      return json(this.sql.exec('SELECT at, track, car, ms, name, why, bytes FROM replay_refused ORDER BY id DESC').toArray());
+      // (anyone may read the list, so a drive refused for the car says only that: with the seconds over each limit a
+      // tuner could turn the figures down until they pass. The whole reason is shown to the ADMIN_KEY, sent as
+      // "Authorization: Bearer <key>", and stays in the table.)
+      const key = this.env.ADMIN_KEY, all = !!key && sameText(req.headers.get('authorization') || '', `Bearer ${key}`);
+      const rows = this.sql.exec('SELECT at, track, car, ms, name, why, bytes FROM replay_refused ORDER BY id DESC').toArray();
+      return json(all ? rows : rows.map((r) => (r.why.startsWith('car') ? { ...r, why: 'car' } : r)));
     }
     if (path === '/api/replay') {
       // a record's replay: the gzipped samples as they came, with whose lap it is and its time in headers

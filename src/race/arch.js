@@ -203,7 +203,7 @@ function flameMesh(jets) {
         vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
         vec3 side = normalize(cross(up, normalize(-c.xyz)));
         float j = corner.z, t = uT - j * 0.06;
-        float grow = smoothstep(0.0, 0.3, t), puff = 0.9 + 0.1 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
+        float grow = smoothstep(0.0, 0.6, t), puff = 0.9 + 0.1 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
         // (the strip is taller than the fire: its top part is the smoke)
         float h = uH * (0.15 + 0.85 * grow) * puff / ${FIRE_TOP.toFixed(2)};
         vLife = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(uEnd - 0.5, uEnd, t));

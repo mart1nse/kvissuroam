@@ -53,9 +53,13 @@ const ARCH_START = { at: START + 6, off: 1.9, clear: 3.6 }, ARCH_FIN = { at: FIN
 // The flames (Martin 26 Nov 15:18). At the start "just one splash of the flames right when timer starts":
 // START_FIRE: seconds and metres high, short so that from behind the car at the line the burst is in the picture. At the finish "only right after the last corner when arc becomes visible and until player
 // goes over the line (or max 5 sec)": once a run, from FLAME_FROM along the stage (the last corner's apex is 854,
-// the finish 875, the arch in sight all the way), the car pointing at the arch within FLAME_COS, for at most
+// the finish 875, the arch in sight all the way), the cannons within FLAME_IN of the picture's middle (-1..1 across it;
+// without a camera: the car pointing at the arch within FLAME_COS), for at most
 // FLAME_S; they die down as the car crosses the line.
-const START_FIRE = [1.1, 3], FLAME_FROM = 856, FLAME_COS = 0.7, FLAME_S = 5;
+// FLAME_H: metres high at the finish. The line is only 30 m past the last hairpin, and from there the chase camera has
+// about 8 m of picture over the gantry (less under the clock), so taller flames burn out of the top of the screen.
+const START_FIRE = [1.4, 3], FLAME_FROM = 856, FLAME_COS = 0.7, FLAME_IN = 0.6, FLAME_S = 5, FLAME_H = 5.5;
+const flameAim = new THREE.Vector3();
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -180,7 +184,7 @@ function streakTex() {
 // rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
 // line (src/race/linelog.js), or none
 // oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
+export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -474,7 +478,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   }
 
   let lineInfo = null;
-  function fire() { st.flamed = true; arches[1]?.flames?.fire(FLAME_S); }
+  function fire() { st.flamed = true; arches[1]?.flames?.fire(FLAME_S, FLAME_H); }
   const arches = [];
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
@@ -1014,7 +1018,14 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       // the finish arch's flames: once a run, out of the last corner facing it (they die down at the line, above)
       if (st.phase === 'run' && !st.flamed && st.prog >= FLAME_FROM && arches[1]) {
         const [fx, fz] = P[ARCH_FIN.at], dx = fx - x, dz = fz - z, d = Math.hypot(dx, dz) || 1;
-        if ((Math.sin(car.yaw) * dx - Math.cos(car.yaw) * dz) / d > FLAME_COS) fire();
+        if (camera) {
+          // (Martin: "when I have passed the corner and turned the front of the car towards the finish line, so I could
+          // see the animation when it starts": the camera lags the car out of the hairpin, so the flames wait until the
+          // cannons are well inside the picture, not only the car's nose pointing at them)
+          camera.updateMatrixWorld();
+          const v = flameAim.set(fx, arches[1].top + 2, fz).project(camera);
+          if (v.z < 1 && Math.abs(v.x) < FLAME_IN && v.y < 1) fire();
+        } else if ((Math.sin(car.yaw) * dx - Math.cos(car.yaw) * dz) / d > FLAME_COS) fire();
       }
       for (const a of arches) a.flames.update(dt);
       bales.update(car, dt);

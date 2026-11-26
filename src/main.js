@@ -1018,7 +1018,7 @@ async function boot() {
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({
-    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    world, scene, camera, toast: (t, ms) => hud.toast(t, ms),
     // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
     place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),

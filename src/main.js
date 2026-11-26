@@ -337,6 +337,7 @@ const lag = createLag(renderer.getContext());   // how far the picture is behind
 // short hitches while driving and what each was (src/hitches.js), for the options window and /stats
 const hitches = createHitches({ report: (h) => stats.hitch(h) });
 let lagSteps = 0, driveT = 0;
+const heldPics = { held: 0, count: false };       // for AUTO graphics: pictures held back since the last frame (createPacer in src/quality.js)
 // how far the camera sees (the extra low level pulls it in): the haze ends just before it, the sky dome follows
 function setFar(m) {
   const far = Math.min(quality.far, m);
@@ -345,8 +346,8 @@ function setFar(m) {
   sky.scale.setScalar(far * 0.9);
   scene.fog.far = far < quality.far ? far * 0.95 : 2800;
 }
-const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o) }, gfxCaps, {
-  locked: lockedLow, software: gpu.software,
+const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o), trimmed: (k) => stats.trim(k) }, gfxCaps, {
+  locked: lockedLow, software: gpu.software, even: params.get('even') !== '0',
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
 // Effects follow the graphics level too: once auto has had to go below full sharpness the tyre and
@@ -902,7 +903,7 @@ async function boot() {
   startSpots = startSlots(startTrack, startPose);
   lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
-  rocketUi = createRocketUi({ pad: $('#rocketpad'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
+  rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
     return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
   } });
@@ -938,7 +939,8 @@ async function boot() {
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     // just put on the start and still on the lap's road before the line: the same, without the glow (Martin 25 Nov)
-    fresh: () => !!lane?.on && mode === 'drive',
+    // (or put somewhere a moment ago, by R, the map or a start: nobody is bumped by a car that appears beside them)
+    fresh: () => (!!lane?.on || performance.now() - placedAt < 2000) && mode === 'drive',
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
     winner: (id) => !!raceMode?.winner(id),
@@ -993,8 +995,10 @@ async function boot() {
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
-    onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
+    // (the lap's finish and each start of the lap timer are told to the server as they happen: it times the lap itself)
+    onLap: (lap, info) => { mp.lapMark('f', lap.ms); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => {
+      if (k === 'start') mp.lapMark('s');
       stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
       // (a Rocket starts every timed lap of its own with a full tank, so laps compare; in a race the tank is filled at the lights only)
       if (k === 'start' && car.rocket && !raceMode?.ghost) refillTank(car.spec.id);
@@ -1009,7 +1013,9 @@ async function boot() {
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({
-    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
+    place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
@@ -1311,9 +1317,11 @@ function startDriving() {
   input.enable(true);
   if (resume?.pose && !resume.told) { resume.told = true; setTimeout(() => hud.toast('BACK WHERE YOU WERE', 2500), 700); }
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
-  // what DRIVE itself put in the scene (the race lights, markers, the car's own bits): its shaders now, at the
-  // press of the button, and not in the first frames of the drive (see shadersReady)
-  try { warmer.firstUse(renderer.compile(scene, camera)); } catch (err) { console.warn(err); }
+  // what DRIVE itself put in the scene (the race lights, markers, the car's own bits): its shaders built off the
+  // page where the browser can (compileAsync), then first used a couple a frame by the work queue (see shadersReady).
+  // Not all at once in the click: /stats of 25 Nov had 105 desktop freezes of 1-3 s inside the DRIVE button,
+  // the menu's not yet finished shaders and DRIVE's own all waited for in one go.
+  warmer.ready(scene).catch((err) => console.warn(err));
 }
 
 // Full screen on phones. The browser drops it when you switch to another app and only lets a page ask
@@ -1416,8 +1424,10 @@ async function watchReplay(track, carOf) {
   go();
 }
 
+let placedAt = -1e9;               // when the car was last put somewhere (ms)
 function place(pose) {
   watch?.stop();                                   // (put somewhere: back in your own car)
+  placedAt = performance.now();
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
@@ -1470,10 +1480,14 @@ async function goLastSpot() {
       pick = pickFromHistory(world, history, opts);
     }
     if (pick?.wait) pick = null;
+    // (a Raadi run with no spot of its own left to go back to: the stage's start, not the nearest dry street,
+    // which may be further along the stage)
+    if (!pick && stage?.running) return stage.goStart();
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
     race?.hopped(pick.x, pick.z);
+    stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
   }
@@ -1706,7 +1720,7 @@ function showGfx(force) {
   const m = gfx.meter;
   const fps = `${Math.round(1000 / m.frame)} FPS (game code ${m.js.toFixed(1)} [drawing ${part.draw.toFixed(1)}, building ${part.build.toFixed(1)}]${gpuTimer.ms != null ? `, graphics card ${gpuTimer.ms.toFixed(1)}` : ''} of ${m.frame.toFixed(1)} ms; late frames ${m.late}/2 s, longest ${Math.round(m.worst)} ms${lag.ms > m.frame * 2.5 ? `; picture ${Math.round(lag.ms)} ms behind` : ''})${hitches.line ? ` · ${hitches.line}` : ''}`;
   $('#opt-gfxnow').textContent = gfx.mode === 'locked' ? `Fixed low by ?q=low · ${fps}`
-    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(l.dpr * 100)}% sharpness, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
+    : `Now: level ${gfxNames(gfx.level)} · ${fps}${l ? ` · ${Math.round(gfx.sharpness * 100)}% sharpness${gfx.sharpness < l.dpr ? ' (trimmed for even pictures)' : ''}, ${l.shadow ? 'shadows' : 'no shadows'}` : ''}${gfx.trimOff ? ' · less sharpness did not even the pictures out' : ''}${gfx.mode === 'auto' && !gfx.auto ? ' · auto off in test runs' : ''}${gfx.cap != null && gfx.mode === 'auto' ? ` · kept at ${gfx.cap + 1} or lower after the game closed itself` : ''}${liteWhy ? ` · light mode (${liteWhy})` : ''}${xlow ? ` · simple ground, no edge smoothing (${xlow})` : ''}${gfx.capped ? ` · held at ${Math.round(gfx.capped)} FPS by the browser or the system (battery saver?): less detail would not make it faster` : ''}`;
 }
 document.getElementById('opt-gfx').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gfx]');
@@ -2180,7 +2194,13 @@ function frame(ts) {
   // short hitches (src/hitches.js): was the frame before late, and what was it busy with; and pictures that
   // reached the screen later than the one before though the frames were on time
   hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - driveT) / 1000 : 0 });
-  if (lag.steps !== lagSteps) { if (felt && rawDt < 0.05 && lag.steps - lagSteps < 3) hitches.pictureLate({ others: mp.count }); lagSteps = lag.steps; }
+  const heldNow = lag.steps - lagSteps;
+  if (heldNow) { if (felt && rawDt < 0.05 && heldNow < 3) hitches.pictureLate({ others: mp.count }); lagSteps = lag.steps; }
+  // (AUTO trims the sharpness when pictures keep being held back: counted in plain driving only, not in the first
+  // 45 s after DRIVE while the town loads, and not where the frame before sent something new to the card or built
+  // a lot, which fewer pixels would not help)
+  heldPics.held = heldNow < 3 ? heldNow : 0;
+  heldPics.count = felt && rawDt < 0.05 && driveT > 0 && t0 - driveT > 45000 && !lastFrame.progs && !lastFrame.tex && !lastFrame.car && !(lastFrame.build > 2);
   lastFrame.net = netMs; lastFrame.car = 0;
 
   // ---- car visuals
@@ -2431,7 +2451,7 @@ function frame(ts) {
   const jsMs = performance.now() - t0;
   lastFrame.js = jsMs;
   if (stats.on) lastFrame.heap = performance.memory?.usedJSHeapSize || 0;
-  const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms);
+  const ch = gfx.frame(rawDt * 1000, jsMs, gpuTimer.ms, heldPics);
   if (back) {
     back.n++; back.f += rawDt * 1000; back.js += jsMs; back.worst = Math.max(back.worst, rawDt * 1000);
     const since = performance.now() - back.at;

@@ -47,6 +47,11 @@ const LAST_S = 3;                          // the last seconds, yellow, counted 
 const GREEN_S = 5;                         // how long the green stays on
 const OFF_LIMIT = 150;                     // metres off the stage before the run is cancelled
 const BACK_LIMIT = 100;                    // metres driven the wrong way along the stage before the run is cancelled
+// R in a run (the car put back on a spot it drove over at least 3 s before: main.js goLastSpot) costs RESET_PEN
+// seconds, and the run goes on from that spot as it stood there. (Martin 26 Nov: "add 5s penalty when clicking R.
+// just in case somebody crashes hard into something and presses R and gets a timegain". Until then a hop of under
+// 40 m was free, a tree or a roof left behind for nothing, and a longer one ended the run.)
+const RESET_PEN = 5;
 const BACK_WARN = 25;                      // ... and from this far on the panel says WRONG WAY
 const FIN_WIDE = 4;                         // metres beside the road that the finish line still counts
 // On the right the finish counts only up to its flag, and a tape runs on from the flag across the grass (Martin
@@ -314,6 +319,7 @@ const ARCS = STAGE.apex.filter(([k]) => WRAP[k] && SPUR[k] == null).map(([k, , b
 }));
 // one text for every one of them (Martin 23 Nov: "a general one for all crossings", "for leaving the track")
 const penText = (s) => `+${s} S FOR LEAVING THE TRACK`;
+const resetText = `+${RESET_PEN} S FOR THE RESET`;
 
 // nearest point of the stage between indices lo and hi: { i, d, lat } (lat: sideways, + right of travel)
 function nearestIn(x, z, lo, hi) {
@@ -993,7 +999,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {};
+    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {}; st.marks = []; st.resets = 0;
     bales.reset();
     tape.reset();
     knocks.reset();
@@ -1063,6 +1069,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     get gate() { return st.gate; },
     get round() { return [...ROUND].map(([k, R]) => [k, R.r, R.a, R.b]); },
     get pen() { return st.pen; },
+    get resets() { return st.resets || 0; },
+    get prog() { return st.prog; },
     get log() { return log; },
     get line() { return lineInfo; },
     get barriers() { return barriers; },
@@ -1076,11 +1084,27 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     lines: LINES, side,
     best,
     goStart,
-    // the car was moved by the player (map, H, R, garage): a run in progress ends
+    // the car was moved by the player (map, H, garage): a run in progress ends
     // a spectator's own car waits (spectate.js): a run ends, the start lights before one go out without a word
     rest() {
       if (st.phase === 'run') return cancel('STAGE CANCELLED');
       if (st.phase === 'count') { st.phase = 'idle'; st.pin = null; st.cool = true; elMsg.textContent = ''; lights.classList.add('hidden'); }
+    },
+    // R in a run: the car is back on a spot it was on at the car's clock t (place() is done). RESET_PEN seconds,
+    // and the run is where it was then: its place along the stage and the checks crossed (a bale passed after
+    // that spot is to be passed again). What was counted stays: the seconds, the metres off the stage. The hop
+    // itself is no driving: no line is crossed by it and it is no metres the wrong way. True when the run goes on.
+    reset(t) {
+      if (st.phase !== 'run') return false;
+      let m = null;
+      for (let k = st.marks.length - 1; k >= 0 && !m; k--) if (st.marks[k].t <= t) { m = st.marks[k]; st.marks.length = k + 1; }
+      // (a spot from before the green light: the line itself)
+      st.prog = Math.min(st.prog, m ? m.prog : START); st.gate = Math.min(st.gate, m ? m.gate : 0);
+      st.prev = null; st.later = null; st.laterM = 0; st.missed = false;
+      st.pen += RESET_PEN; st.resets++;
+      log?.cancel();                         // (the wheels' way up to here is kept; a line with a hop in it is not one)
+      toast(resetText, 2600);
+      return true;
     },
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
@@ -1112,7 +1136,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       st.wall = wall; st.carT = car.time;
       const time = st.clk;
 
-      // a jump (map, H, R): the run ends
+      // a jump (map, H, the garage): the run ends. (R in a run is `reset` below: it clears st.prev, so not this.)
       if (st.prev && Math.hypot(x - st.prev.x, z - st.prev.z) > 40 && (st.phase === 'run' || st.phase === 'count')) cancel('STAGE CANCELLED');
       if (st.cool && dStart > 60) st.cool = false;
       // gone from the park after a run (the garage's or the button's Toomemägi, the map, or driven off): the
@@ -1322,6 +1346,11 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       if (halo && near) halo.material.opacity = st.phase === 'run' ? 0.75 + 0.25 * Math.sin(time * 5) : 0.6;
       breakBarriers(car, Math.min(dt || 0.016, 0.05));
       drawBoards(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);
+      // where the run stood, a few times a second and at every check crossed: R takes it back there (reset below)
+      if (st.phase === 'run') {
+        const m = st.marks.at(-1);
+        if (!m || m.gate !== st.gate || car.time - m.t >= 0.25) st.marks.push({ t: car.time, prog: st.prog, gate: st.gate });
+      }
       st.prev = { x, z }; st.prevTime = time;
       rec?.frame(time, car);
       log?.frame(car);

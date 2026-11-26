@@ -31,10 +31,12 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     return { t100, top, car, t };
   };
   const base = run({ up: 1 }, 60);
-  check('0-100 km/h on the motors is 1.6 s', Math.abs(base.t100 - 1.6) < 0.08, `${base.t100.toFixed(2)} s`);
+  // (1.6 s until 26 Nov, when the fans went back to 12 kN so that the 250 kg added count: Martin, "a means to reduce
+  // the insane acceleration, braking and cornering power")
+  check('0-100 km/h on the motors is 1.7 s at 2200 kg', Math.abs(base.t100 - 1.72) < 0.08, `${base.t100.toFixed(2)} s`);
   check('top speed on the motors is about 340 km/h', Math.abs(base.top - 340) < 8, `${base.top.toFixed(0)} km/h`);
   const b = run({ up: 1, boost: 1 });
-  check('0-100 km/h with BOOST is under 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
+  check('0-100 km/h with BOOST is about 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.64, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
   check('BOOST blows a full tank down in under 6 s, then its valves shut', b.t > 5.4 && b.t < 6 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
   check('BOOST tops out near 355 km/h', b.top > 345 && b.top < 370, `${b.top.toFixed(0)} km/h`);
@@ -111,8 +113,8 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const go = (fanOff) => { const w = world(), c = fresh(w); c.fanOff = fanOff; let t = 0; while (speedKmh(c) < 100 && t < 10) { stepCar(c, { up: 1 }, w, dt); t += dt; } return t; };
   const stop = (fanOff) => { const w = world(), c = fresh(w, 100); c.fanOff = fanOff; for (let t = 0; t < 0.5; t += dt) { stepCar(c, {}, w, dt); c.vx = 100 / 3.6; } const z0 = c.z; let t = 0; while (c.vx > 0.3 && t < 10) { stepCar(c, { down: 1 }, w, dt); t += dt; } return Math.abs(c.z - z0); };
   const g1 = go(false), g0 = go(true), s1 = stop(false), s0 = stop(true);
-  check('fans off: 0-100 km/h takes about 2.5 s, not 1.6', Math.abs(g1 - 1.6) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
-  check('...and stopping from 100 km/h about 36 m, not 21', s1 > 18 && s1 < 24 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
+  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.72) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
+  check('...and stopping from 100 km/h about 36 m, not 22', s1 > 20.5 && s1 < 24.5 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
 }
 
 // ---- one FLIP: fly it and report
@@ -167,13 +169,13 @@ const level = flip('FLIP on level ground at 100 km/h');
 // (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
 // and, upside down there, 8.95 m)
 // (3.1 s and 85 m until 26 Nov, when the last 3 m were made slow: a second more in the air)
-check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level && Math.abs(level.air - 4.2) < 0.15 && Math.abs(level.len - 116) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+check('...is about 4.0 s, 111 m and 8.9 m high at the top of the roll', level && Math.abs(level.air - 4.0) < 0.15 && Math.abs(level.len - 111) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
 // ---- the lift-off push and the way down (Martin 26 Nov): a slightly gentler, steady push with all four corner jets
-// as one; a quiet moment before the roll; the last 3 m slow and the last metre slower still
+// as one; a quiet moment before the roll; the last metres slow and the last one slower still
 {
   const w = world(), car = fresh(w, 100);
   const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ), l = new Float32Array(4), S = 0.005;
-  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0;
+  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0, endLo = 9, endApart = 0, endNose = 0, downLo = 9;
   for (let k = 0; k * S <= plan.tl; k++) {
     const t = k * S;
     flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
@@ -182,14 +184,18 @@ check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level &
     if (t > 0.18 && t < 0.5) { const c = [n[4], n[5], n[6], n[7]]; spread = Math.max(spread, Math.max(...c) - Math.min(...c)); lo = Math.min(lo, ...c); hi = Math.max(hi, ...c); for (let i = 0; i < 4; i++) leanMax = Math.max(leanMax, Math.abs(Math.abs(l[i]) - 0.2)); }
     if (t > 0.58 && t < 0.66) { coast += n[4] + n[5] + n[6] + n[7] + n[8] + n[9]; coastN++; }
     if (k && a.y < prevY) rising = false;
-    if (!rising) { if (t3 === null && a.y <= 3) { t3 = t; v3 = -a.vy; } if (t1 === null && a.y <= 1) { t1 = t; v1 = -a.vy; } if (a.y < 3 && t > plan.tb) fastLow = Math.max(fastLow, -a.vy); }
+    if (!rising) { if (t3 === null && a.y <= 2.4) { t3 = t; v3 = -a.vy; } if (t1 === null && a.y <= 0.85) { t1 = t; v1 = -a.vy; } if (a.y < 2.4 && t > plan.tb) fastLow = Math.max(fastLow, -a.vy); }
+    // (the last metre, from a moment in; and the whole way down from the landing burn on)
+    if (t1 !== null && t > t1 + 0.1 && t < plan.tl - 0.02) { const c = [n[4], n[5], n[6], n[7]]; endLo = Math.min(endLo, ...c); endApart = Math.max(endApart, Math.max(...c) - Math.min(...c)); endNose = Math.max(endNose, n[8], n[9]); }
+    if (t > plan.tb + 0.3 && t < plan.tl - 0.02) downLo = Math.min(downLo, n[4], n[5], n[6], n[7]);
     prevY = a.y;
   }
   check('the lift-off push is a little gentler (2 g, was 2.4) and lasts 0.52 s', gMax > 1.85 && gMax < 2.15, `${gMax.toFixed(2)} g at the most`);
   check('...with the four corner jets blowing as one, steadily, straight down', spread < 0.02 && hi - lo < 0.04 && lo > 0.8 && leanMax < 0.05, `${lo.toFixed(2)} to ${hi.toFixed(2)}, ${spread.toFixed(3)} apart at the most, lean ${leanMax.toFixed(3)} rad off its rest`);
   check('...and a quiet moment before the roll starts', coast / coastN < 0.25, `${(coast / coastN).toFixed(2)} of one jet blowing, on average`);
-  check('the last 3 m down take about 1.5 s (0.5 s before), the last metre about 0.9 s', plan.tl - t3 > 1.3 && plan.tl - t3 < 1.8 && plan.tl - t1 > 0.75 && plan.tl - t1 < 1.1 && t1 - t3 < plan.tl - t1, `${(plan.tl - t3).toFixed(2)} s and ${(plan.tl - t1).toFixed(2)} s`);
-  check('...at 4.5 m/s through 3 m and 1.9 m/s through 1 m, never faster below', Math.abs(v3 - 4.5) < 0.5 && Math.abs(v1 - 1.9) < 0.3 && fastLow < v3 + 0.05, `${v3.toFixed(2)} and ${v1.toFixed(2)} m/s`);
+  check('the catch is low (26 Nov later, was at 3 m and 1 m): the last 2.4 m down take about 1.3 s, the last 0.85 m about 0.8 s', plan.tl - t3 > 1.1 && plan.tl - t3 < 1.5 && plan.tl - t1 > 0.65 && plan.tl - t1 < 1.0 && t1 - t3 < plan.tl - t1, `${(plan.tl - t3).toFixed(2)} s and ${(plan.tl - t1).toFixed(2)} s`);
+  check('the way down ends in one big burn: all four corner jets hard and as one over the last metre, no small bursts', endLo > 0.82 && endApart < 0.12 && endNose < 0.15 && downLo > 0.45, `at least ${endLo.toFixed(2)}, ${endApart.toFixed(2)} apart at the most, the nose jets ${endNose.toFixed(2)}; never under ${downLo.toFixed(2)} from the landing burn on`);
+  check('...at 4.5 m/s through 2.4 m and 1.8 m/s through 0.85 m, never faster below', Math.abs(v3 - 4.5) < 0.5 && Math.abs(v1 - 1.8) < 0.3 && fastLow < v3 + 0.05, `${v3.toFixed(2)} and ${v1.toFixed(2)} m/s`);
 }
 flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
@@ -210,6 +216,19 @@ const downhill = flip('FLIP down an 8 % hill', { h: (s) => -0.08 * s });
 check('...lands tilted to the slope', downhill && Math.abs(downhill.plan.pl - Math.atan(-0.08)) < 0.02, downhill ? `${(downhill.plan.pl * 180 / Math.PI).toFixed(1)} deg` : '');
 flip('FLIP up an 8 % hill', { h: (s) => 0.08 * s });
 flip('FLIP across a slope leaning 6 %', { h: (s, x) => 0.06 * x });
+// down a falling street (Martin 26 Nov: "it stayed up in the air for a very long time"): the way down is measured
+// against the ground's own line, and a car hardly falling faster than that line was let down at 0.3 m/s from 3 m up
+{
+  // (the plans themselves, over streets that fall and are uneven: from the landing burn to the ground in 2.5 s at most)
+  let longest = 0, where = '', n = 0;
+  for (const kmh of [15, 30, 50, 80, 120]) for (const fall of [0, 0.01, 0.03, 0.05, 0.08, 0.12, 0.2]) for (const bump of [0, 0.3, 1]) for (const wave of [7, 23, 61]) {
+    const h = (s) => -fall * s + bump * Math.sin((s / wave) * 6.283), w = world(h), car = fresh(w, kmh, h(0, 0));
+    const p = planFlip(car, w, 1); n++;
+    if (p.tl - p.tb > longest) { longest = p.tl - p.tb; where = `${kmh} km/h, falling ${fall * 100} %, waves of ${bump} m every ${wave} m`; }
+  }
+  check('no flight is held up over falling, uneven ground (10 s of letting down before)', longest < 2.5, `${n} plans, the longest way down ${longest.toFixed(2)} s (${where})`);
+  flip('FLIP down a street falling 8 % at 50 km/h', { kmh: 50, h: (s) => -0.08 * s });
+}
 // ground higher than the roll leaves time for: flown into
 const bank = flip('a 5 m bank ahead: lands on top of it', { h: (s) => (s < 20 ? 0 : s < 30 ? (s - 20) * 0.5 : 5) });
 check('...sooner than on the level', bank && level && bank.air < level.air - 0.3, bank ? `${bank.air.toFixed(2)} s` : '');

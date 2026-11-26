@@ -179,7 +179,7 @@ import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
 import { createSideCam } from './sidecam.js';
-import { createIdlePark, alwaysJudged } from './idlepark.js';
+import { createIdlePark, alwaysJudged, REST_S } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import { createLineLog } from './race/linelog.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
@@ -1400,13 +1400,16 @@ function openGarage() {
 
 // A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
 // (src/idlepark.js; ?idle=<seconds> for trying it out, ?idle=0 never). The garage says why until the next DRIVE.
-// Only while the server is over 90 % full, and a bus always (Martin 26 Nov); ?idle=<seconds> is judged whatever
-// the server says, unless &room=1 asks for the server's word to count.
+// Only while the server is over 90 % full, and a bus always (Martin 26 Nov); with room after 20 minutes (LOOSE_S).
+// ?idle=<seconds> is judged whatever the server says, unless &room=1 asks for the server's word to count
+// (&loose=<seconds>: the wait with room). With nobody there for 20 minutes anywhere (an hour while watching
+// someone) the page goes offline until somebody is back (&rest=<seconds> to try it).
 // (an automated test run is never judged unless it asks: many of them leave a car standing for minutes)
 const idleS = params.has('idle') ? +params.get('idle') || Infinity : navigator.webdriver ? Infinity : undefined;
 const idleAlways = params.has('idle') && !params.has('room');
+const restS = params.has('rest') ? +params.get('rest') || Infinity : navigator.webdriver ? Infinity : REST_S;
 const idlePark = createIdlePark({
-  idle: idleS, warn: idleS < 30 ? 5 : undefined, spread: idleS < 30 ? 3 : undefined,
+  idle: idleS, loose: params.has('loose') ? +params.get('loose') || Infinity : undefined, warn: idleS < 30 ? 5 : undefined, spread: idleS < 30 ? 3 : undefined,
   show: (n) => hud.toast(`IDLE · BACK TO GARAGE IN ${n}`, 1600),
   hide: () => hud.untoast('IDLE · '),
   park() {
@@ -1416,6 +1419,14 @@ const idlePark = createIdlePark({
     $('#idlenote').classList.remove('hidden');
   },
 });
+
+// nobody at this page for restS (an hour while watching someone): offline until somebody is back. Each frame, and
+// every 30 s for a hidden tab, which draws none
+function restCheck() {
+  if (!mp) return;
+  if (Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
+}
+setInterval(restCheck, 30000);
 
 // A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
 // like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
@@ -2178,6 +2189,7 @@ function frame(ts) {
   // a car left standing with nobody at the controls: a countdown, then the garage (src/idlepark.js)
   idlePark.update(mode === 'drive' && !watch?.active && !readyOn && !dropping && !respawning, ctl, pads.acted(), !!(raceMode?.holding || raceMode?.pin || stage?.pin || stage?.phase === 'count'),
     idleAlways || !!mp?.tight || alwaysJudged(car.spec.id));
+  restCheck();
   raceMode?.update(car, dt);
   tyreDefaults();
   people.update();

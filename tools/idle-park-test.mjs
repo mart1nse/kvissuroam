@@ -7,10 +7,12 @@
 // server that says what the test wants): with room a car stands as long as it likes, the server turning tight
 // brings the countdown within 3 s more (each car at a moment of its own), room again calls it off, and a bus is
 // judged whatever the server says. (The server's half: tools/idle-room-test.mjs.)
-// Run with the dev server on 5198: node tools/idle-park-test.mjs [folder for pictures]   (`room`: only that part)
+// And the limits with room (Martin 26 Nov): a car standing ?loose= goes to the garage, nobody there for ?rest= puts
+// the page offline (from the garage and from a hidden tab) until somebody is back.
+// Run with the dev server on 5198: node tools/idle-park-test.mjs [folder for pictures]   (`room`, `rest`: only that part)
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
-const base = 'http://localhost:5198', shots = process.argv.slice(2).find((a) => a !== 'room') || '';
+const base = 'http://localhost:5198', shots = process.argv.slice(2).find((a) => a !== 'room' && a !== 'rest') || '';
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let ok = true;
 const fail = (m) => { ok = false; console.log('  FAIL', m); };
@@ -151,12 +153,60 @@ async function room() {
   await ctx.close();
 }
 
-if (!process.argv.includes('room')) {
+// With room still a limit (Martin 26 Nov, tabs open for days): a car standing `loose` goes to the garage, and with
+// nobody there for `rest` the page goes offline, from the garage and from a hidden tab, and is back online the
+// moment somebody is. ?loose=10&rest=40 for 20 minutes each.
+async function rest() {
+  console.log('rest');
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 810 } });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => fail(`page error: ${e.message}`));
+  let opens = 0, closes = 0;
+  await p.routeWebSocket(/\/api\/ws/, (ws) => {
+    opens++;
+    ws.onClose(() => { closes++; });
+    ws.onMessage((raw) => { if (raw === 'ping') return ws.send('pong'); let m; try { m = JSON.parse(raw); } catch { return; } if (m.t === 'hello') ws.send(JSON.stringify({ t: 'welcome', id: 'me000001', key: null, players: [], wn: 0 })); });
+  });
+  await p.goto(`${base}/?idle=6&room=1&loose=10&rest=40&q=low&trees=old`, { timeout: 180000 });
+  await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
+  await p.evaluate(() => { const r = __game.renderer; r.render = () => {}; });
+  if (!(await until(p, () => __game.mp()?.online, 30000))) fail('not online with the stand-in server');
+  await p.evaluate(() => __game.startDriving());
+  await until(p, () => __game.mode === 'drive', 60000);
+  // 1. room, standing: the garage after 10 s and its countdown
+  let t0 = Date.now();
+  if (!(await until(p, () => __game.mode === 'menu', 25000))) fail('with room, a car stood past the loose limit');
+  else console.log(`  room, standing: the garage ${((Date.now() - t0) / 1000).toFixed(1)} s later`);
+  if ((Date.now() - t0) / 1000 < 13) fail('with room, sent to the garage before the loose limit and its countdown');
+  // 2. in the garage with nobody there: offline 40 s after the last sign of anybody (the page opening)
+  if (!(await until(p, () => __game.mp().resting, 45000)) || !closes) fail(`nobody there, and the page stayed online (socket closed: ${closes})`);
+  else console.log(`  nobody there: offline ${((Date.now() - t0) / 1000).toFixed(1)} s after the drive began (socket closed: ${closes})`);
+  const before = opens;
+  await p.waitForTimeout(6000);
+  if (opens !== before) fail(`resting, and it asked the server again (${opens - before} times)`);
+  // 3. somebody is back (a key): online again at once
+  await p.keyboard.press('KeyB');
+  if (!(await until(p, () => __game.mp().online && !__game.mp().resting, 5000))) fail('somebody back, and not online again');
+  else console.log('  a key: online again');
+  // 4. a hidden tab: its time counts, offline, and back when it shows again
+  await p.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+  t0 = Date.now();
+  // (a hidden tab runs no frames: only the 30 s look)
+  if (!(await until(p, () => __game.mp().resting, 90000))) fail('a hidden tab with nobody there stayed online');
+  else console.log(`  hidden tab: offline ${((Date.now() - t0) / 1000).toFixed(1)} s after it was hidden`);
+  await p.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+  if (!(await until(p, () => __game.mp().online && !__game.mp().resting, 5000))) fail('the tab shown again, and not online again');
+  else console.log('  shown again: online again');
+  await ctx.close();
+}
+
+if (!process.argv.includes('room') && !process.argv.includes('rest')) {
   await run('desktop', { viewport: { width: 1440, height: 810 } }, false);
   await run('phone', { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true }, true);
   await run('phone-small', { viewport: { width: 800, height: 304 }, hasTouch: true, isMobile: true }, true);
 }
-await room();
+if (!process.argv.includes('rest')) await room();
+if (!process.argv.includes('room')) await rest();
 await browser.close();
 console.log(ok ? 'OK' : 'FAILED');
 process.exit(ok ? 0 : 1);

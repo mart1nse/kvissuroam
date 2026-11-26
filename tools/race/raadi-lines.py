@@ -295,9 +295,9 @@ def looks(W, g):
     top = float(np.percentile(on, 97)) if on.size else 1.0
     wn = W / top
     wide = blur(W, 0.75) / top
-    swept = g * (1 - np.exp(-1.7 * wn))
-    loose = g * np.clip(1.9 * wide - 1.5 * wn, 0, 1) * sstep(0.02, 0.12, wide)
-    soil = (1 - g) * (1 - np.exp(-2.6 * wn))
+    swept = g * (1 - np.exp(-2.2 * wn))
+    loose = g * np.clip(2.2 * wide - 1.6 * wn, 0, 1) * sstep(0.02, 0.12, wide)
+    soil = (1 - g) * np.clip(0.75 * wn, 0, 1) ** 0.8
     return swept, loose, soil, top
 
 

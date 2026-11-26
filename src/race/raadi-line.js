@@ -20,7 +20,7 @@ import { jobs } from '../jobs.js';
 
 const LIFT = 0.035;
 // the ground's colour is multiplied by these where a look is whole (over 1 lightens)
-const SWEPT = [0.74, 0.69, 0.63], LOOSE = [1.16, 1.14, 1.1], SOIL = [0.7, 0.52, 0.36];
+const SWEPT = [0.65, 0.59, 0.52], LOOSE = [1.24, 1.21, 1.15], SOIL = [0.66, 0.5, 0.36];
 const ln = (c) => c.map((v) => Math.log(v).toFixed(4)).join(', ');
 
 // a small tile of grain: R streaks along the way the cars go, G stones and crumbs

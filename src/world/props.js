@@ -11,12 +11,18 @@ import { greyBack } from './signback.js';
 import { jobs } from '../jobs.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
-const FACES = 21;
+const FACES = 24;
 // kinds past the sign faces: the white and blue striped post at raised crossings (Veski by Mandel)
 const STRIPED = 40;
 // Raadi park lamp (the rally stage, Martin's photo of 24 Nov): a slim galvanised pole of 6 m with a short
 // arm and a flat head; PARKBIN is the one with the red dog-waste bin on it, by the pond
 const PARK = 41, PARKBIN = 42;
+// Narva mnt beside the Raadi rally start (Martin 26 Nov, his Street View shots and Mapillary's of May 2024,
+// src/world/raadistart.js): the tall galvanised road lamp of 10 m with its long bent arm, the crossing's lamp with
+// two short arms (one at the top, one half way up), the short post with a small head that lights a crossing from
+// its island, and the blue and white striped post that carries a round blue sign on a traffic island's nose
+// (keep right, pass either side)
+const ROADLAMP = 43, CROSSLAMP = 44, ISLELAMP = 45, KEEPPOST = 46, EITHERPOST = 47;
 const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
@@ -26,6 +32,9 @@ function part(geo, hex) {
 }
 const box = (w, h, d, x, y, z, hex) => part(new THREE.BoxGeometry(w, h, d).translate(x, y, z), hex);
 const cyl = (r, h, x, y, z, hex, sides = 6) => part(new THREE.CylinderGeometry(r * 0.8, r, h, sides, 1, true).translate(x, y, z), hex);
+// a square bar t thick from (y0, z0) to (y1, z1) in the plane the lamp's arm lies in
+const beam = (y0, z0, y1, z1, t, hex) => part(new THREE.BoxGeometry(t, t, Math.hypot(y1 - y0, z1 - z0) + t * 0.6).rotateX(-Math.atan2(y1 - y0, z1 - z0)).translate(0, (y0 + y1) / 2, (z0 + z1) / 2), hex);
+const GALV = 0xa9adb5, HEAD = 0x7c8089;
 
 // local axes: +z is "forward" (towards the road for lights, the facing of a sign)
 const SOLID = {
@@ -49,14 +58,31 @@ const SOLID = {
   BIN: [cyl(0.17, 0.5, 0, 0.72, 0.2, 0xc8261e, 8), cyl(0.18, 0.07, 0, 1.0, 0.2, 0x1b1a1f, 8)],
 };
 SOLID[PARKBIN] = [...SOLID[PARK], ...SOLID.BIN];
+SOLID[ROADLAMP] = [cyl(0.105, 10, 0, 5, 0, GALV, 8), beam(9.95, 0, 10.5, 0.3, 0.08, GALV), beam(10.5, 0.3, 10.74, 0.95, 0.08, GALV), beam(10.74, 0.95, 10.8, 2.3, 0.07, GALV), box(0.26, 0.09, 0.72, 0, 10.79, 2.6, HEAD)];
+SOLID[CROSSLAMP] = [cyl(0.105, 10, 0, 5, 0, GALV, 8), beam(9.9, 0, 10.2, 1.25, 0.07, GALV), box(0.24, 0.09, 0.6, 0, 10.22, 1.5, HEAD), beam(5.6, 0, 5.88, 1.1, 0.07, GALV), box(0.24, 0.09, 0.6, 0, 5.9, 1.35, HEAD)];
+SOLID[ISLELAMP] = [cyl(0.075, 6, 0, 3, 0, GALV, 8), box(0.2, 0.09, 0.62, 0, 6.03, 0.12, HEAD)];
+// (seven bands of 0.17 m and a dark cap: 1.25 m, the round plate sits on top of it)
+const stripedPost = [...Array.from({ length: 7 }, (_, k) => box(0.11, 0.17, 0.11, 0, 0.085 + k * 0.17, 0, k % 2 ? 0xf6f5f9 : 0x2a5cc0)), box(0.05, 0.3, 0.05, 0, 1.33, 0, 0x8a8a94)];
+SOLID[KEEPPOST] = stripedPost; SOLID[EITHERPOST] = stripedPost;
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
   [LANTERN]: box(0.16, 0.16, 0.16, 0, 3.5, 0, 0xffe2a8),
   [PARK]: box(0.13, 0.02, 0.4, 0, 5.93, 0.62, 0xfff0d0),
 };
 GLOW[PARKBIN] = GLOW[PARK];
+GLOW[ROADLAMP] = [box(0.2, 0.03, 0.6, 0, 10.73, 2.6, 0xfff0d0)];
+GLOW[CROSSLAMP] = [box(0.18, 0.03, 0.5, 0, 10.16, 1.5, 0xfff0d0), box(0.18, 0.03, 0.5, 0, 5.84, 1.35, 0xfff0d0)];
+GLOW[ISLELAMP] = [box(0.15, 0.03, 0.5, 0, 5.97, 0.12, 0xfff0d0)];
 const POOL = part(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.07, 1.75), 0xffffff);
+// the pool of light under each kind of lamp that has one (the taller the lamp, the wider)
+const POOLS = {
+  [LIGHT]: POOL,
+  [ROADLAMP]: part(new THREE.PlaneGeometry(16, 16).rotateX(-Math.PI / 2).translate(0, 0.07, 2.6), 0xffffff),
+  [CROSSLAMP]: part(new THREE.PlaneGeometry(14, 14).rotateX(-Math.PI / 2).translate(0, 0.07, 1.5), 0xffffff),
+};
 const PLATE = part(new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.5, 0.05), 0xffffff);
+// kinds that are a post of their own with one sign face on it: [atlas column, how far below the usual 2.5 m]
+const FACED = { [KEEPPOST]: [13, 0.92], [EITHERPOST]: [22, 0.92] };
 
 // Poles can snap. Each pole-like kind is its shaft (radius at the foot, height, colour, sides) plus the
 // parts that sit on top of it and go with the top piece when it breaks.
@@ -70,6 +96,7 @@ const SHAFT = {
 };
 // (low: parts fixed to the foot of the pole, which stay with the bottom piece when it snaps)
 SHAFT[PARKBIN] = { ...SHAFT[PARK], low: SOLID.BIN };
+for (const [k, r, h] of [[ROADLAMP, 0.105, 10], [CROSSLAMP, 0.105, 10], [ISLELAMP, 0.075, 6]]) SHAFT[k] = { r, h, hex: GALV, sides: 8, top: SOLID[k].slice(1), glow: GLOW[k] };
 const shaftOf = (kind) => (isSign(kind) ? SHAFT.sign : SHAFT[kind]);
 // the stretch of a shaft between heights y0 and y1 (it tapers to 0.8 of its radius at the top)
 function shaftPiece(sh, y0, y1) {
@@ -119,6 +146,19 @@ function signAtlas() {
   // bus stop
   at(20); c.fillStyle = blue; c.fillRect(-40, -44, 80, 88); c.fillStyle = white; c.fillRect(-27, -30, 54, 60); c.fillStyle = '#18161c'; c.fillRect(-20, -18, 40, 30); c.fillStyle = white; c.fillRect(-16, -14, 32, 12); c.fillStyle = '#18161c'; c.beginPath(); c.arc(-11, 15, 5, 0, 7); c.arc(11, 15, 5, 0, 7); c.fill();
   at(12); disc(44, red); disc(33, white); c.fillStyle = '#18161c'; c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('30', 0, 2);
+  // shared path for walkers and cyclists: a walker over a bicycle
+  at(21); disc(44, blue); c.fillStyle = white;
+  c.beginPath(); c.arc(0, -31, 4.5, 0, 7); c.fill(); poly([[-4, -25], [4, -25], [5, -15], [9, -5], [5, -5], [0, -13], [-5, -5], [-9, -5], [-5, -15]], white);
+  c.strokeStyle = white; c.lineWidth = 3.5;
+  for (const wx of [-13, 13]) { c.beginPath(); c.arc(wx, 22, 9, 0, 7); c.stroke(); }
+  c.beginPath(); c.moveTo(-13, 22); c.lineTo(-4, 9); c.lineTo(8, 9); c.lineTo(13, 22); c.moveTo(-4, 9); c.lineTo(2, 22); c.lineTo(8, 9); c.moveTo(-7, 6); c.lineTo(-1, 6); c.moveTo(8, 9); c.lineTo(10, 5); c.lineTo(15, 5); c.stroke();
+  // pass on either side: two arrows slanting down and apart
+  at(22); disc(44, blue);
+  for (const k of [-1, 1]) { c.setTransform(1, 0, 0, 1, 22 * S + S / 2, S / 2); c.translate(k * 15, 2); c.rotate(Math.PI - k * 0.6); poly([[0, -27], [15, -6], [6, -6], [6, 22], [-6, 22], [-6, -6], [-15, -6]], white); }
+  // lanes ahead (Narva mnt before the Raadi crossing): a white board, straight on from one lane, the other joins it
+  at(23); c.fillStyle = '#18161c'; c.fillRect(-40, -44, 80, 88); c.fillStyle = white; c.fillRect(-37, -41, 74, 82);
+  poly([[-16, -32], [-4, -14], [-12, -14], [-12, 32], [-20, 32], [-20, -14], [-28, -14]], '#18161c');
+  poly([[20, 32], [12, 32], [12, 4], [-2, -8], [-2, 0], [-10, -18], [10, -20], [4, -14], [20, 0]], '#18161c');
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -161,8 +201,8 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, sign: 10 };
-const REACH = { [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, sign: 0.08 };
+const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, sign: 10 };
+const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, sign: 0.08 };
 // thin poles that snap on most hits (the Raadi park lamps, Martin 24 Nov: "should then break. Not very thick posts")
 const THIN = { [PARK]: 1, [PARKBIN]: 1 };
 const KNOCK_KEY = 'streetlap.knocked';
@@ -182,9 +222,9 @@ export function createProps(world, opts = {}) {
   const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-  // sign plates face one way: from behind they are grey metal, but for the bus stop sign (the last atlas
-  // column), which stands across the pavement with its face on both sides
-  const signMat = greyBack(new THREE.MeshLambertMaterial({ map: signAtlas(), alphaTest: 0.5 }), { twoSidedFromU: (FACES - 1) / FACES });
+  // sign plates face one way: from behind they are grey metal, but for the bus stop sign (atlas column 20),
+  // which stands across the pavement with its face on both sides
+  const signMat = greyBack(new THREE.MeshLambertMaterial({ map: signAtlas(), alphaTest: 0.5 }), { twoSidedU: [20 / FACES, 21 / FACES] });
   const paintMat = new THREE.MeshLambertMaterial({ color: 0xdedbe6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const red = [1, 0.16, 0.2], green = [0.2, 1, 0.55], amber = [1, 0.7, 0.2];
   const lamp = box(0.2, 0.2, 0.06, 0, 0, 0, 0xffffff);
@@ -232,11 +272,12 @@ export function createProps(world, opts = {}) {
         continue;
       }
       for (const p of SOLID[kind] || []) solid.add(p, x, y, z, cs, sn);
-      if (kind === LIGHT) {
-        glow.add(GLOW[LIGHT], x, y, z, cs, sn);
-        if (opts.pools !== false) pool.add(POOL, x, y, z, cs, sn);
-      } else if (kind === LANTERN || kind === PARK || kind === PARKBIN) {
-        glow.add(GLOW[kind], x, y, z, cs, sn);
+      if (FACED[kind]) sign.add(PLATE, x, y - FACED[kind][1], z, cs, sn, FACED[kind][0] / FACES, 1 / FACES);
+      if (POOLS[kind]) {
+        for (const g of [GLOW[kind]].flat()) glow.add(g, x, y, z, cs, sn);
+        if (opts.pools !== false) pool.add(POOLS[kind], x, y, z, cs, sn);
+      } else if (kind === LANTERN || kind === PARK || kind === PARKBIN || kind === ISLELAMP) {
+        for (const g of [GLOW[kind]].flat()) glow.add(g, x, y, z, cs, sn);
       } else if (kind === SIGNAL) {
         const r = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
         const on = r < 0.45 ? 0 : r < 0.9 ? 2 : 1;
@@ -300,6 +341,7 @@ export function createProps(world, opts = {}) {
       }
     } else {
       for (const p of SOLID[kind] || []) solid.add(p, 0, 0, 0, cs, sn);
+      if (FACED[kind]) sign.add(PLATE, 0, -FACED[kind][1], 0, cs, sn, FACED[kind][0] / FACES, 1 / FACES);
     }
     const obj = new THREE.Group();
     const geos = [];

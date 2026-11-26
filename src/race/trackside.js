@@ -35,6 +35,7 @@ import { createPlaytech, playtechProps } from './playtech.js';
 import { jobs } from '../jobs.js';
 import { still } from '../still.js';
 import { crashHit } from '../cars/crash.js';
+import { winbaumLot } from '../world/winbaum.js';
 
 const LIGHT = 0, BOLLARD = 8, SIGN0 = 10, ZEBRA = 7, CROSSING = SIGN0 + 7, SPEED40 = SIGN0 + 10, PARKING = SIGN0 + 11, SPEED30 = SIGN0 + 12, SPEED50 = SIGN0;
 
@@ -460,7 +461,8 @@ export function createTrackside(world, scene) {
       for (let j = st.i0; j <= st.i1; j++) { const q = track.P[j % track.N], d = (q[0] - x) ** 2 + (q[1] - z) ** 2; if (d < bd) { bd = d; bi = j; } }
       if (bi < st.treeFrom) continue;
       if (PLAYGROUND.some(([px, pz, pr]) => Math.hypot(x - px, z - pz) < pr + 1.5)) continue;
-      trees.push({ x, z, h: 5.5 + r() * 2, s: 2.1 + r() * 0.8, tint: r() });
+      const t = { x, z, h: 5.5 + r() * 2, s: 2.1 + r() * 0.8, tint: r() };
+      if (!winbaumLot(x, z, 1.5, 6)) trees.push(t);       // (not on the Winbaum cabin's lot or in front of it, ?winbaum=1)
     }
   }
   let treeMesh = null;

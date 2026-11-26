@@ -995,9 +995,8 @@ async function boot() {
     onKudos: () => {},
     // (from the big map's list, a second click on a name: the map closes first, then the camera goes to them)
     onWatch: isTouch ? null : (id) => { if (bigmap?.isOpen) closeMap(); if (id) watch?.start(id); else watch?.stop(); }, watching: () => watch?.id || null,
-    // (desktop: those on a timed Majoraadi run, listed under the MAJORAADI pill; back in the list while watching,
-    // when the pills are away)
-    staged: () => (stage && !watch?.active ? (mp.hotNear(2660, 470, 600, stageIds), stageIds) : null) });
+    // (desktop: those on a timed Majoraadi run, listed under the MAJORAADI pill, while watching a car too)
+    staged: () => (stage ? (mp.hotNear(2660, 470, 600, stageIds), stageIds) : null) });
   if (!isTouch) watch = createSpectate({
     mp, world, toast: (t, ms) => hud.toast(t, ms), racing: (id) => !!raceMode?.racing(id),
     busy: () => mode !== 'drive' || !!overlayOpen(),

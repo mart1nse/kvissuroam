@@ -16,8 +16,9 @@ import { STEALTH } from './stealth.js';
 import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
-import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
+import { POSE_DEC, pack, unpack, replayAt, turnedAbout } from '../race/replay.js';
 import { flightPose, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
+import { CRASH_FLAG } from '../cars/crash.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
@@ -792,8 +793,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     let p;
     if (A && t <= B.t) {
       const span = B.t - A.t || 1, f = Math.max(0, Math.min(1, (t - A.t) / span));
+      // (a crashed car landing end over end on its roof is from there on kept as turned about and rolled over,
+      // crash.js: the same lie of the body, with all three angles half a turn apart, and no way between them)
+      const flip = turnedAbout(A.p, B.p);
       p = A.p.map((v, k) => {
         if (k === 3 || k === 4 || k === 5 || k === 8) {            // angles
+          if (flip && k !== 8) return f < 0.5 ? v : B.p[k];
           let d = B.p[k] - v; d = Math.atan2(Math.sin(d), Math.cos(d));
           return v + d * f;
         }
@@ -1122,9 +1127,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off)
+    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off; 512 thrown over by a hard crash)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0) | (car.crash ? CRASH_FLAG : 0);
     return out;
   }
   function update(car, dt, active) {

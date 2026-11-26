@@ -16,6 +16,7 @@ import { createLandmarks } from './landmarks.js';
 import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
 import { lapGates, lapGatesSteps, throughGate } from './lapgates.js';
+import { CRASH_PEN } from '../cars/crash.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
@@ -352,6 +353,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const st = {
     running: false, t0: 0, clk: 0, wall: null, carT: null, lag: 0, slow: 0, t: 0, off: 0, cps: new Set(), gate: 0, back: 0, along: null, hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null, tyT: {},
+    pen: 0,           // penalty seconds in this lap's time: CRASH_PEN for each hard crash into a wall (cars/crash.js)
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
 
@@ -443,6 +445,15 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     teleported() { st.prev = null; cancel('LAP CANCELLED', false, 'jump'); },
     // back to the last spot (R): a short hop, the lap keeps running
     hopped(x, z) { if (st.prev) st.prev = { x, z }; st.along = null; },
+    // a hard crash into a wall (cars/crash.js: over 140 km/h and straight at it) in a timed lap: CRASH_PEN seconds
+    // on the lap's time, however the car lands (Martin 26 Nov: a wall is no brake). The clock and the splits show
+    // them from here on; the lap goes to the board with them, marked as penalty seconds (lap.pen).
+    crashed() {
+      if (!st.running) return;
+      st.pen += CRASH_PEN;
+      toast(`+${CRASH_PEN} S FOR THE CRASH`, 2600);
+    },
+    get pen() { return st.running ? st.pen : 0; },
     refreshBest() { lastBestKey = ''; },
     // the glowing frame at the finish during an online race (racemode.js)
     finishHalo(on) { decor.finishHalo(on); },
@@ -510,11 +521,14 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                 if (missed === 0 && lapT > MIN_LAP) {
                   const ref = st.ref;
                   const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
-                  const lap = { ms: Math.round(lapT * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
+                  // (the time on the board: the driving and the penalty seconds; the replay and the server's clock have the driving)
+                  const total = lapT + st.pen;
+                  const lap = { ms: Math.round(total * 1000), car: carId, carShort, at: new Date().toISOString(), splits: st.splits.slice(), cp: CP_KEY, inp: used };
                   // (its replay: kept apart from the lap, which goes into this browser's list of laps)
                   const trace = rec?.finish(tc, time, car);
                   if ((st.tyT.gravel || 0) > (st.tyT.road || 0)) lap.ty = 'gravel';
-                  showSplit('FINISH', lapT, refAt(ref || refLaps(carId), null));
+                  if (st.pen) lap.pen = st.pen;
+                  showSplit('FINISH', total, refAt(ref || refLaps(carId), null));
                   // the best before this lap (it counted itself once it was in the list, so no lap was ever a record)
                   const b = bestFor(carId);
                   const pb = !b || lap.ms < b.ms;
@@ -528,12 +542,12 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(laps)); } catch { /* private mode */ }
                   renderLast();
                   // a record gets the big LAP RECORD banner (racemode.js) instead of a toast
-                  if (!pb && !own) toast(`LAP · ${fmtTime(lapT)}`, 4000);
+                  if (!pb && !own) toast(`LAP · ${fmtTime(total)}${st.pen ? ` · INCL. +${st.pen} S` : ''}`, 4000);
                   onLap?.(lap, { rec: pb, prev: b, own, trace });
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; st.lag = st.slow = 0; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.lag = st.slow = 0; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; st.pen = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
@@ -548,7 +562,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               if (g.cp < 0) return;
               const k = g.cp;
               st.cps.add(g.i);
-              const t = time - st.t0;
+              const t = time - st.t0 + st.pen;
               st.splits[k] = Math.round(t * 1000);
               if (!st.ref) st.ref = refLaps(carId);
               showSplit(`CHECKPOINT ${st.cps.size}/${track.checkpoints.length}`, t, refAt(st.ref, k));
@@ -582,7 +596,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       decor.group.visible = show;
       panel.classList.toggle('hidden', !show);
       if (show) {
-        elTime.textContent = st.running ? fmtTime(time - st.t0) : '0:00.00';
+        elTime.textContent = st.running ? fmtTime(time - st.t0 + st.pen) : '0:00.00';
         panel.classList.toggle('idle', !st.running);
         renderBest(carId, carShort);
         if (!st.running && !elMsg.textContent) elMsg.textContent = 'CROSS THE LINE TO START HOTLAP';

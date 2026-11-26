@@ -61,12 +61,13 @@ for (const id of ids) {
         const car = createCar(spec, { x: 0, z: 0, yaw: ang, y: 0 });
         car.vx = kmh / 3.6;
         const r = w.trunksNear(tree[0], tree[1], 1, [])[2];
-        let maxPen = 0, back = 0, px = car.x, pz = car.z, touched = false;
+        let maxPen = 0, back = 0, px = car.x, pz = car.z, touched = false, thrown = false;
         // 3 s flat out into it, 2.5 s reversing straight, then 3 s forward at half lock away from it
         const away = off > 0 ? { up: 0.5, left: 0.5 } : { up: 0.5, right: 0.5 };
         for (let t = 0; t < 8.5; t += dt) {
           const inp = t < 3 ? { up: 1 } : t < 5.5 ? { down: 1 } : away;
           stepCar(car, inp, w, dt);
+          if (car.crash) thrown = true;
           if (t < 3 && overlap(car, tree[0], tree[1], r + 0.1) > 0) touched = true;
           maxPen = Math.max(maxPen, overlap(car, tree[0], tree[1], r));
           if (t >= 3 && t < 5.5) back += Math.hypot(car.x - px, car.z - pz);
@@ -74,7 +75,9 @@ for (const id of ids) {
         }
         const dist = Math.hypot(car.x - tree[0], car.z - tree[1]);
         // free: not inside the trunk, and able to reverse away from it after the hit (unless the hit threw it clear)
-        const clear = overlap(car, tree[0], tree[1], r) === 0 && (!touched || back > 2 || dist > 6);
+        // (at 140 km/h and over, square on, the trunk throws the car over, src/cars/crash.js: it must be back on its
+        // wheels by itself by now, whichever way it landed)
+        const clear = overlap(car, tree[0], tree[1], r) === 0 && (!touched || back > 2 || dist > 6 || (thrown && !car.crash && Math.abs(car.pitch) < 0.2 && Math.abs(car.roll) < 0.2));
         worstPen = Math.max(worstPen, maxPen);
         if (maxPen > 0.25) deep++;
         if (!clear) { stuck++; if (stuck <= 2) console.log(`    ${spec.short} STUCK at ${kmh} km/h offset ${off.toFixed(1)} angle ${ang}: ${dist.toFixed(1)} m from the trunk`); }

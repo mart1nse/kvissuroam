@@ -140,7 +140,7 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
 // One online race, or start votes that lapsed, added into the day's totals t.race (Martin 2026-11-22).
 // It comes from the lobby (worker/race.js), never from a browser: a race's cars, finish times and
 // why racers dropped out, without names. Finish times are the browsers' own, like lap times.
-const RACE_OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit', 'restart', 'still'];
+const RACE_OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit', 'restart', 'still', 'idle'];
 const RACE_END = ['done', 'time', 'restart', 'empty'];
 export const raceSize = (n) => (n <= 3 ? String(n) : n <= 5 ? '4-5' : n <= 9 ? '6-9' : '10+');
 export function addRace(t, r, now = Date.now()) {

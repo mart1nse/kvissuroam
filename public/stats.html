@@ -456,7 +456,7 @@
     h += card('How races ended', null, bars([
       ['all finished or out', end.done || 0], ['7:00 limit reached', end.time || 0],
       ['restarted by vote', end.restart || 0], ['all dropped out', end.empty || 0]], { keep: true, colour: C.hot }));
-    var OUT = { off: 'off the track', cut: 'short cut', jump: 'reset', car: 'changed car', start: 'pressed START', map: 'map jump', left: 'left the game', time: 'still racing at 7:00', quit: 'retired', restart: 'race restarted', still: 'stood still a minute' };
+    var OUT = { off: 'off the track', cut: 'short cut', jump: 'reset', car: 'changed car', start: 'pressed START', map: 'map jump', left: 'left the game', time: 'still racing at 7:00', quit: 'retired', restart: 'race restarted', still: 'stood still a minute', idle: 'idle a minute after the winner' };
     h += card('Why racers did not finish', fmt(racers - fin) + ' racers did not cross the line.', bars(rowsOf(R.out, function (k) { return OUT[k] || k; }), { colour: C.hot }));
     // cars on the grid, with how many of them finished and won
     var cars = Object.keys(R.car || {}).sort(function (a, b) { return R.car[b] - R.car[a]; }).slice(0, 12);

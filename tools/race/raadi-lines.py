@@ -1,9 +1,11 @@
 """The Raadi stage's painted line, made from how people really drive it (Martin 26 Nov 2026).
 
-The game writes every timed run down (src/race/linelog.js) and the server keeps them (worker/index.js, /api/lines).
-This tool fetches the runs, draws the four wheel paths of each one again, and sums them on the ground.
+The game wrote the timed runs down (src/race/linelog.js) and the server kept them (worker/index.js, /api/lines) until
+the stage opened to everyone on 26 Nov 2026, when Martin had the logging taken out: the 32 runs there were are in
+/mnt/project-files/raadi-lines/runs.ndjson. This tool draws the four wheel paths of each run again and sums them on
+the ground. (To log again, bring linelog.js and the two addresses back from git history, before PR #817's merge.)
 
-  python3 tools/race/raadi-lines.py fetch [dir]            new runs from the live site into dir/runs.ndjson
+  python3 tools/race/raadi-lines.py fetch [dir]            new runs from the live site into dir/runs.ndjson (gone since the launch)
   python3 tools/race/raadi-lines.py map [dir] [out.png]    the worn ground as a picture over the stage (to look at)
   python3 tools/race/raadi-lines.py bake [dir]             src/race/raadi-line.json and src/race/raadi-line.png (what the game draws)
   python3 tools/race/raadi-lines.py synth [dir] [n]        made-up runs to try the tool with (never used for the real line)

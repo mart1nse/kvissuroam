@@ -1,5 +1,6 @@
-// The Raadi rally stage (?raadi=1 while it is being tried out): a copy of SSS16 "Tartu vald" of Rally
-// Estonia 2026, 1.77 km of gravel paths in Raadi manor park round the Majoraadi ponds, north of ERM.
+// The Raadi rally stage (MAJORAADI to the players; open to everyone since 26 Nov 2026, ?raadi=0 leaves it out): a
+// copy of SSS16 "Tartu vald" of Rally Estonia 2026, 1.77 km of gravel paths in Raadi manor park round the Majoraadi
+// ponds, north of ERM.
 // Point to point, one car at a time, from a standing start (Martin, 23 Nov 2026).
 //
 // Drive up to the start (or use the RAADI button) and the car is put on the start line and held there while
@@ -105,7 +106,13 @@ export function onStage(road) {
   return k >= n * 0.5;
 }
 
-function loadRuns() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
+// The stage's times from before it opened to everyone were test runs (Martin 26 Nov 2026, at the launch: "Delete
+// all raadi lap times"): the server dropped them from its board (worker/index.js, cleanup-raadi-launch), and this
+// browser's own list leaves them out too, so no test time stays YOUR BEST.
+const OPENED = '2026-11-26T17:20:00.000Z';
+function loadRuns() {
+  try { return (JSON.parse(localStorage.getItem(KEY)) || []).filter((r) => r && typeof r.at === 'string' && r.at >= OPENED); } catch { return []; }
+}
 
 // ---------------------------------------------------------------- pictures
 function canvasTex(w, h, draw) {
@@ -181,10 +188,9 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-// rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
-// line (src/race/linelog.js), or none
+// rec: the run's replay recorder (src/race/replay.js), or none
 // oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
-export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
+export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, readying = () => false, free = () => true, rec = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -732,7 +738,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     setup(pose);
   }
   function setup(pose) {
-    log?.cancel();                           // (a run's last metres past the finish, when the car is put back at once)
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
@@ -745,16 +750,16 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     setLamps(0);
     elMsg.textContent = '';
     st.prev = null;
+    onRun?.('line');                         // (on the line, the lights about to count: for the stats)
   }
   function cancel(why) {
     if (st.phase !== 'run' && st.phase !== 'count') return;
     st.phase = 'done'; st.pin = null; st.cool = true; st.doneT = null;
     rec?.cancel();
-    log?.cancel();
     elMsg.textContent = why;
     toast(why, 3200);
     showAgain();
-    onRun?.('cancel');
+    onRun?.('cancel', null, { why });
   }
   // (Martin 25 Nov: gone sooner, 6 s, and more see-through; it fades out over its last seconds, style.css)
   function showAgain() { st.againUntil = performance.now() + 6000; again.classList.remove('hidden'); }
@@ -841,7 +846,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     get pen() { return st.pen; },
     get resets() { return st.resets || 0; },
     get prog() { return st.prog; },
-    get log() { return log; },
     get line() { return lineInfo; },
     get arches() { return arches; },
     fire,
@@ -869,7 +873,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     reset(t) {
       if (st.phase !== 'run') return false;
       resetRun(st, t);
-      log?.cancel();                         // (the wheels' way up to here is kept; a line with a hop in it is not one)
       toast(resetText, 2600);
       return true;
     },
@@ -945,7 +948,9 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       }
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)
-        if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
+        // (and while the game says GETTING READY after a jump from afar: the stage's things and the places round the
+        // start built and on the graphics card first, 20 s at most)
+        if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000) || (readying() && performance.now() - st.placedAt < 20000)) st.countAt = performance.now();
         const e = (performance.now() - st.countAt) / 1000, left = COUNT_S + LAST_S - e, green = left <= 0;
         const n = Math.max(0, Math.ceil(left));
         if (st.goFor !== st.countAt) { st.goFor = st.countAt; const go = Date.now() + left * 1000; st.clockOff = Math.ceil(go / 60000) * 60000 - go; }
@@ -961,7 +966,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
           arches[0]?.flames.fire(...START_FIRE);           // a burst from the start arch at green
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0; st.lag = st.slow = 0;
           rec?.begin(time);
-          log?.begin(car, carId);
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
@@ -989,7 +993,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
           {
             const f = ev.fin, tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const trace = rec?.finish(tc, time, car);
-            log?.finish(Math.round(t * 1000), st.pen);
             // (the bests before this run: this browser's own in the car, and anyone's)
             const { car: pb } = best(carId), all = top(carId);
             const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
@@ -1038,7 +1041,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       if (st.phase === 'run') markRun(st, car.time);
       st.prev = { x, z }; st.prevTime = time;
       rec?.frame(time, car);
-      log?.frame(car);
 
       // HUD
       const show = st.phase !== 'idle' || dStart < 120;

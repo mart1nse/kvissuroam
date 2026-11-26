@@ -1,12 +1,13 @@
 // Writes public/stats-map.json: a light outline of the map for the heat map on /stats
 // (public/stats.html): the map's edge, the streets and the river, simplified to a few metres, and the
-// Toomemägi lap. Run again when the map grows: node tools/stats-map.mjs
+// Toomemägi lap and the Majoraadi stage. Run again when the map grows: node tools/stats-map.mjs
 import fs from 'node:fs';
 
 const read = (p) => JSON.parse(fs.readFileSync(new URL(`../${p}`, import.meta.url)));
 const meta = read('public/data/meta.json');
 const vec = read('public/data/vectors.json');
 const track = read('src/race/track.json');
+const raadi = read('src/race/raadi.json');
 
 // Douglas-Peucker (a closed ring is done in two halves, or it would fold to its first point)
 function simplify(pts, tol) {
@@ -44,6 +45,8 @@ const out = {
   roads: roads.map((x) => (x.m ? [1, ...x.p.flat()] : [0, ...x.p.flat()])),
   water: water.map((p) => p.flat()),
   track: r(simplify(track.pts, 3)).flat(),
+  // the Majoraadi stage from its start to its finish (open, not a ring)
+  stage: r(simplify(raadi.pts.slice(raadi.start, raadi.finish + 1), 2)).flat(),
 };
 fs.writeFileSync(new URL('../public/stats-map.json', import.meta.url), JSON.stringify(out));
 console.log('stats-map.json', (JSON.stringify(out).length / 1024).toFixed(0), 'KB,', roads.length, 'roads,', water.length, 'water');

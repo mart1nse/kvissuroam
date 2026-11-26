@@ -323,7 +323,7 @@ function paintOf(model) {
   return c ? c.clone() : new THREE.Color(0x9a94a8);
 }
 
-// stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
+// stage: true where the Raadi rally stage is on (everywhere unless ?raadi=0): only then are its records announced
 export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a

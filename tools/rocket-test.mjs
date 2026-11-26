@@ -173,7 +173,7 @@ check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level &
 {
   const w = world(), car = fresh(w, 100);
   const plan = planFlip(car, w, 1), a = {}, n = new Float32Array(NOZ), l = new Float32Array(4), S = 0.005;
-  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0;
+  let gMax = 0, prevV = 0, spread = 0, lo = 9, hi = 0, leanMax = 0, coast = 0, coastN = 0, t3 = null, t1 = null, v3 = 0, v1 = 0, rising = true, prevY = 0, fastLow = 0, endLo = 9, endApart = 0, endNose = 0, downLo = 9;
   for (let k = 0; k * S <= plan.tl; k++) {
     const t = k * S;
     flightPose(plan, t, a); flightNozzles(plan, t, n, spec, l);
@@ -183,12 +183,16 @@ check('...is about 4.2 s, 116 m and 8.95 m high at the top of the roll', level &
     if (t > 0.58 && t < 0.66) { coast += n[4] + n[5] + n[6] + n[7] + n[8] + n[9]; coastN++; }
     if (k && a.y < prevY) rising = false;
     if (!rising) { if (t3 === null && a.y <= 3) { t3 = t; v3 = -a.vy; } if (t1 === null && a.y <= 1) { t1 = t; v1 = -a.vy; } if (a.y < 3 && t > plan.tb) fastLow = Math.max(fastLow, -a.vy); }
+    // (the last metre, from a moment in; and the whole way down from the landing burn on)
+    if (t1 !== null && t > t1 + 0.1 && t < plan.tl - 0.02) { const c = [n[4], n[5], n[6], n[7]]; endLo = Math.min(endLo, ...c); endApart = Math.max(endApart, Math.max(...c) - Math.min(...c)); endNose = Math.max(endNose, n[8], n[9]); }
+    if (t > plan.tb + 0.3 && t < plan.tl - 0.02) downLo = Math.min(downLo, n[4], n[5], n[6], n[7]);
     prevY = a.y;
   }
   check('the lift-off push is a little gentler (2 g, was 2.4) and lasts 0.52 s', gMax > 1.85 && gMax < 2.15, `${gMax.toFixed(2)} g at the most`);
   check('...with the four corner jets blowing as one, steadily, straight down', spread < 0.02 && hi - lo < 0.04 && lo > 0.8 && leanMax < 0.05, `${lo.toFixed(2)} to ${hi.toFixed(2)}, ${spread.toFixed(3)} apart at the most, lean ${leanMax.toFixed(3)} rad off its rest`);
   check('...and a quiet moment before the roll starts', coast / coastN < 0.25, `${(coast / coastN).toFixed(2)} of one jet blowing, on average`);
   check('the last 3 m down take about 1.5 s (0.5 s before), the last metre about 0.9 s', plan.tl - t3 > 1.3 && plan.tl - t3 < 1.8 && plan.tl - t1 > 0.75 && plan.tl - t1 < 1.1 && t1 - t3 < plan.tl - t1, `${(plan.tl - t3).toFixed(2)} s and ${(plan.tl - t1).toFixed(2)} s`);
+  check('the way down ends in one big burn: all four corner jets hard and as one over the last metre, no small bursts', endLo > 0.82 && endApart < 0.12 && endNose < 0.15 && downLo > 0.45, `at least ${endLo.toFixed(2)}, ${endApart.toFixed(2)} apart at the most, the nose jets ${endNose.toFixed(2)}; never under ${downLo.toFixed(2)} from the landing burn on`);
   check('...at 4.5 m/s through 3 m and 1.9 m/s through 1 m, never faster below', Math.abs(v3 - 4.5) < 0.5 && Math.abs(v1 - 1.9) < 0.3 && fastLow < v3 + 0.05, `${v3.toFixed(2)} and ${v1.toFixed(2)} m/s`);
 }
 flip('FLIP at a standstill hops in place', { kmh: 0 });

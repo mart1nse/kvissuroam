@@ -180,6 +180,7 @@ import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
 import { createIdlePark } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
+import { createLineLog } from './race/linelog.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
@@ -1011,12 +1012,17 @@ async function boot() {
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({
-    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
+    place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
     rec: createRecorder(mp.pose),
+    // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
+    // address only (?linelog=1 anywhere, ?linelog=0 nowhere); a test run does the same work and sends nothing.
+    log: params.get('linelog') === '0' ? null : createLineLog({ jobs, track: 'raadi', send: params.get('linelog') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver) }),
     onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); } },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {
@@ -1470,10 +1476,14 @@ async function goLastSpot() {
       pick = pickFromHistory(world, history, opts);
     }
     if (pick?.wait) pick = null;
+    // (a Raadi run with no spot of its own left to go back to: the stage's start, not the nearest dry street,
+    // which may be further along the stage)
+    if (!pick && stage?.running) return stage.goStart();
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
     race?.hopped(pick.x, pick.z);
+    stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
   }

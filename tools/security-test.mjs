@@ -148,9 +148,16 @@ assert.equal(all.find((x) => x.ms === 121000).hold, 1, 'the export marks it held
   r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
   assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
   assert.ok(!(await call('/api/board')).j.allTime.some((x) => x.car === 'm3'), 'a lap in slow motion is not on the board');
-  // the same lap time driven in real time (0.4 s between the marks' ways here): on the board
+  // 4 s more than the lap time between the marks: still slow motion, past the 3.5 s of leeway
   await call('/api/mark', { k: k3, e: 's' }, ip);
-  clock += M3 + 400;
+  clock += M3 + 4000;
+  await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
+  r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
+  // the same lap time driven in real time, its start mark held up 4 s on its way here (Martin 26 Nov 2026: nothing
+  // dropped too heavily on the other side: the server's clock reading less than the lap time helps no cheat): on the board
+  await call('/api/mark', { k: k3, e: 's' }, ip);
+  clock += M3 - 4000;
   await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
   r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
   assert.equal(r.status, 200, JSON.stringify(r.j));
@@ -176,6 +183,12 @@ assert.equal(all.find((x) => x.ms === 121000).hold, 1, 'the export marks it held
   assert.equal(r.status, 200, JSON.stringify(r.j));
   assert.equal((await call('/api/board')).j.allTime.find((x) => x.car === 'passat')?.name, 'Marked');
   sockets.length = 0;
+  // how near these came to the leeways can be read: four laps by the server's clock, two of them outside
+  clock += 61000;
+  const mg = (await call('/api/margins')).j.kinds;
+  assert.equal(mg.clock.n, 4); assert.equal(mg.clock.out, 2); assert.equal(mg.clock.min, -4000); assert.equal(mg.clock.lo, -5000); assert.equal(mg.clock.hi, 3500);
+  // (and the car check's readings of every record drive sent in this test: the honest ones 0, the tuned ones outside)
+  assert.ok(mg.car.n >= 3 && mg.car.p50 === 0 && mg.car.out >= 1 && mg.car.hi === 3, JSON.stringify(mg.car));
 }
 
 // 4) caps: a ticket saved for 10 days posts 3 batches of 50 laps at once: 120 from one address in the hour

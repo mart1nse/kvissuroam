@@ -17,15 +17,15 @@ import { DurableObject } from 'cloudflare:workers';
 import { moved } from './moved.js';
 export { Stats } from './stats.js';
 import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
-import { RaceDesk } from './race.js';
+import { RaceDesk, SEEN_EARLY } from './race.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { throughGate } from '../src/race/lapgates.js';
-import { LAP_GATES } from './follow.js';
+import { LAP_GATES, MAX_SKIPS } from './follow.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
-import { carLimitsSteps, judgeDrive } from '../src/race/plausible.js';
+import { carLimitsSteps, judgeDrive, OVER_MAX } from '../src/race/plausible.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
 import { stageCheck } from './stagecheck.js';
 
@@ -51,7 +51,11 @@ const LAPS_IP_HOUR = 120, LAPS_NAME_DAY = 300;
 // the lap time the page gives: the server's may be this much shorter (a mark slow on its way) or longer (the same,
 // and the 2 s of freezes a lap is forgiven: SLOW_FREE in src/race/race.js). Past that the lap was not driven in
 // real time (slow motion: the game slows down under 20 frames a second, and the lap clock once slowed with it).
-const CLOCK_UNDER = 1500, CLOCK_OVER = 3500;
+// (Martin 26 Nov 2026: "make sure nothing is dropped on the other side too heavily". The server's clock reading
+// less than the lap time helps no cheat (a start mark held up on its way is all it can be), so that side is wide.
+// More than the lap time is what slow motion looks like: 2 s the page's own clock may lose to slow frames
+// (SLOW_FREE in src/race/race.js) and 1.5 s for the finish mark's way here.)
+const CLOCK_UNDER = 5000, CLOCK_OVER = 3500;
 const cleanTrack = (s) => (typeof s === 'string' && Object.hasOwn(STAGES, s) ? s : TRACK);
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -360,6 +364,8 @@ export class Lobby extends DurableObject {
     // laps it finished with what the server measured
     this.sql.exec('CREATE TABLE IF NOT EXISTS lapmarks (sid TEXT PRIMARY KEY, t0 INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS lapseen (sid TEXT NOT NULL, ms INTEGER NOT NULL, took INTEGER NOT NULL, at INTEGER NOT NULL)');
+    // how near play comes to each of the server's limits (margin(), GET /api/margins)
+    this.sql.exec('CREATE TABLE IF NOT EXISTS margins (k TEXT NOT NULL, v REAL NOT NULL, at INTEGER NOT NULL)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS lapseen_sid ON lapseen (sid, ms)');
     this.seenClean = 0;
     // where the cars drove a stage, a row a run (see LINES_MAX)
@@ -906,7 +912,7 @@ export class Lobby extends DurableObject {
     ms = Math.round(Number(ms));
     if (!(ms >= MARK_MIN && ms <= 3600000)) return;
     this.sql.exec('INSERT INTO lapseen (sid, ms, took, at) VALUES (?, ?, ?, ?)', sid, ms, now - t0, now);
-    if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); }
+    if (now - this.seenClean > 3600000) { this.seenClean = now; this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY); }
   }
   // what is wrong with a lap's time by the server's clock ('' for nothing)
   lapClock(sid, ms) {
@@ -915,6 +921,32 @@ export class Lobby extends DurableObject {
     if (rows.length) return `took ${rows[0].took} ms by the server's clock`;
     // (no marks: a page from before they were sent, until those are gone: cutover.js)
     return Date.now() < OLD_PAGES_UNTIL ? '' : 'no marks';
+  }
+
+  // How near play comes to each of the server's limits (Martin 26 Nov 2026: "check other such places as well to make
+  // sure nothing is dropped on the other side too heavily"): one figure for each thing judged, kept three days.
+  // k: 'fin' the ms a racer's own finish time was before the server saw the car over the line (leeway SEEN_EARLY),
+  // 'gaps' the gaps in a racer's positions that the lap was found again after (MAX_SKIPS), 'rcar' / 'car' the most
+  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX). The lap clock's own figures
+  // are in lapseen already. Read by GET /api/margins and the nightly look at the boards (tools/board-audit.mjs).
+  margin(k, v, now = Date.now()) {
+    if (Number.isFinite(v)) this.sql.exec('INSERT INTO margins (k, v, at) VALUES (?, ?, ?)', k, v, now);
+  }
+  margins(now = Date.now()) {
+    if (this.marginsOut && now - this.marginsOut.at < 60000) return this.marginsOut;
+    const since = now - 3 * DAY;
+    // n, the least and the most, the middle and the 1st and 99th of a hundred, and how many lie outside lo..hi
+    const sum = (vs, lo, hi) => {
+      vs.sort((a, b) => a - b);
+      const n = vs.length, q = (f) => (n ? Math.round(vs[Math.min(n - 1, Math.floor(f * n))] * 100) / 100 : null);
+      return { n, min: q(0), p1: q(0.01), p50: q(0.5), p99: q(0.99), max: n ? Math.round(vs[n - 1] * 100) / 100 : null, lo, hi, out: vs.filter((v) => v < lo || v > hi).length };
+    };
+    const kinds = { clock: sum(this.sql.exec('SELECT took - ms AS v FROM lapseen WHERE at >= ?', since).toArray().map((r) => r.v), -CLOCK_UNDER, CLOCK_OVER) };
+    const by = {};
+    for (const r of this.sql.exec('SELECT k, v FROM margins WHERE at >= ?', since).toArray()) (by[r.k] ||= []).push(r.v);
+    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX] };
+    for (const k of Object.keys(LIM)) kinds[k] = sum(by[k] || [], ...LIM[k]);
+    return (this.marginsOut = { at: now, since, kinds });
   }
 
   // What a car can do, measured on the game's physics the first time a replay of it comes (kept while this object
@@ -1015,6 +1047,7 @@ export class Lobby extends DurableObject {
         let lim = null;
         try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
         const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
+        if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
         if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
@@ -1219,6 +1252,7 @@ export class Lobby extends DurableObject {
     if (path === '/api/line' && req.method === 'POST') return this.takeLine(req, ip);
     if (path === '/api/lines') { if (this.over(`L|${ip}`, 40, 60000)) return busy(); return this.readLines(url); }
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
+    if (path === '/api/margins') { if (this.over(`M|${ip}`, 20, 60000)) return busy(); return json(this.margins()); }
     if (path === '/api/replay' && url.searchParams.get('refused')) {
       // (anyone may read the list, so a drive refused for the car says only that: with the seconds over each limit a
       // tuner could turn the figures down until they pass. The whole reason is shown to the ADMIN_KEY, sent as

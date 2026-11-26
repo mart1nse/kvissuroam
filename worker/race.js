@@ -33,7 +33,8 @@ const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const RACE_MIN_MS = 120000;     // no finish faster than this (a lap of Toomemägi: LAP_MIN in index.js)
 const FINISH_EARLY = 3000;      // a finish may claim this much more than the server's clock has run (clock sync)
 const FINISH_LATE = 10000;      // and at most this much less (the message on its way, a short dropout)
-const SEEN_EARLY = 800;         // a finish may be this much before the server saw the car over the line (ten positions a second, and their way here)
+// (800 until 26 Nov 2026. Martin: "within half a second nobody most likely cares ... even up to 1,5 s might be fine")
+export const SEEN_EARLY = 1500; // a finish may be this much before the server saw the car over the line (ten positions a second, and their way here)
 const CLAIM_WAIT = 3000;        // "finished" waits this long for the position that shows it
 const SAVE_MS = 5000;           // what the server has seen of the racers is written down this often (a deploy restarts it mid-race)
 const VOTE_MS = 120000;          // a vote lapses after two minutes
@@ -250,6 +251,7 @@ export class RaceDesk {
       // more than a moment before the server saw it, and never after
       const seen = r.fs - go;
       fin = Math.min(Math.max(c.ms, seen - SEEN_EARLY), seen);
+      this.lobby.margin?.('fin', seen - c.ms);
     } else if (now - c.at < CLAIM_WAIT) return false;          // (the position that shows it may be a moment behind)
     else {
       // not seen over the line. The connection was down as the car crossed it: as if the positions had come, at
@@ -270,6 +272,7 @@ export class RaceDesk {
         const j = d ? judgeDrive(d.xs, d.zs, d.ys, lim, { hop: d.hop }) : null;
         // (a line in the log for each finish judged: how near honest racers come to the limits is worth knowing)
         if (j) console.log(`race judged ${r.car} ${Math.round(fin)} ms, ${d.xs.length} samples, s over: pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}${j.why ? ' REFUSED' : ''}`);
+        if (j) this.lobby.margin?.('rcar', Math.max(j.pull, j.grip, j.stop, j.top));
         if (j?.why) { car = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; fin = null; }
       } catch (err) { console.error('race car check', err); }
     }
@@ -280,6 +283,7 @@ export class RaceDesk {
     }
     // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
     // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
+    this.lobby.margin?.('gaps', r.sk || 0);
     r.ms = Math.round(Math.min(fin, MAX_RACE_MS)) + (r.go ? Math.max(0, r.go - s.tGreen) : 0);
     return true;
   }

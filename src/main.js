@@ -1431,10 +1431,12 @@ const idlePark = createIdlePark({
 });
 
 // nobody at this page for restS (an hour while watching someone): offline until somebody is back. Each frame, and
-// every 30 s for a hidden tab, which draws none
+// every 30 s for a hidden tab, which draws none. Not on the map in view: there the idle rule sends the car to the
+// garage first, and the garage starts this clock afresh (Martin 26 Nov: 20 minutes standing, then 20 in the garage)
 function restCheck() {
   if (!mp) return;
-  if (Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
+  const map = mode === 'drive' && !document.hidden && !watch?.active;
+  if (!map && Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
 }
 setInterval(restCheck, 30000);
 

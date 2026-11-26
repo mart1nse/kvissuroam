@@ -82,6 +82,11 @@ enough to make that happen at DRIVE.
 - New shader variants: warm them (`renderer.compileAsync`) rather than compiling on the first frame.
 - Graphics quality follows the frame rate (`src/quality.js`); new effects should follow the level
   (see `applyFx` in `src/main.js`).
+- AUTO also keeps the pictures even (26 Nov: a MacBook Pro at a steady 60 FPS, 1 hitch in 2 minutes, and 566 pictures
+  finished a screen refresh late): while pictures keep being held back in plain driving it trims the sharpness a
+  step at a time (`createPacer` in `src/quality.js`, `?even=0` switches it off; /stats counts the trims). The game's
+  code and the card's work share one frame: something new that costs the card a millisecond every frame shows up
+  there, not in the frame rate.
 
 The check also runs at night when main changed in the last 24 h; results go to the `perf-reports` branch.
 

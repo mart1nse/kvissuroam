@@ -14,26 +14,32 @@ export function createInput(root) {
   const actions = new Map();   // code -> callback
   let enabled = false;
 
+  // (what the keys hold and what the pointers hold are kept apart: a mouse press on BOOST in the rev counter must
+  // not let go of the arrow key that is held meanwhile)
+  const typed = new Set();
+  const held = new Map();      // pointerId -> control (the pointers, further down)
   window.addEventListener('keydown', (e) => {
     if (!enabled) return;
     const k = keys.get(e.code);
-    if (k) { state[k] = 1; e.preventDefault(); return; }
+    if (k) { typed.add(e.code); state[k] = 1; e.preventDefault(); return; }
     const a = actions.get(e.code);
     if (a && !e.repeat) { a(); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => {
     const k = keys.get(e.code);
-    if (k) state[k] = 0;
+    typed.delete(e.code);
+    if (k) state[k] = byKey(k) || new Set(held.values()).has(k) ? 1 : 0;
   });
-  window.addEventListener('blur', () => { for (const k in state) state[k] = 0; });
+  window.addEventListener('blur', () => { typed.clear(); for (const k in state) state[k] = 0; });
+  const byKey = (k) => { for (const c of typed) if (keys.get(c) === k) return true; return false; };
 
-  // touch pedals: any element with data-ctl="up|down|left|right"
-  const held = new Map();      // pointerId -> control
+  // touch pedals: any element with data-ctl="up|down|left|right" (and a Rocket's BOOST and FLIP, which are also in
+  // the rev counter for a mouse)
   const refresh = () => {
     const on = new Set(held.values());
     for (const k of ['up', 'down', 'left', 'right', 'boost', 'flip']) {
-      state[k] = on.has(k) ? 1 : 0;
-      root.querySelector(`[data-ctl="${k}"]`)?.classList.toggle('held', on.has(k));
+      state[k] = on.has(k) || byKey(k) ? 1 : 0;
+      for (const el of root.querySelectorAll(`[data-ctl="${k}"]`)) el.classList.toggle('held', on.has(k));
     }
   };
   const ctlAt = (x, y) => document.elementFromPoint(x, y)?.closest?.('[data-ctl]')?.dataset.ctl;
@@ -74,8 +80,9 @@ export function createInput(root) {
     setWasd(v) {
       wasd = !!v;
       for (const [code, k] of WASD) { if (wasd) keys.set(code, k); else keys.delete(code); }
+      typed.clear();
       for (const k in state) state[k] = 0;
     },
-    enable(v) { enabled = v; if (!v) { for (const k in state) state[k] = 0; held.clear(); refresh(); } },
+    enable(v) { enabled = v; if (!v) { typed.clear(); for (const k in state) state[k] = 0; held.clear(); refresh(); } },
   };
 }

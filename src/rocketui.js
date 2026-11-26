@@ -3,13 +3,17 @@
 // BOOST's ring is the whole tank, with its per cent under the name. FLIP's is in two halves, one a jump: a whole
 // half is lit, one still filling is pale, and under the name stands "×2" or "×1" (the jumps in the tank) or, with
 // less than one in it, the seconds until there is one: the button is dim then, and its ring shows it filling. On
-// a desktop a slim bar under the rev counter with the keys and the same count. The tank fills again by itself
+// a desktop the same two discs stand small inside the rev counter, over the speed (Martin 26 Nov: better seen
+// than the bar, and they can be clicked; body.rocketdial moves the speed down a touch), and the slim bar under
+// it keeps the keys and the count. The tank fills again by itself
 // whenever it is not full. Only shown while the car has thrusters; the DOM is touched only when something
 // changes. And the small fan in the rev counter of a car with suction fans.
 import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN } from './cars/thrust.js';
 
-export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
-  const bBoost = pad.querySelector('.boost'), bFlip = pad.querySelector('.flip');
+export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
+  // (the discs in use: the phone's, or the rev counter's)
+  const discs = touch || !dial ? pad : dial;
+  const bBoost = discs.querySelector('.boost'), bFlip = discs.querySelector('.flip');
   // (the rings: a dash as long as the share that is in, of the circle's 290.6 and of each half's 138.8 units)
   const ring = { boost: bBoost.querySelector('.fg'), flip: [...bFlip.querySelectorAll('.fg')] }, fill = { bar: bar.querySelector('i') };
   const RING = 2 * Math.PI * 46.25, HALF = (172 / 180) * Math.PI * 46.25, JUMPS = Math.round(TANK_S / JUMP_S);
@@ -33,7 +37,11 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
       const r = car && car.rocket;
       const want = !!r;
       // (body.rocketpad: the phone layout makes room for the two buttons, src/style.css)
-      if (want !== shown) { shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch); document.body.classList.toggle('rocketpad', want && touch); last = ''; }
+      if (want !== shown) {
+        shown = want; pad.classList.toggle('hidden', !want || !touch); bar.classList.toggle('hidden', !want || touch);
+        if (dial) dial.classList.toggle('hidden', !want || touch);
+        document.body.classList.toggle('rocketpad', want && touch); document.body.classList.toggle('rocketdial', want && !touch && !!dial); last = '';
+      }
       if (!r) return;
       const pct = Math.round((r.tank / TANK_S) * 200) / 2;                 // half a per cent steps
       // (seconds until the tank holds a jump again; it does not fill in a flight or while BOOST blows)
@@ -44,7 +52,7 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
       const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${noFlip ? 1 : 0}`;
       if (key === last) return;
       last = key;
-      if (touch) {
+      if (touch || dial) {
         ring.boost.style.strokeDasharray = `${((pct / 100) * RING).toFixed(1)} 400`;
         for (let i = 0; i < ring.flip.length; i++) {
           const share = Math.max(0, Math.min(1, ((pct / 100) * JUMPS) - i));
@@ -55,7 +63,8 @@ export function createRocketUi({ pad, bar, fan = null, touch, keys = () => 'SHIF
         text.flip.textContent = noFlip || off ? 'OFF' : short ? (left < 60 ? `${left} s` : mmss(left)) : `×${jumps}`;
         cls(bBoost, 'no', !canBoost); cls(bFlip, 'no', !canFlip);
         cls(bBoost, 'reload', !canBoost && !off);
-      } else {
+      }
+      if (!touch) {
         fill.bar.style.width = `${pct}%`;
         const k = keys();
         text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : noFlip ? `${k.split(' · ')[0]} · NO FLIP ON A TIMED RUN` : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;

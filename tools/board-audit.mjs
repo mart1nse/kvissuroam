@@ -79,14 +79,14 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   let x = 0, z = 0, y = 0, ro = 0;
   for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; ro += a[9 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; roll[i] = ro / 1000; }
   if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
-  const lim = limits.get(l.car);
+  const lim = limits.get(l.car), where = {};
   if (l.track === 'raadi') {
     // (a car with thrusters leaves the start line harder than the others)
-    row.stage = stageCheck(xs, zs, l.pen || 0, lim?.gas?.launch);
+    row.stage = stageCheck(xs, zs, l.pen || 0, lim?.gas?.launch, where);
     if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
   }
   if (!lim) { row.note = 'not judged'; continue; }
-  const j = judgeDrive(xs, zs, ys, lim, { roll });
+  const j = judgeDrive(xs, zs, ys, lim, { roll, loose: where.loose });   // (a stage run's gravel against gravel's grip)
   row.over = { pull: j.pull, grip: j.grip, stop: j.stop, top: j.top };
   // (a car with thrusters, the Rocket: the gas its drive used over what the tank held, of a full tank, the tanks it
   // was counted to use in all, and the seconds of a kickflip in it)

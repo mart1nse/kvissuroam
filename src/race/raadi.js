@@ -727,7 +727,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {}; st.marks = []; st.resets = 0;
+    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {}; st.tyT = {}; st.marks = []; st.resets = 0;
     bales.reset();
     tape.reset();
     knocks.reset();
@@ -872,19 +872,23 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
     // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
-    update(car, carId, carShort, dt, inp = 'kb') {
+    // look: where the camera is when it is not on our car (watching another player): the stage is built and shown
+    // round that too (Martin 26 Nov: watching a run from town showed the car on bare ground, with no bales, tape,
+    // barriers or line). The run, the start circle and the knocks stay our own car's.
+    update(car, carId, carShort, dt, inp = 'kb', look = null) {
       const x = car.x, z = car.z;
       st.car = car;
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
-      const near = dMid < BUILD_R;
+      const lookMid = look ? Math.hypot(look.x - 2660, look.z - 470) : Infinity;
+      const near = dMid < BUILD_R, seen = near || lookMid < BUILD_R;
       {
         const sp = startPose(), inside = Math.hypot(x - sp.x, z - sp.z) < START_R + 1;
-        showBeam(dMid < 3000, st.phase === 'count' || st.phase === 'run' || st.jump || inside, dt);
+        showBeam(Math.min(dMid, lookMid) < 3000, st.phase === 'count' || st.phase === 'run' || st.jump || inside, dt);
       }
       // (the whole stage's ground is fetched first: it is 560 m across, and the weakest setups only keep 420 m
       // of ground round the car, so from the start line the east loop would have no heights to stand things on)
-      if (near && !built) {
+      if (seen && !built) {
         if (!asked) { asked = true; world.loadAround(2650, 490, 360); }
         let ok = true;
         for (let i = 0; i < N && ok; i += 60) ok = world.ready(P[i][0], P[i][1]);
@@ -893,7 +897,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           jobs.add(build, 'raadi stage');
         }
       }
-      group.visible = near;
+      group.visible = seen;
       // the stage clock: the car's own clock, but a stop (garage, map, another tab) counts at the wall clock's pace
       const wall = performance.now() / 1000;
       if (st.wall != null) {
@@ -958,6 +962,10 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
 
       if (st.phase === 'run') {
         st.inpT[inp] = (st.inpT[inp] || 0) + (dt || 0);
+        // (and with each kind of tyre: the run is marked with the one on for most of it, as a Toomemägi lap is.
+        // Martin 26 Nov: it was the one on at the finish, so a run on gravel tyres could be listed under road tyres.)
+        const tyNow = car.tyres === 'gravel' ? 'gravel' : 'road';
+        st.tyT[tyNow] = (st.tyT[tyNow] || 0) + (dt || 0);
         // (the rules themselves: src/race/raadirules.js; the server judges a recorded run by the same)
         const ev = judgeStep(st, x, z, { pen: (s) => toast(penText(s), 2600) });
         if (ev?.cancel) cancel(ev.cancel);
@@ -973,7 +981,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
             // (the bests before this run: this browser's own in the car, and anyone's)
             const { car: pb } = best(carId), all = top(carId);
             const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
-            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: car.tyres === 'gravel' ? 'gravel' : 'road', inp: used };
+            const run = { ms: Math.round(t * 1000), car: carId, carShort, at: new Date().toISOString(), ty: (st.tyT.gravel || 0) > (st.tyT.road || 0) ? 'gravel' : 'road', inp: used };
             if (st.pen) run.pen = st.pen;
             runs.push(run);
             if (runs.length > 200) runs.splice(0, runs.length - 200);

@@ -53,13 +53,12 @@ export function setInward(on) { inwardOn = !!on; }
 // bites, so the turbos keep spooling, then over CLUTCH_FADE_T the engine is pulled down to the wheels.
 // ?launch=idle is the gentler first try: as if creeping in first at idle with the clutch already in.
 const LAUNCH_SHARE = 1 / 3, CLUTCH_SLIP_T = 0.6, CLUTCH_FADE_T = 0.8;
-// engine.clutchSlip (the F40; ?slip=1 for every car) (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
+// engine.clutchSlip (the F40) (Martin 2026-11-22: a donut whose revs had sagged bogged and wound up slowly, as the launch
 // did): floored in first the driver keeps slipping the clutch, so the engine never falls below the drop revs
 // (for a turbo engine at least where its boost is full)
 // while the wheels turn slower than that. Like the converter's stall speed, but with no torque multiplication.
 let launchManual = true, launchRpm = null;    // launchRpm: null = a third of the way up, 0 = from idle
-let clutchSlip = false;
-export function setLaunch(on, rpm = null, slip = false) { launchManual = !!on; launchRpm = rpm; clutchSlip = !!slip; }
+export function setLaunch(on, rpm = null) { launchManual = !!on; launchRpm = rpm; }
 export function setTurnIn(mode) { turnInHigh = mode === 'high'; }
 const LON_SHARE = 0.7;           // how much cornering eats into traction (1 = full friction circle)
 const SPIN_YAW = 0.04;          // left/right traction imbalance while the wheels spin
@@ -355,7 +354,7 @@ function engineForce(car, throttle, dt, hb = 0) {
     // with the car slewed a little off line, so its forward speed reads low: it counts from 80 % of the shift point
     // and from just below the redline, or the F40 sat on the limiter in first for 1.4 s at 88 km/h; Martin
     // 2026-11-22. Other cars keep 88 %: at 80 % the Mazda and the 190E changed back down on grass and gravel.)
-    const slipper = launchManual && e.type === 'ice' && (clutchSlip || e.clutchSlip === true);
+    const slipper = launchManual && e.type === 'ice' && e.clutchSlip === true;
     const early = rpmAt(g) > e.shiftRpm * (slipper ? 0.8 : 0.88) && rpmAt(g) * wAbs >= (slipper ? e.redline - Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) : e.redline) * vAbs;
     // Coming down: on the throttle it kicks down while the lower gear stays under 90 % of the shift point,
     // coasting it waits until the lower gear lands at 55 %, and braking (into a corner) it comes down early,
@@ -428,11 +427,11 @@ function engineForce(car, throttle, dt, hb = 0) {
       stall = Math.max(stall, L - (L - e.idle) * Math.max(0, (car.launchT - CLUTCH_SLIP_T) / CLUTCH_FADE_T));
       car.launchT += dt;
     }
-    // (engine.clutchSlip, ?slip=1: the clutch kept slipping whenever it is floored in first,
+    // (engine.clutchSlip: the clutch kept slipping whenever it is floored in first,
     // and in a higher gear once the wheels have dragged the engine down near idle: the driver dips the clutch)
     // (a number instead of true is a lighter touch for a car that bogs less: the revs are held that share of the
     // way from the drop revs up to the shift point; 22B 0.15, 200 Avant 0.3, Martin 2026-11-23)
-    const slipTo = clutchSlip || e.clutchSlip === true ? Lslip : e.clutchSlip > 0 ? Math.max(Lslip, L + (e.shiftRpm - L) * e.clutchSlip) : 0;
+    const slipTo = e.clutchSlip === true ? Lslip : e.clutchSlip > 0 ? Math.max(Lslip, L + (e.shiftRpm - L) * e.clutchSlip) : 0;
     if (slipTo > 0 && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (slipTo - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
     // (reversing every car slips its clutch at up to the drop revs as the throttle opens, or it crawled back off
     // idle, Martin 2026-11-23)

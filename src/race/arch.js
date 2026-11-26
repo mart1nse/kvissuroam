@@ -21,7 +21,7 @@ import { paintScale } from '../world/paintscale.js';
 import { still } from '../still.js';
 import { glowTex } from './decor.js';
 
-const BLACK = 0x111114, BAG = 0x18181b, TRUSS = 0x2a2b30;
+const BLACK = 0x111114, BAG = 0x18181b, TRUSS = 0x24252a, TRIM = 0x45474e;
 
 // ---- the picture: the black faces with their red line (towers, beam) and a white patch
 const CELL = 128, CELLS = 3;
@@ -34,16 +34,39 @@ function material() {
   c.width = s * CELLS; c.height = s;
   const g = c.getContext('2d');
   const at = (r, f) => { g.save(); g.translate(r * s, 0); g.scale(s / CELL, s / CELL); f(); g.restore(); };
-  // (the canvas's top is the face's top)
-  for (const [r, line] of [[R_BLACK, 0.95], [R_BLACKBEAM, 0.9]]) at(r, () => {
-    g.fillStyle = '#111114'; g.fillRect(0, 0, CELL, CELL);
-    g.fillStyle = '#c8141e'; g.fillRect(0, line * CELL, CELL, 0.018 * CELL);
+  // (the canvas's top is the face's top) Black printed vinyl on a frame, as it is out in a park: not one black but a
+  // dark grey that varies in big soft patches, rain has run down it in faint streaks, road dust has settled on its
+  // lower part, the frame's edge catches the light along its top, a thin red line near its foot.
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (const [r, line] of [[R_BLACK, 0.93], [R_BLACKBEAM, 0.88]]) at(r, () => {
+    g.fillStyle = '#17171b'; g.fillRect(0, 0, CELL, CELL);
+    for (let i = 0; i < 14; i++) {
+      const x = rnd() * CELL, y = rnd() * CELL, rr = 18 + rnd() * 40, f = g.createRadialGradient(x, y, 0, x, y, rr);
+      const v = rnd() < 0.5 ? '40,40,46' : '6,6,8';
+      f.addColorStop(0, `rgba(${v},0.22)`); f.addColorStop(1, `rgba(${v},0)`);
+      g.fillStyle = f; g.fillRect(0, 0, CELL, CELL);
+    }
+    for (let i = 0; i < 40; i++) {
+      const x = rnd() * CELL, w = 0.4 + rnd() * 1.2, l = CELL * (0.2 + rnd() * 0.7);
+      g.fillStyle = rnd() < 0.6 ? `rgba(70,72,80,${(0.05 + rnd() * 0.07).toFixed(3)})` : `rgba(0,0,0,${(0.1 + rnd() * 0.1).toFixed(3)})`;
+      g.fillRect(x, rnd() * CELL * 0.2, w, l);
+    }
+    const d = g.createLinearGradient(0, CELL * 0.62, 0, CELL);
+    d.addColorStop(0, 'rgba(96,84,70,0)'); d.addColorStop(1, 'rgba(96,84,70,0.4)');
+    g.fillStyle = d; g.fillRect(0, CELL * 0.62, CELL, CELL * 0.38);
+    g.fillStyle = '#b3121b'; g.fillRect(0, line * CELL, CELL, 0.02 * CELL);
+    g.fillStyle = 'rgba(255,120,120,0.25)'; g.fillRect(0, line * CELL, CELL, 0.005 * CELL);
+    g.strokeStyle = '#2b2c31'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, CELL - 3, CELL - 3);
+    g.fillStyle = 'rgba(150,152,160,0.45)'; g.fillRect(0, 0, CELL, 1.2);
   });
   at(R_PLAIN, () => { g.fillStyle = '#fff'; g.fillRect(0, 0, CELL, CELL); });
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
+  // (a standard surface: the sky's picture (scene.environment) lies on it as a faint sheen that grows towards the
+  // edges, the sun gives it a soft highlight; a matt black would read as a hole in the picture)
+  mat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.5, metalness: 0.1 });
   return mat;
 }
 
@@ -63,15 +86,15 @@ function gather() {
         // (the face's own direction, from its corners: a bevel's normals lean)
         const ax = p[t + 3] - p[t], ay = p[t + 4] - p[t + 1], az = p[t + 5] - p[t + 2], bx = p[t + 6] - p[t], by = p[t + 7] - p[t + 1], bz = p[t + 8] - p[t + 2];
         const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, l = Math.hypot(nx, ny, nz) || 1;
-        const face = region >= 0 && Math.abs(nz / l) > 0.9;
+        const ax_ = Math.abs(nx / l), az_ = Math.abs(nz / l), face = region >= 0 && (az_ > 0.9 || ax_ > 0.9);
         for (let v = t; v < t + 9; v += 3) {
           P.push(p[v], p[v + 1], p[v + 2]); N.push(n[v], n[v + 1], n[v + 2]);
           const c = face ? white : col;
           C.push(c.r, c.g, c.b);
           if (face) {
-            const u = (p[v] - bb.min.x) / (bb.max.x - bb.min.x || 1), w = (p[v + 1] - bb.min.y) / (bb.max.y - bb.min.y || 1);
+            const u = az_ > 0.9 ? (p[v] - bb.min.x) / (bb.max.x - bb.min.x || 1) : (p[v + 2] - bb.min.z) / (bb.max.z - bb.min.z || 1), w = (p[v + 1] - bb.min.y) / (bb.max.y - bb.min.y || 1);
             // (on the back face the picture is turned so it reads the same way; a hair in from the cell's edges)
-            const uu = nz / l < 0 ? 1 - u : u;
+            const uu = (az_ > 0.9 ? nz : -nx) / l < 0 ? 1 - u : u;
             U.push((region + 0.02 + 0.96 * uu) / CELLS, 0.02 + 0.96 * w);
           } else U.push(plain[0], plain[1]);
         }
@@ -105,7 +128,10 @@ function gantry(b, a, clear) {
   for (const s of [-1, 1]) {
     b.box(TOWER_W, top + 0.4, TOWER_D, BLACK, s * (a + TOWER_W / 2), (top - 0.4) / 2, 0, 0, R_BLACK);
     b.box(TOWER_W + 0.3, 0.25, TOWER_D + 0.3, BAG, s * (a + TOWER_W / 2), 0.05, 0);       // its foot plate
+    // the frame's corners, bare steel catching the light
+    for (const cx of [-1, 1]) for (const cz of [-1, 1]) b.box(0.06, top + 0.38, 0.06, TRIM, s * (a + TOWER_W / 2) + cx * TOWER_W / 2, (top - 0.4) / 2, cz * TOWER_D / 2);
   }
+  for (const cz of [-1, 1]) for (const yy of [clear, top]) b.box(2 * a, 0.05, 0.05, TRIM, 0, yy, cz * BEAM_D / 2);
   // the beam between the towers (its ends inside them)
   b.box(2 * a + 0.4, BEAM_H, BEAM_D, BLACK, 0, clear + BEAM_H / 2, 0, 0, R_BLACKBEAM);
   // the box truss along the top: four chords, posts and diagonals on its two long sides and across its top
@@ -147,7 +173,7 @@ function gantry(b, a, clear) {
 }
 
 // ---- fire from the cannons
-const FIRE_W = 2.8, FIRE_H = 16;
+const FIRE_W = 3.4, FIRE_H = 16, FIRE_TOP = 0.74;      // the fire's width and height; its share of the strip (smoke above)
 function flameMesh(jets) {
   const pos = [], corner = [], idx = [];
   jets.forEach(([x, y, z], j) => {
@@ -158,10 +184,12 @@ function flameMesh(jets) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('corner', new THREE.Float32BufferAttribute(corner, 3));
   geo.setIndex(idx);
-  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, jets[0][1] + FIRE_H / 2, 0), 20);
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, jets[0][1] + FIRE_H / 2, 0), 24);
   const uniforms = { uT: { value: 0 }, uOn: { value: 0 }, uEnd: { value: 5 }, uH: { value: FIRE_H } };
   const m = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    // (premultiplied: the fire adds its light to what is behind it, the smoke over its top covers it)
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     vertexShader: `
       attribute vec3 corner;
       uniform float uT, uOn, uEnd, uH;
@@ -173,14 +201,15 @@ function flameMesh(jets) {
         vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
         vec3 side = normalize(cross(up, normalize(-c.xyz)));
         float j = corner.z, t = uT - j * 0.06;
-        float grow = smoothstep(0.0, 0.35, t), puff = 0.88 + 0.12 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
-        float h = uH * (0.2 + 0.8 * grow) * puff;
-        vLife = grow * (1.0 - smoothstep(uEnd - 0.5, uEnd, t));
+        float grow = smoothstep(0.0, 0.3, t), puff = 0.9 + 0.1 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
+        // (the strip is taller than the fire: its top part is the smoke)
+        float h = uH * (0.15 + 0.85 * grow) * puff / ${FIRE_TOP.toFixed(2)};
+        vLife = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(uEnd - 0.5, uEnd, t));
         vUv = vec2(corner.x * 0.5 + 0.5, corner.y);
         vSeed = j * 7.31;
         // (wider far off, so that from the first corner, 360 m away, a column is still a few pixels across)
         float far = max(1.0, -c.z / 140.0);
-        c.xyz += side * corner.x * ${(FIRE_W / 2).toFixed(2)} * far * (0.55 + corner.y * 1.1) + up * corner.y * h;
+        c.xyz += side * corner.x * ${(FIRE_W / 2).toFixed(2)} * far * (0.6 + corner.y * 1.3) + up * corner.y * h;
         gl_Position = projectionMatrix * c;
       }`,
     fragmentShader: `
@@ -191,23 +220,46 @@ function flameMesh(jets) {
         vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
       }
+      float fbm(vec2 p) {
+        float s = 0.0, a = 0.5;
+        for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+        return s / 0.9375;
+      }
       void main() {
-        float y = vUv.y;
-        // (rising turbulence: the picture scrolls up, faster low down, and sways)
-        vec2 q = vec2(vUv.x * 3.0 + vSeed + sin(y * 3.0 + uT * 2.0) * 0.25, y * 4.0 - uT * (6.0 - y * 2.0));
-        float n = noise(q) * 0.55 + noise(q * 2.3 + 3.7) * 0.3 + noise(q * 5.1 + 9.1) * 0.15;
-        // a column that swells as it rises and breaks into tongues at its top
-        float wide = 0.7 - y * 0.15;
-        float d = abs(vUv.x - 0.5) * 2.0 + (n - 0.5) * (0.5 + y * 0.8);
-        float body = smoothstep(wide, wide * 0.45, d) * smoothstep(1.0, 0.62 + n * 0.3, y);
-        float heat = clamp(body * (1.15 - y * 0.85) * (0.55 + 0.9 * n), 0.0, 1.0);
-        // deep red at the edges, orange, a yellow-white core low down (the canvas's colours as they are)
-        vec3 col = mix(vec3(0.62, 0.08, 0.02), vec3(1.0, 0.45, 0.05), smoothstep(0.05, 0.4, heat));
-        col = mix(col, vec3(1.0, 0.82, 0.38), smoothstep(0.5, 0.85, heat));
-        col = mix(col, vec3(1.0, 0.97, 0.85), smoothstep(0.85, 1.0, heat) * (1.0 - y));
-        float alpha = smoothstep(0.02, 0.3, heat) * vLife;
-        if (alpha < 0.01) discard;
-        gl_FragColor = vec4(col, alpha);
+        float y = vUv.y, x = (vUv.x - 0.5) * 2.0, t = uT;
+        // turbulence rising through the column: a warped field, faster low down where the gas leaves the cannon
+        vec2 p = vec2(x * 1.5 + vSeed, y * 3.4 - t * 3.6);
+        vec2 w = vec2(fbm(p - vec2(0.0, t * 1.1)), fbm(p + vec2(5.2, 1.3) - vec2(0.0, t * 1.6)));
+        float n = fbm(p * 1.5 + w * 1.9 - vec2(0.0, t * 2.4));
+        // ---- the fire, in the lower part of the strip: narrow at the nozzle, swelling, torn into tongues at its top
+        float fy = y / ${FIRE_TOP.toFixed(2)};
+        float r = mix(0.3, 0.82, smoothstep(0.0, 0.35, fy)) * (1.0 - 0.45 * smoothstep(0.72, 1.1, fy));
+        float dx = abs(x + (w.x - 0.5) * 0.6 * fy);
+        float shape = smoothstep(r, r * 0.2, dx - (n - 0.5) * 0.5 * (0.2 + fy));
+        float cut = smoothstep(1.08, 0.5, fy + (n - 0.5) * 0.8);
+        float T = shape * cut * (1.45 - fy * 0.75) * (0.6 + n);
+        // the colours of burning gas from hot to cool: white-yellow core, yellow, orange, deep red at the edges
+        vec3 c = vec3(0.42, 0.04, 0.0);
+        c = mix(c, vec3(0.92, 0.2, 0.02), smoothstep(0.06, 0.28, T));
+        c = mix(c, vec3(1.0, 0.52, 0.07), smoothstep(0.28, 0.52, T));
+        c = mix(c, vec3(1.0, 0.8, 0.32), smoothstep(0.52, 0.85, T));
+        c = mix(c, vec3(1.0, 0.96, 0.84), smoothstep(0.85, 1.2, T));
+        float e = smoothstep(0.03, 0.25, T);
+        vec3 light = c * e * (1.1 + 0.7 * smoothstep(0.6, 1.2, T));
+        // a short blue-white jet at the nozzle, and the hot air glowing round the body
+        light += vec3(0.55, 0.72, 1.0) * smoothstep(0.05, 0.0, y) * smoothstep(0.3, 0.0, abs(x)) * 0.9;
+        light += vec3(1.0, 0.42, 0.08) * exp(-dx * dx * 5.0) * smoothstep(1.0, 0.05, fy) * 0.22 * (1.0 - e);
+        // ---- smoke where the fire tears off: dark, curling, lit orange from below
+        float sm = fbm(p * 0.8 + w * 2.6 + vec2(3.1, -t * 0.5));
+        float sr = mix(0.25, 0.95, smoothstep(${(FIRE_TOP * 0.7).toFixed(2)}, 1.0, y));
+        float smoke = smoothstep(sr, sr * 0.25, abs(x + (w.y - 0.5) * 0.7) - (sm - 0.5) * 0.9);
+        smoke *= smoothstep(${(FIRE_TOP * 0.6).toFixed(2)}, ${(FIRE_TOP + 0.05).toFixed(2)}, y) * smoothstep(1.0, 0.82, y) * smoothstep(0.3, 0.62, sm) * 0.6;
+        vec3 soot = mix(vec3(0.07, 0.06, 0.06), vec3(0.32, 0.14, 0.05), smoothstep(${(FIRE_TOP + 0.12).toFixed(2)}, ${(FIRE_TOP * 0.8).toFixed(2)}, y));
+        float fa = e * 0.5, sa = smoke * (1.0 - fa);
+        vec3 rgb = light + soot * sa;
+        float a = fa + sa;
+        if (a < 0.004 && dot(rgb, rgb) < 0.0001) discard;
+        gl_FragColor = vec4(rgb * vLife, a * vLife);
       }`,
   });
   const mesh = new THREE.Mesh(geo, m);

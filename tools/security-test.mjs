@@ -76,7 +76,12 @@ assert.ok(!(await call('/api/board')).j.allTime.some((x) => x.car === 'f40'));
 bad = await call('/api/replay', { k, car: 'f40', ms: F40, z: trace(F40) });
 assert.equal(bad.status, 400);
 assert.equal(bad.j.error, 'replay refused: car', 'the sender is not told which limit');
-assert.match((await call('/api/replay?refused=1')).j[0].why, /^car: grip \(s over: pull /, 'the list has the figures');
+assert.equal((await call('/api/replay?refused=1')).j[0].why, 'car', 'the open list does not say which limit either');
+assert.match(db.prepare('SELECT why FROM replay_refused ORDER BY id DESC LIMIT 1').get().why, /^car: grip \(s over: pull /, 'the table has the figures');
+// (with the admin key the list has them too)
+env.ADMIN_KEY = 'k'.repeat(32);
+assert.match((await (await L.fetch(new Request('https://www.linnaring.com/api/replay?refused=1', { headers: { authorization: `Bearer ${env.ADMIN_KEY}` } }))).json())[0].why, /^car: grip \(s over/);
+delete env.ADMIN_KEY;
 assert.ok(!(await call('/api/board')).j.allTime.some((x) => x.car === 'f40'));
 // the real drive: on the board, and its replay kept
 let twice;
@@ -100,7 +105,7 @@ assert.equal(b.recent.length, 1);
   const [x, y] = await Promise.all([0, 1].map(() => call('/api/replay', { k: k2, car: 'audi200', ms: 165288, z: fixture('audi200-tuned') }, '5.5.5.5')));
   assert.equal(x.status, 400); assert.equal(y.status, 400);
   assert.equal(x.j.error, 'replay refused: car');
-  const why = (await call('/api/replay?refused=1')).j[0].why;
+  const why = db.prepare('SELECT why FROM replay_refused ORDER BY id DESC LIMIT 1').get().why;
   assert.match(why, /^car: pull /, why);
   b = (await call('/api/board')).j;
   assert.ok(!b.allTime.some((x) => x.car === 'audi200'), 'the tuned lap is not on the board');

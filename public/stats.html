@@ -12,7 +12,7 @@
   @font-face { font-family: Montserrat; src: url(/fonts/montserrat-latin.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
   :root {
     --bg: #12062b; --panel: #1d0b44; --line: #34186e; --ink: #f6eaff; --ink2: #c7b3ec; --muted: #9581c2;
-    --cyan: #2ff3ff; --pink: #ff5fa2; --hot: #ff2bd6; --sun: #ffd45e;
+    --cyan: #2ff3ff; --pink: #ff5fa2; --hot: #ff2bd6; --sun: #ffd45e; --orange: #ff8014;
   }
   * { box-sizing: border-box; }
   html { color-scheme: dark; }
@@ -104,6 +104,7 @@
   .who .st { margin-left: auto; font-size: 12px; white-space: nowrap; color: var(--muted); }
   .who .st.drv { color: var(--cyan); }
   .who .st.race { color: var(--hot); font-weight: 700; }
+  .who .st.stage { color: var(--orange); font-weight: 700; }
   .who .more { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; opacity: .8; }
 </style>
 </head>
@@ -196,6 +197,8 @@
     var el = document.getElementById('online'), o = onlineData;
     if (!o) return;
     var ps = o.players || [], drv = o.drv != null ? o.drv : ps.filter(function (p) { return p.drv; }).length;
+    // (those on a Majoraadi run at the top, Martin 26 Nov; the server sends them first too, this keeps an older answer in order)
+    ps = ps.slice().sort(function (x, y) { return (y.at === 'stage') - (x.at === 'stage'); });
     var all = o.total != null ? o.total : ps.length + (o.more || 0);
     var note = all ? fmt(all) + (all === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
     // (the ones not driving, 25 Nov: Martin asked who the 40 of 96 not driving were)
@@ -212,7 +215,8 @@
       if (p.race === 'fin') return '<span class="st race">FINISHED</span>';
       if (p.race === 'out') return '<span class="st">out of the race</span>';
       if (p.drv) return '<span class="st drv">driving</span>';
-      return '<span class="st">' + ({ stage: 'Majoraadi stage', away: 'background tab', watch: 'watching', start: 'just opened' }[p.at] || 'in the garage') + '</span>';
+      if (p.at === 'stage') return '<span class="st stage">Majoraadi stage</span>';
+      return '<span class="st">' + ({ away: 'background tab', watch: 'watching', start: 'just opened' }[p.at] || 'in the garage') + '</span>';
     };
     el.innerHTML = '<h2><span class="live"></span>Online now</h2><p class="note">' + note + ' Names as the game shows them; updates every 20 s.</p>' + (ps.length ? '<ul class="who">' + ps.map(function (p) {
       return '<li data-tip="' + esc('online for ' + ago(o.now - p.since)) + '"><span class="nm">' + esc(p.name) + '</span><span class="car">' + esc(carNames[p.car] || p.car) + '</span>' + st(p) + '</li>';

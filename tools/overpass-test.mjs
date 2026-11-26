@@ -23,7 +23,9 @@ globalThis.fetch = async (name) => {
 };
 // data.js is written for the browser bundle: give it a base path
 const dir = mkdtempSync(join(tmpdir(), 'lr-'));
-writeFileSync(join(dir, 'data.mjs'), readFileSync(join(root, 'src/world/data.js'), 'utf8').replace('import.meta.env.BASE_URL', "''"));
+// (data.js hands long work to the page's work queue, src/jobs.js: here its jobs are run at once)
+writeFileSync(join(dir, 'jobs.mjs'), 'export const jobs = { add(f) { const g = f(); if (g && g.next) for (const _ of g); }, late: () => false };\n');
+writeFileSync(join(dir, 'data.mjs'), readFileSync(join(root, 'src/world/data.js'), 'utf8').replace('import.meta.env.BASE_URL', "''").replace("'../jobs.js'", "'./jobs.mjs'"));
 const { loadWorldData } = await import(pathToFileURL(join(dir, 'data.mjs')));
 const world = await loadWorldData();
 

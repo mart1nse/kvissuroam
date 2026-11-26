@@ -28,6 +28,7 @@ import { chevronTex, haloTex, beamTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
 import { SURFACE } from '../world/data.js';
+import { buildLine } from './raadi-line.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 // Not on a run, a car that drives into the circle round the start spot is put on the line (Martin 24 Nov 15:32: "Make a
@@ -440,7 +441,8 @@ function streakTex() {
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
 // rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
 // line (src/race/linelog.js), or none
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null, log = null }) {
+// oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null, log = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -733,8 +735,11 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     group.add(m);
   }
 
+  let lineInfo = null;
   function* build() {
-    yield* buildTracks();
+    // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
+    if (oldTracks) yield* buildTracks();
+    else lineInfo = yield* buildLine({ group, P, TAN, S, groundY });
     yield;
     // signs: yellow time control and the red start flag; the start clock; the line
     sign('tc', 1, HW[1] + 1.4);
@@ -1059,6 +1064,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     get round() { return [...ROUND].map(([k, R]) => [k, R.r, R.a, R.b]); },
     get pen() { return st.pen; },
     get log() { return log; },
+    get line() { return lineInfo; },
     get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
     // the seconds to green (the test drive holds the clock with it to take its pictures)

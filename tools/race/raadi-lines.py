@@ -30,6 +30,7 @@ F = 10                                   # values a sample (src/race/linelog.js)
 CELL = 0.2                               # metres a cell of the ground grid
 PAD = 22                                 # metres of grid round the stage
 SLIDE = 3.0                              # a wheel sliding at full strength wears this much more than rolling
+BLUR_MIN = 0.25                          # metres: the least the summed wear is smoothed over
 X0 = math.floor(P[:, 0].min() - PAD); Z0 = math.floor(P[:, 1].min() - PAD)
 GW = int(math.ceil((P[:, 0].max() + PAD - X0) / CELL)); GH = int(math.ceil((P[:, 1].max() + PAD - Z0) / CELL))
 
@@ -186,8 +187,11 @@ def worn(runs, o):
     """the worn ground: W (wear per run, smoothed), the same on a level scale 0..1, and the runs that counted"""
     roll, slide, n = wear(runs)
     if not n: sys.exit('no runs')
-    sig = float(o.get('blur', 0.3))
+    # (smoothed more while the runs are few, as an estimate of where the many will drive: 0.6 m for 3 runs, 0.47 m
+    # for 10, 0.3 m for 100, never under BLUR_MIN)
+    sig = float(o['blur']) if 'blur' in o else min(0.7, max(BLUR_MIN, 0.75 * n ** -0.2))
     W = blur(roll + SLIDE * slide, sig) / n
+    print(f'{n} runs, smoothed over {sig:.2f} m')
     return W, n
 
 
@@ -209,6 +213,123 @@ def draw_map(d, out, o):
         x, z = q(P[i]); dr.ellipse([x - 6, z - 6, x + 6, z + 6], outline=(255, 60, 60) if i == FIN else (60, 220, 60), width=2)
     im.save(out)
     print(f'{n} runs, wear at the 97th percentile {top:.2f} passes a run, {out} {im.size}')
+
+
+# ---------------------------------------------------------------- what the game draws
+# One strip of picture laid along the stage: across it u = 0..1 is E metres left to E metres right of the centre
+# line, along it v = 0..1 is the stage's points I0 to I1. TW x TH texels, each holding how worn the ground is there
+# as three shares 0..255: R gravel swept, G loose gravel lying beside the swept band, B grass worn to soil. The
+# game turns each into a factor on the ground's colour, factor = colour ^ share (src/race/raadi-line.js), so shares
+# add up where the strip lies on itself: the stage crosses its own path and drives one stretch twice, and inside a
+# tight corner a strip this wide folds over itself. There each layer gets its part of the wear, by a weight that
+# fades to nothing at the strip's own edges (so no layer ends at a visible line) and the parts sum to the whole.
+E = 9.0                                  # metres either side of the centre line
+K = 12                                   # quads across the strip (the mesh; 1.5 m each)
+TW, TH = 64, 4096
+EDGE_M, END_M = 2.0, 4.0                 # the weight fades over this at the strip's sides and its two ends
+TAN = np.array([(P[min(N - 1, i + 1)] - P[max(0, i - 1)]) for i in range(N)]); TAN /= np.hypot(TAN[:, 0], TAN[:, 1])[:, None]
+I0 = max(START - 3, R.get('gravelFrom', 0)); I1 = N - 1
+
+
+def sstep(a, b, x):
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def strip_pos(fi, d):
+    """the ground under the strip at stage index fi (may be fractional) and d metres right of the centre line"""
+    i = np.clip(np.floor(fi).astype(int), 0, N - 2); t = fi - i
+    ax = P[i, 0] - TAN[i, 1] * d; az = P[i, 1] + TAN[i, 0] * d
+    bx = P[i + 1, 0] - TAN[i + 1, 1] * d; bz = P[i + 1, 1] + TAN[i + 1, 0] * d
+    return ax + (bx - ax) * t, az + (bz - az) * t
+
+
+CUM = np.r_[0, np.cumsum(np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])))]
+
+
+def weight(fi, d):
+    """a layer's weight: 1 in the strip, fading out at its sides and ends"""
+    m = np.interp(fi, np.arange(N), CUM)
+    return sstep(0, EDGE_M, E - np.abs(d)) * sstep(0, END_M, m - CUM[I0]) * sstep(0, END_M, CUM[I1] - m)
+
+
+def sample(grid, x, z):
+    gx = np.clip((x - X0) / CELL - 0.5, 0, GW - 1.001); gz = np.clip((z - Z0) / CELL - 0.5, 0, GH - 1.001)
+    ix = np.floor(gx).astype(int); iz = np.floor(gz).astype(int); tx = gx - ix; tz = gz - iz
+    return (grid[iz, ix] * (1 - tx) + grid[iz, ix + 1] * tx) * (1 - tz) + (grid[iz + 1, ix] * (1 - tx) + grid[iz + 1, ix + 1] * tx) * tz
+
+
+def layers():
+    """the sum of the weights of the strip's layers over each cell of the ground: every triangle of the game's mesh
+    that faces up, drawn into the grid with its weight"""
+    Hs = np.zeros((GH, GW))
+    ds = -E + 2 * E * np.arange(K + 1) / K
+    for i in range(I0, I1):
+        for j in range(K):
+            # the quad's corners as the game orders them: (i, j), (i, j+1), (i+1, j), (i+1, j+1)
+            c = [(i, ds[j]), (i, ds[j + 1]), (i + 1, ds[j]), (i + 1, ds[j + 1])]
+            xy = [strip_pos(np.array(float(q[0])), q[1]) if q[0] < N - 1 else (P[q[0], 0] - TAN[q[0], 1] * q[1], P[q[0], 1] + TAN[q[0], 0] * q[1]) for q in c]
+            for tri in ((0, 1, 2), (2, 1, 3)):
+                (x0, z0), (x1, z1), (x2, z2) = [(float(xy[k][0]), float(xy[k][1])) for k in tri]
+                area = (x1 - x0) * (z2 - z0) - (x2 - x0) * (z1 - z0)
+                if area >= -1e-9: continue                          # (folded over: it faces down, and the game does not draw it)
+                gx0 = int(math.floor((min(x0, x1, x2) - X0) / CELL - 0.5)); gx1 = int(math.ceil((max(x0, x1, x2) - X0) / CELL - 0.5))
+                gz0 = int(math.floor((min(z0, z1, z2) - Z0) / CELL - 0.5)); gz1 = int(math.ceil((max(z0, z1, z2) - Z0) / CELL - 0.5))
+                gx0 = max(gx0, 0); gz0 = max(gz0, 0); gx1 = min(gx1, GW - 1); gz1 = min(gz1, GH - 1)
+                if gx1 < gx0 or gz1 < gz0: continue
+                X, Z = np.meshgrid(X0 + (np.arange(gx0, gx1 + 1) + 0.5) * CELL, Z0 + (np.arange(gz0, gz1 + 1) + 0.5) * CELL)
+                w1 = ((X - x0) * (z2 - z0) - (x2 - x0) * (Z - z0)) / area
+                w2 = ((x1 - x0) * (Z - z0) - (X - x0) * (z1 - z0)) / area
+                w0 = 1 - w1 - w2
+                inside = (w0 >= 0) & (w1 >= 0) & (w2 >= 0)
+                if not inside.any(): continue
+                fi = w0 * c[tri[0]][0] + w1 * c[tri[1]][0] + w2 * c[tri[2]][0]
+                dd = w0 * c[tri[0]][1] + w1 * c[tri[1]][1] + w2 * c[tri[2]][1]
+                Hs[gz0:gz1 + 1, gx0:gx1 + 1] += np.where(inside, weight(fi, dd), 0)
+    return Hs
+
+
+def looks(W, g):
+    """the three shares over the ground: gravel swept, loose gravel beside the swept band, grass worn to soil"""
+    on = W[(W > 0.02) & (g > 0.5)]
+    top = float(np.percentile(on, 97)) if on.size else 1.0
+    wn = W / top
+    wide = blur(W, 0.75) / top
+    swept = g * (1 - np.exp(-1.7 * wn))
+    loose = g * np.clip(1.9 * wide - 1.5 * wn, 0, 1) * sstep(0.02, 0.12, wide)
+    soil = (1 - g) * (1 - np.exp(-2.6 * wn))
+    return swept, loose, soil, top
+
+
+def bake(d, o):
+    runs = load_runs(d, o)
+    W, n = worn(runs, o)
+    g = gravel_mask()
+    swept, loose, soil, top = looks(W, g)
+    Hs = layers()
+    fi = I0 + (np.arange(TH) + 0.5) / TH * (I1 - I0)
+    dd = -E + 2 * E * (np.arange(TW) + 0.5) / TW
+    FI, DD = np.meshgrid(fi, dd, indexing='ij')                      # (TH, TW): a row of the picture is a place along the stage
+    x, z = strip_pos(FI, DD)
+    h = weight(FI, DD); H = sample(Hs, x, z)
+    part = np.where(H > 1e-3, np.minimum(1, h / np.maximum(H, 1e-3)), 1.0)
+    img = np.stack([sample(a, x, z) * part for a in (swept, loose, soil)], -1)
+    img8 = np.round(np.clip(img, 0, 1) * 255).astype(np.uint8)
+    # which quads of each row of the mesh have anything on them (the others are left out)
+    cols = []
+    rows_per = TH / (I1 - I0); cpq = TW / K
+    live = img8.max(-1) > 2
+    for i in range(I0, I1):
+        r0 = max(0, int(math.floor((i - I0) * rows_per)) - 1); r1 = min(TH, int(math.ceil((i + 1 - I0) * rows_per)) + 1)
+        c = np.nonzero(live[r0:r1].any(0))[0]
+        if not len(c): cols.append([0, 0]); continue
+        cols.append([max(0, int(math.floor((c[0] - 1) / cpq))), min(K, int(math.floor((c[-1] + 1) / cpq)) + 1)])
+    Image.fromarray(img8, 'RGB').save(ROOT + 'src/race/raadi-line.png', optimize=True)
+    when = max((r['at'] for r in runs), default='')
+    json.dump({'v': 1, 'i0': I0, 'i1': I1, 'e': E, 'k': K, 'runs': n, 'until': when, 'cols': cols}, open(ROOT + 'src/race/raadi-line.json', 'w'), separators=(',', ':'))
+    quads = sum(b - a for a, b in cols)
+    print(f'{n} runs (the last at {when}), full wear {top:.2f} passes a run; {quads} quads of {len(cols) * K}; '
+          f'picture {TW}x{TH}, {os.path.getsize(ROOT + "src/race/raadi-line.png") // 1024} KB; layers up to {Hs.max():.2f}')
 
 
 # ---------------------------------------------------------------- made-up runs to try the tool with
@@ -252,7 +373,5 @@ if __name__ == '__main__':
     if cmd == 'fetch': fetch(d)
     elif cmd == 'map': draw_map(d, a[1] if len(a) > 1 else os.path.join(d, 'map.png'), o)
     elif cmd == 'synth': synth(d, int(a[1]) if len(a) > 1 else 12)
-    elif cmd == 'bake':
-        from importlib import import_module
-        sys.exit('bake: not written yet')
+    elif cmd == 'bake': bake(d, o)
     else: sys.exit(__doc__)

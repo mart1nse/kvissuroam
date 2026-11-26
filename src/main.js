@@ -1014,6 +1014,7 @@ async function boot() {
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
+    oldTracks: params.get('tracks') === 'old',
     rec: createRecorder(mp.pose),
     // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
     // address only (?linelog=1 anywhere, ?linelog=0 nowhere); a test run does the same work and sends nothing.

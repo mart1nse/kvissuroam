@@ -2,7 +2,8 @@
 // figures had been changed in the browser, until a player wrote in). Run each night with the performance check
 // (CLAUDE.md, "For the nightly run"), and by hand when a record looks wrong.
 //   node tools/board-audit.mjs [--site https://www.linnaring.com] [--json out.json] [--days 3] [--from folder] [--all]
-// It reads only what anyone can: /api/laps.json, each record's drive (/api/replay) and the list of refused drives.
+// It reads only what anyone can: /api/laps.json, each record's drive (/api/replay), the list of refused drives and
+// how near play came to the server's leeways (/api/margins).
 //   1) every car's record on each track: its drive through the car check again (src/race/plausible.js, with the
 //      car's figures as they are in the code now), a Raadi run through the stage's rules as well
 //      (worker/stagecheck.js), and whether the drive that is stored is that lap's at all
@@ -10,6 +11,8 @@
 //      lap driven far faster than anybody else has in that car is what a changed car looks like in the splits
 //      (the tuned Audi's third part: 34.2 s, the best of 635 other laps 39.2), and the parts next to it with it.
 //   3) what the server refused in the last 24 hours, counted by reason
+//   4) the leeways: how far the server's clock was from the lap times, the racers' finish times from the server's
+//      sighting, and how much of each leeway ordinary play used (a note when it is over six tenths)
 // Prints one line when all is well, and a line for each thing worth a look. --from reads laps.json and
 // replay-<track>-<car>.gz from a folder instead of the site (the test of this script does).
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -137,9 +140,29 @@ const since = Date.now() - 86400000;
 for (const r of refused || []) if (Date.parse(r.at) > since) { const k = r.why.startsWith('race') ? 'race finish' : r.why.split(':')[0].split(' ')[0]; out.refused[k] = (out.refused[k] || 0) + 1; }
 const ref = Object.entries(out.refused).map(([k, n]) => `${k} ${n}`).join(', ');
 
+// ---- 4) how near play came to the server's leeways in the last three days (GET /api/margins)
+const mg = FROM ? null : await get('/api/margins').catch(() => null);
+const room = [];
+if (mg?.kinds) {
+  out.margins = mg.kinds;
+  const s1 = (v) => `${v > 0 ? '+' : ''}${(v / 1000).toFixed(2)}`;
+  const c = mg.kinds.clock, f = mg.kinds.fin, g = mg.kinds.gaps, rc = mg.kinds.rcar, cr = mg.kinds.car;
+  if (c?.n) {
+    room.push(`lap clock: ${c.n} laps, the server's clock against the lap time from ${s1(c.min)} to ${s1(c.max)} s (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)}); leeway ${s1(c.lo)} to ${s1(c.hi)} s, ${c.out} outside`);
+    if (c.p99 > 0.6 * c.hi || c.p1 < 0.6 * c.lo) notes.push(`the lap clock's leeway is nearly used by ordinary laps (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)} s of ${s1(c.lo)} to ${s1(c.hi)})`);
+  }
+  if (f?.n) {
+    room.push(`race finishes: ${f.n}, the racer's own time ${s1(f.p1)} to ${s1(f.p99)} s before the server saw the car over the line, at most ${s1(f.max)} (leeway ${s1(f.hi)} s, ${f.out} beyond it and counted from the server's sighting)${g?.n ? `; gaps in positions at most ${g.max} of ${g.hi}` : ''}${rc?.n ? `; car check at most ${rc.max} s over, of ${rc.hi}` : ''}`);
+    if (f.p99 > 0.6 * f.hi) notes.push(`the race finish's leeway is nearly used by ordinary finishes (99 in 100 within ${s1(f.p99)} s of ${s1(f.hi)})`);
+    if (g?.n && g.max >= g.hi) notes.push(`a racer used all ${g.hi} gaps in positions a race allows`);
+  }
+  if (cr?.n) room.push(`record drives sent: ${cr.n}, at most ${cr.max} s over a limit, of ${cr.hi}`);
+}
+
 out.notes = notes;
 const judged = out.records.filter((r) => r.over).length;
 console.log(`BOARDS: ${out.records.length} records (${judged} drives judged against their car), ${[...byCar.values()].reduce((s, r) => s + r.length, 0)} laps' split times compared. ${notes.length ? `${notes.length} worth a look:` : 'Nothing stands out.'}`);
 for (const n of notes) console.log(`  ${n}`);
 console.log(`  refused by the server in the last 24 h (of its last 50): ${ref || 'none'}`);
+for (const r of room) console.log(`  ${r}`);
 if (OUT) writeFileSync(OUT, JSON.stringify(out, null, 1));

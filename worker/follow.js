@@ -47,7 +47,8 @@ const MAX_HOPS = 20;
 export const PACE_K = 0.9;       // a car found again after a gap: not faster than this share of the fastest known time
 const GAP_SLACK = 700;           // ms
 const GAP_MS = 1500;             // no position for this long: a gap
-export const MAX_SKIPS = 3, MAX_SKIP_MS = 30000;   // gaps a race may have, and the lap time they may cover in all (by the fastest pace)
+// (5 gaps since 26 Nov 2026, 3 before: what a gap can gain is held by the time they may cover, not by their number)
+export const MAX_SKIPS = 5, MAX_SKIP_MS = 30000;   // gaps a race may have, and the lap time they may cover in all (by the fastest pace)
 const NEAR_ROAD = 25;            // m beyond the road: a car found again must be this near the lap
 
 // what is kept in memory of one racer while the race runs (the racer's own record r, in the race desk's stored

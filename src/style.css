@@ -876,12 +876,12 @@ body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; li
 #options { max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - 70px - max(8px, env(safe-area-inset-bottom)));
   overflow-y: auto; overscroll-behavior: contain; }
 #options, #options * { touch-action: pan-y; }
-/* phones (landscape, often only 300-390 px tall): no keyboard or controller rows (so no section headings either), tighter spacing, right under the
+/* phones (landscape, often only 300-390 px tall): no keyboard or controller rows and no SOUND heading over the first rows, tighter spacing, right under the
    top buttons (clamp(44px, 6vw, 60px) tall), and the pedals step aside while the panel is open so taps reach it */
 body.touch #options { top: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px) + 6px); width: min(300px, 60vw); padding: 8px 12px;
   max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - clamp(44px, 6vw, 60px) - 6px - max(6px, env(safe-area-inset-bottom))); }
 body.touch #options .optctl { display: none; }
-body.touch #options .optctl + h4 { display: none; }
+body.touch #options h3 + h4 { display: none; }
 body.touch #options h3 { margin-bottom: 6px; font-size: 12px; }
 body.touch #options h4 { margin-bottom: 4px; }
 body.touch #options .opt small { margin-top: 2px; font-size: 10px; line-height: 1.3; }
@@ -899,7 +899,7 @@ body.touch:has(#options:not(.hidden)) #touch { visibility: hidden; }
 #options button { padding: 6px 16px; font-size: 11px; letter-spacing: .2em; }
 #options .gfx { margin-top: 4px; cursor: default; }
 #options h4 { margin: 14px 0 8px; padding-top: 10px; border-top: 1px solid rgba(255, 95, 162, .3); font-size: 10px; letter-spacing: .26em; color: var(--pink); }
-#options h3 + h4, #options h3 + .optctl > h4:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+#options h3 + h4 { margin-top: 0; padding-top: 0; border-top: 0; }
 #options .opt { cursor: default; }
 #options #opt-keys { margin-bottom: 4px; }
 #options .seg { display: flex; gap: 4px; margin: 8px 0 0; }
@@ -960,7 +960,7 @@ body.touch:has(#options:not(.hidden)) #touch { visibility: hidden; }
 #ctlsetup .btns em { color: var(--sun); font-style: normal; }
 @media (max-width: 760px) { #ctlsetup .tune { grid-template-columns: 1fr; } }
 @media (hover: hover) and (pointer: fine) { #ctlsetup .dev:hover, #ctlsetup .map:hover { background: rgba(47, 243, 255, .14); } }
-#options .optsetup { display: block; width: 100%; margin: 8px 0 2px; }
+#options .optsetup { display: block; width: 100%; margin: 8px 0 12px; }
 /* pedal bars by the rev counter while a controller with them on drives */
 #pedals { position: absolute; left: -16px; bottom: 12%; height: 42%; display: flex; gap: 4px; pointer-events: none; }
 #pedals div { position: relative; width: 8px; height: 100%; border: 1px solid rgba(255, 255, 255, .55); border-radius: 2px; background: rgba(18, 6, 43, .45); overflow: hidden; }

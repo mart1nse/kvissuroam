@@ -224,6 +224,8 @@ def blur(a, sigma):
     return out
 
 
+MARK_GRAVEL, MARK_ON, MARK_FADE = 0.9, 4.0, 6.0
+CUM0 = np.r_[0, np.cumsum(np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])))]
 TAR_R = 14.0                             # round the start, up to where the gravel begins: what is not gravel is tarmac
 
 
@@ -262,7 +264,30 @@ def ground_masks():
     band(P[:R.get('gravelFrom', 0) + 2], 2 * TAR_R, d)
     zone = done(im)
     g = g * (1 - paint)
-    return g, np.maximum(paint, zone * (1 - g))
+    tar = np.maximum(paint, zone * (1 - g))
+    # where a slide leaves its mark: the tarmac, and (Martin 26 Nov 14:46) the gravel of the start stretch as well,
+    # "most likely there is some pavement or concret or old ashpalt rith under it ... maybe with like 90% opacity",
+    # and on into the first corner "until no asphalt is whon, like 10m or so into the corner and a bit onward": the
+    # gravel road's first MARK_ON metres whole, fading out over the next MARK_FADE (15:15, after 14 m whole and a
+    # short end: "do a quicker fadeout of tire tracks while gravel")
+    g0 = R.get('gravelFrom', 0) + 1
+    far = int(np.searchsorted(CUM0, CUM0[g0] + MARK_ON + MARK_FADE)) + 2
+    im, d = sheet()
+    band(P[:far + 1], 2 * TAR_R, d)
+    near = done(im)
+    # how far along the stage each cell lies (the nearest place on its line, stepped every 0.25 m): a cell beside
+    # the start lane or the tarmac's end counts whole, one further up the gravel road by how far up it is
+    t = np.arange(0, CUM0[far], 0.25)
+    lx = np.interp(t, CUM0[:far + 1], P[:far + 1, 0]); lz = np.interp(t, CUM0[:far + 1], P[:far + 1, 1])
+    zi, xi = np.nonzero(near > 0)
+    cx = X0 + (xi + 0.5) * CELL; cz = Z0 + (zi + 0.5) * CELL
+    at = np.empty(len(cx))
+    for k in range(0, len(cx), 20000):
+        q = slice(k, k + 20000)
+        at[q] = t[np.argmin((cx[q, None] - lx[None]) ** 2 + (cz[q, None] - lz[None]) ** 2, 1)]
+    on = np.zeros_like(near)
+    on[zi, xi] = near[zi, xi] * (1 - sstep(0, 1, (at - CUM0[g0] - MARK_ON) / MARK_FADE))
+    return g, tar, blur(np.maximum(tar, MARK_GRAVEL * on), 0.4)
 
 
 def worn(runs, o):
@@ -284,7 +309,7 @@ def worn(runs, o):
 def draw_map(d, out, o):
     runs = load_runs(d, o)
     W, WT, n = worn(runs, o)
-    g, tar = ground_masks()
+    g, tar, on = ground_masks()
     g = np.maximum(g, tar)
     top = np.percentile(W[W > 0.02], 97) if (W > 0.02).any() else 1
     v = np.clip(W / top, 0, 1) ** 0.6
@@ -396,8 +421,8 @@ def looks(W, WT, g, tar):
     return swept, loose, soil, rubber, top
 
 
-def marks(runs, tar):
-    """every stretch a wheel slid on the tarmac, as a ribbon: [x, z, w, a, ...] per point in whole numbers, x and z
+def marks(runs, on):
+    """every stretch a wheel slid where marks stay (`on`: the tarmac, the start's gravel a little less), as a ribbon: [x, z, w, a, ...] per point in whole numbers, x and z
     in cm from the start line's point, w the mark's width in cm (a tyre's, broader when it is dragged sideways), a
     its strength 0..100"""
     out = []
@@ -411,7 +436,7 @@ def marks(runs, tar):
         tyre = (m[3] or 20) / 100
         yaw = s[:, 2] / 1000; hx = np.sin(yaw); hz = -np.cos(yaw)
         for (x, z, sl, air) in wheel_paths(s, m):
-            a = np.where(air, 0, sl) * sstep(0.35, 0.65, sample(tar, x, z))
+            a = np.where(air, 0, sl) * np.clip(sample(on, x, z), 0, 1)
             dx = np.gradient(x); dz = np.gradient(z); l = np.hypot(dx, dz)
             cb = np.where(l > 0.02, np.abs(dx * hx + dz * hz) / np.maximum(l, 1e-6), 1.0)
             w = tyre * cb + PATCH * np.sqrt(np.clip(1 - cb * cb, 0, 1))
@@ -437,7 +462,7 @@ def marks(runs, tar):
 def bake(d, o):
     runs = load_runs(d, o)
     W, WT, n = worn(runs, o)
-    g, tar = ground_masks()
+    g, tar, on = ground_masks()
     swept, loose, soil, rubber, top = looks(W, WT, g, tar)
     Hs = layers()
     fi = I0 + (np.arange(TH) + 0.5) / TH * (I1 - I0)
@@ -459,7 +484,7 @@ def bake(d, o):
         cols.append([max(0, int(math.floor((c[0] - 1) / cpq))), min(K, int(math.floor((c[-1] + 1) / cpq)) + 1)])
     img8[..., 3] = 255 - img8[..., 3]
     Image.fromarray(img8, 'RGBA').save(ROOT + 'src/race/raadi-line.png', optimize=True)
-    mk = marks(runs, tar)
+    mk = marks(runs, on)
     when = max((r['at'] for r in runs), default='')
     json.dump({'v': 2, 'i0': I0, 'i1': I1, 'e': E, 'k': K, 'runs': n, 'until': when, 'tail': TAIL.tolist(), 'cols': cols, 'marks': mk},
               open(ROOT + 'src/race/raadi-line.json', 'w'), separators=(',', ':'))

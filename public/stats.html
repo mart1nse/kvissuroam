@@ -565,13 +565,6 @@
       });
     };
     rows('Hitches per 10 minutes of driving', 'on');
-    rows('Pictures held back per 10 minutes (the frame on time, its picture a screen refresh late)', 'pace');
-    // AUTO graphics trimming the sharpness for even pictures (src/quality.js createPacer): how often it went to each step
-    var trims = [['1', 'to 92% of the level\'s sharpness'], ['2', 'to 85%'], ['3', 'to 78%'], ['0', 'back to full after a minute of even pictures'], ['off', 'given up: the whole trim changed nothing']];
-    if (trims.some(function (r) { return devs.some(function (d) { return o[d + ':trim:' + r[0]]; }); })) {
-      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>Sharpness trimmed by AUTO for even pictures (times)</b></td></tr>';
-      trims.forEach(function (r) { body += '<tr><td>' + r[1] + '</td>' + devs.map(function (d) { return '<td class="n">' + fmt(o[d + ':trim:' + r[0]] || 0) + '</td>'; }).join('') + '</tr>'; });
-    }
     var kinds = [
       ['why', 'What the frame before was busy with', { build: 'building places and cars (queued work)', draw: 'handing the picture to the graphics card', online: 'the other players (cars, list, names, race)', game: 'the game\'s other frame code',
         card: 'nothing on the page: the graphics card or the browser', 'page:net': 'messages from the server', 'page:car': 'a car model back from its worker' }],
@@ -594,7 +587,7 @@
     body += '</tbody></table>';
     var top = devs.slice().sort(function (a, b) { return secs[b] - secs[a]; })[0];
     var line = name[top] + ': ' + fmt((total[top] || 0) / secs[top] * 600, 1) + ' hitches per 10 minutes of driving';
-    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. A picture held back is a frame that was on time whose picture was finished a screen refresh later than the one before: an uneven step that frame times do not show. Counted from 25 Nov 2026.', body);
+    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. Counted from 25 Nov 2026.', body);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

@@ -60,6 +60,18 @@ export function ringTex() {
   });
 }
 
+// the start circle lying on the ground, what shows of the column while a car is on the start (Martin 26 Nov: "when
+// on stage start, instead of showing the whole halo column, just show it on the ground as a somewhat filled
+// circle"): a light fill, so the road and the skid marks show through, and a bright rim
+export function discTex() {
+  return canvasTex(128, 128, (g, w, h) => {
+    const f = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    f.addColorStop(0, 'rgba(45,205,255,0.22)'); f.addColorStop(0.7, 'rgba(45,205,255,0.3)'); f.addColorStop(0.86, 'rgba(60,215,255,0.36)');
+    f.addColorStop(0.94, 'rgba(120,240,255,0.92)'); f.addColorStop(0.985, 'rgba(70,225,255,0.4)'); f.addColorStop(1, 'rgba(45,205,255,0)');
+    g.fillStyle = f; g.fillRect(0, 0, w, h);
+  });
+}
+
 export function chevronTex() {
   return canvasTex(512, 192, (g, w, h) => {
     g.fillStyle = 'rgba(18,6,43,0.35)';

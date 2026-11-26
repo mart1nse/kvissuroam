@@ -25,7 +25,7 @@ import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
 import { createKnocks } from './knock.js';
-import { chevronTex, beamTex, ringTex } from './decor.js';
+import { chevronTex, beamTex, ringTex, discTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
 import { SURFACE } from '../world/data.js';
@@ -42,6 +42,7 @@ const KEY = 'kvissuroam.raadi';            // this browser's stage times
 // fade in, together like 0.5s"): START_R m round it, a column of light BEAM_H m high, the fade FADE_S each way.
 const START_R = 10, BEAM_H = 256, FADE_S = 0.2;
 const BEAM_DIM = 0.25, RING_DIM = 0.5, RING_H = 2.4;   // the column and its ring in the count and the run, of their strength with no run on
+const DISC_OUT = 5;                       // the column comes back once the car is this far out of the start circle
 // The arches (src/race/arch.js): the start's stands 10 m past the line, beyond the clock, where the view from behind
 // the waiting car has it in the picture, its legs outside the tape on the left; the finish's over the flying
 // finish. `off`: from the gravel's edge to the inside of a leg. The finish's legs stand wide: the runs logged so
@@ -772,7 +773,9 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
   // start the timed lap with the lights, then have a way of leaving it on the screen, but with much lower
   // intensity on ... the placement of the car initially so some of the effect is kept but you see the road and
   // skid marks"): it had gone out at the lights. They ease from one strength to the other in a third of a second.
-  let beam = null, ring = null;
+  // On the start itself, and until the car is DISC_OUT m out of the circle, neither shows: only a filled circle on
+  // the ground, the disc (Martin 26 Nov: "once you have driven out of it 5m, it becomes the column again").
+  let beam = null, ring = null, disc = null;
   // (made through the work queue, so warm.js holds them back unseen until their shader and picture are on the card)
   let beamQueued = false, ringQueued = false;
   const ease = (m, to, dt) => {
@@ -780,8 +783,9 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     if (d) m.material.opacity += Math.sign(d) * Math.min(Math.abs(d), Math.min(dt || 0.016, 0.05) * 3);
     m.visible = m.material.opacity > 0.004;
   };
-  // on: the car is within sight of the column; dim: a run or its count is on, or the car stands in the circle
-  function showBeam(on, dim, dt) {
+  // on: the car is within sight of the column; dim: a run or its count is on, or the car stands in the circle;
+  // close: the car is on the start or within DISC_OUT of it, the disc instead of the column and its ring
+  function showBeam(on, dim, dt, close = false) {
     if (!beam) {
       if (!on || beamQueued) return;
       beamQueued = true;
@@ -796,8 +800,9 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       }, 'raadi start beam');
       return;
     }
-    ease(beam, on ? (dim ? BEAM_DIM : 1) : 0, dt);
-    if (ring) ease(ring, on ? (dim ? RING_DIM : 1) : 0, dt);
+    ease(beam, on && !close ? (dim ? BEAM_DIM : 1) : 0, dt);
+    if (disc) ease(disc, on && close ? 1 : 0, dt);
+    if (ring) ease(ring, on && !close ? (dim ? RING_DIM : 1) : 0, dt);
     else if (on && built && !ringQueued) {
       // (once the stage's ground is there: its foot lies on the ground all the way round, and the column's own
       // foot, made from far off with whatever height was at hand, is put down on it too)
@@ -813,6 +818,18 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
         scene.add(r);
         if (beam) beam.position.y = y0 - 0.3 + BEAM_H / 2;
         ring = r;
+        yield;
+        // the disc, lying on the ground (rings of points across it, so it follows the ground inside too)
+        const dg = new THREE.RingGeometry(0, START_R, 48, 6);
+        dg.rotateX(-Math.PI / 2);
+        const dp = dg.attributes.position;
+        for (let i = 0; i < dp.count; i++) dp.setY(i, groundY(sp.x + dp.getX(i), sp.z + dp.getZ(i)) - y0 + 0.05);
+        const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: discTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        d.position.set(sp.x, y0, sp.z);
+        d.renderOrder = 5;
+        d.visible = false;
+        scene.add(d);
+        disc = d;
       }, 'raadi start ring');
     }
   }
@@ -899,8 +916,8 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       const lookMid = look ? Math.hypot(look.x - 2660, look.z - 470) : Infinity;
       const near = dMid < BUILD_R, seen = near || lookMid < BUILD_R;
       {
-        const sp = startPose(), inside = Math.hypot(x - sp.x, z - sp.z) < START_R + 1;
-        showBeam(Math.min(dMid, lookMid) < 3000, st.phase === 'count' || st.phase === 'run' || st.jump || inside, dt);
+        const sp = startPose(), dS = Math.hypot(x - sp.x, z - sp.z), inside = dS < START_R + 1;
+        showBeam(Math.min(dMid, lookMid) < 3000, st.phase === 'count' || st.phase === 'run' || st.jump || inside, dt, dS < START_R + DISC_OUT || st.jump);
       }
       // (the whole stage's ground is fetched first: it is 560 m across, and the weakest setups only keep 420 m
       // of ground round the car, so from the start line the east loop would have no heights to stand things on)

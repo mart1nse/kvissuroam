@@ -1,5 +1,6 @@
-// The Raadi rally stage (?raadi=1 while it is being tried out): a copy of SSS16 "Tartu vald" of Rally
-// Estonia 2026, 1.77 km of gravel paths in Raadi manor park round the Majoraadi ponds, north of ERM.
+// The Raadi rally stage (MAJORAADI to the players; open to everyone since 26 Nov 2026, ?raadi=0 leaves it out): a
+// copy of SSS16 "Tartu vald" of Rally Estonia 2026, 1.77 km of gravel paths in Raadi manor park round the Majoraadi
+// ponds, north of ERM.
 // Point to point, one car at a time, from a standing start (Martin, 23 Nov 2026).
 //
 // Drive up to the start (or use the RAADI button) and the car is put on the start line and held there while
@@ -105,7 +106,13 @@ export function onStage(road) {
   return k >= n * 0.5;
 }
 
-function loadRuns() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
+// The stage's times from before it opened to everyone were test runs (Martin 26 Nov 2026, at the launch: "Delete
+// all raadi lap times"): the server dropped them from its board (worker/index.js, cleanup-raadi-launch), and this
+// browser's own list leaves them out too, so no test time stays YOUR BEST.
+const OPENED = '2026-11-26T16:00:00.000Z';
+function loadRuns() {
+  try { return (JSON.parse(localStorage.getItem(KEY)) || []).filter((r) => r && typeof r.at === 'string' && r.at >= OPENED); } catch { return []; }
+}
 
 // ---------------------------------------------------------------- pictures
 function canvasTex(w, h, draw) {
@@ -745,6 +752,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     setLamps(0);
     elMsg.textContent = '';
     st.prev = null;
+    onRun?.('line');                         // (on the line, the lights about to count: for the stats)
   }
   function cancel(why) {
     if (st.phase !== 'run' && st.phase !== 'count') return;
@@ -754,7 +762,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     elMsg.textContent = why;
     toast(why, 3200);
     showAgain();
-    onRun?.('cancel');
+    onRun?.('cancel', null, { why });
   }
   // (Martin 25 Nov: gone sooner, 6 s, and more see-through; it fades out over its last seconds, style.css)
   function showAgain() { st.againUntil = performance.now() + 6000; again.classList.remove('hidden'); }

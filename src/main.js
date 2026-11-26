@@ -435,8 +435,9 @@ let watchSpec = null;              // the car the HUD shows while watching
 const mapHits = [];                // the players' arrows on the minimap as last drawn (canvas pixels), to click
 const ownCar = () => car;          // (for the minimap's overlay, whose own "car" is the one the map follows)
 const spot = { x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, yawRate: 0, hit: 0, halfLen: 2.2, halfWid: 0.9, spec: null };    // where the places build around while watching (see PLACES)
-// the Raadi rally stage (src/race/raadi.js), while it is tried out only with ?raadi=1
-const RAADI = params.get('raadi') === '1';
+// the Raadi rally stage (src/race/raadi.js), MAJORAADI to the players: tried out behind ?raadi=1 from 23 Nov 2026 and
+// open to everyone since 26 Nov (Martin: "merge to prod"). ?raadi=0 leaves it out (the old single-circuit game).
+const RAADI = params.get('raadi') !== '0';
 let stage = null;
 let droveOnce = false;                  // DRIVE pressed since the page opened: the first puts the car at a circuit,
                                         // so that circuit's tyres go on (the stored choice of a last visit, gravel, had
@@ -1036,6 +1037,8 @@ async function boot() {
     onRun: (k, run, info) => {
       if (k === 'start') mp.lapMark('s');
       if (k === 'finish') { mp.lapMark('f', run.ms - (run.pen || 0) * 1000); mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); }
+      // (the stage's own counts on /stats, Martin at the launch 26 Nov: "Make sure stats start coming through")
+      stats.stage(k, k === 'finish' ? run : info?.why);
     },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {
@@ -1295,7 +1298,7 @@ function startDriving() {
   mode = 'drive';
   stats.drive();
   driveT = performance.now();
-  // the track picked on the start screen (?raadi=1): DRIVE starts there. With Raadi picked always, unless the
+  // the track picked on the start screen: DRIVE starts there. With Raadi picked always, unless the
   // car is at Raadi already (the line under DRIVE says RAADI; Martin 23 Nov: H, then the menu, then DRIVE stayed
   // at Toomemägi). With Toomemägi picked the car is only fetched from Raadi, and only after a pick.
   // (not in one's own race, from its count to its finish: with Raadi still picked a racer who had opened the garage
@@ -1526,7 +1529,7 @@ async function goLastSpot() {
       if (down) {
         place(down);
         race?.hopped(down.x, down.z);
-        stage?.reset(car.time);
+        if (stage?.reset(car.time)) stats.stage('reset');
         return;
       }
     }
@@ -1549,7 +1552,7 @@ async function goLastSpot() {
     place(pick);
     if (pick.roof) roofPut = { x: pick.x, z: pick.z, y: pick.y };
     race?.hopped(pick.x, pick.z);
-    stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
+    if (stage?.reset(pick.t)) stats.stage('reset');   // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
   }
@@ -2237,7 +2240,7 @@ function frame(ts) {
     else if (!car.inWater) wetAt = null;
     // (a crash that ends on the roof, cars/crash.js: R then goes back to before it, however long the car has lain there)
     // and on a timed lap or stage run every such crash is seconds, however the car lands (race.js, raadi.js)
-    if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); race?.crashed(); stage?.crashed(); }
+    if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); race?.crashed(); if (stage?.running) stats.stage('crash'); stage?.crashed(); }
     else if (!car.crash) wreckAt = null;
     // (up on a house's roof, where the walls are below the car: a spot there is one to be put back on, the first
     // R; see goLastSpot)

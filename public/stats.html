@@ -127,7 +127,7 @@
 (function () {
   'use strict';
   var out = document.getElementById('out'), tip = document.getElementById('tip');
-  var C = { cyan: '#2ff3ff', pink: '#ff5fa2', hot: '#ff2bd6', sun: '#ffd45e', violet: '#8a3ffc' };
+  var C = { cyan: '#2ff3ff', pink: '#ff5fa2', hot: '#ff2bd6', sun: '#ffd45e', violet: '#8a3ffc', orange: '#ff8014' };
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
   var fmt = function (n, dp) { return (n || 0).toLocaleString('en-GB', { maximumFractionDigits: dp || 0, minimumFractionDigits: dp || 0 }); };
   var dur = function (s) { s = s || 0; return s >= 3600 ? fmt(s / 3600, 1) + ' h' : s >= 60 ? fmt(s / 60) + ' min' : fmt(s) + ' s'; };
@@ -240,6 +240,7 @@
       [dur(t.drive), 'driven', sessions ? dur((t.drive || 0) / Math.max(1, drove)) + ' per driver' : ''],
       [fmt(t.km, (t.km || 0) < 100 ? 1 : 0) + ' km', 'distance', fmt(misc.drives || 0) + ' DRIVE presses'],
       [fmt(laps.finish), 'laps finished', fmt(laps.start) + ' started'],
+      [fmt((t.stage || {}).finish), 'Majoraadi runs finished', fmt((t.stage || {}).start) + ' started'],
       [fmt(t.peak), 'most online at once', fmt(misc.mp || 0) + ' visits met another car'],
       [fmt((t.race || {}).n), 'online races', fmt((t.race || {}).racers) + ' racers on the grid'],
     ].map(function (x) { return '<div class="tile"><b>' + x[0] + '</b><span>' + x[1] + '</span><small>' + x[2] + '</small></div>'; }).join('') + '</div>';
@@ -253,7 +254,7 @@
       for (var i = 23; i >= 0; i--) {
         var at = hr0 - i * 36e5, lab = new Date(at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Tallinn', hour: '2-digit', minute: '2-digit' });
         var r0 = byHr[at] || { sessions: 0, drove: 0 };
-        days.push({ day: lab, sessions: r0.sessions, drove: r0.drove, drive: r0.drive, laps: r0.laps, races: r0.races });
+        days.push({ day: lab, sessions: r0.sessions, drove: r0.drove, drive: r0.drive, laps: r0.laps, stage: r0.stage, races: r0.races });
       }
     } else if (d.days > 1) {
       var byDay = {};
@@ -265,7 +266,7 @@
       var mx = Math.max(1, Math.max.apply(null, days.map(function (r) { return r.sessions; })));
       var cols = days.map(function (r) {
         var only = Math.max(0, r.sessions - r.drove);
-        var tipT = esc(r.day) + '<br>' + fmt(r.sessions) + ' visits · ' + fmt(r.drove) + ' drove' + (r.drive ? ' · ' + dur(r.drive) : '') + (r.laps ? ' · ' + fmt(r.laps) + ' laps' : '') + (r.races ? ' · ' + fmt(r.races) + (r.races === 1 ? ' race' : ' races') : '');
+        var tipT = esc(r.day) + '<br>' + fmt(r.sessions) + ' visits · ' + fmt(r.drove) + ' drove' + (r.drive ? ' · ' + dur(r.drive) : '') + (r.laps ? ' · ' + fmt(r.laps) + ' laps' : '') + (r.stage ? ' · ' + fmt(r.stage) + ' Majoraadi ' + (r.stage === 1 ? 'run' : 'runs') : '') + (r.races ? ' · ' + fmt(r.races) + (r.races === 1 ? ' race' : ' races') : '');
         return '<div class="col" data-tip="' + tipT + '">' +
           (only ? '<div class="seg" style="height:' + (only / mx * 100) + '%;background:' + C.violet + '"></div>' : '') +
           (r.drove ? '<div class="seg" style="height:' + (r.drove / mx * 100) + '%;background:' + C.cyan + '"></div>' : '') + '</div>';
@@ -279,7 +280,7 @@
     h += freezes(t);
     h += hitches(t);
     // where people drive
-    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button>' + (frzHeat(t) ? '<button id="frzmap" type="button">' + (frzMap ? 'Show driving' : 'Show freezes') + '</button>' : '') + '</div>', true);
+    h += card('Where people drive', 'Time driven in each ' + d.heat + ' m square. The pink line is the Toomemägi lap, the orange one the Majoraadi stage, the yellow dot the start. Scroll to zoom, drag to move, double-click to fit.', '<canvas id="map"></canvas><div class="scale"><span>less</span><i></i><span>more</span><button id="whole" type="button">' + (wholeMap ? 'Zoom to the driving' : 'Whole map') + '</button>' + (frzHeat(t) ? '<button id="frzmap" type="button">' + (frzMap ? 'Show driving' : 'Show freezes') + '</button>' : '') + '</div>', true);
 
     // the ten driver names with the most time driven online (Martin 2026-11-26; worker/stats.js addDrivers)
     var td = d.drivers || {}, tops = td.top || [];
@@ -295,6 +296,7 @@
       ['reset or map jump', laps.jump || 0], ['changed car', laps.reset || 0], ['left mid-lap', laps.quit || 0]], { keep: true, colour: C.pink }));
     h += card('Where laps are given up', 'Checkpoints passed when a lap was cancelled or left.', bars(rowsOf(t.quit, function (k) { return k + ' of 4'; }).sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }), { keep: true, colour: C.pink }));
 
+    h += stageCards(t, name);
     h += races(t, name);
 
     // devices by visits and by time spent driving, in the same order so the two can be compared at a glance
@@ -397,6 +399,32 @@
     h += card(d.hours ? 'Online demand by the hour' : 'Online demand by the day', 'The busiest minute of each ' + (d.hours ? 'hour, Tartu time.' : 'day.'),
       '<div class="legend"><span><i style="background:' + C.cyan + '"></i>online</span><span><i style="background:' + C.pink + '"></i>waiting outside (server full)</span></div>' +
       chart(cols, mx) + '<div class="axis"><span>' + esc(rows[0].lab) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(rows[rows.length - 1].lab) + '</span></div>', true);
+    return h;
+  }
+
+  // ---- the Majoraadi stage (src/stats.js stage(), counted from its launch on 26 Nov 2026): runs from the line to
+  // the finish, why the others ended, tyres, penalty seconds, cars. Its times are on the lap board in the game.
+  function stageCards(t, name) {
+    var S = t.stage || {}, start = S.start || 0, fin = S.finish || 0;
+    var out = ['cut', 'off', 'wrong', 'corner', 'garage', 'race', 'moved', 'restart', 'quit'].reduce(function (a, k) { return a + (S['x:' + k] || 0); }, 0);
+    var clean = S['pen:0'] || 0;
+    var h = card('Majoraadi stage', 'The rally stage in Raadi manor park, 1.7 km of gravel from a standing start. Counted since it opened to everyone on 26 November 2026.', '<div class="nums">' + [
+      [fmt(S.line), 'put on the start line', 'Times a car drove into the start circle (or used the MAJORAADI button) and the start lights began to count.'],
+      [fmt(start), 'runs started', 'The lights went green. ' + fmt(S['x:lights']) + ' left the line before green.'],
+      [fmt(fin), 'runs finished', pct(fin, start) + ' of the runs started crossed the finish.'],
+      [pct(clean, fin), 'finished clean', fmt(clean) + ' finished runs had no penalty seconds.'],
+      [fmt(out), 'runs not finished', 'Cancelled by the stage\'s rules, left for the garage, a race or the map, started again, or the page closed mid-run.'],
+      [fmt(S.reset), 'R in a run', 'Times a driver went back to a spot of the run with R (+5 s each).'],
+      [fmt(S.crash), 'hard crashes in a run', 'Crashes into a wall or a tree that cost seconds on the run.'],
+    ].map(function (x) { return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>', true);
+    if (!start && !S.line) return h;
+    h += card('How Majoraadi runs ended', fmt(start) + ' runs started.', bars([
+      ['finished', fin], ['short cut', S['x:cut'] || 0], ['off the stage', S['x:off'] || 0], ['wrong way', S['x:wrong'] || 0], ['missed a corner', S['x:corner'] || 0],
+      ['to the garage', S['x:garage'] || 0], ['left for a race', S['x:race'] || 0], ['map or a jump', S['x:moved'] || 0], ['back to the start (H)', S['x:restart'] || 0],
+      ['page closed mid-run', S['x:quit'] || 0]], { keep: true, colour: C.orange }));
+    h += card('Majoraadi runs finished per car', null, bars(rowsOf(t.stageCar, name), { colour: C.orange, top: 12 }));
+    h += card('Majoraadi penalties and tyres', 'Finished runs.', '<h3>Penalty seconds</h3>' + bars([['none', S['pen:0'] || 0], ['1 to 4 s', S['pen:1-4'] || 0], ['5 to 9 s', S['pen:5-9'] || 0], ['10 s or more', S['pen:10+'] || 0]], { keep: true, colour: C.orange }) +
+      '<h3>Tyres</h3>' + bars([['gravel', S['ty:gravel'] || 0], ['road', S['ty:road'] || 0]], { keep: true, colour: C.sun }));
     return h;
   }
 
@@ -639,6 +667,8 @@
     if (mapData) {
       ctx.beginPath(); line(mapData.track, 0); ctx.closePath();
       ctx.strokeStyle = '#ff5fa2'; ctx.lineWidth = 2; ctx.stroke();
+      // (the Majoraadi stage in the game's neon orange, as on its own maps)
+      if (mapData.stage) { ctx.beginPath(); line(mapData.stage, 0); ctx.strokeStyle = C.orange; ctx.lineWidth = 2; ctx.stroke(); }
       ctx.beginPath(); ctx.arc(X(mapData.start[0]), Z(mapData.start[1]), 4, 0, 7);
       ctx.fillStyle = C.sun; ctx.fill(); ctx.strokeStyle = '#12062b'; ctx.lineWidth = 2; ctx.stroke();
     }

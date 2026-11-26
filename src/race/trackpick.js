@@ -1,5 +1,5 @@
-// The start screen's track picker (?raadi=1 while Raadi is tried out; Martin's plan of 23 Nov 2026): a card
-// per circuit in place of the Toomemägi outline. Each shows the circuit's outline, its length and surface in
+// The start screen's track picker (Martin's plan of 23 Nov 2026; for everyone since the Raadi stage opened on 26 Nov):
+// a card per circuit in place of the Toomemägi outline. Each shows the circuit's outline, its length and surface in
 // one word; the picked one is bigger and shows the record and your best. On phones a row of pills under the
 // logo. DRIVE then starts at the picked circuit (main.js); the line under DRIVE says which.
 // Each outline is drawn as the old Toomemägi map was (src/race/outline.js: a thin neon tube, the start line

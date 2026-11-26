@@ -426,6 +426,16 @@ export class Lobby extends DurableObject {
       this.sql.exec("DELETE FROM meta WHERE k = 'board'");
       this.setMeta('cleanup-2026-11-26', '1');
     }
+    // One-off (Martin, 26 Nov 2026, as the Majoraadi stage opened to everyone: "Delete all raadi lap times"): every
+    // stage time kept so far was a test run while the stage was tried out behind ?raadi=1 (14 runs, a copy is in the
+    // project's raadi-launch folder and in the nightly backup), and so are the stage records' replays. Only the
+    // stage's: Toomemägi's laps and replays stay as they are. The board is made again from what is left.
+    if (!this.meta('cleanup-raadi-launch')) {
+      this.sql.exec("DELETE FROM laps WHERE track = 'raadi'");
+      this.sql.exec("DELETE FROM replays WHERE track = 'raadi'");
+      this.sql.exec("DELETE FROM meta WHERE k = 'board'");
+      this.setMeta('cleanup-raadi-launch', '1');
+    }
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.rl = new Map();          // rate limit counters (in memory: they only matter while it is busy)

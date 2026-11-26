@@ -1202,7 +1202,7 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 #people .who li.gar > i { box-shadow: none; }
 #people .who small.at { margin-left: .4em; font-size: .85em; font-style: italic; }
 
-/* ---- the Raadi rally stage (?raadi=1, src/race/raadi.js): the clock in the lap panel's look, the start
+/* ---- the Raadi rally stage (MAJORAADI, src/race/raadi.js): the clock in the lap panel's look, the start
    lights (red, yellow for the last five seconds, green), BACK TO STAGE START */
 #stage .msg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; min-height: 1em; }
 body:not(.touch) #stage .msg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
@@ -1247,7 +1247,7 @@ body.touch:has(#trackpills):not(.racelist):not(.racegrid) { --rbt: calc(var(--tb
 body.touch.racelist #trackpills, body.touch.racegrid #trackpills { display: none; }
 body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 
-/* the start screen's track picker (?raadi=1), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
+/* the start screen's track picker (src/race/trackpick.js), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
    of cards under the tag line in the room above the cars, the picked one 520 x 210 at a 900 px high window
    with the outline at full height, name, length and surface, mode chips, record, your best and LAP TIMES;
    the others 300 x 132 and plainer. Everything is sized from the row's own height, so a lower window gets

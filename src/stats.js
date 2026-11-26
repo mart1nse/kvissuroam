@@ -12,9 +12,9 @@ const params = new URLSearchParams(location.search);
 const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, stage: {}, stageCar: {}, err: [] });
 let b = fresh();
-let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0;
+let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0, onStage = false;
 const once = new Set();
 const errSeen = new Set();
 
@@ -35,13 +35,14 @@ function device(isTouch) {
 }
 
 const empty = (o) => !first && !o.menu && !o.drive && !o.err.length
-  && ['laps', 'smash', 'misc', 'death', 'frz'].every((k) => !Object.keys(o[k]).length)
+  && ['laps', 'smash', 'misc', 'death', 'frz', 'stage'].every((k) => !Object.keys(o[k]).length)
   && !(loadMs && !once.has('load')) && !(loaded && !once.has('loaded')) && !(drove && !once.has('drove'));
 
 function send(leaving = false, closing = false) {
   if (!on) return;
   // a lap still running as the page closes was given up
   if (closing && lapCp >= 0) { stats.lap('quit', lapCp); lapCp = -1; }
+  if (closing && onStage) { inc(b.stage, 'x:quit'); onStage = false; }
   if (empty(b)) return;
   const out = b;
   b = fresh();
@@ -72,7 +73,7 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz', 'hit', 'hitT']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz', 'hit', 'hitT', 'stage', 'stageCar']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
 }
 
@@ -235,6 +236,38 @@ export const stats = {
     inc(b.laps, k);
     if (k === 'finish' && extra) inc(b.lapCar, extra);
     if ((k === 'off' || k === 'cut' || k === 'jump' || k === 'reset' || k === 'quit') && extra != null) inc(b.quit, String(Math.min(6, extra)));
+  },
+  // The Majoraadi stage (src/race/raadi.js onRun; Martin 2026-11-26, at its launch: "Make sure stats start coming
+  // through"). In the bundle's `stage`: line (put on the start line, the lights counting), start (green), finish,
+  // x:<why> for a run that ended without a finish (the stage's rules: cut, off, wrong, corner; the player: garage,
+  // race, moved (the map, a jump), restart (H or the pill: back on the line), quit (the page closed); lights: left
+  // before green), reset (R in a run), crash (a hard crash in a run), and for each finished run its tyres
+  // (ty:gravel, ty:road) and penalty seconds in steps (pen:0, pen:1-4, pen:5-9, pen:10+); `stageCar` the finishes
+  // per car. The times themselves are on the lap board.
+  stage(k, x) {
+    if (!on) return;
+    try {
+      // (back on the line in the middle of a run, H or the pill: that run was given up for a new one)
+      if (k === 'line' && onStage) { inc(b.stage, 'x:restart'); onStage = false; }
+      if (k === 'line' || k === 'reset' || k === 'crash') { inc(b.stage, k); return; }
+      if (k === 'start') { inc(b.stage, 'start'); onStage = true; return; }
+      if (k === 'finish') {
+        onStage = false;
+        inc(b.stage, 'finish');
+        if (x?.car) inc(b.stageCar, x.car);
+        inc(b.stage, `ty:${x?.ty === 'gravel' ? 'gravel' : 'road'}`);
+        const p = x?.pen || 0;
+        inc(b.stage, `pen:${p <= 0 ? '0' : p < 5 ? '1-4' : p < 10 ? '5-9' : '10+'}`);
+        return;
+      }
+      if (k === 'cancel') {
+        const w = String(x || '');
+        const why = !onStage ? 'lights' : /SHORT CUT/.test(w) ? 'cut' : /OFF THE STAGE/.test(w) ? 'off' : /WRONG WAY/.test(w) ? 'wrong'
+          : /MISSED A CORNER/.test(w) ? 'corner' : /GARAGE/.test(w) ? 'garage' : /RACE/.test(w) ? 'race' : 'moved';
+        onStage = false;
+        inc(b.stage, `x:${why}`);
+      }
+    } catch { /* never in the way of the game */ }
   },
   error(msg) {
     if (!on || errSeen.size >= 10) return;

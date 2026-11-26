@@ -22,7 +22,7 @@ const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST
 const TOP_SHOW = 5;              // the lines an opened car shows (worker/tops.js)
 const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5L7 5 3 8.5"/></svg>';
 
-// stage: the Raadi rally stage (?raadi=1): then a track picker in place of the outline, and both circuits' times
+// stage: the Raadi rally stage (on unless ?raadi=0): then a track picker in place of the outline, and both circuits' times
 // onWatch(track, car): watch a record's replay (desktop; none on phones)
 // carNow(): the car picked in the garage, whose row is open when the board opens
 export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car }) {

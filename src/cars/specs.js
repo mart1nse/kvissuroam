@@ -64,7 +64,6 @@ export const CARS = {
       torque: [[750, 130], [1500, 160], [2500, 176], [3500, 187], [4200, 192], [5000, 187], [6200, 169.4], [6800, 150], [7200, 110]],
       stallRpm: 2400,
       converterGain: 1.9,
-      hbRevs: 0,                // no handbrake clutch: an automatic SUV driven mostly through its front wheels, where the clutch drop's spin only pushes the nose wide (Martin 2026-11-22)
     },
     gears: [2.785, 1.682, 1.129, 0.773, 0.566],
     reverse: 2.0,
@@ -136,7 +135,6 @@ export const CARS = {
       torque: [[750, 140], [1500, 170], [2500, 190], [3500, 202], [4300, 208], [5200, 208], [6000, 198], [6600, 186.6], [6900, 172], [7300, 120]],
       stallRpm: 2500,
       converterGain: 1.8,
-      hbRevs: 0,                // no handbrake clutch: an automatic SUV driven mostly through its front wheels, where the clutch drop's spin only pushes the nose wide (Martin 2026-11-22)
     },
     // the CVT with its launch gear, driven as six stepped ratios
     gears: [3.38, 2.24, 1.62, 1.22, 0.93, 0.70],
@@ -498,7 +496,6 @@ export const CARS = {
         bov: { kind: 'recirc', level: 0.85, flutter: 0.5 },   // the factory valve feeds the air back in: a whoosh, and a flutter when it is caught out
       },
       stallRpm: 3900,           // a launch slips the clutch high, all four wheels biting
-      hbRevs: 6000,             // the handbrake takes the drive off (a rally handbrake turn): the engine is kept up here at its power peak, or revs on up with the throttle
       rollStallRpm: 5200,
       converterGain: 1.6,
       clutchSlip: 0.15,         // a touch of the slipping clutch (Martin 2026-11-23)
@@ -623,17 +620,10 @@ export const CARS = {
   },
 };
 
-// The handbrake clutch (engine.hbRevs, see engineForce in physics.js) is standard on every
-// four-wheel-drive car with an engine, these and any added later (Martin 2026-11-22): pulling the
-// handbrake takes the drive off, the revs stay up, and letting go lights the tyres. A car that does not
-// give its own hbRevs keeps the revs at its power peak (read off its torque curve below the redline);
-// hbRevs: 0 turns it off for one car. Electric cars have no clutch to drop and are left as they are.
-for (const s of Object.values(CARS)) {
-  const e = s.engine;
-  if (s.drive !== 'awd' || e.type !== 'ice' || e.hbRevs !== undefined) continue;
-  let best = 0;
-  for (const [rpm, nm] of e.torque) if (rpm <= e.redline && rpm * nm > best) { best = rpm * nm; e.hbRevs = rpm; }
-}
+// The handbrake on every four-wheel-drive car, electric ones too, opens the centre coupling as on a WRC car
+// (Martin 2026-11-26): the rear wheels lock and the engine or front motor keeps driving the fronts. Nothing to set
+// per car: it follows drive: 'awd' (`open` in substep, physics.js). It replaced the handbrake clutch
+// (engine.hbRevs, 22 Nov), which took the drive off all four wheels.
 
 export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'rocket', 'bus'];
 

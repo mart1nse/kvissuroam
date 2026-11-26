@@ -18,7 +18,7 @@ import { jobs } from './jobs.js';
 import { paintScale } from './world/paintscale.js';
 
 export const KUDOS_S = 5;              // how long the sign shows
-export const KUDOS_GAP_S = 30;         // one sender to one receiver: once in this long (the server holds to it too)
+export { KUDOS_GAP_S } from './net/kudosrules.js';   // one sender to one receiver: once in this long (the server holds to it too)
 
 // where the sign sits on each car: centre (y up, z back, metres in the car's own frame), size, and its lean
 // back from upright (radians). Measured on the game's car models in the car viewer.

@@ -7,42 +7,24 @@
 // frame sets one number for the pitch of all of it and a handful of levels: the pull of the motors (the pedal)
 // and how hard they hold the car back with the pedal let go.
 //
-// Four sounds to choose from until Martin has picked one (?whine=1..4, 0 or nothing: the old sine):
-//   1 gear      straight-cut reduction gears as in a race car: two whines a fourth apart (rear and front
-//               motors), rough with the shafts' turning, a hum of the motors under it that grows with the pull
-//   2 turbine   a stack of fifths and octaves that spools like a turbine: each note a pair a hair apart so it
-//               shimmers, the rush of air with it, a filter that opens as the pedal goes down
-//   3 inverter  the song of the power electronics: at a launch two tones part from one note and run away up
-//               and down (as a tram's or a maglev's do), and meet again as the car brakes to a stop; above
-//               town speeds the gears take over
-//   4 pulse     a deep growl that throbs faster with speed, metallic under load, a thin whine over it
-// Tuned by measurement and spectrograms (tools/motor-sound-demo.mjs), not by ear.
+// Martin picked it from four (26 Nov; the other three, a turbine, an inverter's song and a throbbing growl, are in
+// the first commit of this file on its branch and, with the clips, in the project's shared folder, rocket/whine): straight-cut reduction gears as in a race car, two whines a fourth apart (the rear
+// motors and the front one), rough with the shafts' turning, and under them a hum of the motors that grows with
+// the pull. Over 200 km/h its pitch all but stops rising (his wish: "reaches like some max point but ever so
+// slightly gets higher"). Tuned by measurement and spectrograms (tools/motor-sound-demo.mjs), not by ear.
 
 const TAU = Math.PI * 2;
-export const MOTOR_KINDS = ['gear', 'turbine', 'inverter', 'pulse'];
-// which cars have such motors, and the sound each has when the address does not say (null: the old sine)
-const MOTOR_CARS = { rocket: null };
-
-let asked;
-// the sound for this car: a name from MOTOR_KINDS, or null for the plain whine of audio.js
-export function motorKind(spec) {
-  if (!(spec.id in MOTOR_CARS)) return null;
-  if (asked === undefined) {
-    asked = null;
-    try {
-      const q = new URLSearchParams(location.search).get('whine');
-      if (q !== null) asked = MOTOR_KINDS[Number(q) - 1] || MOTOR_KINDS.find((k) => k === q) || 'old';
-    } catch {}
-  }
-  if (asked) return asked === 'old' ? null : asked;
-  return MOTOR_CARS[spec.id];
-}
+// which cars have such motors, and which sound
+const MOTOR_CARS = { rocket: 'gear' };
+// the sound for this car: its name, or null for the plain whine of audio.js
+export const motorKind = (spec) => MOTOR_CARS[spec.id] || null;
 
 // how hard the motors hold the car back, 0..1: the pedal let go at speed (physics.js evRegen comes in over a third
 // of a second and fades out at a walk), more with the brake pedal down
 export function motorRegen(car, v) {
   if (car.throttle > 0) return 0;
-  return (car.regenIn || 0) * Math.min(1, Math.max(0, (v - 0.5) / 2.5)) * (car.brake > 0 ? 1 : 0.6);
+  // (another player's car does not say how far its motors have come in: taken as all the way)
+  return (car.regenIn ?? 1) * Math.min(1, Math.max(0, (v - 0.5) / 2.5)) * (car.brake > 0 ? 1 : 0.6);
 }
 
 const ramp = (x, a, b) => Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -85,9 +67,13 @@ function bench(ctx, noise) {
   };
   return k;
 }
-const to = (param, v, t, tc = 0.07) => param.setTargetAtTime(v, t, tc);
+// (each change is a word to the sound thread: none is sent for a level or a pitch that has not moved)
+const to = (param, v, t, tc = 0.07) => {
+  if (Math.abs(v - (param.was ?? NaN)) < 1e-4 * (1 + Math.abs(v))) return;
+  param.was = v; param.setTargetAtTime(v, t, tc);
+};
 
-// ---- 1: straight-cut gears
+// ---- straight-cut gears
 function gear(k, sum) {
   const mesh = k.wave([1, 0.5, 0.24, 0.1, 0.04]);
   // the rear pair's reduction: the main whine, nine to a turn. Two motors a hair apart, and no gear is quite true,
@@ -117,6 +103,8 @@ function gear(k, sum) {
   sum.connect(body);
   return {
     out: body, level: 0.082,
+    // the pitch follows the wheels up to here (m/s, 200 km/h), then eases off within some 20 km/h to a tenth of its rise
+    knee: 200 / 3.6, ease: 5, creep: 0.1,
     set(t, v, load, rg) {
       const sp = ramp(v, 0, 18), pull = Math.max(load, 0.5 * rg);
       to(rear.gain, sp * (0.32 + 0.68 * load + 0.2 * rg), t);
@@ -130,105 +118,7 @@ function gear(k, sum) {
   };
 }
 
-// ---- 2: turbine
-function turbine(k, sum) {
-  const soft = k.wave([1, 0.18, 0.1, 0.04]);
-  // (a hair apart: 1.4 Hz and a little more with the pitch, so the shimmer stays slow at any speed)
-  const pair = (order, level, dest) => { k.tone(order * 0.9988, soft, level, dest, -0.7); k.tone(order * 1.0012, soft, level, dest, 0.7); };
-  // the note, six to a turn, with the octave under it; then the fifth, the octave and the fifth over that, which
-  // come in with the pull and run down slowly when the pedal is let go
-  const low = k.gain(0), mid = k.gain(0), top = k.gain(0);
-  pair(6, 0.3, low); k.tone(3, 'sine', 0.4, low);
-  pair(9, 0.26, mid); pair(12, 0.2, mid);
-  pair(18, 0.1, top); k.tone(24, 'sine', 0.06, top);
-  low.connect(sum); mid.connect(sum); top.connect(sum);
-  // the spool: a bright tone through a filter that rings, and the pedal opens it
-  const spool = k.gain(0), sweep = k.filter('lowpass', 80, 5);
-  k.tone(3, 'sawtooth', 0.3, sweep); k.tone(3.012, 'sawtooth', 0.3, sweep);
-  k.chain(sweep, spool, sum);
-  // the air through it
-  const air = k.gain(0);
-  k.hiss(k.filter('bandpass', 40, 3.5, 15), k.filter('lowpass', 3800, 0.6), air, sum);
-  let open = 0;
-  return {
-    out: sum, level: 0.097,
-    set(t, v, load, rg, hz) {
-      const sp = ramp(v, 0, 18);
-      to(low.gain, sp * (0.45 + 0.55 * load + 0.15 * rg), t);
-      to(mid.gain, sp * (0.3 + 0.7 * load), t, load > 0.5 ? 0.08 : 0.3);
-      to(top.gain, sp * load * load * (1 - ramp(v, 60, 95)), t, load > 0.5 ? 0.12 : 0.35);
-      open += ((load > 0 ? 0.25 + 0.75 * load : 0.1 * rg) - open) * (load > open ? 0.12 : 0.035);
-      to(sweep.frequency, 60 + hz * 3 * (1.4 + 5.5 * open), t, 0.03);
-      to(spool.gain, (0.2 + 0.8 * sp) * (0.25 + 0.75 * open) * Math.min(1, v / 2), t);
-      to(air.gain, sp * (0.12 + 0.4 * load + 0.1 * rg), t, 0.12);
-    },
-  };
-}
-
-// ---- 3: inverter
-function inverter(k, sum) {
-  const FC = 1180;   // the switching note at a standstill
-  // the inverter: its side tones part from the switching note by four and eight to a turn of the shaft, up and
-  // down, so a launch is one note that splits and runs away both ways. Heard with the current, about town.
-  const song = k.gain(0);
-  for (const [n, a] of [[4, 0.42], [-4, 0.42], [8, 0.24], [-8, 0.24]]) k.tone(n, 'sine', a, song, FC);
-  for (const [n, a] of [[2, 0.1], [-2, 0.1]]) k.tone(n, 'sine', a, song, FC * 2);
-  song.connect(sum);
-  // the gears: one cleaner whine eight to a turn, and the rear motors' pair a hair apart
-  const mesh = k.wave([1, 0.4, 0.16, 0.05]), whine = k.gain(0);
-  k.tone(8, mesh, 0.5, whine); k.tone(8.024, mesh, 0.3, whine);
-  whine.connect(sum);
-  // the motors pulling: the buzz of their poles (24 to a turn) and a hum under it
-  const buzz = k.gain(0), hum = k.gain(0);
-  k.tone(24, k.wave([1, 0, 0.14]), 0.2, buzz); k.tone(24.07, 'sine', 0.12, buzz);
-  k.chain(buzz, k.filter('lowpass', 4200, 0.7), sum);
-  k.tone(4, k.wave([1, 0.5, 0.3, 0.15]), 0.5, hum); k.tone(2, 'sine', 0.3, hum);
-  hum.connect(sum);
-  return {
-    out: sum, level: 0.08,
-    set(t, v, load, rg) {
-      const sp = ramp(v, 0, 18), cur = Math.max(load, 0.5 * rg);
-      to(song.gain, (0.1 + 0.9 * cur) * Math.min(1, cur * 4 + v / 3) * (1 - ramp(v, 15, 33)) * 0.7, t, 0.04);
-      to(whine.gain, ramp(v, 3, 22) * (0.42 + 0.58 * load + 0.4 * rg), t);
-      to(buzz.gain, ramp(v, 1, 12) * (1 - ramp(v, 38, 60)) * (0.15 + 0.85 * cur), t);
-      to(hum.gain, (0.2 + 0.8 * sp) * (0.8 * load + 0.3 * rg), t, 0.05);
-    },
-  };
-}
-
-// ---- 4: pulse
-function pulse(k, sum) {
-  // two bright tones three to a turn and a fifth of a turn apart: they beat seven times a second at 30 km/h and
-  // 25 at 100, a throb that quickens into a growl. The pull bends them (a tone 1.5 to a turn swings their pitch),
-  // which is the metal in it, and opens the filter over them.
-  const growl = k.gain(0), lp = k.filter('lowpass', 100, 2.2), bend = k.gain(0);
-  const a = k.tone(3, 'sawtooth', 0.4, lp), b = k.tone(3.21, 'sawtooth', 0.4, lp);
-  k.tone(1.5, 'sine', 1, bend);
-  bend.connect(a.frequency); bend.connect(b.frequency);
-  k.chain(lp, growl, sum);
-  // the weight under it
-  const sub = k.gain(0);
-  k.tone(1.5, 'sine', 0.5, sub); k.tone(3, 'sine', 0.3, sub); sub.connect(sum);
-  // and the motors' own thin whine over it, so it is still an electric car
-  const whine = k.gain(0);
-  k.tone(12, 'sine', 0.2, whine); k.tone(12.05, 'sine', 0.16, whine); k.tone(24, 'sine', 0.05, whine);
-  whine.connect(sum);
-  let open = 0;
-  return {
-    out: sum, level: 0.15,
-    set(t, v, load, rg, hz) {
-      const sp = ramp(v, 0, 18);
-      open += ((load > 0 ? 0.2 + 0.8 * load : 0.12 * rg) - open) * (load > open ? 0.15 : 0.05);
-      to(lp.frequency, 90 + hz * (4 + 9 * open), t, 0.03);
-      to(bend.gain, hz * 1.5 * (0.15 + 1.1 * load), t, 0.05);
-      to(growl.gain, (0.15 + 0.85 * sp) * (0.3 + 0.7 * load + 0.25 * rg) * Math.min(1, v / 1.5), t);
-      to(sub.gain, sp * (0.35 + 0.65 * load + 0.2 * rg), t);
-      to(whine.gain, sp * (0.45 + 0.55 * load + 0.5 * rg) * (1 - 0.5 * ramp(v, 60, 100)), t);
-    },
-  };
-}
-
-const BUILD = { gear, turbine, inverter, pulse };
+const BUILD = { gear };
 
 // The motors of one car: `noise` is a running noise source, `out` where the sound goes. step() each frame with
 // the wheels' speed (m/s, spin and all), the pedal (0..1), how hard the motors hold the car back with the pedal
@@ -246,7 +136,9 @@ export function createMotor(ctx, out, noise, spec, kind) {
   return {
     kind,
     step(t, vw, throttle, regen, dead) {
-      const w = Math.abs(vw), hz = w * perMs;
+      const w = Math.abs(vw), over = w - v.knee;
+      // (past the knee the note nears a top and then only creeps on: at 300 km/h it is where 226 would be, at 370 where 233)
+      const hz = (over > 0 ? v.knee + v.ease * (1 - v.creep) * (1 - Math.exp(-over / v.ease)) + v.creep * over : w) * perMs;
       to(k.shaft.offset, hz, t, 0.04);
       // (the motors answer the pedal at once, but not in one frame: a click otherwise)
       load += (throttle - load) * 0.35;

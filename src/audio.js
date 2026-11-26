@@ -425,7 +425,7 @@ export function createAudio() {
   // arrive, a gain that falls with distance and a pan towards where the car is. The delay changing as
   // the car closes or pulls away is the Doppler shift: higher coming at you, dropping as it goes past.
   function makeVoice() {
-    const v = { id: null, carId: null, synth: null, cfg: null, skid: 0, spin: 0, lastBoost: 0, lastPsh: 0, d: 0, at: -1 };
+    const v = { id: null, carId: null, synth: null, cfg: null, motor: null, motorWant: null, skid: 0, spin: 0, lastBoost: 0, lastPsh: 0, d: 0, at: -1 };
     v.mix = ctx.createGain();
     v.lp = ctx.createBiquadFilter(); v.lp.type = 'lowpass'; v.lp.frequency.value = 8000; v.lp.Q.value = 0.5;
     v.delay = ctx.createDelay(1);
@@ -455,6 +455,7 @@ export function createAudio() {
     const t = ctx.currentTime;
     v.id = null;
     v.out.gain.setTargetAtTime(0, t, 0.08);
+    if (v.motor) { v.motor.stop(); v.motor = null; }
     if (v.synth) v.synth.port.postMessage({ state: { on: 0 } });
   }
   function bind(v, r, d) {
@@ -463,6 +464,9 @@ export function createAudio() {
     if (v.jetGain) { v.jetGain.gain.setTargetAtTime(0, t, 0.03); v.jet = 0; }
     v.ev = r.spec.engine.type === 'ev';
     v.cfg = v.ev ? null : ENGINE_SOUNDS[r.spec.id] || null;
+    // (a car with motors of its own sound, src/audio-motor.js: made when it is first heard, taken apart when let go)
+    v.motorWant = v.ev ? motorKind(r.spec) : null;
+    if (v.motor && v.motor.kind !== v.motorWant) { v.motor.stop(); v.motor = null; }
     if (v.cfg && workletReady && !v.synth) {
       try {
         v.synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
@@ -488,8 +492,10 @@ export function createAudio() {
     if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.06);
     const speed = Math.hypot(r.vx, r.vy), vw = speed + r.slipV, b = r.boost;
     if (v.ev) {
+      if (v.motorWant && !v.motor) { v.motor = createMotor(ctx, v.mix, noiseSrc, s, v.motorWant); if (!v.motor) v.motorWant = null; }
+      if (v.motor) v.motor.step(t, vw, r.throttle, motorRegen(r, speed), false);
       v.whine.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
-      v.whineGain.gain.setTargetAtTime(Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + r.throttle * 0.5), t, 0.08);
+      v.whineGain.gain.setTargetAtTime(v.motor ? 0 : Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + r.throttle * 0.5), t, 0.08);
     } else {
       if (e.turbo) {
         const wh = e.turbo.whistle ?? 1;
@@ -704,6 +710,6 @@ export function createAudio() {
     // (for tests: which of the motor sounds of src/audio-motor.js our car has, null for none)
     get motorKind() { return motor?.kind || null; },
     // (for tests: which other cars have a voice, how far off they are and how loud)
-    get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, node: v.out })); },
+    get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, motor: v.motor?.kind || null, node: v.out })); },
   };
 }

@@ -7,9 +7,10 @@
 // clip is what the driver hears. --solo leaves fans and wind out.
 //
 // Run: NODE_PATH=$(npm root -g) node tools/motor-sound-demo.mjs <outdir> [kinds] [--solo] [--gain=<dB>]
-//   kinds: old,gear,turbine,inverter,pulse (default all). Writes <outdir>/<kind>.wav and prints, for each part
+//   kinds: old (the plain sine the other electric cars have), gear (the Rocket's), none (fans and wind alone). Writes <outdir>/<kind>.wav and prints, for each part
 //   of the drive, the level and where the sound's weight lies. --gain: make-up for listening (default 13 dB,
-//   the same for every clip, so they compare as they would in the game).
+//   the same for every clip, so they compare as they would in the game). --top: another drive, floored from a
+//   standstill to 320 km/h on the motors alone, the pedal let go, braked hard to a stop (the pitch over 200 km/h).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -18,14 +19,14 @@ import { fileURLToPath } from 'node:url';
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
 import { refillTank } from '../src/cars/thrust.js';
-import { MOTOR_KINDS, motorRegen } from '../src/audio-motor.js';
+import { motorRegen } from '../src/audio-motor.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (k) => process.argv.find((a) => a.startsWith(`--${k}`));
 const val = (k) => flag(`${k}=`)?.slice(k.length + 3);
 const out = pos[0] || 'motor-demo';
-const kinds = pos[1] ? pos[1].split(',') : ['old', ...MOTOR_KINDS];
+const kinds = pos[1] ? pos[1].split(',') : ['old', 'gear'];
 const SOLO = !!flag('solo'), GAIN = 10 ** (Number(val('gain') ?? 13) / 20);
 const SR = 48000, FPS = 60, ID = val('car') || 'rocket';
 mkdirSync(out, { recursive: true });
@@ -51,6 +52,13 @@ const steps = [
   ['braked hard to a stop', () => ({ down: kmh() > 3 ? 1 : 0 }), (t) => kmh() < 0.5 || t > 8],
   ['rest', () => ({}), (t) => t > 0.8],
 ];
+if (flag('top')) steps.splice(0, steps.length,
+  ['rest', () => ({}), (t) => t > 0.6],
+  ['floored to 200', () => ({ up: 1 }), () => kmh() >= 200],
+  ['floored on to 320', () => ({ up: 1 }), (t) => kmh() >= 320 || t > 30],
+  ['pedal let go', () => ({}), (t) => t > 2.5],
+  ['braked hard to a stop', () => ({ down: kmh() > 3 ? 1 : 0 }), (t) => kmh() < 0.5 || t > 10],
+  ['rest', () => ({}), (t) => t > 0.8]);
 const F = [], marks = [];   // per 1/60 s: wheel speed, road speed, pedal, held back
 {
   const dt = 1 / 120;

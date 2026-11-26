@@ -156,7 +156,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     uiTimer = 0.25;
     const hot = p && o.live && (p[20] & 8), race = racing(id);
     const lap = mp.lastLap(o.name);
-    const st = o.rp ? (!shown ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY · ${secs(o.rp.t)} / ${fmt(o.rp.ms)}`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? 'ON A HOTLAP'
+    const st = o.rp ? (!shown ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY · ${secs(o.rp.t)} / ${fmt(o.rp.ms)}`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? (Math.hypot(p[0] - 2660, p[1] - 470) < 600 ? 'ON THE STAGE' : 'ON A HOTLAP')
       : lap ? `LAST LAP ${fmt(lap.ms)}` : '';
     const wait = mp.kudosWait(id) > 0;
     const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${wait}|${mp.stealth}`;

@@ -1022,6 +1022,8 @@ async function boot() {
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
+    // (the start circle takes the car only while it is plainly being driven: not from the garage, a replay or a race)
+    free: () => mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost,
     oldTracks: params.get('tracks') === 'old',
     rec: createRecorder(mp.pose),
     // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
@@ -1063,6 +1065,8 @@ async function boot() {
     halo: (on) => race.finishHalo(on),
     // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
     busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
+    // (somebody else on a stage run, by what their car last sent: the server does not count them for the vote either)
+    staged: (id) => { const p = mp.poseOf(id); return !!p && !!(p[20] & 8) && Math.hypot(p[0] - 2660, p[1] - 470) < 600; },
     // (a car with thrusters does not race: Martin 26 Nov, "do not allow the tesla to take part in races". It
     // laps on its own, with BOOST and without FLIP once the lap is on: ctl.flipOff below)
     noRace: () => !!car.spec.thrusters,
@@ -1290,7 +1294,9 @@ function startDriving() {
   // the track picked on the start screen (?raadi=1): DRIVE starts there. With Raadi picked always, unless the
   // car is at Raadi already (the line under DRIVE says RAADI; Martin 23 Nov: H, then the menu, then DRIVE stayed
   // at Toomemägi). With Toomemägi picked the car is only fetched from Raadi, and only after a pick.
-  if (stage) {
+  // (not in one's own race, from its count to its finish: with Raadi still picked a racer who had opened the garage
+  // on the grid was sent to Raadi by DRIVE, fetched back by the grid and left on gravel tyres for the tarmac race)
+  if (stage && !(raceMode?.holding || raceMode?.ghost)) {
     // (a circuit picked here is an explicit pick too: its tyres go on once the car is down, as with the
     // in-game buttons; Martin 23 Nov: a fresh game, RAADI picked, dropped there on road tyres)
     const toRaadi = board.track === 'raadi' && !atRaadi();

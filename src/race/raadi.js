@@ -163,7 +163,7 @@ function streakTex() {
 // rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
 // line (src/race/linelog.js), or none
 // oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null, log = null, oldTracks = false }) {
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -764,13 +764,16 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.jump = true;
     fader.style.opacity = '1';
     setTimeout(() => {
-      hideAgain();
-      const pose = startPose();
-      place(pose);
-      setup(pose);
-      onJump?.();          // (gravel tyres on, as the RAADI button does; Martin 24 Nov: "when goin into the halo i did not get gravel tires")
       st.jump = false;
       requestAnimationFrame(() => { fader.style.opacity = '0'; });
+      // (only if the car is still in the circle and still being driven: H, the TOOMEMÄGI button, a race's grid or
+      // the garage inside the fade's 0.2 s was undone by this, the car put back on the Raadi line)
+      const sp = startPose(), c = st.car;
+      if ((st.phase !== 'idle' && st.phase !== 'done') || !c || Math.hypot(c.x - sp.x, c.z - sp.z) > START_R + 5 || !free()) return;
+      hideAgain();
+      place(sp);
+      setup(sp);
+      onJump?.();          // (gravel tyres on, as the RAADI button does; Martin 24 Nov: "when goin into the halo i did not get gravel tires")
     }, FADE_S * 1000 + 20);
   }
   function hideAgain() { st.againUntil = 0; again.classList.add('hidden'); }
@@ -827,6 +830,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
     update(car, carId, carShort, dt, inp = 'kb') {
       const x = car.x, z = car.z;
+      st.car = car;
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
       const near = dMid < BUILD_R;
@@ -849,6 +853,9 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         const ds = car.time - (st.carT ?? car.time), dw = wall - st.wall;
         const add = dw > 1 ? Math.max(dw, ds) : Math.max(0, ds);
         st.clk += add;
+        // (back from the garage or another tab during the count: the lights start again, where the run used to
+        // begin the moment the game was back, with no count at all)
+        if (dw > 1 && st.phase === 'count') st.countAt = performance.now();
         // (as the lap's clock, src/race/race.js SLOW_FREE: under 20 frames a second the game runs slower than real
         // time, and a run is forgiven 2 s of that; past them its clock keeps real time)
         if (st.phase === 'run') {
@@ -873,7 +880,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // once the car has been out of it)
         const sp = startPose(), dSpot = Math.hypot(x - sp.x, z - sp.z);
         if (st.cool && dSpot > START_R + 3) st.cool = false;
-        if (!st.cool && !st.jump && dSpot < START_R) jumpToStart();
+        if (!st.cool && !st.jump && dSpot < START_R && free()) jumpToStart();
       }
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)

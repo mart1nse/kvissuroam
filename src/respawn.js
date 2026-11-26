@@ -52,7 +52,26 @@ export function dryLevel(world, p) {
   return y0;
 }
 
-// Pick from the remembered poses (oldest first, newest last; { x, z, yaw, y, t }) the newest one that is
+// Is pose p ({ x, z, yaw, y }) a place on a house's roof where a car can be put back (Martin, 26 Nov 2026: "if
+// there is a house you cannot get down from, the first R puts you back on the roof")? The roof is under the
+// whole car and a margin round it, no step in it and no steeper than a car stands on. Returns the height, or null.
+export function roofLevel(world, p) {
+  if (!world.roofTop || (world.ready && !world.ready(p.x, p.z))) return null;
+  const y0 = world.groundAt(p.x, p.z, p.y + 0.4);
+  if (!(y0 > world.heightAt(p.x, p.z) + 1) || Math.abs(y0 - p.y) > 0.6) return null;
+  const fx = Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = Math.sin(p.yaw);
+  for (const a of [-3, -1.5, 0, 1.5, 3]) for (const s of [-1.3, 0, 1.3]) {
+    const x = p.x + fx * a + rx * s, z = p.z + fz * a + rz * s;
+    // (as high as the roof may rise or fall that far from the car's middle, and a roof it is: not the ground
+    // beside the house, not a wall of a higher part of it)
+    const g = world.groundAt(x, z, y0 + 0.4 + Math.hypot(a, s) * 0.5);
+    if (Math.abs(g - y0) > 0.25 + Math.hypot(a, s) * 0.5 || !(g > world.heightAt(x, z) + 1)) return null;
+    if (world.wallTop(x, z, y0 + 0.4) > g + 0.3) return null;
+  }
+  return y0;
+}
+
+// Pick from the remembered poses (oldest first, newest last; { x, z, yaw, y, t, roof? }) the newest one that is
 // at least minAge seconds older than "ref", at least minDist metres from (sx, sz), and dry. Poses that are
 // too new or not dry are dropped from the list, so asking again goes further back.
 // Returns { x, z, yaw, y, t }, null, or { wait: pose } when the next pose to look at is in a part of the
@@ -64,8 +83,8 @@ export function pickFromHistory(world, history, { ref, sx, sz, minAge = 3, minDi
     history.length = i;                 // whatever happens, this pose is used up
     if (ref - h.t < minAge) continue;
     if (Math.hypot(h.x - sx, h.z - sz) < minDist) continue;
-    const y = dryLevel(world, h);
-    if (y !== null) return { x: h.x, z: h.z, yaw: h.yaw, y, t: h.t };
+    const y = h.roof ? roofLevel(world, h) : dryLevel(world, h);
+    if (y !== null) return { x: h.x, z: h.z, yaw: h.yaw, y, t: h.t, roof: !!h.roof };
   }
   return null;
 }

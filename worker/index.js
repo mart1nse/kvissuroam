@@ -33,6 +33,7 @@ import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
 
 const TRACK = 'toomemagi';
+const TOP_N = 10;                 // a lap among its car's ten best waits for its drive to be judged (wouldLead)
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
 // 60 s and 45 s, and a lap of 61 s posted by hand would have topped the board (security review: the record was
 // 2:40.25). Toomemägi, 4.9 km: 2:00 is 147 km/h on average through the town. Raadi's stage, 1.73 km of gravel:
@@ -924,7 +925,18 @@ export class Lobby extends DurableObject {
   wouldLead(l) {
     const b = this.board(), part = l.track === TRACK ? b : b[l.track];
     const beats = (list) => { const r = list.find((x) => x.car === l.car); return !r || l.ms < r.ms; };
-    return beats(part.allTime) || (l.day === b.day && beats(part.today));
+    return beats(part.allTime) || (l.day === b.day && beats(part.today)) || this.inTopTen(l);
+  }
+  // ... or one of its car's ten best on that track (Martin 26 Nov: "start checking just in case top ten times per
+  // car", for a board that may one day show ten a car): fewer than TOP_N laps on the board are faster, or it is
+  // the driver's own best in that car and fewer than TOP_N other drivers have a faster one
+  inTopTen(l) {
+    const faster = this.sql.exec('SELECT COUNT(*) AS n FROM (SELECT 1 FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND ms < ? LIMIT ?)', l.track, l.car, l.ms, TOP_N).one().n;
+    if (faster < TOP_N) return true;
+    const own = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND name = ? COLLATE NOCASE', l.track, l.car, l.name).one().m;
+    if (own != null && own <= l.ms) return false;
+    const others = this.sql.exec('SELECT COUNT(DISTINCT name COLLATE NOCASE) AS n FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND ms < ? AND name <> ? COLLATE NOCASE', l.track, l.car, l.ms, l.name).one().n;
+    return others < TOP_N;
   }
   // a lap that has just been stored
   addToBoard(l) {
@@ -1175,7 +1187,11 @@ export class Lobby extends DurableObject {
         // (if the limits cannot be worked out the drive is not judged: an honest record must not wait on a fault here)
         let lim = null;
         try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
-        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll });
+        // (a stage run: which of its places were on the gravel, from the stage's own rules; one the rules refuse
+        // is refused for that below, and its car is judged as if all of it were tarmac)
+        const where = {};
+        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, lim?.gas?.launch, where);
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
         // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
         // the seconds it was turning over in the air, which is a kickflip inside the lap)
@@ -1352,7 +1368,7 @@ export class Lobby extends DurableObject {
         const cp = typeof l?.cp === 'string' && /^[0-9,]{1,80}$/.test(l.cp) ? l.cp : null;
         const good = track === TRACK && sp && cp && sp.length === cp.split(',').length && sp.every((v, k) => v > (k ? sp[k - 1] : 0) && v < ms);
         const row = { track, name, car, ms, at: at.toISOString(), day, splits: good ? sp : null, cp: good ? cp : null, inp: cleanInp(l?.inp), ty: l?.ty === 'gravel' ? 'gravel' : null, pen: pen || null };
-        // a time that would be the car's best of all time or of today waits for its replay (see "Replays")
+        // a time that would be the car's best of all time or of today, or one of its ten best, waits for its replay (see "Replays")
         const hold = this.wouldLead(row) ? 1 : null;
         this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, cp, sid, inp, ty, pen, hold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           track, name, car, ms, row.at, row.day, good ? JSON.stringify(sp) : null, row.cp, tk.sid, row.inp, row.ty, row.pen, hold);

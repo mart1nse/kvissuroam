@@ -117,11 +117,18 @@ assert.equal(b.recent.length, 1);
   db.prepare("UPDATE laps SET hold = NULL WHERE car = 'f40' AND ms = ?").run(F40);
 }
 
-// 3) a slower lap of the same car goes straight on (not a best)
+// 3) a slower lap of the same car, while it is still among the car's ten best, waits for its replay too (26 Nov:
+// Martin, "start checking top ten times per car")
 clock += 5 * 60000;
 r = await call('/api/lap', { name: 'Real', car: 'f40', ms: 155000, k, ago: 0 });
-assert.equal(r.j.hold, undefined);
-assert.equal(r.j.board.laps, 2);
+assert.deepEqual(r.j.hold, [{ car: 'f40', ms: 155000 }], 'a lap among the car\'s ten best is held');
+assert.equal(r.j.board.laps, 1);
+// ... and one that is not (ten faster laps of the car on the board, and the driver's own best faster) goes straight on
+for (let i = 0; i < 10; i++) db.prepare("INSERT INTO laps (track, name, car, ms, at, day, sid, hold) VALUES ('toomemagi', ?, 'f40', ?, ?, ?, 'x', NULL)").run(`Other${i}`, 140000 + i * 1000, new Date(clock).toISOString(), '2026-11-25');
+clock += 5 * 60000;
+r = await call('/api/lap', { name: 'Real', car: 'f40', ms: 158000, k, ago: 0 });
+assert.equal(r.j.hold, undefined, 'the 12th lap of a car, not the driver\'s best, goes straight on');
+db.prepare("DELETE FROM laps WHERE name LIKE 'Other%'").run();
 // a faster one without a replay never shows
 clock += 5 * 60000;
 r = await call('/api/lap', { name: 'Faker', car: 'f40', ms: 121000, k: await (async () => { const t = await ticket('2.2.2.2'); clock += 3 * 60000; return t; })(), ago: 0 }, '2.2.2.2');

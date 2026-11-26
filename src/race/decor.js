@@ -26,6 +26,16 @@ export function haloTex() {
   });
 }
 
+// the Raadi finish arch's sheet of light (src/race/arch.js): the halo's fill without its frame, the arch's own
+// line of light round the opening being the frame (Martin 26 Nov: "fill the neon glow to fit inside of it exactly")
+export function glowTex() {
+  return canvasTex(4, 64, (g, w, h) => {
+    const f = g.createLinearGradient(0, h, 0, 0);
+    f.addColorStop(0, 'rgba(47,243,255,0.62)'); f.addColorStop(0.55, 'rgba(47,243,255,0.28)'); f.addColorStop(1, 'rgba(255,43,214,0.24)');
+    g.fillStyle = f; g.fillRect(0, 0, w, h);
+  });
+}
+
 // the column of light over the stage's start, fading out up into the sky (1 px = 1 m of 256).
 // Bluish cyan all the way up (Martin 26 Nov: "Make it in some color, the bluish cyan-like perhaps"): it was cyan
 // only at the foot and pink above, added to the picture as light, and against the pink sky that read as a pale

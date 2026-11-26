@@ -1,7 +1,10 @@
 // Cold-gas thrusters (the Tesla Roadster Rocket, Martin 2026-11-25): one tank feeding two buttons.
 //
 // BOOST: the rear nozzles push the body forward for as long as the button is held, a second of tank a
-// second. FLIP: a kickflip jump that costs half a tank. The whole flight is worked out at the press
+// second. FLIP: a kickflip jump that costs half a tank. The tank fills again by itself whenever it is not full
+// and no nozzle is blowing (Martin 2026-11-26: "make the gas tank gradual fill start when there is less than
+// full tank"), a whole tank in two minutes; nothing is locked meanwhile: FLIP works with half a tank in it,
+// BOOST with a tenth. The whole flight is worked out at the press
 // (planFlip): the lift-off push is the same every time, so the arc is too; the planner follows the line the
 // car is travelling along and finds where that arc comes down to the ground, and the car then flies exactly
 // that plan (flightPose) with the nozzles doing the work shown. What stands in the way is the driver's to
@@ -19,16 +22,17 @@
 
 export const TANK_S = 10;          // seconds of thrust in a full tank
 export const JUMP_S = 5;           // ...of which one FLIP takes this much
-export const REFILL_S = 120;       // an empty tank is full again after this long; nothing works meanwhile
+export const REFILL_S = 120;       // an empty tank is full again after this long (it fills whenever it is not full)
 export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (offline testing, ?off=100: Martin 2026-11-25)
 
 const G = 9.81;
 // The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
 // all, which is the tail's 80 kN for 2 s and no more. So BOOST's push follows the pressure, the share of the gas
 // still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
-// quite done; at EMPTY of a tank nothing useful is left and the reload starts. A FLIP is its fixed half tank.
+// quite done; at EMPTY of a tank nothing useful is left and the valves shut. A FLIP is its fixed half tank.
 const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
-const EMPTY = 0.06;                // BOOST has blown the tank down to this share: the reload starts
+const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
+export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
 const FADE0 = 370 / 3.6, FADE1 = 400 / 3.6;   // BOOST eases off between these speeds (m/s)
 const LIFT_T = 0.45;               // the lift-off push lasts this long (s)...
@@ -65,44 +69,51 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 const TANKS = new Map();
 export function rocketState(id) {
   let r = TANKS.get(id);
-  if (!r) TANKS.set(id, r = { tank: TANK_S, reload: false, flight: null, up: 0, boost: 0, flipHeld: false, launched: null, landed: false, crashed: false, noz: new Float32Array(NOZ), lean: new Float32Array(4) });
-  r.flight = null; r.boost = 0; r.flipHeld = false; r.launched = null; r.landed = false; r.crashed = false; r.noz.fill(0); r.lean.fill(0);
+  if (!r) TANKS.set(id, r = { tank: TANK_S, on: false, dry: false, flight: null, up: 0, boost: 0, flipHeld: false, launched: null, landed: false, crashed: false, noz: new Float32Array(NOZ), lean: new Float32Array(4) });
+  r.flight = null; r.boost = 0; r.on = false; r.dry = false; r.flipHeld = false; r.launched = null; r.landed = false; r.crashed = false; r.noz.fill(0); r.lean.fill(0);
   return r;
 }
-export function refillTank(id) { const r = TANKS.get(id); if (r) { r.tank = TANK_S; r.reload = false; } }
+export function refillTank(id) { const r = TANKS.get(id); if (r) { r.tank = TANK_S; r.dry = false; } }
 
-const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) { r.tank = 0; r.reload = true; } };
+const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) r.tank = 0; };
 
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
 // kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not 2 min).
+// r.on: BOOST's valves are open; r.dry: they shut for want of gas with the button still held (it must be let go).
 export function rocketStep(car, input, world, dt) {
   const r = car.rocket, T = car.spec.thrusters;
   r.refillS = input.quickRefill ? QUICK_REFILL_S : REFILL_S;
-  if (r.reload) { r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / r.refillS); if (r.tank >= TANK_S) r.reload = false; }
+  // the tank fills whenever it is not full and nothing is blowing (not in a flight, not while BOOST's valves are open)
+  if (r.tank < TANK_S && !r.flight && !r.on) r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / r.refillS);
   // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
   car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
   if (r.flight) { fly(car, world, dt); return !!r.flight; }
   const off = !!input.rocketOff || car.inWater;
   const flip = !!input.flip;
-  if (flip && !r.flipHeld && !off && !input.flipOff && !r.reload && !car.airborne && r.tank >= JUMP_S - 1e-6) {
+  if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && r.tank >= JUMP_S - 1e-6) {
     const steer = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
     const plan = planFlip(car, world, steer < -0.3 ? -1 : 1);
     use(r, JUMP_S);
-    r.flight = plan; r.launched = plan; r.flipHeld = true; r.boost = 0; car.thrustN = 0;
+    r.flight = plan; r.launched = plan; r.flipHeld = true; r.boost = 0; r.on = false; car.thrustN = 0;
     fly(car, world, dt);
     return true;
   }
   r.flipHeld = flip;
   // BOOST
-  const on = !!input.boost && !off && !r.reload && r.tank > 0;
+  // (open valves stay open down to EMPTY; shut ones open with BOOST_MIN in the tank, and after running dry only
+  // at a new press, so a held button does not sputter as the tank fills)
+  const held = !!input.boost;
+  if (!held) r.dry = false;
+  const on = held && !off && (r.on ? r.tank > EMPTY * TANK_S : !r.dry && r.tank >= BOOST_MIN * TANK_S);
+  if (r.on && !on && held && !off) r.dry = true;
+  r.on = on;
   const full = r.tank / TANK_S;                                   // the pressure, as a share of a full tank's
   if (on) {
     // (gas out per second = push / GAS_V, so the tank empties by its own share every blowS seconds)
     const blowS = (GAS_V * (T.gasKg || 250)) / T.rear;
     use(r, (dt * r.tank) / blowS);
-    if (r.tank < EMPTY * TANK_S) use(r, r.tank);
   }
   const want = on ? full * clamp01((FADE1 - car.vx) / (FADE1 - FADE0)) : 0;
   r.boost += (want - r.boost) * Math.min(1, dt / OPEN_T);

@@ -74,7 +74,7 @@ check('B sees the nozzles under the floor blow', down > 0.5, `level ${down.toFix
 // 3: a flight that ends against a house: B stops flying the plan there (it sees no landing burn)
 await place(A, 1700, 0);
 await A.waitForTimeout(2500);
-await A.evaluate(() => { const r = __game.car.rocket; r.tank = 10; r.reload = false; });
+await A.evaluate(() => { const r = __game.car.rocket; r.tank = 10; r.dry = false; });
 await key(A, 'keydown', 'KeyX'); await A.waitForTimeout(80); await key(A, 'keyup', 'KeyX');
 await A.waitForTimeout(1000);
 await A.evaluate(() => { const w = __game.world; w.sdfWas = w.sdfAt; w.roofWas = w.roofAt; w.sdfAt = () => -1; w.roofAt = () => 1e9; });

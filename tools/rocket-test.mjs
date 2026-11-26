@@ -3,7 +3,7 @@
 // Run: node tools/rocket-test.mjs   (add --v for every flight's figures)
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar, speedKmh } from '../src/cars/physics.js';
-import { TANK_S, JUMP_S, REFILL_S, refillTank, planFlip, flightPose, flightNozzles, NOZ } from '../src/cars/thrust.js';
+import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN, refillTank, planFlip, flightPose, flightNozzles, NOZ } from '../src/cars/thrust.js';
 import { createSmoke } from '../src/smoke.js';
 
 const spec = CARS.rocket;
@@ -27,7 +27,7 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const run = (input, until = 30) => {
     const w = world(), car = fresh(w);
     let t = 0, t100 = null, top = 0;
-    while (t < until) { stepCar(car, input, w, dt); t += dt; const v = speedKmh(car); if (t100 === null && v >= 100) t100 = t; top = Math.max(top, v); if (input.boost && car.rocket.reload) break; }
+    while (t < until) { stepCar(car, input, w, dt); t += dt; const v = speedKmh(car); if (t100 === null && v >= 100) t100 = t; top = Math.max(top, v); if (input.boost && car.rocket.dry) break; }
     return { t100, top, car, t };
   };
   const base = run({ up: 1 }, 60);
@@ -36,33 +36,70 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const b = run({ up: 1, boost: 1 });
   check('0-100 km/h with BOOST is under 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.6, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
-  check('BOOST blows a full tank down in under 6 s, then the reload starts', b.t > 5.4 && b.t < 6 && b.car.rocket.reload, `${b.t.toFixed(2)} s`);
+  check('BOOST blows a full tank down in under 6 s, then its valves shut', b.t > 5.4 && b.t < 6 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
   check('BOOST tops out near 355 km/h', b.top > 345 && b.top < 370, `${b.top.toFixed(0)} km/h`);
   {
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
-    for (; !ci.rocket.reload && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
+    for (; !ci.rocket.dry && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
     check('...0-300 km/h in about 2.8 s', t300 > 2.5 && t300 < 3.1, `${t300.toFixed(2)} s`);
     check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 140000 && first > 60000 && first < 80000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
   }
   // BOOST alone (no throttle key): the motors are held at full power too
   const alone = run({ boost: 1 });
   check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
-  // the reload: nothing works for 120 s, then a full tank
+  // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 120 s, and nothing is locked:
+  // with the button still held after running dry nothing blows, and it fills all the same
   const w = world(), car = b.car;
   let t = 0, moved = false;
-  const v0 = car.vx;
-  for (; car.rocket.reload && t < 200; t += dt) { stepCar(car, { boost: 1, flip: (t * 2) % 1 < 0.5 }, w, dt); if (t > 0.3 && car.rocket.reload && (car.rocket.flight || car.thrustN > 0)) moved = true; }   // (the valves take a moment to shut)
-  check('the reload takes 120 s and locks both buttons', Math.abs(t - REFILL_S) < 0.5 && !moved && car.rocket.tank >= TANK_S - JUMP_S, `${t.toFixed(1)} s`);
-  void v0;
-  // offline testing (?off=100): the reload takes 2 s
-  { const wq = world(), q = fresh(wq); q.rocket.tank = 0; q.rocket.reload = true; let tq = 0;
-    for (; q.rocket.reload && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
-    check('the quick reload of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
-  check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+  const dry0 = car.rocket.tank;
+  for (; t < 30; t += dt) { stepCar(car, { boost: 1 }, w, dt); if (t > 0.3 && car.thrustN > 0) moved = true; }   // (the valves take a moment to shut)
+  check('run dry with BOOST still held: nothing blows, and the tank fills', !moved && Math.abs(car.rocket.tank - dry0 - (30 * TANK_S) / REFILL_S) < 0.05, `${dry0.toFixed(2)} to ${car.rocket.tank.toFixed(2)} s of tank in 30 s`);
+  // let go and pressed again: BOOST blows on what there is
+  stepCar(car, {}, w, dt);
+  for (let k = 0; k < 20; k++) stepCar(car, { boost: 1 }, w, dt);
+  check('...let go and pressed again, BOOST blows on what there is', car.thrustN > 5000 && car.rocket.on, `${(car.thrustN / 1000).toFixed(0)} kN`);
+  {
+    // left alone it fills to the top at a whole tank in 120 s (the cars of this file share the one tank, so this car first)
+    const from = car.rocket.tank; let tf = 0;
+    for (; car.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(car, {}, w, dt);
+    stepCar(car, {}, w, dt);
+    check('...and left alone the tank fills to the top, a whole one in 120 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
+    check('...and the car weighs its full 2200 kg again', spec.mass === 2200 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
+  }
+  {
+    // a little used: the filling starts at once, and stops for as long as BOOST blows
+    const wp = world(), q = fresh(wp);
+    for (let k = 0; k < 120; k++) stepCar(q, { up: 1, boost: 1 }, wp, dt);
+    const used = q.rocket.tank; let tf = 0;
+    for (let k = 0; k < 720; k++) stepCar(q, {}, wp, dt);
+    const after6 = q.rocket.tank;
+    for (; q.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(q, {}, wp, dt);
+    check('a tank a little used starts filling at once', used < TANK_S - 3 && Math.abs(after6 - used - (6 * TANK_S) / REFILL_S) < 0.02 && Math.abs(tf + 6 - ((TANK_S - used) / TANK_S) * REFILL_S) < 0.5, `${used.toFixed(2)} s left after 1 s of BOOST, ${after6.toFixed(2)} s six seconds on, full ${(tf + 6).toFixed(0)} s after letting go`);
+    // from empty: 120 s to full; FLIP works with half a tank in it and not before, BOOST with a tenth
+    const we0 = world(), z = fresh(we0); z.rocket.tank = 0;
+    let tz = 0, boostAt = null, flipAt = null, early = false;
+    for (; z.rocket.tank < TANK_S && tz < 200; tz += dt) {
+      if (flipAt === null) {
+        // (a tap of each button every half second)
+        const tap = Math.round(tz / dt) % 30 === 0;
+        stepCar(z, { flip: tap ? 1 : 0, boost: boostAt === null && tap ? 1 : 0 }, we0, dt);
+        if (boostAt === null && z.rocket.on) { boostAt = tz; if (z.rocket.tank < BOOST_MIN * TANK_S - 0.01) early = true; }
+        if (z.rocket.launched) { flipAt = tz; if (z.rocket.tank < -1e-6) early = true; break; }
+      }
+    }
+    check('from empty: BOOST works with a tenth of a tank in it (12 s), FLIP with half (a minute)', boostAt > 11.5 && boostAt < 13 && flipAt > 59 && flipAt < 63 && !early, `BOOST after ${boostAt === null ? '-' : boostAt.toFixed(1)} s, FLIP after ${flipAt === null ? '-' : flipAt.toFixed(1)} s`);
+    const wf = world(), ff = fresh(wf); ff.rocket.tank = 0; let tfull = 0;
+    for (; ff.rocket.tank < TANK_S && tfull < 200; tfull += dt) stepCar(ff, {}, wf, dt);
+    check('...and an empty tank is full again in 120 s', Math.abs(tfull - REFILL_S) < 0.5, `${tfull.toFixed(1)} s`);
+  }
+  // offline testing (?off=100): the filling takes 2 s
+  { const wq = world(), q = fresh(wq); q.rocket.tank = 0; let tq = 0;
+    for (; q.rocket.tank < TANK_S && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
+    check('the quick filling of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
   // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors
   const we = world(), e = fresh(we);
-  e.rocket.tank = 0; e.rocket.reload = true;
+  e.rocket.tank = 0;
   let te = 0, e100 = null;
   for (; te < 5 && e100 === null; te += dt) { stepCar(e, { up: 1 }, we, dt); if (speedKmh(e) >= 100) e100 = te + dt; }
   check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 6 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
@@ -92,10 +129,10 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
     // it flies until something is in the way, is let go there, and ends up on the ground on its wheels
     let t = dt, peak = 0;
     while (car.rocket.flight && t < 20) { stepCar(car, {}, w, dt); t += dt; peak = Math.max(peak, car.y - h(-car.z, car.x)); }
-    const at = -car.z, crashed = car.rocket.crashed, air = t;
+    const at = -car.z, crashed = car.rocket.crashed, air = t, tankL = car.rocket.tank;
     for (let u = 0; u < 4; u += dt) stepCar(car, {}, w, dt);
     const down = !car.airborne && Math.abs(car.y - h(-car.z, car.x)) < 0.3 && Math.abs(car.roll) < 0.5 && Number.isFinite(car.x + car.z + car.vx);
-    check(name, crashed && down && car.rocket.tank === tank0 - JUMP_S, `${crashed ? 'let go' : 'not let go'} ${at.toFixed(1)} m on, ${air.toFixed(2)} s in, ${peak.toFixed(1)} m up; ${down ? 'on its wheels after' : 'not settled'}`);
+    check(name, crashed && down && tankL === tank0 - JUMP_S, `${crashed ? 'let go' : 'not let go'} ${at.toFixed(1)} m on, ${air.toFixed(2)} s in, ${peak.toFixed(1)} m up; ${down ? 'on its wheels after' : 'not settled'}`);
     return { at, air, car };
   }
   let t = dt, peak = 0, rollMax = 0, low = Infinity, nozMax = 0;
@@ -112,14 +149,14 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   const slopeRate = (h(-car.z + 0.05, car.x) - h(-car.z - 0.05, car.x)) / 0.1 * Math.hypot(car.vx, car.vy);
   const rel = car.vyUp - slopeRate;
   const vL = Math.hypot(car.vx, car.vy), yL = car.y;
-  const air = t;
+  const air = t, tankL = car.rocket.tank;   // (a jump is half a tank, and nothing fills in the air)
   // and the seconds after it: the car must settle without bouncing off or losing its speed
   let bounce = 0, air2 = 0;
   for (let u = 0; u < 1.5; u += dt) { stepCar(car, {}, w, dt); if (car.airborne) air2 += dt; bounce = Math.max(bounce, car.y - h(-car.z, car.x)); }
   // (one whole turn: just before touchdown the roll stands at a full circle, and it never goes past it)
   // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
-  const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && car.rocket.tank === tank0 - JUMP_S;
+  const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && tankL === tank0 - JUMP_S;
   check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.6).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
@@ -176,7 +213,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...and BOOST still works', car.thrustN > 0 && car.rocket.tank < tank0 - 0.9, `${car.rocket.tank.toFixed(2)} s left`);
 }
 
-// ---- two flips, then nothing until the reload is over
+// ---- two flips, then none until half a tank is back
 {
   const w = world(), car = fresh(w, 60);
   let flips = 0, t = 0, held = false;
@@ -186,7 +223,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     held = press;
     if (car.rocket.launched) { flips++; car.rocket.launched = null; }
   }
-  check('a full tank is two flips, then the reload', flips === 2 && car.rocket.reload, `${flips} flips`);
+  check('a full tank is two flips, then none until half a tank is back', flips === 2 && car.rocket.tank < JUMP_S, `${flips} flips in 12 s, ${car.rocket.tank.toFixed(2)} s of tank`);
 }
 
 // ---- the plan alone gives the same flight (what the other players are sent)
@@ -322,7 +359,7 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
 {
   const w = world(), car = fresh(w);
   let low = 1, t = 0, start = 0;
-  for (; !car.rocket.reload && t < 12; t += dt) { stepCar(car, { up: 1, boost: 1 }, w, dt); if (t > 0.5 && !car.rocket.reload) low = Math.min(low, car.rocket.noz[0]); if (t > 0.2 && !start) start = car.rocket.noz[0]; }
+  for (; !car.rocket.dry && t < 12; t += dt) { stepCar(car, { up: 1, boost: 1 }, w, dt); if (t > 0.5 && car.rocket.on) low = Math.min(low, car.rocket.noz[0]); if (t > 0.2 && !start) start = car.rocket.noz[0]; }
   check('BOOST held: the tail jets blow until the tank is down', start > 0.9 && low > 0.2 && low < 0.4, `${start.toFixed(2)} at the start, least ${low.toFixed(2)}, ${t.toFixed(1)} s`);
   const w2 = world(), c2 = fresh(w2);
   for (let k = 0; k < 60; k++) stepCar(c2, { up: 1, boost: 1 }, w2, dt);

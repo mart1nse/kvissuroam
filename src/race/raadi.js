@@ -109,7 +109,7 @@ export function onStage(road) {
 // The stage's times from before it opened to everyone were test runs (Martin 26 Nov 2026, at the launch: "Delete
 // all raadi lap times"): the server dropped them from its board (worker/index.js, cleanup-raadi-launch), and this
 // browser's own list leaves them out too, so no test time stays YOUR BEST.
-const OPENED = '2026-11-26T16:00:00.000Z';
+const OPENED = '2026-11-26T17:20:00.000Z';
 function loadRuns() {
   try { return (JSON.parse(localStorage.getItem(KEY)) || []).filter((r) => r && typeof r.at === 'string' && r.at >= OPENED); } catch { return []; }
 }

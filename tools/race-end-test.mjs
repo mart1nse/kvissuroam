@@ -119,4 +119,37 @@ assert.equal(desk.s.racers.find((r) => r.id === 'd').out, 'left');
   assert.equal(desk.s.phase, 'idle');
   assert.equal(desk.s.last.racers.find((r) => r.id === 'c').ms != null, true, 'c finished');
 }
+
+// Idle once the winner is through (Martin 2026-11-26 22:34: the racer at 0.1 km stalling the race again): a minute
+// after the first finish, a racer who has passed no gate of the lap for a minute is out, whether their car stands,
+// potters about or sends nothing; one getting on with the lap stays in
+{
+  if (desk.s.phase === 'on') desk.close('restart', clock);
+  for (const s of sockets) s.a.drv = true;
+  clock += 60000; alive();
+  msg(0, { t: 'rv', on: 1 }); msg(1, { t: 'rv', on: 1 }); msg(2, { t: 'rj', on: 1 }); msg(3, { t: 'rj', on: 1 });
+  assert.equal(desk.s.racers.length, 4);
+  const R = (id) => desk.s.racers.find((r) => r.id === id);
+  const pos = (i, x, z) => desk.seen(sockets[i].a.id, [x, z, 0], clock);
+  const g = desk.s.tGreen;
+  // b potters about near the start (30 m out and back every 20 s: never a minute within 25 m, so never 'still');
+  // c gets on with the lap (a gate every few seconds, as follow.js would mark it); d's page sends no positions
+  const step = () => { alive(); pos(1, Math.floor((clock - g) / 20000) % 2 ? 30 : 0, 0); if ((clock - g) % 4000 === 0) R('c').gs = clock; };
+  for (clock = g; clock < g + 150000; clock += 500) step();
+  assert.ok(!R('b').out && !R('c').out && !R('d').out, 'nobody through: nobody out for idling');
+  over(0, 150000); msg(0, { t: 'rf', ms: 150000 });
+  assert.equal(R('a').ms, 150000, 'a wins');
+  for (; clock < g + 150000 + 59000; clock += 500) { step(); if (clock % 15000 < 500) desk.alarm(); }
+  assert.ok(!R('b').out && !R('d').out, 'inside the minute after the winner');
+  for (; clock < g + 150000 + 76000; clock += 500) { step(); if (clock % 15000 < 500) desk.alarm(); }
+  assert.equal(R('b').out, 'idle', 'b pottering about, no gate: out');
+  assert.equal(R('d').out, 'idle', 'd sending nothing: out');
+  assert.ok(!R('c').out, 'c on its way round: in');
+  assert.equal(desk.s.phase, 'on', 'c still racing');
+  // c stops getting on with the lap: out a minute after its last gate, and the race ends
+  const lastGate = R('c').gs;
+  for (; clock < lastGate + 76000; clock += 500) { alive(); if (clock % 15000 < 500) desk.alarm(); }
+  assert.equal(desk.s.phase, 'idle', 'all through or out: closed');
+  assert.deepEqual(desk.s.last.racers.map((r) => [r.id, r.ms != null, r.out]), [['a', true, null], ['b', false, 'idle'], ['c', false, 'idle'], ['d', false, 'idle']]);
+}
 console.log('ok race end');

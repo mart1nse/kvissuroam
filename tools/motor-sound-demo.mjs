@@ -100,7 +100,7 @@ await page.goto(`http://127.0.0.1:${srv.address().port}/`);
 
 for (const kind of kinds) {
   await page.evaluate(async ({ kind, F, SR, FPS, T, SOLO, NOWHINE, spec }) => {
-    const { createMotor, plainWhine } = await import('/src/audio-motor.js');
+    const { createMotor, plainWhine, plainWhineHz } = await import('/src/audio-motor.js');
     const ctx = new OfflineAudioContext(1, Math.ceil(T * SR), SR);
     const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);   // (audio.js: master 0.5; an electric car's bus goes to it dry)
     const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
@@ -120,7 +120,7 @@ for (const kind of kinds) {
       const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0; o.connect(g).connect(master); o.start(0);
       for (let i = 0; i < n; i++) {
         const t = i / FPS, vw = F[i * 4], thr = F[i * 4 + 2];
-        o.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
+        o.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
         g.gain.setTargetAtTime(plainWhine(vw, thr), t, 0.08);
       }
     }

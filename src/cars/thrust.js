@@ -43,8 +43,15 @@ const BURN_A = 2.3 * G;            // the landing burn slows the fall by this mu
 // ...but not all the way down (Martin 26 Nov: "extend out the last 3m to take more time ... And the last meter even
 // more slower as it tries to soften the impact"): the burn ends DOWN_H3 over the ground at DOWN_V3, the car is let
 // down from there to DOWN_H1 at an easing speed, and over the last metre slower still
-const DOWN_H3 = 3, DOWN_V3 = 4.5;  // m over the ground, m/s down there
-const DOWN_H1 = 1, DOWN_V1 = 1.9;
+// (26 Nov later: "make the transition into the last part just a touch later, so it falls a bit lower on the
+// quicker drop speed and then the catch takes effect a bit later": 2.4 m and 0.85 m, were 3 and 1)
+const DOWN_H3 = 2.4, DOWN_V3 = 4.5;  // m over the ground, m/s down there
+const DOWN_H1 = 0.85, DOWN_V1 = 1.8;
+// All of that is measured against the ground's own line, which falls away under a flight downhill. A car that is
+// not yet falling DOWN_V3_MIN faster than that line (just over the top, above a street going down) falls freely
+// until it is, and only then is let down. (Until 26 Nov the let-down began at whatever small speed it had, as slow
+// as SINK: three metres at 0.3 m/s, a flight of 12 s. Martin: "it stayed up in the air for a very long time".)
+const DOWN_V3_MIN = 2.6;
 const SINK = 0.3;                  // the speed the wheels meet the ground at, which the springs take (m/s)
 const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (s)...
 const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
@@ -170,8 +177,9 @@ function landing(p) {
   rise(p, p.tb, tmpY);
   const s = p.vland + SINK, T = p.tl - p.tb;
   const rb = tmpY[0] - (p.yl - s * T), vb = tmpY[1] - s;
-  const v3 = Math.min(-SINK, Math.max(-DOWN_V3, vb)), v1 = Math.max(-DOWN_V1, v3);
-  const T1 = Math.max(0, (v3 - vb) / BURN_A), h3 = rb + 0.5 * (vb + v3) * T1, h1 = Math.min(DOWN_H1, h3 / 3);
+  const v3 = Math.min(-DOWN_V3_MIN, Math.max(-DOWN_V3, vb)), v1 = -DOWN_V1;
+  // (T1: the burn that slows the fall to v3, or the free fall that brings it up to v3)
+  const T1 = vb < v3 ? (v3 - vb) / BURN_A : (vb - v3) / G, h3 = rb + 0.5 * (vb + v3) * T1, h1 = Math.min(DOWN_H1, h3 * 0.4);
   L = { s, T, rb, vb, v3, v1, h3, h1, T1, T2: 0, T3: 0, one: true };
   if (h3 > 0.3 && T - T1 > 0.1) {
     const t2 = (h3 - h1) / ((-v3 - v1) / 2), t3 = h1 / ((-v1 + SINK) / 2), k = (T - T1) / (t2 + t3);
@@ -336,6 +344,8 @@ const SLIVER = 2, GAP = 1;                         // a valve never opens for le
 const FAINT = 0.26;                                // ...nor opens at all for less than this at its most
 const LONGER = 2;                                  // ...and every opening lasts this many rows longer at each end (Martin 26 Nov: "a bit more length to the existing ones")
 const CALM = 0.3;                                  // before the roll the bursts are this much of themselves ("do not add side thrusts that much")
+const LAND_K = 0.7, LAND_K1 = 0.96;                // on the way down the four corner jets blow at least this hard, and this hard over the last metre
+const LAND_EVEN = 0.6;                             // ...and this much of the hunt's play between them is gone (nearly all of it over the last metre)
 export function flightNozzles(p, t, noz, spec, lean) {
   noz.fill(0);
   if (lean) lean.fill(0);
@@ -396,6 +406,16 @@ function valves(p, f, t, noz, spec, lean) {
   const steady = t < LIFT_T ? 1 : 0;
   // (and until the roll starts the bursts are few and small)
   const calm = CALM + (1 - CALM) * smooth((t - (ROLL_T0 - 0.05)) / 0.3);
+  // (and the way down ends in one big burn of all four together: from the landing burn on they blow hard and as
+  // one, hardest over the last metre, with little left of the hunt and no small bursts between. Martin 26 Nov:
+  // "the last end of the coming down part reduce the micro ones and the bigger in the end comes from all 4 upward
+  // thrusters on very high level". What is shown is more than holds the car up there: the jets are the look)
+  let down = 0, last = 0;
+  if (t > p.tb) {
+    const L = landing(p), t1 = p.tb + (L.one ? 0.6 * L.T : L.T1 + L.T2);
+    down = smooth((t - p.tb) / 0.25); last = smooth((t - (t1 - 0.3)) / 0.4);
+  }
+  const shown = Math.max(lift, down * (LAND_K + (LAND_K1 - LAND_K) * last)), even = 1 - LAND_EVEN * down - (0.92 - LAND_EVEN) * last;
   // ...and the roll. Its own turn is a long burn: one side's pair pushes its side up to spin the car, then the
   // other's stops it. The hunt and the trembling are bursts, short for a small correction and longer for a big
   // one, on whichever side the body is being pushed back from just then
@@ -420,16 +440,16 @@ function valves(p, f, t, noz, spec, lean) {
     // while they hold the car up, the side that gives way eases off and swings out; in free flight the pushing
     // side blows down and the other side blows out sideways (it pushes the floor across, the same way round)
     // (in a long burn the bursts ride on it, smaller; in a pause there is nothing)
-    const free = (1 - quiet) * ((i === 0 || i === 3 ? longA : longB) + busy * calm * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn)));
+    const free = (1 - quiet) * (1 - down) * ((i === 0 || i === 3 ? longA : longB) + busy * calm * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn)));
     // (a valve does not dribble: what would be a faint flicker is nothing)
-    const k = lift * open * (steady ? 1 : (1 - 0.5 * ease) * (1 + 0.3 * pn)) + (1 - lift) * free * smooth((free - 0.08) / 0.14);
-    noz[NOZ_DOWN + i] = clamp01(k * (steady ? 1 : 0.9 + 0.1 * Math.sin(f.flut[i] * t + i * 1.7)));
-    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + (steady ? 0 : ease * busy * calm * (1 - quiet) * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift))) + (steady ? 0.02 : 0.07) * Math.sin(f.drift[i] * t + i * 2.3);
+    const k = shown * open * (steady ? 1 : (1 - 0.5 * ease * even) * (1 + 0.3 * pn * even)) + (1 - shown) * free * smooth((free - 0.08) / 0.14);
+    noz[NOZ_DOWN + i] = clamp01(k * (steady ? 1 : 1 - 0.1 * even + 0.1 * even * Math.sin(f.flut[i] * t + i * 1.7)));
+    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + (steady ? 0 : ease * busy * calm * even * (1 - quiet) * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift))) + (steady ? 0.02 : 0.02 + 0.05 * even) * Math.sin(f.drift[i] * t + i * 2.3);
   }
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
   // and after that answer its trembling
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
-  const sw = (1 - quiet) * calm * burst(pushOf(yawPlay, f, t) / SWING_REF, SWING_DEAD);
+  const sw = (1 - quiet) * calm * (1 - 0.8 * down) * burst(pushOf(yawPlay, f, t) / SWING_REF, SWING_DEAD);
   if (sw) { const i = sw > 0 ? NOZ_YAW : NOZ_YAW + 1; noz[i] = Math.max(noz[i], 0.7 * Math.abs(sw)); }   // (+ yaw is to the right: the left one pushes the nose right)
 }
 
@@ -464,8 +484,8 @@ export function planFlip(car, world, side = 1) {
     const yb = tmpY[0], vb = tmpY[1];
     let slope = 0;
     for (let it = 0; it < 3; it++) {
-      const rv = vb - slope, v3 = Math.min(-SINK, Math.max(-DOWN_V3, rv)), v1 = Math.max(-DOWN_V1, v3);
-      const T1 = Math.max(0, (v3 - rv) / BURN_A);
+      const rv = vb - slope, v3 = Math.min(-DOWN_V3_MIN, Math.max(-DOWN_V3, rv)), v1 = -DOWN_V1;
+      const T1 = rv < v3 ? (v3 - rv) / BURN_A : (rv - v3) / G;
       const T = T1 + (DOWN_H3 - DOWN_H1) / ((-v3 - v1) / 2) + DOWN_H1 / ((-v1 + SINK) / 2);
       tl = tb + T;
       yEnd = yb + 0.5 * (rv + v3) * T1 - DOWN_H3 + slope * T;

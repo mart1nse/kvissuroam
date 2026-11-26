@@ -21,6 +21,12 @@ const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts a
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
 const NEAR = 45;               // within this of the track the edges and the lap panel show
 const MIN_LAP = 30;            // seconds; anything faster is a glitch (a reset onto the line)
+// The game runs slower than real time whenever a frame takes over 50 ms (main.js), and the lap clock is the game's:
+// under 20 frames a second a lap was driven in slow motion, at a lap time that did not show it (26 Nov 2026, the
+// review of ways to cheat: a browser's developer tools can hold a page there). A lap is forgiven this many seconds
+// of that (a freeze is not the driver's doing); past them its clock keeps real time. The server times a lap that
+// would be a record by its own clock and holds this against it (worker/index.js lapMark).
+const SLOW_FREE = 2;
 const CUT_TEXT = 'SHORT CUT · LAP CANCELLED';
 const BACK_LIMIT = 100;        // metres driven the wrong way along the lap before it is cancelled (Martin, 24 Nov)
 const BACK_WARN = 25;          // ... and from this far on the panel says WRONG WAY
@@ -344,7 +350,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const elLast = panel.querySelector('#laplast'), elMsg = panel.querySelector('#lapmsg');
 
   const st = {
-    running: false, t0: 0, clk: 0, wall: null, carT: null, t: 0, off: 0, cps: new Set(), gate: 0, back: 0, along: null, hint: -1, onTrack: false, near: false,
+    running: false, t0: 0, clk: 0, wall: null, carT: null, lag: 0, slow: 0, t: 0, off: 0, cps: new Set(), gate: 0, back: 0, along: null, hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null, tyT: {},
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
@@ -450,7 +456,14 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
       const wall = performance.now() / 1000;
       if (st.wall != null) {
         const ds = car.time - (st.carT ?? car.time), dw = wall - st.wall;
-        st.clk += dw > 1 ? Math.max(dw, ds) : Math.max(0, ds);
+        const add = dw > 1 ? Math.max(dw, ds) : Math.max(0, ds);
+        st.clk += add;
+        // (how far the game has fallen behind real time on this lap, and what of that is past SLOW_FREE: added once)
+        if (st.running) {
+          st.lag += dw - add;
+          const over = st.lag - SLOW_FREE;
+          if (over > st.slow) { st.clk += over - st.slow; st.slow = over; }
+        }
       }
       st.wall = wall; st.carT = car.time;
       const time = st.clk;
@@ -520,7 +533,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.lag = st.slow = 0; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }

@@ -538,7 +538,12 @@ export const CARS = {
     tc: 1,                      // the motors hold the tyres at their grip limit while the wheel is straight
     tcSlip: 1.5,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
-    fanDown: 16000, squat: 0.5,   // (sized for 0-100 km/h in Tesla's 1.6 s at this weight)
+    // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that
+    // figure, which also made the car brake and corner harder than before. Martin 26 Nov: the weight was meant "to
+    // reduce the insane acceleration, braking and cornering power", so the fans are 12 kN again and the weight
+    // counts: 0-100 in 1.72 s, 22 m from 100, about 1.87 g in a bend. squat: the body ducks and dives this much of
+    // what other cars' do; 0.5 until then, "ducks and dives also quite a bit")
+    fanDown: 12000, squat: 0.3,
     // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
     // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
     // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty

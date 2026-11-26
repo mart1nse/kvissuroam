@@ -259,7 +259,7 @@ export function createAudio() {
   // Suction fans under the floor (spec.fanDown): they turn all the time, so the car is never silent. Four fans a
   // hair apart in speed beat against each other (the whir), and the air they pull through the floor hisses. They
   // idle with the car at rest and run up with the pedal or the speed (FAN_UP s to follow).
-  const FAN_TONE = 0.05, FAN_AIR = 0.16, FAN_UP = 0.3;
+  const FAN_TONE = 0.035, FAN_AIR = 0.11, FAN_UP = 0.3;   // (quieter since 26 Nov, Martin: "reduce the default fan sound": 3 dB down run up, 7 dB down idling)
   function makeFan() {
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;
     const air = ctx.createGain(); air.gain.value = 0;
@@ -283,8 +283,8 @@ export function createAudio() {
     fanS = want;
     for (const [o, r] of fan.osc) o.frequency.setTargetAtTime((120 + 260 * k) * r, t, tc);
     fan.f.frequency.setTargetAtTime(450 + 700 * k, t, tc);
-    fan.tone.gain.setTargetAtTime(on ? FAN_TONE * Math.pow(k, 1.3) : 0, t, tc);
-    fan.air.gain.setTargetAtTime(on ? FAN_AIR * Math.pow(k, 1.3) : 0, t, tc);
+    fan.tone.gain.setTargetAtTime(on ? FAN_TONE * Math.pow(k, 2) : 0, t, tc);
+    fan.air.gain.setTargetAtTime(on ? FAN_AIR * Math.pow(k, 2) : 0, t, tc);
   }
   // the valves snapping open for a kickflip's lift-off: a short hard burst
   function jetPop(out, level) {

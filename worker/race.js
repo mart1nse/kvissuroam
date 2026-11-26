@@ -10,7 +10,15 @@
 //
 // All times are the server's clock (Date.now()); the browsers keep their offset to it (t: 'clock'),
 // so the lights go out at the same moment everywhere and the order is by each racer's own time from
-// lights out, not by whose message arrives first. Nothing here is trusted more than a lap time is.
+// lights out, not by whose message arrives first.
+//
+// Since 26 Nov 2026 the server follows each racer round the lap itself, from the positions they send
+// (worker/follow.js): a finish is taken only from a car it saw stand on the grid, start after its lights, pass
+// the lap's gates in order and cross the line, and at about the moment it saw that. (Until then "finished" was
+// the racer's word, and one sent two minutes after the lights won any race.)
+import { CARS } from '../src/cars/specs.js';
+import { follow, newFollow, finishInGap, PASS } from './follow.js';
+import { OLD_PAGES_UNTIL } from './cutover.js';
 
 const COUNT_MS = 5000;           // RACE STARTS IN
 const GRID_MS = 10000;           // on the grid; the five lights come on in its last five seconds
@@ -24,6 +32,9 @@ const MAX_RACE_MS = 7 * 60000;   // a race is closed this long after lights out
 const RACE_MIN_MS = 120000;     // no finish faster than this (a lap of Toomemägi: LAP_MIN in index.js)
 const FINISH_EARLY = 3000;      // a finish may claim this much more than the server's clock has run (clock sync)
 const FINISH_LATE = 10000;      // and at most this much less (the message on its way, a short dropout)
+const SEEN_EARLY = 800;         // a finish may be this much before the server saw the car over the line (ten positions a second, and their way here)
+const CLAIM_WAIT = 3000;        // "finished" waits this long for the position that shows it
+const SAVE_MS = 5000;           // what the server has seen of the racers is written down this often (a deploy restarts it mid-race)
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];
@@ -46,8 +57,10 @@ export class RaceDesk {
     try { s = JSON.parse(lobby.meta('race')); } catch { s = null; }
     this.s = s && typeof s === 'object' ? s : { id: 0, phase: 'idle', racers: [], votes: {}, last: null };
     if (!this.s.votes) this.s.votes = {};
+    this.fol = new Map();         // racer id -> what the server has seen of their lap (follow.js), in memory
+    this.savedAt = 0;
   }
-  save() { this.lobby.setMeta('race', JSON.stringify(this.s)); }
+  save() { this.lobby.setMeta('race', JSON.stringify(this.s)); this.savedAt = Date.now(); }
 
   // Race stats for /stats (Martin 2026-11-22): votes are counted here and sent to the stats object
   // with each race as it closes, or with the votes that lapsed. One small message per race, no names.
@@ -143,7 +156,8 @@ export class RaceDesk {
     const votes = Object.entries(s.votes).filter(([id, v]) => v.k === b.kind && b.voters.has(id) && now - v.t < VOTE_MS).map(([id]) => id);
     return {
       id: s.id, on: s.phase === 'on', tGrid: s.tGrid, tGreen: s.tGreen, seed: s.seed,
-      racers: s.racers, vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
+      // (without what the server keeps of each racer's lap for itself: gates, grid, the line, gaps, a finish not yet seen)
+      racers: s.racers.map(({ gt, gs, arm, fs, sk, skm, jp, cl, ...r }) => r), vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
     };
   }
   send() { this.lobby.broadcast({ t: 'race', r: this.view() }); }
@@ -160,6 +174,7 @@ export class RaceDesk {
     s.seed = Math.floor(Math.random() * 1e9);
     s.racers = [...ids].slice(0, MAX_RACERS).map((id) => ({ id, name: d.get(id)?.name || '?', car: d.get(id)?.car || 'w201' }));
     s.votes = {};
+    this.fol.clear();
     // first at the lights (the restart vote opens then, and everyone has to hear it: Martin 2026-11-22
     // saw no RESTART until some other message came), then at the 7:00 cut-off (alarm below)
     this.lobby.ctx.storage.setAlarm(s.tGreen).catch?.(() => {});
@@ -188,6 +203,7 @@ export class RaceDesk {
     if (now >= s.tGreen + MAX_RACE_MS) { this.close('time', now); return; }
     this.quiet(now);
     // nobody left on the grid before the lights: nothing to race
+    for (const r of s.racers) if (r.cl) this.settle(r, now);
     if (!s.racers.length || (now >= s.tGrid && !this.active().length)) { this.close('empty', now); return; }
     if (now >= s.tGreen && s.racers.every((r) => r.ms != null || r.out)) this.close('done', now);
   }
@@ -203,6 +219,55 @@ export class RaceDesk {
       on ||= this.online(); d ||= this.drivers();
       if (!on.has(r.id) || !d.has(r.id)) r.out = 'left';
     }
+  }
+  // A racer's position, as it comes in (index.js pose): their lap is followed (follow.js). What it shows is kept
+  // on the racer's record and written down every few seconds, so a restart of the server finds the race as it was.
+  seen(id, p, now) {
+    const s = this.s;
+    if (s.phase !== 'on') return;
+    const r = s.racers.find((x) => x.id === id);
+    if (!r || r.out || r.ms != null || now < (r.g ?? s.tGrid) - 500) return;
+    let f = this.fol.get(id);
+    if (!f || f.race !== s.id) this.fol.set(id, f = newFollow(s.id));
+    const ev = follow(r, f, p[0], p[1], now, r.go || s.tGreen, !!CARS[r.car]?.thrusters, Number.isFinite(p[21]) ? p[21] : null);
+    if (!ev) return;
+    // (over the line with its "finished" already here: that is the finish)
+    if (ev === 'finish' && r.cl) { this.settle(r, now); this.check(now); this.save(); this.send(); }
+    // (the grid, the start and a jump are written down at once: a deploy right after must not lose them)
+    else if (ev !== 'gate' || now - this.savedAt > SAVE_MS) this.save();
+  }
+  // A racer's word that they finished (r.cl: the time they give, and when it came) against what the server saw.
+  // true once it is decided: the finish taken, or the racer out as one who did not drive the lap ('cut').
+  settle(r, now) {
+    const c = r.cl, s = this.s;
+    if (!c || r.ms != null || r.out) { delete r.cl; return true; }
+    const go = r.go || s.tGreen, since = c.at - go;
+    let fin = null;
+    if (r.fs != null) {
+      // seen over the line: the racer's own time (their clock is finer than ten positions a second), but not
+      // more than a moment before the server saw it, and never after
+      const seen = r.fs - go;
+      fin = Math.min(Math.max(c.ms, seen - SEEN_EARLY), seen);
+    } else if (now - c.at < CLAIM_WAIT) return false;          // (the position that shows it may be a moment behind)
+    else {
+      // not seen over the line. The connection was down as the car crossed it: as if the positions had come, at
+      // the earliest moment the lap's last part allows. Or a race of one from a page that does not send positions
+      // while alone (see cutover.js): believed as before.
+      const f = this.fol.get(r.id), gap = finishInGap(r, f?.race === s.id ? f : null, c.at, go + c.ms);
+      if (gap != null) fin = Math.min(Math.max(c.ms, gap - go, since - FINISH_LATE), since);
+      else if (c.at < OLD_PAGES_UNTIL && s.racers.length === 1) fin = Math.min(Math.max(c.ms, since - FINISH_LATE), since);
+    }
+    delete r.cl;
+    if (fin != null && r.jp) fin = null;                      // (moved in a way no car drives)
+    if (fin == null) {
+      r.out = 'cut';
+      this.lobby.raceRefused?.(r, c.ms, r.jp ? `jumped ${r.jp} times` : r.gt == null ? (r.arm ? 'never over the start line' : 'not seen standing on the grid') : `gates ${r.gt} of ${PASS.length}`);
+      return true;
+    }
+    // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
+    // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
+    r.ms = Math.round(Math.min(fin, MAX_RACE_MS)) + (r.go ? Math.max(0, r.go - s.tGreen) : 0);
+    return true;
   }
   // A vote (by: who voted) starts the race once enough are in. When drivers leave (by: none) and the
   // votes already in become enough, it starts only if two or more want it (Martin 2026-11-22: five
@@ -265,14 +330,12 @@ export class RaceDesk {
         const r = this.s.phase === 'on' && this.s.racers.find((x) => x.id === me.id);
         // The time is the browser's own, so the server holds it against its clock (security review 25 Nov 2026: any
         // racer could claim the win with a made-up time): it cannot be more than a moment past the time since that
-        // racer's lights went out, and not under a believable lap, and a message that comes late (a lost
-        // connection) is taken as finishing at most FINISH_LATE before it came.
+        // racer's lights went out, and not under a believable lap. And since 26 Nov against the lap as the server
+        // followed it (settle): the word waits a moment for the position that shows the car over the line.
         const ms = Math.round(Number(m.ms)), since = now - (r ? r.go || this.s.tGreen : now);
         if (!r || r.ms != null || r.out || !(ms >= RACE_MIN_MS && ms <= MAX_RACE_MS) || ms > since + FINISH_EARLY) return true;
-        const fin = Math.min(Math.max(ms, since - FINISH_LATE), MAX_RACE_MS);
-        // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
-        // placed where they crossed the line, Martin 2026-11-23, not ahead of those who started earlier)
-        r.ms = fin + (r.go ? Math.max(0, r.go - this.s.tGreen) : 0);
+        r.cl ||= { ms, at: now };
+        if (!this.settle(r, now)) this.lobby.ctx.storage.setAlarm(now + CLAIM_WAIT + 100).catch?.(() => {});
         this.check(now); this.save(); this.send();
         return true;
       }

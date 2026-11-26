@@ -130,6 +130,54 @@ assert.equal(r.j.board.allTime.find((x) => x.car === 'f40').ms, F40, 'unverified
 const all = (await call('/api/laps.json')).j;
 assert.equal(all.find((x) => x.ms === 121000).hold, 1, 'the export marks it held');
 
+// 3b) laps timed by the server's own clock (26 Nov 2026: under 20 frames a second the game and its lap clock ran in
+// slow motion): the page marks a lap's start and finish as they happen, and a car's best counts only if the time
+// between the marks agrees with the lap time
+{
+  const { OLD_PAGES_UNTIL } = await import(root + '/worker/cutover.js');
+  const { gunzipSync } = await import('node:zlib');
+  const msOf = (name) => Number(gunzipSync(readFileSync(new URL(`./fixtures/replays/${name}.gz`, import.meta.url))).toString().split(',', 3)[2]);
+  const ip = '6.6.6.6', k3 = await ticket(ip), M3 = msOf('m3');
+  clock += 60000;
+  // slow motion: the lap took twice its time between the marks
+  await call('/api/mark', { k: k3, e: 's' }, ip);
+  clock += 2 * M3;
+  assert.equal((await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip)).status, 200);
+  r = await call('/api/lap', { name: 'Slow', car: 'm3', ms: M3, k: k3, ago: 0 }, ip);
+  assert.deepEqual(r.j.hold, [{ car: 'm3', ms: M3 }]);
+  r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
+  assert.ok(!(await call('/api/board')).j.allTime.some((x) => x.car === 'm3'), 'a lap in slow motion is not on the board');
+  // the same lap time driven in real time (0.4 s between the marks' ways here): on the board
+  await call('/api/mark', { k: k3, e: 's' }, ip);
+  clock += M3 + 400;
+  await call('/api/mark', { k: k3, e: 'f', ms: M3 }, ip);
+  r = await call('/api/replay', { k: k3, car: 'm3', ms: M3, z: fixture('m3') }, ip);
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  assert.equal((await call('/api/board')).j.allTime.find((x) => x.car === 'm3')?.ms, M3);
+  // once the pages from before the marks are gone, a best with no marks stays off the board ...
+  clock = OLD_PAGES_UNTIL + 3600000;
+  const PA = msOf('passat'), k4 = await ticket('7.7.7.7');
+  clock += PA + 60000;
+  r = await call('/api/lap', { name: 'Unmarked', car: 'passat', ms: PA, k: k4, ago: 0 }, '7.7.7.7');
+  assert.deepEqual(r.j.hold, [{ car: 'passat', ms: PA }]);
+  r = await call('/api/replay', { k: k4, car: 'passat', ms: PA, z: fixture('passat') }, '7.7.7.7');
+  assert.equal(r.status, 400); assert.equal(r.j.error, 'replay refused: clock');
+  // ... and one marked over the page's connection goes on
+  const sock = { a: { at: clock, ip: '8.8.8.8' }, send() {}, close() {}, deserializeAttachment() { return this.a; }, serializeAttachment(x) { this.a = x; } };
+  sockets.push(sock);
+  const k5 = await ticket('8.8.8.8');
+  await L.webSocketMessage(sock, JSON.stringify({ t: 'hello', name: 'Marked', k: k5 }));
+  await L.webSocketMessage(sock, JSON.stringify({ t: 'lm', e: 's' }));
+  clock += PA + 150;
+  await L.webSocketMessage(sock, JSON.stringify({ t: 'lm', e: 'f', ms: PA }));
+  r = await call('/api/lap', { name: 'Marked', car: 'passat', ms: PA, k: k5, ago: 0 }, '8.8.8.8');
+  r = await call('/api/replay', { k: k5, car: 'passat', ms: PA, z: fixture('passat') }, '8.8.8.8');
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  assert.equal((await call('/api/board')).j.allTime.find((x) => x.car === 'passat')?.name, 'Marked');
+  sockets.length = 0;
+}
+
 // 4) caps: a ticket saved for 10 days posts 3 batches of 50 laps at once: 120 from one address in the hour
 k = await ticket('3.3.3.3');
 clock += 10 * 86400000;

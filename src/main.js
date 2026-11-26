@@ -903,7 +903,7 @@ async function boot() {
   startSpots = startSlots(startTrack, startPose);
   lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
-  rocketUi = createRocketUi({ pad: $('#rocketpad'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
+  rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
     return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
   } });
@@ -939,7 +939,8 @@ async function boot() {
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     // just put on the start and still on the lap's road before the line: the same, without the glow (Martin 25 Nov)
-    fresh: () => !!lane?.on && mode === 'drive',
+    // (or put somewhere a moment ago, by R, the map or a start: nobody is bumped by a car that appears beside them)
+    fresh: () => (!!lane?.on || performance.now() - placedAt < 2000) && mode === 'drive',
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
     winner: (id) => !!raceMode?.winner(id),
@@ -994,8 +995,10 @@ async function boot() {
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
-    onLap: (lap, info) => { mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
+    // (the lap's finish and each start of the lap timer are told to the server as they happen: it times the lap itself)
+    onLap: (lap, info) => { mp.lapMark('f', lap.ms); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => {
+      if (k === 'start') mp.lapMark('s');
       stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
       // (a Rocket starts every timed lap of its own with a full tank, so laps compare; in a race the tank is filled at the lights only)
       if (k === 'start' && car.rocket && !raceMode?.ghost) refillTank(car.spec.id);
@@ -1010,7 +1013,9 @@ async function boot() {
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({
-    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
+    place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
@@ -1416,8 +1421,10 @@ async function watchReplay(track, carOf) {
   go();
 }
 
+let placedAt = -1e9;               // when the car was last put somewhere (ms)
 function place(pose) {
   watch?.stop();                                   // (put somewhere: back in your own car)
+  placedAt = performance.now();
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
@@ -1470,10 +1477,14 @@ async function goLastSpot() {
       pick = pickFromHistory(world, history, opts);
     }
     if (pick?.wait) pick = null;
+    // (a Raadi run with no spot of its own left to go back to: the stage's start, not the nearest dry street,
+    // which may be further along the stage)
+    if (!pick && stage?.running) return stage.goStart();
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
     race?.hopped(pick.x, pick.z);
+    stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
   }

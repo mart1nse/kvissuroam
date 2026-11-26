@@ -9,7 +9,10 @@
 // unburnt fuel of the blip going off in the hot exhaust): a quick lick or two, drawn with the same points.
 // And the white cloud a Rocket's thrusters blow up off the ground as it lifts off and sets down (mist), and the
 // dust its suction fans pull off loose ground and blow out behind it (fanDust).
+// And a car on its roof after a crash (src/cars/crash.js): a cloud of dust as it comes down, then steam from
+// its engine for a while (wreck).
 import * as THREE from 'three';
+import { onRoof } from './cars/crash.js';
 import { NOZ_DOWN, NOZZLES } from './cars/thrust.js';
 
 const MAX = 700;           // puffs alive at once
@@ -281,6 +284,29 @@ export function createSmoke(world) {
   }
   const myFan = { owed: 0 };
 
+  // A car lying on its roof (crash.js; ours or another player's, known by how its body is turned): dust thrown
+  // up as the roof comes down, then steam rising from the engine, thinning out over half a minute.
+  // st: { t: how long it has lain there, owed }. A dozen puffs, then at most 4 a second.
+  function wreck(car, dt, st) {
+    if (!onRoof(car)) { st.t = 0; st.owed = 0; return; }
+    const r = () => Math.random() - 0.5;
+    const gyc = world.groundAt(car.x, car.z, car.y + 0.4);
+    if (!st.t) {
+      for (let k = Math.round(12 * thinK); k > 0; k--) {
+        const a = Math.random() * 6.283, d = 0.6 + Math.random() * 1.4;
+        puff(car.x + Math.cos(a) * d, gyc + 0.15, car.z + Math.sin(a) * d, Math.cos(a) * (1.5 + 2 * Math.random()), 0.4 + Math.random() * 0.8, Math.sin(a) * (1.5 + 2 * Math.random()), 0.9, DUST);
+      }
+    }
+    st.t += dt;
+    if (st.t > 30) return;
+    st.owed += 4 * Math.exp(-st.t / 9) * thinK * dt;
+    while (st.owed >= 1) {
+      st.owed -= 1;
+      puff(car.x + r() * 1.4, gyc + 0.5, car.z + r() * 1.4, r() * 0.5, 0.7 + Math.random() * 0.6, r() * 0.5, 0.55);
+    }
+  }
+  const myWreck = { t: 0, owed: 0 };
+
   // car: the player's car after its physics step; active: false while the game is not being driven
   // others: other players' cars, [car-like] (multiplayer.js remotes()); only the ones near enough to see
   function update(car, dt, active, others = []) {
@@ -294,12 +320,14 @@ export function createSmoke(world) {
       if (o.tyres) tyres(o, dt, st.tyres);
       if (o.noz) mist(o, o.noz, st.mist || (st.mist = [0, 0, 0, 0]), dt);
       if (o.spec.fanDown) fanDust(o, o.ground, st.fan || (st.fan = { owed: 0 }), dt);
+      wreck(o, dt, st.wreck || (st.wreck = { t: 0, owed: 0 }));
     }
     if (theirs.size > others.length) for (const id of [...theirs.keys()]) if (!others.some((o) => o.id === id)) theirs.delete(id);
     if (active && car && !car.inWater) tyres(car, dt, myTyres);
     else myTyres.heat[0] = myTyres.heat[1] = 0;
     if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
     if (active && car && car.spec.fanDown && !car.inWater) fanDust(car, car.surface, myFan, dt);
+    if (active && car) wreck(car, dt, myWreck);
 
     if (!alive && !fresh) return;
     alive = 0; fresh = false;

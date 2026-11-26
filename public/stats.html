@@ -333,7 +333,7 @@
     ].map(function (x) { return '<div data-tip="' + esc(x[2]) + '"><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');
 
     h += card('Mayhem', null, '<div class="nums">' + [
-      [(t.smash || {}).prop, 'props knocked over'], [(t.smash || {}).glass, 'shelter panes smashed'], [misc.water, 'trips into the water'],
+      [(t.smash || {}).prop, 'props knocked over'], [(t.smash || {}).glass, 'shelter panes smashed'], [misc.water, 'trips into the water'], [misc.roof, 'crashes onto the roof'],
       [misc.mapjump, 'jumps from the map'], [misc.garage, 'garage visits'], [misc.idle, 'idle cars sent to the garage'], [misc.speed100, 'visits past 100 km/h'],
       [misc.speed150, 'past 150 km/h'], [misc.speed200, 'past 200 km/h'], [misc.speed250, 'past 250 km/h'],
     ].map(function (x) { return '<div><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');

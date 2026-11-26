@@ -7,6 +7,7 @@
 
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
+import { crashHit, crashStep } from './crash.js';
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
@@ -196,6 +197,7 @@ export function createCar(spec, pose) {
     surface: 1,
     inWater: false, waterTime: 0, sunk: false, waterLevel: 0,
     hit: 0,                      // strength of the last impact (m/s), decays
+    crash: null,                 // on its way onto its roof, or lying on it (crash.js), until resetCar
     a: L * spec.cgFront, b: L * (1 - spec.cgFront),
     iz: spec.mass * (0.5 * L) ** 2 * 1.15,
     halfLen: spec.halfLen ?? L / 2 + 0.85, halfWid: spec.halfWid ?? spec.track / 2 + 0.13,
@@ -630,6 +632,15 @@ function boxContact(car, b, list, fx, fz, rx, rz, hl, hw, contact) {
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
 // steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
+  // (a car that met a wall too fast and too squarely is going over onto its roof, or lies on it: crash.js)
+  if (car.crash) {
+    crashStep(car, world, dtFrame);
+    car.time += dtFrame;
+    car.hit *= Math.exp(-dtFrame * 4); car.landed *= Math.exp(-dtFrame * 6);
+    if (car.kerbHit) car.kerbHit = 0;
+    if (car.jolt) car.jolt *= Math.exp(-dtFrame * 10);
+    return;
+  }
   // (a car with thrusters, thrust.js: its tank, its BOOST, and a kickflip in flight, which moves the car
   // along its plan instead of on its tyres)
   if (car.rocket && rocketStep(car, input, world, dtFrame)) {
@@ -639,7 +650,7 @@ export function stepCar(car, input, world, dtFrame) {
   }
   const n = Math.max(1, Math.ceil(dtFrame / (1 / 240)));
   const dt = dtFrame / n;
-  for (let i = 0; i < n; i++) substep(car, input, world, dt);
+  for (let i = 0; i < n && !car.crash; i++) substep(car, input, world, dt);
   car.time += dtFrame;
   car.hit *= Math.exp(-dtFrame * 4);
   car.landed *= Math.exp(-dtFrame * 6);
@@ -1352,6 +1363,7 @@ function substep(car, input, world, dt) {
     const pvx = wvx - car.yawRate * oz, pvz = wvz + car.yawRate * ox;
     const vn = pvx * nx + pvz * nz;
     if (vn >= 0) return;
+    crashHit(car, nx, nz, wvx, wvz);          // (fast and square enough, it ends on its roof: crash.js)
     const rn = ox * nz - oz * nx;
     const j = (-(1 + 0.15) * vn) / (1 / m + (rn * rn) / car.iz);
     // friction along the obstacle
@@ -1510,6 +1522,7 @@ function substep(car, input, world, dt) {
     car.x += nx * tmpR[2]; car.z += nz * tmpR[2];
     const vn = wvx * nx + wvz * nz;
     if (vn < 0) {
+      crashHit(car, nx, nz, wvx, wvz);
       wvx -= 1.1 * vn * nx; wvz -= 1.1 * vn * nz;
       car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
       car.hit = Math.max(car.hit, -vn);
@@ -1527,6 +1540,7 @@ function substep(car, input, world, dt) {
       car.x += lnx * depth; car.z += lnz * depth;
       const vn = wvx * lnx + wvz * lnz;
       if (vn < 0) {
+        crashHit(car, lnx, lnz, wvx, wvz);
         wvx -= 1.1 * vn * lnx; wvz -= 1.1 * vn * lnz;
         car.vx = wvx * fx + wvz * fz; car.vy = wvx * rx + wvz * rz;
         car.hit = Math.max(car.hit, -vn);
@@ -1574,7 +1588,7 @@ export function resetCar(car, pose) {
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
-  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
+  car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.crash = null; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
   car.rpm = car.spec.engine.idle ?? 0; car.kw = 0; car.regenIn = car.pedalIn = 0;
   if (car.rocket) { car.rocket.flight = null; car.thrustN = 0; }
 }

@@ -12,6 +12,7 @@ import { streetKit } from '../world/streetkit.js';
 import { islandOuter, ISLAND_END } from './veskiend.js';
 import { drapeGeometry } from '../world/drape.js';
 import { jobs } from '../jobs.js';
+import { crashHit } from '../cars/crash.js';
 
 export const VESKI = { i0: 1655, i1: 1823, red: [0.15, 1.9], colour: 0xa27c7e };     // red: from the left road edge inwards; it runs out into the junction
 const LINE = { i0: 1657.5, i1: 1820.6, dash: 1.65, gap: 0.8, at: [1.9, 2.05] };       // dashes in track points (about 1.8 m each)
@@ -277,6 +278,7 @@ export function createVeski(world, group, merged, { shadows = true } = {}) {
           const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
           const vn = wvx * nx + wvz * nz;
           if (vn < 0) {
+            crashHit(car, nx, nz, wvx, wvz);          // (fast and square: onto its roof, cars/crash.js)
             const nvx = wvx - 1.25 * vn * nx, nvz = wvz - 1.25 * vn * nz;
             car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
             car.yawRate *= 0.6;

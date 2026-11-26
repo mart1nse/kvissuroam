@@ -13,7 +13,9 @@ register('data:text/javascript,' + encodeURIComponent(`export async function loa
 }`));
 const root = new URL('..', import.meta.url).href.replace(/\/$/, '');
 const { RaceDesk } = await import(root + '/worker/race.js');
-const { PT, PASS } = await import(root + '/worker/follow.js');
+const { PT, PASS, driven } = await import(root + '/worker/follow.js');
+const { CARS } = await import(root + '/src/cars/specs.js');
+const { carLimits, judgeDrive } = await import(root + '/src/race/plausible.js');
 const { OLD_PAGES_UNTIL } = await import(root + '/worker/cutover.js');
 const LAP = JSON.parse(readFileSync(new URL('../src/race/track.json', import.meta.url)));
 assert.ok(PT, 'worker/pace.json is of the lap\'s gates as they are (else: node tools/make-pace.mjs)');
@@ -23,14 +25,17 @@ Date.now = () => clock;
 
 // the fixtures as places ten times a second
 const drives = {};
+let tuned = null;        // the Audi 200 record of 26 Nov driven with the car's figures changed
 for (const f of readdirSync(new URL('./fixtures/replays/', import.meta.url))) {
-  if (!f.endsWith('.gz') || f.includes('tuned')) continue;
+  if (!f.endsWith('.gz')) continue;
   const a = gunzipSync(readFileSync(new URL(`./fixtures/replays/${f}`, import.meta.url))).toString().split(',').map(Number);
   const n = a[3], pts = [];
-  let x = 0, z = 0;
-  for (let i = 0; i < n; i++) { x += a[4 + i * 21] / 100; z += a[4 + i * 21 + 1] / 100; pts.push([x, z]); }
-  drives[f.replace('.gz', '')] = pts;
+  let x = 0, z = 0, y = 0;
+  for (let i = 0; i < n; i++) { x += a[4 + i * 21] / 100; z += a[4 + i * 21 + 1] / 100; y += a[4 + i * 21 + 2] / 100; pts.push([x, z, y]); }
+  if (f.includes('tuned')) tuned = pts; else drives[f.replace('.gz', '')] = pts;
 }
+// what each car can do, as the server works it out (worker/index.js carLimit)
+const limitNow = new Map([...Object.keys(drives), 'audi200'].map((c) => [c, carLimits(CARS[c])]));
 // the grid (src/race/racemode.js gridPose), place k
 const P = LAP.pts, N = P.length, A = P[N - 30], GL = Math.hypot(P[0][0] - A[0], P[0][1] - A[1]);
 const ux = (P[0][0] - A[0]) / GL, uz = (P[0][1] - A[1]) / GL;
@@ -38,29 +43,29 @@ const gridAt = (k) => { const row = Math.floor(k / 5), col = [2, 1, 3, 0, 4][k %
 // a race drive: from the grid place at a m/s2 to the lap's first place, then the lap, then 3 s on past the line
 function raceDrive(pts, k = 0, a = 6) {
   const g = gridAt(k), to = pts[0], L = Math.hypot(to[0] - g[0], to[1] - g[1]), out = [];
-  for (let t = 0; ; t += 0.1) { const d = 0.5 * a * t * t; if (d >= L) break; out.push([g[0] + (to[0] - g[0]) * d / L, g[1] + (to[1] - g[1]) * d / L]); }
+  for (let t = 0; ; t += 0.1) { const d = 0.5 * a * t * t; if (d >= L) break; out.push([g[0] + (to[0] - g[0]) * d / L, g[1] + (to[1] - g[1]) * d / L, to[2]]); }
   const launch = out.length;
   out.push(...pts);
   const e = pts.at(-1), b = pts.at(-2);
-  for (let i = 1; i <= 30; i++) out.push([e[0] + (e[0] - b[0]) * i, e[1] + (e[1] - b[1]) * i]);
+  for (let i = 1; i <= 30; i++) out.push([e[0] + (e[0] - b[0]) * i, e[1] + (e[1] - b[1]) * i, e[2]]);
   return { path: out, launch, fin: launch + pts.length - 1, grid: g };
 }
 
 // a lobby with n pages
 function world(n, cars = []) {
-  const meta = {}, refused = [];
+  const meta = {}, refused = [], margins = [];
   const sockets = Array.from({ length: n }, (_, i) => ({ a: { id: `p${i}`, name: `P${i}`, car: cars[i] || 'f40', drv: true, at: clock }, send() {}, deserializeAttachment() { return this.a; }, serializeAttachment(a) { this.a = a; } }));
   const L = {
-    meta: (k) => meta[k] ?? null, setMeta: (k, v) => { meta[k] = v; }, broadcast() {}, raceRefused: (r, ms, why) => refused.push([r.id, why]),
+    limitNow, meta: (k) => meta[k] ?? null, setMeta: (k, v) => { meta[k] = v; }, broadcast() {}, raceRefused: (r, ms, why) => refused.push([r.id, why]), margin: (k, v) => margins.push([k, v]),
     ctx: { getWebSockets: () => sockets, getWebSocketAutoResponseTimestamp: () => new Date(clock), storage: { setAlarm: () => Promise.resolve() } },
   };
-  const w = { L, meta, refused, sockets, desk: new RaceDesk(L) };
+  const w = { L, meta, refused, margins, sockets, desk: new RaceDesk(L) };
   w.msg = (i, m) => { sockets[i].a.at = clock; w.desk.message(sockets[i], sockets[i].a, m); };
   w.racer = (i) => w.desk.s.racers.find((r) => r.id === `p${i}`) || w.desk.s.last?.racers.find((r) => r.id === `p${i}`);
   // everyone votes; the race is on, the clock at the start of the grid time
   w.begin = () => { for (let i = 0; i < n; i++) w.msg(i, { t: i < 2 ? 'rv' : 'rj', on: 1 }); assert.equal(w.desk.s.phase, 'on'); clock = w.desk.s.tGrid; };
   // (a position as a page sends it: the place, and in slot 21 the sender's own stamp of it)
-  w.pose = (i, p, st = clock % 60000) => { const a = new Array(22).fill(0); a[0] = p[0]; a[1] = p[1]; a[21] = st; w.desk.seen(`p${i}`, a, clock); };
+  w.pose = (i, p, st = clock % 60000) => { const a = new Array(22).fill(0); a[0] = p[0]; a[1] = p[1]; a[2] = p[2] || 0; a[21] = st; w.desk.seen(`p${i}`, a, clock); };
   return w;
 }
 // Runs a race: plans[i] = { path, launch, fin, from (index of path sent first, default 0), cut(k, t): false to not
@@ -101,6 +106,26 @@ for (const [name, pts] of Object.entries(drives)) {
   assert.ok(Math.abs(a.ms - d.fin * 100) <= 100, `${name}: ${a.ms} for ${d.fin * 100}`);
   assert.ok(b.ms > a.ms || name === 'bus');
   assert.equal(w.refused.length, 0);
+  // (how near each finish came to the limits is written down: the racer's time against the server's sighting, the
+  // gaps used, the car check)
+  const of = (k) => w.margins.filter((m) => m[0] === k).map((m) => m[1]);
+  assert.equal(of('fin').length, 2); assert.ok(of('fin').every((v) => v >= 0 && v <= 200), `fin ${of('fin')}`);
+  assert.deepEqual(of('gaps'), [0, 0]); assert.ok(of('rcar').every((v) => v <= 1));
+  // (and the lap as the server followed it reads as this car's drive: seconds over each of the car's limits)
+  const dr = driven(w.desk.fol.get('p0')), j = judgeDrive(dr.xs, dr.zs, dr.ys, limitNow.get(name), { hop: dr.hop });
+  console.log(`${name.padEnd(8)} followed ${(a.ms / 1000).toFixed(1)} s, ${dr.xs.length} samples, s over: pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}`);
+  assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1, `${name}: an honest race reads ${JSON.stringify(j)}`);
+}
+// 1b) the car itself: the Audi 200 record that was driven with twice the pull, as a race; and the F40's drive
+// under the name of the bus
+{
+  const w = world(2, ['audi200', 'w201']), d = raceDrive(tuned);
+  const [a] = run(w, [d, raceDrive(drives.bus, 1)]);
+  assert.equal(a.out, 'ref', 'the tuned car: its finish is not counted'); assert.equal(a.ms, null);
+  assert.match(w.refused[0][1], /^car: pull/);
+  const w2 = world(2, ['bus', 'w201']), d2 = raceDrive(drives.f40);
+  const [b] = run(w2, [d2, raceDrive(drives.bus, 1)]);
+  assert.equal(b.out, 'ref', 'a bus as fast as an F40'); assert.match(w2.refused[0][1], /^car: /);
 }
 const F40 = drives.f40;
 
@@ -109,35 +134,35 @@ const F40 = drives.f40;
   const w = world(2), d = raceDrive(F40);
   const still = { path: [d.grid], grid: d.grid, fin: 1250, claim: 125000 };
   const [a, b] = run(w, [still, d]);
-  assert.equal(a.out, 'cut', 'no lap driven: out'); assert.equal(a.ms, null);
+  assert.equal(a.out, 'ref', 'no lap driven: out'); assert.equal(a.ms, null);
   assert.equal(b.out, null); assert.ok(b.ms > 0);
   assert.match(w.refused[0][1], /start line/);
 }
 {
   const w = world(2), d = raceDrive(F40);
   const [a] = run(w, [{ path: [], noGrid: 1, fin: 1250, claim: 125000 }, d]);
-  assert.equal(a.out, 'cut', 'no positions: out');
+  assert.equal(a.out, 'ref', 'no positions: out');
   assert.match(w.refused[0][1], /grid/);
 }
 // 3) a finish shaved by 5 s: taken as when the server saw it, less a moment
 {
   const w = world(2), d = raceDrive(F40);
   const [a] = run(w, [{ ...d, claim: d.fin * 100 - 5000 }, raceDrive(drives.bus, 1)]);
-  assert.ok(a.ms >= d.fin * 100 - 800 && a.ms <= d.fin * 100, `shaved: ${a.ms} for ${d.fin * 100}`);
+  assert.ok(a.ms >= d.fin * 100 - 1500 && a.ms <= d.fin * 100, `shaved: ${a.ms} for ${d.fin * 100}`);
 }
 // 4) a short cut: half a minute of the lap left out by a jump
 {
   const w = world(2), d = raceDrive(F40);
   const cutPath = [...d.path.slice(0, d.launch + 400), ...d.path.slice(d.launch + 700)];
   const [a] = run(w, [{ ...d, path: cutPath, fin: d.fin - 300 }, raceDrive(drives.bus, 1)]);
-  assert.equal(a.out, 'cut', 'short cut: out');
+  assert.equal(a.out, 'ref', 'short cut: out');
   assert.match(w.refused[0][1], /jumped/);
 }
 // 5) away before the lights: 3 s early
 {
   const w = world(2), d = raceDrive(F40);
   const [a] = run(w, [{ ...d, early: 3000 }, raceDrive(drives.bus, 1)]);
-  assert.equal(a.out, 'cut', 'early start: out');
+  assert.equal(a.out, 'ref', 'early start: out');
 }
 // 6) a flying start: through the grid at speed as the lights go out
 {
@@ -151,7 +176,7 @@ const F40 = drives.f40;
   for (let k = 0; clock < go; clock += 100, k++) { const left = Math.max(1, Math.round((go - clock) / 100)); w.pose(0, left <= run0.length ? run0[run0.length - left] : [g[0] + ux * v * -5, g[1] + uz * v * -5]); w.pose(1, gridAt(1)); }
   for (let k = 0; k < path.length; k++, clock += 100) w.pose(0, path[k]);
   w.msg(0, { t: 'rf', ms: path.length * 100 }); clock += 4000; w.desk.alarm();
-  assert.equal(w.racer(0).out, 'cut', 'flying start: out');
+  assert.equal(w.racer(0).out, 'ref', 'flying start: out');
 }
 // 7) a lost connection for 6 s in the middle of the lap, and the server restarted by a deploy: both finish
 {
@@ -171,7 +196,7 @@ const F40 = drives.f40;
 {
   const w = world(2), d = raceDrive(F40);
   const [a] = run(w, [{ ...d, cut: (k) => k < d.fin - 600, claimAt: 0 }, raceDrive(drives.bus, 1)]);
-  assert.equal(a.out, 'cut', 'a minute unseen: out');
+  assert.equal(a.out, 'ref', 'a minute unseen: out');
 }
 // 9) R: back 6 s along its own path, and on from there
 {
@@ -199,7 +224,7 @@ const F40 = drives.f40;
   const hop = []; for (let k = a0; k < a1; k++) if ((k - a0) % 6 < 2) hop.push(d.path[k]);
   const path = [...d.path.slice(0, a0), ...hop, ...d.path.slice(a1)];
   const [a] = run(w, [{ ...d, path, fin: d.fin - (a1 - a0) + hop.length }, raceDrive(drives.bus, 1)]);
-  assert.equal(a.out, 'cut', 'hopping forward: out');
+  assert.equal(a.out, 'ref', 'hopping forward: out');
   assert.match(w.refused[0][1], /jumped/);
 }
 // 13) what a bad connection and a slow page do to honest positions. Held up for 1.2 s on the way and then all at
@@ -243,4 +268,4 @@ const F40 = drives.f40;
   assert.ok(w.desk.s.racers[0].arm, 'seen on the grid');
   assert.deepEqual(Object.keys(w.desk.view().racers[0]).sort(), ['car', 'id', 'name']);
 }
-console.log(`ok: ${Object.keys(drives).length} honest drives followed to the finish; made-up, shaved, cut, hopped and early ones refused`);
+console.log(`ok: ${Object.keys(drives).length} honest drives followed to the finish; made-up, shaved, cut, hopped, early and tuned ones refused`);

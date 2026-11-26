@@ -324,7 +324,7 @@ export function createAudio() {
     if (active && !car.inWater && kerb > 0.08 && kerb > lastKerb + 0.06) knock(kerb);
     lastKerb = kerb;
     const v = Math.hypot(car.vx, car.vy);
-    const dead = !active || car.inWater;
+    const dead = !active || car.inWater || !!car.crash?.onRoof;      // (on its roof after a crash, crash.js: the engine has stopped)
     const flying = car.airborne && car.airTime > 0.1;
     if (car.spec.airBrakes) {
       if (car.brake > 0 && v > 2) airArmed = true;

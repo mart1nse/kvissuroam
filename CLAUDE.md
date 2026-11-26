@@ -105,5 +105,11 @@ For the nightly run (and anyone reading its result):
   read over on eight figures beside other work and inside on all of them alone). The check watches the rest of
   the machine and prints THE MACHINE WAS BUSY when other work took the processor meanwhile; such a run is no
   reason to blame a commit or to start a hunt: run it again alone with `--force`.
+- The lap boards get a look the same night (26 Nov: two records driven in a car whose figures had been changed in
+  the browser stood until a player wrote in). After the check, run `node tools/board-audit.mjs` (a few seconds; it
+  only reads the live site): every record's drive through the car check again, a Raadi record through the stage's
+  rules, the last three days' split times against the rest of that car's laps, what the server refused in the
+  last 24 hours, and how much of the server's leeways (the lap clock, the race finish) ordinary play used. Put its `BOARDS:` line in the summary, and each line under it when there are any. It decides
+  nothing by itself: a lap it points at is for Martin to look at (`hold = 2` takes a lap off the board).
 - Do not change `tools/perf-budget.cjs` or `tools/perf-budget.json` to make a figure pass. If the check
   itself seems to measure wrongly, say so and leave the decision to Martin.

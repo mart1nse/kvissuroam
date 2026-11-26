@@ -59,7 +59,7 @@ const MAPS = {
   // short hitches while driving and what each had going on, and the seconds driven per crowd (src/stats.js hitch())
   hit: [(k) => /^(desktop|phone|tablet|other):(why:(build|draw|online|game|card|page:(net|car))|new:(shaders|pictures|car|none)|len:(<50|50-100|100-250|250\+)|on:(0|1-9|10-29|30-59|60\+)|t:(<30s|30s-2m|2-10m|10m\+)|pace:(0|1-9|10-29|30-59|60\+)|trim:(0|1|2|3|off))$/.test(k), 400],
   hitT: [(k) => /^(desktop|phone|tablet|other):(0|1-9|10-29|30-59|60\+)$/.test(k), SEC],
-  misc: [LIST('drives', 'water', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
+  misc: [LIST('drives', 'water', 'roof', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };
 

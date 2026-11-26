@@ -4,7 +4,7 @@
 //     not flood it, and a full stage answers 410;
 //  2) with `drive` (needs the dev server, npx vite --port 5198, and Playwright): a run driven along the stage
 //     in the game is written down every 0.75 m, packed and posted once, with the metres past the finish; a run
-//     cancelled after 300 m is posted as not finished, one of 60 m is not posted.
+//     cancelled after 300 m is posted as not finished, one of 40 m is not posted.
 //   node tools/linelog-test.mjs [drive] [url]
 import assert from 'node:assert/strict';
 import { register, createRequire } from 'node:module';
@@ -133,7 +133,7 @@ if (process.argv[2] === 'drive') {
   assert.ok(Math.hypot(got[0][0] - P[S0][0], got[0][1] - P[S0][1]) < 3, 'starts at the line');
   assert.ok(p.z.length < 60000, 'small');
 
-  // 2) cancelled after 300 m: posted as not finished; 3) after 60 m: not posted
+  // 2) cancelled after 300 m: posted as not finished; 3) after 40 m: not posted
   posts.length = 0;
   const part = (m) => { const a = along(S0, F), out = []; for (const q of a) { out.push(q); if (len(out) >= m) break; } return out; };
   r = await drive(part(300));
@@ -144,10 +144,10 @@ if (process.argv[2] === 'drive') {
   assert.equal(p.done, 0); assert.ok(p.n > 300 && p.n < 700, `${p.n} samples for 300 m`);
   posts.length = 0;
   await page.waitForFunction(() => { const s = __game.stage(); s.countLeft = 0; return s.phase === 'run'; }, null, { timeout: 180000, polling: 200 });
-  r = await drive(part(60));
+  r = await drive(part(40));
   await page.evaluate(() => { const s = __game.stage(); s.update = window.__stUpdate; s.goStart(); });
   await page.waitForTimeout(1500);
-  assert.equal(posts.length, 0, 'a 60 m run is not posted');
+  assert.equal(posts.length, 0, 'a 40 m run is not posted');
   await browser.close();
   console.log('drive: ok');
 }

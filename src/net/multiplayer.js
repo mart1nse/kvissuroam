@@ -438,6 +438,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // so a freed place is not fought over by everyone waiting at the same moment).
   let full = false;
   let released = false;
+  // the server is over 90 % full (it says so with the welcome and whenever that changes, see room() in
+  // worker/index.js): only then is a car left standing sent to the garage (src/idlepark.js)
+  let tight = false;
   let kickNote = false;
   let qPos = 0;                  // our place in the queue while the server is full (1: next in)
   const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
@@ -616,7 +619,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         qPos = Number.isInteger(m.q) && m.q > 0 ? m.q : 0;
         if (kickNote) kicked();
         else if (!full) toast(`SERVER FULL (${Number(m.max) || 100}) · ${qPos ? `${ordinal(qPos)} IN QUEUE` : 'DRIVING OFFLINE TILL A PLACE FREES'}`, 5000);
-        full = true; online = false;
+        full = true; online = false; tight = true;
         onPeople?.('count');
         break;
       case 'welcome':
@@ -625,6 +628,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         kickNote = false;
         full = false;
         myId = m.id;
+        tight = m.tight === 1;
         myWn = Number.isInteger(m.wn) ? m.wn : 0;
         if (typeof m.id === 'string') mine.add(m.id);
         // the lap ticket: proof of when this browser came online, sent along with every lap (see
@@ -633,6 +637,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         for (const p of Array.isArray(m.players) ? m.players : []) add(p);
         onPeople?.('count');
         if (m.board) setBoard(m.board);
+        break;
+      case 'room':
+        tight = m.tight === 1;
         break;
       case 'join':
         if (!add(m)) break;
@@ -1313,6 +1320,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get online() { return online; },
     // the server was full: driving offline until a place frees (see schedule)
     get full() { return full; },
+    // the server is over 90 % full: a car left standing is sent to the garage (src/idlepark.js)
+    get tight() { return tight; },
     // our place in the queue while full (0: not known)
     get queuePos() { return qPos; },
     stealth: STEALTH,

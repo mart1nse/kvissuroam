@@ -28,6 +28,7 @@ import { cleanPlate } from '../src/net/plates.js';
 import { carLimitsSteps, judgeDrive, OVER_MAX } from '../src/race/plausible.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
 import { stageCheck } from './stagecheck.js';
+import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -150,6 +151,9 @@ const STAMP = 21;                                     // a position's slot for w
 // After MAP_IDLE_MS of that the page's connection is closed as for an idle garage (4002) and it is kept out for
 // MAP_OUT_MS, twice as long each time up to MAP_OUT_MAX. Back in, it has MAP_PROBE_MS to touch a pedal or the
 // wheel: then it is as anyone again, otherwise out again. (MAP_IDLE_S and MAP_OUT_S on the Worker change the first two.)
+// (26 Nov, Martin: with room on the server a car may stand on the map for as long as it likes, so more players are
+// seen online. Such a page's car is judged only while the server is "tight", over ROOM_AT of its places taken, see
+// room(); a bus always, tight or not.)
 const MAP_IDLE_MS = 180000, MAP_PROBE_MS = 20000, MAP_OUT_MS = 60000, MAP_OUT_MAX = 15 * 60000;
 const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
 const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
@@ -579,10 +583,13 @@ export class Lobby extends DurableObject {
   idleCars(now) {
     const idleMs = (Number(this.env?.MAP_IDLE_S) || MAP_IDLE_MS / 1000) * 1000, outMs = (Number(this.env?.MAP_OUT_S) || MAP_OUT_MS / 1000) * 1000;
     for (const [key, k] of this.parked) if (now > k.until + 3600000) this.parked.delete(key);
+    // (also every 5 s while anyone drives: is the server tight? A socket gone silent changes that with no event)
+    const tight = this.room();
     for (const [id, e] of this.poses) {
       const a = e.ws.deserializeAttachment();
       if (!a?.id || a.x || a.i || a.ghost) continue;
       if (this.race.racing(id)) { e.t0 = now; continue; }          // (from the count to the flag: as if just arrived)
+      if (!tight && !alwaysJudged(a.car)) continue;                // (room on the server: it may stand)
       const key = a.pw ? `w|${a.pw}` : `i|${a.ip}`;
       let k = this.parked.get(key);
       if (k?.back && e.act > k.back) { this.parked.delete(key); k = null; }
@@ -776,6 +783,28 @@ export class Lobby extends DurableObject {
     // turned away; one released for each page that comes in, none while nobody new arrives)
     if (n >= Math.max(1, Math.ceil(max * 0.9)) && idle) { this.release(idle.ws, idle.a, 4002, 'idle'); n--; }
     return n;
+  }
+
+  // Is the server tight: more than ROOM_AT of its places taken (over 90 of 100, by MAX_ONLINE)? With room, a car
+  // standing on the map with nobody at its controls is left there (Martin 26 Nov: more players seen online, no harm
+  // in it); tight, the idle rule is on for everyone (src/idlepark.js on the page, idleCars here for the old pages).
+  // Every page hears it with its welcome and whenever it changes ({ t: 'room', tight }). Counted as seats counts
+  // (no ghosts, no closed sockets, none gone silent), without letting anyone go. `this.tight` is forgotten when the
+  // object sleeps: the first look after that tells everyone once more.
+  // except: a socket that is closing
+  room(except) {
+    const max = Math.max(1, Math.min(MAX_SOCKETS, Number(this.env?.MAX_ONLINE) || MAX_SOCKETS)), now = Date.now();
+    let n = 0;
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      const a = ws.deserializeAttachment();
+      if (a?.ghost || a?.x) continue;
+      const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0;
+      if (Math.max(ping, a?.at || 0) > now - 80000) n++;
+    }
+    const tight = n > max * ROOM_AT;
+    if (tight !== this.tight) { this.tight = tight; this.broadcast({ t: 'room', tight: tight ? 1 : 0 }, except); }
+    return tight;
   }
 
   broadcast(msg, except) {
@@ -1113,6 +1142,7 @@ export class Lobby extends DurableObject {
       if (n >= max || (!this.ownSeat && (qi >= 0 ? qi >= free : q.list.length + q.added >= free))) {
         this.refused(wk, now);
         this.loadTick(now);
+        this.room();                      // (seats may have dropped silent sockets)
         // full: a socket of its own (not one of the lobby's) that says so and closes, since a browser cannot
         // read why an upgrade was refused; the game then drives offline and asks again now and then
         const pair = new WebSocketPair();
@@ -1129,6 +1159,7 @@ export class Lobby extends DurableObject {
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
       pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}), ...(self ? { i: 1 } : {}) });
+      this.room();                        // (one more place taken: tight now?)
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -1385,7 +1416,8 @@ export class Lobby extends DurableObject {
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
       const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
-      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, board: this.board() }));
+      // (tight: the server over 90 % full, so a car left standing goes to the garage, see room())
+      ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, ...(this.room() ? { tight: 1 } : {}), board: this.board() }));
       if (!me?.id && ghost) this.ghostHello(id);
       if (!me?.id && !ghost) { this.broadcast({ t: 'join', id, name, car: a.car, ...(pl ? { pl } : {}), ...(w ? { w } : {}), ...(kn ? { kn, kf: a.kf } : {}) }, ws); this.race.back(a); }
       // (a spectator back on: the count of whom they watch)
@@ -1460,6 +1492,7 @@ export class Lobby extends DurableObject {
     try { ws.close(); } catch { /* already closed */ }
     this.dropPose(ws, me?.id);
     if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); if (me.on) this.watchTold([me.on], ws); }
+    this.room(ws);                        // (a place freed: room again?)
   }
 
   async webSocketError(ws) {

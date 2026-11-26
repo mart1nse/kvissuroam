@@ -1347,6 +1347,16 @@ body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { 
 #board .boards table { min-width: 0; }
 #board .bcol h3 { margin: 0 0 4px; font-size: clamp(12px, 1.5vw, 16px); letter-spacing: .16em; color: var(--pink); display: flex; align-items: center; gap: .5em; }
 #board .bcol h3 small { color: #fff; opacity: .7; font-size: .7em; letter-spacing: .12em; }
+/* the circuit's record over all cars at the heading's far end: time, driver, car (wraps under it when narrow) */
+#board .bcol h3 { flex-wrap: wrap; row-gap: 2px; }
+#board .rec { display: inline-flex; align-items: baseline; gap: .5em; white-space: nowrap; letter-spacing: .08em; }
+#board .bcol h3 .rec { margin-left: auto; font-size: .8em; }
+#board .rec u { text-decoration: none; font-size: .68em; letter-spacing: .2em; color: #fff; opacity: .6; }
+#board .rec b { color: var(--sun); font-size: 1.12em; text-shadow: 0 0 10px rgba(255, 200, 60, .45); }
+#board .rec i { color: #fff; font-style: normal; font-weight: 700; max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#board .rec em { color: var(--cyan); font-style: italic; font-weight: 800; opacity: .9; }
+#board .rec i + em::before { content: '·'; color: #fff; opacity: .45; font-style: normal; margin-right: .5em; }
+#board .today.lr { margin-top: 2px; }
 #board .boards th, #board .boards td { padding: 4px 8px; }
 svg.trk { width: 1.25em; height: 1.25em; vertical-align: -.25em; margin-right: 5px; overflow: visible; }
 svg.trk path { fill: none; stroke: var(--pink); stroke-width: 90; stroke-linejoin: round; stroke-linecap: round; }

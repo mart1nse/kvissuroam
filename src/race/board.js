@@ -215,6 +215,9 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   const watchable = (track, r) => !!(onWatch && r && mp.board?.rp?.[track]?.[r.car] === r.ms);
   const time = (track, r) => (watchable(track, r) ? `<b class="rp" data-rp="${track}|${escapeHtml(r.car)}">${fmtTime(r.ms / 1000)}</b>` : `<b>${fmtTime(r.ms / 1000)}</b>`);
   const srv = (t) => (t === 'raadi' ? 'raadi' : 'toomemagi');
+  const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
+  // a circuit's record over all cars: the time (its replay where there is one), the driver and the car
+  const rec = (r, track, ic, label = 'RECORD') => (r ? `<span class="rec"><u>${label}</u>${ic(r)}${time(track, r)}<i>${escapeHtml(r.name)}</i><em>${escapeHtml(cars[r.car]?.short || r.car)}</em></span>` : '');
 
   function render() {
     if (panel.classList.contains('hidden')) return;
@@ -245,6 +248,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
+      ${b?.allTime?.length ? `<p class="today lr">${rec(least(b.allTime), 'toomemagi', ic, 'LAP RECORD')}</p>` : ''}
       ${todayBest ? `<p class="today">FASTEST TODAY ${ic(todayBest)}${time('toomemagi', todayBest)} ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
       <div class="tablelaps"><table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}</div>
@@ -270,7 +274,10 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       return carRows(id, 'raadi', e, t, own(kept, id, ic, 'raadi'), cell);
     }).join('');
     const [T, R] = TRACKS;
-    const head = (t, sub) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small></h3>`;
+    // the circuit's record over all cars beside its name, with who drove it and in what (Martin, 26 Nov 2026; the
+    // server's lists only, so offline there is none)
+    const recT = least(b?.allTime || []), recR = R0 ? least(net(R0.allTime)) : null;
+    const head = (t, sub, r, track) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small>${rec(r, track, ic)}</h3>`;
     const table = (rows) => `<table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>`;
     const tag = (l) => TRACK_ICON[l.track || 'toome'];
     const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
@@ -279,7 +286,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       .map((l) => `<li>${tag(l)}${ic(l)}${time(srv(l.track), l)} <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TARTU · LAP TIMES</h2>
       <p class="small">${b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi${R0 ? ` and ${R0.laps} run${R0.laps === 1 ? '' : 's'} of the Majoraadi stage` : ''} driven` : 'lap times are offline'}</p>
-      <div class="boards"><div class="bcol">${head(T, 'LAP')}${table(rowsT)}</div><div class="bcol">${head(R, 'STAGE')}${table(rowsR)}</div></div>
+      <div class="boards"><div class="bcol">${head(T, 'LAP', recT, 'toomemagi')}${table(rowsT)}</div><div class="bcol">${head(R, 'STAGE', recR, 'raadi')}${table(rowsR)}</div></div>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
@@ -292,7 +299,6 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     loadTop();
   }
   btn.addEventListener('click', show);
-  const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
   const record = (id) => {
     if (id === 'raadi') {
       // (the server's, or this browser's own best while a run of its is still on the way there)

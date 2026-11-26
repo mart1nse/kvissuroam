@@ -172,6 +172,23 @@ export const ENGINE_SOUNDS = {
     edge: 0.5, rasp: 0.42,
     turbo: true, turboMuffle: 210, hiss: 0.025, whistle: 0.8, whistleF: 1.0, pops: 0.02,
   },
+  // Ford Duratec R (Cosworth) in the Focus WRC 03: 2.0 litre DOHC 16-valve straight four, firing order 1-3-4-2, one
+  // Garrett TR30R behind the 34 mm restrictor, a short open rally exhaust with hardly a silencer. Even beats, so no
+  // burble: a hard, buzzy, rasping drone that the turbine only partly softens, the straight-cut gears whining under it,
+  // and anti-lag banging and spitting in the pipe on every lift.
+  focus: {
+    revUp: 42000, blipLag: 0.02,
+    seed: 3, order: [1, 3, 4, 2], banks: [0, 0, 0, 0], stagger: 2,
+    pipes: [{ len: 0.62, fb: -0.56, damp: 0.6 }],
+    res: [[120, 1.2, 0.55], [260, 1.8, 0.48], [620, 2.2, 0.36], [1400, 2.6, 0.18]], dry: 0.6,
+    lp0: 650, lpRpm: 300, lpLoad: 2300, hp: 34,
+    base: 0.45, overrun: 0.85, pulseDeg: 24, noise: 0.18, rough: 0.08, bias: 0.05,
+    intake: 0.45, intakeF: 900, intakeQ: 1.1, tick: 0.05, tickF: 3400,
+    jitter: 1.8, lope: 10, drive: 2.5, gain: 0.85, idleVol: 0.34,
+    edge: 0.6, rasp: 0.55,
+    turbo: true, turboMuffle: 300, hiss: 0.03, whistle: 1.0, whistleF: 1.05,
+    pops: 0.12, crackle: 0.3, smoothTop: true,
+  },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy
   // howl, with a sharp induction bark from the airbox.

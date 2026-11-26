@@ -566,7 +566,7 @@ export function createTerrain(world, renderer, opts) {
           mesh.userData.kerb = km;
         }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
-        const ch = { seg, B: 1, url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, half: tile / 2, gone: false };
+        const ch = { seg, B: 1, url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
         yield;
@@ -672,10 +672,10 @@ export function createTerrain(world, renderer, opts) {
     for (const ch of chunks) {
       ch.d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
       if (hold && ch.holdFor !== hold) {
-        // (from the nearest edge of the tile: as far as the camera loads sharp ground, unless the hold says less)
+        // (as far as the camera loads sharp ground, unless the hold says less: the tiles a drive along the points loads)
         const r = hold.r ?? rHi;
         ch.holdFor = hold;
-        ch.held = hold.pts.some(([x, z]) => Math.hypot(Math.max(0, Math.abs(ch.cx - x) - ch.half), Math.max(0, Math.abs(ch.cz - z) - ch.half)) < r);
+        ch.held = hold.pts.some(([x, z]) => Math.hypot(ch.cx - x, ch.cz - z) < r);
       }
       const held = !!hold && ch.held;
       if (held && ch.state !== 'hi' && ch.state !== 'failed') heldWait++;

@@ -469,7 +469,7 @@ const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
 // GETTING READY at its start and kept, so a run brings no new pictures onto the graphics card. Martin 26 Nov: "load
 // all the things the players will see after the first turn anyway, then no surprises". Phones and the extra low
 // setup keep to their memory and load it as they go). The map squares too: those that any spot of the stage would
-// load are loaded from the stage's middle, so no far houses and trees build themselves during a run either)
+// load are loaded and kept too, so no far houses and trees build themselves during a run either)
 let stageHold = null;
 function groundHold() {
   if (isTouch || xlow || !stage || !atRaadi()) return null;
@@ -477,9 +477,7 @@ function groundHold() {
     const { pts, start, finish } = stage.data, at = [];
     for (let i = start; i < finish; i += 20) at.push(pts[i]);
     at.push(pts[finish]);
-    const xs = at.map((p) => p[0]), zs = at.map((p) => p[1]);
-    const x = (Math.min(...xs) + Math.max(...xs)) / 2, z = (Math.min(...zs) + Math.max(...zs)) / 2;
-    stageHold = { pts: at, x, z, pad: Math.ceil(Math.max(...at.map(([px, pz]) => Math.hypot(px - x, pz - z)))) };
+    stageHold = { pts: at };
   }
   return stageHold;
 }
@@ -2514,8 +2512,7 @@ function frame(ts) {
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     // (spectating: around the watched car, and a little around our own, which is where we come back to)
     else if (watch?.active) world.update(WF.x, WF.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
-    else if (!flyIn && (sh = groundHold())) world.update(sh.x, sh.z, quality.loadRadius + sh.pad, quality.loadRadius + 500 + sh.pad);
-    else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
+    else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 }, !flyIn && (sh = groundHold()) ? sh.pts : null);
     terrain.update(watch?.scrubbing ? WF : camera.position, watch?.active ? null : sh || groundHold());      // (a replay's slider being slid: see parked above)
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
   }

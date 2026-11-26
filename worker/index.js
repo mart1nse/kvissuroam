@@ -952,7 +952,7 @@ export class Lobby extends DurableObject {
     try { b = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
     const track = typeof b?.track === 'string' && Object.hasOwn(STAGES, b.track) ? b.track : '', car = cleanCar(b?.car);
     const n = Math.round(Number(b?.n)), int = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v)) || 0));
-    if (!track || !car || b?.v !== 1 || !(n >= 100 && n <= 8000) || typeof b?.z !== 'string' || b.z.length > LINE_CHARS || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
+    if (!track || !car || b?.v !== 1 || !(n >= 60 && n <= 8000) || typeof b?.z !== 'string' || b.z.length > LINE_CHARS || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
     if (this.linesOf(track) >= LINES_MAX) return json({ error: 'enough' }, 410);
     let bytes;
     try { bytes = Uint8Array.from(atob(b.z), (c) => c.charCodeAt(0)); } catch { return json({ error: 'invalid' }, 400); }

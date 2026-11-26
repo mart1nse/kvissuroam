@@ -994,7 +994,10 @@ async function boot() {
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},
     // (from the big map's list, a second click on a name: the map closes first, then the camera goes to them)
-    onWatch: isTouch ? null : (id) => { if (bigmap?.isOpen) closeMap(); if (id) watch?.start(id); else watch?.stop(); }, watching: () => watch?.id || null });
+    onWatch: isTouch ? null : (id) => { if (bigmap?.isOpen) closeMap(); if (id) watch?.start(id); else watch?.stop(); }, watching: () => watch?.id || null,
+    // (desktop: those on a timed Majoraadi run, listed under the MAJORAADI pill; back in the list while watching,
+    // when the pills are away)
+    staged: () => (stage && !watch?.active ? (mp.hotNear(2660, 470, 600, stageIds), stageIds) : null) });
   if (!isTouch) watch = createSpectate({
     mp, world, toast: (t, ms) => hud.toast(t, ms), racing: (id) => !!raceMode?.racing(id),
     busy: () => mode !== 'drive' || !!overlayOpen(),
@@ -1522,6 +1525,7 @@ function homeHere() {
 // (Martin 26 Nov: "After majoraadi text, show in brackets how many are on an active timed stage"); nothing when
 // nobody is. The others by what their cars send, as `staged` for the race vote)
 let pillAt = null, pillN = -1;
+const stageIds = new Set();            // (who of the others is on a run there, for the online list: src/net/people.js)
 function trackPills() {
   const at = atRaadi(), n = (mp?.hotNear(2660, 470, 600) || 0) + (stageBusy() ? 1 : 0);
   if (at === pillAt && n === pillN) return;

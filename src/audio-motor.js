@@ -1,7 +1,7 @@
-// The motors of the electric cars, heard. First the Roadster Rocket's (Martin 26 Nov: its whine "a bit more
-// mechanical, robust, but also a bit futu or sci fi"), then the other two, which are four-wheel drive with a motor
-// at each axle (Martin 26 Nov: "can the other 4wd EVs also get the dual engines turning up effect"). An electric
-// car that is not listed here keeps the one quiet sine in audio.js.
+// The motors of the Roadster Rocket, heard (Martin 26 Nov: its whine "a bit more mechanical, robust, but also a bit
+// futu or sci fi"). The other electric cars keep their one quiet sine in audio.js (plainWhine below). The Enyaq and
+// the bZ4X had two motor whines of their own for an afternoon (26 Nov, #771, #794, #798); Martin, having driven
+// them: "lets revert back to the original whine".
 //
 // Everything follows one signal, the turns a second of the motor shafts (the wheels through the reduction gears:
 // in the Rocket 117 a second at 100 km/h), and each tone is so many "to a turn" of it, as the sounds of a real
@@ -9,23 +9,17 @@
 // frame sets one number for the pitch of all of it and a handful of levels: the pull of the motors (the pedal)
 // and how hard they hold the car back with the pedal let go.
 //
-// The Rocket ("gear"): Martin picked it from four (the other three, a turbine, an inverter's song and a throbbing
+// Martin picked it from four (the other three, a turbine, an inverter's song and a throbbing
 // growl, are with the clips in the project's shared folder, rocket/whine): straight-cut reduction gears as in a
 // race car, two whines a fourth apart (the rear motors and the front one), rough with the shafts' turning, and
 // under them a hum of the motors that grows with the pull. Over 200 km/h its pitch all but stops rising (his
 // wish: "reaches like some max point but ever so slightly gets higher").
 //
-// The road cars ("pair"): the same two whines rising together, one for each axle's motor, but clean and quiet as
-// a family car's are, and each car its own: the Enyaq is led by its rear motor and the front one joins a third
-// higher when the pedal asks for it (as the real 80x's front motor does); the bZ4X's two are equals a fifth
-// apart, each a pair of tones a hair apart, so it shimmers. The intervals are chosen by ear's rules, not from the
-// real cars' gear teeth.
-//
 // All of it tuned by measurement and spectrograms (tools/motor-sound-demo.mjs), not by ear.
 
 const TAU = Math.PI * 2;
 // which cars have such motors, and which sound
-const MOTOR_CARS = { rocket: 'gear', enyaq: 'enyaq', bz4x: 'bz4x' };
+const MOTOR_CARS = { rocket: 'gear' };
 // the sound for this car: its name, or null for the plain whine of audio.js
 export const motorKind = (spec) => MOTOR_CARS[spec.id] || null;
 
@@ -128,42 +122,13 @@ function gear(k, sum) {
   };
 }
 
-// ---- a road car with a motor at each axle
-// o: rear, front: the two whines, so many to a turn of the shaft; timbre: the strengths of a whine's harmonics;
-// apart: Hz between the two tones each whine is made of (0: one tone); idle, pull, hold: each whine's level with the
-// pedal let go, how much the pedal adds and how much the motors holding the car back add, [rear, front]; hum: the
-// motors' own low note under load; full: the speed (m/s) by which the whines have their level; level: all of it
-function pair(o) {
-  return (k, sum) => {
-    const wave = k.wave(o.timbre);
-    const whine = (order) => {
-      const g = k.gain(0);
-      if (o.apart) { k.tone(order, wave, 0.3, g, -o.apart / 2); k.tone(order, wave, 0.3, g, o.apart / 2); } else k.tone(order, wave, 0.5, g);
-      g.connect(sum);
-      return g;
-    };
-    const rear = whine(o.rear), front = whine(o.front);
-    const hum = k.gain(0);
-    k.tone(o.hum, 'sine', 0.4, hum); k.tone(o.hum * 2, 'sine', 0.12, hum); hum.connect(sum);
-    return {
-      out: sum, level: o.level,
-      set(t, v, load, rg) {
-        const sp = ramp(v, 0, o.full);
-        to(rear.gain, sp * (o.idle[0] + o.pull[0] * load + o.hold[0] * rg), t);
-        to(front.gain, sp * (o.idle[1] + o.pull[1] * load + o.hold[1] * rg), t);
-        to(hum.gain, (0.2 + 0.8 * sp) * (load + 0.3 * rg), t, 0.05);
-      },
-    };
-  };
-}
+// the plain whine every electric car but the Rocket has, as audio.js plays it: its level (the gain of one sine)
+// at this wheel speed (m/s) and pedal
+export const plainWhine = (vw, throttle) => Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + throttle * 0.5);
+// and its pitch (Hz). It does not follow the wheels in proportion: 180 Hz standing still, 38 Hz more for each m/s
+export const plainWhineHz = (vw) => 180 + vw * 38;
 
-const BUILD = {
-  gear,
-  // Škoda Enyaq 80x: the rear motor does the work and is always heard; the front one joins when the pedal asks
-  enyaq: pair({ rear: 8, front: 10.05, timbre: [1, 0.3, 0.1], apart: 0, idle: [0.5, 0.1], pull: [0.5, 0.9], hold: [0.45, 0.1], hum: 4, full: 26, level: 0.072 }),
-  // Toyota bZ4X AWD: two equal motors, a fifth apart, and a shimmer in each
-  bz4x: pair({ rear: 10.5, front: 7, timbre: [1, 0.14, 0.05], apart: 1.6, idle: [0.42, 0.42], pull: [0.58, 0.58], hold: [0.3, 0.3], hum: 3.5, full: 26, level: 0.085 }),
-};
+const BUILD = { gear };
 
 // The motors of one car: `noise` is a running noise source, `out` where the sound goes. step() each frame with
 // the wheels' speed (m/s, spin and all), the pedal (0..1), how hard the motors hold the car back with the pedal

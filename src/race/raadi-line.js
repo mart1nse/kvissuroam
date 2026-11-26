@@ -12,7 +12,7 @@
 // from the last corner on and "the inital asphalty part" are to have it too). On the tarmac of the start the picture
 // gives the soft dark band where the cars brake and turn into the first corner, and over it lie the marks themselves
 // (`marks` in raadi-line.json): every stretch a wheel slid there in a logged run, a ribbon as wide as its tyre, as
-// long as that launch's wheelspin or that slide was. Under three thousand points, one more mesh, no picture.
+// long as that launch's wheelspin or that slide was (and on the gravel beside it and 20 m into the first corner). A few thousand points, one more mesh, no picture.
 //
 // One mesh multiplied over the ground, as the wheel tracks it replaces were: the ground keeps its own light, shade
 // and texture. A share s of a look turns the ground's colour by colour ^ s, so the shares of two layers add up to

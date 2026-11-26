@@ -7,8 +7,8 @@
 // clip is what the driver hears. --solo leaves fans and wind out.
 //
 // Run: NODE_PATH=$(npm root -g) node tools/motor-sound-demo.mjs <outdir> [kinds] [--solo] [--gain=<dB>]
-//   --car=<id> (default rocket; enyaq, bz4x). kinds: old (the plain sine of audio.js), the car's own sound (gear,
-//   enyaq, bz4x), none (fans and wind alone); default old and the car's own. Writes <outdir>/<kind>.wav and prints, for each part
+//   --car=<id> (default rocket; another car for its drive). kinds: old (the plain sine of audio.js), the car's own
+//   sound (gear), none (fans and wind alone); default old and the car's own. Writes <outdir>/<kind>.wav and prints, for each part
 //   of the drive, the level and where the sound's weight lies. --gain: make-up for listening (default 13 dB,
 //   the same for every clip, so they compare as they would in the game). --top: another drive, floored from a
 //   standstill to 320 km/h on the motors alone, the pedal let go, braked hard to a stop (the pitch over 200 km/h).
@@ -34,7 +34,7 @@ mkdirSync(out, { recursive: true });
 
 // ---- the drive
 const spec = CARS[ID];
-const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)];
+const kinds = pos[1] ? pos[1].split(',') : ['old', motorKind(spec)].filter(Boolean);
 const FAST = Math.min(200, (spec.limiter || 250) - 8);   // the fast part's speed: 200 km/h, or what the car can do
 const world = { meta: { riverLevel: -100 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
 if (spec.thrusters) refillTank(ID);
@@ -99,7 +99,7 @@ await page.goto(`http://127.0.0.1:${srv.address().port}/`);
 
 for (const kind of kinds) {
   await page.evaluate(async ({ kind, F, SR, FPS, T, SOLO, spec }) => {
-    const { createMotor } = await import('/src/audio-motor.js');
+    const { createMotor, plainWhine, plainWhineHz } = await import('/src/audio-motor.js');
     const ctx = new OfflineAudioContext(1, Math.ceil(T * SR), SR);
     const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);   // (audio.js: master 0.5; an electric car's bus goes to it dry)
     const nb = ctx.createBuffer(1, 2 * SR, SR), d = nb.getChannelData(0);
@@ -107,16 +107,18 @@ for (const kind of kinds) {
     const noise = ctx.createBufferSource(); noise.buffer = nb; noise.loop = true; noise.start(0);
     const n = F.length / 4;
     // the motors
-    if (kind === 'none') { /* fans and wind alone */ } else if (kind === 'old') {
+    // (none: fans and wind alone)
+    if (kind !== 'none' && kind !== 'old') {
+      const m = createMotor(ctx, master, noise, spec, kind);
+      for (let i = 0; i < n; i++) m.step(i / FPS, F[i * 4], F[i * 4 + 2], F[i * 4 + 3], false);
+    }
+    if (kind === 'old') {
       const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0; o.connect(g).connect(master); o.start(0);
       for (let i = 0; i < n; i++) {
         const t = i / FPS, vw = F[i * 4], thr = F[i * 4 + 2];
-        o.frequency.setTargetAtTime(180 + vw * 38, t, 0.05);
-        g.gain.setTargetAtTime(Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + thr * 0.5), t, 0.08);
+        o.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
+        g.gain.setTargetAtTime(plainWhine(vw, thr), t, 0.08);
       }
-    } else {
-      const m = createMotor(ctx, master, noise, spec, kind);
-      for (let i = 0; i < n; i++) m.step(i / FPS, F[i * 4], F[i * 4 + 2], F[i * 4 + 3], false);
     }
     if (!SOLO) {
       // the fans (audio.js makeFan, fanSound) ...

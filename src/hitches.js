@@ -31,7 +31,6 @@ export const WHY = { build: 'building', draw: 'drawing', online: 'other players'
 
 export function createHitches({ report = null } = {}) {
   const log = [];                  // [driving clock s, ms, why]
-  const lateAt = [];               // driving clock of each late picture
   const win = new Float32Array(120);
   let base = 16.7, clock = 0, frames = 0, wi = 0, run = false;
   const usual = { js: 0, build: 0, draw: 0, net: 0 };
@@ -44,7 +43,6 @@ export function createHitches({ report = null } = {}) {
       clock += ms / 1000;
       frames++;
       while (log.length && clock - log[0][0] > SPAN) log.shift();
-      while (lateAt.length && clock - lateAt[0] > SPAN) lateAt.shift();
       // the usual frame: the lower quarter of the last 120 (a frame rate that has settled lower is the usual one
       // within two seconds; one that hops between on time and late keeps the on-time one)
       win[wi++ % 120] = ms;
@@ -67,27 +65,20 @@ export function createHitches({ report = null } = {}) {
       try { report?.(hit); } catch { /* never in the way of the game */ }
       return hit;
     },
-    // the picture of a frame that was on time reached the screen a refresh or more later than the one before it
-    // (createLag in src/quality.js): uneven steps that the frame times do not show
-    pictureLate(s = {}) {
-      lateAt.push(clock);
-      try { report?.({ pace: true, others: s.others || 0 }); } catch { /* never in the way of the game */ }
-    },
-    // the last five minutes of driving: { secs, n, worst, by: [[why, n], ...], late (pictures held back), frames }
+    // the last five minutes of driving: { secs, n, worst, by: [[why, n], ...], frames }
     get recent() {
       const by = new Map();
       let worst = 0;
       for (const [, ms, why] of log) { by.set(why, (by.get(why) || 0) + 1); worst = Math.max(worst, ms); }
-      return { secs: Math.min(clock, SPAN), n: log.length, worst, by: [...by].sort((a, b) => b[1] - a[1]), late: lateAt.length, frames };
+      return { secs: Math.min(clock, SPAN), n: log.length, worst, by: [...by].sort((a, b) => b[1] - a[1]), frames };
     },
     // one line for the options window
     get line() {
       const r = this.recent;
       if (r.secs < 5) return '';
       const span = r.secs < 90 ? `${Math.round(r.secs)} s` : `${Math.round(r.secs / 60)} min`;
-      const held = r.late ? `; picture held back ${r.late} ${r.late === 1 ? 'time' : 'times'}` : '';
-      if (!r.n) return `no hitches in the last ${span} of driving${held}`;
-      return `${r.n} ${r.n === 1 ? 'hitch' : 'hitches'} in the last ${span} of driving, longest ${Math.round(r.worst)} ms (${r.by.map(([k, n]) => `${n} ${WHY[k] || k}`).join(', ')})${held}`;
+      if (!r.n) return `no hitches in the last ${span} of driving`;
+      return `${r.n} ${r.n === 1 ? 'hitch' : 'hitches'} in the last ${span} of driving, longest ${Math.round(r.worst)} ms (${r.by.map(([k, n]) => `${n} ${WHY[k] || k}`).join(', ')})`;
     },
   };
 }

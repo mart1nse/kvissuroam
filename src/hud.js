@@ -20,7 +20,7 @@ export function createHud(world) {
   const ctx = map.getContext('2d');
   let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
   let overlay = null;
-  const face = $('#dial .face'), needle = $('#dial .needle');
+  const face = $('#dial .face'), needle = $('#dial .needle'), tach = $('#tach');
   let dialMax = 8000, dialRed = 7000, needleShown = -999, needleV = 0, needleDrawn = -999, needleHot = false;
   let dialMin = 0, dialKw = false, needleChg = false, kwText = null, kwShown = null;
 
@@ -65,6 +65,9 @@ export function createHud(world) {
     svg += dialKw ? `<text class="kw" x="0" y="46">0 kW</text>` : `<text class="x1000" x="0" y="45">×1000 RPM</text>`;
     face.innerHTML = svg;
     kwText = dialKw ? face.querySelector('.kw') : null; kwShown = null;
+    // (an electric car's tach says kW and no "km/h" under the speed: Martin 26 Nov 2026, first for the Rocket,
+    // then "remove kmh for other electrics too"; the kW stands where the km/h was. src/style.css #tach.kw)
+    tach?.classList.toggle('kw', dialKw);
     needleShown = -999;
   }            // extra drawing in world coordinates (race track, other players)
 

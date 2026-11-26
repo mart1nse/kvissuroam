@@ -2,22 +2,24 @@
 // for everyone, and a bus is judged always (Martin 26 Nov; room() and idleCars in worker/index.js, src/idlepark.js
 // on the page). The server's half: it tells every page whether it is tight (with the welcome, and { t: 'room' }
 // when that changes), and judges the old pages' cars by it. The page's half is in tools/idle-park-test.mjs.
-// The real lobby under `wrangler dev` with a cap of 5 (tight: all 5 taken), 6 s of idling and 5 s kept out:
+// With room there is still a limit (Martin 26 Nov, tabs open for days): an old page's car standing LOOSE_S, and an
+// old page (no r=1) in the garage that long, give up their place; a new page goes offline by itself (idle-park-test).
+// The real lobby under `wrangler dev` with a cap of 5 (tight: all 5 taken), 6 s of idling, 5 s kept out, 30 s loose:
 //   node tools/idle-room-test.mjs            (starts wrangler dev on port 8790 itself; port=8790 to change)
-//   node tools/idle-room-test.mjs nostart    (a wrangler dev already running there with MAX_ONLINE 5, MAP_IDLE_S 6, MAP_OUT_S 5)
+//   node tools/idle-room-test.mjs nostart    (a wrangler dev already running there with MAX_ONLINE 5, MAP_IDLE_S 6, MAP_OUT_S 5, LOOSE_S 30)
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 
 const arg = (k, d) => { const a = process.argv.find((s) => s.startsWith(`${k}=`)); return a ? a.slice(k.length + 1) : d; };
-const PORT = +arg('port', 8790), CAP = 5, IDLE = 6000, OUT = 5000;
+const PORT = +arg('port', 8790), CAP = 5, IDLE = 6000, OUT = 5000, LOOSE = 30000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let seq = 0;
 // a page: old (no i=1) or new, on the map; sends its car's position five times a second while `drive` is set
 // ('idle': nobody at the controls, 'gas': a pedal down)
-function page({ fresh = false, name = `Bot${seq + 1}`, car = 'w201' } = {}) {
+function page({ fresh = false, rests = fresh, name = `Bot${seq + 1}`, car = 'w201', where = 'map' } = {}) {
   const w = `r${Date.now().toString(36)}${++seq}`.padEnd(8, '0');
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/api/ws?w=${w}${fresh ? '&i=1' : ''}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/api/ws?w=${w}${fresh ? '&i=1' : ''}${rests ? '&r=1' : ''}`);
     const me = { w, name, ws, msgs: [], closed: null, drive: null, x: 100 + seq * 20, t0: Date.now() };
     const tick = setInterval(() => {
       if (!me.drive || ws.readyState !== 1) return;
@@ -27,7 +29,7 @@ function page({ fresh = false, name = `Bot${seq + 1}`, car = 'w201' } = {}) {
       p[21] = Date.now() % 60000;
       ws.send(JSON.stringify({ t: 's', p }));
     }, 200);
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', b: 1, name, car, w: 'map' }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', b: 1, name, car, w: where }));
     ws.onmessage = (e) => {
       if (e.data === 'pong') return;
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -46,7 +48,7 @@ function page({ fresh = false, name = `Bot${seq + 1}`, car = 'w201' } = {}) {
 
 let dev = null;
 if (!process.argv.includes('nostart')) {
-  dev = spawn('npx', ['wrangler', 'dev', '--port', String(PORT), '--var', `MAX_ONLINE:${CAP}`, '--var', `MAP_IDLE_S:${IDLE / 1000}`, '--var', `MAP_OUT_S:${OUT / 1000}`, '--persist-to', `/tmp/idle-room-test-${process.pid}`],
+  dev = spawn('npx', ['wrangler', 'dev', '--port', String(PORT), '--var', `MAX_ONLINE:${CAP}`, '--var', `MAP_IDLE_S:${IDLE / 1000}`, '--var', `MAP_OUT_S:${OUT / 1000}`, '--var', `LOOSE_S:${LOOSE / 1000}`, '--persist-to', `/tmp/idle-room-test-${process.pid}`],
     { cwd: new URL('..', import.meta.url).pathname, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   let log = '';
   dev.stdout.on('data', (d) => { log += d; });
@@ -113,6 +115,30 @@ try {
   await sleep(Math.max(0, IDLE + 4000 - (Date.now() - fresh.t0)));
   for (const p of [eye, driver, fresh, fifth]) assert.ok(!p.closed, `${p.name} was put off the map: ${JSON.stringify(p.closed)}`);
   ok(`the drivers and a new page's idle car stayed (${secs(Date.now() - driver.t0)})`);
+
+  // 5. with room, still a limit: an old page's car standing LOOSE, and old pages in the garage that long, go; a page
+  // that goes offline by itself (r=1) is left to do so, and so is the new page's car
+  // (room for them: only the driver stays)
+  for (const p of [eye, fresh, fifth]) p.close();
+  await sleep(500);
+  const stand = await page({ name: 'OldStand' }); stand.drive = 'idle';
+  const garage = await page({ name: 'OldGarage', where: 'garage' });
+  const oldNew = await page({ fresh: true, rests: false, name: 'Pre773Garage', where: 'garage' });   // (#773's pages: i=1, no r=1)
+  assert.equal(stand.room(), 'room');
+  c = await stand.gone(LOOSE + 10000);
+  const rests = await page({ fresh: true, name: 'NewGarage', where: 'garage' });
+  assert.equal(c?.code, 4002, 'with room, an old page\'s car stood past the loose limit');
+  assert.ok(c.at - stand.t0 >= LOOSE - 500, `put off the map too soon with room: ${secs(c.at - stand.t0)}`);
+  ok(`with room, an old page's idle car is off the map after ${secs(c.at - stand.t0)}`);
+  // (looked at once a minute, with the load figures)
+  const g = await garage.gone(LOOSE + 75000), g2 = await oldNew.gone(10000);
+  assert.equal(g?.code, 4002, 'an old page in the garage past the loose limit kept its place');
+  assert.equal(g2?.code, 4002, 'a page of #773 in the garage past the loose limit kept its place');
+  assert.ok(g.at - garage.t0 >= LOOSE - 500, `released from the garage too soon: ${secs(g.at - garage.t0)}`);
+  ok(`with room, old pages in the garage give up their place after ${secs(g.at - garage.t0)} and ${secs(g2.at - oldNew.t0)}`);
+  await sleep(Math.max(0, LOOSE + 65000 - (Date.now() - rests.t0)));
+  assert.ok(!rests.closed && !driver.closed, 'a page that rests by itself, or a driver, was released');
+  ok(`a page that goes offline by itself (in the garage ${secs(Date.now() - rests.t0)}) and the driver keep theirs`);
   console.log('OK');
 } catch (e) { console.log('FAILED', e.message); process.exitCode = 1; }
 stop();

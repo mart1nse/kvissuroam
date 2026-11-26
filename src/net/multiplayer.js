@@ -392,7 +392,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     await ticketReady;
     // w: this page's own random id, so the server counts a page refused with SERVER FULL once however often it asks again
     // i: this page sends its own idle car to the garage (src/idlepark.js), so the server does not judge it
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}&i=1`;
+    // r: and goes offline by itself with nobody there (rest), so the server does not release it from the garage
+    if (resting) return;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}&i=1&r=1`;
     let sock;
     try { sock = new WebSocket(url); } catch { return schedule(); }
     ws = sock;
@@ -427,7 +429,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // (Martin 25 Nov: said so once back on the map and still kept out; the garage hides messages)
       if (e?.code === 4002) { full = true; kickNote = true; }
       onPeople?.('count');
-      if (released) clearTimeout(wsRetry); else schedule();
+      if (released || resting) clearTimeout(wsRetry); else schedule();
     };
     sock.onerror = () => {};
   }
@@ -442,6 +444,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // the server is over 90 % full (it says so with the welcome and whenever that changes, see room() in
   // worker/index.js): only then is a car left standing sent to the garage (src/idlepark.js)
   let tight = false;
+  // offline on purpose: nobody at this page for 20 minutes (src/idlepark.js REST_S; Martin 26 Nov, tabs left open
+  // for days hold a place and an old version of the game). Back online the moment somebody is there.
+  let resting = false;
   let kickNote = false;
   let qPos = 0;                  // our place in the queue while the server is full (1: next in)
   const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
@@ -1342,6 +1347,19 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get full() { return full; },
     // the server is over 90 % full: a car left standing is sent to the garage (src/idlepark.js)
     get tight() { return tight; },
+    // nobody there for a long while: offline until wake() (see resting)
+    rest() {
+      if (resting) return;
+      resting = true;
+      clearTimeout(wsRetry); wsRetry = 0;
+      if (ws) try { ws.close(1000, 'rest'); } catch { /* closed */ }
+    },
+    wake() {
+      if (!resting) return;
+      resting = false; retry = 1; full = false; released = false;
+      connect();
+    },
+    get resting() { return resting; },
     // our place in the queue while full (0: not known)
     get queuePos() { return qPos; },
     stealth: STEALTH,

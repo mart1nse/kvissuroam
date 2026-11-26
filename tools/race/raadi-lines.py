@@ -224,7 +224,7 @@ def blur(a, sigma):
     return out
 
 
-MARK_GRAVEL, MARK_ON, MARK_FADE = 0.9, 11.0, 9.0
+MARK_GRAVEL, MARK_ON, MARK_FADE = 0.9, 4.0, 6.0
 CUM0 = np.r_[0, np.cumsum(np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])))]
 TAR_R = 14.0                             # round the start, up to where the gravel begins: what is not gravel is tarmac
 
@@ -268,14 +268,25 @@ def ground_masks():
     # where a slide leaves its mark: the tarmac, and (Martin 26 Nov 14:46) the gravel of the start stretch as well,
     # "most likely there is some pavement or concret or old ashpalt rith under it ... maybe with like 90% opacity",
     # and on into the first corner "until no asphalt is whon, like 10m or so into the corner and a bit onward": the
-    # gravel road's first MARK_ON metres whole, fading out over the next MARK_FADE
+    # gravel road's first MARK_ON metres whole, fading out over the next MARK_FADE (15:15, after 14 m whole and a
+    # short end: "do a quicker fadeout of tire tracks while gravel")
     g0 = R.get('gravelFrom', 0) + 1
+    far = int(np.searchsorted(CUM0, CUM0[g0] + MARK_ON + MARK_FADE)) + 2
     im, d = sheet()
-    far = int(np.searchsorted(CUM0, CUM0[g0] + MARK_ON + MARK_FADE)) + 1
-    for i in range(far, g0, -1):                                  # (from the far end, so the nearer, stronger part lies on top)
-        t = 1 - np.clip((CUM0[i] - CUM0[g0] - MARK_ON) / MARK_FADE, 0, 1)
-        d.line([px(P[i - 1]), px(P[i])], fill=int(round(255 * t * t * (3 - 2 * t))), width=int(round(2 * TAR_R / CELL * S)))
-    on = np.maximum(zone, done(im))
+    band(P[:far + 1], 2 * TAR_R, d)
+    near = done(im)
+    # how far along the stage each cell lies (the nearest place on its line, stepped every 0.25 m): a cell beside
+    # the start lane or the tarmac's end counts whole, one further up the gravel road by how far up it is
+    t = np.arange(0, CUM0[far], 0.25)
+    lx = np.interp(t, CUM0[:far + 1], P[:far + 1, 0]); lz = np.interp(t, CUM0[:far + 1], P[:far + 1, 1])
+    zi, xi = np.nonzero(near > 0)
+    cx = X0 + (xi + 0.5) * CELL; cz = Z0 + (zi + 0.5) * CELL
+    at = np.empty(len(cx))
+    for k in range(0, len(cx), 20000):
+        q = slice(k, k + 20000)
+        at[q] = t[np.argmin((cx[q, None] - lx[None]) ** 2 + (cz[q, None] - lz[None]) ** 2, 1)]
+    on = np.zeros_like(near)
+    on[zi, xi] = near[zi, xi] * (1 - sstep(0, 1, (at - CUM0[g0] - MARK_ON) / MARK_FADE))
     return g, tar, blur(np.maximum(tar, MARK_GRAVEL * on), 0.4)
 
 

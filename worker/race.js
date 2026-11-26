@@ -6,7 +6,8 @@
 // one a second, and lights out after a short random hold. One lap from there; the first over the
 // line wins. While it runs only racers still in it can vote to RESTART (half of them plus one). Once
 // half of the racers have finished, a fresh START vote is open to every driver. A race ends when
-// everyone has finished or is out, or seven minutes after the lights.
+// everyone has finished or is out, or seven minutes after the lights. A racer whose car has stood still
+// for a minute after their lights is out (STILL_MS).
 //
 // All times are the server's clock (Date.now()); the browsers keep their offset to it (t: 'clock'),
 // so the lights go out at the same moment everywhere and the order is by each racer's own time from
@@ -39,6 +40,11 @@ const CLAIM_WAIT = 3000;        // "finished" waits this long for the position t
 const SAVE_MS = 5000;           // what the server has seen of the racers is written down this often (a deploy restarts it mid-race)
 const VOTE_MS = 120000;          // a vote lapses after two minutes
 const MAX_RACERS = 30;
+// Standing still (Martin 2026-11-26: all through but one who started and then stood, and the race stayed open for the
+// rest of the seven minutes): a racer whose positions show the car within STILL_M of one place for STILL_MS after
+// their lights is out ('still'). Judged only on positions coming in one after another (a gap over STILL_GAP starts
+// the minute again), so a page that went quiet is left to quiet() as before.
+const STILL_MS = 60000, STILL_M = 25, STILL_GAP = 5000;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];   // (what a page may say; 'ref': the server did not take the finish)
 
 // votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one.
@@ -163,7 +169,7 @@ export class RaceDesk {
     return {
       id: s.id, on: s.phase === 'on', tGrid: s.tGrid, tGreen: s.tGreen, seed: s.seed,
       // (without what the server keeps of each racer's lap for itself: gates, grid, the line, gaps, a finish not yet seen)
-      racers: s.racers.map(({ gt, gs, arm, fs, sk, skm, jp, cl, ...r }) => r), vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
+      racers: s.racers.map(({ gt, gs, arm, fs, sk, skm, jp, cl, still, ...r }) => r), vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
     };
   }
   send() { this.lobby.broadcast({ t: 'race', r: this.view() }); }
@@ -233,6 +239,14 @@ export class RaceDesk {
     if (s.phase !== 'on') return;
     const r = s.racers.find((x) => x.id === id);
     if (!r || r.out || r.ms != null || now < (r.g ?? s.tGrid) - 500) return;
+    // (standing still: w = where the car stands [x, z], since when, its last position there; see STILL_MS)
+    const w = r.still;
+    if (!w || now - w[3] > STILL_GAP || Math.hypot(p[0] - w[0], p[1] - w[1]) > STILL_M) r.still = [Math.round(p[0]), Math.round(p[1]), now, now];
+    else {
+      w[3] = now;
+      // (not once the car was seen over the line, or its "finished" is waiting for that: the finish is settled first)
+      if (r.fs == null && !r.cl && now - Math.max(w[2], r.go || s.tGreen) > STILL_MS) { r.out = 'still'; this.check(now); this.save(); this.send(); return; }
+    }
     let f = this.fol.get(id);
     // (and what the racer's car can do is worked out meanwhile, for the judging of its drive at the finish)
     if (!f || f.race !== s.id) { this.fol.set(id, f = newFollow(s.id)); this.lobby.carLimit?.(r.car)?.catch?.(() => {}); }

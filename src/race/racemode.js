@@ -21,7 +21,7 @@ const hash = (seed, id) => {
   return h;
 };
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired', ref: 'not counted' };
+const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired', ref: 'not counted', still: 'stood still' };
 
 export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, noRace = () => false, staged = () => false, onWatch = null, watching = () => null }) {
   const { P, N, s: S, length: LEN } = track;
@@ -467,8 +467,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   return {
     // a word from the server
     message(m) {
-      const prevId = r?.id, prevLast = r?.last?.id, prevN = r?.vote?.ids?.length || 0;
+      const prevId = r?.id, prevLast = r?.last?.id, prevN = r?.vote?.ids?.length || 0, wasIn = active(me());
       r = m;
+      // (put out by the server for standing still a minute: worker/race.js STILL_MS)
+      if (wasIn && r.id === prevId && me()?.out === 'still') toast('OUT OF THE RACE · STOOD STILL', 3000);
       if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; sentRf = sentRd = null; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // our finish or our drop-out never got through (the connection was down as it was sent, Martin 2026-11-24:
       // a race that everyone was through kept running): the server still has us racing, so say it once more

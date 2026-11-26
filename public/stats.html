@@ -566,6 +566,12 @@
     };
     rows('Hitches per 10 minutes of driving', 'on');
     rows('Pictures held back per 10 minutes (the frame on time, its picture a screen refresh late)', 'pace');
+    // AUTO graphics trimming the sharpness for even pictures (src/quality.js createPacer): how often it went to each step
+    var trims = [['1', 'to 92% of the level\'s sharpness'], ['2', 'to 85%'], ['3', 'to 78%'], ['0', 'back to full after a minute of even pictures'], ['off', 'given up: the whole trim changed nothing']];
+    if (trims.some(function (r) { return devs.some(function (d) { return o[d + ':trim:' + r[0]]; }); })) {
+      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>Sharpness trimmed by AUTO for even pictures (times)</b></td></tr>';
+      trims.forEach(function (r) { body += '<tr><td>' + r[1] + '</td>' + devs.map(function (d) { return '<td class="n">' + fmt(o[d + ':trim:' + r[0]] || 0) + '</td>'; }).join('') + '</tr>'; });
+    }
     var kinds = [
       ['why', 'What the frame before was busy with', { build: 'building places and cars (queued work)', draw: 'handing the picture to the graphics card', online: 'the other players (cars, list, names, race)', game: 'the game\'s other frame code',
         card: 'nothing on the page: the graphics card or the browser', 'page:net': 'messages from the server', 'page:car': 'a car model back from its worker' }],

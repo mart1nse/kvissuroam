@@ -137,6 +137,35 @@ for (const [kmh, world] of [[60, road], [140, road], [280, road], [90, downs], [
 }
 console.log('ok  a kickflip in the drive is refused, at any speed');
 
+// ---- thrown over by a wall (src/cars/crash.js: over 140 km/h, squarely) is not a kickflip: every ending of a crash,
+// nose first, sideways and tail first, and on with BOOST from where the car stands again
+{
+  const wall = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: (x, z) => z, sdfGrad: (x, z, o) => { o[0] = 0; o[1] = 1; return o; } };
+  let n = 0, over = 0;
+  for (const kmh of [145, 220, 320, 389]) for (const deg of [0, 25]) for (const turn of [0, 90, 180]) for (const dice of [0.3, 0.66, 0.74, 0.9]) {
+    refillTank(spec.id);
+    const a = (deg * Math.PI) / 180, dir = [Math.sin(a), -Math.cos(a)], yaw = Math.atan2(dir[0], -dir[1]) + (turn * Math.PI) / 180;
+    const car = createCar(spec, { x: 0, z: 6 + (kmh / 3.6) * 2.5, yaw });
+    car.crashDice = dice;
+    const fx = Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = Math.sin(yaw), v = kmh / 3.6;
+    car.vx = v * (dir[0] * fx + dir[1] * fz); car.vy = v * (dir[0] * rx + dir[1] * rz);
+    const xs = [], zs = [], ys = [], roll = [];
+    let crashed = false, most = 0;
+    for (let t = 0, next = 0; t < 16; t += 1 / 60) {
+      stepCar(car, t < 2.4 ? { up: 0.2 } : { up: 1, boost: t > 9 && t < 12, steer: 0.3 }, wall, 1 / 60);
+      crashed ||= !!car.crash; most = Math.max(most, Math.abs(car.roll || 0));
+      if (t >= next) { xs.push(car.x); zs.push(car.z); ys.push(car.y); roll.push(car.roll || 0); next += STEP; }
+    }
+    const j = judgeDrive(Float64Array.from(xs), Float64Array.from(zs), Float64Array.from(ys), lim, { roll: Float64Array.from(roll) });
+    if (crashed) n++;
+    if (most > 1.2) over++;
+    assert.equal(j.why, '', `a crash at ${kmh} km/h, ${deg} degrees off, turned ${turn}, dice ${dice}: refused (${show(j)})`);
+    assert.equal(j.air, 0);
+  }
+  assert.ok(n > 60 && over > 40, `${n} crashes, ${over} of them right over`);
+  console.log(`ok  ${n} hard crashes into a wall, ${over} of them over onto a side or the roof: none is taken for a kickflip`);
+}
+
 // ---- the Rocket's drive under another car's name, and no other car judged by gas
 {
   const d = drive(spec, [[25, { up: 1, boost: 1 }], [5, { down: 1 }]]);

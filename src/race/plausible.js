@@ -49,7 +49,8 @@ const SIDE_K = 1;                    // gas turns the car's path only as it push
 // 1.7 s) while its height bends as a falling thing's does, this far (m) over the middle of where it was AIR_T s
 // before and will be AIR_T s after (free fall: 3.1 m, whatever the ground does). The records of 26 Nov: 0.43 rad
 // at the most, and 0.8 m over a crest; a car that leaves a crest and leans slowly over as it flies turns at
-// a tenth of a radian a second.
+// a tenth of a radian a second; one thrown over by a wall (src/cars/crash.js) is 0.8 m over its path at the most
+// while it turns, a kickflip 3.2 to 3.9 m.
 const AIR_ROLL = 1.2, AIR_SPIN = 2, AIR_UP = 2.2, AIR_T = 0.8;
 export const AIR_MAX = 0;            // seconds of that a drive may have
 

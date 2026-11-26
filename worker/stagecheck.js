@@ -12,7 +12,7 @@
 //                 run's own earlier path) with its seconds; the run's time must carry at least as many
 // The straight line between two places cuts a bend a little more than the car did, so every measure is taken EASE
 // metres in the car's favour: an honest run must never be refused, and a cut that deep in is no accident.
-import { newRun, judgeStep, P, TAN, HW, START, FIN, RESET_PEN, CHECKS, FIN_WIDE, FIN_FLAG } from '../src/race/raadirules.js';
+import { newRun, judgeStep, P, TAN, HW, START, FIN, RESET_PEN, CHECKS, FIN_WIDE, FIN_FLAG, STAGE } from '../src/race/raadirules.js';
 
 export const EASE = 0.6;
 const START_BACK = 1.6;          // m behind the start line the car is put (src/race/raadi.js startPose)
@@ -24,8 +24,9 @@ const HOP = 12, BACK_AGE = 20, BACK_R = 8;   // R, as the replay check knows it 
 // launch: how hard this car leaves a standstill when that is harder than LAUNCH_A (m/s2: a car with thrusters, whose
 // BOOST may be held from the green light: src/race/plausible.js gas.launch; an honest Rocket's start was 'a flying
 // start' until 26 Nov 2026, with BOOST and without).
-// '' when the run holds, else what is wrong with it.
-export function stageCheck(xs, zs, pen = 0, launch = 0) {
+// '' when the run holds, else what is wrong with it. out, when given, gets `loose`: 1 for each place the run was past
+// the tarmac start, on the stage's gravel (the car check judges those against gravel's grip: src/race/plausible.js).
+export function stageCheck(xs, zs, pen = 0, launch = 0, out = null) {
   const launchA = Math.max(LAUNCH_A, launch || 0);
   const n = xs.length;
   if (n < 20) return 'too short';
@@ -67,5 +68,12 @@ export function stageCheck(xs, zs, pen = 0, launch = 0) {
     if (st.gate < CHECKS.length) return `the run misses a corner: ${st.gate} of ${CHECKS.length} bales passed`;
   }
   if (st.pen > pen) return `penalties: the drive has ${st.pen} s of them, its time ${pen}`;
+  if (out) {
+    // (two points into the gravel: the tarmac's last metres are judged as tarmac; past the finish, as the finish)
+    const from = (STAGE.gravelFrom || START) + 2, loose = new Uint8Array(n);
+    let last = 0;
+    for (let i = 0; i < n; i++) { if (snap[i]) last = snap[i][0]; loose[i] = last >= from ? 1 : 0; }
+    out.loose = loose;
+  }
   return '';
 }

@@ -108,8 +108,15 @@ export function* carLimitsSteps(spec, every = 0) {
   }
   // sideways: the tyre's grip on dry paving (road tyres there, the better of the two), the car's own rubber,
   // the best patch of road (physics.js: 5 % either way), and suction fans' weight if it has them
-  const grip = G * Math.max(TYRE_GRIP('road', 1), TYRE_GRIP('gravel', 1)) * (spec.grip ?? 1) * 1.05 * (1 + (spec.fanDown || 0) / (light * G));
-  lim = { top, pull, stop: Math.max(stop, 0.5 * G), grip };
+  const fans = 1 + (spec.fanDown || 0) / (light * G);
+  const grip = G * Math.max(TYRE_GRIP('road', 1), TYRE_GRIP('gravel', 1)) * (spec.grip ?? 1) * 1.05 * fans;
+  // on gravel (a Raadi run past its tarmac start; Martin 26 Nov: judged against paving a tune of up to 1.6 to 1.8
+  // times the grip and brakes passed there): the better tyre on gravel, the wide rubber's rule off paving
+  // (physics.js WIDE_LOOSE), the loose ground's patches (13 % either way); braking by the same share
+  const wide = spec.grip ?? 1, looseWide = wide > 1 ? 1 - (wide - 1) * 0.5 : wide;
+  const gripLoose = G * Math.max(TYRE_GRIP('gravel', 2) * Math.min(1, wide), TYRE_GRIP('road', 2) * looseWide) * 1.13 * fans;
+  const stopAll = Math.max(stop, 0.5 * G);
+  lim = { top, pull, stop: stopAll, grip, loose: { grip: gripLoose, stop: Math.max(0.4 * G, stopAll * (gripLoose / grip)) } };
   // thrusters: dv, the speed a full tank can add (m/s: all its gas out at GAS_V, the car growing lighter as it
   // goes); a, the most the tail nozzles push the car at its lightest (m/s2); fill, seconds an empty tank takes to
   // fill; launch, the hardest it leaves a standstill (m/s2, for a stage's start: worker/stagecheck.js; the motors'
@@ -134,11 +141,16 @@ export function carLimits(spec) {
 // Each second is judged as two halves and counts only when both are over: a wall, a landing or R (back to an
 // earlier spot) changes a car's speed or heading in one sample, tuning does it for seconds on end. So a messy lap
 // with a dozen knocks (the first of the day in a car is held for its replay too) reads as nothing.
+// k.loose: 1 for each sample on loose ground (gravel), judged there against lim.loose's grip and brakes: a half
+// second counts as loose when it starts and ends there.
 export function judgeDrive(xs, zs, ys, lim, k = {}) {
   const n = xs.length, out = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, spent: 0, why: '' };
   if (!lim || n < 25) return out;
   const gas = lim.gas;
   const pullK = k.pull ?? PULL_K, gripK = k.grip ?? GRIP_K, stopK = k.stop ?? STOP_K;
+  const loose = k.loose && lim.loose ? k.loose : null;
+  const gripAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.grip : lim.grip);
+  const stopAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.stop : lim.stop);
   // speed at each sample from the places on both sides of it (level, and with the climb), its heading, and
   // whether a hop is near (those samples are not driving)
   const vh = new Float64Array(n), e = new Float64Array(n), hd = new Float64Array(n), hop = new Uint8Array(n), pw = new Float64Array(n + 1);
@@ -163,9 +175,9 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     // (a car with thrusters: its pull and its bends are judged with the gas, below)
     if (!gas && over((a, b) => e[b] - e[a] > (pw[b] - pw[a]) * pullK + PULL_SLACK / 2)) out.pull += STEP;
     // (a stop: the speed shed, the hill's share left out, only while the car rolls on)
-    if (vh[i] > 3 && over((a, b) => vh[a] - vh[b] - (G * Math.max(0, ys[b] - ys[a])) / Math.max(5, vh[a]) > lim.stop * stopK * H * STEP)) out.stop += STEP;
+    if (vh[i] > 3 && over((a, b) => vh[a] - vh[b] - (G * Math.max(0, ys[b] - ys[a])) / Math.max(5, vh[a]) > stopAt(a, b) * stopK * H * STEP)) out.stop += STEP;
     // (sideways: how far the heading turns, times the speed; a car all but standing has no path to speak of)
-    if (!gas && vh[o] > 5 && vh[m] > 5 && vh[i] > 5 && over((a, b) => turn(a, b) * Math.min(vh[a], vh[b]) > lim.grip * gripK * H * STEP)) out.grip += STEP;
+    if (!gas && vh[o] > 5 && vh[m] > 5 && vh[i] > 5 && over((a, b) => turn(a, b) * Math.min(vh[a], vh[b]) > gripAt(a, b) * gripK * H * STEP)) out.grip += STEP;
   }
   if (gas) {
     // Half second by half second: what the car gained on its way (fwd, m/s) and what its path turned (side) over
@@ -184,7 +196,7 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
       const v = (vh[a] + vh[b]) / 2;
       const room = gas.a * THRUST_K * span * Math.max(0, Math.min(1, (lim.top - v) / FADE + 0.5));
       let fwd = Math.max(0, (e[b] - e[a] - (pw[b] - pw[a]) * GAS_PULL_K - PULL_SLACK / 2) / Math.max(v, 2));
-      const side = vh[a] > 5 && vh[b] > 5 ? Math.max(0, turn(a, b) * Math.min(vh[a], vh[b]) - lim.grip * gripK * span) : 0;
+      const side = vh[a] > 5 && vh[b] > 5 ? Math.max(0, turn(a, b) * Math.min(vh[a], vh[b]) - gripAt(a, b) * gripK * span) : 0;
       const overF = fwd > room + GAS_FLOOR, paid = Math.min(side, fwd * SIDE_K), overS = side - paid > GAS_FLOOR;
       if (overF) { fwd = room; if (wasF) out.pull += wasF === 1 ? 2 * span : span; }
       if (overS && wasS) out.grip += wasS === 1 ? 2 * span : span;

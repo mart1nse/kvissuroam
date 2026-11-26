@@ -83,5 +83,8 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) 
     onPick?.(picked);
   });
   render();
-  return { get picked() { return picked; }, render, el };
+  // (the garage opens on the track the car is at, Martin 26 Nov: the TOOMEMÄGI button or H, then the garage and
+  // DRIVE, took the car back to Raadi because the picker still said Raadi. Not a pick: no tyres change.)
+  function follow(id) { if (id !== picked) { picked = id; render(); } }
+  return { get picked() { return picked; }, follow, render, el };
 }

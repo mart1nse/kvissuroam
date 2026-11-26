@@ -98,6 +98,31 @@ for (const spec of Object.values(CARS)) {
   if (lim.gas) assert.ok(b.why, `${spec.id} with twice the grip must be refused (${show(b)})`);
   else assert.ok(b.grip > OVER_MAX, `${spec.id} with twice the grip must be refused for it (${show(b)})`);
 }
+// 4) on gravel (a Raadi run past its tarmac start: judged against gravel's grip, k.loose): every car honest on
+// both kinds of tyre, and twice the grip on gravel tyres refused there far more often than the tarmac limits did
+// (26 Nov: 11 of 13 cars against 5; the 190E and the bus at full lock on the keyboard do not use it)
+{
+  const gravel = { ...road, surfaceAt: () => 2, gravelAt: () => 1 }, STICKY = 2;
+  let worstG = 0, caught = 0, before = 0, n = 0;
+  for (const spec of Object.values(CARS)) {
+    const lim = carLimits(spec);
+    if (lim.gas) continue;                           // (the Rocket: its gas, tools/rocket-judge-test.mjs)
+    for (const tyres of ['road', 'gravel']) {
+      const d = drive(spec, tyres, PLAN, gravel), loose = new Uint8Array(d[0].length).fill(1);
+      const j = judgeDrive(...d, lim, { loose });
+      worstG = Math.max(worstG, j.pull, j.grip, j.stop, j.top);
+      assert.equal(j.why, '', `${spec.id} on ${tyres} tyres on gravel: an honest drive refused (${show(j)})`);
+    }
+    const sticky = copy(spec, (s) => { s.fanDown = (s.fanDown || 0) + (STICKY - 1) * s.mass * 9.81; });
+    const d = drive(sticky, 'gravel', PLAN, gravel), loose = new Uint8Array(d[0].length).fill(1);
+    const g = judgeDrive(...d, lim, { loose }), t = judgeDrive(...d, lim);
+    n++; if (g.why) caught++; if (t.why) before++;
+    console.log(`${spec.id.padEnd(8)} on gravel: honest ok | twice the grip: gravel limits ${show(g)}${g.why ? ' REFUSED' : ''} | tarmac limits ${show(t)}${t.why ? ' REFUSED' : ''}`);
+  }
+  console.log(`on gravel: honest drives at most ${worstG} s over; twice the grip refused ${caught} of ${n} (with the tarmac limits ${before})`);
+  assert.ok(worstG <= 1, `an honest drive on gravel reads ${worstG} s over`);
+  assert.ok(caught >= 10 && caught > before, `twice the grip on gravel must be refused for most cars (${caught} of ${n})`);
+}
 // a fast car's drive under a slow car's name
 for (const [drove, said] of [['f40', 'audi200'], ['cgt', 'm3'], ['impreza', 'passat'], ['m3', 'bus']]) {
   const j = judgeDrive(...drive(CARS[drove], 'road', PLAN), carLimits(CARS[said]));

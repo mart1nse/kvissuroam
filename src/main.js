@@ -199,12 +199,13 @@ if (params.get('donut') === '1') { setDonutHelp(true); console.info('donut helpe
 if (params.get('turnin') === 'normal') { setTurnIn('normal'); console.info('old fixed steering into a slide (?turnin=normal)'); }
 if (params.get('inward') === '0') { setInward(false); console.info('held steering stops at the grip limit (?inward=0)'); }
 // cars with an engine start like manuals (clutch drop); ?launch=0 brings back the torque converter,
-// ?launch=<rpm> or ?launch=idle change the start, ?slip=1 keeps the clutch slipping on every car (the F40 always)
+// ?launch=<rpm> or ?launch=idle change the start. (?slip=1, every car's clutch kept slipping, is gone: Martin
+// 26 Nov, it made an M3 about 0.27 s quicker to the first 100 m off the stage's start.)
 if (params.get('launch') === '0') { setLaunch(false); console.info('torque converter starts (?launch=0)'); }
-else if (params.has('launch') || params.get('slip') === '1') {
+else if (params.has('launch')) {
   const l = params.get('launch'), rpm = l === 'idle' ? 0 : +l > 1000 ? +l : null;
-  setLaunch(true, rpm, params.get('slip') === '1');
-  console.info(`manual starts: ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}${params.get('slip') === '1' ? ', clutch kept slipping in first (?slip=1)' : ''}`);
+  setLaunch(true, rpm);
+  console.info(`manual starts: ${rpm === 0 ? 'from idle' : `clutch dropped at ${rpm ?? 'a third of the redline'} rpm`}`);
 }
 // the top the graphics quality may climb to on this device (src/quality.js steps down from it when the frame rate drops)
 const gfxCaps = { dpr: quality.pixelRatio, shadow: quality.shadow, trees: quality.treeDetail > 0 ? 150 : 70, load: quality.loadRadius, far: quality.far };
@@ -948,6 +949,8 @@ async function boot() {
     winner: (id) => !!raceMode?.winner(id),
     onRace: (r) => raceMode?.message(r),
     onRecord: () => audio.chime?.('record'),
+    // (the server did not believe a time's drive: it is not on the board, and the driver is told so)
+    onRefused: () => hud.toast('TIME NOT SAVED', 4500),
     // a thumbs up (src/kudos.js): the sign on the receiver's car wherever it is in view, ours or another's
     onKudos: (from, to) => {
       const who = from === mp.id ? { name: mp.name, colour: ME_COLOUR } : { name: mp.nameOf(from), colour: mp.colourOf(from) };
@@ -1395,7 +1398,15 @@ function openGarage() {
   $('#sunk').classList.add('hidden');
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
   else if (car.crash) standUp(car);             // (left in the middle of a crash: on its wheels where it is)
-  car.vx = car.vy = car.yawRate = 0;
+  // The garage ends a timed lap and a stage run (Martin 26 Nov: it was a free brake, G and G again stopped a
+  // car from 80 km/h in 1.2 m with the clock still running, and no car check can see one instant stop). The
+  // stage's count is left as it is: it starts again after the garage. In one's own online race, after the
+  // lights, the car keeps its speed instead: the race's clock is the server's, and a stop is no gain then.
+  race?.cancel('LAP CANCELLED · GARAGE', false, 'jump');
+  if (stage?.phase === 'run') stage.cancel('STAGE CANCELLED · GARAGE');
+  if (!(raceMode?.ghost && !raceMode?.holding)) car.vx = car.vy = car.yawRate = 0;
+  // the track picker on the track the car is at, so that DRIVE leaves it there (a pick in the garage still moves it)
+  if (stage && !trackPicked) { board?.follow(atRaadi() ? 'raadi' : 'toome'); layoutMenu(); }
 }
 
 // A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
@@ -2237,7 +2248,7 @@ function frame(ts) {
     }
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
-    stage?.update(car, carId, s0Short(), dt, inpNow());
+    stage?.update(car, carId, s0Short(), dt, inpNow(), watch?.focus);   // (and the stage round a car being watched)
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,

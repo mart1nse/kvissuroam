@@ -1,15 +1,18 @@
 // The side views on 5 and 6 (src/sidecam.js; Martin 26 Nov: "Add a side view option for the camera on desktop,
 // perhaps like 5 and 6 keys? let it show the road at least 10m forna and after. in case of tesla zoom a litlle bit
-// out during th ejump with smooth transition and move with the car in case of big drop in level etc.").
+// out during th ejump with smooth transition and move with the car in case of big drop in level etc."; then: "reduce
+// the gap front and back to just a touch over the front and end of the car and then try to make the lens wider and
+// the when i dont know at 2m on the side raise it up indeed").
 // Checks, in a desktop browser:
 //  - the keys: 5 the left side, 6 the right, the same key again back to the view that was on, C back without
 //    switching chase and drone, nothing with the map open or in the garage;
-//  - the framing in three window shapes, a car and the bus: the camera square to the car, the road 10 m ahead of
-//    the nose and 10 m behind the tail inside the picture;
-//  - two streets of houses on the lap: the camera's line of sight to the car and to both ends of that road clears
-//    the roofs, on both sides, standing and driving down the street (between tall houses close by it is as high as
-//    it goes instead), and the camera rises and sinks without a jump;
-//  - a Rocket's kickflip: the picture opens a little and closes again, never quickly, and the car stays in it;
+//  - the framing in three window shapes, a car and the bus: the camera square to the car, 2 m out from its flank
+//    in the open, the car's corners at the nose and the tail inside the picture with a touch to spare;
+//  - two streets of houses on the lap: the camera is never inside a house, its line of sight to the car and to
+//    both ends of it clears the walls, on both sides, standing and driving down the street, and it rises and sinks
+//    without a jump;
+//  - a Rocket's kickflip: the camera backs off a few metres in the air and comes back, never quickly, and the car
+//    stays in the picture;
 //  - a fall of 40 m: the camera goes down with the car, which stays in the picture, and is never under the ground;
 //  - what one frame of it costs.
 // Run with the dev server on 5198: node tools/side-view-test.mjs [folder for pictures]
@@ -46,14 +49,17 @@ const open = async (w, h, car) => {
       let least = 99;
       for (let k = 0.1; k < 1; k += 0.02) {
         const x = tx + (cam.x - tx) * k, z = tz + (cam.z - tz) * k, y = ty + (cam.y - ty) * k;
-        least = Math.min(least, y - Math.max(w.sdfAt(x, z) < 1 ? w.roofAt(x, z) : -1e9, w.heightAt(x, z)));
+        least = Math.min(least, y - Math.max(w.sdfAt(x, z) < 0 ? w.roofAt(x, z) : -1e9, w.heightAt(x, z)));
       }
       return least;
     };
     window.__view = () => {
       const c = g.car, cam = g.camera, f = [Math.sin(c.yaw), -Math.cos(c.yaw)], rel = [cam.position.x - c.x, cam.position.y - c.y, cam.position.z - c.z];
-      const far = c.halfLen + 10;
-      return { side: g.sideCam.side, w: g.sideCam.out.w, fov: cam.fov, fwd: rel[0] * f[0] + rel[2] * f[1], right: -rel[0] * f[1] + rel[2] * f[0], up: rel[1],
+      const far = c.halfLen, sd = Math.sign(-rel[0] * f[1] + rel[2] * f[0]) * c.halfWid;
+      // the near flank's corners, at the nose and the tail, half a metre up: where they fall in the picture
+      const corner = (d) => { const v = new V(c.x + f[0] * d - f[1] * sd, c.y + 0.5, c.z + f[1] * d + f[0] * sd).project(cam); return [v.x, v.y]; };
+      const inHouse = g.world.sdfAt(cam.position.x, cam.position.z) < 0 && cam.position.y < g.world.roofAt(cam.position.x, cam.position.z);
+      return { nose: corner(far), tail: corner(-far), inHouse, dist: Math.hypot(rel[0], rel[2]), halfWid: c.halfWid, side: g.sideCam.side, w: g.sideCam.out.w, fov: cam.fov, fwd: rel[0] * f[0] + rel[2] * f[1], right: -rel[0] * f[1] + rel[2] * f[0], up: rel[1],
         ahead: __ndc(far), behind: __ndc(-far), car: __ndc(0, 0.6), clear: __clear(0), ends: Math.min(__clear(far), __clear(-far)), el: g.sideCam.out.el,
         under: cam.position.y - g.world.heightAt(cam.position.x, cam.position.z), y: c.y, air: c.airborne, flight: !!c.rocket?.flight, kmh: c.vx * 3.6, t: performance.now() / 1000 };
     };
@@ -70,6 +76,7 @@ const place = async (p, pose, wait = 4000) => { await p.evaluate((o) => __game.p
 const record = async (p, ms, during) => { await p.evaluate(() => { window.__rec = []; }); if (during) await during(); await p.waitForTimeout(ms); return p.evaluate(() => { const r = window.__rec; window.__rec = null; return r; }); };
 const shot = async (p, name) => { if (!dir) return; await p.evaluate(() => { const g = __game; g.renderer.realRender(g.scene, g.camera); }); await p.screenshot({ path: `${dir}/${name}.png` }); console.log(`     picture ${name}.png`); };
 const f = (v, n = 2) => v.toFixed(n);
+const ends = (v) => Math.max(Math.abs(v.nose[0]), Math.abs(v.tail[0]));
 // the fastest a figure changed between two frames, per second (frames closer than a 120th are left out: the
 // browser's clock is too coarse for them)
 const rate = (rec, k) => { let m = 0; for (let i = 1; i < rec.length; i++) { const dt = rec[i].t - rec[i - 1].t; if (dt > 1 / 120) m = Math.max(m, Math.abs(rec[i][k] - rec[i - 1][k]) / dt); } return m; };
@@ -82,12 +89,13 @@ let v = await view(p);
 check('the chase view to begin with', v.side === 0 && v.fwd < -4 && Math.abs(v.right) < 0.5, `camera ${f(-v.fwd)} m behind`);
 await key(p, 'Digit5'); await p.waitForTimeout(1800);
 v = await view(p);
-check('5: the camera on the car\'s left, square to it', v.side === -1 && v.right < -10 && Math.abs(v.fwd) < 0.5, `${f(-v.right)} m to the left, ${f(v.up)} m up, ${f(v.fwd)} m along`);
-check('the car drives to the left of the picture there', v.ahead[0] < -0.5 && v.behind[0] > 0.5);
+check('5: the camera on the car\'s left, square to it, 2 m out from its flank', v.side === -1 && Math.abs(-v.right - v.halfWid - 2) < 0.4 && Math.abs(v.fwd) < 0.5, `${f(-v.right - v.halfWid)} m from the flank, ${f(v.up)} m up, ${f(v.fwd)} m along`);
+check('the car drives to the left of the picture there', v.nose[0] < -0.5 && v.tail[0] > 0.5);
+check('the whole car in the picture with a touch to spare', ends(v) < 0.97 && ends(v) > 0.6, `its corners ${f(ends(v))} of the way to the side, ${f(v.fov, 0)} degrees`);
 await shot(p, 'side-left-open');
 await key(p, 'Digit6'); await p.waitForTimeout(2600);
 v = await view(p);
-check('6 from there: the right side', v.side === 1 && v.right > 10 && Math.abs(v.fwd) < 0.5, `${f(v.right)} m to the right`);
+check('6 from there: the right side', v.side === 1 && v.right > 2.5 && Math.abs(v.fwd) < 0.5, `${f(v.right - v.halfWid)} m from the flank`);
 await key(p, 'Digit6'); await p.waitForTimeout(1800);
 v = await view(p);
 check('6 again: back to the chase view', v.side === 0 && v.w === 0 && v.fwd < -4 && Math.abs(v.right) < 0.5);
@@ -115,28 +123,28 @@ await key(p, 'KeyG'); await p.waitForFunction(() => __game.mode === 'drive' && !
 console.log('a Rocket\'s kickflip');
 await place(p, OPEN);
 await key(p, 'Digit5'); await p.waitForTimeout(1800);
-const fov0 = (await view(p)).fov;
+const d0 = (await view(p)).dist;
 await key(p, 'ArrowUp', 'keydown');
 await p.waitForFunction(() => __game.car.vx > 8, null, { timeout: 20000 });
 let rec = await record(p, 9000, async () => { await key(p, 'KeyX', 'keydown'); await p.waitForTimeout(120); await key(p, 'KeyX', 'keyup'); await key(p, 'ArrowUp', 'keyup'); await p.waitForTimeout(1500); await shot(p, 'side-kickflip'); });
 {
-  const fl = rec.filter((r) => r.flight), top = Math.max(...rec.map((r) => r.y)) - rec[0].y, wide = Math.max(...rec.map((r) => r.fov));
+  const fl = rec.filter((r) => r.flight), top = Math.max(...rec.map((r) => r.y)) - rec[0].y, back = Math.max(...rec.map((r) => r.dist));
   check('it flew', fl.length > 20, `${f(fl.length ? fl[fl.length - 1].t - fl[0].t : 0)} s, ${f(top)} m up`);
-  check('the picture opens a little in the air', wide > fov0 + 4 && wide < fov0 + 12, `${f(fov0, 1)} to ${f(wide, 1)} degrees`);
-  check('...and never quickly', rate(rec, 'fov') < 12, `${f(rate(rec, 'fov'), 1)} degrees a second at most`);
-  check('...and closes again after the landing', Math.abs(rec[rec.length - 1].fov - fov0) < 1, `${f(rec[rec.length - 1].fov, 1)} degrees ${f(rec[rec.length - 1].t - fl[fl.length - 1].t, 1)} s after it`);
+  check('the camera backs off a few metres in the air', back > d0 + 3 && back < d0 + 5, `${f(d0, 1)} to ${f(back, 1)} m from the car`);
+  check('...and never quickly', rate(rec, 'dist') < 6.5, `${f(rate(rec, 'dist'), 1)} m a second at most`);
+  check('...and comes back after the landing', Math.abs(rec[rec.length - 1].dist - d0) < 0.3, `${f(rec[rec.length - 1].dist, 1)} m ${f(rec[rec.length - 1].t - fl[fl.length - 1].t, 1)} s after it`);
   // (what the car meets after the landing, a bale or a bank, is not the camera's business: to half a second after it)
   const till = fl.length ? fl[fl.length - 1].t + 0.5 : 0, flown = rec.filter((r) => r.t < till);
   const hi = Math.max(...rec.map((r) => Math.abs(r.car[1]))), edge = Math.max(...flown.map((r) => Math.max(Math.abs(r.ahead[0]), Math.abs(r.behind[0])))), along = Math.max(...flown.map((r) => Math.abs(r.fwd)));
   check('the car stays well inside the picture, top to bottom', hi < 0.6, `at most ${f(hi)} of the way from the middle to the edge`);
-  check('the road 10 m ahead and behind stays in it through the flight', edge < 0.97, `at most ${f(edge)} of the way to the side`);
+  check('its nose and tail stay in it through the flight', edge < 0.97, `at most ${f(edge)} of the way to the side`);
   check('the camera stays beside the car through it', along < 1.5, `at most ${f(along)} m along`);
 }
 
 // ---------------------------------------------------------------- a long fall
 console.log('a fall of 40 m');
 await place(p, OPEN, 3000);
-const g0 = (await view(p)).y;
+const before = await view(p), g0 = before.y;
 rec = await record(p, 7000, () => p.evaluate((o) => __game.place(o), { ...OPEN, y: g0 + 40 }));
 {
   const fall = rec.filter((r) => r.air), drop = Math.max(...rec.map((r) => r.y)) - rec[rec.length - 1].y;
@@ -144,36 +152,36 @@ rec = await record(p, 7000, () => p.evaluate((o) => __game.place(o), { ...OPEN, 
   check('it fell', fall.length > 20 && drop > 35, `${f(drop, 1)} m in ${f(fall.length ? fall[fall.length - 1].t - fall[0].t : 0)} s`);
   check('the car stays in the picture all the way down', hi < 0.8, `at most ${f(hi)} of the way from the middle to the edge`);
   check('the camera is never under the ground', Math.min(...rec.map((r) => r.under)) > 0.5, `${f(Math.min(...rec.map((r) => r.under)))} m over it at the least`);
-  check('the car is back in the middle afterwards', Math.abs(rec[rec.length - 1].car[1]) < 0.1, f(rec[rec.length - 1].car[1]));
+  check('the car is back where it was in the picture afterwards', Math.abs(rec[rec.length - 1].car[1] - before.car[1]) < 0.08, `${f(rec[rec.length - 1].car[1])}, was ${f(before.car[1])}`);
 }
 await key(p, 'KeyC');
 
 // ---------------------------------------------------------------- houses in the way
 // (two streets of the lap: Vallikraavi's end, houses of two and three floors a few metres from the kerb on both
-// sides, and Rüütli, 18 m of wall 4 m from the car on both sides, where no camera can stand beside the car)
-for (const [street, pose, tall] of [['a street of houses', TRACK(1160), false], ['a street of tall houses close by', TRACK(800), true]]) {
+// sides, Rüütli, 18 m of wall 4 or 5 m from the car's middle on both sides, and a wall 2 m from the car's middle
+// on its right in the old town, where the camera has to come in over the pavement or rise)
+for (const [street, pose, sides, pic] of [['a street of houses', TRACK(1160), ['left', 'right'], 'side-left-houses'], ['a street of tall houses close by', TRACK(800), ['left', 'right'], 'side-left-tall-houses'],
+  ['a wall right beside the car', TRACK(108), ['right'], 'side-right-wall']]) {
   console.log(street);
-  for (const [code, name] of [['Digit5', 'left'], ['Digit6', 'right']]) {
+  for (const name of sides) {
+    const code = name === 'left' ? 'Digit5' : 'Digit6';
     await place(p, pose, 5000);
     const near = await p.evaluate((sg) => { const c = __game.car, w = __game.world; for (let l = 2; l < 20; l++) { const x = c.x + Math.cos(c.yaw) * sg * l, z = c.z + Math.sin(c.yaw) * sg * l; if (w.sdfAt(x, z) < 1 && w.roofAt(x, z) > -1e8) return [l, w.roofAt(x, z) - c.y]; } return null; }, name === 'left' ? -1 : 1);
     check(`${name}: a house stands beside the road there`, !!near, near ? `${near[0]} m from the car, ${f(near[1], 0)} m high` : '');
     await key(p, 'Space', 'keydown');
     await key(p, code); await p.waitForTimeout(2500);
     v = await view(p);
-    if (tall) check(`${name}: the camera looks down from as high as it goes`, v.el > 1.3 && v.clear > -1.5, `${f(v.el * 57.3, 0)} degrees up, the line of sight to the car ${f(v.clear)} m over the eaves`);
-    else {
-      check(`${name}: the camera sees the car over the roofs`, v.clear > 0.2, `clear by ${f(v.clear)} m, ${f(Math.abs(v.right))} m out and ${f(v.up)} m up`);
-      check(`${name}: ...and both ends of the road`, v.ends > 0, `clear by ${f(v.ends)} m`);
-    }
-    check(`${name}: the road 10 m ahead and behind is in the picture`, Math.max(Math.abs(v.ahead[0]), Math.abs(v.behind[0])) < 0.97 && Math.abs(v.fwd) < 0.5);
-    if (name === 'left') await shot(p, tall ? 'side-left-tall-houses' : 'side-left-houses');
+    check(`${name}: the camera is not in a house and sees the car`, !v.inHouse && v.clear > 0, `${f(Math.abs(v.right) - v.halfWid)} m out from the flank, ${f(v.up)} m up (${f(v.el * 57.3, 0)} degrees), clear by ${f(Math.min(v.clear, 9))} m`);
+    check(`${name}: ...and both its ends`, v.ends > 0, `clear by ${f(Math.min(v.ends, 9))} m`);
+    check(`${name}: the car's nose and tail in the picture`, ends(v) < 0.97 && Math.abs(v.fwd) < 0.5, `${f(ends(v))} of the way to the side`);
+    if (name === sides[0]) await shot(p, pic);
     await key(p, 'Space', 'keyup');
     // down the street
     // (a Rocket would be at 180 km/h in four seconds: a second and a half of throttle, then it rolls)
     await key(p, 'ArrowUp', 'keydown');
     rec = await record(p, 6000, async () => { await p.waitForTimeout(1500); await key(p, 'ArrowUp', 'keyup'); });
-    const seen = rec.filter((r) => r.clear > 0 || r.el > 1.3).length / rec.length;
-    check(`${name}, driving: the car is in sight, or the camera as high as it goes`, seen > 0.9, `${f(seen * 100, 0)} % of ${rec.length} frames, to ${f(Math.max(...rec.map((r) => r.kmh)), 0)} km/h`);
+    const seen = rec.filter((r) => r.clear > 0 && !r.inHouse).length / rec.length;
+    check(`${name}, driving: the car in sight, the camera never in a house`, seen > 0.95, `${f(seen * 100, 0)} % of ${rec.length} frames, to ${f(Math.max(...rec.map((r) => r.kmh)), 0)} km/h`);
     check(`${name}, driving: the camera rises and sinks without a jump`, rate(rec, 'el') < 2, `${f(rate(rec, 'el') * 57.3, 0)} degrees a second at most, between ${f(Math.min(...rec.map((r) => r.el)) * 57.3, 0)} and ${f(Math.max(...rec.map((r) => r.el)) * 57.3, 0)} degrees up`);
     await key(p, 'KeyC');
   }
@@ -196,9 +204,8 @@ for (const [w, h, car] of [[1000, 1000, 'w201'], [2560, 1080, 'bus'], [1440, 810
   for (const code of ['Digit5', 'Digit6']) {
     await key(p, code); await p.waitForTimeout(code === 'Digit5' ? 1800 : 2600);
     v = await view(p);
-    const edge = Math.max(Math.abs(v.ahead[0]), Math.abs(v.behind[0]));
-    check(`${w} x ${h}, ${car}, ${code === 'Digit5' ? 'left' : 'right'}: 10 m of road ahead of the nose and behind the tail`, edge < 0.97 && edge > 0.7 && Math.abs(v.fwd) < 0.5 && Math.abs(v.car[1]) < 0.2,
-      `${f(edge)} of the way to the side, camera ${f(Math.hypot(v.right, v.up), 1)} m away, ${f(v.fov, 0)} degrees`);
+    check(`${w} x ${h}, ${car}, ${code === 'Digit5' ? 'left' : 'right'}: the car's nose and tail in, with a touch to spare`, ends(v) < 0.97 && ends(v) > 0.6 && Math.abs(v.fwd) < 0.5 && Math.abs(v.car[1]) < 0.3,
+      `${f(ends(v))} of the way to the side, camera ${f(Math.abs(v.right) - v.halfWid, 1)} m from the flank, ${f(v.fov, 0)} degrees`);
   }
   await p.context().close();
 }

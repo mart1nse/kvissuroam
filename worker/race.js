@@ -7,7 +7,8 @@
 // line wins. While it runs only racers still in it can vote to RESTART (half of them plus one). Once
 // half of the racers have finished, a fresh START vote is open to every driver. A race ends when
 // everyone has finished or is out, or seven minutes after the lights. A racer whose car has stood still
-// for a minute after their lights is out (STILL_MS).
+// for a minute after their lights is out (STILL_MS), and so is one who has not got on with the lap for a
+// minute once the winner is through (IDLE_MS).
 //
 // All times are the server's clock (Date.now()); the browsers keep their offset to it (t: 'clock'),
 // so the lights go out at the same moment everywhere and the order is by each racer's own time from
@@ -45,6 +46,12 @@ const MAX_RACERS = 30;
 // their lights is out ('still'). Judged only on positions coming in one after another (a gap over STILL_GAP starts
 // the minute again), so a page that went quiet is left to quiet() as before.
 const STILL_MS = 60000, STILL_M = 25, STILL_GAP = 5000;
+// Not getting on with the lap once the winner is through (Martin 2026-11-26 22:34, the same racer stalling a race at
+// 0.1 km again: "inactivity timeout for players who are not actually driving at 1 min after the winner finishes"): a
+// minute after the first finish, a racer who has passed none of the lap's gates (follow.js) for IDLE_MS is out
+// ('idle'). Unlike 'still' it needs no positions at all (a page that sends none is not driving the lap either), and a
+// car that potters about off its way round is caught as well as one that stands.
+const IDLE_MS = 60000;
 // A deploy restarts the server (Martin 2026-11-26 20:46: every connection dropped mid-race and the race was gone, a
 // new vote needed). The race itself is read back from storage, but the server came up with no sockets, so the first
 // look at the racers found none of them there, put them all out as 'left' and closed the race as empty before the
@@ -238,9 +245,15 @@ export class RaceDesk {
   quiet(now) {
     const s = this.s;
     if (this.phase(now) !== 'race' || now - this.boot < BACK_MS) return;
+    // (the winner over the line, by the race's clock: see IDLE_MS; Infinity while nobody is through)
+    let win = Infinity;
+    for (const r of s.racers) if (r.ms != null && r.ms < win) win = r.ms;
+    const winAt = s.tGreen + win;
     let on = null, d = null;
     for (const r of s.racers) {
       if (r.out || r.ms != null || now < (r.go || s.tGreen) + 10000) continue;
+      // (the last gate passed, else the racer's own lights; not once seen over the line or with a finish waiting)
+      if (r.fs == null && !r.cl && now - Math.max(winAt, r.gs || 0, r.go || s.tGreen) > IDLE_MS) { r.out = 'idle'; continue; }
       on ||= this.online(); d ||= this.drivers();
       if (!on.has(r.id) || !d.has(r.id)) r.out = 'left';
     }

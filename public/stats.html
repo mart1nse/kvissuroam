@@ -340,7 +340,7 @@
 
     h += card('Mayhem', null, '<div class="nums">' + [
       [(t.smash || {}).prop, 'props knocked over'], [(t.smash || {}).glass, 'shelter panes smashed'], [misc.water, 'trips into the water'], [misc.roof, 'hard crashes into a wall (over 140 km/h)'],
-      [misc.mapjump, 'jumps from the map'], [misc.garage, 'garage visits'], [misc.idle, 'idle cars sent to the garage'], [misc.speed100, 'visits past 100 km/h'],
+      [misc.mapjump, 'jumps from the map'], [misc.garage, 'garage visits'], [misc.idle, 'idle cars sent to the garage'], [misc.tabs, 'games taken up from another tab'], [misc.speed100, 'visits past 100 km/h'],
       [misc.speed150, 'past 150 km/h'], [misc.speed200, 'past 200 km/h'], [misc.speed250, 'past 250 km/h'],
     ].map(function (x) { return '<div><b>' + fmt(x[0]) + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>');
 
@@ -456,7 +456,7 @@
     h += card('How races ended', null, bars([
       ['all finished or out', end.done || 0], ['7:00 limit reached', end.time || 0],
       ['restarted by vote', end.restart || 0], ['all dropped out', end.empty || 0]], { keep: true, colour: C.hot }));
-    var OUT = { off: 'off the track', cut: 'short cut', jump: 'reset', car: 'changed car', start: 'pressed START', map: 'map jump', left: 'left the game', time: 'still racing at 7:00', quit: 'retired', restart: 'race restarted', still: 'stood still a minute' };
+    var OUT = { off: 'off the track', cut: 'short cut', jump: 'reset', car: 'changed car', start: 'pressed START', map: 'map jump', left: 'left the game', time: 'still racing at 7:00', quit: 'retired', restart: 'race restarted', still: 'stood still a minute', idle: 'idle a minute after the winner' };
     h += card('Why racers did not finish', fmt(racers - fin) + ' racers did not cross the line.', bars(rowsOf(R.out, function (k) { return OUT[k] || k; }), { colour: C.hot }));
     // cars on the grid, with how many of them finished and won
     var cars = Object.keys(R.car || {}).sort(function (a, b) { return R.car[b] - R.car[a]; }).slice(0, 12);

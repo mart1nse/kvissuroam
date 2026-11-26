@@ -7,6 +7,7 @@
 
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
+import { bonnetStep } from './bonnet.js';
 import { crashHit, crashStep } from './crash.js';
 import { HANG, CLEAR, edgeStart, edgeStep } from './tip.js';
 
@@ -197,6 +198,7 @@ export function createCar(spec, pose) {
     pitchRate: 0, rollRate: 0,
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     rocket: spec.thrusters ? rocketState(spec.id) : null, thrustN: 0,
+    bonnet: spec.bonnet ? { state: 'shut', at: 0, drag: 0 } : null,
     steer: 0, wheelSpin: 0, wheelSpinF: 0, wheelSpinR: 0,
     slipV: 0, slipVF: 0, slipVR: 0, spin: 0, useF: 0, useR: 0,   // driven-wheel slip speed (m/s), 0..1 wheelspin, lateral grip in use
     gear: 1, shiftTimer: 0, rpm: spec.engine.idle ?? 0, reversing: false, boost: 0, shaft: 0, carry: 0, revCut: 0, csHold: 0, csDir: 0,
@@ -474,7 +476,7 @@ function engineForce(car, throttle, dt) {
     const rEff = Math.max(rpm, car.carry);
     const u = Math.max(0, Math.min(1, (rEff - tb.onRpm) / (tb.fullRpm - tb.onRpm)));
     const want = throttle * u * u * (3 - 2 * u);
-    const sk = want > car.shaft ? tb.spool * (0.25 + 0.75 * Math.min(1, rEff / e.redline)) : SHAFT_DECAY;
+    const sk = want > car.shaft ? tb.spool * (0.25 + 0.75 * Math.min(1, rEff / e.redline)) : tb.keep ?? SHAFT_DECAY;   // (keep: anti-lag holds the turbine up on a lift, the Focus WRC)
     car.shaft += (want - car.shaft) * Math.min(1, dt * sk);
     // pressure follows the turbine speed quickly, and dumps at once on a lift
     const up = Math.min(want, car.shaft);
@@ -641,6 +643,7 @@ function boxContact(car, b, list, fx, fz, rx, rz, hl, hw, contact) {
 // input: { up, down, left, right, handbrake } booleans or 0..1 values, steer optional (-1..1);
 // steerDirect: steer is a steering wheel's angle (full lock at +-1) instead of a share of the grip
 export function stepCar(car, input, world, dtFrame) {
+  if (car.bonnet) bonnetStep(car);          // (the Focus WRC's bonnet: up after a hard hit, off at speed, src/cars/bonnet.js)
   // (a car that met a wall too fast and too squarely is being thrown over, or lies where it came down: crash.js)
   if (car.crash) {
     crashStep(car, world, dtFrame);
@@ -1276,7 +1279,7 @@ function substep(car, input, world, dt) {
   }
 
   // ---- resistances and slope
-  const drag = 0.5 * RHO * s.cdA * car.vx * Math.abs(car.vx);
+  const drag = 0.5 * RHO * (s.cdA + (car.bonnet?.drag || 0)) * car.vx * Math.abs(car.vx);   // (a bonnet up against the screen is an air brake)
   const crr = (sf.crr * fzF + sr.crr * fzR);
   const roll = Math.abs(car.vx) > 0.1 ? Math.sign(car.vx) * crr : 0;
   const slopeX = -m * G * Math.sin(car.groundPitch) * load;     // the slope pushes through the tyres

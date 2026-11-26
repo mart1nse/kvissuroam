@@ -102,6 +102,29 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   check(g.level === N - 2 && moves.length <= 3, `card too slow for the top settles one down (rung ${g.level}, ${moves.length} moves)`);
 }
 
+
+// 12. the sharpest rungs (twice the pixels across) need the card well under its limit: Martin's MacBook, 26 Nov 2026,
+// card 10 to 12 of 16.7 ms on the top rung with every frame on time, "stutters came back"; on MEDIUM "buttery smooth".
+// (sharp: the top rung only, as on a 2x desktop ladder)
+function runSharp(start, card, seconds = 300, timed = true) {
+  const g = createGovernor({ levels: N, start, sharp: N - 1 });
+  const moves = [];
+  for (let t = 0; t < seconds * 1000; t += 16.67) { const ch = g.feed(16.67, timed ? card(g.level, t) : null); if (ch) moves.push(`${Math.round(t / 1000)}s ${ch.from}->${ch.to} ${ch.why}`); }
+  return { g, moves };
+}
+{
+  const mac = (l) => (l === N - 1 ? 11 : 7);
+  const a = runSharp(N - 1, mac);
+  check(a.g.level === N - 2 && a.moves.length === 0, `Mac: a start saved on the top rung begins one below and stays there (rung ${a.g.level}; ${a.moves.join(', ')})`);
+  const b = runSharp(N - 1, () => 5);
+  check(b.g.level === N - 1 && b.moves.length === 1, `a card with room to spare climbs to the top rung and holds it (rung ${b.g.level}; ${b.moves.join(', ')})`);
+  const c = runSharp(N - 1, () => 5, 300, false);
+  check(c.g.level === N - 2 && c.moves.length === 0, `no card timer (Safari): not on the top rung (rung ${c.g.level})`);
+  // a scene that grows heavier on the top rung (a crowd at a race finish): one step down, no flicker after
+  const d = runSharp(N - 1, (l, t) => (l === N - 1 ? (t < 60000 ? 6 : 10.5) : t < 60000 ? 4 : 7.5));
+  check(d.g.level === N - 2 && d.moves.length === 2 && /sharp$/.test(d.moves[1]), `the card climbs past 55% on the top rung: one rung down and stays (${d.moves.join(', ')})`);
+}
+
 // 12. the saved levels of a visit are there on every later visit, also the ones kept under the keys of
 // before the extra low rung. (They were read from the old key once and never written under the new one:
 // from the second visit on a phone had forgotten the level it must stay under after running out of
@@ -154,6 +177,14 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   createQuality(hooks(), caps, {});
   const both = [mem.get('kvissuroam.alive2'), tab.get('kvissuroam.alive2')].map((m) => JSON.parse(m || '{}'));
   check(both.every((m) => m.level >= 0 && m.t > 0), `a page on screen marks this tab and the browser (${JSON.stringify(both)})`);
+  // a tab standing aside while another plays (src/onetab.js) draws no frames: it keeps no mark to go stale, and
+  // marks again when it plays
+  mem.clear(); tab.clear();
+  const q = createQuality(hooks(), caps, {});
+  q.setAside(true);
+  check(!mem.get('kvissuroam.alive2') && !tab.get('kvissuroam.alive2'), 'a tab aside keeps no mark');
+  q.setAside(false);
+  check(!!mem.get('kvissuroam.alive2') && !!tab.get('kvissuroam.alive2'), 'and marks again when it plays');
   delete globalThis.localStorage; delete globalThis.sessionStorage;
 }
 

@@ -510,6 +510,78 @@ export const CARS = {
     limiter: null,              // no 180 km/h home-market cap: 5th runs out of revs at about 250
     ref: { zeroTo100: 4.7, top: 248, powerKw: 227 },   // the quickest road tests (they run 4.7 to 5.3 s); about 248 km/h unrestricted; power as measured, not the 206 kW on paper
   },
+  focus: {
+    // Ford Focus RS WRC 03 (Martin 2026-11-26): the white works car M-Sport built for the 2003 season, first out at
+    // Rally New Zealand that April; Markko Märtin won the Acropolis (the last 20 km of Elatia-Zeli with the bonnet
+    // flown up against the windscreen) and Finland in it. Sources cross-checked: Ford's press release
+    // (ultimatecarpage, supercars.net), juwra.com, rallycars.com, crash.net, dirtfish. What none of them gives (gear
+    // ratios, rev limit, the diffs' maps) is estimated and marked so. Body: a stand-in until Martin's scan arrives.
+    tyreWidth: [0.225, 0.225],   // m, front and rear (for the tyre marks)
+    id: 'focus',
+    name: 'Ford Focus RS WRC 03',
+    short: 'Focus WRC',
+    tag: 'WRC',
+    year: 2003,
+    blurb: 'WRC 03 · 2.0 Duratec R turbo on a 34 mm restrictor · 300 bhp, 550 Nm · 6-speed Xtrac sequential · four-wheel drive, three active diffs',
+    mass: 1310,                 // the WRC minimum of 1230 kg, which it ran at ("right on the weight limit", crash.net), + driver
+    wheelbase: 2.615,
+    track: 1.55,                // 1550 front and rear
+    height: 1.40,               // 1380 (supercars.net) or 1420 (juwra, rallycars)
+    cgFront: 0.45,              // transverse engine in front, but the radiator laid flat in the back, crew sat low and back (crash.net): about 55 % front
+    cgHeight: 0.45,             // a works car on tarmac springs: low
+    wheelRadius: 0.315,         // 225/630 R18 Michelin on 8 x 18 OZ (rallycars, supercars.net)
+    cdA: 0.42 * 2.05,           // the big wing and the 03's aero kit: draggy, as rally cars are
+    drive: 'awd',
+    // front, centre and rear differentials all active (hydraulic, Pi electronics), 50 : 50 as the base split (rallycars).
+    // On tarmac the maps ran the centre a little rearward, so the car turns in on a lift and does not push wide on the
+    // power: 45 : 55 here, and the centre sends more back as the fronts start to slip, up to 35 : 65 (estimated)
+    rearShare: 0.55, rearShareMax: 0.65,
+    grip: 1.2,                  // tarmac rally rubber under 1230 kg (gravel tyres are gravel tyres, as on every car)
+    abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
+    bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
+    // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js)
+    exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true },
+    engine: {
+      type: 'ice',
+      idle: 1000,               // a race engine's lumpy idle
+      redline: 7500,            // (no source gives the limit: about where a restricted 2.0 WRC engine's power ends)
+      shiftRpm: 7300,
+      brakeDown: 0.9,           // braking into a corner it comes down early and keeps the revs up
+      pulses: 2,
+      revDrop: 5200,            // a light flywheel and a carbon clutch (rallycars): the revs fall fast
+      revCut: 0.04, revCutDrop: 350,
+      // off the throttle: a 2.0 race engine's friction and pumping through three differentials, about 50 Nm at 6000 rpm
+      // (anti-lag cracks the throttle on a lift to keep the turbine spinning, not to drive): a lift tucks the nose in
+      brakeTorque: [28, 0.0038],
+      // Cosworth-built Duratec R, 1991 cc (84.8 x 88.0 mm), 9.0 : 1, one Garrett TR30R behind the 34 mm restrictor:
+      // 550 Nm @ 4000 and 300 bhp (224 kW) @ 6500 (Ford's figures, all sources agree). The restrictor holds the power
+      // flat at about 230 kW from 4000 to 6500 rpm, so the torque falls off as the revs rise.
+      torque: [[1000, 180], [1500, 270], [2000, 370], [2500, 450], [3000, 515], [3500, 545], [4000, 550], [4500, 490], [5000, 440], [5500, 400], [6000, 365], [6500, 330], [7000, 300], [7500, 270], [7900, 150]],
+      // ...and off boost: 2.0 litres at 9 : 1
+      turbo: {
+        torqueOff: [[1000, 120], [2500, 165], [4000, 190], [5500, 185], [7000, 160], [7900, 120]],
+        onRpm: 1500,            // anti-lag: boost from low down...
+        fullRpm: 2600,
+        spool: 5,               // ...and it comes at once
+        keep: 0.1,              // and the turbine is kept spinning on a lift (anti-lag): the boost is back the moment you press again
+        dump: 4,
+        whistle: 1.0,
+        bov: { kind: 'vent', level: 0.6, chunks: 1, flutter: 0.2, shift: 1.2 },
+      },
+      stallRpm: 4500,           // launch control
+      rollStallRpm: 5500,
+      converterGain: 1.5,
+    },
+    // 6-speed Xtrac sequential (all sources; no ratios published): a close set on tarmac gearing, the gears topping out at
+    // about 80, 104, 126, 150, 175 and 200 km/h (estimated)
+    gears: [2.5, 1.923, 1.587, 1.333, 1.143, 1.0],
+    reverse: 2.8,
+    finalDrive: 4.45,
+    efficiency: 0.85,           // three differentials
+    shiftTime: 0.06,            // a flat-shift sequential: no lift, the cut is a few hundredths
+    limiter: null,              // 6th runs out of revs at about 200
+    ref: { zeroTo100: 3.6, top: 200, powerKw: 224 },   // (no published 0-100: Ford's 0-60 mph 4.2 s is a gravel figure; tarmac works cars ran about 3.5)
+  },
   rocket: {
     // 2028 Tesla Roadster Rocket (Martin 2026-11-25): drives like the Roadster Performance (0-100 km/h in 1.6 s on
     // four underbody suction fans), plus ten cold-gas thrusters fed from one tank: BOOST and the kickflip
@@ -625,16 +697,16 @@ export const CARS = {
 // per car: it follows drive: 'awd' (`open` in substep, physics.js). It replaced the handbrake clutch
 // (engine.hbRevs, 22 Nov), which took the drive off all four wheels.
 
-export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'f40', 'cgt', 'rocket', 'bus'];
+export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', 'mazda6', 'bz4x', 'm3', 'impreza', 'focus', 'f40', 'cgt', 'rocket', 'bus'];
 
 // Cars nobody is shown yet (Martin 2026-11-25: the Rocket is hidden from all until he says): not in the garage,
 // not on the lap board, not accepted by the server. Stealth mode (?off=100, src/net/stealth.js) drives them.
-export const HIDDEN_CARS = ['rocket'];
+export const HIDDEN_CARS = ['rocket', 'focus'];   // (the Focus WRC: Martin 26 Nov, behind ?off=100 until he says)
 
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [
   { name: 'EVERYDAY', ids: ['passat', 'crv', 'mazda6', 'rav4'] },
   { name: 'ELECTRIC', ids: ['enyaq', 'bz4x', 'rocket'] },
-  { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt', 'impreza'] },
+  { name: 'PERFORMANCE', ids: ['f40', 'm3', 'cgt', 'impreza', 'focus'] },
   { name: 'LOCAL HEROES', ids: ['w201', 'audi200', 'bus'] },   // the old Merc, the Audi wagon and the line 8 bus
 ];

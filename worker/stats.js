@@ -59,7 +59,7 @@ const MAPS = {
   // short hitches while driving and what each had going on, and the seconds driven per crowd (src/stats.js hitch())
   hit: [(k) => /^(desktop|phone|tablet|other):(why:(build|draw|online|game|card|page:(net|car))|new:(shaders|pictures|car|none)|len:(<50|50-100|100-250|250\+)|on:(0|1-9|10-29|30-59|60\+)|t:(<30s|30s-2m|2-10m|10m\+)|pace:(0|1-9|10-29|30-59|60\+)|trim:(0|1|2|3|off))$/.test(k), 400],
   hitT: [(k) => /^(desktop|phone|tablet|other):(0|1-9|10-29|30-59|60\+|uneven)$/.test(k), SEC],
-  misc: [LIST('drives', 'water', 'roof', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
+  misc: [LIST('drives', 'water', 'roof', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp', 'tabs'), N],
   // the Majoraadi stage (src/stats.js stage(), from its launch on 26 Nov 2026): put on the line, started, finished,
   // why a run ended without a finish, R hops and crashes in runs, and the finished runs' tyres and penalty seconds
   stage: [LIST('line', 'start', 'finish', 'reset', 'crash', 'x:cut', 'x:off', 'x:wrong', 'x:corner', 'x:garage', 'x:race', 'x:moved', 'x:restart', 'x:quit', 'x:lights',
@@ -140,7 +140,7 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
 // One online race, or start votes that lapsed, added into the day's totals t.race (Martin 2026-11-22).
 // It comes from the lobby (worker/race.js), never from a browser: a race's cars, finish times and
 // why racers dropped out, without names. Finish times are the browsers' own, like lap times.
-const RACE_OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit', 'restart', 'still'];
+const RACE_OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit', 'restart', 'still', 'idle'];
 const RACE_END = ['done', 'time', 'restart', 'empty'];
 export const raceSize = (n) => (n <= 3 ? String(n) : n <= 5 ? '4-5' : n <= 9 ? '6-9' : '10+');
 export function addRace(t, r, now = Date.now()) {

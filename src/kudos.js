@@ -33,6 +33,7 @@ const SPOTS = {
   bz4x: { y: 1.33, z: 2.3, s: 0.42, tilt: 0.54 },
   m3: { y: 1.22, z: 1.5, s: 0.66, tilt: 1.15 },
   impreza: { y: 1.15, z: 1.36, s: 0.6, tilt: 1.08 },
+  focus: { y: 1.24, z: 1.6, s: 0.5, tilt: 1.0 },
   f40: { y: 1.06, z: 1.15, s: 0.72, tilt: 1.47 },
   cgt: { y: 0.99, z: 1.35, s: 0.72, tilt: 1.45, dark: true },
   rocket: { y: 1.0, z: 1.45, s: 0.7, tilt: 1.38, dark: true },

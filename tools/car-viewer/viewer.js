@@ -79,6 +79,8 @@ scene.add(car.group); window.__car = car;
 await car.ready;
 if (q.get('copy') === '1') for (let i = 0; i < 50 && !car.glbLoaded; i++) await new Promise((r) => setTimeout(r, 100));     // (the copy takes the scanned body after the template)
 car.setLights({ brake: q.get('brake') === '1', reverse: q.get('reverse') === '1', headlights: q.get('head') === '1' });
+// &bonnet=1: the Focus WRC's bonnet up against the windscreen (or &bonnet=<0..1> of the way there)
+if (q.get('bonnet') && car.bonnet) car.bonnet.pivot.rotation.x = car.bonnet.rest * Math.min(1, +q.get('bonnet'));
 if (q.get('steer')) { car.wheels.fl.steer.rotation.y = +q.get('steer'); car.wheels.fr.steer.rotation.y = +q.get('steer'); }
 if (q.get('spin')) for (const k in car.wheels) car.wheels[k].spin.rotation.x = +q.get('spin');
 if (q.get('soot')) car.setSoot?.(+q.get('soot'));

@@ -175,7 +175,9 @@ function flip(name, { h = () => 0, kmh = 100, extra = {}, side = 0, slide = 0, e
   // (one whole turn: just before touchdown the roll stands at a full circle, and it never goes past it)
   // (and a little: the 10 to 16 degrees it overshoots by, and its trembling)
   const full = rollMax > 2 * Math.PI * 0.97 && rollMax < 2 * Math.PI * 1.06;
-  const pass = Math.abs(rel) < 0.5 && Math.abs(yL - gL) < 0.1 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < 0.12 && tankL === tank0 - JUMP_S;
+  // (the flight ends at the wheels' first touch, 26 Nov: the body is still some 11 cm over its ride height there and
+  // sinking at up to 1 m/s, which the springs take without the car coming up again)
+  const pass = rel > -1.05 && rel < 0.1 && yL - gL > -0.03 && yL - gL < 0.2 && full && Math.abs(vL - v0) < 0.05 * Math.max(v0, 1) + 0.05 && low > -0.06 && air2 < 0.1 && bounce < Math.max(0.12, yL - gL + 0.03) && tankL === tank0 - JUMP_S;
   check(name, pass, `${air.toFixed(2)} s in the air, ${len.toFixed(1)} m long, ${peak.toFixed(2)} m high, touchdown ${rel.toFixed(2)} m/s against the ground, speed ${(v0 * 3.6).toFixed(0)} to ${(vL * 3.6).toFixed(0)} km/h, lift ${(plan.vl / 10.3).toFixed(2)}x${verbose ? `, roll ${(rollMax * 180 / Math.PI).toFixed(0)} deg, lowest ${low.toFixed(2)} m, after: bounce ${bounce.toFixed(2)} m, air ${air2.toFixed(2)} s` : ''}`);
   return { plan, air, len, peak, car };
 }
@@ -185,7 +187,28 @@ const level = flip('FLIP on level ground at 100 km/h');
 // (Tesla's film: about 3 s in the air, the car's middle 8.7 m up; here the floor is 8.1 m up at the top of the arc
 // and, upside down there, 8.95 m)
 // (3.1 s and 85 m until 26 Nov, when the last 3 m were made slow: a second more in the air)
-check('...is about 4.0 s, 111 m and 8.9 m high at the top of the roll', level && Math.abs(level.air - 4.0) < 0.15 && Math.abs(level.len - 111) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// (4.0 s and 111 m until the flight ended at the first touch and not at the plan's end, a quarter of a second sooner)
+check('...is about 3.8 s, 105 m and 8.9 m high at the top of the roll', level && Math.abs(level.air - 3.77) < 0.15 && Math.abs(level.len - 105) < 5 && Math.abs(level.peak - 8.95) < 0.4, level ? `${level.air.toFixed(2)} s, ${level.len.toFixed(0)} m, ${level.peak.toFixed(2)} m` : '');
+// ---- the first touch (Martin 26 Nov: "as soon as there is just the slightest contact on the road then it acts as
+// turning input etc (even if the animation is still ending)"): the flight ends where the wheels, hanging under the
+// body, first meet the road, a quarter of a second before the plan's end, and the car answers at once
+{
+  const fly = (after) => {
+    const w = world(), car = fresh(w, 100);
+    for (let t = 0; t < 0.5; t += dt) { stepCar(car, { up: 0 }, w, dt); car.vx = 100 / 3.6; car.lastGround = null; }
+    stepCar(car, { flip: 1 }, w, dt);
+    const plan = car.rocket.launched;
+    let t = dt;
+    while (car.rocket.flight && t < 20) { stepCar(car, {}, w, dt); t += dt; }
+    const up = car.y, jets = Math.max(car.rocket.noz[4], car.rocket.noz[5], car.rocket.noz[6], car.rocket.noz[7]), yaw0 = car.yaw, v0 = car.vx;
+    for (let u = 0; u < 0.25; u += dt) stepCar(car, after, w, dt);
+    return { early: plan.tl - t, up, jets, turned: Math.abs(car.yaw - yaw0) * 180 / Math.PI, lost: (v0 - car.vx) * 3.6, jetsAfter: Math.max(car.rocket.noz[4], car.rocket.noz[5], car.rocket.noz[6], car.rocket.noz[7]) };
+  };
+  const a = fly({ right: 1 }), b = fly({ down: 1 }), c = fly({});
+  check('the flight ends at the wheels\' first touch, before the plan does', a.early > 0.15 && a.early < 0.4 && a.up > 0.05 && a.up < 0.18, `${a.early.toFixed(2)} s before the plan's end, the body ${(a.up * 100).toFixed(0)} cm over its ride height`);
+  check('...and from there the car answers the wheel and the brake', a.turned > 1.5 && a.turned > 5 * c.turned + 1 && b.lost > 8 && b.lost > c.lost + 6, `in a quarter of a second: turned ${a.turned.toFixed(1)} deg (${c.turned.toFixed(1)} hands off), ${b.lost.toFixed(0)} km/h braked off (${c.lost.toFixed(0)} coasting)`);
+  check('...while the jets die away by themselves', a.jets > 0.5 && a.jetsAfter < 0.1, `${a.jets.toFixed(2)} at the touch, ${a.jetsAfter.toFixed(2)} a quarter of a second on`);
+}
 // ---- the lift-off push and the way down (Martin 26 Nov): a slightly gentler, steady push with all four corner jets
 // as one; a quiet moment before the roll; the last metres slow and the last one slower still
 {
@@ -217,7 +240,8 @@ flip('FLIP at a standstill hops in place', { kmh: 0 });
 flip('FLIP at 250 km/h', { kmh: 250 });
 const film = flip('FLIP at the 47 km/h of Tesla\'s film', { kmh: 47.2 });
 // (the film's 40 m, and the second more of being let down slowly)
-check('...covers about 55 m', film && Math.abs(film.len - 55) < 3, film ? `${film.len.toFixed(1)} m` : '');
+// (52 m at the plan's end; the flight ends at the first touch, a quarter of a second sooner)
+check('...covers about 50 m', film && Math.abs(film.len - 50) < 3, film ? `${film.len.toFixed(1)} m` : '');
 flip('FLIP rolling left', { side: -1 });
 flip('FLIP in a slide flies along the slide', { kmh: 80, slide: 6 });
 // a 4 m drop 20 to 40 m ahead: lands lower, later

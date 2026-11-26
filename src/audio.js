@@ -215,6 +215,49 @@ export function createAudio() {
     }
   }
 
+  // the Focus WRC's bonnet (src/cars/bonnet.js): 'pop' it slams up against the windscreen, a hollow clang of thin
+  // panel on glass; 'tear' it rips off its hinges, a metallic shriek and a rattle; 'land' it comes down on the road
+  // behind, a clatter. level 0..1.3.
+  function panel(kind, level = 1) {
+    if (!ctx || ctx.state !== 'running' || !noiseBuf) return;
+    const t = ctx.currentTime + 0.005, L = Math.max(0.15, Math.min(1.3, level));
+    const burst = (at, dur, type, freq, q, gain) => {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = noiseBuf; f.type = type; f.frequency.value = freq; f.Q.value = q;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(gain, at + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      src.connect(f).connect(g).connect(bus);
+      src.start(at, Math.random()); src.stop(at + dur + 0.02);
+    };
+    const ring = (at, f0, f1, dur, gain, type = 'triangle') => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, at);
+      o.frequency.exponentialRampToValueAtTime(f1, at + dur);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(gain, at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g).connect(bus);
+      o.start(at); o.stop(at + dur + 0.02);
+    };
+    if (kind === 'pop') {
+      burst(t, 0.12, 'lowpass', 500, 0.8, 0.35 * L);                                   // the thud on the glass
+      ring(t, 180, 120, 0.35, 0.12 * L); ring(t, 433, 380, 0.25, 0.05 * L, 'sine'); ring(t, 911, 860, 0.18, 0.03 * L, 'sine');   // the panel ringing
+      burst(t + 0.18, 0.06, 'bandpass', 700, 2, 0.08 * L);                              // and its bounce
+    } else if (kind === 'tear') {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 6;
+      f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(1200, t + 0.22);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25 * L, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      src.connect(f).connect(g).connect(bus); src.start(t, Math.random()); src.stop(t + 0.3);
+      ring(t + 0.02, 240, 140, 0.4, 0.1 * L);
+      for (let k = 0; k < 4; k++) burst(t + 0.05 + Math.random() * 0.25, 0.03, 'bandpass', 1500 + Math.random() * 2000, 3, 0.05 * L);
+    } else {
+      for (let k = 0; k < 3; k++) { const at = t + k * (0.09 + Math.random() * 0.08); burst(at, 0.07, 'bandpass', 900 + Math.random() * 500, 1.5, (0.14 - k * 0.04) * L); ring(at, 300 + Math.random() * 80, 200, 0.12, (0.05 - k * 0.012) * L); }
+    }
+  }
+
   // a wooden picket fence knocked down (src/world/breakfence.js; Martin 2026-11-22: a slight breaking sound):
   // 'snap' the dry crack of the panel tearing off its posts, a few splinters and the hollow knock of the
   // boards; 'land' the soft clack of a panel hitting the pavement. level 0..1.3 from the speed.
@@ -701,7 +744,7 @@ export function createAudio() {
   }
 
   return {
-    start, update, updateRemotes, updateSpace, chime, beep, putt, smash, wood,
+    start, update, updateRemotes, updateSpace, chime, beep, putt, smash, wood, panel,
     setLite(v) { if (v === lite) return; lite = v; applySpace(); },
     get space() { return space; },
     setCar(spec) {

@@ -12,7 +12,7 @@ import { paintScale } from '../world/paintscale.js';
 // each car's own plate, for the box's grey hint in the garage
 export const OWN_PLATE = {
   w201: '190 EEE', audi200: '200 QTR', passat: '019 TDI', crv: '207 CRV', enyaq: '823 ENQ', rav4: '369 RAV', mazda6: '006 MAZ',
-  bz4x: '444 BZX', m3: '333 BMW', impreza: '022 STI', f40: '040 FER', cgt: '001 POR', bus: '408 TNS',
+  bz4x: '444 BZX', m3: '333 BMW', impreza: '022 STI', focus: '003 WRC', f40: '040 FER', cgt: '001 POR', bus: '408 TNS',
 };
 
 const OUT = 0.001;                 // metres out from the plate under it

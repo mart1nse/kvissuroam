@@ -146,6 +146,7 @@ import { createSkidMarks } from './skidmarks.js';
 import { createSmoke } from './smoke.js';
 import { createPlumes } from './cars/plumes.js';
 import { createRocketUi } from './rocketui.js';
+import { bonnetView, fixBonnet, dropBonnet } from './cars/bonnet.js';
 import { refillTank } from './cars/thrust.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
@@ -1275,7 +1276,7 @@ function setCar(id, now = false) {
   car = createCar(spec, pose);
   car.tyres = tyres;
   car.fanOff = fansOff && !!spec.fanDown;
-  if (model) { scene.remove(model.group); freeModel(model.group); }
+  if (model) { dropBonnet(model); scene.remove(model.group); freeModel(model.group); }
   try {
     model = buildCarModel ? buildCarModel(id) : buildPlaceholder(spec);
   } catch (err) {
@@ -1522,6 +1523,7 @@ let placedAt = -1e9;               // when the car was last put somewhere (ms)
 function place(pose) {
   watch?.stop();                                   // (put somewhere: back in your own car)
   placedAt = performance.now();
+  if (Math.hypot(pose.x - car.x, pose.z - car.z) > 200) fixBonnet(car);   // (put somewhere far off, home or the stage's start: a fresh bonnet; R keeps it as it is)
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
@@ -2344,6 +2346,7 @@ function frame(ts) {
   w.fl.spin.rotation.x = w.fr.spin.rotation.x = -car.wheelSpinF;
   w.rl.spin.rotation.x = w.rr.spin.rotation.x = -car.wheelSpinR;
   model.setLights({ brake: car.brake > 0, reverse: car.reversing, headlights: true });
+  if (model.bonnet) bonnetView(model, car, dt, scene, world, audio.panel);   // (the Focus WRC's bonnet: src/cars/bonnet.js)
   // a diesel with a failing DPF sooting up its tail: clean at the start, bad by 5 km, clean again on a respawn
   if (s.dpfSmoke && model.setSoot) {
     if (mode === 'drive') car.sootKm = (car.sootKm || 0) + Math.abs(car.vx) * dt / 1000;
@@ -2621,7 +2624,7 @@ window.__game = !devHook ? { hitches } : {
   hitches,
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

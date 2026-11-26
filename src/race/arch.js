@@ -5,10 +5,11 @@
 // (LEG m wide) are the room for adverts, on both sides, and `panels` below says where each lies. Its word stands
 // on a small board on top of the beam, so that the beam stays free. A line of light runs round the opening and
 // round the outside.
-// Each arch is three small meshes (the body, the lines of light, the word) and both share one small picture of
-// the two words; the legs are solid (world.addSolids).
+// Each arch is one mesh of a few hundred triangles (the body, the lines of light and the word together: the
+// lowest graphics level counts every piece it draws), and both share one material and one small picture, the
+// two words and a white patch that everything else takes its plain colour through. The legs are solid
+// (world.addSolids).
 import * as THREE from 'three';
-import { Parts } from './landmarks.js';
 import { paintScale } from '../world/paintscale.js';
 import { still } from '../still.js';
 
@@ -17,29 +18,32 @@ const CUT = 0.9, CUT_IN = 0.5;                              // the cut corners o
 const FOOT = 1.5;                                           // the legs go this far into the ground (a slope under them)
 const LINE = 0.09;                                          // the lines of light
 const BOARD_W = 4.4, BOARD_H = 0.7;                         // the word's board on top
-const BLACK = 0x0d0d13, CYAN = 0x38d6ff, PINK = 0xff3fd0;
+const BLACK = 0x0b0b10, CYAN = 0x38d6ff, PINK = 0xff3fd0;
 const WORDS = ['START', 'FINISH'];
 
-let wordsTex = null;
-function words() {
-  if (wordsTex) return wordsTex;
-  const k = paintScale(), w = Math.round(512 * k), h = Math.round(80 * k);
+// the picture: the words one under the other, and under them a white patch (PLAIN) for the faces of one colour
+const ROW = 80, GAP = 16, TALL = ROW * WORDS.length + GAP * 2;
+const PLAIN = [0.5, GAP / 2 / TALL];
+let mat = null;
+function material() {
+  if (mat) return mat;
+  const k = paintScale(), w = Math.round(512 * k), h = Math.round(TALL * k);
   const c = document.createElement('canvas');
-  c.width = w; c.height = h * WORDS.length;
+  c.width = w; c.height = h;
   const g = c.getContext('2d');
-  g.fillStyle = '#0d0d13'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#0d0d13'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#fff'; g.fillRect(0, h - Math.round(GAP * k), w, Math.round(GAP * k));
   g.font = `italic 900 ${Math.round(62 * k)}px "Avenir Next", "Futura", "Trebuchet MS", sans-serif`;
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  WORDS.forEach((t, i) => {
-    g.shadowColor = '#38d6ff'; g.shadowBlur = 10 * k;
-    g.fillStyle = '#f2fbff';
-    try { g.letterSpacing = `${Math.round(10 * k)}px`; } catch { /* an old browser: the letters closer */ }
-    g.fillText(t, w / 2, h * (i + 0.5) + 3 * k);
-  });
-  wordsTex = new THREE.CanvasTexture(c);
-  wordsTex.colorSpace = THREE.SRGBColorSpace;
-  wordsTex.anisotropy = 4;
-  return wordsTex;
+  try { g.letterSpacing = `${Math.round(10 * k)}px`; } catch { /* an old browser: the letters closer */ }
+  g.shadowColor = '#38d6ff'; g.shadowBlur = 10 * k;
+  g.fillStyle = '#f2fbff';
+  WORDS.forEach((t, i) => g.fillText(t, w / 2, (ROW * (i + 0.5) + 3) * k));
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true });
+  return mat;
 }
 
 // the arch's outline seen along the road: x across, y up from the ground at its middle; `a` is half the opening
@@ -72,35 +76,35 @@ export function buildArch({ group, world, x, z, tx, tz, half, word }) {
   g.position.set(x, y, z);
   g.rotation.y = yaw;
 
+  // corners gathered into one mesh: [positions, colour, uv or null for the white patch]
+  const P = [], C = [], U = [], col = new THREE.Color();
+  const put = (geo, hex, uv) => {
+    const pos = geo.attributes.position.array;
+    col.setHex(hex);
+    for (let i = 0; i < pos.length; i += 3) { P.push(pos[i], pos[i + 1], pos[i + 2]); C.push(col.r, col.g, col.b); }
+    if (uv) U.push(...uv); else for (let i = 0; i < pos.length; i += 3) U.push(PLAIN[0], PLAIN[1]);
+    geo.dispose();
+  };
   // the body: one flat arch, and the word's board on top
-  const p = new Parts();
-  let geo = slab([...outline(a, 0), ...opening(a, 0)], DEEP);
-  p.add(geo, BLACK, 0, 0, 0); geo.dispose();
   const by = CLEAR + BEAM + BOARD_H / 2;
-  p.box(BOARD_W + 0.16, BOARD_H + 0.08, 0.2, BLACK, 0, by, 0);
-  const body = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
-  body.castShadow = true;
-  g.add(body);
-
+  put(slab([...outline(a, 0), ...opening(a, 0)], DEEP), BLACK);
+  put(new THREE.BoxGeometry(BOARD_W + 0.16, BOARD_H + 0.08, 0.2).translate(0, by, 0).toNonIndexed(), BLACK);
   // the lines of light: round the opening and round the outside, a hair proud of both faces
-  const q = new Parts();
-  geo = slab([...opening(a, 0), ...opening(a, -LINE).reverse()], DEEP + 0.03);
-  q.add(geo, CYAN, 0, 0, 0); geo.dispose();
-  geo = slab([...outline(a, 0), ...outline(a, -LINE).reverse()], DEEP + 0.03);
-  q.add(geo, PINK, 0, 0, 0); geo.dispose();
-  const lines = q.mesh(new THREE.MeshBasicMaterial({ vertexColors: true }));
-  g.add(lines);
-
-  // the word, on both faces of its board
-  const v0 = 1 - (word + 1) / WORDS.length, v1 = 1 - word / WORDS.length, hw = BOARD_W / 2, hh = BOARD_H / 2, d = 0.11;
-  const wg = new THREE.BufferGeometry();
-  wg.setAttribute('position', new THREE.Float32BufferAttribute([
-    hw, by - hh, -d, -hw, by - hh, -d, -hw, by + hh, -d, hw, by + hh, -d,          // the face the cars come up to
-    -hw, by - hh, d, hw, by - hh, d, hw, by + hh, d, -hw, by + hh, d,
-  ], 3));
-  wg.setAttribute('uv', new THREE.Float32BufferAttribute([0, v0, 1, v0, 1, v1, 0, v1, 0, v0, 1, v0, 1, v1, 0, v1], 2));
-  wg.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
-  g.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ map: words(), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+  put(slab([...opening(a, 0), ...opening(a, -LINE).reverse()], DEEP + 0.03), CYAN);
+  put(slab([...outline(a, 0), ...outline(a, -LINE).reverse()], DEEP + 0.03), PINK);
+  // the word, on both faces of its board (the first is the face the cars come up to)
+  const v1 = 1 - word * ROW / TALL, v0 = 1 - (word + 1) * ROW / TALL, hw = BOARD_W / 2, hh = BOARD_H / 2, d = 0.115;
+  const quad = (x0, x1, z) => new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([x0, by - hh, z, x1, by - hh, z, x1, by + hh, z, x0, by - hh, z, x1, by + hh, z, x0, by + hh, z], 3));
+  const wuv = [0, v0, 1, v0, 1, v1, 0, v0, 1, v1, 0, v1];
+  put(quad(hw, -hw, -d), 0xffffff, wuv);
+  put(quad(-hw, hw, d), 0xffffff, wuv);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  const mesh = new THREE.Mesh(geo, material());
+  mesh.castShadow = true;
+  g.add(mesh);
 
   group.add(g);
   // the legs stop a car

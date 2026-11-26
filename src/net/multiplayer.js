@@ -48,6 +48,7 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const HEARD_S = 2.5;             // a car whose last position is younger than this is still there (a far one comes once a second)
 const FRESH = 64;                // flag: just put on the start and still in the start lane (src/race/startlane.js)
 const THRU = HOT | FRESH;        // either: nobody bumps this car
 // A car that just appeared where it is (its first position, R, the map, or a place a script made up) does not push
@@ -1464,12 +1465,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // (garage, menu, another tab) for less than AWAY_S
     drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
-    // how many other cars are on a timed run within r of (x, z) now: their lap timer running (flag 8) and still
-    // sending (the Majoraadi pill's count, main.js trackPills); `ids`, a Set, is filled with who they are
+    // how many other cars are on a timed run within r of (x, z) now: their lap timer running (flag 8) in their
+    // newest position, heard within HEARD_S (the Majoraadi pill's count, main.js trackPills); `ids`, a Set, is
+    // filled with who they are. (Not `live`, which goes off 0.6 s after a position: a car far from ours comes once
+    // a second (the server's POSE_VFAR_MS), and the list under the pill blinked with it, Martin 26 Nov.)
     hotNear(x, z, r, ids = null) {
+      const now = performance.now() / 1000;
       let n = 0;
       ids?.clear();
-      for (const o of others.values()) { const p = o.pose; if (p && o.live && (p[20] & HOT) && (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) { n++; ids?.add(o.id); } }
+      for (const o of others.values()) {
+        const L = o.buf[o.buf.length - 1], p = L?.p;
+        if (p && now - L.t < HEARD_S && (p[20] & HOT) && (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) { n++; ids?.add(o.id); }
+      }
       return n;
     },
     setName(n) {

@@ -58,7 +58,7 @@ const MAPS = {
   frz: [(k) => /^(desktop|phone|tablet|other):(why:(game:(build|draw|other)|page:[A-Za-z0-9._:-]{1,40}|paint)|new:(shaders|pictures|none)|kpc:(yes|no)|gc:yes|os:(Windows|macOS|iOS|Android|Linux|ChromeOS|other)|mem:(\?|0\.25|0\.5|1|2|4|8|16|32)|lvl:(\?|1[0-5]|[0-9])|on:(0|1-9|10-29|30\+)|t:(<30s|30s-2m|2-10m|10m\+)|len:(1-3s|3-10s|10s\+)|do:(free|hotlap|race|stage)|kmh:(<5|5-50|50\+)|at:-?\d{1,3},-?\d{1,3})$/.test(k), 8],
   // short hitches while driving and what each had going on, and the seconds driven per crowd (src/stats.js hitch())
   hit: [(k) => /^(desktop|phone|tablet|other):(why:(build|draw|online|game|card|page:(net|car))|new:(shaders|pictures|car|none)|len:(<50|50-100|100-250|250\+)|on:(0|1-9|10-29|30-59|60\+)|t:(<30s|30s-2m|2-10m|10m\+)|pace:(0|1-9|10-29|30-59|60\+)|trim:(0|1|2|3|off))$/.test(k), 400],
-  hitT: [(k) => /^(desktop|phone|tablet|other):(0|1-9|10-29|30-59|60\+)$/.test(k), SEC],
+  hitT: [(k) => /^(desktop|phone|tablet|other):(0|1-9|10-29|30-59|60\+|uneven)$/.test(k), SEC],
   misc: [LIST('drives', 'water', 'roof', 'mapjump', 'garage', 'idle', 'glLost', 'speed100', 'speed150', 'speed200', 'speed250', 'mp'), N],
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };

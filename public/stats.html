@@ -550,7 +550,7 @@
   function hitches(t) {
     var o = t.hit || {}, T = t.hitT || {}, total = {}, secs = {};
     Object.keys(o).forEach(function (k) { var p = k.split(':'); if (p[1] === 'len') total[p[0]] = (total[p[0]] || 0) + o[k]; });
-    Object.keys(T).forEach(function (k) { var p = k.split(':'); secs[p[0]] = (secs[p[0]] || 0) + T[k]; });
+    Object.keys(T).forEach(function (k) { var p = k.split(':'); if (p[1] !== 'uneven') secs[p[0]] = (secs[p[0]] || 0) + T[k]; });
     var devs = ['phone', 'desktop', 'tablet'].filter(function (d) { return secs[d] >= 60; });
     if (!devs.length) return '';
     var name = { desktop: 'Desktop', phone: 'Phone', tablet: 'Tablet' };
@@ -565,11 +565,16 @@
       });
     };
     rows('Hitches per 10 minutes of driving', 'on');
+    // (the part of the driving with an uneven frame rate, where single late frames are no longer counted as hitches)
+    if (devs.some(function (d) { return T[d + ':uneven'] > 0; })) body += '<tr><td colspan="' + (devs.length + 1) + '"><b>Uneven frame rate</b></td></tr><tr><td>share of the driving</td>' + devs.map(function (d) {
+      var u = T[d + ':uneven'] || 0;
+      return '<td class="n"><b>' + fmt(u / secs[d] * 100, 0) + '%</b><small>' + fmt(u / 3600, 1) + ' h</small></td>';
+    }).join('') + '</tr>';
     var kinds = [
       ['why', 'What the frame before was busy with', { build: 'building places and cars (queued work)', draw: 'handing the picture to the graphics card', online: 'the other players (cars, list, names, race)', game: 'the game\'s other frame code',
         card: 'nothing on the page: the graphics card or the browser', 'page:net': 'messages from the server', 'page:car': 'a car model back from its worker' }],
       ['new', 'New on the graphics card in that frame', { shaders: 'new shaders', pictures: 'new pictures', car: 'a step of another player\'s car', none: 'nothing new' }],
-      ['len', 'How long, ms', {}], ['t', 'Time since DRIVE', {}],
+      ['len', 'How long, ms', {}], ['t', 'Time since DRIVE, or since the car was put somewhere', {}],
     ];
     kinds.forEach(function (kd) {
       var vals = {};
@@ -587,7 +592,7 @@
     body += '</tbody></table>';
     var top = devs.slice().sort(function (a, b) { return secs[b] - secs[a]; })[0];
     var line = name[top] + ': ' + fmt((total[top] || 0) / secs[top] * 600, 1) + ' hitches per 10 minutes of driving';
-    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. Counted from 25 Nov 2026.', body);
+    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. A frame rate that hops all the time (four or more of the last 120 frames late) is an uneven frame rate, not hitches: its share of the driving has a row of its own, and a hitch there is a frame that stands out from those late ones. Until 26 Nov 2026 every late frame of such a visit was counted, so the figures before that read higher and earlier (a visit\'s 60 rows were used up in its first seconds). Counted from 25 Nov 2026.', body);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

@@ -128,6 +128,147 @@ export async function loadWorldData(onProgress = () => {}) {
     return c >= 0 && r >= 0 && c < RN && r < RN ? roofGrid(s)[r * RN + c] : -1e9;
   };
 
+  // The roofs themselves, for a car that comes down on one or drives over one (Martin, 26 Nov 2026: "free room
+  // over those buildings, taking into account the slopes of their roofs, so a car could drive onto it in case of
+  // a jump from another building or the new jump"). The map's houses are solids with their real roof planes; the
+  // triangles that face up (no steeper than about 75 degrees, as the bake's roofs are) are kept per sector in a
+  // bucket grid, as they are in the file (x and z in 5 cm from the sector's corner, y in cm), made the first time
+  // a car is up at roof height there and dropped with the sector. Nothing is drawn and no picture is made.
+  const QC = 8, QM = 4;      // metres to a square; squares of margin (a house stands in one sector's file and can reach into the next)
+  const QN = Math.ceil(S / QC) + 2 * QM;
+  const NO_ROOFS = { dv: null, start: new Uint32Array(QN * QN + 1), refs: new Uint16Array(0) };
+  const YARD_UP = 1.5, YARD_MIN = 80;     // a roof within this of its house's foot (m) is a floor; with this much of it (m2) a yard to drive in
+  // (made in the work queue, a millisecond or two of work for a busy square, asked for as soon as a car is up at
+  // roof height in the square or within reach of it; `now`: the car is at a house this moment, the rest of the
+  // work is done at once)
+  function roofTris(s, now) {
+    if (s.rtris) return s.rtris;
+    const b = s.buildings;
+    if (!b || b.nv < 3) return (s.rtris = NO_ROOFS);
+    if (!s.rjob) { const it = s.rjob = roofBuild(s, b); jobs.add(function* () { yield* it; }, 'roofs'); }
+    if (!s.rtris && now) for (const it = s.rjob; !it.next().done;);
+    return s.rtris;
+  }
+  function* roofBuild(s, b) {
+    const n = Math.floor(b.nv / 3);
+    const gone = () => s.buildings !== b || s.rtris;          // (the square was dropped, or made at once meanwhile)
+    if (gone()) return;
+    const nq = new Int8Array(b.buf, b.offset + b.nv * 6, b.nv * 3);
+    // (the triangles stay in the sector's file: the grid holds their numbers there)
+    const dv = new DataView(b.buf, b.offset, b.nv * 6), base = new DataView(b.buf, b.offset + b.nv * 13, b.nv * 2);
+    // facing up (the normal's y over 0.25, as the bake's roofs are): 1; and down at the foot of its house, a
+    // terrace or the floor of a yard: 2, with how much of that each house has (houses are told apart by the height
+    // of their foot, as the scenery tells them)
+    const up = new Uint8Array(n), floors = new Map();
+    let m = 0;
+    for (let t = 0; t < n; t++) {
+      if ((t & 4095) === 4095 && jobs.late(2)) { yield; if (gone()) return; }
+      if (nq[t * 9 + 1] < 32) continue;
+      const o = t * 18, foot = base.getInt16(t * 6, true);
+      up[t] = 1; m++;
+      if (Math.max(dv.getInt16(o + 2, true), dv.getInt16(o + 8, true), dv.getInt16(o + 14, true)) > foot + YARD_UP * 100) continue;
+      const ax = dv.getInt16(o, true), az = dv.getInt16(o + 4, true);
+      const area = Math.abs((dv.getInt16(o + 6, true) - ax) * (dv.getInt16(o + 16, true) - az) - (dv.getInt16(o + 12, true) - ax) * (dv.getInt16(o + 10, true) - az)) * 0.00125;
+      up[t] = 2; floors.set(foot, (floors.get(foot) || 0) + area);
+    }
+    // (a floor too small to drive on is no roof at all: roofOver puts a lid on the well)
+    for (let t = 0; t < n; t++) if (up[t] === 2 && floors.get(base.getInt16(t * 6, true)) < YARD_MIN) { up[t] = 0; m--; }
+    if (m === 0) return (s.rtris = NO_ROOFS);
+    const count = new Uint32Array(QN * QN + 1);
+    const box = new Uint8Array(m * 4), which = new Uint32Array(m);
+    const cell = (v) => Math.max(0, Math.min(QN - 1, Math.floor(v * 0.05 / QC) + QM));
+    m = 0;
+    for (let t = 0; t < n; t++) {
+      if ((t & 4095) === 4095 && jobs.late(2)) { yield; if (gone()) return; }
+      if (up[t] === 0) continue;
+      const o = t * 18;
+      const ax = dv.getInt16(o, true), az = dv.getInt16(o + 4, true), bx = dv.getInt16(o + 6, true), bz = dv.getInt16(o + 10, true), cx = dv.getInt16(o + 12, true), cz = dv.getInt16(o + 16, true);
+      const c0 = cell(Math.min(ax, bx, cx)), c1 = cell(Math.max(ax, bx, cx)), r0 = cell(Math.min(az, bz, cz)), r1 = cell(Math.max(az, bz, cz));
+      box[m * 4] = c0; box[m * 4 + 1] = c1; box[m * 4 + 2] = r0; box[m * 4 + 3] = r1; which[m++] = t;
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) count[r * QN + c + 1]++;
+    }
+    for (let i = 0; i < QN * QN; i++) count[i + 1] += count[i];
+    const refs = n < 65536 ? new Uint16Array(count[QN * QN]) : new Uint32Array(count[QN * QN]), at = count.slice(0, QN * QN);
+    if (jobs.late(2)) { yield; if (gone()) return; }
+    for (let k = 0; k < m; k++) {
+      for (let r = box[k * 4 + 2]; r <= box[k * 4 + 3]; r++) for (let c = box[k * 4]; c <= box[k * 4 + 1]; c++) refs[at[r * QN + c]++] = which[k];
+    }
+    s.rtris = { dv, start: count, refs };
+  }
+  // the highest roof of sector s's houses over the point that is below yMax; -Infinity where there is none
+  function roofIn2(s, x, z, yMax) {
+    if (s === undefined || s.state !== 'ready') return -Infinity;
+    const c = Math.floor((x - s.x0) / QC) + QM, r = Math.floor((z - s.z0) / QC) + QM;
+    if (c < 0 || r < 0 || c >= QN || r >= QN) return -Infinity;
+    // (not made yet: asked for once a car is up at roof height here, groundAt, and needed at once only next to a
+    // wall; a bridge's deck is at roof height all its length with no house near)
+    let g = s.rtris;
+    if (!g) {
+      if (!roofMake) return -Infinity;
+      const near = sdfNear(x, z) < 1;
+      if (!near && !roofAhead) return -Infinity;
+      g = roofTris(s, near);
+      if (!g) return -Infinity;
+    }
+    const i = r * QN + c, e = g.start[i + 1];
+    let k = g.start[i], best = -Infinity;
+    if (k === e) return best;
+    const dv = g.dv, px = (x - s.x0) * 20, pz = (z - s.z0) * 20;
+    for (; k < e; k++) {
+      const o = g.refs[k] * 18;
+      const ax = dv.getInt16(o, true), az = dv.getInt16(o + 4, true), bx = dv.getInt16(o + 6, true), bz = dv.getInt16(o + 10, true), cx = dv.getInt16(o + 12, true), cz = dv.getInt16(o + 16, true);
+      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (d === 0) continue;
+      const u = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / d, v = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / d;
+      // (a hair over the sides: no crack between two triangles for a wheel to fall into)
+      if (u < -0.004 || v < -0.004 || u + v > 1.004) continue;
+      const y = (u * dv.getInt16(o + 2, true) + v * dv.getInt16(o + 8, true) + (1 - u - v) * dv.getInt16(o + 14, true)) * 0.01;
+      if (y < yMax && y > best) best = y;
+    }
+    return best;
+  }
+  // the top of the roofs of sector s that reach into the grid square the point is in
+  function roofCell(s, x, z) {
+    if (s === undefined || s.state !== 'ready' || !s.rtris) return -Infinity;
+    const c = Math.floor((x - s.x0) / QC) + QM, r = Math.floor((z - s.z0) / QC) + QM;
+    if (c < 0 || r < 0 || c >= QN || r >= QN) return -Infinity;
+    const g = s.rtris, i = r * QN + c;
+    let best = -Infinity;
+    for (let k = g.start[i], e = g.start[i + 1]; k < e; k++) {
+      const o = g.refs[k] * 18, y = Math.max(g.dv.getInt16(o + 2, true), g.dv.getInt16(o + 8, true), g.dv.getInt16(o + 14, true)) * 0.01;
+      if (y > best) best = y;
+    }
+    return best;
+  }
+  // What a car can stand on over a house, below yMax. The roof, as roofTop has it; but a place deep inside a
+  // house's outline with no roof over it (a light well a few metres across that the distance field has as house,
+  // with no floor in the map or one too small to drive on, roofTris: a car that fell in stood inside the walls
+  // and was let out through them) is closed with a lid as high as the roofs round it. A yard with a floor of
+  // YARD_MIN and more (a terrace, a deck over a cellar) is left open: a car comes down into it and drives there,
+  // the houses round it its walls (physics.js: inside).
+  function roofOver(x, z, yMax) {
+    const r = roofTop(x, z, yMax);
+    if (r > -1e8 || sdfNear(x, z) > -0.75) return r;
+    const sx = Math.floor((x - G0) / S), sz = Math.floor((z - G0) / S);
+    let lid = roofCell(sectors.get(key(sx, sz)), x, z);
+    const lx = x - G0 - sx * S, lz = z - G0 - sz * S, m = QM * QC;
+    const dx = lx < m ? -1 : lx > S - m ? 1 : 0, dz = lz < m ? -1 : lz > S - m ? 1 : 0;
+    if (dx) lid = Math.max(lid, roofCell(sectors.get(key(sx + dx, sz)), x, z));
+    if (dz) lid = Math.max(lid, roofCell(sectors.get(key(sx, sz + dz)), x, z));
+    if (dx && dz) lid = Math.max(lid, roofCell(sectors.get(key(sx + dx, sz + dz)), x, z));
+    return lid < yMax ? lid : r;
+  }
+  function roofTop(x, z, yMax) {
+    const sx = Math.floor((x - G0) / S), sz = Math.floor((z - G0) / S);
+    let y = roofIn2(sectors.get(key(sx, sz)), x, z, yMax);
+    const lx = x - G0 - sx * S, lz = z - G0 - sz * S, m = QM * QC;
+    const dx = lx < m ? -1 : lx > S - m ? 1 : 0, dz = lz < m ? -1 : lz > S - m ? 1 : 0;
+    if (dx) y = Math.max(y, roofIn2(sectors.get(key(sx + dx, sz)), x, z, yMax));
+    if (dz) y = Math.max(y, roofIn2(sectors.get(key(sx, sz + dz)), x, z, yMax));
+    if (dx && dz) y = Math.max(y, roofIn2(sectors.get(key(sx + dx, sz + dz)), x, z, yMax));
+    return y;
+  }
+
   // a bucket grid over a sector's trees, built the first time a car comes near
   const TC = 16;
   function trunkGrid(s) {
@@ -283,7 +424,7 @@ export async function loadWorldData(onProgress = () => {}) {
         for (let k = 0; k < n; k++) {
           // (the first and last piece of a segment reach 0.3 m past its ends, as the line's round caps do)
           const t0 = (k / n) * l - (k === 0 ? 0.3 : 0), t1 = ((k + 1) / n) * l + (k === n - 1 ? 0.3 : 0), t = (t0 + t1) / 2;
-          const box = { x: a[0] + ux * t, z: a[1] + uz * t, yaw, hx: (t1 - t0) / 2, hz: 0.3, map: true };
+          const box = { x: a[0] + ux * t, z: a[1] + uz * t, yaw, hx: (t1 - t0) / 2, hz: 0.3, map: true, tall: 2 };
           if (frees.some((f) => inBox(f, box.x, box.z))) continue;
           mapWalls.push(box);
           exAdd(box);
@@ -427,7 +568,7 @@ export async function loadWorldData(onProgress = () => {}) {
   function unload(s) {
     for (const f of onUnload) f(s);
     if (last === s) last = null;
-    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = s.kept = s.roofs = null;
+    s.H = s.S = s.D = s.buildings = s.trees = s.bushes = s.fences = s.tgrid = s.kept = s.roofs = s.rtris = s.rjob = null;
     s.state = 'idle';
   }
 
@@ -481,6 +622,12 @@ export async function loadWorldData(onProgress = () => {}) {
     return found;
   }
   const UNDER = 1.1;        // a car lower than this below a deck is on the ground under it (1.5 m with what the physics adds)
+  const TREE_FREE = 3, TREE_PART = 0.3;
+  const NO_ROOF = 2.2;       // m: how tall a fence, a garden wall or a parked car is taken to be by a car in the air
+  const ROOF_UP = 0.9;      // a car asking from this far over the ground can be on a roof (the physics asks from 0.4 over its wheels)
+  const ROOF_MAKE = 1.6;    // ...and from this far its map square's roofs are put in their grid when it is at a house (a car that hops on the street asks too)
+  const ROOF_AHEAD = 3;     // ...and from this far, in the work queue ahead of need, wherever it is in the square
+  let roofMake = true, roofAhead = false;
 
   // Piers under the long spans: [x, z, along x, along z, half width across, top]. Only a car below the deck meets them.
   const piers = [];
@@ -552,9 +699,21 @@ export async function loadWorldData(onProgress = () => {}) {
   }
 
   const rectDist = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
+  let sdfNear = () => 12;
+  const ring = meta.boundary;
+  function inMap(x, z) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j];
+      if ((a[1] > z) !== (b[1] > z) && x < ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return inside;
+  }
+  const tmpN = [0, 0];
 
   const world = {
     meta, vectors, walls, sectors, coarse: C, decks,
+    onRoof: false,
     onSectorLoad(f) { onLoad.push(f); },
     onSectorUnload(f) { onUnload.push(f); },
     pending: () => loading,
@@ -713,8 +872,22 @@ export async function loadWorldData(onProgress = () => {}) {
       return out.length ? out : null;
     },
 
-    // What a car at height y stands on: a deck when it is level with one, the terrain otherwise.
-    groundAt(x, z, y) {
+    // What a car at height y stands on: a deck or a roof when it is level with one, the terrain otherwise.
+    // yRoof: the houses' roofs count below this height (the physics gives each wheel its own: what the wheel
+    // is over, or what it was on a step ago carried on; a roof whose wall it stands at does not)
+    // (onRoof is set when the answer is a roof: the physics clears it before asking for a car's wheels)
+    groundAt(x, z, y, yRoof = y + UNDER) {
+      let t = this.heightAt(x, z);
+      if (slabs.length !== 0) { const r = slabAt(x, z, y + UNDER); if (r > t) t = r; }
+      // (a house's roof, for a car that is up over the ground: one driving along the street never asks)
+      // (the roofs' grid is asked for ahead of need, roofTris, when the car is well up in the air, over a bridge's
+      // deck too and not on it; a wheel over a bank or the wall of a quay is not that)
+      const deck = decks.length !== 0 && deckAt(x, z, y + UNDER) ? hit.y : -Infinity;
+      if (y - t > ROOF_UP) { roofMake = y - t > ROOF_MAKE; roofAhead = y - t > ROOF_AHEAD && y - deck > ROOF_AHEAD; const r = roofOver(x, z, yRoof); roofMake = true; roofAhead = false; if (r > t) { t = r; this.onRoof = true; } }
+      return deck > t ? deck : t;
+    },
+    // The same without the houses' roofs: what a fence, a barrier or a parked car at the point stands on.
+    floorAt(x, z, y) {
       let t = this.heightAt(x, z);
       if (slabs.length !== 0) { const r = slabAt(x, z, y + UNDER); if (r > t) t = r; }
       if (decks.length === 0 || !deckAt(x, z, y + UNDER)) return t;
@@ -753,6 +926,7 @@ export async function loadWorldData(onProgress = () => {}) {
     surfaceAt(x, z, y) {
       if (y !== undefined && decks.length !== 0 && deckAt(x, z, y + UNDER) && hit.y > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       if (y !== undefined && slabs.length !== 0 && slabAt(x, z, y + UNDER) > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
+      if (y !== undefined && y - this.heightAt(x, z) > ROOF_UP && roofOver(x, z, y + UNDER) > this.heightAt(x, z) + 0.3) return SURFACE.PAVED;
       const s = find(x, z);
       if (s === null) return SURFACE.GRASS;
       let c = Math.floor((x - s.x0) / sres), r = Math.floor((z - s.z0) / sres);
@@ -783,8 +957,13 @@ export async function loadWorldData(onProgress = () => {}) {
     // Tree trunks within reach of (x, z), written to out as flat [x, z, radius, ...]. The physics
     // collides with them as exact circles: the 0.5 m distance field is too coarse for something
     // as thin as a trunk, and a car that got half way past one could not get free again.
-    trunksNear(x, z, reach, out) {
+    // With tops (an array): how high each is solid, as heights are. A tree is a post up to where its crown
+    // thins out, some metres from its top (Martin, 26 Nov 2026: "trees from some metres from the top, it should be
+    // possible to fly through them"): the top TREE_FREE of it, or the top TREE_PART of a tall one, is leaves and
+    // twigs a car in the air goes through; never more than half a small tree.
+    trunksNear(x, z, reach, out, tops) {
       out.length = 0;
+      if (tops) tops.length = 0;
       const sx0 = Math.floor((x - reach - G0) / S), sx1 = Math.floor((x + reach - G0) / S);
       const sz0 = Math.floor((z - reach - G0) / S), sz1 = Math.floor((z + reach - G0) / S);
       for (let sx = sx0; sx <= sx1; sx++) for (let sz = sz0; sz <= sz1; sz++) {
@@ -797,7 +976,9 @@ export async function loadWorldData(onProgress = () => {}) {
           for (let i = g.heads[r * g.nc + c]; i >= 0; i = g.next[i]) {
             const tx = rec[i * 6], tz = rec[i * 6 + 2];
             if (Math.abs(tx - x) > reach || Math.abs(tz - z) > reach) continue;
-            out.push(tx, tz, Math.min(0.45, Math.max(0.14, 0.035 * rec[i * 6 + 3])));   // as baked (tools/bake/surface.py trunk)
+            const h = rec[i * 6 + 3];
+            out.push(tx, tz, Math.min(0.45, Math.max(0.14, 0.035 * h)));   // as baked (tools/bake/surface.py trunk)
+            if (tops) tops.push(rec[i * 6 + 1] + Math.max(h * 0.5, h - Math.max(TREE_FREE, h * TREE_PART)));
           }
         }
       }
@@ -842,6 +1023,33 @@ export async function loadWorldData(onProgress = () => {}) {
       return y;
     },
 
+    // The highest roof of the map's houses over the point that is below yMax (-Infinity: none there).
+    roofTop(x, z, yMax = Infinity) { return roofOver(x, z, yMax); },
+    // The top of a solid box (addSolids) for a car asking at height y: NO_ROOF over what it stands on, or its own
+    // height where it has one (b.tall).
+    solidTop(b, y) { return this.floorAt(b.x, b.z, y) + (b.tall ?? NO_ROOF); },
+    // How high what the distance field has at the point stands, for a car asking at height y: the roof over it or
+    // just inside the wall it is at; for a house with no roof plane there (a spire) the top of its walls; for
+    // something thin with no roof at all (a fence, a garden wall, a parked car) NO_ROOF over what it stands on;
+    // Infinity for the map's edge. A car whose wheels are above that passes over.
+    wallTop(x, z, y) {
+      let r = roofOver(x, z, Infinity);
+      if (r > -1e8) return r;
+      const d = this.sdfAt(x, z);
+      this.sdfGrad(x, z, tmpN);
+      if (d > -0.5) {
+        const qx = x - tmpN[0] * (d + 0.5), qz = z - tmpN[1] * (d + 0.5);
+        r = roofOver(qx, qz, Infinity);
+        if (r > -1e8) return r;
+      }
+      // (no roof: a house with only walls there, the top of them; else something of no great height, unless it
+      // is the map's edge)
+      if (d <= -0.5) { r = this.roofAt(x, z); if (r > -1e8) return r; }
+      const e = Math.max(d, 0) + 2;
+      if (d <= -1.5 && !inMap(x - tmpN[0] * e, z - tmpN[1] * e)) return Infinity;
+      return this.floorAt(x, z, y) + NO_ROOF;
+    },
+
     sdfAt(x, z) {
       const s = find(x, z);
       if (s === null) return 12;
@@ -866,6 +1074,7 @@ export async function loadWorldData(onProgress = () => {}) {
       return out;
     },
   };
+  sdfNear = (x, z) => world.sdfAt(x, z);
   // The retaining walls of ramps are solid for everything, above and below (the obstacle field is flat).
   const wallBoxes = [];
   for (const d of decks) {

@@ -31,8 +31,10 @@ import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './liv
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
+import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from '../src/net/kudosrules.js';
 
 const TRACK = 'toomemagi';
+const TOP_N = 10;                 // a lap among its car's ten best waits for its drive to be judged (wouldLead)
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
 // 60 s and 45 s, and a lap of 61 s posted by hand would have topped the board (security review: the record was
 // 2:40.25). Toomemägi, 4.9 km: 2:00 is 147 km/h on average through the town. Raadi's stage, 1.73 km of gravel:
@@ -156,9 +158,16 @@ const STAMP = 21;                                     // a position's slot for w
 // wheel: then it is as anyone again, otherwise out again. (MAP_IDLE_S and MAP_OUT_S on the Worker change the first two.)
 // (26 Nov, Martin: with room on the server a car may stand on the map for as long as it likes, so more players are
 // seen online. Such a page's car is judged only while the server is "tight", over ROOM_AT of its places taken, see
-// room(); a bus always, tight or not.)
+// room(); a bus always, tight or not. With room after LOOSE_MS: Martin 26 Nov, tabs left open for days hold an old
+// version of the game while the server has changed.)
+// The same LOOSE_MS for a page from before the game went offline by itself with nobody there (pages that do say
+// r=1 as they connect): in the garage or another tab that long it gives up its place with room too (restOld).
 const MAP_IDLE_MS = 180000, MAP_PROBE_MS = 20000, MAP_OUT_MS = 60000, MAP_OUT_MAX = 15 * 60000;
-const KUDOS_GAP = 30000, KUDOS_MAX = 8, KUDOS_KEEP = 24;   // a thumbs up: one sender to one receiver once in 30 s, at most 8 a minute from one sender
+const LOOSE_MS = 20 * 60000;
+// a thumbs up (src/net/kudosrules.js): one sender to one receiver once in 30 s and KUDOS_PAIR a day, at most 8 a
+// minute from one sender, and from one internet address to one receiver KUDOS_ADDR an hour (several tabs or
+// private windows, each a new player)
+const KUDOS_GAP = KUDOS_GAP_S * 1000, KUDOS_MAX = 8, KUDOS_ADDR = KUDOS_PAIR * 2;
 const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
@@ -484,6 +493,7 @@ export class Lobby extends DurableObject {
     const min = Math.floor(now / 60000);
     if (min === this.loadMin) return;
     this.loadMin = min;
+    try { this.restOld(now); } catch (err) { console.error('restOld', err); }
     const st = this.env?.STATS;
     if (!st) return;
     this.waitClean(now);
@@ -508,6 +518,20 @@ export class Lobby extends DurableObject {
     this.ghostNew = new Set(); this.ghc = 0;
     const p = st.get(st.idFromName('stats')).addLoad(s).catch(() => {});
     this.ctx.waitUntil?.(p);
+  }
+
+  // pages from before the game went offline by itself (no r=1): in the garage or another tab over LOOSE_MS, the
+  // place is given up as an idle garage's is when the server is nearly full (4002: such a page joins again as
+  // soon as it is back on the map). Once a minute, with the load figures.
+  // (LOOSE_S on the Worker changes LOOSE_MS without a deploy)
+  looseMs() { return (Number(this.env?.LOOSE_S) || LOOSE_MS / 1000) * 1000; }
+  restOld(now) {
+    const loose = this.looseMs();
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a?.id || a.x || a.r || a.ghost || (a.w !== 'garage' && a.w !== 'away') || this.race.racing(a.id)) continue;
+      if (now - (a.wt || a.at || now) > loose) this.release(ws, a, 4002, 'idle');
+    }
   }
 
   // ---- Positions (see TICK): kept in memory only, they are stale a moment later anyway
@@ -607,11 +631,11 @@ export class Lobby extends DurableObject {
       const a = e.ws.deserializeAttachment();
       if (!a?.id || a.x || a.i || a.ghost) continue;
       if (this.race.racing(id)) { e.t0 = now; continue; }          // (from the count to the flag: as if just arrived)
-      if (!tight && !alwaysJudged(a.car)) continue;                // (room on the server: it may stand)
+      const wait = tight || alwaysJudged(a.car) ? idleMs : Math.max(idleMs, this.looseMs());   // (room on the server: longer)
       const key = a.pw ? `w|${a.pw}` : `i|${a.ip}`;
       let k = this.parked.get(key);
       if (k?.back && e.act > k.back) { this.parked.delete(key); k = null; }
-      if (now - Math.max(e.act, e.t0, k?.back || 0) < (k?.back ? Math.min(MAP_PROBE_MS, idleMs) : idleMs)) continue;
+      if (now - Math.max(e.act, e.t0, k?.back || 0) < (k?.back ? Math.min(MAP_PROBE_MS, wait) : wait)) continue;
       const n = (k?.n || 0) + 1;
       if (this.parked.size < 2000) this.parked.set(key, { n, until: now + Math.min(outMs * 2 ** (n - 1), MAP_OUT_MAX), back: 0 });
       this.release(e.ws, a, 4002, 'idle');
@@ -905,7 +929,18 @@ export class Lobby extends DurableObject {
   wouldLead(l) {
     const b = this.board(), part = l.track === TRACK ? b : b[l.track];
     const beats = (list) => { const r = list.find((x) => x.car === l.car); return !r || l.ms < r.ms; };
-    return beats(part.allTime) || (l.day === b.day && beats(part.today));
+    return beats(part.allTime) || (l.day === b.day && beats(part.today)) || this.inTopTen(l);
+  }
+  // ... or one of its car's ten best on that track (Martin 26 Nov: "start checking just in case top ten times per
+  // car", for a board that may one day show ten a car): fewer than TOP_N laps on the board are faster, or it is
+  // the driver's own best in that car and fewer than TOP_N other drivers have a faster one
+  inTopTen(l) {
+    const faster = this.sql.exec('SELECT COUNT(*) AS n FROM (SELECT 1 FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND ms < ? LIMIT ?)', l.track, l.car, l.ms, TOP_N).one().n;
+    if (faster < TOP_N) return true;
+    const own = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND name = ? COLLATE NOCASE', l.track, l.car, l.name).one().m;
+    if (own != null && own <= l.ms) return false;
+    const others = this.sql.exec('SELECT COUNT(DISTINCT name COLLATE NOCASE) AS n FROM laps WHERE track = ? AND car = ? AND hold IS NULL AND ms < ? AND name <> ? COLLATE NOCASE', l.track, l.car, l.ms, l.name).one().n;
+    return others < TOP_N;
   }
   // a lap that has just been stored
   addToBoard(l) {
@@ -1156,7 +1191,11 @@ export class Lobby extends DurableObject {
         // (if the limits cannot be worked out the drive is not judged: an honest record must not wait on a fault here)
         let lim = null;
         try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
-        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll });
+        // (a stage run: which of its places were on the gravel, from the stage's own rules; one the rules refuse
+        // is refused for that below, and its car is judged as if all of it were tarmac)
+        const where = {};
+        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, lim?.gas?.launch, where);
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
         // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
         // the seconds it was turning over in the air, which is a kickflip inside the lap)
@@ -1213,7 +1252,7 @@ export class Lobby extends DurableObject {
       if (!q.idx.has(wk) && this.waiting.has(wk)) { this.qc = null; q = this.queue(now); }   // (joined it since)
       // a page whose idle car was put off the map (idleCars): kept out for a while, told as when the server is full
       // (no place in the queue: it asks again in a minute or so). A reload brings the game's own rule: let in.
-      const pk = this.parked.get(wk), self = url.searchParams.get('i') === '1';
+      const pk = this.parked.get(wk), self = url.searchParams.get('i') === '1', rests = url.searchParams.get('r') === '1';
       if (pk && self) this.parked.delete(wk);
       else if (pk && now < pk.until) {
         const pair = new WebSocketPair();
@@ -1243,7 +1282,7 @@ export class Lobby extends DurableObject {
       this.loadTick(now);
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
-      pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}), ...(self ? { i: 1 } : {}) });
+      pair[1].serializeAttachment({ at: Date.now(), ip, ...(pw ? { pw } : {}), ...(self ? { i: 1 } : {}), ...(rests ? { r: 1 } : {}) });
       this.room();                        // (one more place taken: tight now?)
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
@@ -1333,7 +1372,7 @@ export class Lobby extends DurableObject {
         const cp = typeof l?.cp === 'string' && /^[0-9,]{1,80}$/.test(l.cp) ? l.cp : null;
         const good = track === TRACK && sp && cp && sp.length === cp.split(',').length && sp.every((v, k) => v > (k ? sp[k - 1] : 0) && v < ms);
         const row = { track, name, car, ms, at: at.toISOString(), day, splits: good ? sp : null, cp: good ? cp : null, inp: cleanInp(l?.inp), ty: l?.ty === 'gravel' ? 'gravel' : null, pen: pen || null };
-        // a time that would be the car's best of all time or of today waits for its replay (see "Replays")
+        // a time that would be the car's best of all time or of today, or one of its ten best, waits for its replay (see "Replays")
         const hold = this.wouldLead(row) ? 1 : null;
         this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, cp, sid, inp, ty, pen, hold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           track, name, car, ms, row.at, row.day, good ? JSON.stringify(sp) : null, row.cp, tk.sid, row.inp, row.ty, row.pen, hold);
@@ -1498,11 +1537,14 @@ export class Lobby extends DurableObject {
       this.bund.set(ws, b);
       // thumbs up received today: the page's own count (kept in its browser till midnight, so a reload or a
       // lost connection keeps it), or what this socket had
-      const kn = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
-      const kf = (me?.kn || 0) >= kn ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : [];
+      // (at most KUDOS_PAIR from any one player: a day saved before that rule, or by an old page, loses the rest)
+      const { kn, kf } = (() => {
+        const n = Math.max(me?.kn || 0, Number.isInteger(m.kn) ? Math.min(999, Math.max(0, m.kn)) : 0);
+        return kudosFair(n, ((me?.kn || 0) >= n ? me?.kf : Array.isArray(m.kf) ? m.kf.map(cleanKudo).filter(Boolean).slice(-KUDOS_KEEP) : []) || []);
+      })();
       // (the plate: the one sent, or the one this socket had; a page that sends none keeps its cars' own)
       const pl = 'pl' in m ? okPlate(m.pl) : me?.pl || '';
-      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
+      const a = { id, name, car: cleanCar(m.car) || 'w201', at: Date.now(), ip, ...(pl ? { pl } : {}), ...(tk ? { sid: tk.sid } : {}), ...(me?.pw ? { pw: me.pw } : {}), ...(me?.i ? { i: 1 } : {}), ...(me?.r ? { r: 1 } : {}), ...(kn ? { kn, kf: kf || [] } : {}), ...(b ? { b: 1 } : {}), ...(ghost ? { ghost: true } : {}), ...(me?.drv ? { drv: true } : {}), ...(w ? { w, wt: w === me?.w && me?.wt ? me.wt : Date.now() } : {}), ...(on ? { on } : {}) };
       ws.serializeAttachment(a);
       // (tight: the server over 90 % full, so a car left standing goes to the garage, see room())
       ws.send(JSON.stringify({ t: 'welcome', id, key, players: this.players().filter((p) => p.id !== id), wn: this.watchCounts().get(id) || 0, ...(this.room() ? { tight: 1 } : {}), board: this.board() }));
@@ -1549,9 +1591,13 @@ export class Lobby extends DurableObject {
     } else if (m.t === 'ku') {
       // a thumbs up for another player (Martin, 2026-11-23): told to everyone, sender too, since all who are
       // near see it as a sign in the receiver's back window (src/kudos.js). Not from or to a ghost or oneself.
+      // One player to the same player at most KUDOS_PAIR a day (Martin 2026-11-26: one filled another's bus window
+      // with about 30), counted in the receiver's collection, which their page keeps through the day.
       const to = cleanOn(m.to);
-      if (me.ghost || !to || to === me.id || !this.players().some((p) => p.id === to)) return;
+      const rc = me.ghost || !to || to === me.id ? null : this.players().find((p) => p.id === to);
+      if (!rc || kudosFrom(rc.kf, me.id, me.name) >= KUDOS_PAIR) return;
       if (this.over(`k|${me.id}`, KUDOS_MAX, 60000) || this.over(`k|${me.id}|${to}`, 1, KUDOS_GAP)) return;
+      if (this.over(`ki|${me.ip}|${to}`, KUDOS_ADDR, 3600000)) return;
       // the receiver's count for this session and the last senders, for those who come later (src/kudos.js:
       // the small thumbs on that car's back window)
       for (const w of this.ctx.getWebSockets()) {

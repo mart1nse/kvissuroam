@@ -200,7 +200,7 @@
     var note = all ? fmt(all) + (all === 1 ? ' player' : ' players') + ' in the game, ' + fmt(drv) + ' driving on the map.' : 'Nobody is playing right now.';
     // (the ones not driving, 25 Nov: Martin asked who the 40 of 96 not driving were)
     var at = o.at || {}, parts = [];
-    [['stage', 'on the Raadi stage'], ['garage', 'in the garage or menu'], ['away', 'in a background tab'], ['watch', 'watching'], ['start', 'just opened']].forEach(function (x) { if (at[x[0]]) parts.push(fmt(at[x[0]]) + ' ' + x[1]); });
+    [['stage', 'on the Majoraadi stage'], ['garage', 'in the garage or menu'], ['away', 'in a background tab'], ['watch', 'watching'], ['start', 'just opened']].forEach(function (x) { if (at[x[0]]) parts.push(fmt(at[x[0]]) + ' ' + x[1]); });
     if (parts.length && all > drv) note = note.replace(/\.$/, '') + ', ' + parts.join(', ') + '.';
     if (o.waiting) note += ' <b style="color:' + C.pink + '">Server full: ' + fmt(o.waiting) + ' more waiting outside</b>' + (o.queue ? ' (' + fmt(o.queue) + ' in the queue now)' : '') + ', driving offline until a place frees (' + fmt(all + o.waiting) + ' want to play online, the cap is ' + fmt(o.cap) + ').';
     var r = o.race;
@@ -212,7 +212,7 @@
       if (p.race === 'fin') return '<span class="st race">FINISHED</span>';
       if (p.race === 'out') return '<span class="st">out of the race</span>';
       if (p.drv) return '<span class="st drv">driving</span>';
-      return '<span class="st">' + ({ stage: 'Raadi stage', away: 'background tab', watch: 'watching', start: 'just opened' }[p.at] || 'in the garage') + '</span>';
+      return '<span class="st">' + ({ stage: 'Majoraadi stage', away: 'background tab', watch: 'watching', start: 'just opened' }[p.at] || 'in the garage') + '</span>';
     };
     el.innerHTML = '<h2><span class="live"></span>Online now</h2><p class="note">' + note + ' Names as the game shows them; updates every 20 s.</p>' + (ps.length ? '<ul class="who">' + ps.map(function (p) {
       return '<li data-tip="' + esc('online for ' + ago(o.now - p.since)) + '"><span class="nm">' + esc(p.name) + '</span><span class="car">' + esc(carNames[p.car] || p.car) + '</span>' + st(p) + '</li>';
@@ -516,7 +516,7 @@
       ['gc', 'Script memory cleared over the gap', { yes: 'yes, over 30 MB (Chrome only)' }],
       ['kpc', 'Browser builds shaders aside (KHR_parallel_shader_compile)', { yes: 'yes', no: 'no' }],
       ['len', 'How long', {}], ['t', 'Time since DRIVE', {}], ['on', 'Others online', {}],
-      ['do', 'Driving', { free: 'free driving', hotlap: 'a hotlap', race: 'an online race', stage: 'the Raadi stage' }],
+      ['do', 'Driving', { free: 'free driving', hotlap: 'a hotlap', race: 'an online race', stage: 'the Majoraadi stage' }],
       ['kmh', 'Speed, km/h', {}], ['lvl', 'Graphics level', {}], ['os', 'System', {}], ['mem', 'Memory, GB (Chrome only)', {}],
     ];
     var body = '<table class="trouble"><thead><tr><th></th>' + devs.map(function (d) { return '<th class="n">' + name[d] + '<small>' + fmt(total[d]) + (total[d] === 1 ? ' freeze' : ' freezes') + '</small></th>'; }).join('') + '</tr></thead><tbody>';
@@ -565,13 +565,6 @@
       });
     };
     rows('Hitches per 10 minutes of driving', 'on');
-    rows('Pictures held back per 10 minutes (the frame on time, its picture a screen refresh late)', 'pace');
-    // AUTO graphics trimming the sharpness for even pictures (src/quality.js createPacer): how often it went to each step
-    var trims = [['1', 'to 92% of the level\'s sharpness'], ['2', 'to 85%'], ['3', 'to 78%'], ['0', 'back to full after a minute of even pictures'], ['off', 'given up: the whole trim changed nothing']];
-    if (trims.some(function (r) { return devs.some(function (d) { return o[d + ':trim:' + r[0]]; }); })) {
-      body += '<tr><td colspan="' + (devs.length + 1) + '"><b>Sharpness trimmed by AUTO for even pictures (times)</b></td></tr>';
-      trims.forEach(function (r) { body += '<tr><td>' + r[1] + '</td>' + devs.map(function (d) { return '<td class="n">' + fmt(o[d + ':trim:' + r[0]] || 0) + '</td>'; }).join('') + '</tr>'; });
-    }
     var kinds = [
       ['why', 'What the frame before was busy with', { build: 'building places and cars (queued work)', draw: 'handing the picture to the graphics card', online: 'the other players (cars, list, names, race)', game: 'the game\'s other frame code',
         card: 'nothing on the page: the graphics card or the browser', 'page:net': 'messages from the server', 'page:car': 'a car model back from its worker' }],
@@ -594,7 +587,7 @@
     body += '</tbody></table>';
     var top = devs.slice().sort(function (a, b) { return secs[b] - secs[a]; })[0];
     var line = name[top] + ': ' + fmt((total[top] || 0) / secs[top] * 600, 1) + ' hitches per 10 minutes of driving';
-    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. A picture held back is a frame that was on time whose picture was finished a screen refresh later than the one before: an uneven step that frame times do not show. Counted from 25 Nov 2026.', body);
+    return fold('hitches', 'Short hitches while driving', line, 'Frames that came late while plain driving (1.75 times the usual frame or more, under a second; up to 60 a visit), per 10 minutes of such driving, by how many others were online, and what the frame before each was busy with. Counted from 25 Nov 2026.', body);
   }
 
   // ---- the heat map, over a light outline of the game's map (public/stats-map.json)

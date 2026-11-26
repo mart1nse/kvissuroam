@@ -189,7 +189,7 @@
     <div id="cards"></div>
     <button id="drive" class="neon"><b>DRIVE</b><small id="drivecar"></small></button>
     <p id="idlenote" class="small hidden">Your car stood idle on the map, so it is back in the garage. DRIVE puts it where it was.</p>
-    <p class="small keys desktop-only">Arrow keys to drive · R back to last spot · H back to the start · M map · G garage · A / Z gear up / down · B look back · C drone view · L lap times · Y road / gravel tyres</p>
+    <p class="small keys desktop-only">Arrow keys to drive · R back to last spot · H back to the start · M map · G garage · A / Z gear up / down · B look back · C drone view · 5 / 6 side views · L lap times · Y road / gravel tyres</p>
     <p class="small attribution" id="attribution"></p>
   </div>
 
@@ -204,15 +204,6 @@
     </div>
     <div id="options" class="hidden">
       <h3>OPTIONS</h3>
-      <div class="optctl">
-      <h4>CONTROLS</h4>
-      <div class="opt"><span><b>KEYS</b><small>Arrows drive. A / Z shift gears, or WASD drives with an automatic gearbox.</small></span></div>
-      <div id="opt-keys" class="seg"><button data-keys="az">ARROWS + A / Z GEARS</button><button data-keys="wasd">WASD</button></div>
-      <div class="opt"><span><b>INPUT</b><small>A gamepad or a wheel gives gradual throttle, brake and steering. AUTO drives with whatever you touched last.</small></span></div>
-      <div id="opt-input" class="seg"><button data-input="auto">AUTO</button><button data-input="kb">KEYBOARD</button><button data-input="pad">CONTROLLER</button></div>
-      <p class="small optkeys" id="opt-inputnow"></p>
-      <button class="neon small optsetup" id="opt-setup">SET UP GAMEPAD / WHEEL</button>
-      </div>
       <h4>SOUND</h4>
       <div class="opt"><span><b>SOUND</b><small>N switches it on and off while driving.</small></span></div>
       <div id="opt-sound" class="seg"><button data-sound="on">ON</button><button data-sound="off">OFF</button></div>
@@ -223,6 +214,15 @@
       <div id="opt-gfx" class="seg"><button data-gfx="auto">AUTO</button><button data-gfx="high">HIGH</button><button data-gfx="medium">MEDIUM</button><button data-gfx="low">LOW</button></div>
       <p class="small optkeys" id="opt-gfxnow"></p>
       <p class="small optwarn hidden" id="opt-gpu"></p>
+      <div class="optctl">
+      <h4>CONTROLS</h4>
+      <div class="opt"><span><b>KEYS</b><small>Arrows drive. A / Z shift gears, or WASD drives with an automatic gearbox.</small></span></div>
+      <div id="opt-keys" class="seg"><button data-keys="az">ARROWS + A / Z GEARS</button><button data-keys="wasd">WASD</button></div>
+      <div class="opt"><span><b>INPUT</b><small>A gamepad or a wheel gives gradual throttle, brake and steering. AUTO drives with whatever you touched last.</small></span></div>
+      <div id="opt-input" class="seg"><button data-input="auto">AUTO</button><button data-input="kb">KEYBOARD</button><button data-input="pad">CONTROLLER</button></div>
+      <p class="small optkeys" id="opt-inputnow"></p>
+      <button class="neon small optsetup" id="opt-setup">SET UP GAMEPAD / WHEEL</button>
+      </div>
       <button class="neon small" data-act="options-close">CLOSE</button>
     </div>
     <canvas id="minimap" width="420" height="420" data-act="map" title="Open the city map (M)"></canvas>

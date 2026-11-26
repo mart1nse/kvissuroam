@@ -8,10 +8,12 @@
 // Each arch is one mesh of a few hundred triangles (the body, the lines of light and the word together: the
 // lowest graphics level counts every piece it draws), and both share one material and one small picture, the
 // two words and a white patch that everything else takes its plain colour through. The legs are solid
-// (world.addSolids).
+// (world.addSolids). `glow` fills the opening (inside its line of light) with a see-through sheet of light, the
+// stage's finish halo (raadi.js sets how strong).
 import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
 import { still } from '../still.js';
+import { glowTex } from './decor.js';
 
 const LEG = 1.1, DEEP = 0.9, CLEAR = 4.9, BEAM = 1.5;      // a leg's width, the arch's depth along the road, the height under the beam, the beam
 const CUT = 0.9, CUT_IN = 0.5;                              // the cut corners outside and in the opening
@@ -47,13 +49,13 @@ function material() {
 }
 
 // the arch's outline seen along the road: x across, y up from the ground at its middle; `a` is half the opening
-function outline(a, grow) {
+function outline(a, grow, clear) {
   // (grow > 0: the same outline that much further out, for the lines of light; 0.414 = tan 22.5°, a cut corner's share)
-  const o = a + LEG + grow, top = CLEAR + BEAM + grow, c = CUT + grow * 0.414;
+  const o = a + LEG + grow, top = clear + BEAM + grow, c = CUT + grow * 0.414;
   return [[-o, -FOOT], [-o, top - c], [-o + c, top], [o - c, top], [o, top - c], [o, -FOOT]];
 }
-function opening(a, grow) {
-  const i = a - grow, top = CLEAR - grow, c = CUT_IN - grow * 0.414;
+function opening(a, grow, clear) {
+  const i = a - grow, top = clear - grow, c = CUT_IN - grow * 0.414;
   return [[i, -FOOT], [i, top - c], [i - c, top], [-i + c, top], [-i, top - c], [-i, -FOOT]];
 }
 function slab(pts, depth) {
@@ -66,8 +68,9 @@ function slab(pts, depth) {
 }
 
 // x, z: the middle of the road under the arch; tx, tz: the way the stage runs there; half: from the road's middle
-// to the inside of each leg; word: 0 START, 1 FINISH. Returns the meshes' group and `panels`, the free faces.
-export function buildArch({ group, world, x, z, tx, tz, half, word }) {
+// to the inside of each leg; word: 0 START, 1 FINISH; clear: the height under the beam; glow: a sheet of light in the
+// opening. Returns the meshes' group, `panels` (the free faces) and `glow` (that sheet's mesh, or null).
+export function buildArch({ group, world, x, z, tx, tz, half, word, clear = CLEAR, glow = false }) {
   const yaw = Math.atan2(tx, tz), a = half;
   // (the ground at the legs and the middle: the arch stands on the highest of them, its feet reach down)
   const mid = half + LEG / 2, rx = Math.cos(yaw), rz = -Math.sin(yaw);
@@ -86,12 +89,12 @@ export function buildArch({ group, world, x, z, tx, tz, half, word }) {
     geo.dispose();
   };
   // the body: one flat arch, and the word's board on top
-  const by = CLEAR + BEAM + BOARD_H / 2;
-  put(slab([...outline(a, 0), ...opening(a, 0)], DEEP), BLACK);
+  const by = clear + BEAM + BOARD_H / 2;
+  put(slab([...outline(a, 0, clear), ...opening(a, 0, clear)], DEEP), BLACK);
   put(new THREE.BoxGeometry(BOARD_W + 0.16, BOARD_H + 0.08, 0.2).translate(0, by, 0).toNonIndexed(), BLACK);
   // the lines of light: round the opening and round the outside, a hair proud of both faces
-  put(slab([...opening(a, 0), ...opening(a, -LINE).reverse()], DEEP + 0.03), CYAN);
-  put(slab([...outline(a, 0), ...outline(a, -LINE).reverse()], DEEP + 0.03), PINK);
+  put(slab([...opening(a, 0, clear), ...opening(a, -LINE, clear).reverse()], DEEP + 0.03), CYAN);
+  put(slab([...outline(a, 0, clear), ...outline(a, -LINE, clear).reverse()], DEEP + 0.03), PINK);
   // the word, on both faces of its board (the first is the face the cars come up to)
   const v1 = 1 - word * ROW / TALL, v0 = 1 - (word + 1) * ROW / TALL, hw = BOARD_W / 2, hh = BOARD_H / 2, d = 0.115;
   const quad = (x0, x1, z) => new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([x0, by - hh, z, x1, by - hh, z, x1, by + hh, z, x0, by - hh, z, x1, by + hh, z, x0, by + hh, z], 3));
@@ -106,16 +109,33 @@ export function buildArch({ group, world, x, z, tx, tz, half, word }) {
   mesh.castShadow = true;
   g.add(mesh);
 
+  // the sheet of light: the opening's shape inside its line, from just under the lowest ground across the road (a
+  // slope under the arch: what lies under the ground is not seen), the picture's foot at that ground
+  let sheet = null;
+  if (glow) {
+    let low = Infinity;
+    for (let k = -4; k <= 4; k++) low = Math.min(low, world.heightAt(x + rx * a * k / 4, z + rz * a * k / 4));
+    const y0 = low - y - 0.05, pts = opening(a, LINE, clear).map(([px, py]) => [px, Math.max(py, y0)]);
+    const sh = new THREE.Shape();
+    pts.forEach(([px, py], k) => (k ? sh.lineTo(px, py) : sh.moveTo(px, py)));
+    const sg = new THREE.ShapeGeometry(sh), sp = sg.attributes.position, su = sg.attributes.uv, top = clear - LINE;
+    for (let i = 0; i < sp.count; i++) su.setXY(i, (sp.getX(i) + a) / (2 * a), (sp.getY(i) - y0) / (top - y0));
+    sheet = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide, fog: true }));
+    sheet.renderOrder = 4;
+    g.add(sheet);
+  }
+
   group.add(g);
   // the legs stop a car
   world.addSolids([-1, 1].map((s) => ({ x: x + rx * mid * s, z: z + rz * mid * s, yaw, hx: LEG / 2, hz: DEEP / 2 })));
   return {
     group: g,
+    glow: sheet,
     // the faces left free for adverts, on both sides of the arch: [x0, y0, x1, y1] in the arch's own metres
     // (x across the road from its middle, y up from its foot)
     panels: {
-      beam: [-(a - CUT_IN), CLEAR + LINE, a - CUT_IN, CLEAR + BEAM - LINE],
-      legs: [[-(a + LEG) + LINE, 0, -a - LINE, CLEAR - CUT_IN], [a + LINE, 0, a + LEG - LINE, CLEAR - CUT_IN]],
+      beam: [-(a - CUT_IN), clear + LINE, a - CUT_IN, clear + BEAM - LINE],
+      legs: [[-(a + LEG) + LINE, 0, -a - LINE, clear - CUT_IN], [a + LINE, 0, a + LEG - LINE, clear - CUT_IN]],
     },
   };
 }

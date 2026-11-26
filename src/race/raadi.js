@@ -24,7 +24,7 @@ import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
 import { createKnocks } from './knock.js';
-import { chevronTex, haloTex, beamTex, ringTex } from './decor.js';
+import { chevronTex, beamTex, ringTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
 import { SURFACE } from '../world/data.js';
@@ -45,7 +45,8 @@ const BEAM_DIM = 0.25, RING_DIM = 0.5, RING_H = 2.4;   // the column and its rin
 // the waiting car has it in the picture, its legs outside the tape on the left; the finish's over the flying
 // finish. `off`: from the gravel's edge to the inside of a leg. The finish's legs stand wide: the runs logged so
 // far cross that line within the gravel but come to it up to 1.7 m off its right edge and leave it 0.5 m off its left.
-const ARCH_START = { at: START + 5, off: 1.9 }, ARCH_FIN = { at: FIN, off: 3.2 };
+// The finish's beam is lower (Martin 26 Nov: "lower the finish one just a touch"), and its opening is the finish halo.
+const ARCH_START = { at: START + 5, off: 1.9 }, ARCH_FIN = { at: FIN, off: 3.2, clear: 4.3, glow: true };
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -479,21 +480,15 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     sign('finish', FIN, HW[FIN] + FIN_FLAG);
     sign('finish', FIN, -(HW[FIN] + 1.4));
     line(FIN, 0.2);
-    // the finish halo, like the lap's (Martin 23 Nov: "finish line rectangle halo"): a glowing frame across the
-    // flying finish, pulsing while a run is on
-    {
-      const w = HW[FIN] * 2 + 1.2, hh = 3.6, [fx, fz] = P[FIN];
-      halo = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ map: haloTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true }));
-      halo.rotation.y = Math.atan2(TAN[FIN][0], TAN[FIN][1]);
-      halo.position.set(fx, groundY(fx, fz) + hh / 2 + 0.05, fz);
-      halo.renderOrder = 4;
-      group.add(halo);
-    }
     sign('stop', N - 1, HW[N - 1] + 1.4);
     yield;
     // the arches over the start and the finish
     for (const [word, A] of [ARCH_START, ARCH_FIN].entries()) {
-      arches.push(buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, word }));
+      const arch = buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, word, clear: A.clear, glow: !!A.glow });
+      arches.push(arch);
+      // the finish halo (Martin 23 Nov: "finish line rectangle halo"), since 26 Nov the finish arch's opening filled
+      // with light ("fill the neon glow to fit inside of it exactly"), pulsing while a run is on
+      if (arch.glow) halo = arch.glow;
       yield;
     }
     // the straw bales at the apexes (src/race/bales.js)

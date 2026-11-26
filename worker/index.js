@@ -1313,7 +1313,10 @@ export class Lobby extends DurableObject {
         // map and not driving: a Raadi stage run (not counted as driving for the race votes)
         at[k] = (at[k] || 0) + 1;
       }
-      players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
+      // (those on a Majoraadi run first, then the drivers, then the rest; Martin 26 Nov: "on stats page bring majoraadi
+      // to the top", and the list is cut at 60, so the order is set here)
+      const rank = (p) => (p.at === 'stage' ? 0 : p.drv ? 1 : 2);
+      players.sort((x, y) => (rank(x) - rank(y)) || (x.since - y.since));
       const ph = race.phase(now);
       // (total and drv count everyone: the list shows the first 60, and the page once counted only those, 24 Nov)
       // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap

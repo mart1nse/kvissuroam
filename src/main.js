@@ -179,6 +179,7 @@ import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
 import { createIdlePark } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
+import { createLineLog } from './race/linelog.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
@@ -1011,6 +1012,9 @@ async function boot() {
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
     onJump: () => { tyrePending = { k: 'gravel', t: performance.now() }; },
     rec: createRecorder(mp.pose),
+    // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
+    // address only (?linelog=1 anywhere, ?linelog=0 nowhere); a test run does the same work and sends nothing.
+    log: params.get('linelog') === '0' ? null : createLineLog({ jobs, track: 'raadi', send: params.get('linelog') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver) }),
     onRun: (k, run, info) => { if (k === 'finish') { mp.submitLap({ ...run, track: 'raadi' }, info?.trace); if (info?.record) audio.chime?.('record'); } },
     online: () => !!mp.board?.raadi,
     bestFor: (id) => {

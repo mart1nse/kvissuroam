@@ -438,8 +438,9 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-// rec: the run's replay recorder (src/race/replay.js), or none
-export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null }) {
+// rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
+// line (src/race/linelog.js), or none
+export function createStage({ world, scene, toast, place, onRun, wood, beep, bestFor, online, onJump, rec = null, log = null }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -983,6 +984,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     setup(pose);
   }
   function setup(pose) {
+    log?.cancel();                           // (a run's last metres past the finish, when the car is put back at once)
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
@@ -1000,6 +1002,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     if (st.phase !== 'run' && st.phase !== 'count') return;
     st.phase = 'done'; st.pin = null; st.cool = true; st.doneT = null;
     rec?.cancel();
+    log?.cancel();
     elMsg.textContent = why;
     toast(why, 3200);
     showAgain();
@@ -1055,6 +1058,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     get gate() { return st.gate; },
     get round() { return [...ROUND].map(([k, R]) => [k, R.r, R.a, R.b]); },
     get pen() { return st.pen; },
+    get log() { return log; },
     get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
     // the seconds to green (the test drive holds the clock with it to take its pictures)
@@ -1134,6 +1138,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0;
           rec?.begin(time);
+          log?.begin(car, carId);
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
@@ -1279,6 +1284,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
           else if (a < 0 && b >= 0) {
             const f = a / (a - b), tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const trace = rec?.finish(tc, time, car);
+            log?.finish(Math.round(t * 1000), st.pen);
             // (the bests before this run: this browser's own in the car, and anyone's)
             const { car: pb } = best(carId), all = top(carId);
             const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
@@ -1312,6 +1318,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       drawBoards(st.phase === 'run' || st.phase === 'count' ? st.prog : START, time);
       st.prev = { x, z }; st.prevTime = time;
       rec?.frame(time, car);
+      log?.frame(car);
 
       // HUD
       const show = st.phase !== 'idle' || dStart < 120;

@@ -2,8 +2,9 @@
 // the real marks on the gravel and the grass beside it merged "to some kind of a rough outline of the racing line";
 // the cars are sideways through the corners, so there it is no pair of ruts but one broad band).
 //
-// Every timed run is written down (src/race/linelog.js), and tools/race/raadi-lines.py sums the wheel paths of all
-// of them on the ground and bakes the result into one small picture, a strip laid along the stage: 9 m either side
+// The timed runs of the day it was made were written down (the logging was taken out at the stage's launch, 26 Nov
+// 2026: the runs are in the project's raadi-lines/runs.ndjson), and tools/race/raadi-lines.py sums the wheel paths of
+// all of them on the ground and bakes the result into one small picture, a strip laid along the stage: 9 m either side
 // of its centre line, 64 texels across and 4096 along (1 MB on the graphics card with its smaller copies). Each
 // texel says how worn the ground is there, as four shares: gravel swept by the wheels (darker, packed), the loose
 // gravel that lies beside the swept band (lighter, stony), grass worn through to soil, and rubber on tarmac.

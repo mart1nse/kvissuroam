@@ -182,7 +182,6 @@ import { createSpectate } from './spectate.js';
 import { createSideCam } from './sidecam.js';
 import { createIdlePark, alwaysJudged, REST_S } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
-import { createLineLog } from './race/linelog.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
@@ -1030,9 +1029,6 @@ async function boot() {
     free: () => mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost,
     oldTracks: params.get('tracks') === 'old',
     rec: createRecorder(mp.pose),
-    // where each run's wheels went, for the stage's painted line (src/race/linelog.js). Sent from the game's own
-    // address only (?linelog=1 anywhere, ?linelog=0 nowhere); a test run does the same work and sends nothing.
-    log: params.get('linelog') === '0' ? null : createLineLog({ jobs, track: 'raadi', send: params.get('linelog') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver) }),
     // (the green light and the finish are told to the server as they happen: it times the run itself, as it does a lap)
     onRun: (k, run, info) => {
       if (k === 'start') mp.lapMark('s');

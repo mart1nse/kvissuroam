@@ -188,10 +188,9 @@ function streakTex() {
 // ---------------------------------------------------------------- the stage
 // bestFor(carId): the best time in that car { ms, name } (anyone's, from the server's board, or this browser's
 // own) or null; online(): the server's board is known, so a time under that best is the stage record
-// rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
-// line (src/race/linelog.js), or none
+// rec: the run's replay recorder (src/race/replay.js), or none
 // oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
-export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
+export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -739,7 +738,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     setup(pose);
   }
   function setup(pose) {
-    log?.cancel();                           // (a run's last metres past the finish, when the car is put back at once)
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
@@ -758,7 +756,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     if (st.phase !== 'run' && st.phase !== 'count') return;
     st.phase = 'done'; st.pin = null; st.cool = true; st.doneT = null;
     rec?.cancel();
-    log?.cancel();
     elMsg.textContent = why;
     toast(why, 3200);
     showAgain();
@@ -849,7 +846,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     get pen() { return st.pen; },
     get resets() { return st.resets || 0; },
     get prog() { return st.prog; },
-    get log() { return log; },
     get line() { return lineInfo; },
     get arches() { return arches; },
     fire,
@@ -877,7 +873,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
     reset(t) {
       if (st.phase !== 'run') return false;
       resetRun(st, t);
-      log?.cancel();                         // (the wheels' way up to here is kept; a line with a hop in it is not one)
       toast(resetText, 2600);
       return true;
     },
@@ -969,7 +964,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
           arches[0]?.flames.fire(...START_FIRE);           // a burst from the start arch at green
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0; st.lag = st.slow = 0;
           rec?.begin(time);
-          log?.begin(car, carId);
           onRun?.('start');
           setTimeout(() => { if (st.phase !== 'count') lights.classList.add('hidden'); }, 1200);
         }
@@ -997,7 +991,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
           {
             const f = ev.fin, tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const trace = rec?.finish(tc, time, car);
-            log?.finish(Math.round(t * 1000), st.pen);
             // (the bests before this run: this browser's own in the car, and anyone's)
             const { car: pb } = best(carId), all = top(carId);
             const used = Object.entries(st.inpT).sort((p, q) => q[1] - p[1])[0]?.[0] || inp;
@@ -1046,7 +1039,6 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       if (st.phase === 'run') markRun(st, car.time);
       st.prev = { x, z }; st.prevTime = time;
       rec?.frame(time, car);
-      log?.frame(car);
 
       // HUD
       const show = st.phase !== 'idle' || dStart < 120;

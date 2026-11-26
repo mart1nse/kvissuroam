@@ -45,6 +45,14 @@ const MAX_RACERS = 30;
 // their lights is out ('still'). Judged only on positions coming in one after another (a gap over STILL_GAP starts
 // the minute again), so a page that went quiet is left to quiet() as before.
 const STILL_MS = 60000, STILL_M = 25, STILL_GAP = 5000;
+// A deploy restarts the server (Martin 2026-11-26 20:46: every connection dropped mid-race and the race was gone, a
+// new vote needed). The race itself is read back from storage, but the server came up with no sockets, so the first
+// look at the racers found none of them there, put them all out as 'left' and closed the race as empty before the
+// pages were back (they ask again after 2, 4, 8 and 16 s, src/net/multiplayer.js). For BACK_MS after the server
+// starts, nobody is put out for a quiet page; and a racer whose socket closed ('left' with lt, the time) still holds
+// the race open for BACK_MS, so a page that comes back in that time (back()) is in the race again. (One put out by
+// quiet() has had its time already: asleep 80 s, or off the map past the page's own 30 s.)
+const BACK_MS = 45000;
 const OUT = ['off', 'cut', 'jump', 'car', 'start', 'map', 'left', 'time', 'quit'];   // (what a page may say; 'ref': the server did not take the finish)
 
 // votes needed: start = half of the drivers (at least 2 when 2 or more), restart = half of the racers plus one.
@@ -67,6 +75,9 @@ export class RaceDesk {
     if (!this.s.votes) this.s.votes = {};
     this.fol = new Map();         // racer id -> what the server has seen of their lap (follow.js), in memory
     this.savedAt = 0;
+    // when the server started with nobody connected (a deploy or another restart: every socket gone, the pages on their
+    // way back), else 0 (woken from hibernation with its pages still connected): see BACK_MS
+    this.boot = lobby.ctx.getWebSockets().length ? 0 : Date.now();
   }
   save() { this.lobby.setMeta('race', JSON.stringify(this.s)); this.savedAt = Date.now(); }
 
@@ -136,6 +147,8 @@ export class RaceDesk {
     return now < s.tGrid ? 'count' : now < s.tGreen ? 'grid' : 'race';
   }
   active() { return this.s.racers.filter((r) => !r.out); }
+  // still in the race, or gone with their connection so lately that they may yet come back (BACK_MS)
+  held(r, now = Date.now()) { return !r.out || (r.out === 'left' && now - (r.lt || 0) < BACK_MS); }
   finished() { return this.s.racers.filter((r) => r.ms != null); }
   // during a race: may a fresh start vote be held (half of the racers are through)?
   openForStart() {
@@ -169,7 +182,7 @@ export class RaceDesk {
     return {
       id: s.id, on: s.phase === 'on', tGrid: s.tGrid, tGreen: s.tGreen, seed: s.seed,
       // (without what the server keeps of each racer's lap for itself: gates, grid, the line, gaps, a finish not yet seen)
-      racers: s.racers.map(({ gt, gs, arm, fs, sk, skm, jp, cl, still, ...r }) => r), vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
+      racers: s.racers.map(({ gt, gs, arm, fs, sk, skm, jp, cl, still, lt, ...r }) => r), vote: { kind: b.kind, ids: votes, need: b.need, of: b.of }, last: s.last, now,
     };
   }
   send() { this.lobby.broadcast({ t: 'race', r: this.view() }); }
@@ -216,15 +229,15 @@ export class RaceDesk {
     this.quiet(now);
     // nobody left on the grid before the lights: nothing to race
     for (const r of s.racers) if (r.cl) this.settle(r, now);
-    if (!s.racers.length || (now >= s.tGrid && !this.active().length)) { this.close('empty', now); return; }
-    if (now >= s.tGreen && s.racers.every((r) => r.ms != null || r.out)) this.close('done', now);
+    if (!s.racers.length || (now >= s.tGrid && !s.racers.some((r) => this.held(r, now)))) { this.close('empty', now); return; }
+    if (now >= s.tGreen && s.racers.every((r) => r.ms != null || !this.held(r, now))) this.close('done', now);
   }
   // Racers still in the race whose page is gone quiet (Martin 2026-11-24: all finished or out, yet the race ran on
   // to 7:00): no live socket (asleep, or its 'rf'/'rd' never got through), or off the map for good (another tab,
   // the menu: the page's own 30 s grace has passed). They are out ('left'), so the race ends when the rest are done.
   quiet(now) {
     const s = this.s;
-    if (this.phase(now) !== 'race') return;
+    if (this.phase(now) !== 'race' || now - this.boot < BACK_MS) return;
     let on = null, d = null;
     for (const r of s.racers) {
       if (r.out || r.ms != null || now < (r.go || s.tGreen) + 10000) continue;
@@ -418,7 +431,7 @@ export class RaceDesk {
   back(me) {
     const r = this.s.phase === 'on' && this.phase() === 'race' && this.s.racers.find((x) => x.id === me.id);
     if (!r || r.out !== 'left') return;
-    delete r.out;
+    delete r.out; delete r.lt;
     this.save(); this.send();
   }
   left(me) {
@@ -426,7 +439,7 @@ export class RaceDesk {
     delete s.votes[me.id];
     if (s.phase === 'on') {
       const i = s.racers.findIndex((r) => r.id === me.id);
-      if (i >= 0) { if (this.phase(now) === 'race') { if (s.racers[i].ms == null && !s.racers[i].out) s.racers[i].out = 'left'; } else s.racers.splice(i, 1); }
+      if (i >= 0) { if (this.phase(now) === 'race') { if (s.racers[i].ms == null && !s.racers[i].out) { s.racers[i].out = 'left'; s.racers[i].lt = now; } } else s.racers.splice(i, 1); }
       this.check(now);
     }
     this.tally(now);

@@ -243,7 +243,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     const lead = rows[0];
     for (const x of rows) {
       if (x.out) { x.gap = 'OUT'; x.where = OUT_TEXT[x.out] || 'out'; continue; }
-      if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; continue; }
+      // (in a race that still runs, a checkered flag by the place of each racer through the line, Martin 2026-11-26:
+      // the list tells at a glance who has finished and who is still on the lap; none in the results after the race)
+      if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; x.fin = !!live; continue; }
       x.where = x.p?.prog != null ? (x.p.prog < 0 ? 'START' : `${(x.p.prog / 1000).toFixed(1)} KM`) : '';
       if (x === lead) { x.gap = isTouch ? '' : 'LEADER'; continue; }
       const k = x.p?.marks?.length - 1, at = leadAt(lead, k);
@@ -270,20 +272,42 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
       const name = `${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}`;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}${x.fin ? ' fin' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="f">${x.fin ? '<i></i>' : ''}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 
-  // phones: the live standings sit over the gas pedal in a short box that scrolls (Martin 2026-11-22). The
-  // box is drawn anew with the list, so it keeps where a finger left it, and otherwise follows your own row.
-  let fingerAt = -1e9;
-  for (const ev of ['touchstart', 'wheel']) list.addEventListener(ev, () => { fingerAt = performance.now(); }, { passive: true });
+  // the list scrolls inside its box (the phones' live standings over the gas pedal, Martin 2026-11-22; the results
+  // everywhere) and is drawn anew whenever a gap changes, so it otherwise follows your own row. Scrolled by hand (the
+  // wheel, a finger, the scroll bar dragged) it stays where it was left until 30 s after the last of it, then goes
+  // back to your row (Martin 2026-11-26: it kept snapping back to him while he read the results).
+  const HAND_MS = 30000;
+  let handAt = -1e9, handBack = false, ownTop = -1;
+  const byHand = () => {
+    handAt = performance.now(); handBack = true;
+    // (results shown for a while after a race: not tucked away while somebody reads them)
+    if (listOpen && listUntil !== Infinity) listUntil = Math.max(listUntil, now() + HAND_MS);
+  };
+  const inTb = (e) => !!lp.tb && lp.tb.contains(e.target);
+  for (const ev of ['touchstart', 'wheel']) list.addEventListener(ev, (e) => { if (inTb(e)) byHand(); }, { passive: true });
+  // (any scroll the list did not make itself: the scroll bar dragged, a flick still running after the finger is off)
+  list.addEventListener('scroll', (e) => { if (e.target === lp.tb && Math.abs(lp.tb.scrollTop - ownTop) > 1) byHand(); }, { capture: true, passive: true });
+  const handHeld = () => performance.now() - handAt < HAND_MS;
   function keepScroll(top) {
-    const tb = list.querySelector('.tb');
-    if (!tb || tb.scrollHeight <= tb.clientHeight + 1) return;
-    if (performance.now() - fingerAt < 4000) { tb.scrollTop = top; return; }
-    const meRow = tb.querySelector('tr.me');
-    tb.scrollTop = meRow ? meRow.offsetTop - (tb.clientHeight - meRow.offsetHeight) / 2 : top;
+    const tb = lp.tb;
+    if (tb.scrollHeight > tb.clientHeight + 1) {
+      if (handHeld()) tb.scrollTop = top;
+      else {
+        // (your row in the middle of the box: measured against the box itself, as offsetTop counts from the panel's
+        // top on desktop and put the row near the bottom)
+        const meRow = tb.querySelector('tr.me');
+        if (meRow) {
+          const a = meRow.getBoundingClientRect(), b = tb.getBoundingClientRect();
+          tb.scrollTop += a.top - b.top - tb.clientTop - (tb.clientHeight - a.height) / 2;
+        } else tb.scrollTop = top;
+        handBack = false;
+      }
+    }
+    ownTop = tb.scrollTop;
   }
 
   // ---- drawn four times a second (and at once after a click or a message)
@@ -430,10 +454,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (!lp.hd || lp.hd.parentNode !== list) {
         list.innerHTML = '<div class="hd"></div><div class="tb"></div><div class="ft"></div>';
         lp.hd = list.querySelector('.hd'); lp.tb = list.querySelector('.tb'); lp.ft = list.querySelector('.ft');
+        // (the box's height is set from the online list's room after it shows, and changes with it: your row put
+        // back in the middle then, unless it was scrolled by hand)
+        if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (!handHeld()) keepScroll(lp.tb.scrollTop); }).observe(lp.tb);
       }
       setText(lp.hd, `${head}${xBtn}`);
-      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
+      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td class="f"></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
       if (lp.tb._h !== tb) { const top = lp.tb.scrollTop; setText(lp.tb, tb); keepScroll(top); }
+      else if (handBack && !handHeld()) keepScroll(lp.tb.scrollTop);   // (30 s after a scroll by hand, back to your row)
       setText(lp.ft, foot);
       lp.ft.style.display = foot ? '' : 'none';
     }
@@ -471,7 +499,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       r = m;
       // (put out by the server for standing still a minute: worker/race.js STILL_MS)
       if (wasIn && r.id === prevId && me()?.out === 'still') toast('OUT OF THE RACE · STOOD STILL', 3000);
-      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; sentRf = sentRd = null; dismissed = 0; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
+      if (r.id !== prevId) { track_.clear(); finishedMs = null; outSent = 0; sentRf = sentRd = null; dismissed = 0; handAt = -1e9; if (!r.on) pin = null; else if (prevId !== undefined) { showLast = false; listOpen = false; } }
       // our finish or our drop-out never got through (the connection was down as it was sent, Martin 2026-11-24:
       // a race that everyone was through kept running): the server still has us racing, so say it once more
       const mm = r.on && me();

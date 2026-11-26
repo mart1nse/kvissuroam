@@ -109,9 +109,12 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
 {
   const mem = new Map();
   globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+  // (this tab's own store: a page that died on screen and loads again in the same tab finds its mark there)
+  const tab = new Map();
+  globalThis.sessionStorage = { getItem: (k) => (tab.has(k) ? tab.get(k) : null), setItem: (k, v) => tab.set(k, String(v)), removeItem: (k) => tab.delete(k) };
   const caps = { dpr: 1.5, shadow: 1024, trees: 70, load: 520 }, id = `${caps.dpr}/${caps.shadow}/${caps.trees}/${caps.load}`;
   const hooks = () => ({ renderer: { getPixelRatio: () => 1, setPixelRatio() {}, shadowMap: {} }, sun: { shadow: { mapSize: { x: 0, set() {} }, map: null } }, quality: {}, setTrees() {} });
-  const visit = () => { const q = createQuality(hooks(), caps, {}); mem.delete('kvissuroam.alive2'); return q; };     // (closed in the ordinary way: the mark of being on screen goes)
+  const visit = () => { const q = createQuality(hooks(), caps, {}); mem.delete('kvissuroam.alive2'); tab.delete('kvissuroam.alive2'); return q; };     // (closed in the ordinary way: the mark of being on screen goes)
   mem.set('kvissuroam.gfxCap', JSON.stringify({ ladder: id, level: 2 }));
   mem.set('kvissuroam.gfxAuto2', JSON.stringify({ ladder: id, level: 1 }));
   const caps3 = [visit().cap, visit().cap, visit().cap];
@@ -119,21 +122,39 @@ check(deviceLadder({ dpr: 1, shadow: 1024, trees: 70, load: 520 }).length < N, '
   check(JSON.parse(mem.get('kvissuroam.gfxAuto3') || '{}').level === 2, `and so does the level the device held steady (${mem.get('kvissuroam.gfxAuto3')})`);
   // a page that died on screen: one level under where it died; again within half an hour: two under
   mem.clear();
-  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6 }));
+  tab.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6 }));
   const a = visit().cap;
-  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 5 }));
+  tab.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 5 }));
   const b = visit().cap;
   check(a === 5 && b === 3, `a crash caps one level lower, a second one soon after two (${a}, ${b})`);
   // the clues the mark carried come out for the stats (24 Nov 2026), and an old mark without them still works
-  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 4, s: 700, heap: 520, tex: 260 }));
+  tab.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 4, s: 700, heap: 520, tex: 260 }));
   const d = visit().death;
   check(d && d.level === 4 && d.s === 700 && d.heap === 520 && d.tex === 260 && d.cap === 2, `a death's clues reach the stats (${JSON.stringify(d)})`);
   mem.set('kvissuroam.gfxCap2', JSON.stringify({ ladder: id, level: 5 }));
-  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 3 }));
+  tab.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 3 }));
   const d2 = visit().death;
   check(d2 && d2.s === null && d2.heap === null && d2.cap === 2, `an old mark without clues (${JSON.stringify(d2)})`);
   check(visit().death === null, 'no death after a visit that closed in the ordinary way');
-  delete globalThis.localStorage;
+  // another window of the game on screen beside this one (Martin's Mac, 26 Nov 2026): its mark in the browser's
+  // store, written a moment ago, is no crash; one nobody has written for a minute is (a tab opened after a death);
+  // a mark of the old kind, with no time, from another tab is not taken for one either
+  mem.clear(); tab.clear();
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, t: Date.now() - 4000 }));
+  const w = visit();
+  check(w.death === null && w.cap === null, `a second window of the game on screen is no crash (${JSON.stringify(w.death)}, cap ${w.cap})`);
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, t: Date.now() - 60000 }));
+  const o = visit();
+  check(o.death && o.death.level === 6 && o.cap === 5, `a mark nobody wrote for a minute is a crash (${JSON.stringify(o.death)})`);
+  mem.clear();
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6 }));
+  check(visit().death === null, 'an old mark of another tab, with no time, is no crash');
+  // and a visit on screen keeps both marks, the tab's and the browser's, with the time
+  mem.clear(); tab.clear();
+  createQuality(hooks(), caps, {});
+  const both = [mem.get('kvissuroam.alive2'), tab.get('kvissuroam.alive2')].map((m) => JSON.parse(m || '{}'));
+  check(both.every((m) => m.level >= 0 && m.t > 0), `a page on screen marks this tab and the browser (${JSON.stringify(both)})`);
+  delete globalThis.localStorage; delete globalThis.sessionStorage;
 }
 
 process.exit(failed ? 1 : 0);

@@ -902,7 +902,7 @@ async function boot() {
   startSpots = startSlots(startTrack, startPose);
   lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
   hud = createHud(world);
-  rocketUi = createRocketUi({ pad: $('#rocketpad'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
+  rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
     return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
   } });

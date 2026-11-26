@@ -648,7 +648,7 @@ export function stepCar(car, input, world, dtFrame) {
   }
   // (a car with thrusters, thrust.js: its tank, its BOOST, and a kickflip in flight, which moves the car
   // along its plan instead of on its tyres)
-  if (car.rocket && rocketStep(car, input, world, dtFrame)) {
+  if (car.rocket && rocketStep(car, input, world, dtFrame, STATIC)) {
     car.time += dtFrame;
     car.hit *= Math.exp(-dtFrame * 4); car.landed *= Math.exp(-dtFrame * 6);
     return;

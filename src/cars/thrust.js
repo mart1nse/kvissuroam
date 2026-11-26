@@ -53,7 +53,8 @@ const DOWN_H1 = 0.85, DOWN_V1 = 1.8;
 // until it is, and only then is let down. (Until 26 Nov the let-down began at whatever small speed it had, as slow
 // as SINK: three metres at 0.3 m/s, a flight of 12 s. Martin: "it stayed up in the air for a very long time".)
 const DOWN_V3_MIN = 2.6;
-const SINK = 0.3;                  // the speed the wheels meet the ground at, which the springs take (m/s)
+// (the wheels touch before that, hanging below the body, and the flight ends there: see fly)
+const SINK = 0.3;                  // the speed the plan would bring the body to its ride height at (m/s)
 const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (s)...
 const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
 const ROLL_MIN = 1.1;              // ...which is never less than this (s)
@@ -97,14 +98,16 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) r.tank = 0; };
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
 // kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not a minute).
 // r.on: BOOST's valves are open; r.dry: they shut for want of gas with the button still held (it must be let go).
-export function rocketStep(car, input, world, dt) {
+// droop: how far the wheels hang below the body in the air (m, the physics' own spring travel at rest): a flight
+// ends where they first touch, see fly.
+export function rocketStep(car, input, world, dt, droop = 0) {
   const r = car.rocket, T = car.spec.thrusters;
   r.refillS = input.quickRefill ? QUICK_REFILL_S : REFILL_S;
   // the tank fills whenever it is not full and nothing is blowing (not in a flight, not while BOOST's valves are open)
   if (r.tank < TANK_S && !r.flight && !r.on) r.tank = Math.min(TANK_S, r.tank + (dt * TANK_S) / r.refillS);
   // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
   car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
-  if (r.flight) { fly(car, world, dt); return !!r.flight; }
+  if (r.flight) { fly(car, world, dt, droop); return !!r.flight; }
   const off = !!input.rocketOff || car.inWater;
   const flip = !!input.flip;
   if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && r.tank >= JUMP_S - 1e-6) {
@@ -112,7 +115,7 @@ export function rocketStep(car, input, world, dt) {
     const plan = planFlip(car, world, steer < -0.3 ? -1 : 1);
     use(r, JUMP_S);
     r.flight = plan; r.launched = plan; r.flipHeld = true; r.boost = 0; r.on = false; car.thrustN = 0;
-    fly(car, world, dt);
+    fly(car, world, dt, droop);
     return true;
   }
   r.flipHeld = flip;
@@ -557,6 +560,29 @@ export function unpackPlan(a) {
 
 // ---------------------------------------------------------------------------------------------- flying it
 const pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
+// How far the lowest wheel is over the road (m) at a pose of plan p: the body `up` over it, less what the roll and
+// the nod that are left take off the lower side; a big number while the car is still turning over.
+function wheelUp(p, at, up, spec) {
+  const off = Math.atan2(Math.sin(at.roll - p.rl), Math.cos(at.roll - p.rl));
+  return Math.abs(off) < 0.2 ? up - (spec.track / 2) * Math.abs(Math.sin(off)) - (spec.wheelbase / 2) * Math.abs(Math.sin(at.pitch - p.pl)) : 1e9;
+}
+// When a plan's wheels first touch its own ground line (seconds from lift-off): where fly, below, ends the flight
+// over even ground. Another player's page stops flying the plan there too and shows the car's own positions from
+// then on, as its driver has the wheel again. DROOP: how far the wheels hang below the body in the air (the
+// physics' spring travel at rest, which it hands to rocketStep).
+const DROOP = 0.11, TOUCH = new WeakMap(), tmpPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
+export function touchTime(p, spec) {
+  let t = TOUCH.get(p);
+  if (t !== undefined) return t;
+  t = p.tl;
+  for (let x = p.tl - 0.01; x > p.tb; x -= 0.01) {
+    flightPose(p, x, tmpPose);
+    if (wheelUp(p, tmpPose, tmpPose.y - (p.yl + (p.vland + SINK) * (x - p.tl)), spec) >= DROOP) break;
+    t = x;
+  }
+  TOUCH.set(p, t);
+  return t;
+}
 // The flight is over before its plan is (crash: something was in the way) or the plan ends over a drop: the car
 // is left to the ordinary physics as it is, in the air, to fall and hit what it hits. It goes on turning the way
 // it was, at the rate that has it the right way up as it comes down (up: metres of air under it).
@@ -570,7 +596,7 @@ function letGo(car, rollRate, crash, up) {
   r.noz.fill(0); r.lean.fill(0); r.flight = null;
   if (crash) r.crashed = true; else r.landed = true;
 }
-function fly(car, world, dt) {
+function fly(car, world, dt, droop = 0) {
   const r = car.rocket, p = r.flight, s = car.spec;
   const roll0 = car.roll;
   p.t += dt;
@@ -603,6 +629,18 @@ function fly(car, world, dt) {
   car.wheelSpin += spin; car.wheelSpinF += spin; car.wheelSpinR += spin;
   if (s.engine.type === 'ev') car.rpm = (Math.abs(car.vx) / s.wheelRadius) * s.gears[0] * (60 / (2 * Math.PI));
   car.lastGround = null; car.kerbS = null; car.stone = null;
+  // The first touch (Martin 26 Nov: "as soon as there is just the slightest contact on the road then it acts as
+  // turning input etc (even if the animation is still ending)"): on the way down the wheels hang `droop` below the
+  // body, and the lower side's lower still by what roll and nod are left. Where the first of them meets the road the
+  // plan has done its work: the car is the ordinary physics' again, sinking as it was, and its springs take the
+  // rest, so the wheel, the pedals and the brakes answer from that moment and not a quarter of a second later, at
+  // the plan's end. The jets are left as they are and die away by themselves (rocketStep).
+  if (!done && droop > 0 && p.t > p.tb && pose.vy < 0 && wheelUp(p, pose, up, s) < droop) {
+    car.roll = p.rl + Math.atan2(Math.sin(pose.roll - p.rl), Math.cos(pose.roll - p.rl));
+    car.airborne = true; car.airTime += dt; car.load = 0;
+    r.flight = null; r.landed = true;
+    return;
+  }
   if (!done) {
     car.roll = pose.roll;
     car.airborne = true; car.airTime += dt; car.load = 0;

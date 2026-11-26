@@ -17,7 +17,7 @@ import { KUDOS_GAP_S } from '../kudos.js';
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt } from '../race/replay.js';
-import { flightPose, flightNozzles, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
+import { flightPose, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
 import { badName } from '../../worker/badnames.js';
@@ -827,8 +827,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
     if (!o.lean) o.lean = new Float32Array(4);                  // (how far its corner jets are swung out)
     const f = o.flip, t = f ? now - (bundled ? DELAY_BUNDLED : DELAY) - f.t0 : -1;
-    if (f && (t > f.plan.tl || !p || !o.live)) o.flip = null;
-    if (f && p && o.live && t >= 0 && t <= f.plan.tl) {
+    // (to its wheels' first touch, where its driver has the car again: thrust.js, touchTime)
+    const end = f ? touchTime(f.plan, o.spec) : 0;
+    if (f && (t > end || !p || !o.live)) o.flip = null;
+    if (f && p && o.live && t >= 0 && t <= end) {
       flightPose(f.plan, t, flown);
       p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
       p[6] = f.plan.vx; p[7] = f.plan.vz;

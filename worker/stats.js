@@ -9,6 +9,10 @@
 // Each bundle also goes into a row of totals for its hour (UTC), kept two days, so that
 // GET /api/stats?hours=24 gives a rolling last 24 hours (Martin 2026-11-24: "24 h", not since midnight).
 //
+// The one place with names is the top drivers (Martin 2026-11-26: "top 10 driving hours by player"): the online
+// lobby, which already shows everyone's driver name in the game, says once a minute who is driving on the map,
+// and each gets that minute under the name (see addDrivers below). No bundle from a browser carries a name.
+//
 // One bundle is one row written, far inside the free plan's 100,000 a day. Everything in a bundle is
 // checked against fixed lists and limits, because anyone can post one: a made-up bundle can at worst
 // add a few minutes to a day's totals.
@@ -231,6 +235,49 @@ export function loadView(L, span) {
   };
 }
 
+// ---- Top drivers (Martin 2026-11-26: "to stats top 10 driving hours by player"). The stats bundles carry no
+// names, so this comes from the online lobby (worker/index.js loadTick): once a minute it names who is driving
+// on the map (not ghosts), and each name gets 60 s. So it is time driven online under a driver name: a rename
+// starts a new line, two players with one name share a line, and driving offline (server full, no connection)
+// is not in it. Kept apart from the totals, one row per Tartu day and one per UTC hour (two days), each a list
+// of [name, seconds], so a minute costs two rows written however many are driving. Names are told apart
+// without regard to capitals and shown as last written.
+export const DRIVERS_DAY = 5000, DRIVERS_HOUR = 1500;      // the most names kept per day and per hour
+const cleanDriver = (s) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20) : '');
+// a stored row -> { m: the minute last counted, map: name in small letters -> [name, seconds] }
+export function driversFrom(text) {
+  const t = { m: 0, map: new Map() };
+  try {
+    const o = JSON.parse(text);
+    t.m = Number(o.m) || 0;
+    for (const e of o.d) if (Array.isArray(e) && typeof e[0] === 'string' && e[0] && e[1] > 0) t.map.set(e[0].toLowerCase(), [e[0], e[1]]);
+  } catch { /* nothing kept yet */ }
+  return t;
+}
+export const driversText = (t) => JSON.stringify({ m: t.m, d: [...t.map.values()] });
+// one minute (min: minutes since 1970) of the names driving. False when nothing changed: nobody driving, or a
+// minute already counted (after a deploy the lobby starts its minutes afresh and would count one twice).
+export function addDrivers(t, names, min, max) {
+  if (!Array.isArray(names) || !(min > t.m)) return false;
+  const seen = new Set();
+  for (const raw of names.slice(0, 200)) {
+    const n = cleanDriver(raw), k = n.toLowerCase();
+    if (!n || seen.has(k)) continue;
+    const e = t.map.get(k);
+    if (e) { e[0] = n; e[1] += 60; } else if (t.map.size < max) t.map.set(k, [n, 60]); else continue;
+    seen.add(k);
+  }
+  if (!seen.size) return false;
+  t.m = min;
+  return true;
+}
+// several rows (oldest first) added together: how many names drove, and the n with the most time
+export function topDrivers(rows, n = 10) {
+  const all = new Map();
+  for (const t of rows) for (const [k, [name, sec]] of t.map) { const e = all.get(k); if (e) { e.name = name; e.sec += sec; } else all.set(k, { name, sec }); }
+  return { n: all.size, top: [...all.values()].sort((a, b) => b.sec - a.sec).slice(0, n) };
+}
+
 // several days' totals added together
 export function sumDays(rows) {
   const out = {};
@@ -261,6 +308,10 @@ export class Stats extends DurableObject {
       const row = this.sql.exec('SELECT data FROM days WHERE day = ?', tartuDay(new Date(now))).toArray()[0];
       if (row) this.sql.exec('INSERT INTO hours (hour, data) VALUES (?, ?)', hourKey(Math.floor(now / HOUR) * HOUR - tartuHour(new Date(now)) * HOUR), row.data);
     }
+    // the top drivers' rows (see addDrivers above)
+    this.sql.exec('CREATE TABLE IF NOT EXISTS drive_days (day TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS drive_hours (hour TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    this.drv = {};                // table -> { key, t } kept in memory between minutes
     this.today = null;            // { day, data } kept in memory between bundles
     this.thisHour = null;         // { hour, data }, the same for the hour
     this.rl = new Map();
@@ -320,7 +371,31 @@ export class Stats extends DurableObject {
   // a minute of the online lobby (worker/index.js loadTick): RPC like addRace
   addLoad(s) {
     const now = typeof s?.t === 'number' && Math.abs(s.t - Date.now()) < 300000 ? new Date(s.t) : new Date();
+    // (the names driving this minute: never in the way of the load counts)
+    try { if (Array.isArray(s?.drivers) && s.drivers.length) this.addDrivers(s.drivers, now); } catch (err) { console.error('drivers', err); }
     return this.addNow((d) => addLoad(d, s), now);
+  }
+
+  // the top drivers' row of a day or an hour, kept in memory while it is the current one
+  driveRow(table, col, key, keepFrom) {
+    let c = this.drv[table];
+    if (c?.key !== key) {
+      const row = this.sql.exec(`SELECT data FROM ${table} WHERE ${col} = ?`, key).toArray()[0];
+      c = this.drv[table] = { key, t: driversFrom(row?.data) };
+      this.sql.exec(`DELETE FROM ${table} WHERE ${col} < ?`, keepFrom);
+    }
+    return c;
+  }
+  addDrivers(names, now = new Date()) {
+    const min = Math.floor(now.getTime() / 60000);
+    const d = this.driveRow('drive_days', 'day', tartuDay(now), tartuDay(new Date(Date.now() - KEEP_DAYS * 86400000)));
+    if (addDrivers(d.t, names, min, DRIVERS_DAY)) this.sql.exec('INSERT INTO drive_days (day, data) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data', d.key, driversText(d.t));
+    const h = this.driveRow('drive_hours', 'hour', hourKey(now.getTime()), hourKey(Date.now() - KEEP_HOURS * HOUR));
+    if (addDrivers(h.t, names, min, DRIVERS_HOUR)) this.sql.exec('INSERT INTO drive_hours (hour, data) VALUES (?, ?) ON CONFLICT (hour) DO UPDATE SET data = excluded.data', h.key, driversText(h.t));
+  }
+  // the top 10 of the rows from a day or an hour on
+  topDrivers(table, col, from) {
+    return topDrivers(this.sql.exec(`SELECT data FROM ${table} WHERE ${col} >= ? ORDER BY ${col}`, from).toArray().map((r) => driversFrom(r.data)));
   }
 
   async fetch(req) {
@@ -372,7 +447,7 @@ export class Stats extends DurableObject {
         // visits hour by hour, the 24 h tab's columns (the other tabs have them per day)
         const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, races: r.data.race?.n || 0 }));
         const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
-          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits };
+          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits, drivers: this.topDrivers('drive_hours', 'hour', from) };
         this.cache.set('h24', { at: Date.now(), body });
         return answer(body);
       }
@@ -391,7 +466,7 @@ export class Stats extends DurableObject {
       });
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
       const total = sumDays(rows.map((r) => r.data));
-      const body = { days, from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)) };
+      const body = { days, from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)), drivers: this.topDrivers('drive_days', 'day', from) };
       this.cache.set(days, { at: Date.now(), body });
       return answer(body);
     }

@@ -164,9 +164,10 @@ function freeze(s, ms) {
 // plain driving (up to 60 a visit) counts as "device:kind:value" in the bundle's `hit`:
 //   why  build | draw | online | game | card | page:net | page:car      what the frame before was busy with
 //   new  shaders | pictures | car | none      what that frame sent to the graphics card first
-//   len (ms), on (others online), t (since DRIVE)
+//   len (ms), on (others online), t (since DRIVE or since the car was last put somewhere)
 // and `hitT` the seconds of such driving per "device:others online", so /stats can say hitches per 10 minutes
-// alone and in a crowd.
+// alone and in a crowd. `hitT`'s "device:uneven" is the part of those seconds with an uneven frame rate (four
+// or more of the last 120 frames late: not counted as single hitches since 26 Nov 2026).
 const crowd = (n) => bucket(n || 0, [1, 10, 30, 60], ['0', '1-9', '10-29', '30-59', '60+']);
 function hitch(h) {
   const d = dev || 'other';
@@ -268,6 +269,7 @@ export const stats = {
     if (s.mode !== 'drive') return;
     b.drive += dt;
     if (s.felt && s.raw < 1) inc(b.hitT, `${dev || 'other'}:${crowd(s.others)}`, dt);
+    if (s.felt && s.raw < 1 && s.uneven) inc(b.hitT, `${dev || 'other'}:uneven`, dt);
     inc(b.car, s.car, dt);
     inc(b.inp, s.inp, dt);
     inc(b.view, s.view, dt);

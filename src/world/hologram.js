@@ -4,9 +4,9 @@
 // projector pad with a faint beam and a few rising sparks. Clicking or tapping it opens the taproom's site.
 import * as THREE from 'three';
 
-const FONT = 'LinnaringMontserrat';
+export const FONT = 'LinnaringMontserrat';
 let fontReady = null;
-function loadFont() {
+export function loadFont() {
   if (fontReady) return fontReady;
   if (typeof FontFace === 'undefined' || !document.fonts) return (fontReady = Promise.resolve(false));
   const url = `${import.meta.env.BASE_URL}fonts/montserrat-latin.woff2`;

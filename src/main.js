@@ -465,6 +465,22 @@ let droveOnce = false;                  // DRIVE pressed since the page opened: 
 let trackPicked = false;                // a track was picked on the start screen since the last DRIVE
 if (RAADI) setUnrutted(onStage);
 const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
+// (a desktop at the Majoraadi stage: the sharp ground that any spot of the stage would load is loaded behind
+// GETTING READY at its start and kept, so a run brings no new pictures onto the graphics card. Martin 26 Nov: "load
+// all the things the players will see after the first turn anyway, then no surprises". Phones and the extra low
+// setup keep to their memory and load it as they go). The map squares too: those that any spot of the stage would
+// load are loaded and kept too, so no far houses and trees build themselves during a run either)
+let stageHold = null;
+function groundHold() {
+  if (isTouch || xlow || !stage || !atRaadi()) return null;
+  if (!stageHold) {
+    const { pts, start, finish } = stage.data, at = [];
+    for (let i = start; i < finish; i += 20) at.push(pts[i]);
+    at.push(pts[finish]);
+    stageHold = { pts: at };
+  }
+  return stageHold;
+}
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
@@ -567,7 +583,7 @@ function getReadyStep(now) {
   const left = shrinker?.pending || 0;
   readyMost = Math.max(readyMost, left);
   // (all: as long as building work is queued or things are held back from the picture, 15 s at most)
-  const busy = dropping || respawning || left > 0 || !world.ready(car.x, car.z) || (readyAll && now - readyOn < 15000 && (jobs.pending > 0 || warmer.waiting > 0));
+  const busy = dropping || respawning || left > 0 || !world.ready(car.x, car.z) || (readyAll && now - readyOn < 15000 && (jobs.pending > 0 || warmer.waiting > 0 || terrain?.pending() > 0));
   if ((!busy && now - readyOn > 600) || now - readyOn > 20000) { readyOn = 0; readyAll = false; readyEl.classList.remove('show'); return; }
   const text = readyMost > 3 && !dropping ? `GETTING READY ${Math.round(100 * (1 - left / readyMost))}%` : 'GETTING READY';
   if (readyEl.textContent !== text) readyEl.textContent = text;
@@ -2495,11 +2511,12 @@ function frame(ts) {
       warmer.scope(() => { trackside.update(WF.x, WF.z); trackKerbs.update(WF.x, WF.z); });
       if (jobs.live && performance.now() - b0 > 6) jobs.rest();
     }
+    let sh = null;                 // (the Majoraadi stage's hold: see groundHold)
     if (intro) world.update(introFocus.x, introFocus.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
     // (spectating: around the watched car, and a little around our own, which is where we come back to)
     else if (watch?.active) world.update(WF.x, WF.z, quality.loadRadius, quality.loadRadius + 500, { x: car.x, z: car.z, r: 300 });
-    else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 });
-    terrain.update(watch?.scrubbing ? WF : camera.position);      // (a replay's slider being slid: see parked above)
+    else world.update(car.x, car.z, quality.loadRadius, quality.loadRadius + 500, flyIn && { x: flyIn.from.x, z: flyIn.from.z, r: 700 }, !flyIn && (sh = groundHold()) ? sh.pts : null);
+    terrain.update(watch?.scrubbing ? WF : camera.position, watch?.active ? null : sh || groundHold());      // (a replay's slider being slid: see parked above)
     for (const s of world.sectors.values()) if (s.tree) s.tree.setNear(s.d < 260);
   }
   // queued building work (map squares, painted fronts, ground tiles): a few milliseconds of it every frame

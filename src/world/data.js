@@ -805,12 +805,16 @@ export async function loadWorldData(onProgress = () => {}) {
 
     // Start loading sectors within rLoad of the point, drop those beyond rKeep
     // (but never those within hold.r of hold, e.g. the parked car while the intro drone flies elsewhere).
-    update(x, z, rLoad, rKeep, hold = null) {
+    // along: [[x, z], ...] or null, more points treated as the first one (the Majoraadi stage's line: what any spot of
+    // it would load is loaded and kept; s.d stays the distance from x, z)
+    update(x, z, rLoad, rKeep, hold = null, along = null) {
       const want = [];
       for (const s of sectors.values()) {
         s.d = rectDist(s, x, z);
-        if (s.state === 'idle' && s.d < rLoad) want.push(s);
-        else if (s.state === 'ready' && s.d > rKeep && !(hold && rectDist(s, hold.x, hold.z) < hold.r)) unload(s);
+        if (along && s.alongFor !== along) { s.alongFor = along; s.alongD = Math.min(...along.map(([px, pz]) => rectDist(s, px, pz))); }
+        const d = along ? Math.min(s.d, s.alongD) : s.d;
+        if (s.state === 'idle' && d < rLoad) want.push(s);
+        else if (s.state === 'ready' && d > rKeep && !(hold && rectDist(s, hold.x, hold.z) < hold.r)) unload(s);
       }
       want.sort((a, b) => a.d - b.d);
       for (const s of want) { if (loading >= 3) break; load(s); }

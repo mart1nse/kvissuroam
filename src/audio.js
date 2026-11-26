@@ -336,11 +336,11 @@ export function createAudio() {
     if (ev) {
       engGain.gain.setTargetAtTime(0, t, 0.05);
       if (synth) synth.port.postMessage({ state: { on: 0 } });
-      // (a car with motors of its own sound has those instead of the plain whine, or with it: `blend`)
+      // (a car with motors of its own sound has those instead of the plain whine)
       if (motorWant && !motor && noiseSrc) { motor = createMotor(ctx, bus, noiseSrc, car.spec, motorWant); if (!motor) motorWant = null; }
       if (motor) motor.step(t, vw, car.throttle, motorRegen(car, v), dead);
       whine.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
-      whineGain.gain.setTargetAtTime(dead || (motor && !motor.blend) ? 0 : plainWhine(vw, car.throttle), t, 0.08);
+      whineGain.gain.setTargetAtTime(dead || motor ? 0 : plainWhine(vw, car.throttle), t, 0.08);
     } else {
       // turbos whistle as they spool, rising in pitch with boost and revs (inside the engine synthesiser;
       // the oscillator is only for browsers without it), and vent their boost when the throttle shuts
@@ -497,7 +497,7 @@ export function createAudio() {
       if (v.motorWant && !v.motor) { v.motor = createMotor(ctx, v.mix, noiseSrc, s, v.motorWant); if (!v.motor) v.motorWant = null; }
       if (v.motor) v.motor.step(t, vw, r.throttle, motorRegen(r, speed), false);
       v.whine.frequency.setTargetAtTime(plainWhineHz(vw), t, 0.05);
-      v.whineGain.gain.setTargetAtTime(v.motor && !v.motor.blend ? 0 : plainWhine(vw, r.throttle), t, 0.08);
+      v.whineGain.gain.setTargetAtTime(v.motor ? 0 : plainWhine(vw, r.throttle), t, 0.08);
     } else {
       if (e.turbo) {
         const wh = e.turbo.whistle ?? 1;

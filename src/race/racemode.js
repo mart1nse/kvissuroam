@@ -5,6 +5,7 @@
 // Light on purpose: a few DOM boxes whose text is only rewritten when it changes (four times a
 // second at most), positions looked up ten times a second with a hint, no canvas, no 3D.
 import { fmtTime, escapeHtml } from './race.js';
+import { KUDOS_PAIR } from '../net/kudosrules.js';
 
 const STEP = 100;                 // metres between the timing points the gaps are measured at
 const LIST_MS = 10000;            // results shown this long, then tucked into the LAST RACE chip
@@ -152,6 +153,16 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   const loneRacer = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null && r.racers.filter((x) => !x.out).length === 1 && mp.drivers().length > 0; };
   const racingNow = () => { const m = me(); return phaseFor(m) === 'race' && !!m && active(m) && finishedMs == null; };
   list.addEventListener('click', (e) => {
+    // a thumbs up after a name (its own hit target, ahead of the name's click that follows the car)
+    const ku = e.target.closest('[data-ku]');
+    if (ku) {
+      e.stopPropagation(); e.preventDefault();
+      const id = ku.dataset.ku;
+      if (!mp.kudos(id)) return;
+      render();
+      for (const b of list.querySelectorAll('[data-ku]')) if (b.dataset.ku === id) b.classList.add('sent');
+      return;
+    }
     // (desktop, Martin 2026-11-24: a name in the race list follows that car, as in the online list)
     const nm = e.target.closest('td.n[data-id]');
     if (nm && onWatch) { e.stopPropagation(); onWatch(nm.dataset.id); render(); return; }
@@ -238,14 +249,24 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     return rows;
   }
 
-  // compact (the live list in a race, Martin 2026-11-21): position, name, car and gap only
+  // a thumbs up right after a driver's name in the results (Martin 2026-11-26), the same as the one in the online
+  // list (src/kudos.js): for a driver still online, never on your own row; faint for 30 s after one, and for the
+  // rest of the day once KUDOS_PAIR went to them (src/net/kudosrules.js, the server holds to the same). The thumb
+  // is a picture in style.css, not markup: the table is written anew whenever a gap changes.
+  const kuBtn = (x) => {
+    if (mp.stealth || !x.id || x.id === mp.id || mp.nameOf(x.id) == null) return '';
+    const w = mp.kudosWait(x.id);
+    return `<b class="ku${w > 0 ? ' wait' : ''}" data-ku="${escapeHtml(x.id)}" title="${w === Infinity ? `Thumbs up: ${KUDOS_PAIR} given today` : 'Thumbs up'}"></b>`;
+  };
+  // compact (the live list in a race, Martin 2026-11-21): position, name, car and gap only (no thumbs up while racing)
   function rowsHtml(rows, compact) {
     let pos = 0, prevMs = null;
     return rows.map((x, i) => {
       if (!x.out && (x.ms == null || x.ms !== prevMs)) pos = i + 1;
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
+      const name = `${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 

@@ -149,7 +149,11 @@ if (mg?.kinds) {
   const c = mg.kinds.clock, f = mg.kinds.fin, g = mg.kinds.gaps, rc = mg.kinds.rcar, cr = mg.kinds.car;
   if (c?.n) {
     room.push(`lap clock: ${c.n} laps, the server's clock against the lap time from ${s1(c.min)} to ${s1(c.max)} s (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)}); leeway ${s1(c.lo)} to ${s1(c.hi)} s, ${c.out} outside`);
-    if (c.p99 > 0.6 * c.hi || c.p1 < 0.6 * c.lo) notes.push(`the lap clock's leeway is nearly used by ordinary laps (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)} s of ${s1(c.lo)} to ${s1(c.hi)})`);
+    // (a page that runs under 20 frames a second reads 2 s over by design: its clock may lose that much to slow
+    // frames, SLOW_FREE in src/race/race.js. The first 17 laps of 26 Nov: half within 0.03 s, one at +2.02 s. What
+    // is watched is the rest of the leeway, the marks' way to the server.)
+    const SLOW = 2000;
+    if (c.p99 > SLOW + 0.6 * (c.hi - SLOW) || c.p1 < 0.6 * c.lo) notes.push(`the lap clock's leeway is nearly used by ordinary laps (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)} s of ${s1(c.lo)} to ${s1(c.hi)})`);
   }
   if (f?.n) {
     room.push(`race finishes: ${f.n}, the racer's own time ${s1(f.p1)} to ${s1(f.p99)} s before the server saw the car over the line, at most ${s1(f.max)} (leeway ${s1(f.hi)} s, ${f.out} beyond it and counted from the server's sighting)${g?.n ? `; gaps in positions at most ${g.max} of ${g.hi}` : ''}${rc?.n ? `; car check at most ${rc.max} s over, of ${rc.hi}` : ''}`);

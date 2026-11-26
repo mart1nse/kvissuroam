@@ -42,7 +42,8 @@ const ME = 'Martin';
 const own = { w201: 190000, audi200: 176420, passat: 193030, crv: 195000, enyaq: 179150, rav4: 190630, mazda6: 191140, bz4x: 174000, m3: 171840, impreza: 168060, f40: 168930, cgt: 173850, bus: 293060 };
 const at = (d) => `2026-11-${d}T12:00:00.000Z`;
 const ownLaps = Object.entries(own).map(([car, ms], i) => ({ ms, car, carShort: car, at: at(17 + (i % 8)), inp: 'kb' }));
-const ownRuns = [{ ms: 124120, car: 'impreza', at: at(26), ty: 'gravel', inp: 'kb' }, { ms: 129800, car: 'audi200', at: at(26), ty: 'gravel', inp: 'kb' }];
+// (stage runs from before the stage opened to everyone, 26 Nov 16:00 UTC, are test runs the page leaves out: src/race/raadi.js)
+const ownRuns = [{ ms: 124120, car: 'impreza', at: at(27), ty: 'gravel', inp: 'kb' }, { ms: 129800, car: 'audi200', at: at(27), ty: 'gravel', inp: 'kb' }];
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const asked = [];
@@ -70,7 +71,7 @@ async function open(name, ctxOpts, { raadi = false } = {}) {
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
-  await p.goto(`http://localhost:${port}/?q=low&trees=old&fixedintro&shot=0.3${raadi ? '&raadi=1' : ''}`, { timeout: 180000 });
+  await p.goto(`http://localhost:${port}/?q=low&trees=old&fixedintro&shot=0.3${raadi ? '' : '&raadi=0'}`, { timeout: 180000 });
   await p.waitForFunction(() => window.__game?.board?.(), null, { timeout: 240000 });
   await p.evaluate(() => __game.board().show());
   await p.waitForFunction(() => document.querySelector('#board tbody.car.open tr.more'), null, { timeout: 20000 });
@@ -84,7 +85,10 @@ const shot = async (p, file, sel) => {
   await p.screenshot({ path: `${out}/${file}` });
 };
 
-// 1) a computer, Toomemägi only (as live now)
+// the record over all cars from the laps themselves (laps on the board, hidden cars left out by the server)
+const fmt = (ms) => { const m = Math.floor(ms / 60000), s = ms / 1000 - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`; };   // (as fmtTime)
+const fastest = (track) => fmt(db.prepare("SELECT MIN(ms) m FROM laps WHERE track = ? AND hold IS NULL AND car != 'rocket'").get(track).m);
+// 1) a computer, Toomemägi only (?raadi=0, as before the stage went live)
 {
   const { ctx, p, errors } = await open('desktop', { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
   let s = await state(p);
@@ -95,6 +99,8 @@ const shot = async (p, file, sel) => {
   assert.ok(lines.every((l, i) => l.startsWith(String(i + 2))), 'numbered 2 to 5');
   const pills = await p.$$eval('#board em.pl', (e) => e.map((x) => x.textContent));
   assert.ok(pills.length >= 10, `a place after your best (${pills.join(' ')})`);
+  const lr = await p.$eval('#board .today.lr', (e) => e.innerText.replace(/\s+/g, ' ').trim());
+  assert.ok(lr.startsWith('LAP RECORD') && lr.includes(fastest('toomemagi')), `the lap record over all cars (${lr})`);
   // a click on a car opens it (and on a time without a replay too), again closes it; the picked car stays open
   await p.click('#board tbody[data-car="bz4x"] tr.main th');
   s = await state(p);
@@ -127,14 +133,23 @@ const shot = async (p, file, sel) => {
   assert.match(s[1], /impreza\+/, 'the picked car open in the stage table too');
   const side = await p.evaluate(() => { const [a, c] = document.querySelectorAll('#board .bcol'); return a.getBoundingClientRect().top === c.getBoundingClientRect().top; });
   assert.ok(side, 'the two tables side by side at 1600 wide');
+  const recs = await p.$$eval('#board .bcol h3 .rec', (e) => e.map((x) => x.innerText.replace(/\s+/g, ' ').trim()));
+  assert.equal(recs.length, 2, `a record beside each circuit's name (${recs.join(' | ')})`);
+  assert.ok(recs[0].includes(fastest('toomemagi')) && recs[1].includes(fastest('raadi')), `the fastest of all cars (${recs.join(' | ')})`);
+  const oneLine = await p.$$eval('#board .bcol h3', (hs) => hs.every((h) => { const r = h.querySelector('.rec').getBoundingClientRect(), s = h.querySelector('small').getBoundingClientRect(); return Math.abs(r.top + r.height / 2 - (s.top + s.height / 2)) < 8; }));
+  assert.ok(oneLine, 'the record on the same line as the name at 1600 wide');
+  console.log('records:', recs.join(' | '));
   await shot(p, '12-desktop-both-tracks.png');
   assert.deepEqual(errors, [], 'no page errors');
   console.log('both:', s.join(' | '));
   await ctx.close();
 }
-// 3) phones
+// 3) phones (both circuits, as live)
 for (const [file, dev] of [['13-phone-844x390.png', { ...devices['iPhone 13 landscape'], viewport: { width: 844, height: 390 } }], ['14-phone-800x304.png', { ...devices['iPhone 13 landscape'], viewport: { width: 800, height: 304 } }]]) {
-  const { ctx, p, errors } = await open(file, dev);
+  const { ctx, p, errors } = await open(file, dev, { raadi: true });
+  const fits = await p.$$eval('#board .bcol h3 .rec', (e) => e.length === 2 && e.every((x) => x.getBoundingClientRect().right <= innerWidth));
+  assert.ok(fits, 'both records within the screen');
+  await shot(p, file.replace('.png', '-top.png'));
   await p.tap('#board tbody[data-car="bz4x"] tr.main th');
   assert.match((await state(p))[0], /bz4x\+/, 'a tap opens a row');
   const wide = await p.evaluate(() => document.querySelector('#board table').getBoundingClientRect().width <= innerWidth);

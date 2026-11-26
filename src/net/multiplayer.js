@@ -48,6 +48,7 @@ const RESTITUTION = 0.35;
 const MAX_OTHERS = 150;
 const AWAY_S = 30;              // a driver who steps into the garage, the menu or another tab still counts this long (Martin, 2026-11-22)
 const HOT = 8;                   // flag: this car's lap timer is running
+const HEARD_S = 2.5;             // a car whose last position is younger than this is still there (a far one comes once a second)
 const FRESH = 64;                // flag: just put on the start and still in the start lane (src/race/startlane.js)
 const THRU = HOT | FRESH;        // either: nobody bumps this car
 // A car that just appeared where it is (its first position, R, the map, or a place a script made up) does not push
@@ -211,8 +212,38 @@ function farCars(scene, max) {
     kinds.set(id, m);
     all.push(m);
   }
+  // (Martin 26 Nov: in the start crowd the whole cars around ours were see-through and the stand-ins solid.) Each of
+  // these has a twin for the cars passing through ours and near it (see setFade): the same shape, the same buffers,
+  // the car's strength read per car (instanceAlpha). One material for all the twins, so one more shader for all the
+  // stand-ins, made with the game (compiled with the rest at DRIVE, never while driving), and a twin is drawn, one
+  // draw call, only while it holds a car. How it is see-through (blended, or alpha to coverage) is see() in
+  // createMultiplayer, as for the whole cars.
+  const ghost = mesh.material.clone();
+  ghost.onBeforeCompile = (s) => {
+    s.vertexShader = `attribute float instanceAlpha;\nvarying float vGhostA;\n${s.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGhostA = instanceAlpha;')}`;
+    s.fragmentShader = `varying float vGhostA;\n${s.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.a *= vGhostA;')}`;
+  };
+  ghost.customProgramCacheKey = () => 'standin-ghost';
+  for (const m of [...all]) {
+    const g = new THREE.BufferGeometry();
+    for (const k in m.geometry.attributes) g.setAttribute(k, m.geometry.attributes[k]);    // (the same buffers on the card)
+    const alpha = new THREE.InstancedBufferAttribute(new Float32Array(max).fill(1), 1);
+    alpha.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('instanceAlpha', alpha);
+    const t = new THREE.InstancedMesh(g, ghost, max);
+    t.name = `${m.name} see-through`;
+    t.setColorAt(0, new THREE.Color(0xffffff));
+    t.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    t.count = 0;
+    t.frustumCulled = false;
+    t.visible = false;
+    t.userData.alpha = alpha;
+    scene.add(t);
+    m.userData.ghost = t;
+    all.push(t);
+  }
   for (const m of all) { m.userData.n = 0; m.userData.cols = []; }
-  return { mesh, all, of: (id) => kinds.get(id) || null };
+  return { mesh, all, ghost, of: (id) => kinds.get(id) || null };
 }
 
 // A car's stand-in shape from its STANDINS entry, in metres: the body up to the windows (or its whole outline
@@ -293,7 +324,7 @@ function paintOf(model) {
   return c ? c.clone() : new THREE.Color(0x9a94a8);
 }
 
-// stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
+// stage: true where the Raadi rally stage is on (everywhere unless ?raadi=0): only then are its records announced
 export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
@@ -1002,6 +1033,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     } else m.transparent = on;
     m.needsUpdate = true;
   };
+  see(far.ghost, true);              // (the stand-ins' see-through twins: see farCars)
   const FADE_MIN = 0.1, FADE_AHEAD = 10, FADE_SIDE = 5, TAG_MIN = 0.6;
   const fadeWarm = new Map();        // car id -> 'busy' | true
   const fadeKeep = new Map();        // car id -> the see-through clones that keep its programs (see warmFade)
@@ -1058,6 +1090,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
   let wholeCut = Infinity, shadowCut = Infinity;
   const dsBuf = [];
+  const ghostPool = [], ghosts = [];       // see-through stand-ins this frame (see farCars)
+  // a car's stand-in into its instanced mesh this frame: its place in it
+  function putFar(m, mx, paint) {
+    const u = m.userData, n = u.n++;
+    m.setMatrixAt(n, mx);
+    if (u.cols[n] !== paint) { u.cols[n] = paint; m.setColorAt(n, paint); u.rc = true; }
+    return n;
+  }
   // ---- Lap record replays (src/race/replay.js): one car at a time, drawn like another player's (not in the online
   // list, the map or the race; nobody bumps it), its pose read from the recorded lap instead of the network.
   const REPLAY_ID = '~replay';           // (not a server id: those are letters and digits, see cleanOn in worker/index.js)
@@ -1223,13 +1263,31 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const g = o.model?.group;
       if (!p) { if (g) setNear(o, false); showTag(o, false); continue; }
       const fx = Math.sin(p[3]), fz = -Math.cos(p[3]);
+      // passing through each other and close: see-through, FADE_MIN on our spot, solid FADE_AHEAD ahead or behind or
+      // FADE_SIDE to the side (k 1 and over: solid), the whole car and the stand-in alike
+      let k = 1;
+      if (me) {
+        const dx = p[0] - me.x, dz = p[1] - me.z;
+        if (dx * dx + dz * dz < FADE_AHEAD ** 2 + FADE_SIDE ** 2 && (ghostMe || (p[20] & THRU) || racing(o.id))) {
+          const sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
+          k = Math.max(Math.abs(dx * sy - dz * cy) / FADE_AHEAD, Math.abs(dx * cy + dz * sy) / FADE_SIDE);
+        }
+      }
       // whole car near, a block further out (a little either way before it changes: no flicker at the edge);
       // a block too while its car is not built (yet, or on a phone not at all: see LEAN_NEAR)
-      const whole = !!g && o.model.warmed !== false;
+      const built = !!g && o.model.warmed !== false;
+      // (a see-through stand-in turns into its whole car only once that car's see-through shaders are ready: never
+      // solid in between)
+      let whole = built;
+      if (whole && !o.near && o.fa < 1 && fadeWarm.get(o.car) !== true) { if (!fadeWarm.has(o.car)) warmFade(o); whole = false; }
       if (whole && d < detail * 1.15) ds.push(d);
       const near = whole && d < (o.near ? Math.min(detail * 1.15, wholeCut * 1.08) : Math.min(detail, wholeCut));
       if (g) setNear(o, near);
       if (!near) {
+        // see-through as its whole car would be (eased the same way; the stand-ins' shader is ready from the start)
+        const a = k < 1 ? FADE_MIN + (1 - FADE_MIN) * k : 1, fa = o.fa ?? 1;
+        o.fa = a >= 1 && fa > 0.995 ? 1 : fa + (a - fa) * Math.min(1, dt * 8);
+        o.tagA = 1 - (1 - TAG_MIN) * (1 - o.fa) / (1 - FADE_MIN);
         if (d < farMax) {
           // its own shape and colour (STANDINS), else the general one scaled to its size
           const fk = far.of(o.car), fmesh = fk || far.mesh;
@@ -1237,13 +1295,17 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           fq.setFromEuler(fe.set(p[4], -p[3], -p[5]));
           let paint;
           if (fk) { fs.set(1, 1, 1); paint = fk.userData.paint; } else {
-            const sz = whole ? o.model.size : null;
-            paint = whole ? o.paint : o.plain || (o.plain = new THREE.Color(o.colour));
+            const sz = built ? o.model.size : null;
+            paint = built ? o.paint : o.plain || (o.plain = new THREE.Color(o.colour));
             fs.set(sz?.width ?? o.halfWid * 2, sz?.height ?? 1.45, sz?.length ?? o.halfLen * 2);
           }
-          const u = fmesh.userData, n = u.n++;
-          fmesh.setMatrixAt(n, fm.compose(fp, fq, fs));
-          if (u.cols[n] !== paint) { u.cols[n] = paint; fmesh.setColorAt(n, paint); u.rc = true; }
+          fm.compose(fp, fq, fs);
+          if (o.fa < 1) {
+            // (into the see-through twin after the loop, the farthest first)
+            const e = ghostPool[ghosts.length] || (ghostPool[ghosts.length] = { m: null, mx: new THREE.Matrix4(), paint: null, a: 1, d: 0 });
+            e.m = fmesh.userData.ghost; e.mx.copy(fm); e.paint = paint; e.a = o.fa; e.d = d;
+            ghosts.push(e);
+          } else putFar(fmesh, fm, paint);
         }
       } else {
         // on a hotlap: the glow under their car and the tag over their name
@@ -1257,18 +1319,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
           g.add(o.halo);
         }
         if (o.halo) o.halo.visible = hot;
-        // passing through each other and close: see-through (FADE_MIN on our spot, solid FADE_AHEAD / FADE_SIDE away)
+        // see-through when passing through each other and close (k, above)
         let a = 1;
         // (made ready ahead, while the car is still a little way off)
         if (me && d < FADE_EARLY && !fadeWarm.has(o.car) && (ghostMe || (p[20] & THRU) || racing(o.id))) warmFade(o);
-        if (me && (ghostMe || (p[20] & THRU) || racing(o.id))) {
-          const dx = p[0] - me.x, dz = p[1] - me.z, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
-          const k = Math.max(Math.abs(dx * sy - dz * cy) / FADE_AHEAD, Math.abs(dx * cy + dz * sy) / FADE_SIDE);
-          if (k < 1) {
-            const w = fadeWarm.get(o.car);
-            if (w === true) a = FADE_MIN + (1 - FADE_MIN) * k;
-            else if (!w) warmFade(o);
-          }
+        if (k < 1) {
+          const w = fadeWarm.get(o.car);
+          if (w === true) a = FADE_MIN + (1 - FADE_MIN) * k;
+          else if (!w) warmFade(o);
         }
         // (eased, so a lap starting or ending with a car beside us does not snap)
         // (a car just changed for one whose see-through shader is not ready: solid at once)
@@ -1306,10 +1364,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     wholeCut = ds.length > wholeMax ? ds[wholeMax - 1] + 0.01 : Infinity;
     shadowCut = ds.length > SHADOWS ? ds[SHADOWS - 1] + 0.01 : Infinity;
     ds.length = 0;
+    // the see-through stand-ins, the farthest first (where they are blended, one drawn over the picture first would
+    // hide those behind it)
+    if (ghosts.length > 1) ghosts.sort((x, y) => y.d - x.d);
+    for (const e of ghosts) e.m.userData.alpha.setX(putFar(e.m, e.mx, e.paint), e.a);
+    ghosts.length = 0;
     for (const m of far.all) {
       const u = m.userData;
       if (m.count !== u.n) { m.count = u.n; m.visible = u.n > 0; }
-      if (u.n) m.instanceMatrix.needsUpdate = true;
+      if (u.n) { m.instanceMatrix.needsUpdate = true; if (u.alpha) u.alpha.needsUpdate = true; }
       if (u.rc) { m.instanceColor.needsUpdate = true; u.rc = false; }
       u.n = 0;
     }
@@ -1340,7 +1403,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // won the last race (or is first over the line in this one): WINNER over their name instead of HOTLAP
       const won = !pl && winner(o.id);
       if (won !== !!o.won) { o.won = won; o.el.classList.toggle('won', won); }
-      const ta = o.near ? Math.round((o.tagA ?? 1) * 50) / 50 : 1;
+      const ta = Math.round((o.tagA ?? 1) * 50) / 50;
       if (ta !== (o.ta ?? 1)) { o.ta = ta; o.el.style.opacity = ta === 1 ? '' : ta; }
       const rec = o.rp ? o.rp.tag : recs.size ? recordOf(o.name) : '';
       if (rec !== (o.rec || '')) { o.rec = rec; if (rec) o.el.dataset.rec = rec; else delete o.el.dataset.rec; }
@@ -1402,6 +1465,20 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // (garage, menu, another tab) for less than AWAY_S
     drivers() { return [...others.entries()].filter(([, o]) => o.pose || (o.seen && performance.now() / 1000 - o.seen < AWAY_S - 1)).map(([id, o]) => ({ id, w: o.w, wn: o.wn, name: o.name, colour: o.colour, car: o.car })); },
     players() { return [...others.values()].filter((o) => o.pose).map((o) => ({ id: o.id, name: o.name, colour: o.colour, x: o.pose[0], z: o.pose[1], yaw: o.pose[3], hot: !!o.hot })); },
+    // how many other cars are on a timed run within r of (x, z) now: their lap timer running (flag 8) in their
+    // newest position, heard within HEARD_S (the Majoraadi pill's count, main.js trackPills); `ids`, a Set, is
+    // filled with who they are. (Not `live`, which goes off 0.6 s after a position: a car far from ours comes once
+    // a second (the server's POSE_VFAR_MS), and the list under the pill blinked with it, Martin 26 Nov.)
+    hotNear(x, z, r, ids = null) {
+      const now = performance.now() / 1000;
+      let n = 0;
+      ids?.clear();
+      for (const o of others.values()) {
+        const L = o.buf[o.buf.length - 1], p = L?.p;
+        if (p && now - L.t < HEARD_S && (p[20] & HOT) && (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r) { n++; ids?.add(o.id); }
+      }
+      return n;
+    },
     setName(n) {
       n = cleanName(n);
       if (badName(n)) return null;           // a racist slur: not taken, the box flashes (race/board.js)

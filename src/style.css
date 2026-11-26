@@ -784,14 +784,18 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i.behind { color: #ff5a6e; }
 :is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
-/* desktop: from the minimap up, the count, your line, then the names (the first just over your line) and the
-   notes on top; how many names fit is worked out in src/net/people.js */
+/* desktop: from the minimap up, the count, your line, "+N MORE", then the names (A to Z read down, Z just over
+   your line) and the notes on top; how many names fit is worked out in src/net/people.js */
 body:not(.touch) #people { display: flex; flex-direction: column-reverse; align-items: flex-start; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
   pointer-events: auto; overscroll-behavior: contain; scrollbar-width: none; }
 /* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
 body:not(.touch) #people .who::-webkit-scrollbar { display: none; }
 body:not(.touch) #people .who > li { flex-shrink: 0; }
+/* (Martin 2026-11-26) those on a timed Majoraadi run: the same rows, under the MAJORAADI pill on the right (src/net/people.js),
+   top down, as many as there is room for above the speedometer, the wheel scrolls the rest */
+body:not(.touch) #people .who.st:not(.hidden) { position: fixed; right: max(10px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 68px + 34px);
+  flex-direction: column; align-items: flex-end; margin: 0; max-height: calc(100vh - 102px - clamp(170px, 24vw, 280px) - 70px); }
 #people .up { display: none; }
 body:not(.touch) #people .up:not(.hidden) { display: block; margin: 0 0 1px; color: #fff; opacity: .6; letter-spacing: .08em; white-space: nowrap; }
 body:not(.touch) #people .who.more-up { -webkit-mask-image: linear-gradient(transparent, #000 1.6em); mask-image: linear-gradient(transparent, #000 1.6em); }
@@ -1041,6 +1045,17 @@ body:not(.touch) #rlist > :not(.tb) { flex-shrink: 0; }
 #rlist td.w { text-align: right; opacity: .75; font-size: .85em; }
 #rlist tr.me td { background: rgba(125, 255, 90, .12); } #rlist tr.me td.n { color: #7dff5a; }
 #rlist tr.out td { opacity: .5; }
+/* through the line while the race still runs (Martin 2026-11-26): a small checkered flag by the place and the time in
+   gold; those still on their lap keep the cyan gap */
+#rlist td.f { width: 0; padding-left: 0; padding-right: .15em; }
+#rlist td.f i, body.touch #rlist.live tr.fin td.n::before { width: 1.04em; height: .78em; border-radius: 1.5px;
+  background: conic-gradient(#fff 0 25%, var(--ink) 0 50%, #fff 0 75%, var(--ink) 0) 0 0 / .52em .52em;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .5), 0 0 6px rgba(255, 212, 94, .6); }
+#rlist td.f i { display: block; }
+#rlist tr.fin td.g { color: var(--sun); }
+/* (phones' narrow live box: the flag before the name of those through, so the rows still racing keep their names whole) */
+body.touch #rlist.live td.f { display: none; }
+body.touch #rlist.live tr.fin td.n::before { content: ''; display: inline-block; margin-right: .4em; vertical-align: -.02em; }
 /* a thumbs up right after a driver's name in the results (Martin 2026-11-26), the online list's neon thumb: faint for
    30 s after one and for the rest of the day once three went to that driver. A picture here, not markup in each row,
    since the table is written anew whenever a gap changes. The name is cut short before it, so the thumb never is. */
@@ -1141,6 +1156,15 @@ body.touch #rlist { left: auto; right: var(--lapr); top: max(6px, env(safe-area-
   width: min(380px, 100vw - var(--lapr) - max(10px, env(safe-area-inset-left)) - var(--mm) - 10px);   /* right of the minimap (Martin 22 Nov) */
   padding: 8px 12px; font-size: 10px; border-radius: 14px; }
 body.touch #rlist td.w { display: none; }
+/* (the full results scroll inside the box, as on desktop, Martin 2026-11-26: on a phone they were cut off after a
+   dozen rows, your own row and the footer with them) */
+body.touch #rlist:not(.live):not(.hidden) { display: flex; flex-direction: column; }
+body.touch #rlist:not(.live) > :not(.tb) { flex-shrink: 0; }
+body.touch #rlist:not(.live) .tb { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: rgba(47, 243, 255, .6) transparent; }
+/* (every element has touch-action: none, so a finger on a row could not scroll the list, the live standings either:
+   only the box's own edge took it) */
+#rlist .tb, #rlist .tb * { touch-action: pan-y; }
 /* phones during the race (Martin 2026-11-22): only your place and race time top centre, in the lap timer's place,
    and the standings on the right over the gas pedal, as many rows as fit there, the rest a scroll away */
 body.touch #rlist.live:not(.hidden) { display: contents; }
@@ -1202,7 +1226,7 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 #people .who li.gar > i { box-shadow: none; }
 #people .who small.at { margin-left: .4em; font-size: .85em; font-style: italic; }
 
-/* ---- the Raadi rally stage (?raadi=1, src/race/raadi.js): the clock in the lap panel's look, the start
+/* ---- the Raadi rally stage (MAJORAADI, src/race/raadi.js): the clock in the lap panel's look, the start
    lights (red, yellow for the last five seconds, green), BACK TO STAGE START */
 #stage .msg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; min-height: 1em; }
 body:not(.touch) #stage .msg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
@@ -1229,7 +1253,9 @@ body.touch #rallylights { top: calc(max(6px, env(safe-area-inset-top)) + 78px); 
 #stageagain:not(.hidden) { animation: stagefade 6s ease-in both; }
 @keyframes stagefade { 0% { opacity: .8; } 40% { opacity: .8; } 100% { opacity: 0; } }
 body.touch #stageagain { top: calc(34% + 40px); }
-#rbtn.away { font-size: .8em; animation: none; opacity: .9; }
+/* (on a stage run the race button keeps the race button's letters: Martin 26 Nov, at .8em they sat tiny in the big pill;
+   RACE STARTING takes RACE FINISHED's size, racemode.js) */
+#rbtn.away { animation: none; opacity: .9; }
 /* (desktop: on the right under the top buttons, clear of the race button at the top left: Martin 23 Nov) */
 #trackpills { right: max(10px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 68px); display: flex; gap: 6px; pointer-events: auto; }
 #trackpills button { padding: 6px 12px; border: none; border-radius: 999px; background: rgba(18, 6, 43, .55); color: var(--cyan);
@@ -1237,6 +1263,10 @@ body.touch #stageagain { top: calc(34% + 40px); }
 #trackpills button:active { transform: scale(.96); }
 #trackpills button.here { background: rgba(26, 84, 120, .7); color: #fff; }
 @media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
+/* each circuit's outline before its name (Martin 26 Nov), in the letters' colour: cyan, white on the stage's own pill */
+#trackpills button { display: inline-flex; align-items: center; }
+#trackpills svg.trk { width: 1.5em; height: 1.5em; margin: -.3em .5em -.3em 0; flex: none; }
+#trackpills svg.trk path { stroke: currentColor; stroke-width: 80; }
 /* phones: right under the top buttons, the race button and its chip one row lower (Martin 23 Nov: "move the raadi
    start and other track buttons upward to the right, maybe above the race button": they sat at the bottom between
    the pedals). Away while a race's lights or its standings show: those need the room, and nobody leaves then. */
@@ -1245,7 +1275,7 @@ body.touch:has(#trackpills):not(.racelist):not(.racegrid) { --rbt: calc(var(--tb
 body.touch.racelist #trackpills, body.touch.racegrid #trackpills { display: none; }
 body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 
-/* the start screen's track picker (?raadi=1), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
+/* the start screen's track picker (src/race/trackpick.js), after the plan's mockup desk-pick-surface (Martin, 23 Nov): a row
    of cards under the tag line in the room above the cars, the picked one 520 x 210 at a 900 px high window
    with the outline at full height, name, length and surface, mode chips, record, your best and LAP TIMES;
    the others 300 x 132 and plainer. Everything is sized from the row's own height, so a lower window gets
@@ -1317,6 +1347,16 @@ body.touch #trackpick .tube { stroke-width: 60; } body.touch #trackpick .core { 
 #board .boards table { min-width: 0; }
 #board .bcol h3 { margin: 0 0 4px; font-size: clamp(12px, 1.5vw, 16px); letter-spacing: .16em; color: var(--pink); display: flex; align-items: center; gap: .5em; }
 #board .bcol h3 small { color: #fff; opacity: .7; font-size: .7em; letter-spacing: .12em; }
+/* the circuit's record over all cars at the heading's far end: time, driver, car (wraps under it when narrow) */
+#board .bcol h3 { flex-wrap: wrap; row-gap: 2px; }
+#board .rec { display: inline-flex; align-items: baseline; gap: .5em; white-space: nowrap; letter-spacing: .08em; }
+#board .bcol h3 .rec { margin-left: auto; font-size: .8em; }
+#board .rec u { text-decoration: none; font-size: .68em; letter-spacing: .2em; color: #fff; opacity: .6; }
+#board .rec b { color: var(--sun); font-size: 1.12em; text-shadow: 0 0 10px rgba(255, 200, 60, .45); }
+#board .rec i { color: #fff; font-style: normal; font-weight: 700; max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#board .rec em { color: var(--cyan); font-style: italic; font-weight: 800; opacity: .9; }
+#board .rec i + em::before { content: '·'; color: #fff; opacity: .45; font-style: normal; margin-right: .5em; }
+#board .today.lr { margin-top: 2px; }
 #board .boards th, #board .boards td { padding: 4px 8px; }
 svg.trk { width: 1.25em; height: 1.25em; vertical-align: -.25em; margin-right: 5px; overflow: visible; }
 svg.trk path { fill: none; stroke: var(--pink); stroke-width: 90; stroke-linejoin: round; stroke-linecap: round; }
@@ -1488,8 +1528,9 @@ body.touch #trackpick { flex: 1 1 0; min-height: 28px; max-height: 40vh; width: 
 @media (pointer: coarse) { #watch .scrub .knob { left: -12px; width: 24px; height: 24px; margin-top: -12px; } #watch .scrub .rail { height: 40px; } }
 /* the watched player's own name tag is in the pill */
 .pname.watched { display: none !important; }
-/* your own car waits: its tyre button, lap timer and stage panel are not for the watched car */
-body.watching #tyre, body.watching #lap, body.watching #lapsplit, body.watching #lapback, body.watching #trackpills,
+/* your own car waits: its tyre button, lap timer and stage panel are not for the watched car (the track pills stay,
+   with those on a Majoraadi run under its pill: Martin 26 Nov; a pill takes you back to your car and to that start) */
+body.watching #tyre, body.watching #lap, body.watching #lapsplit, body.watching #lapback,
 body.watching #stage, body.watching #stageagain { visibility: hidden; }
 /* the online list on desktop: a name is a button that watches that car, your own line brings you back */
 body:not(.touch) #people .who li[data-id] { pointer-events: auto; cursor: pointer; border-radius: 999px; padding: 0 .5em 0 .1em; margin-left: -.1em;

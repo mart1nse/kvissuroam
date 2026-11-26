@@ -44,11 +44,6 @@ const LAP_MIN = 120000;
 const MARK_MIN = 30000;      // a lap or stage run timed by the server's clock is at least this long (each track's own least time is asked of the lap itself)
 // the other circuits whose times are kept, with that shortest time
 const STAGES = { raadi: 70000 };
-// Where the cars drive a stage (src/race/linelog.js; Martin 26 Nov 2026: the stage's painted wheel tracks are to be
-// made from real driving): each timed run's samples are kept here, nameless, until the line has been painted from
-// them for the last time (a day after the stage opens to everyone). At most LINES_MAX runs a stage; a run is 10 to
-// 20 KB. tools/race/raadi-lines.mjs reads them back through GET /api/lines.
-const LINES_MAX = 8000, LINE_CHARS = 120000;
 // New laps from one address in an hour, and laps under one name in a Tartu day (a ticket saved up for hours could
 // post its laps all at once, 50 a request: thousands a minute from one script). A lap takes over 2 minutes, so one
 // player drives under 30 an hour; this leaves room for a household or a classroom behind one address.
@@ -398,9 +393,10 @@ export class Lobby extends DurableObject {
     // the laps being driven now: sid -> { t0: the start mark, id: whose connection, last, pts } (lapPlace)
     this.trails = new Map(); this.trailAsked = new Set();
     this.seenClean = 0;
-    // where the cars drove a stage, a row a run (see LINES_MAX)
-    this.sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, done INTEGER NOT NULL, ms INTEGER NOT NULL, pen INTEGER NOT NULL, n INTEGER NOT NULL, info TEXT NOT NULL, data BLOB NOT NULL)');
-    this.lineN = null;            // track -> runs kept
+    // The stage's painted line was made from where the cars drove (26 Nov 2026, the runs kept in table `lines` from
+    // the page's src/race/linelog.js). Martin at the launch, the same day: the logging goes, the line stays as it is.
+    // Every run it held is in the project's raadi-lines/runs.ndjson (tools/race/raadi-lines.py reads it).
+    this.sql.exec('DROP TABLE IF EXISTS lines');
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     this.tops = null;             // the five best drivers per car, made when first asked for (worker/tops.js, topsNow)
     this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
@@ -425,6 +421,16 @@ export class Lobby extends DurableObject {
       this.sql.exec("DELETE FROM replays WHERE track = 'toomemagi' AND car = 'audi200' AND ms = 165288");
       this.sql.exec("DELETE FROM meta WHERE k = 'board'");
       this.setMeta('cleanup-2026-11-26', '1');
+    }
+    // One-off (Martin, 26 Nov 2026, as the Majoraadi stage opened to everyone: "Delete all raadi lap times"): every
+    // stage time kept so far was a test run while the stage was tried out behind ?raadi=1 (14 runs, a copy is in the
+    // project's raadi-launch folder and in the nightly backup), and so are the stage records' replays. Only the
+    // stage's: Toomemägi's laps and replays stay as they are. The board is made again from what is left.
+    if (!this.meta('cleanup-raadi-launch')) {
+      this.sql.exec("DELETE FROM laps WHERE track = 'raadi'");
+      this.sql.exec("DELETE FROM replays WHERE track = 'raadi'");
+      this.sql.exec("DELETE FROM meta WHERE k = 'board'");
+      this.setMeta('cleanup-raadi-launch', '1');
     }
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
@@ -1125,47 +1131,6 @@ export class Lobby extends DurableObject {
     return p;
   }
 
-  // ---- Stage lines: POST /api/line takes one run { v, track, car, done, ms, pen, ty, m: [a, b, track, tyre] cm, n, z }
-  // (z: the samples as text, gzipped, base64: kept as they come, the tool that paints the line checks them);
-  // 410 once the stage has its LINES_MAX, and the page then stops writing runs down.
-  linesOf(track) {
-    this.lineN ||= {};
-    return (this.lineN[track] ??= this.sql.exec('SELECT COUNT(*) AS n FROM lines WHERE track = ?', track).one().n);
-  }
-  async takeLine(req, ip) {
-    if (this.over(`l|${ip}`, 12, 600000)) return json({ error: 'too many requests' }, 429);
-    const text = await req.text();
-    if (text.length > LINE_CHARS + 2000) return json({ error: 'too big' }, 413);
-    let b;
-    try { b = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
-    const track = typeof b?.track === 'string' && Object.hasOwn(STAGES, b.track) ? b.track : '', car = cleanCar(b?.car);
-    const n = Math.round(Number(b?.n)), int = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v)) || 0));
-    if (!track || !car || b?.v !== 1 || !(n >= 60 && n <= 8000) || typeof b?.z !== 'string' || b.z.length > LINE_CHARS || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
-    if (this.linesOf(track) >= LINES_MAX) return json({ error: 'enough' }, 410);
-    let bytes;
-    try { bytes = Uint8Array.from(atob(b.z), (c) => c.charCodeAt(0)); } catch { return json({ error: 'invalid' }, 400); }
-    const info = JSON.stringify({ ty: b.ty === 'gravel' ? 'gravel' : 'road', m: (Array.isArray(b.m) ? b.m : []).slice(0, 4).map((v) => int(v, 1000)) });
-    this.sql.exec('INSERT INTO lines (at, track, car, done, ms, pen, n, info, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      new Date().toISOString(), track, car, b.done ? 1 : 0, int(b.ms, 3600000), int(b.pen, 999), n, info, bytes);
-    this.lineN[track]++;
-    return json({ ok: true });
-  }
-  // GET /api/lines?track=raadi: how many runs are kept; &after=<id>&limit=<n>: the runs after that id, oldest first
-  readLines(url) {
-    const track = url.searchParams.get('track') || '';
-    if (!Object.hasOwn(STAGES, track)) return json({ error: 'no such stage' }, 404);
-    const total = this.linesOf(track);
-    if (!url.searchParams.has('after')) return json({ track, total, max: LINES_MAX });
-    const after = Math.max(0, Math.round(Number(url.searchParams.get('after'))) || 0), limit = Math.max(1, Math.min(60, Math.round(Number(url.searchParams.get('limit'))) || 40));
-    const rows = this.sql.exec('SELECT id, at, car, done, ms, pen, n, info, data FROM lines WHERE track = ? AND id > ? ORDER BY id LIMIT ?', track, after, limit).toArray();
-    return json({ track, total, rows: rows.map((r) => {
-      const u = new Uint8Array(r.data);
-      let s = '';
-      for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
-      return { id: r.id, at: r.at, car: r.car, done: r.done, ms: r.ms, pen: r.pen, n: r.n, ...JSON.parse(r.info), z: btoa(s) };
-    }) });
-  }
-
   async takeReplay(req, ip) {
     if (this.over(`r|${ip}`, 6, 60000)) return json({ error: 'too many requests' }, 429);
     const text = await req.text();
@@ -1348,7 +1313,10 @@ export class Lobby extends DurableObject {
         // map and not driving: a Raadi stage run (not counted as driving for the race votes)
         at[k] = (at[k] || 0) + 1;
       }
-      players.sort((x, y) => (y.drv - x.drv) || (x.since - y.since));
+      // (those on a Majoraadi run first, then the drivers, then the rest; Martin 26 Nov: "on stats page bring majoraadi
+      // to the top", and the list is cut at 60, so the order is set here)
+      const rank = (p) => (p.at === 'stage' ? 0 : p.drv ? 1 : 2);
+      players.sort((x, y) => (rank(x) - rank(y)) || (x.since - y.since));
       const ph = race.phase(now);
       // (total and drv count everyone: the list shows the first 60, and the page once counted only those, 24 Nov)
       // pages waiting outside after SERVER FULL (asked again within WAIT_GONE), and the cap
@@ -1442,8 +1410,8 @@ export class Lobby extends DurableObject {
       return json({ ok: true });
     }
 
-    if (path === '/api/line' && req.method === 'POST') return this.takeLine(req, ip);
-    if (path === '/api/lines') { if (this.over(`L|${ip}`, 40, 60000)) return busy(); return this.readLines(url); }
+    // (a page opened before the logging was taken out still sends its runs: 410 tells it to stop writing them down)
+    if (path === '/api/line' && req.method === 'POST') return json({ error: 'gone' }, 410);
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
     if (path === '/api/margins') { if (this.over(`M|${ip}`, 20, 60000)) return busy(); return json(this.margins()); }
     if (path === '/api/replay' && url.searchParams.get('refused')) {

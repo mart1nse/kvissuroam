@@ -336,6 +336,8 @@ const SLIVER = 2, GAP = 1;                         // a valve never opens for le
 const FAINT = 0.26;                                // ...nor opens at all for less than this at its most
 const LONGER = 2;                                  // ...and every opening lasts this many rows longer at each end (Martin 26 Nov: "a bit more length to the existing ones")
 const CALM = 0.3;                                  // before the roll the bursts are this much of themselves ("do not add side thrusts that much")
+const LAND_K = 0.7, LAND_K1 = 0.96;                // on the way down the four corner jets blow at least this hard, and this hard over the last metre
+const LAND_EVEN = 0.6;                             // ...and this much of the hunt's play between them is gone (nearly all of it over the last metre)
 export function flightNozzles(p, t, noz, spec, lean) {
   noz.fill(0);
   if (lean) lean.fill(0);
@@ -396,6 +398,16 @@ function valves(p, f, t, noz, spec, lean) {
   const steady = t < LIFT_T ? 1 : 0;
   // (and until the roll starts the bursts are few and small)
   const calm = CALM + (1 - CALM) * smooth((t - (ROLL_T0 - 0.05)) / 0.3);
+  // (and the way down ends in one big burn of all four together: from the landing burn on they blow hard and as
+  // one, hardest over the last metre, with little left of the hunt and no small bursts between. Martin 26 Nov:
+  // "the last end of the coming down part reduce the micro ones and the bigger in the end comes from all 4 upward
+  // thrusters on very high level". What is shown is more than holds the car up there: the jets are the look)
+  let down = 0, last = 0;
+  if (t > p.tb) {
+    const L = landing(p), t1 = p.tb + (L.one ? 0.6 * L.T : L.T1 + L.T2);
+    down = smooth((t - p.tb) / 0.25); last = smooth((t - (t1 - 0.3)) / 0.4);
+  }
+  const shown = Math.max(lift, down * (LAND_K + (LAND_K1 - LAND_K) * last)), even = 1 - LAND_EVEN * down - (0.92 - LAND_EVEN) * last;
   // ...and the roll. Its own turn is a long burn: one side's pair pushes its side up to spin the car, then the
   // other's stops it. The hunt and the trembling are bursts, short for a small correction and longer for a big
   // one, on whichever side the body is being pushed back from just then
@@ -420,16 +432,16 @@ function valves(p, f, t, noz, spec, lean) {
     // while they hold the car up, the side that gives way eases off and swings out; in free flight the pushing
     // side blows down and the other side blows out sideways (it pushes the floor across, the same way round)
     // (in a long burn the bursts ride on it, smaller; in a pause there is nothing)
-    const free = (1 - quiet) * ((i === 0 || i === 3 ? longA : longB) + busy * calm * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn)));
+    const free = (1 - quiet) * (1 - down) * ((i === 0 || i === 3 ? longA : longB) + busy * calm * (0.8 * push + 0.5 * ease + 0.45 * Math.max(0, pn)));
     // (a valve does not dribble: what would be a faint flicker is nothing)
-    const k = lift * open * (steady ? 1 : (1 - 0.5 * ease) * (1 + 0.3 * pn)) + (1 - lift) * free * smooth((free - 0.08) / 0.14);
-    noz[NOZ_DOWN + i] = clamp01(k * (steady ? 1 : 0.9 + 0.1 * Math.sin(f.flut[i] * t + i * 1.7)));
-    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + (steady ? 0 : ease * busy * calm * (1 - quiet) * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift))) + (steady ? 0.02 : 0.07) * Math.sin(f.drift[i] * t + i * 2.3);
+    const k = shown * open * (steady ? 1 : (1 - 0.5 * ease * even) * (1 + 0.3 * pn * even)) + (1 - shown) * free * smooth((free - 0.08) / 0.14);
+    noz[NOZ_DOWN + i] = clamp01(k * (steady ? 1 : 1 - 0.1 * even + 0.1 * even * Math.sin(f.flut[i] * t + i * 1.7)));
+    if (lean) lean[i] = (left ? -1 : 1) * (SPLAY + (steady ? 0 : ease * busy * calm * even * (1 - quiet) * (SWING_AIR + (SWING_LIFT - SWING_AIR) * lift))) + (steady ? 0.02 : 0.02 + 0.05 * even) * Math.sin(f.drift[i] * t + i * 2.3);
   }
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
   // and after that answer its trembling
   if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6;
-  const sw = (1 - quiet) * calm * burst(pushOf(yawPlay, f, t) / SWING_REF, SWING_DEAD);
+  const sw = (1 - quiet) * calm * (1 - 0.8 * down) * burst(pushOf(yawPlay, f, t) / SWING_REF, SWING_DEAD);
   if (sw) { const i = sw > 0 ? NOZ_YAW : NOZ_YAW + 1; noz[i] = Math.max(noz[i], 0.7 * Math.abs(sw)); }   // (+ yaw is to the right: the left one pushes the nose right)
 }
 

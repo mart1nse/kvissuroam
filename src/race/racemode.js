@@ -243,7 +243,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     const lead = rows[0];
     for (const x of rows) {
       if (x.out) { x.gap = 'OUT'; x.where = OUT_TEXT[x.out] || 'out'; continue; }
-      if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; continue; }
+      // (in a race that still runs, a checkered flag by the place of each racer through the line, Martin 2026-11-26:
+      // the list tells at a glance who has finished and who is still on the lap; none in the results after the race)
+      if (x.ms != null) { x.gap = x === lead ? fmtTime(x.ms / 1000) : `+${((x.ms - lead.ms) / 1000).toFixed(2)}`; x.where = 'FINISHED'; x.fin = !!live; continue; }
       x.where = x.p?.prog != null ? (x.p.prog < 0 ? 'START' : `${(x.p.prog / 1000).toFixed(1)} KM`) : '';
       if (x === lead) { x.gap = isTouch ? '' : 'LEADER'; continue; }
       const k = x.p?.marks?.length - 1, at = leadAt(lead, k);
@@ -270,7 +272,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       prevMs = x.ms;
       const carShort = cars[x.car]?.short || x.car;
       const name = `${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}`;
-      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
+      return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}${x.fin ? ' fin' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="f">${x.fin ? '<i></i>' : ''}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
     }).join('');
   }
 
@@ -432,7 +434,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         lp.hd = list.querySelector('.hd'); lp.tb = list.querySelector('.tb'); lp.ft = list.querySelector('.ft');
       }
       setText(lp.hd, `${head}${xBtn}`);
-      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
+      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td class="f"></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
       if (lp.tb._h !== tb) { const top = lp.tb.scrollTop; setText(lp.tb, tb); keepScroll(top); }
       setText(lp.ft, foot);
       lp.ft.style.display = foot ? '' : 'none';

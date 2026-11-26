@@ -300,7 +300,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   let bundled = false;           // this connection's server sends positions in bundles
   let myWn = 0;                  // spectators watching our car (the server's count)
   let holdId = null;             // the car we spectate: drawn parked where it was last heard of when it goes quiet
-  let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
+  let ws = null, myId = null, ticket = null, retry = 1, sendTimer = 0, placeTimer = 0, shiftHold = 0, cutHold = 0, board = null, online = false;
   // (a racist slur kept from before the server refused them: the browser gets a fresh random name)
   let name = lsGet(NAME_KEY) || '';
   if (badName(name)) name = '';
@@ -1125,7 +1125,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     shiftHold = car && car.shiftTimer > 0 ? 0.3 : shiftHold - dt;
     cutHold = car && car.revCut > 0 ? 0.15 : cutHold - dt;
     // (in a race also with nobody else online: the server follows each racer's lap from these, worker/follow.js)
-    if (active && !STEALTH && (others.size || racing(myId)) && sendTimer <= 0 && ws && ws.readyState === 1) {
+    // (and on a lap: the server holds a record's drive against where it saw the car meanwhile, worker/livecheck.js)
+    if (active && !STEALTH && (others.size || racing(myId) || hotlap()) && sendTimer <= 0 && ws && ws.readyState === 1) {
       // (a spectator follows our car: full rate for them, wherever the others are)
       sendTimer = 1 / (nearest < CLOSE || racing(myId) || watchedNow() ? SEND_HZ : nearest < LONELY ? SEND_HZ_MID : SEND_HZ_FAR);
       const p = poseNow(car, sendPose, hotlap(), fresh());
@@ -1135,6 +1136,15 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       out[STAMP] = Date.now() % 60000;
       send({ t: 's', p: out });
     }
+    // (on a lap with no connection, the server full or the line down for a moment: where the car is goes to the
+    // server every 3 s by a request, as the lap's marks do)
+    if (active && !STEALTH && ticket && hotlap() && !(ws && ws.readyState === 1 && myId)) {
+      placeTimer -= dt;
+      if (placeTimer <= 0) {
+        placeTimer = 3;
+        fetch('/api/mark', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e: 'p', x: Math.round(car.x), z: Math.round(car.z) }) }).catch(() => {});
+      }
+    } else placeTimer = 0;
     const W = innerWidth, H = innerHeight;
     fxList.length = 0;
     tagList.length = 0;

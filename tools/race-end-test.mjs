@@ -62,4 +62,61 @@ assert.equal(desk.s.racers.find((r) => r.id === 'd').out, 'left');
     assert.equal(r.car, 'w201', 'car kept after the lights');
   }
 }
+
+// Standing still (Martin 2026-11-26): all through but one who started and stood; out after a minute, the race ends
+{
+  if (desk.s.phase === 'on') desk.close('restart', clock);
+  for (const s of sockets) s.a.drv = true;
+  clock += 60000; alive();
+  msg(0, { t: 'rv', on: 1 }); msg(1, { t: 'rv', on: 1 });
+  assert.equal(desk.s.racers.length, 2);
+  const A = () => desk.s.racers.find((r) => r.id === 'a'), B = () => desk.s.racers.find((r) => r.id === 'b');
+  const pos = (i, x, z) => desk.seen(sockets[i].a.id, [x, z, 0], clock);
+  // on the grid from its start to the lights, b standing: not counted (standing there is the rule)
+  clock = desk.s.tGrid; alive();
+  for (; clock < desk.s.tGreen; clock += 1000) pos(1, 0, 0);
+  // b drives off for 80 s at 20 m/s, then stops; a keeps going at 3 m/s on its way round
+  const g = desk.s.tGreen;
+  for (clock = g; clock < g + 80000; clock += 500) { alive(); pos(1, (clock - g) / 50, 0); pos(0, 0, (clock - g) * 0.003); }
+  const stop = clock, bx = (stop - g) / 50;
+  for (; clock < stop + 59000; clock += 500) { alive(); pos(1, bx + 3, 2); pos(0, 0, (clock - g) * 0.003); }
+  assert.ok(!B().out, 'b inside the minute');
+  assert.ok(!A().out, 'a slow but moving: in');
+  assert.ok(B().still && desk.view().racers.every((x) => !('still' in x)), 'what the server keeps of the standing is not sent');
+  // a finishes; b still standing: the race is on until b's minute is up
+  over(0, clock - g); msg(0, { t: 'rf', ms: clock - g });
+  assert.equal(A().ms, clock - g);
+  assert.equal(desk.s.phase, 'on', 'b still in');
+  for (; clock < stop + 61000; clock += 500) { alive(); pos(1, bx, 0); }
+  assert.equal(desk.s.phase, 'idle', 'b out for standing: all through, closed');
+  assert.deepEqual(desk.s.last.racers.map((r) => [r.id, r.out]), [['a', null], ['b', 'still']]);
+
+  // a gap in the positions starts the minute again; a racer standing right after the lights is out a minute after them
+  clock += 60000; alive();
+  msg(0, { t: 'rv', on: 1 }); msg(1, { t: 'rv', on: 1 }); msg(2, { t: 'rj', on: 1 });
+  clock = desk.s.tGrid; alive();
+  for (; clock < desk.s.tGreen; clock += 1000) { pos(0, 10, 10); pos(1, 20, 20); pos(2, 30, 30); }
+  const g2 = desk.s.tGreen;
+  for (clock = g2; clock < g2 + 40000; clock += 500) { alive(); pos(0, 10, 10); pos(1, 20, 20); pos(2, 30 + (clock - g2) / 20, 30); }
+  // a's page sends nothing for 10 s (a stall on the way), then the same place again
+  for (; clock < g2 + 50000; clock += 500) { alive(); pos(1, 20, 20); pos(2, 30 + (clock - g2) / 20, 30); }
+  for (; clock < g2 + 61000; clock += 500) { alive(); pos(0, 10, 10); pos(1, 20, 20); pos(2, 30 + (clock - g2) / 20, 30); }
+  const R = (id) => desk.s.racers.find((r) => r.id === id);
+  assert.equal(R('b').out, 'still', 'b stood from the lights: out a minute after them');
+  assert.ok(!R('a').out, 'a: the gap started its minute again');
+  for (; clock < g2 + 109000; clock += 500) { alive(); pos(0, 10, 10); pos(2, 30 + (clock - g2) / 20, 30); }
+  assert.ok(!R('a').out, 'a: not yet a minute since the gap');
+  for (; clock < g2 + 111000; clock += 500) { alive(); pos(0, 10, 10); pos(2, 30 + (clock - g2) / 20, 30); }
+  assert.equal(R('a').out, 'still', 'a: a minute of positions after the gap');
+  assert.ok(!R('c').out, 'c driving: in');
+  // seen over the line and standing there, its "finished" not here yet: not put out, the finish is settled
+  for (; clock < g2 + 125000; clock += 500) { alive(); pos(2, 30 + (clock - g2) / 20, 30); }
+  const cm = clock - g2;
+  over(2, cm);
+  for (const end = clock + 70000; clock < end; clock += 500) { alive(); pos(2, 500, 500); }
+  assert.ok(!R('c').out, 'c over the line: not out for standing');
+  msg(2, { t: 'rf', ms: cm });
+  assert.equal(desk.s.phase, 'idle');
+  assert.equal(desk.s.last.racers.find((r) => r.id === 'c').ms != null, true, 'c finished');
+}
 console.log('ok race end');

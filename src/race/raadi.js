@@ -184,7 +184,7 @@ function streakTex() {
 // rec: the run's replay recorder (src/race/replay.js), or none; log: where each run's wheels went, for the painted
 // line (src/race/linelog.js), or none
 // oldTracks: the wheel tracks drawn along an ideal line, as before 26 Nov (?tracks=old, to compare)
-export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, free = () => true, rec = null, log = null, oldTracks = false }) {
+export function createStage({ world, scene, camera = null, toast, place, onRun, wood, beep, bestFor, online, onJump, readying = () => false, free = () => true, rec = null, log = null, oldTracks = false }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -945,7 +945,9 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       }
       if (st.phase === 'count') {
         // (the lights wait while the ground and the stage's things are still loading after the jump here)
-        if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000)) st.countAt = performance.now();
+        // (and while the game says GETTING READY after a jump from afar: the stage's things and the places round the
+        // start built and on the graphics card first, 20 s at most)
+        if (!world.ready(x, z) || (!bales.built && performance.now() - st.placedAt < 6000) || (readying() && performance.now() - st.placedAt < 20000)) st.countAt = performance.now();
         const e = (performance.now() - st.countAt) / 1000, left = COUNT_S + LAST_S - e, green = left <= 0;
         const n = Math.max(0, Math.ceil(left));
         if (st.goFor !== st.countAt) { st.goFor = st.countAt; const go = Date.now() + left * 1000; st.clockOff = Math.ceil(go / 60000) * 60000 - go; }

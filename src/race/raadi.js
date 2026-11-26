@@ -32,6 +32,7 @@ import { SURFACE } from '../world/data.js';
 import { OFF_LIMIT, BACK_LIMIT, BACK_WARN, FIN_FLAG, SHORT_M, P, HW, N, START, FIN, TAN, S, side, MORE_BALES, TRACK_ROUND, TRACK_W, ROUND, yawAt, LINES, ARCS, penText, resetText, judgeStep, markRun, resetRun } from './raadirules.js';
 import { buildLine } from './raadi-line.js';
 import { buildArch } from './arch.js';
+import { CRASH_PEN } from '../cars/crash.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
 // Not on a run, a car that drives into the circle round the start spot is put on the line (Martin 24 Nov 15:32: "Make a
@@ -467,7 +468,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
     if (oldTracks) yield* buildTracks();
-    else lineInfo = yield* buildLine({ group, P, TAN, S, groundY });
+    else lineInfo = yield* buildLine({ group, P, START, groundY });
     yield;
     // signs: yellow time control and the red start flag; the start clock; the line
     sign('tc', 1, HW[1] + 1.4);
@@ -859,6 +860,12 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       toast(resetText, 2600);
       return true;
     },
+    // a hard crash into a wall or a tree (cars/crash.js) in a run: CRASH_PEN seconds, as on a lap of Toomemägi
+    crashed() {
+      if (st.phase !== 'run') return;
+      st.pen += CRASH_PEN;
+      toast(`+${CRASH_PEN} S FOR THE CRASH`, 2600);
+    },
     teleported() { st.prev = null; if (st.phase === 'run' || st.phase === 'count') cancel('STAGE CANCELLED'); st.phase = st.phase === 'done' ? 'done' : 'idle'; },
     cancel,
     // inp: what is driving the car (keyboard, gamepad, wheel, touch): a run is marked with the one used most
@@ -927,7 +934,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (and once each: a wait for loading after the first pip starts the same second again, unheard)
         const bn = green ? 0 : left <= LAST_S && e > 0.05 ? n : -1;
         if (bn >= 0 && bn !== st.beepN) { beep?.(bn === 0 ? 'go' : 'pip'); st.beepN = bn; }
-        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 RAADI · ${STAGE_KM} KM`;
+        lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 MAJORAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0; st.lag = st.slow = 0;
@@ -1006,7 +1013,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       if (st.phase === 'done' && st.againUntil && performance.now() > st.againUntil) hideAgain();
     },
     // the start screen's and the HUD's names
-    name: 'RAADI',
+    name: 'MAJORAADI',
     escape: escapeHtml,
   };
 }

@@ -25,11 +25,12 @@ import { LAP_GATES, MAX_SKIPS } from './follow.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
-import { carLimitsSteps, judgeDrive, OVER_MAX } from '../src/race/plausible.js';
+import { carLimitsSteps, judgeDrive, OVER_MAX, GAS_OVER } from '../src/race/plausible.js';
 import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
 import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
+import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -142,6 +143,7 @@ const POSE_KEEP = 5000;                               // a car that has not sent
 const V_MAX = 116, STEP_ROOM = 1;                     // m/s (418 km/h; 110 until the Roadster Rocket, shown to nobody yet, was given its 405), and metres
 const V_ASK = 45, V_TOP_K = 1.15, V_TOP_ROOM = 3;
 const GAP_MS = 1500, FRESH_MS = 2000, FLAG_FRESH = 64;
+const JMP_NEAR = 60;                                  // m from its last position a Rocket's kickflip may start ('jmp')
 const JUMPS_MAX = 12, JUMP_LEAK = 5000;
 const SPEED_K = 1.3, SPEED_ROOM = 4;                  // claimed speed: at most this share of the speed seen, plus m/s
 const STAMP = 21;                                     // a position's slot for when it was taken (ms within the minute, the sender's clock)
@@ -301,11 +303,18 @@ function checkTrace(text, track, driving, drive = {}) {
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
   const g = GATES[track];
-  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0;
+  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0, fl = 0;
   const xs = drive.xs = new Float64Array(n), zs = drive.zs = new Float64Array(n), ys = drive.ys = new Float64Array(n);
+  // (and how far the car is rolled over, rad: a car with thrusters that turns over in the air has flown a kickflip)
+  const rolls = drive.roll = new Float64Array(n);
+  let roll = 0;
+  // (hard crashes into a wall, src/cars/crash.js: each is CRASH_PEN seconds in the lap's time)
+  const flags = new Int32Array(n);
+  for (let i = 0; i < n; i++) flags[i] = fl += a[4 + i * f + 20];
+  drive.crashes = crashesIn(flags);
   for (let i = 0; i < n; i++) {
-    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100;
-    xs[i] = x; zs[i] = z; ys[i] = y;
+    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100; roll += a[4 + i * f + 5] / 1000;
+    xs[i] = x; zs[i] = z; ys[i] = y; rolls[i] = roll;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
     if (i && Math.hypot(x - px, z - pz) > 12) {
       // R puts the car back on a spot it drove through at least 3 s before and the lap goes on (main.js
@@ -374,6 +383,8 @@ export class Lobby extends DurableObject {
     this.sql.exec('CREATE INDEX IF NOT EXISTS lapseen_sid ON lapseen (sid, ms)');
     // (trail: where the car was seen during that lap, [tenths of a second after its start mark, x, z, ...]: livecheck.js)
     if (!this.sql.exec('PRAGMA table_info(lapseen)').toArray().some((c) => c.name === 'trail')) this.sql.exec('ALTER TABLE lapseen ADD COLUMN trail TEXT');
+    // (fl: kickflips the car told of while the lap was on, see lapFlight)
+    if (!this.sql.exec('PRAGMA table_info(lapseen)').toArray().some((c) => c.name === 'fl')) this.sql.exec('ALTER TABLE lapseen ADD COLUMN fl INTEGER');
     // the laps being driven now: sid -> { t0: the start mark, id: whose connection, last, pts } (lapPlace)
     this.trails = new Map(); this.trailAsked = new Set();
     this.seenClean = 0;
@@ -956,13 +967,21 @@ export class Lobby extends DurableObject {
     this.sql.exec('DELETE FROM lapmarks WHERE sid = ?', sid);
     ms = Math.round(Number(ms));
     if (!(ms >= MARK_MIN && ms <= 3600000)) return;
-    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at, trail) VALUES (?, ?, ?, ?, ?)', sid, ms, now - t0, now, tr?.t0 === t0 && tr.pts.length ? JSON.stringify(tr.pts) : null);
+    this.sql.exec('INSERT INTO lapseen (sid, ms, took, at, trail, fl) VALUES (?, ?, ?, ?, ?, ?)', sid, ms, now - t0, now, tr?.t0 === t0 && tr.pts.length ? JSON.stringify(tr.pts) : null, tr?.t0 === t0 && tr.fl ? tr.fl : null);
     if (now - this.seenClean > 3600000) {
       this.seenClean = now;
       this.sql.exec('DELETE FROM lapseen WHERE at < ?', now - 3 * DAY); this.sql.exec('DELETE FROM lapmarks WHERE t0 < ?', now - DAY); this.sql.exec('DELETE FROM margins WHERE at < ?', now - 3 * DAY);
       for (const [k, v] of this.trails) if (v.t0 < now - 3600000) this.trails.delete(k);
       this.trailAsked.clear();
     }
+  }
+  // A Rocket told the others of a kickflip (the 'jmp' message) while its lap or stage run was on. The game allows
+  // none then (src/main.js flipOff: "no flip when hotlap has started", Martin 26 Nov 2026), so the page is a changed
+  // one: the lap is marked, and cannot become a record (lapClock). A flight begun before the start line is told
+  // before the lap's start mark and is not counted; the game starts no lap while the car is in the air.
+  lapFlight(sid, id) {
+    const tr = sid && this.trails.get(sid);
+    if (tr && (!tr.id || !id || tr.id === id)) tr.fl = (tr.fl || 0) + 1;
   }
   // Where a car on a lap is, as its positions come in (pose) or by a request from a page with no connection: one
   // place every LIVE_MS is kept from the lap's start mark to its finish, and goes into lapseen with the lap. After a
@@ -987,8 +1006,9 @@ export class Lobby extends DurableObject {
   // lap the car was not seen on at all is from a page that does not send its places when alone, until those are
   // gone: cutover.js)
   lapClock(sid, ms, drive = null) {
-    const rows = this.sql.exec('SELECT took, trail FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
+    const rows = this.sql.exec('SELECT took, trail, fl FROM lapseen WHERE sid = ? AND ms = ?', sid, ms).toArray();
     const fit = rows.filter((r) => r.took >= ms - CLOCK_UNDER && r.took <= ms + CLOCK_OVER);
+    if (fit.length && fit.every((r) => r.fl)) return `flight: ${fit[0].fl} kickflip${fit[0].fl > 1 ? 's' : ''} told of during the lap`;
     if (!fit.length) {
       if (rows.length) return `clock: took ${rows[0].took} ms by the server's clock`;
       // (no marks: a page from before they were sent, until those are gone: cutover.js)
@@ -1012,7 +1032,8 @@ export class Lobby extends DurableObject {
   // sure nothing is dropped on the other side too heavily"): one figure for each thing judged, kept three days.
   // k: 'fin' the ms a racer's own finish time was before the server saw the car over the line (leeway SEEN_EARLY),
   // 'gaps' the gaps in a racer's positions that the lap was found again after (MAX_SKIPS), 'rcar' / 'car' the most
-  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX), 'live' the share of the
+  // seconds a race lap / a record's drive was over one of its car's limits (OVER_MAX), 'gas' the share of a tank a
+  // drive in a car with thrusters used over what the tank held (GAS_OVER), 'live' the share of the
   // places a car was seen at during a lap that were not on its drive (LIVE_MISS). The lap clock's own figures
   // are in lapseen already. Read by GET /api/margins and the nightly look at the boards (tools/board-audit.mjs).
   margin(k, v, now = Date.now()) {
@@ -1030,7 +1051,7 @@ export class Lobby extends DurableObject {
     const kinds = { clock: sum(this.sql.exec('SELECT took - ms AS v FROM lapseen WHERE at >= ?', since).toArray().map((r) => r.v), -CLOCK_UNDER, CLOCK_OVER) };
     const by = {};
     for (const r of this.sql.exec('SELECT k, v FROM margins WHERE at >= ?', since).toArray()) (by[r.k] ||= []).push(r.v);
-    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX], live: [0, LIVE_MISS] };
+    const LIM = { fin: [-1e9, SEEN_EARLY], gaps: [0, MAX_SKIPS], rcar: [0, OVER_MAX], car: [0, OVER_MAX], live: [0, LIVE_MISS], gas: [0, GAS_OVER] };
     for (const k of Object.keys(LIM)) kinds[k] = sum(by[k] || [], ...LIM[k]);
     return (this.marginsOut = { at: now, since, kinds });
   }
@@ -1121,23 +1142,30 @@ export class Lobby extends DurableObject {
     let best = bestNow(), had = hadNow();
     if (!lap.hold && best !== ms) return refuse('not the record', lap.name);
     if (!lap.hold && had && had.ms <= ms) return json({ ok: true });  // (that record's replay came already)
-    let bytes, why, told;
+    let bytes, why, told, launch;
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
       why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive);
+      // the seconds for its hard crashes into walls must be in its time (the page adds them; one that left them out)
+      const crashPen = (drive.crashes || 0) * CRASH_PEN;
+      if (!why && crashPen > (lap.pen || 0)) { why = `crash: the drive has ${drive.crashes} of them, its time ${lap.pen || 0} s of penalty`; told = 'crash'; }
       if (!why) {
         // the car itself: seconds of the drive over what this car can do (the list of refusals gets the figures,
         // the sender only that it was the car)
         // (if the limits cannot be worked out the drive is not judged: an honest record must not wait on a fault here)
         let lim = null;
         try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
-        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
-        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
+        // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
+        // the seconds it was turning over in the air, which is a kickflip inside the lap)
+        if (lim?.gas) this.margin('gas', j.gas);
+        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${lim?.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used; ${j.air} s of a kickflip` : ''})`; told = 'car'; }
+        launch = lim?.gas?.launch;
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
-      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, lap.pen || 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
       if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }
@@ -1279,7 +1307,8 @@ export class Lobby extends DurableObject {
       for (const l of list) {
         const name = cleanName(l?.name), car = cleanCar(l?.car), ms = Math.round(Number(l?.ms)), track = cleanTrack(l?.track);
         // (penalty seconds: whole, and the driving itself must still be a believable time)
-        const pen = track !== TRACK && Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
+        // (a stage's own, and on any track CRASH_PEN for each hard crash into a wall: the replay is asked again)
+        const pen = Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
         if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || LAP_MIN) && ms <= 3600000)) continue;
         // a time under a racist slur: answered as saved, so the browser stops sending it, and not kept
         if (badName(name)) { ok.push(ms); continue; }
@@ -1542,6 +1571,11 @@ export class Lobby extends DurableObject {
       if (!m.p.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 100000)) return;
       if (!Number.isInteger(m.c) || m.c < 0 || m.c >= 60000) return;
       if (this.over(`j|${me.id}`, 4, 20000)) return;
+      // (the flight starts where the car is and no faster than a car goes: a made-up plan would show the others a
+      // car in the air anywhere on the map for up to 9 s. JMP_NEAR: what a car covers between two positions, twice over)
+      const at = this.poses.get(me.id);
+      if (!at || Math.hypot(m.p[0] - at.p[0], m.p[1] - at.p[1]) > JMP_NEAR || Math.hypot(m.p[3], m.p[4]) > V_MAX) return;
+      this.lapFlight(me.sid, me.id);
       this.broadcast({ t: 'jmp', id: me.id, p: m.p, c: m.c }, ws);
     }
   }

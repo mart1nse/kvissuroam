@@ -12,7 +12,7 @@ import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowOb
 import { CARS, CAR_ORDER as CAR_ORDER_ALL, CAR_GROUPS as CAR_GROUPS_ALL, HIDDEN_CARS } from './cars/specs.js';
 import { STEALTH } from './net/stealth.js';
 import { createGarage } from './garage.js';
-import { createCar, stepCar, resetCar, speedKmh, shiftGear, setDonutHelp, setTurnIn, setInward, setLaunch } from './cars/physics.js';
+import { createCar, stepCar, resetCar, standUp, speedKmh, shiftGear, setDonutHelp, setTurnIn, setInward, setLaunch } from './cars/physics.js';
 import { buildPlaceholder } from './cars/placeholder.js';
 import { createInput } from './input.js';
 import { createPads, buttonName } from './controls/pads.js';
@@ -178,6 +178,7 @@ import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
 import { createSpectate } from './spectate.js';
+import { createSideCam } from './sidecam.js';
 import { createIdlePark, alwaysJudged } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import { createLineLog } from './race/linelog.js';
@@ -471,8 +472,7 @@ function freeStart() {
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
 let wetAt = null;                // where and when the car went into the water: { x, z, t }
-let wreckAt = null;              // where and when the car crashed onto its roof (cars/crash.js), while it lies there
-const roofedEl = $('#roofed');
+let wreckAt = null;              // where and when the car crashed hard into a wall (cars/crash.js), while it is being thrown over
 let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -998,7 +998,7 @@ async function boot() {
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
     // (the lap's finish and each start of the lap timer are told to the server as they happen: it times the lap itself)
-    onLap: (lap, info) => { mp.lapMark('f', lap.ms); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
+    onLap: (lap, info) => { mp.lapMark('f', lap.ms - (lap.pen || 0) * 1000); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => {
       if (k === 'start') mp.lapMark('s');
       stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
@@ -1042,7 +1042,7 @@ async function boot() {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
     tp.id = 'trackpills';
-    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
+    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Majoraadi rally stage start">MAJORAADI</button>';
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null });
@@ -1245,7 +1245,7 @@ let garage = null;
 function layoutMenu() {
   garage?.sync(carId);
   const d = $('#drivecar');
-  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'RAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
+  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
 function buildMenu() {
@@ -1387,9 +1387,8 @@ function openGarage() {
   $('#hud').classList.add('hidden');
   $('#touch').classList.add('hidden');
   $('#sunk').classList.add('hidden');
-  roofedEl.classList.add('hidden');
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
-  else if (car.crash) goLastSpot();             // (left lying on its roof: back on its wheels before the crash, as R does)
+  else if (car.crash) standUp(car);             // (left in the middle of a crash: on its wheels where it is)
   car.vx = car.vy = car.yawRate = 0;
 }
 
@@ -1445,7 +1444,7 @@ function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
-  wetAt = null; wreckAt = null; roofedEl.classList.add('hidden');
+  wetAt = null; wreckAt = null;
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
@@ -1462,7 +1461,7 @@ function trackPills() {
   if (at === pillAt) return;
   pillAt = at;
   const b = document.querySelector('#trackpills [data-act="track-raadi"]');
-  if (b) { b.textContent = at ? '↺ RAADI START' : 'RAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Raadi rally stage start'; }
+  if (b) { b.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
 }
 
 function goHome() {
@@ -1865,6 +1864,7 @@ let droneYaw = 0;
 const droneDir = new THREE.Vector2(0, -1);   // the car's travel direction, averaged (x, z)
 let camView = localStorage.getItem('kvissuroam.view') === 'drone' ? 'drone' : 'chase';
 input.on('KeyC', unlessMap(() => {
+  if (sideCam.side) { sideCam.off(); return; }   // (from a side view C goes back to the one it left)
   camView = camView === 'chase' ? 'drone' : 'chase';
   droneYaw = camYaw; droneDir.set(Math.sin(camYaw), -Math.cos(camYaw));
   try { localStorage.setItem('kvissuroam.view', camView); } catch {}
@@ -1873,6 +1873,10 @@ input.on('KeyC', unlessMap(() => {
 // out around the car every frame and the camera is placed between them, so it never trails the car.
 const VIEW_BLEND = 0.8;
 let droneMix = camView === 'drone' ? 1 : 0;
+// 5 and 6: the car from its left and from its right side (src/sidecam.js); the same key again, or C, goes back to
+// the view that was on
+const sideCam = createSideCam(() => world);
+for (const [code, side] of [['Digit5', -1], ['Numpad5', -1], ['Digit6', 1], ['Numpad6', 1]]) input.on(code, unlessMap(() => sideCam.press(side)));
 // a click or tap on a small thumbs up on a back window (src/kudos.js, Martin 2026-11-24): who gave it, and when,
 // in a small label there for a few seconds; on the +N place the older ones. Only work at the click itself.
 let kudoPop = null, kudoPopT = 0;
@@ -2180,9 +2184,9 @@ function frame(ts) {
     if (car.inWater && !wetAt) { wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime }; stats.count('water'); }
     else if (!car.inWater) wetAt = null;
     // (a crash that ends on the roof, cars/crash.js: R then goes back to before it, however long the car has lain there)
-    if (car.crash && !wreckAt) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at }; stats.count('roof'); }
+    // and on a timed lap or stage run every such crash is seconds, however the car lands (race.js, raadi.js)
+    if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); race?.crashed(); stage?.crashed(); }
     else if (!car.crash) wreckAt = null;
-    roofedEl.classList.toggle('hidden', !(car.crash?.onRoof && car.crash.t - car.crash.tRoof > 0.5));
     if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
       // (standing still adds nothing: the list then reaches further back along the route)
@@ -2251,7 +2255,9 @@ function frame(ts) {
     const ease = (rate) => 1 - Math.exp(-rate * dt);
     let d = tg.yaw - camYaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    camYaw += d * ease(3 + speed * 0.08);
+    // (a car being thrown over by a wall, cars/crash.js: the view holds its heading, and comes round behind the car
+    // once it stands again; landed end over end it faces back the way it came)
+    if (!tg.crash) camYaw += d * ease(3 + speed * 0.08);
     const cx = Math.sin(camYaw), cz = -Math.cos(camYaw);
     // a street photo is narrower than the game's view, so over photos the camera backs off and zooms in
     const pm = photos?.mix ?? 0;
@@ -2265,6 +2271,7 @@ function frame(ts) {
       const fall = (world.groundAt(tg.x - cx * 4, tg.z - cz * 4, gy) - world.groundAt(tg.x + cx * 4, tg.z + cz * 4, gy)) / 8;
       camSlope += (Math.max(-0.3, Math.min(0.3, fall)) - camSlope) * ease(2.5);
     }
+    const camSnap0 = camSnap;
     if (camSnap) { camSnap = false; camDist = wantDist; camY = top; camSlope = 0; }
     else {
       camDist += (wantDist - camDist) * ease(5);
@@ -2320,6 +2327,10 @@ function frame(ts) {
       camLook.lerp(droneLook.set(tg.x + dx * ahead, camY, tg.z + dz * ahead), dw);
       wantFov += (55 - wantFov) * dw; warp *= 1 - dw;
     }
+    // 5 / 6: round to the car's side from whichever of those it is (B held looks back as ever)
+    if (camSnap0) sideCam.snap();
+    const sv = sideCam.update(tg, camYaw, dt, camera.aspect, camPos, camLook, !(ctl.look && !board?.open));
+    if (sv.w > 0) { wantFov += (sv.fov - wantFov) * sv.w; warp *= 1 - sv.w; }
     tunnel += (warp - tunnel) * Math.min(1, dt * 2);
     if (flyIn) {
       flyIn.t = Math.min(1, flyIn.t + dt / FLY_IN);
@@ -2503,7 +2514,7 @@ window.__game = !devHook ? { hitches } : {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

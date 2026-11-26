@@ -248,5 +248,5 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 
-  return { render: () => { render(); picker?.render(); }, get track() { return picker?.picked || 'toome'; }, show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
+  return { render: () => { render(); picker?.render(); }, get track() { return picker?.picked || 'toome'; }, follow: (id) => picker?.follow(id), show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
 }

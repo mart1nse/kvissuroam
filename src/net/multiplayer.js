@@ -293,7 +293,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (?raadi=1): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -1103,8 +1103,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (!held.delete(lapKey(lap)) && (!best || best.ms !== lap.ms || best.name !== name)) continue;
       try {
         const z = await pack(trace, jobs);
-        await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },
+        const r = await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, track: lap.track || undefined, z }) });
+        // (the server did not believe the drive: the driver is told, Martin 26 Nov: "just a 'time not saved'".
+        // Until then the page had shown its record and the board simply never got it.)
+        if (r.status === 400) { const j = await r.json().catch(() => null); if (/^replay refused/.test(j?.error || '')) onRefused?.(lap); }
         refreshBoard();
       } catch { /* the lap stands without a replay */ }
     }

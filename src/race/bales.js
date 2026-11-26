@@ -9,8 +9,16 @@
 // line, and a square hit lifts its far edge: under about 45 degrees it drops back, over that it goes over
 // on its side. Straw gives a little where it was hit (a dent of up to 14 %), more the harder the hit.
 // reset() stands them all up in their places again.
+//
+// And a hit shows (Martin 26 Nov: "some simple deforming visual qualities based on hit. Have some straws fall or
+// fly out"): where the car struck, the bale's side is pressed into a hollow, deeper low down where the bumper is, up
+// to DENT m for a hit at 70 km/h and more (two such places a bale, the newest and the deepest); the more it has
+// been knocked about the lumpier it gets and the more its top sinks; and loose straw bursts out of the place
+// (src/race/straw.js), the harder the hit the more, and trails off a bale that is thrown and tumbles. The dents
+// are made in the bales' own shader from two numbers a bale: nothing is rebuilt at a hit.
 import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
+import { createStraw } from './straw.js';
 
 const R = 0.6, H = 1.2, MASS = 340, MU = 0.75, REST = 0, G = 9.81;   // (straw does not bounce; its rim digs into the turf as it slides)
 // How heavy a bale is to the car depends on how squarely it is met (Martin 23 Nov: "If I hit a bale full on with
@@ -32,6 +40,55 @@ const CORNER = 0.45;                           // how round the car's corners ar
 const BOW = 0.75;
 const RUB = 0.12;                              // straw against paint: how much of the push can drag it sideways
 const BANNER_U = 0.4;                          // middle of the banner, as a share of the way round
+const DENT = 0.22;                             // the deepest a side is pressed in (m, of the 0.6 m radius)
+const DENT_V0 = 1.4, DENT_PER = 0.0115;        // closing speed (m/s) from which a hit leaves a dent, and m of dent per m/s over it
+const SAME = 0.74;                             // a hit within about 42 degrees of an old dent deepens that one
+const UP = new THREE.Vector3(0, 1, 0);
+
+// The dents, the lumps and the sunken top, in the bale's own space before its instance is placed. aDentA: the
+// first dent's way out from the axis (x, z, unit), its depth (m), and how knocked about the bale is (0..1).
+// aDentB: the second dent, and a number of the bale's own for its lumps.
+function dentShader(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec4 aDentA;
+        attribute vec4 aDentB;
+        varying float vDent;
+        void baleDent(inout vec3 p, inout vec3 n, vec2 dir, float depth, float y) {
+          float r = length(p.xz);
+          if (depth < 0.002 || r < 0.05) return;
+          // a hollow about 60 degrees to either side of the place, deepest in its middle; the bumper is low, so
+          // it is pressed in most below the bale's middle and less than half as much at the top
+          vec2 rad = p.xz / r;
+          float c = dot(rad, dir), w = smoothstep(0.42, 1.0, c);
+          if (w <= 0.0) return;
+          float d = depth * w * mix(1.0, 0.42, smoothstep(-0.25, 0.6, y)) * min(1.0, r / 0.5);
+          p.xz -= rad * d;
+          // (its flanks face the middle of the hollow)
+          vec2 mid = dir - rad * c;
+          n = normalize(n + vec3(mid.x, 0.0, mid.y) * (depth / 0.6) * 8.0 * w * (1.0 - w));
+          vDent = max(vDent, w * depth / ${DENT.toFixed(2)});
+        }`)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        vec3 balePos = position;
+        vDent = 0.0;
+        baleDent(balePos, objectNormal, aDentA.xy, aDentA.z, position.y);
+        baleDent(balePos, objectNormal, aDentB.xy, aDentB.z, position.y);
+        {
+          float an = atan(position.x, position.z);
+          float lump = sin(an * 5.0 + position.y * 6.0 + aDentB.w) * sin(an * 3.0 - position.y * 9.0 + aDentB.w * 1.7);
+          balePos.xz *= 1.0 + aDentA.w * 0.075 * lump;
+          balePos.y -= aDentA.w * 0.07 * (0.6 + 0.4 * lump) * smoothstep(0.1, 0.6, position.y);
+        }`)
+      .replace('#include <begin_vertex>', 'vec3 transformed = balePos;');
+    // (pressed straw is darker)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vDent;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 - 0.2 * vDent;');
+  };
+  return mat;
+}
 
 function baleTexture() {
   const k = paintScale(), W = Math.round(512 * k), Hh = Math.round(160 * k);
@@ -94,6 +151,8 @@ function baleGeometry() {
   };
   pts.push(new THREE.Vector2(0, -h));
   rim(R - RIM_BOT, -h + RIM_BOT, RIM_BOT, -Math.PI / 2, 0, 2);
+  // (two more rings up the side, so a dent can be deeper low down than at the top)
+  pts.push(new THREE.Vector2(R, -0.2), new THREE.Vector2(R, 0.15));
   rim(R - RIM_TOP, h - RIM_TOP, RIM_TOP, 0, Math.PI / 2, 4);
   pts.push(new THREE.Vector2(0, h));
   const geo = new THREE.LatheGeometry(pts, seg);
@@ -119,9 +178,14 @@ export function createBales({ world, group, spots }) {
     tilt: 0, tv: 0, tdx: 1, tdz: 0,    // lean, its rate, and the way it leans (unit)
     down: false,                       // gone over on its side
     sq: 0, sqa: 0,                     // dent (share of the radius) and where round the bale it is
+    dent: [0, 0, 0, 0, 0, 0],          // the two places pressed in: way out from the axis (x, z, in the bale's own space) and depth, twice
+    ruf: 0, shed: 0,                   // how knocked about it is (0..1); straw owed to the air as it tumbles
     awake: false,
   }));
   let meshes = null;
+  // loose straw: fewer wisps on phones and weak computers (those paint small)
+  const LIGHT_DEVICE = paintScale() < 1;
+  const straw = createStraw({ world, group, max: LIGHT_DEVICE ? 130 : 320, wide: LIGHT_DEVICE });
   const ground = (x, z) => world.heightAt(x, z);
   const M = new THREE.Matrix4(), A = new THREE.Matrix4(), q = new THREE.Quaternion(), axis = new THREE.Vector3(), v3 = new THREE.Vector3(), sc = new THREE.Vector3();
 
@@ -143,24 +207,82 @@ export function createBales({ world, group, spots }) {
     mesh.instanceMatrix.needsUpdate = true;
   }
 
+  // its dents and lumps to its shader
+  function drawDents(b) {
+    if (!meshes) return;
+    const [mesh, i] = b.slot, A = mesh.geometry.attributes.aDentA, B = mesh.geometry.attributes.aDentB, d = b.dent;
+    A.setXYZW(i, d[0], d[1], d[2], b.ruf);
+    B.setXYZW(i, d[3], d[4], d[5], B.getW(i));
+    A.needsUpdate = B.needsUpdate = true;
+  }
+
+  // A hit at the closing speed vn from the car's side (the push on the bale goes along nx, nz): the place is
+  // pressed in, and straw flies from it with the car's speed (wvx, wvz).
+  function strike(b, nx, nz, vn, rad, wvx, wvz) {
+    // towards the car, in the bale's own space (it has turned, and may be lying)
+    v3.set(-nx, 0, -nz);
+    if (b.tilt) v3.applyAxisAngle(axis.set(b.tdz, 0, -b.tdx), -b.tilt);
+    v3.applyAxisAngle(UP, -b.ry);
+    const l = Math.hypot(v3.x, v3.z), add = Math.min(DENT, (vn - DENT_V0) * DENT_PER) * Math.min(1, l * 1.2);
+    // (on an end of a bale lying down: no dent in its side)
+    if (add > 0.004 && l > 0.35) {
+      const lx = v3.x / l, lz = v3.z / l, d = b.dent;
+      const same = (k) => d[k + 2] > 0 && d[k] * lx + d[k + 1] * lz > SAME;
+      let k = same(0) ? 0 : same(3) ? 3 : -1;
+      if (k >= 0) {
+        // the same place again: deeper, a little, and the place moves towards the new hit
+        const w = add / (add + d[k + 2]), mx = d[k] + (lx - d[k]) * w, mz = d[k + 1] + (lz - d[k + 1]) * w, ml = Math.hypot(mx, mz) || 1;
+        d[k] = mx / ml; d[k + 1] = mz / ml;
+        d[k + 2] = Math.min(DENT, Math.max(d[k + 2], add) + 0.3 * Math.min(d[k + 2], add));
+      } else {
+        // a new place: instead of the shallower of the two, if it is deeper than half of that
+        k = d[2] <= d[5] ? 0 : 3;
+        if (add > d[k + 2] * 0.5) { d[k] = lx; d[k + 1] = lz; d[k + 2] = add; }
+      }
+    }
+    b.ruf = Math.min(1, b.ruf + Math.max(0, vn - DENT_V0) * 0.035);
+    drawDents(b);
+    // straw out of the place: from none at a nudge to a cloud of it at 60 km/h
+    const n = Math.min(LIGHT_DEVICE ? 20 : 44, Math.floor((vn - 1) * (LIGHT_DEVICE ? 1.3 : 2.8)));
+    if (n > 0) {
+      const cx = b.x - nx * rad * 0.8, cz = b.z - nz * rad * 0.8;
+      straw.burst(cx, ground(cx, cz) + 0.55, cz, wvx * 0.8, wvz * 0.8, 1.2 + vn * 0.22, n, b.white);
+    }
+  }
+
   function reset() {
     for (const b of bales) {
       const s = b.home;
       b.x = s.x; b.z = s.z; b.vx = b.vz = 0; b.wy = 0; b.tilt = 0; b.tv = 0; b.down = false; b.sq = 0; b.awake = false;
+      b.dent.fill(0); b.ruf = 0; b.shed = 0;
+      drawDents(b);
       // the banner's middle towards the cars coming: the side at u is at the angle u * 2 pi from +z, towards +x
       b.ry = Math.atan2(-s.tx, -s.tz) - BANNER_U * Math.PI * 2;
       draw(b);
     }
+    straw.clear();
   }
 
   function build() {
     const geo = baleGeometry();
-    const straw = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: baleTexture() }), bales.filter((b) => !b.white).length || 1);
-    const wrap = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xeef0f2 }), bales.filter((b) => b.white).length || 1);
+    // (the two kinds share the shape; each has its own list of its bales' dents)
+    const own = (n) => {
+      const g = new THREE.BufferGeometry();
+      g.setIndex(geo.index);
+      for (const k in geo.attributes) g.setAttribute(k, geo.attributes[k]);
+      const A = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4), B = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
+      for (let i = 0; i < n; i++) B.setW(i, i * 2.4 + 1);
+      g.setAttribute('aDentA', A); g.setAttribute('aDentB', B);
+      return g;
+    };
+    const ns0 = bales.filter((b) => !b.white).length || 1, nw0 = bales.filter((b) => b.white).length || 1;
+    const netted = new THREE.InstancedMesh(own(ns0), dentShader(new THREE.MeshLambertMaterial({ map: baleTexture() })), ns0);
+    const wrap = new THREE.InstancedMesh(own(nw0), dentShader(new THREE.MeshLambertMaterial({ color: 0xeef0f2 })), nw0);
     let ns = 0, nw = 0;
-    for (const b of bales) b.slot = b.white ? [wrap, nw++] : [straw, ns++];
-    for (const m of [straw, wrap]) { m.castShadow = true; m.frustumCulled = false; group.add(m); }
-    meshes = [straw, wrap];
+    for (const b of bales) b.slot = b.white ? [wrap, nw++] : [netted, ns++];
+    for (const m of [netted, wrap]) { m.castShadow = true; m.frustumCulled = false; group.add(m); }
+    meshes = [netted, wrap];
+    straw.build();
     reset();
   }
 
@@ -218,6 +340,8 @@ export function createBales({ world, group, spots }) {
             if (!b.down && kick > 1.2) { b.tdx = nx; b.tdz = nz; b.tv = Math.max(b.tv, Math.min(4.5, (kick - 1.2) * 0.42)); }
             // the dent
             if (kick > 1.5) { const add = Math.min(0.14 - b.sq, (kick - 1.5) * 0.012); if (add > 0) { b.sq += add; b.sqa = Math.atan2(-nx, -nz) - b.ry; } }
+            // (and the place pressed in, and straw out of it)
+            if (vn > 1) strike(b, nx, nz, vn, rad, wvx, wvz);
             // the car: the same push back, at the point of contact
             const nvx = wvx - (J * nx + Jt * tx) / Mc, nvz = wvz - (J * nz + Jt * tz) / Mc;
             car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
@@ -249,12 +373,24 @@ export function createBales({ world, group, spots }) {
         b.tv += (b.tilt < TIP ? -9 * Math.cos(b.tilt) : 7) * dt;
         b.tilt += b.tv * dt;
         if (b.tilt <= 0) { b.tilt = 0; b.tv = 0; }
-        else if (b.tilt >= Math.PI / 2) { b.tilt = Math.PI / 2; b.tv = 0; b.down = true; }
+        else if (b.tilt >= Math.PI / 2) {
+          b.tilt = Math.PI / 2; b.tv = 0; b.down = true;
+          // (it lands on its side: a puff of straw off it, and it is the worse for it)
+          const lx = b.x + b.tdx * (H / 2 + R), lz = b.z + b.tdz * (H / 2 + R);
+          straw.burst(lx, ground(lx, lz) + 0.5, lz, b.vx, b.vz, 1.6, LIGHT_DEVICE ? 4 : 9, b.white);
+          b.ruf = Math.min(1, b.ruf + 0.25); drawDents(b);
+        }
+      }
+      // thrown fast, it leaves straw behind it
+      if (sp > 3.5) {
+        b.shed += (sp - 3.5) * (LIGHT_DEVICE ? 1.2 : 2.5) * dt;
+        if (b.shed >= 1) { const n = Math.floor(b.shed); b.shed -= n; straw.burst(b.x, ground(b.x, b.z) + 0.7, b.z, b.vx * 0.5, b.vz * 0.5, 1, n, b.white); }
       }
       draw(b);
       if (sp < 0.02 && b.wy === 0 && (b.tilt === 0 || b.down)) { b.vx = b.vz = 0; b.awake = false; }
     }
+    straw.update(car, dt);
   }
 
-  return { build, reset, update, bales, get built() { return !!meshes; } };
+  return { build, reset, update, bales, straw, get built() { return !!meshes; } };
 }

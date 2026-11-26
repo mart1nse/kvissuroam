@@ -1,141 +1,355 @@
-// The arches over a rally stage's start and finish (Martin 26 Nov 2026: "Add rally start and finish arcs. Start
-// one ideally should be shown somewhat also in the lights out view initially. Both of them would need a bit of
-// room too as I would potentially like to add some ads to them"). A black arch with cut corners, as wide as the
-// road and the grass beside it, with nothing on its faces: the beam (BEAM m high, the whole span) and the two legs
-// (LEG m wide) are the room for adverts, on both sides, and `panels` below says where each lies. Its word stands
-// on a small board on top of the beam, so that the beam stays free. A line of light runs round the opening and
-// round the outside.
-// Each arch is one mesh of a few hundred triangles (the body, the lines of light and the word together: the
-// lowest graphics level counts every piece it draws), and both share one material and one small picture, the
-// two words and a white patch that everything else takes its plain colour through. The legs are solid
-// (world.addSolids). `glow` fills the opening (inside its line of light) with a see-through sheet of light, the
-// stage's finish halo (raadi.js sets how strong).
+// The arches over a rally stage's start and finish, drawn after the real ones at Rally Estonia (Martin 26 Nov 2026,
+// with his photos: "draft some real-life looking banners instead (without logos or texts). for start arch use the
+// design of the visit estonia arch. and for the finish one, use the black, bigger and more robust. also see that
+// there are flames going out of the finish one"). Faces are left plain where the real ones carry adverts, and
+// `panels` says where each such face lies, for adverts later.
+//
+//  - start: the inflatable arch. A blue beam with rounded top corners and a band along its foot (a dark strip, a
+//    fading row of orange squares, orange going to red into the blue), on two white legs that taper towards the
+//    ground and lean out a little at the foot, an orange fade at their tops, black weight bags at their feet and
+//    guy ropes out to pegs. Its edges are rounded (bevelled), as a blown-up thing is.
+//  - finish: the black gantry. Two square black towers and a black beam between them with a thin red line along
+//    their feet, a box truss along the top with flame cannons and lamps on it. `glow` fills its opening with a
+//    see-through sheet of light (the stage's finish halo: raadi.js sets how strong).
+//  - flames (finish): `flames.fire()` sends a column of fire up from each cannon for FLAME_S seconds (raadi.js says
+//    when). One mesh of camera-facing strips drawn by a small shader; it is in the picture from the start, collapsed
+//    to nothing while the cannons are quiet, so its shader is made ready with the rest (src/warm.js) and nothing is
+//    made or compiled when it fires.
+//
+// Each arch is one mesh (the lowest graphics level counts every piece it draws) and both share one material and
+// one small picture: the faces' paint, and a white patch that the plain faces take their colour through. Its parts
+// never share a face with each other (two faces in one place flicker: the first arches' lines of light did).
+// The legs and towers are solid (world.addSolids).
 import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
 import { still } from '../still.js';
 import { glowTex } from './decor.js';
 
-const LEG = 1.1, DEEP = 0.9, CLEAR = 4.9, BEAM = 1.5;      // a leg's width, the arch's depth along the road, the height under the beam, the beam
-const CUT = 0.9, CUT_IN = 0.5;                              // the cut corners outside and in the opening
-const FOOT = 1.5;                                           // the legs go this far into the ground (a slope under them)
-const LINE = 0.09;                                          // the lines of light
-const BOARD_W = 4.4, BOARD_H = 0.7;                         // the word's board on top
-const BLACK = 0x0b0b10, CYAN = 0x38d6ff, PINK = 0xff3fd0;
-const WORDS = ['START', 'FINISH'];
+export const FLAME_S = 5;
+const BLUE = 0x2268dc, WHITE = 0xf2f2ee, BLACK = 0x111114, BAG = 0x18181b, TRUSS = 0x2a2b30, ROPE = 0x303034;
 
-// the picture: the words one under the other, and under them a white patch (PLAIN) for the faces of one colour
-const ROW = 80, GAP = 16, TALL = ROW * WORDS.length + GAP * 2;
-const PLAIN = [0.5, GAP / 2 / TALL];
+// ---- the picture: four painted faces in a row of squares, and a white patch
+const CELL = 128, CELLS = 5;
+const R_BEAM = 0, R_LEG = 1, R_BLACK = 2, R_BLACKBEAM = 3, R_PLAIN = 4;
 let mat = null;
 function material() {
   if (mat) return mat;
-  const k = paintScale(), w = Math.round(512 * k), h = Math.round(TALL * k);
+  const k = paintScale(), s = Math.round(CELL * k);
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = s * CELLS; c.height = s;
   const g = c.getContext('2d');
-  g.fillStyle = '#0d0d13'; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#fff'; g.fillRect(0, h - Math.round(GAP * k), w, Math.round(GAP * k));
-  g.font = `italic 900 ${Math.round(62 * k)}px "Avenir Next", "Futura", "Trebuchet MS", sans-serif`;
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  try { g.letterSpacing = `${Math.round(10 * k)}px`; } catch { /* an old browser: the letters closer */ }
-  g.shadowColor = '#38d6ff'; g.shadowBlur = 10 * k;
-  g.fillStyle = '#f2fbff';
-  WORDS.forEach((t, i) => g.fillText(t, w / 2, (ROW * (i + 0.5) + 3) * k));
+  const at = (r, f) => { g.save(); g.translate(r * s, 0); g.scale(s / CELL, s / CELL); f(); g.restore(); };
+  // (the canvas's top is the face's top)
+  at(R_BEAM, () => {
+    let f = g.createLinearGradient(0, 0, 0, CELL);
+    f.addColorStop(0, '#2a74e6'); f.addColorStop(0.62, '#1f60d4'); f.addColorStop(0.7, '#ff7a1c'); f.addColorStop(0.8, '#e8361f'); f.addColorStop(0.84, '#30282a');
+    g.fillStyle = f; g.fillRect(0, 0, CELL, CELL);
+    g.fillStyle = '#2c2c30'; g.fillRect(0, 0.84 * CELL, CELL, 0.16 * CELL);
+    // a row of orange squares fading out towards the middle
+    const q = CELL * 0.045;
+    for (let i = 0; i < CELL / q; i++) for (let j = 0; j < 2; j++) {
+      if ((i + j) % 2) continue;
+      const u = i * q / CELL, a = Math.max(0, 1 - Math.min(u, 1 - u) * 3.2);
+      if (a <= 0) continue;
+      g.fillStyle = `rgba(255,128,30,${(0.85 * a).toFixed(2)})`;
+      g.fillRect(i * q, 0.86 * CELL + j * q, q, q);
+    }
+  });
+  at(R_LEG, () => {
+    const f = g.createLinearGradient(0, 0, 0, CELL);
+    f.addColorStop(0, '#e8361f'); f.addColorStop(0.06, '#ff7a1c'); f.addColorStop(0.16, '#f2f2ee'); f.addColorStop(1, '#f2f2ee');
+    g.fillStyle = f; g.fillRect(0, 0, CELL, CELL);
+  });
+  for (const [r, line] of [[R_BLACK, 0.95], [R_BLACKBEAM, 0.9]]) at(r, () => {
+    g.fillStyle = '#111114'; g.fillRect(0, 0, CELL, CELL);
+    g.fillStyle = '#c8141e'; g.fillRect(0, line * CELL, CELL, 0.018 * CELL);
+  });
+  at(R_PLAIN, () => { g.fillStyle = '#fff'; g.fillRect(0, 0, CELL, CELL); });
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true });
+  mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
   return mat;
 }
 
-// the arch's outline seen along the road: x across, y up from the ground at its middle; `a` is half the opening
-function outline(a, grow, clear) {
-  // (grow > 0: the same outline that much further out, for the lines of light; 0.414 = tan 22.5°, a cut corner's share)
-  const o = a + LEG + grow, top = clear + BEAM + grow, c = CUT + grow * 0.414;
-  return [[-o, -FOOT], [-o, top - c], [-o + c, top], [o - c, top], [o, top - c], [o, -FOOT]];
-}
-function opening(a, grow, clear) {
-  const i = a - grow, top = clear - grow, c = CUT_IN - grow * 0.414;
-  return [[i, -FOOT], [i, top - c], [i - c, top], [-i + c, top], [-i, top - c], [-i, -FOOT]];
-}
-function slab(pts, depth) {
+// a flat outline (x across, y up) made thick along the road, its edges rounded by `round` m
+function slab(pts, depth, round = 0, seg = 1) {
   const sh = new THREE.Shape();
-  pts.forEach(([x, y], k) => (k ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+  pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
   sh.closePath();
-  const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 1 });
-  g.translate(0, 0, -depth / 2);
-  return g.toNonIndexed();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: depth - round * 2, curveSegments: seg, bevelEnabled: round > 0, bevelThickness: round, bevelSize: round, bevelSegments: 2 });
+  g.translate(0, 0, -(depth - round * 2) / 2);
+  return g.index ? g.toNonIndexed() : g;
+}
+// the outline of a rectangle with its two top corners rounded by r (anticlockwise, as a Shape wants)
+function roundTop(x0, y0, x1, y1, r) {
+  const out = [[x0, y0], [x1, y0]];
+  for (let i = 0; i <= 4; i++) { const t = (i / 4) * Math.PI / 2; out.push([x1 - r + Math.cos(t) * r, y1 - r + Math.sin(t) * r]); }
+  for (let i = 0; i <= 4; i++) { const t = Math.PI / 2 + (i / 4) * Math.PI / 2; out.push([x0 + r + Math.cos(t) * r, y1 - r + Math.sin(t) * r]); }
+  return out;
+}
+
+// corners gathered into one mesh. put(geo, hex, region): the faces looking along the road (front and back) wear
+// the region's paint stretched over the part's own box; the rest take `hex` through the white patch.
+function gather() {
+  const P = [], N = [], C = [], U = [], col = new THREE.Color(), white = new THREE.Color(0xffffff);
+  const plain = [(R_PLAIN + 0.5) / CELLS, 0.5];
+  return {
+    put(geo, hex, region = -1) {
+      if (geo.index) geo = geo.toNonIndexed();
+      if (!geo.attributes.normal) geo.computeVertexNormals();
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox, p = geo.attributes.position.array, n = geo.attributes.normal.array;
+      col.setHex(hex);
+      for (let t = 0; t < p.length; t += 9) {
+        // (the face's own direction, from its corners: a bevel's normals lean)
+        const ax = p[t + 3] - p[t], ay = p[t + 4] - p[t + 1], az = p[t + 5] - p[t + 2], bx = p[t + 6] - p[t], by = p[t + 7] - p[t + 1], bz = p[t + 8] - p[t + 2];
+        const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, l = Math.hypot(nx, ny, nz) || 1;
+        const face = region >= 0 && Math.abs(nz / l) > 0.9;
+        for (let v = t; v < t + 9; v += 3) {
+          P.push(p[v], p[v + 1], p[v + 2]); N.push(n[v], n[v + 1], n[v + 2]);
+          const c = face ? white : col;
+          C.push(c.r, c.g, c.b);
+          if (face) {
+            const u = (p[v] - bb.min.x) / (bb.max.x - bb.min.x || 1), w = (p[v + 1] - bb.min.y) / (bb.max.y - bb.min.y || 1);
+            // (on the back face the picture is turned so it reads the same way; a hair in from the cell's edges)
+            const uu = nz / l < 0 ? 1 - u : u;
+            U.push((region + 0.02 + 0.96 * uu) / CELLS, 0.02 + 0.96 * w);
+          } else U.push(plain[0], plain[1]);
+        }
+      }
+      geo.dispose();
+    },
+    box(w, h, d, hex, x, y, z, rz = 0, region = -1) {
+      const g = new THREE.BoxGeometry(w, h, d);
+      if (rz) g.rotateZ(rz);
+      g.translate(x, y, z);
+      this.put(g, hex, region);
+    },
+    mesh() {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      const m = new THREE.Mesh(geo, material());
+      m.castShadow = true;
+      return m;
+    },
+  };
+}
+
+// ---- the inflatable start arch. a: from the road's middle to the inside of a leg at its foot
+const IN = { FOOT_W: 0.85, TOP_W: 1.55, LEAN: 0.35, DEEP: 0.75, BEAM_D: 0.95, BEAM_H: 1.75, CLEAR: 4.7, ROUND: 0.16 };
+function inflatable(b, a) {
+  const { FOOT_W, TOP_W, LEAN, DEEP, BEAM_D, BEAM_H, CLEAR, ROUND } = IN;
+  const top = CLEAR + BEAM_H;
+  const legs = [];
+  for (const s of [-1, 1]) {
+    // a leg's outline: its foot at a .. a + FOOT_W, its top (inside the beam) LEAN further in and TOP_W wide
+    const xi0 = a, xo0 = a + FOOT_W, xi1 = a - LEAN, xo1 = a - LEAN + TOP_W, y1 = CLEAR + 0.5;
+    const pts = [[xi0, -0.3], [xo0, -0.3], [xo1, y1], [xi1, y1]].map(([x, y]) => [x * s, y]);
+    b.put(slab(s > 0 ? pts : pts.reverse(), DEEP, ROUND), WHITE, R_LEG);
+    legs.push({ s, x0: xi0, x1: xo0, xi1, xo1 });
+    // a weight bag at its foot, and two guy ropes from its top out to pegs
+    b.box(FOOT_W + 0.5, 0.32, DEEP + 0.4, BAG, s * (a + FOOT_W / 2), 0.1, 0);
+    for (const dz of [-1, 1]) {
+      const fx = s * (a + FOOT_W + 1.8), fz = dz * 2.2, tx = s * (xo1 - 0.25), ty = CLEAR + 0.2, tz = dz * DEEP / 2;
+      // (a thin rod from the peg to the leg's top: laid along +z, then turned to look at the top)
+      const l = Math.hypot(fx - tx, ty, fz - tz);
+      const r = new THREE.CylinderGeometry(0.012, 0.012, l, 3).rotateX(Math.PI / 2).translate(0, 0, l / 2);
+      r.lookAt(new THREE.Vector3(tx - fx, ty, tz - fz));
+      r.translate(fx, 0, fz);
+      b.put(r, ROPE);
+      b.box(0.05, 0.25, 0.05, ROPE, fx, 0.08, fz);
+    }
+  }
+  // the beam: wider than the legs' tops, its top corners rounded
+  const half = a - LEAN + TOP_W + 0.25;
+  b.put(slab(roundTop(-half, CLEAR, half, top, 0.7), BEAM_D, ROUND, 4), BLUE, R_BEAM);
+  return {
+    top,
+    solids: legs.map((l) => ({ x: l.s * (l.x0 + l.x1) / 2, hx: (l.x1 - l.x0) / 2 + 0.1, hz: DEEP / 2 })),
+    panels: {
+      beam: [-half + 0.7, CLEAR + BEAM_H * 0.3, half - 0.7, top - 0.15],
+      legs: legs.map((l) => [l.s * l.x0, 0.4, l.s * (l.xi1 + l.xo1) / 2, CLEAR]).map(([p, y0, q, y1]) => [Math.min(p, q), y0, Math.max(p, q), y1]),
+    },
+    open: null,
+  };
+}
+
+// ---- the black gantry at the finish. a: from the road's middle to the inside of a tower
+const GA = { TOWER_W: 1.45, TOWER_D: 1.2, BEAM_H: 1.6, BEAM_D: 0.9, TRUSS: 0.5, BAY: 0.75 };
+function gantry(b, a, clear) {
+  const { TOWER_W, TOWER_D, BEAM_H, BEAM_D, TRUSS, BAY } = GA;
+  const top = clear + BEAM_H, o = a + TOWER_W;
+  for (const s of [-1, 1]) {
+    b.box(TOWER_W, top + 0.4, TOWER_D, BLACK, s * (a + TOWER_W / 2), (top - 0.4) / 2, 0, 0, R_BLACK);
+    b.box(TOWER_W + 0.3, 0.25, TOWER_D + 0.3, BAG, s * (a + TOWER_W / 2), 0.05, 0);       // its foot plate
+  }
+  // the beam between the towers (its ends inside them)
+  b.box(2 * a + 0.4, BEAM_H, BEAM_D, BLACK, 0, clear + BEAM_H / 2, 0, 0, R_BLACKBEAM);
+  // the box truss along the top: four chords, posts and diagonals on its two long sides and across its top
+  const y0 = top + 0.06, y1 = y0 + TRUSS, z = 0.28, c = 0.05;
+  for (const yy of [y0, y1]) for (const zz of [-z, z]) b.box(2 * o, c, c, TRUSS, 0, yy, zz);
+  const n = Math.round(2 * o / BAY), step = 2 * o / n, diag = Math.hypot(step, TRUSS), ang = Math.atan2(TRUSS, step);
+  for (let i = 0; i <= n; i++) {
+    const x = -o + i * step;
+    for (const zz of [-z, z]) b.box(c * 0.8, TRUSS, c * 0.8, TRUSS, x, (y0 + y1) / 2, zz);
+    if (i === n) break;
+    const xm = x + step / 2, sgn = i % 2 ? 1 : -1;
+    for (const zz of [-z, z]) b.box(diag, c * 0.7, c * 0.7, TRUSS, xm, (y0 + y1) / 2, zz, sgn * ang);
+    b.box(c * 0.7, c * 0.7, 2 * z, TRUSS, x, y1, 0);
+  }
+  // flame cannons on top (where the flames come out) and lamps between them
+  const jets = [];
+  const nj = 5;
+  for (let i = 0; i < nj; i++) {
+    const x = -o + 0.6 + (2 * o - 1.2) * i / (nj - 1);
+    b.box(0.42, 0.34, 0.42, 0x3a3b40, x, y1 + 0.2, 0);
+    b.box(0.16, 0.3, 0.16, 0x1c1c1f, x, y1 + 0.5, 0);
+    jets.push([x, y1 + 0.62, 0]);
+    if (i < nj - 1) {
+      const lx = x + (2 * o - 1.2) / (nj - 1) / 2;
+      b.box(0.3, 0.3, 0.36, 0x1c1c1f, lx, y1 + 0.18, -0.05);
+      b.box(0.24, 0.24, 0.02, 0xfff2d0, lx, y1 + 0.18, -0.24);
+    }
+  }
+  return {
+    top: y1,
+    jets,
+    solids: [-1, 1].map((s) => ({ x: s * (a + TOWER_W / 2), hx: TOWER_W / 2, hz: TOWER_D / 2 })),
+    panels: {
+      beam: [-a + 0.1, clear + 0.2, a - 0.1, top - 0.15],
+      legs: [[-o + 0.1, 0.5, -a - 0.1, top - 0.2], [a + 0.1, 0.5, o - 0.1, top - 0.2]],
+    },
+    open: { x0: -a + 0.03, x1: a - 0.03, top: clear - 0.03 },
+  };
+}
+
+// ---- fire from the cannons
+const FIRE_W = 2.8, FIRE_H = 16;
+function flameMesh(jets) {
+  const pos = [], corner = [], idx = [];
+  jets.forEach(([x, y, z], j) => {
+    for (const [cx, cy] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) { pos.push(x, y, z); corner.push(cx, cy, j); }
+    idx.push(j * 4, j * 4 + 1, j * 4 + 2, j * 4, j * 4 + 2, j * 4 + 3);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('corner', new THREE.Float32BufferAttribute(corner, 3));
+  geo.setIndex(idx);
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, jets[0][1] + FIRE_H / 2, 0), 20);
+  const uniforms = { uT: { value: 0 }, uOn: { value: 0 } };
+  const m = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `
+      attribute vec3 corner;
+      uniform float uT, uOn;
+      varying vec2 vUv; varying float vSeed, vLife;
+      void main() {
+        if (uOn < 0.5) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
+        vec4 c = modelViewMatrix * vec4(position, 1.0);
+        // standing upright, turned to the camera about the upright
+        vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+        vec3 side = normalize(cross(up, normalize(-c.xyz)));
+        float j = corner.z, t = uT - j * 0.06;
+        float grow = smoothstep(0.0, 0.35, t), puff = 0.88 + 0.12 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
+        float h = ${FIRE_H.toFixed(1)} * (0.2 + 0.8 * grow) * puff;
+        vLife = grow * (1.0 - smoothstep(${(FLAME_S - 0.7).toFixed(2)}, ${FLAME_S.toFixed(2)}, t));
+        vUv = vec2(corner.x * 0.5 + 0.5, corner.y);
+        vSeed = j * 7.31;
+        // (wider far off, so that from the first corner, 360 m away, a column is still a few pixels across)
+        float far = max(1.0, -c.z / 140.0);
+        c.xyz += side * corner.x * ${(FIRE_W / 2).toFixed(2)} * far * (0.55 + corner.y * 1.1) + up * corner.y * h;
+        gl_Position = projectionMatrix * c;
+      }`,
+    fragmentShader: `
+      uniform float uT;
+      varying vec2 vUv; varying float vSeed, vLife;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+      }
+      void main() {
+        float y = vUv.y;
+        // (rising turbulence: the picture scrolls up, faster low down, and sways)
+        vec2 q = vec2(vUv.x * 3.0 + vSeed + sin(y * 3.0 + uT * 2.0) * 0.25, y * 4.0 - uT * (6.0 - y * 2.0));
+        float n = noise(q) * 0.55 + noise(q * 2.3 + 3.7) * 0.3 + noise(q * 5.1 + 9.1) * 0.15;
+        // a column that swells as it rises and breaks into tongues at its top
+        float wide = 0.7 - y * 0.15;
+        float d = abs(vUv.x - 0.5) * 2.0 + (n - 0.5) * (0.5 + y * 0.8);
+        float body = smoothstep(wide, wide * 0.45, d) * smoothstep(1.0, 0.62 + n * 0.3, y);
+        float heat = clamp(body * (1.15 - y * 0.85) * (0.55 + 0.9 * n), 0.0, 1.0);
+        // deep red at the edges, orange, a yellow-white core low down (the canvas's colours as they are)
+        vec3 col = mix(vec3(0.62, 0.08, 0.02), vec3(1.0, 0.45, 0.05), smoothstep(0.05, 0.4, heat));
+        col = mix(col, vec3(1.0, 0.82, 0.38), smoothstep(0.5, 0.85, heat));
+        col = mix(col, vec3(1.0, 0.97, 0.85), smoothstep(0.85, 1.0, heat) * (1.0 - y));
+        float alpha = smoothstep(0.02, 0.3, heat) * vLife;
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(col, alpha);
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.renderOrder = 6;
+  mesh.frustumCulled = false;
+  return {
+    mesh,
+    get on() { return uniforms.uOn.value > 0; },
+    fire() { uniforms.uT.value = 0; uniforms.uOn.value = 1; },
+    update(dt) {
+      if (!uniforms.uOn.value) return;
+      uniforms.uT.value += Math.min(dt || 0.016, 0.1);
+      if (uniforms.uT.value > FLAME_S + 0.4) uniforms.uOn.value = 0;
+    },
+  };
 }
 
 // x, z: the middle of the road under the arch; tx, tz: the way the stage runs there; half: from the road's middle
-// to the inside of each leg; word: 0 START, 1 FINISH; clear: the height under the beam; glow: a sheet of light in the
-// opening. Returns the meshes' group, `panels` (the free faces) and `glow` (that sheet's mesh, or null).
-export function buildArch({ group, world, x, z, tx, tz, half, word, clear = CLEAR, glow = false }) {
-  const yaw = Math.atan2(tx, tz), a = half;
-  // (the ground at the legs and the middle: the arch stands on the highest of them, its feet reach down)
-  const mid = half + LEG / 2, rx = Math.cos(yaw), rz = -Math.sin(yaw);
-  const y = Math.max(world.heightAt(x, z), world.heightAt(x + rx * mid, z + rz * mid), world.heightAt(x - rx * mid, z - rz * mid));
+// to the inside of each leg at the ground; kind: 'start' or 'finish'; clear: the height under the finish's beam;
+// glow: a sheet of light in the finish's opening. Returns the group, `panels` (the free faces, [x0, y0, x1, y1] in
+// the arch's own metres: x across the road from its middle, y up from its foot, on both faces), `glow` (that
+// sheet's mesh, or null) and `flames` (the finish's fire, or null).
+export function buildArch({ group, world, x, z, tx, tz, half, kind = 'start', clear = 4.3, glow = false }) {
+  const yaw = Math.atan2(tx, tz), a = half, rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const b = gather();
+  const it = kind === 'finish' ? gantry(b, a, clear) : inflatable(b, a);
+  // (it stands on the highest ground under its feet and its middle; the feet reach down into a slope)
+  const feet = it.solids.map((s) => world.heightAt(x + rx * s.x, z + rz * s.x));
+  const y = Math.max(world.heightAt(x, z), ...feet);
   const g = still(new THREE.Group());
   g.position.set(x, y, z);
   g.rotation.y = yaw;
+  g.add(b.mesh());
+  // the legs and towers reach down to the ground under them
+  for (const [k, s] of it.solids.entries()) {
+    const drop = y - feet[k];
+    if (drop > 0.05) {
+      const f = gather();
+      f.box(s.hx * 2 - 0.02, drop + 0.3, s.hz * 2 - 0.02, kind === 'finish' ? BLACK : BAG, s.x, -drop / 2 + 0.1, 0);
+      g.add(f.mesh());
+    }
+  }
 
-  // corners gathered into one mesh: [positions, colour, uv or null for the white patch]
-  const P = [], C = [], U = [], col = new THREE.Color();
-  const put = (geo, hex, uv) => {
-    const pos = geo.attributes.position.array;
-    col.setHex(hex);
-    for (let i = 0; i < pos.length; i += 3) { P.push(pos[i], pos[i + 1], pos[i + 2]); C.push(col.r, col.g, col.b); }
-    if (uv) U.push(...uv); else for (let i = 0; i < pos.length; i += 3) U.push(PLAIN[0], PLAIN[1]);
-    geo.dispose();
-  };
-  // the body: one flat arch, and the word's board on top
-  const by = clear + BEAM + BOARD_H / 2;
-  put(slab([...outline(a, 0, clear), ...opening(a, 0, clear)], DEEP), BLACK);
-  put(new THREE.BoxGeometry(BOARD_W + 0.16, BOARD_H + 0.08, 0.2).translate(0, by, 0).toNonIndexed(), BLACK);
-  // the lines of light: round the opening and round the outside, a hair proud of both faces
-  put(slab([...opening(a, 0, clear), ...opening(a, -LINE, clear).reverse()], DEEP + 0.03), CYAN);
-  put(slab([...outline(a, 0, clear), ...outline(a, -LINE, clear).reverse()], DEEP + 0.03), PINK);
-  // the word, on both faces of its board (the first is the face the cars come up to)
-  const v1 = 1 - word * ROW / TALL, v0 = 1 - (word + 1) * ROW / TALL, hw = BOARD_W / 2, hh = BOARD_H / 2, d = 0.115;
-  const quad = (x0, x1, z) => new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([x0, by - hh, z, x1, by - hh, z, x1, by + hh, z, x0, by - hh, z, x1, by + hh, z, x0, by + hh, z], 3));
-  const wuv = [0, v0, 1, v0, 1, v1, 0, v0, 1, v1, 0, v1];
-  put(quad(hw, -hw, -d), 0xffffff, wuv);
-  put(quad(-hw, hw, d), 0xffffff, wuv);
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
-  const mesh = new THREE.Mesh(geo, material());
-  mesh.castShadow = true;
-  g.add(mesh);
-
-  // the sheet of light: the opening's shape inside its line, from just under the lowest ground across the road (a
-  // slope under the arch: what lies under the ground is not seen), the picture's foot at that ground
   let sheet = null;
-  if (glow) {
+  if (glow && it.open) {
     let low = Infinity;
     for (let k = -4; k <= 4; k++) low = Math.min(low, world.heightAt(x + rx * a * k / 4, z + rz * a * k / 4));
-    const y0 = low - y - 0.05, pts = opening(a, LINE, clear).map(([px, py]) => [px, Math.max(py, y0)]);
-    const sh = new THREE.Shape();
-    pts.forEach(([px, py], k) => (k ? sh.lineTo(px, py) : sh.moveTo(px, py)));
-    const sg = new THREE.ShapeGeometry(sh), sp = sg.attributes.position, su = sg.attributes.uv, top = clear - LINE;
-    for (let i = 0; i < sp.count; i++) su.setXY(i, (sp.getX(i) + a) / (2 * a), (sp.getY(i) - y0) / (top - y0));
+    const y0 = low - y - 0.05, { x0, x1, top } = it.open;
+    const sg = new THREE.PlaneGeometry(x1 - x0, top - y0);
+    sg.translate((x0 + x1) / 2, (top + y0) / 2, 0);
     sheet = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide, fog: true }));
     sheet.renderOrder = 4;
     g.add(sheet);
   }
+  let flames = null;
+  if (it.jets) {
+    flames = flameMesh(it.jets);
+    g.add(flames.mesh);
+  }
 
   group.add(g);
-  // the legs stop a car
-  world.addSolids([-1, 1].map((s) => ({ x: x + rx * mid * s, z: z + rz * mid * s, yaw, hx: LEG / 2, hz: DEEP / 2 })));
-  return {
-    group: g,
-    glow: sheet,
-    // the faces left free for adverts, on both sides of the arch: [x0, y0, x1, y1] in the arch's own metres
-    // (x across the road from its middle, y up from its foot)
-    panels: {
-      beam: [-(a - CUT_IN), clear + LINE, a - CUT_IN, clear + BEAM - LINE],
-      legs: [[-(a + LEG) + LINE, 0, -a - LINE, clear - CUT_IN], [a + LINE, 0, a + LEG - LINE, clear - CUT_IN]],
-    },
-  };
+  world.addSolids(it.solids.map((s) => ({ x: x + rx * s.x, z: z + rz * s.x, yaw, hx: s.hx, hz: s.hz })));
+  return { group: g, glow: sheet, flames, panels: it.panels, top: y + it.top };
 }

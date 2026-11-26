@@ -46,7 +46,16 @@ const BEAM_DIM = 0.25, RING_DIM = 0.5, RING_H = 2.4;   // the column and its rin
 // finish. `off`: from the gravel's edge to the inside of a leg. The finish's legs stand wide: the runs logged so
 // far cross that line within the gravel but come to it up to 1.7 m off its right edge and leave it 0.5 m off its left.
 // The finish's beam is lower (Martin 26 Nov: "lower the finish one just a touch"), and its opening is the finish halo.
-const ARCH_START = { at: START + 5, off: 1.9 }, ARCH_FIN = { at: FIN, off: 3.2, clear: 4.3, glow: true };
+// Since 26 Nov afternoon they look like the real ones (his photos): the inflatable blue arch at the start, the black
+// gantry with flame cannons at the finish.
+const ARCH_START = { at: START + 5, off: 1.9, kind: 'start' }, ARCH_FIN = { at: FIN, off: 3.2, kind: 'finish', clear: 4.3, glow: true };
+// The finish's flames (Martin 26 Nov: "if you turn around the first corner and car is facing the finish arch, then
+// have flames ... for 5 seconds (or if player crosses the finish line if get there earlier)"). Out of the stage's
+// first corner the road does run straight at the finish arch, 360 m off, but the manor and the park's trees stand
+// between (looked along the stage from 2.2 m up, 26 Nov): the first stretch that faces the arch with it in sight
+// is the one out of the corner at 318, towards the pond, 280 to 200 m off. So: once a run, from FLAME_FROM on along
+// the stage, the car within FLAME_R of the arch and pointing at it within FLAME_COS; or at the finish.
+const FLAME_FROM = 320, FLAME_R = 420, FLAME_COS = 0.9;
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -465,6 +474,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   }
 
   let lineInfo = null;
+  function fire() { st.flamed = true; arches[1]?.flames?.fire(); }
   const arches = [];
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
@@ -483,8 +493,8 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     sign('stop', N - 1, HW[N - 1] + 1.4);
     yield;
     // the arches over the start and the finish
-    for (const [word, A] of [ARCH_START, ARCH_FIN].entries()) {
-      const arch = buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, word, clear: A.clear, glow: !!A.glow });
+    for (const A of [ARCH_START, ARCH_FIN]) {
+      const arch = buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, kind: A.kind, clear: A.clear, glow: !!A.glow });
       arches.push(arch);
       // the finish halo (Martin 23 Nov: "finish line rectangle halo"), since 26 Nov the finish arch's opening filled
       // with light ("fill the neon glow to fit inside of it exactly"), pulsing while a run is on
@@ -722,7 +732,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     st.phase = 'count'; st.beepN = null;
     st.pin = pose;
     st.countAt = st.placedAt = performance.now();
-    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {}; st.tyT = {}; st.marks = []; st.resets = 0;
+    st.prog = START; st.off = 0; st.back = 0; st.gate = 0; st.bendPen.clear(); st.cut = ''; st.later = null; st.laterM = 0; st.missed = false; st.pen = 0; st.apexPen.clear(); st.widePen.clear(); st.doneT = null; st.inpT = {}; st.tyT = {}; st.marks = []; st.resets = 0; st.flamed = false;
     bales.reset();
     tape.reset();
     knocks.reset();
@@ -830,6 +840,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     get log() { return log; },
     get line() { return lineInfo; },
     get arches() { return arches; },
+    fire,
     get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
     // the seconds to green (the test drive holds the clock with it to take its pictures)
@@ -969,6 +980,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (also with the last check still open: the car's place on the stage waits there, and the finish is what
         // judges it)
         if (ev?.fin != null && st.phase === 'run') {
+          if (!st.flamed) fire();
           {
             const f = ev.fin, tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const trace = rec?.finish(tc, time, car);
@@ -997,6 +1009,15 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         let moving = false;
         for (const b of barriers) if (b.t !== b.want) { b.t += Math.sign(b.want - b.t) * Math.min(Math.abs(b.want - b.t), dt * 1.2); moving = true; }
         if (moving) drawBarriers();
+      }
+      // the finish arch's flames: once a run, when the car comes out of the first corner facing it (or at the finish)
+      const fl = arches[1]?.flames;
+      if (fl) {
+        if (st.phase === 'run' && !st.flamed && st.prog >= FLAME_FROM) {
+          const [fx, fz] = P[ARCH_FIN.at], dx = fx - x, dz = fz - z, d = Math.hypot(dx, dz);
+          if (d < FLAME_R && (Math.sin(car.yaw) * dx - Math.cos(car.yaw) * dz) / d > FLAME_COS) fire();
+        }
+        fl.update(dt);
       }
       bales.update(car, dt);
       tape.update(car, dt);

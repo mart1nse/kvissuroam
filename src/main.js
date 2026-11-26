@@ -120,6 +120,7 @@ import { createUlenurmeKonsum, ulenurmeKonsumWalls } from './world/ulenurmekonsu
 import { createRoad3, road3PaintVectors } from './world/road3raadi.js';
 import { createKaluri, kaluriProps, kaluriClear, kaluriVectors } from './world/kaluri.js';
 import { createRaadiPark, raadiParkTrees, raadiParkProps } from './world/raadipark.js';
+import { createRaadiStart, raadiStartProps, raadiStartClear, raadiStartVectors } from './world/raadistart.js';
 import { createIsaJaPoeg } from './world/isapoeg.js';
 import { createRiia2, riia2Walls } from './world/riia2.js';
 import { skipHidden, onePass } from './still.js';
@@ -441,7 +442,7 @@ let trackPicked = false;                // a track was picked on the start scree
 if (RAADI) setUnrutted(onStage);
 const atRaadi = () => Math.hypot(car.x - 2660, car.z - 470) < 600;
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
-let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa;
+let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = params.get('busstops') !== '0';
 let roadFix = null;                 // what src/world/roadprops.js moved and left out (for tests)
@@ -596,6 +597,7 @@ async function boot() {
   kuuniVectors(world.vectors);                  // Küüni beyond the first corner is a pedestrian street: no road lines
   turuPaintVectors(world.vectors);              // Turu: the hatched island from Soola to Sadama, no centre lines on Sadama and the car park lanes
   road3PaintVectors(world.vectors);             // road 3 north of Kvissentali tee: two lanes, edge lines, the chevron island
+  raadiStartVectors(world.vectors);             // Narva mnt beside the Raadi rally start: its lanes, hatching and turn lane, the path's line
   aoverePaintVectors(world.vectors);            // the Haava junction: the hatched band, gore and wedge on road 3
   ulenurmePaintVectors(world.vectors);          // road 2 at the Lennu interchange: lines by the median rail, the hatched wedge and gore
   narvaPaintVectors(world.vectors);             // Narva mnt from Jaama to Peetri: a double solid centre line
@@ -709,7 +711,7 @@ async function boot() {
   trackKerbs = createTrackKerbs(world, scene);     // the 10 cm kerbs of the pavements along the lap (before any sector loads too)
   // the hand-placed props of the hand-made places (worked out once: the clear hook keeps lights and poles round them)
   let handPlaced = null;
-  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props(), ...kaluriProps(), ...ulikooliProps(), ...ulikooli2Props(), ...ulikooli3Props(), ...raadiParkProps()]);
+  const handExtras = () => (handPlaced ||= [...extraProps(), ...aksiProps(), ...pootsmaniProps(), ...kvissentaliProps(), ...mandelProps(), ...veskiEndProps(), ...coopProps(), ...jaaaegProps(), ...valliStreetProps(), ...keskusProps(), ...kroonuaiaProps(), ...baeriStreetProps(), ...pepleriProps(), ...kuuniProps(), ...arhitektiProps(), ...haridus10Props(), ...kaluriProps(), ...ulikooliProps(), ...ulikooli2Props(), ...ulikooli3Props(), ...raadiParkProps(), ...raadiStartProps()]);
   // where crowded lights and poles are not thinned: round hand-placed props, bus stops and hand-painted ground
   const keepOutCircles = (hand) => [
     ...hand.map(([, x, z]) => ({ x, z, r: 60 })),
@@ -720,7 +722,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of raadiStartClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   ulikooliSignSkip(world);                      // Werner's name is painted on its own front
@@ -819,6 +821,7 @@ async function boot() {
   road3 = createRoad3(scene, world);
   kaluri = createKaluri(scene, world, { shadows: !isTouch });
   raadiPark = createRaadiPark(scene, world, { lite: isTouch || !!xlow });   // the park's stones (its young trees: raadiParkTrees)
+  raadiStart = createRaadiStart(scene, world, { shadows: !isTouch });   // Narva mnt beside the rally start: islands, guard rail, the Tartu vald board
   isaJaPoeg = createIsaJaPoeg(scene, world, { shadows: !isTouch });   // the Isa ja poeg bronze at the first corner
   riia2 = createRiia2(scene, world, { shadows: !isTouch });
   riia3 = createRiia3(scene, world, { shadows: !isTouch });
@@ -2110,7 +2113,7 @@ function frame(ts) {
     // (the places build around the watched car while spectating: a copy, so nothing they do moves it)
     const placeCar = watch?.active ? Object.assign(spot, WF, { y: WV?.y ?? car.y }) : car;
     if (!jobs.resting) {
-      PLACES ||= [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
+      PLACES ||= [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];

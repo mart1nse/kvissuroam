@@ -1009,7 +1009,9 @@ async function boot() {
   });
   if (RAADI) world.gravelAt = stageGravel;          // (the stage's gravel eases into the grass beside it)
   if (RAADI) stage = createStage({
-    world, scene, toast: (t, ms) => hud.toast(t, ms), place: (pose) => place(pose), wood: (kind, level) => audio.wood?.(kind, level),
+    world, scene, toast: (t, ms) => hud.toast(t, ms),
+    // (on the line for a new run: R goes back only to spots of this run, never to one from before it further along the stage)
+    place: (pose) => { history.length = 0; place(pose); }, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
     // the lap times etc from now on"): the same queue, ticket and board, under the track 'raadi'
@@ -1469,10 +1471,14 @@ async function goLastSpot() {
       pick = pickFromHistory(world, history, opts);
     }
     if (pick?.wait) pick = null;
+    // (a Raadi run with no spot of its own left to go back to: the stage's start, not the nearest dry street,
+    // which may be further along the stage)
+    if (!pick && stage?.running) return stage.goStart();
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
     place(pick);
     race?.hopped(pick.x, pick.z);
+    stage?.reset(pick.t);                    // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
   }

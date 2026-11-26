@@ -55,7 +55,7 @@ export function dryLevel(world, p) {
 // Pick from the remembered poses (oldest first, newest last; { x, z, yaw, y, t }) the newest one that is
 // at least minAge seconds older than "ref", at least minDist metres from (sx, sz), and dry. Poses that are
 // too new or not dry are dropped from the list, so asking again goes further back.
-// Returns { x, z, yaw, y }, null, or { wait: pose } when the next pose to look at is in a part of the
+// Returns { x, z, yaw, y, t }, null, or { wait: pose } when the next pose to look at is in a part of the
 // map that is not loaded (load it and ask again).
 export function pickFromHistory(world, history, { ref, sx, sz, minAge = 3, minDist = 0 }) {
   for (let i = history.length - 1; i >= 0; i--) {
@@ -65,7 +65,7 @@ export function pickFromHistory(world, history, { ref, sx, sz, minAge = 3, minDi
     if (ref - h.t < minAge) continue;
     if (Math.hypot(h.x - sx, h.z - sz) < minDist) continue;
     const y = dryLevel(world, h);
-    if (y !== null) return { x: h.x, z: h.z, yaw: h.yaw, y };
+    if (y !== null) return { x: h.x, z: h.z, yaw: h.yaw, y, t: h.t };
   }
   return null;
 }

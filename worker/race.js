@@ -89,6 +89,10 @@ export class RaceDesk {
   }
   // in the race now (on the grid or driving it, not finished or out): keeps the place even from the garage
   racing(id) { return this.s.phase === 'on' && this.s.racers.some((r) => r.id === id && !r.out && r.ms == null); }
+  // A car with thrusters does not race (Martin 26 Nov: "do not allow the tesla to take part in races"): whoever
+  // sits in one is no driver or spectator here, so they are not in a vote's pool, cannot vote or join, and one
+  // who takes such a car before their lights is out of the list again (changed).
+  noRace(car) { return !!CARS[car]?.thrusters; }
   // everyone connected and driving (not a ghost), id -> attachment
   drivers() {
     const out = new Map();
@@ -96,7 +100,7 @@ export class RaceDesk {
       if (ws === this.skip) continue;
       const a = ws.deserializeAttachment();
       if (!this.live(ws, a)) continue;
-      if (a?.id && !a.ghost && a.drv) out.set(a.id, a);
+      if (a?.id && !a.ghost && a.drv && !this.noRace(a.car)) out.set(a.id, a);
     }
     return out;
   }
@@ -109,7 +113,7 @@ export class RaceDesk {
       if (ws === this.skip) continue;
       const a = ws.deserializeAttachment();
       if (!this.live(ws, a)) continue;
-      if (a?.id && !a.ghost && !a.drv && a.w === 'watch') out.set(a.id, a);
+      if (a?.id && !a.ghost && !a.drv && a.w === 'watch' && !this.noRace(a.car)) out.set(a.id, a);
     }
     return out;
   }
@@ -333,7 +337,7 @@ export class RaceDesk {
       case 'rj': {          // join or leave before the lights
         if (me.ghost || this.s.phase !== 'on') return true;
         const ph = this.phase(now), i = this.s.racers.findIndex((r) => r.id === me.id);
-        const room = i < 0 && this.s.racers.length < MAX_RACERS && (me.drv || me.w === 'watch');
+        const room = i < 0 && this.s.racers.length < MAX_RACERS && (me.drv || me.w === 'watch') && !this.noRace(me.car);
         if (m.on && ph === 'count' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car });
         // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
         // (g on the grid, go lights out: the race time is counted from go)
@@ -384,7 +388,10 @@ export class RaceDesk {
     r.name = me.name;
     // the car is the one raced in (Martin 2026-11-24: a winner shown in a bus they took after the finish): it
     // may change only until their lights go out; after that a car change is OUT for a racer still on the lap
-    if (Date.now() < (r.go || this.s.tGreen)) r.car = me.car;
+    const early = Date.now() < (r.go || this.s.tGreen);
+    if (early) r.car = me.car;
+    // (into a car that does not race: off the list before the lights, out of the race after them)
+    if (this.noRace(me.car)) { if (early) this.s.racers.splice(this.s.racers.indexOf(r), 1); else if (!r.out && r.ms == null) r.out = 'car'; this.check(Date.now()); }
     this.save(); this.send();
   }
   // a socket went away

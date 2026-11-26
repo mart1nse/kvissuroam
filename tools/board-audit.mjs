@@ -75,20 +75,25 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   const [, f, ms, n] = a;
   // (a stage time has its penalty seconds on top of the drive's own time)
   if (Math.abs(ms + (l.pen || 0) * 1000 - l.ms) > 2) { row.note = `the stored drive is of ${fmt(ms)}`; if (l.at > '2026-11-26') notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: the stored drive is another lap's (${fmt(ms)})`); continue; }
-  const xs = new Float64Array(n), zs = new Float64Array(n), ys = new Float64Array(n);
-  let x = 0, z = 0, y = 0;
-  for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; }
+  const xs = new Float64Array(n), zs = new Float64Array(n), ys = new Float64Array(n), roll = new Float64Array(n);
+  let x = 0, z = 0, y = 0, ro = 0;
+  for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; ro += a[9 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; roll[i] = ro / 1000; }
+  if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
+  const lim = limits.get(l.car), where = {};
   if (l.track === 'raadi') {
-    row.stage = stageCheck(xs, zs, l.pen || 0);
+    // (a car with thrusters leaves the start line harder than the others)
+    row.stage = stageCheck(xs, zs, l.pen || 0, lim?.gas?.launch, where);
     if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
   }
-  if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
-  const lim = limits.get(l.car);
-  if (!lim) { row.note = 'not judged (thrusters)'; continue; }
-  const j = judgeDrive(xs, zs, ys, lim);
+  if (!lim) { row.note = 'not judged'; continue; }
+  const j = judgeDrive(xs, zs, ys, lim, { roll, loose: where.loose });   // (a stage run's gravel against gravel's grip)
   row.over = { pull: j.pull, grip: j.grip, stop: j.stop, top: j.top };
+  // (a car with thrusters, the Rocket: the gas its drive used over what the tank held, of a full tank, the tanks it
+  // was counted to use in all, and the seconds of a kickflip in it)
+  const gas = lim.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used, ${j.air} s of a kickflip` : '';
+  if (lim.gas) Object.assign(row.over, { gas: j.gas, spent: j.spent, air: j.air });
   const worst = Math.max(j.pull, j.grip, j.stop, j.top);
-  if (j.why) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE DRIVE DOES NOT HOLD for this car (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`);
+  if (j.why) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE DRIVE DOES NOT HOLD for this car (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${gas})`);
   else if (worst > CLOSE) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: near a limit (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}; refused past ${OVER_MAX})`);
 }
 
@@ -149,7 +154,11 @@ if (mg?.kinds) {
   const c = mg.kinds.clock, f = mg.kinds.fin, g = mg.kinds.gaps, rc = mg.kinds.rcar, cr = mg.kinds.car;
   if (c?.n) {
     room.push(`lap clock: ${c.n} laps, the server's clock against the lap time from ${s1(c.min)} to ${s1(c.max)} s (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)}); leeway ${s1(c.lo)} to ${s1(c.hi)} s, ${c.out} outside`);
-    if (c.p99 > 0.6 * c.hi || c.p1 < 0.6 * c.lo) notes.push(`the lap clock's leeway is nearly used by ordinary laps (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)} s of ${s1(c.lo)} to ${s1(c.hi)})`);
+    // (a page that runs under 20 frames a second reads 2 s over by design: its clock may lose that much to slow
+    // frames, SLOW_FREE in src/race/race.js. The first 17 laps of 26 Nov: half within 0.03 s, one at +2.02 s. What
+    // is watched is the rest of the leeway, the marks' way to the server.)
+    const SLOW = 2000;
+    if (c.p99 > SLOW + 0.6 * (c.hi - SLOW) || c.p1 < 0.6 * c.lo) notes.push(`the lap clock's leeway is nearly used by ordinary laps (98 in 100 within ${s1(c.p1)} to ${s1(c.p99)} s of ${s1(c.lo)} to ${s1(c.hi)})`);
   }
   if (f?.n) {
     room.push(`race finishes: ${f.n}, the racer's own time ${s1(f.p1)} to ${s1(f.p99)} s before the server saw the car over the line, at most ${s1(f.max)} (leeway ${s1(f.hi)} s, ${f.out} beyond it and counted from the server's sighting)${g?.n ? `; gaps in positions at most ${g.max} of ${g.hi}` : ''}${rc?.n ? `; car check at most ${rc.max} s over, of ${rc.hi}` : ''}`);
@@ -157,6 +166,13 @@ if (mg?.kinds) {
     if (g?.n && g.max >= g.hi) notes.push(`a racer used all ${g.hi} gaps in positions a race allows`);
   }
   if (cr?.n) room.push(`record drives sent: ${cr.n}, at most ${cr.max} s over a limit, of ${cr.hi}`);
+  // (a record's drive against where the server saw the car while the lap was driven: worker/livecheck.js)
+  const lv = mg.kinds.live;
+  if (lv?.n) {
+    const pc = (v) => Math.round(v * 100);
+    room.push(`record drives against where the car was seen: ${lv.n}, at most ${pc(lv.max)} in 100 of the places off the drive (leeway ${pc(lv.hi)}), ${lv.out} beyond it`);
+    if (lv.p50 > 0.6 * lv.hi) notes.push(`half the record drives sent have over ${pc(0.6 * lv.hi)} in 100 of the places the car was seen at off the drive (leeway ${pc(lv.hi)}): the check is too tight or the places come late`);
+  }
 }
 
 out.notes = notes;

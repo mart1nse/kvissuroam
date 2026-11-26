@@ -21,7 +21,7 @@ const hash = (seed, id) => {
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OUT_TEXT = { off: 'off track', cut: 'short cut', jump: 'reset', car: 'car change', start: 'START', map: 'map drop', left: 'left', time: 'out of time', quit: 'retired', ref: 'not counted' };
 
-export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, onWatch = null, watching = () => null }) {
+export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, isDriving, halo, busy = () => false, unbusy, noRace = () => false, staged = () => false, onWatch = null, watching = () => null }) {
   const { P, N, s: S, length: LEN } = track;
   // the grid: Küüni carries on straight behind the corner into the start straight, so the line is on
   // that line, ~95 m before the start/finish (Martin's green line, 21 Nov), cars facing up it
@@ -107,6 +107,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   function act() {
     if (!r || !mp.online || mp.stealth) return;
     const mine = me(), ph = phaseFor(mine);
+    // (in a car that does not race, noRace: the server would not take the vote or the join; say why)
+    if (noRace() && !mine) { toast('THIS CAR DOES NOT RACE · TAKE ANOTHER TO JOIN', 3000); return; }
     const voteOpen = r.vote.kind !== 'none';
     // on a Raadi stage run (Martin, 2026-11-23): left out of the vote, the button only joins a race that is starting
     if (busy()) {
@@ -176,7 +178,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   }, true);
   count.addEventListener('click', (e) => {
     const k = e.target.closest('[data-r]')?.dataset.r;
-    if (k === 'join') { if (!me()) mp.raceSend({ t: 'rj', on: 1 }); }
+    if (k === 'join') { if (!me() && !noRace()) mp.raceSend({ t: 'rj', on: 1 }); }
     else if (k === 'no') { if (me()) mp.raceSend({ t: 'rj', on: 0 }); dismissed = r?.id || 0; }
   });
 
@@ -298,7 +300,9 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (ph === 'race' && !isTouch) line += ' · RACE STILL ON';
       // drivers on the map the server does not count: a page from before race mode (it cannot vote
       // until it is reloaded)
-      const old = mp.drivers().length + (mp.counted ? 1 : 0) - v.of;
+      // (nor one in a car that does not race: that is no old page)
+      // (nor one on a stage run: the server leaves them out of the vote, and every such player read as an old page)
+      const old = mp.drivers().filter((d) => !cars[d.car]?.thrusters && !staged(d.id)).length + (mp.counted && !noRace() ? 1 : 0) - v.of;
       if (old > 0) line += isTouch ? ` · ${old} OLD PAGE${old > 1 ? 'S' : ''}` : ` · ${old} ON AN OLD PAGE`;
     } else {
       label = 'RACE ON'; cls = 'dim';
@@ -321,6 +325,13 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         : `<b>${n} / ${v.need}</b> VOTES`;
       line += isTouch ? '' : ' · NOT IN THE VOTE';
     }
+    // a car that does not race (one with thrusters, Martin 26 Nov): the same, and the button says so
+    const barred = noRace() && !mine && !mp.stealth;
+    if (barred) {
+      label = 'NO RACING'; cls = 'dim';
+      line = (ph === 'count' || ph === 'grid' ? `${r.racers.length} ON THE GRID` : ph === 'race' ? `${r.racers.filter(active).length} RACING · ${clock(t - r.tGreen)} / 7:00`
+        : `<b>${n} / ${v.need}</b> VOTES`) + (isTouch ? '' : ' · THIS CAR DOES NOT RACE');
+    }
     const lab = isTouch ? label.replace(' ', '<br>') : label;
     if (btn._h !== lab + cls) { btn._h = lab + cls; btn.innerHTML = `<span>${lab}</span>`; btn.className = cls; }
     btn.classList.toggle('away', away);
@@ -328,7 +339,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     const subLine = away && !joinable(ph) ? '' : line;
 
     // TO RACE START (the countdown)
-    const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth && !(busy() && !mine);
+    const cnt = ph === 'count' && dismissed !== r.id && !mp.stealth && !(busy() && !mine) && !barred;
     show(count, cnt);
     if (cnt) {
       setText(count.querySelector('.t2'), String(Math.max(1, Math.ceil((r.tGrid - t) / 1000))));
@@ -441,7 +452,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (active(mm) && (sentRf || sentRd)?.id === r.id) mp.raceSend(sentRf || sentRd);
       // someone started a vote: tell the others
       const v = r.vote, n = v?.ids?.length || 0;
-      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count' && !mp.stealth && !busy()) {
+      if (v && v.kind !== 'none' && n > prevN && !v.ids.includes(mp.id) && phaseOf() !== 'count' && !mp.stealth && !busy() && !noRace()) {
         const who = mp.nameOf(v.ids[v.ids.length - 1]);
         if (who && prevN === 0) { toast(`${who.toUpperCase()} WANTS TO ${v.kind === 'restart' ? 'RESTART' : 'RACE'} · ${isTouch ? 'TAP' : 'PRESS 1'}`, 4000); chime?.('join'); }
       }
@@ -452,6 +463,8 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       render();
     },
     act,
+    // (the race as the server last told it: the tests read it)
+    view: () => r,
     // racing: other cars pass through ours (and ours through theirs)
     get ghost() { const m = me(), ph = phaseFor(m); return !!m && active(m) && (ph === 'grid' || ph === 'race'); },
     // another player who is in the race, from the grid until they finish or drop out: nobody bumps them
@@ -479,7 +492,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       if (!v || v.kind === 'none' || !v.ids?.length) return null;
       const ids = new Set(v.ids);
       const can = v.kind === 'restart' ? (id) => !!r.racers.find((x) => x.id === id && !x.out) : () => true;
-      return { kind: v.kind, key: `${v.kind}:${v.ids.join(',')}`, has: (id) => ids.has(id), can: (id) => can(id) && !(id === mp.id && mp.stealth) };
+      return { kind: v.kind, key: `${v.kind}:${v.ids.join(',')}`, has: (id) => ids.has(id), can: (id) => can(id) && !(id === mp.id && (mp.stealth || noRace())) };
     },
     // our lap timer finished a lap
     // a lap was completed (race.js); info.rec: it is a lap record for the car, info.prev: the best it beat

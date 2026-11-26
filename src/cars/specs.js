@@ -525,7 +525,7 @@ export const CARS = {
     tag: 'Rocket',
     year: 2028,
     blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
-    mass: 2200,                 // estimate, with driver and both gas tanks full (Martin 25 Nov: 250 kg more, "some data predicts it being higher"; it was 1950)
+    mass: 2100,                 // estimate, with driver and both gas tanks full (Martin 25 Nov: 250 kg on the first 1950, "some data predicts it being higher"; 26 Nov: "reduce tesla weight again, by 100kg")
     wheelbase: 2.65,
     track: 1.64,
     cgFront: 0.52,
@@ -542,7 +542,8 @@ export const CARS = {
     // figure, which also made the car brake and corner harder than before. Martin 26 Nov: the weight was meant "to
     // reduce the insane acceleration, braking and cornering power", so the fans are 12 kN again and the weight
     // counts: 0-100 in 1.72 s, 22 m from 100, about 1.87 g in a bend. squat: the body ducks and dives this much of
-    // what other cars' do; 0.5 until then, "ducks and dives also quite a bit")
+    // what other cars' do; 0.5 until then, "ducks and dives also quite a bit". At the 2100 kg of later that day:
+    // 1.67 s, 21.5 m, 1.9 g)
     fanDown: 12000, squat: 0.3,
     // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
     // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
@@ -561,9 +562,12 @@ export const CARS = {
     finalDrive: 1.0,
     efficiency: 0.93,
     shiftTime: 0,
-    limiter: 340,               // "over 210 mph" on the motors; BOOST takes it on to about 400
+    // Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg said
+    // nowhere (it was 340 on the motors, with BOOST on to about 370). The motors' push meets the air's about 1.1
+    // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
+    limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 1.6, top: 340, powerKw: 1000 },
+    ref: { zeroTo100: 1.6, top: 389, powerKw: 1000 },
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

@@ -16,7 +16,7 @@ import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
 import { carLimits, carLimitsSteps, judgeDrive, STEP, OVER_MAX } from '../src/race/plausible.js';
 
-const show = (j) => `pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}`;
+const show = (j) => `pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}${j.spent || j.gas ? ` gas ${j.gas}` : ''}`;
 
 // ---- 1) real drives
 const dir = new URL('./fixtures/replays/', import.meta.url);
@@ -69,7 +69,6 @@ const copy = (spec, change) => { const s = structuredClone(spec); change(s); ret
 let worst = 0;
 for (const spec of Object.values(CARS)) {
   const lim = carLimits(spec);
-  if (!lim) { console.log(`${spec.id.padEnd(8)} not judged (thrusters)`); continue; }
   for (const tyres of ['road', 'gravel']) {
     for (const [name, plan, world] of [['hard', PLAN], ['wall', CRASH], ['hills', HILLS, hills]]) {
       const j = judgeDrive(...drive(spec, tyres, plan, world), lim);
@@ -80,7 +79,8 @@ for (const spec of Object.values(CARS)) {
   }
   // grip as suction fans give it, the car's own weight again pressing on the tyres: bends and stops at 2 g, and
   // the keyboard's steering follows it (the tuned record of 26 Nov read 2 to 2.3 g in both)
-  const sticky = copy(spec, (s) => { s.fanDown = (s.fanDown || 0) + s.mass * 9.81; });
+  // (a car that has fans already, the Rocket: twice the weight on its tyres that it has with them)
+  const sticky = copy(spec, (s) => { s.fanDown = 2 * (s.fanDown || 0) + s.mass * 9.81; });
   // and with that grip twice the engine or the motors (alone it only spins the wheels of the strong cars)
   const strong = copy(sticky, (s) => {
     for (const e of [s.engine, s.engine.turbo]) for (const k of ['torque', 'torqueOff']) if (e?.[k]) e[k] = e[k].map(([r, t]) => [r, t * 2]);
@@ -88,8 +88,40 @@ for (const spec of Object.values(CARS)) {
   });
   const a = judgeDrive(...drive(strong, 'road', PLAN), lim), b = judgeDrive(...drive(sticky, 'road', PLAN), lim);
   console.log(`${spec.id.padEnd(8)} honest ok | twice the pull: ${show(a)} | twice the grip: ${show(b)}`);
-  assert.ok(a.pull > OVER_MAX, `${spec.id} with twice the pull must be refused for it (${show(a)})`);
-  assert.ok(b.grip > OVER_MAX, `${spec.id} with twice the grip must be refused for it (${show(b)})`);
+  // (a car with thrusters, the Rocket: what its motors do not explain is counted as gas, which a tank holds a
+  // minute's worth of: twice the motors on this short drive is no more than its BOOST gives it. Its own drives with
+  // BOOST and its own cheats, twice the motors round and round among them, are in tools/rocket-judge-test.mjs)
+  if (!lim.gas) assert.ok(a.pull > OVER_MAX, `${spec.id} with twice the pull must be refused for it (${show(a)})`);
+  // (the Rocket at full lock on the keyboard turns no harder with twice the grip than its limit allows, the car at its
+  // lightest and a third over: that drive is refused for its stops, 2.9 g of them; three times the grip shows in
+  // the bends too, tools/rocket-judge-test.mjs)
+  if (lim.gas) assert.ok(b.why, `${spec.id} with twice the grip must be refused (${show(b)})`);
+  else assert.ok(b.grip > OVER_MAX, `${spec.id} with twice the grip must be refused for it (${show(b)})`);
+}
+// 4) on gravel (a Raadi run past its tarmac start: judged against gravel's grip, k.loose): every car honest on
+// both kinds of tyre, and twice the grip on gravel tyres refused there far more often than the tarmac limits did
+// (26 Nov: 11 of 13 cars against 5; the 190E and the bus at full lock on the keyboard do not use it)
+{
+  const gravel = { ...road, surfaceAt: () => 2, gravelAt: () => 1 }, STICKY = 2;
+  let worstG = 0, caught = 0, before = 0, n = 0;
+  for (const spec of Object.values(CARS)) {
+    const lim = carLimits(spec);
+    if (lim.gas) continue;                           // (the Rocket: its gas, tools/rocket-judge-test.mjs)
+    for (const tyres of ['road', 'gravel']) {
+      const d = drive(spec, tyres, PLAN, gravel), loose = new Uint8Array(d[0].length).fill(1);
+      const j = judgeDrive(...d, lim, { loose });
+      worstG = Math.max(worstG, j.pull, j.grip, j.stop, j.top);
+      assert.equal(j.why, '', `${spec.id} on ${tyres} tyres on gravel: an honest drive refused (${show(j)})`);
+    }
+    const sticky = copy(spec, (s) => { s.fanDown = (s.fanDown || 0) + (STICKY - 1) * s.mass * 9.81; });
+    const d = drive(sticky, 'gravel', PLAN, gravel), loose = new Uint8Array(d[0].length).fill(1);
+    const g = judgeDrive(...d, lim, { loose }), t = judgeDrive(...d, lim);
+    n++; if (g.why) caught++; if (t.why) before++;
+    console.log(`${spec.id.padEnd(8)} on gravel: honest ok | twice the grip: gravel limits ${show(g)}${g.why ? ' REFUSED' : ''} | tarmac limits ${show(t)}${t.why ? ' REFUSED' : ''}`);
+  }
+  console.log(`on gravel: honest drives at most ${worstG} s over; twice the grip refused ${caught} of ${n} (with the tarmac limits ${before})`);
+  assert.ok(worstG <= 1, `an honest drive on gravel reads ${worstG} s over`);
+  assert.ok(caught >= 10 && caught > before, `twice the grip on gravel must be refused for most cars (${caught} of ${n})`);
 }
 // a fast car's drive under a slow car's name
 for (const [drove, said] of [['f40', 'audi200'], ['cgt', 'm3'], ['impreza', 'passat'], ['m3', 'bus']]) {

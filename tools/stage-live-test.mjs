@@ -69,6 +69,8 @@ const out = {
   board: (await (await fetch(`${base}/api/board`)).json()).raadi?.allTime?.find((r) => r.car === CAR) || null,
   replay: (await fetch(`${base}/api/replay?track=raadi&car=${CAR}`)).status,
   refused: await (await fetch(`${base}/api/replay?refused=1`)).json().catch(() => null),
+  // (where the server saw the car during the run, against its drive: worker/livecheck.js)
+  live: (await (await fetch(`${base}/api/margins`)).json().catch(() => null))?.kinds?.live || null,
 };
 console.log(JSON.stringify(out, null, 1));
 const bad = [];
@@ -76,6 +78,7 @@ if (!out.run || Math.abs(out.run.ms - want) > 300 || out.run.pen) bad.push(`the 
 if (!out.board || out.board.ms !== out.run?.ms) bad.push('not on the board');
 if (out.replay !== 200) bad.push(`its drive is not stored (${out.replay})`);
 if (out.refused?.length) bad.push('something was refused');
+if (!out.live?.n || out.live.max > 0.05) bad.push(`the run was not seen driven as its drive says: ${JSON.stringify(out.live)}`);
 if (errs.length) bad.push('page errors');
 console.log(bad.length ? `FAIL ${bad.join('; ')}` : 'ok: a stage run by a real page is on the board, its drive judged and stored');
 await b.close(); stop();

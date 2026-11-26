@@ -29,12 +29,14 @@ const raadi = stagePath();
 // the small marks used beside a lap in the lists (as big as the controller marks)
 export const TRACK_ICON = {
   toome: `<svg class="trk" viewBox="0 0 ${toome.w} ${toome.h}" role="img" aria-label="TOOMEMÄGI"><title>TOOMEMÄGI</title><path d="${toome.d}"/></svg>`,
-  raadi: `<svg class="trk rd" viewBox="0 0 ${raadi.w} ${raadi.h}" role="img" aria-label="RAADI"><title>RAADI</title><path d="${raadi.d}"/></svg>`,
+  raadi: `<svg class="trk rd" viewBox="0 0 ${raadi.w} ${raadi.h}" role="img" aria-label="MAJORAADI"><title>MAJORAADI</title><path d="${raadi.d}"/></svg>`,
 };
 
+// (The stage is MAJORAADI to the players since 26 Nov 2026, Martin: "rename raadi to majoraadi all across (except the
+// flag to test it)". Its id, the server's track name, saved times and the ?raadi=1 / ?track=raadi links stay 'raadi'.)
 export const TRACKS = [
   { id: 'toome', name: 'TOOMEMÄGI', km: (TRACK.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'OLD TOWN · START ON KÜÜNI', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: toome, loop: true, secs: 7 },
-  { id: 'raadi', name: 'RAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi, secs: 5 },
+  { id: 'raadi', name: 'MAJORAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi, secs: 5 },
 ];
 
 // A fresh page always opens with Toomemägi picked (Martin 23 Nov: the last pick is not remembered); a link
@@ -81,5 +83,8 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) 
     onPick?.(picked);
   });
   render();
-  return { get picked() { return picked; }, render, el };
+  // (the garage opens on the track the car is at, Martin 26 Nov: the TOOMEMÄGI button or H, then the garage and
+  // DRIVE, took the car back to Raadi because the picker still said Raadi. Not a pick: no tyres change.)
+  function follow(id) { if (id !== picked) { picked = id; render(); } }
+  return { get picked() { return picked; }, follow, render, el };
 }

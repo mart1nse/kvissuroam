@@ -43,8 +43,15 @@ const BURN_A = 2.3 * G;            // the landing burn slows the fall by this mu
 // ...but not all the way down (Martin 26 Nov: "extend out the last 3m to take more time ... And the last meter even
 // more slower as it tries to soften the impact"): the burn ends DOWN_H3 over the ground at DOWN_V3, the car is let
 // down from there to DOWN_H1 at an easing speed, and over the last metre slower still
-const DOWN_H3 = 3, DOWN_V3 = 4.5;  // m over the ground, m/s down there
-const DOWN_H1 = 1, DOWN_V1 = 1.9;
+// (26 Nov later: "make the transition into the last part just a touch later, so it falls a bit lower on the
+// quicker drop speed and then the catch takes effect a bit later": 2.4 m and 0.85 m, were 3 and 1)
+const DOWN_H3 = 2.4, DOWN_V3 = 4.5;  // m over the ground, m/s down there
+const DOWN_H1 = 0.85, DOWN_V1 = 1.8;
+// All of that is measured against the ground's own line, which falls away under a flight downhill. A car that is
+// not yet falling DOWN_V3_MIN faster than that line (just over the top, above a street going down) falls freely
+// until it is, and only then is let down. (Until 26 Nov the let-down began at whatever small speed it had, as slow
+// as SINK: three metres at 0.3 m/s, a flight of 12 s. Martin: "it stayed up in the air for a very long time".)
+const DOWN_V3_MIN = 2.6;
 const SINK = 0.3;                  // the speed the wheels meet the ground at, which the springs take (m/s)
 const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (s)...
 const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
@@ -170,8 +177,9 @@ function landing(p) {
   rise(p, p.tb, tmpY);
   const s = p.vland + SINK, T = p.tl - p.tb;
   const rb = tmpY[0] - (p.yl - s * T), vb = tmpY[1] - s;
-  const v3 = Math.min(-SINK, Math.max(-DOWN_V3, vb)), v1 = Math.max(-DOWN_V1, v3);
-  const T1 = Math.max(0, (v3 - vb) / BURN_A), h3 = rb + 0.5 * (vb + v3) * T1, h1 = Math.min(DOWN_H1, h3 / 3);
+  const v3 = Math.min(-DOWN_V3_MIN, Math.max(-DOWN_V3, vb)), v1 = -DOWN_V1;
+  // (T1: the burn that slows the fall to v3, or the free fall that brings it up to v3)
+  const T1 = vb < v3 ? (v3 - vb) / BURN_A : (vb - v3) / G, h3 = rb + 0.5 * (vb + v3) * T1, h1 = Math.min(DOWN_H1, h3 * 0.4);
   L = { s, T, rb, vb, v3, v1, h3, h1, T1, T2: 0, T3: 0, one: true };
   if (h3 > 0.3 && T - T1 > 0.1) {
     const t2 = (h3 - h1) / ((-v3 - v1) / 2), t3 = h1 / ((-v1 + SINK) / 2), k = (T - T1) / (t2 + t3);
@@ -476,8 +484,8 @@ export function planFlip(car, world, side = 1) {
     const yb = tmpY[0], vb = tmpY[1];
     let slope = 0;
     for (let it = 0; it < 3; it++) {
-      const rv = vb - slope, v3 = Math.min(-SINK, Math.max(-DOWN_V3, rv)), v1 = Math.max(-DOWN_V1, v3);
-      const T1 = Math.max(0, (v3 - rv) / BURN_A);
+      const rv = vb - slope, v3 = Math.min(-DOWN_V3_MIN, Math.max(-DOWN_V3, rv)), v1 = -DOWN_V1;
+      const T1 = rv < v3 ? (v3 - rv) / BURN_A : (rv - v3) / G;
       const T = T1 + (DOWN_H3 - DOWN_H1) / ((-v3 - v1) / 2) + DOWN_H1 / ((-v1 + SINK) / 2);
       tl = tb + T;
       yEnd = yb + 0.5 * (rv + v3) * T1 - DOWN_H3 + slope * T;

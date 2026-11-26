@@ -17,9 +17,15 @@ const INP = {
 const tyreMark = (k) => `<i class="tymark ${k}" title="${k === 'gravel' ? 'Gravel' : 'Road'} tyres">${tyreIcon(k)}</i>`;
 const inpIcon = (k) => { const [name, d] = INP[k] || INP.kb; return `<svg class="inp" viewBox="0 0 24 20" role="img" aria-label="${name}"><title>${name}</title>${d}</svg>`; };
 
+// a place as the board says it: 1ST, 2ND, 3RD, 4TH ... 11TH, 12TH, 13TH ... 21ST
+const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH'}`;
+const TOP_SHOW = 5;              // the lines an opened car shows (worker/tops.js)
+const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5L7 5 3 8.5"/></svg>';
+
 // stage: the Raadi rally stage (?raadi=1): then a track picker in place of the outline, and both circuits' times
 // onWatch(track, car): watch a record's replay (desktop; none on phones)
-export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null }) {
+// carNow(): the car picked in the garage, whose row is open when the board opens
+export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
 
@@ -147,12 +153,61 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
 
   // Your own best in each car, beside the records (Martin, 23 Nov 2026: when others were faster his times
   // were nowhere on the board). From this browser's laps, with the day it was set.
+  // (Martin 26 Nov: and the place it has among the car's drivers, one line a driver, as the server counts it for
+  // this very time; filled in the top five)
   function own(list, id, ic, track = 'toomemagi') {
     const r = list.reduce((m, l) => (l.car === id && (!m || l.ms < m.ms) ? l : m), null);
     if (!r) return '<small class="none">–</small>';
     const d = r.at ? new Date(r.at).toLocaleDateString([], { day: 'numeric', month: 'short' }) : '';
-    return `${ic(r)}${time(track, r)}${d ? `<small class="date">${d}</small>` : ''}`;
+    const pl = top?.[track]?.place?.[id], n = top?.[track]?.top?.[id]?.n;
+    const pill = pl && pl[1] === r.ms ? `<em class="pl${pl[0] <= TOP_SHOW ? ' top' : ''}" title="${ordinal(pl[0])} of ${Math.max(n || 0, pl[0])} drivers in this car">${ordinal(pl[0])}</em>` : '';
+    return `${ic(r)}${time(track, r)}${pill}${d ? `<small class="date">${d}</small>` : ''}`;
   }
+
+  // ---- The five best per car (Martin 26 Nov 2026): a car's row opens to show its five fastest drivers of all time
+  // and of today, one line a driver with their best (from the server: worker/tops.js). The car picked in the garage
+  // opens when the board does; a click on any row opens or closes it (a click on a time with a replay plays it),
+  // each on its own, and they stay as left while the page is open.
+  const opened = new Set();
+  let top = null, topBusy = false, topAgain = false, topAt = -1e9, topTimer = 0;
+  // own best per car as the server is asked about it: car.ms,car.ms
+  const bests = (list) => {
+    const m = new Map();
+    for (const l of list) if (Number.isInteger(l.ms) && (!m.has(l.car) || l.ms < m.get(l.car))) m.set(l.car, l.ms);
+    return [...m].map(([c, ms]) => `${c}.${ms}`).join(',');
+  };
+  function loadTop() {
+    if (topBusy) { topAgain = true; return; }
+    topBusy = true; topAt = performance.now();
+    const q = new URLSearchParams({ me: mp.name || '', toomemagi: bests(race.laps) });
+    if (stage) q.set('raadi', bests(stage.runs.filter((r) => r.inp)));
+    fetch(`/api/top?${q}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.toomemagi) { top = j; render(); } }).catch(() => {})
+      .finally(() => { topBusy = false; if (topAgain) { topAgain = false; topSoon(); } });
+  }
+  // (new laps while the board is open: asked again, at most every 3 s)
+  function topSoon() {
+    if (panel.classList.contains('hidden') || topTimer) return;
+    const wait = Math.max(0, 3000 - (performance.now() - topAt));
+    topTimer = setTimeout(() => { topTimer = 0; if (!panel.classList.contains('hidden')) loadTop(); }, wait);
+  }
+
+  // one car's rows on one circuit: its own line (the best ever, today's best and your best), then up to four more of
+  // each list under it, hung between the car's name and YOUR BEST (style.css)
+  // ever, today: the car's drivers fastest first (just the best when the server's lists are not here)
+  function carRows(id, track, ever, today, mine, cell) {
+    const n = Math.min(TOP_SHOW, Math.max(1, ever.length, today.length));
+    const open = n > 1 && opened.has(id);
+    let h = `<tbody class="car${open ? ' open' : ''}${n === 1 ? ' nomore' : ''}${id === carNow() ? ' cur' : ''}" data-car="${id}"><tr class="main"><th>${CHEV}${escapeHtml(cars[id].short)}</th><td class="rk0"></td><td class="ev">${cell(ever[0], true, track)}</td><td class="td">${cell(today[0], false, track)}</td><td class="you">${mine}</td></tr>`;
+    for (let i = 1; i < n; i++) {
+      const a = ever[i], t = today[i];
+      h += `<tr class="more${i === 1 ? ' first' : ''}${i === n - 1 ? ' last' : ''}"><td class="side"></td><td class="rk">${a || t ? i + 1 : ''}</td><td class="dw">${a ? cell(a, true, track) : '&nbsp;'}</td><td class="dw">${t ? cell(t, false, track) : '&nbsp;'}</td><td class="side"></td></tr>`;
+    }
+    if (n > 1) h += '<tr class="gap"><td colspan="5"></td></tr>';
+    return `${h}</tbody>`;
+  }
+  // a circuit's lists for a car from the server (with the car in each line, for its replay)
+  const topList = (track, id, which, fix = (r) => r) => (top?.[track]?.top?.[id]?.[which] || []).map((r) => fix({ ...r, car: id }));
 
   // A record lap whose replay the server keeps (src/race/replay.js) can be watched by clicking its time (Martin,
   // 2026-11-24: no underline or button, something people find as they click around): wherever that time shows.
@@ -173,8 +228,12 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     const ty = (r) => (r?.track === 'raadi' ? r.ty === 'road' : r?.ty === 'gravel') ? tyreMark(r.ty) : '';
     const ic = (r) => (kinds.size > 1 ? inpIcon(r?.inp || 'kb') : '') + ty(r);
     // (the best ever also says the day the record was set)
-    const cell = (r, dated, track = 'toomemagi') => (r ? `${ic(r)}${time(track, r)}<small>${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
-    const rows = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td><td class="you">${own(race.laps, id, ic)}</td></tr>`).join('');
+    // (your own name in the lists in cyan)
+    const meName = (mp.name || '').toLowerCase();
+    const cell = (r, dated, track = 'toomemagi') => (r ? `${ic(r)}${time(track, r)}<small class="nm${r.name && r.name.toLowerCase() === meName ? ' me' : ''}">${escapeHtml(r.name)}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
+    // (the server's five a car once they are here; till then the board's one)
+    const both = (track, id, ever1, today1, fix) => (top?.[track] ? [topList(track, id, 'all', fix), topList(track, id, 'today', fix)] : [ever1 ? [ever1] : [], today1 ? [today1] : []]);
+    const rows = order.map((id) => { const [e, t] = both('toomemagi', id, pick(b?.allTime, id), pick(b?.today, id)); return carRows(id, 'toomemagi', e, t, own(race.laps, id, ic), cell); }).join('');
     const todayBest = (b?.today || []).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const when = (at) => new Date(at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const mine = race.laps.slice(-5).reverse()
@@ -182,12 +241,12 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     // latest laps by anyone (20 on desktop, the 5 newest on phones: style.css)
     const recent = (b?.recent || []).slice(0, 20)
       .map((l) => `<li>${ic(l)}${time('toomemagi', l)} <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
-    if (stage) { renderBoth({ b, pick, day, ic, cell, when }); return; }
+    if (stage) { renderBoth({ b, pick, day, ic, cell, when, both }); return; }
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
       ${todayBest ? `<p class="today">FASTEST TODAY ${ic(todayBest)}${time('toomemagi', todayBest)} ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
-      <div class="tablelaps"><table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="tablelaps"><table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}</div>
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
@@ -195,7 +254,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   // Toomemägi and Raadi side by side (Martin, 23 Nov 2026), and one list of the latest laps on both, each
   // with the circuit's small outline. Raadi's times come from the server like Toomemägi's (its part of the
   // board, `raadi`); while the server cannot be reached the table shows this browser's own runs.
-  function renderBoth({ b, pick, day, ic, cell, when }) {
+  function renderBoth({ b, pick, day, ic, cell, when, both }) {
     const me = mp.name, R0 = b?.raadi;
     const runs = stage.runs.map((r) => ({ ...r, name: me, track: 'raadi' }));
     // (the server keeps the tyres as gravel or nothing: nothing is road tyres there)
@@ -204,11 +263,15 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     const bestOf = (list, id) => list.filter((r) => r.car === id).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
     const kept = runs.filter((r) => r.inp);                      // (the ones that count: see best() in raadi.js)
     const everR = R0 ? net(R0.allTime) : kept, todayR = R0 ? net(R0.today) : kept.filter((r) => new Date(r.at).toDateString() === today);
-    const rowsT = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(pick(b?.allTime, id), true)}</td><td>${cell(pick(b?.today, id))}</td><td class="you">${own(race.laps, id, ic)}</td></tr>`).join('');
-    const rowsR = order.map((id) => `<tr><th>${escapeHtml(cars[id].short)}</th><td>${cell(bestOf(everR, id), true, 'raadi')}</td><td>${cell(bestOf(todayR, id), false, 'raadi')}</td><td class="you">${own(kept, id, ic, 'raadi')}</td></tr>`).join('');
+    const rowsT = order.map((id) => { const [e, t] = both('toomemagi', id, pick(b?.allTime, id), pick(b?.today, id)); return carRows(id, 'toomemagi', e, t, own(race.laps, id, ic), cell); }).join('');
+    // (the server's lists of the stage only while it can be reached: offline the table is this browser's own runs)
+    const rowsR = order.map((id) => {
+      const [e, t] = R0 && top?.raadi ? both('raadi', id, null, null, (r) => net([r])[0]) : [[bestOf(everR, id)].filter(Boolean), [bestOf(todayR, id)].filter(Boolean)];
+      return carRows(id, 'raadi', e, t, own(kept, id, ic, 'raadi'), cell);
+    }).join('');
     const [T, R] = TRACKS;
     const head = (t, sub) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small></h3>`;
-    const table = (rows) => `<table><thead><tr><th>CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const table = (rows) => `<table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>`;
     const tag = (l) => TRACK_ICON[l.track || 'toome'];
     const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
       .map((l) => `<li>${tag(l)}${ic(l)}${time(srv(l.track), l)} ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
@@ -222,9 +285,11 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   }
 
   function show() {
+    opened.add(carNow());
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
+    loadTop();
   }
   btn.addEventListener('click', show);
   const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
@@ -244,9 +309,15 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden');
     const rp = e.target.closest('[data-rp]');
-    if (rp) { const [track, car] = rp.dataset.rp.split('|'); onWatch(track, car); }
+    if (rp) { const [track, car] = rp.dataset.rp.split('|'); onWatch(track, car); return; }
+    // a car's row opens or closes, in both circuits' tables at once
+    const g = e.target.closest('tr.main')?.parentNode;
+    if (!g?.dataset.car) return;
+    const id = g.dataset.car;
+    if (opened.has(id)) opened.delete(id); else opened.add(id);
+    for (const t of panel.querySelectorAll(`tbody[data-car="${id}"]`)) t.classList.toggle('open', opened.has(id) && !t.classList.contains('nomore'));
   });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 
-  return { render: () => { render(); picker?.render(); }, get track() { return picker?.picked || 'toome'; }, follow: (id) => picker?.follow(id), show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
+  return { render: () => { render(); picker?.render(); topSoon(); }, get track() { return picker?.picked || 'toome'; }, follow: (id) => picker?.follow(id), show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
 }

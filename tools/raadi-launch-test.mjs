@@ -1,5 +1,6 @@
 // The Majoraadi launch's one-off (Martin 26 Nov 2026: "Delete all raadi lap times"): a lobby that wakes up with the
-// new code drops every stage time and stage replay once, and nothing of Toomemägi's. Runs the real Lobby over
+// new code drops every stage time and stage replay once, and nothing of Toomemägi's; and the racing-line logging's
+// table is gone. Runs the real Lobby over
 // node:sqlite with the live site's laps (only read from it, or a laps.json given), as tools/top-board-test.mjs does.
 //   node tools/raadi-launch-test.mjs [laps=laps.json]
 import assert from 'node:assert/strict';
@@ -58,6 +59,10 @@ assert.equal(b.raadi.laps, 0, 'no stage times counted');
 assert.ok(b.allTime.length > 0 && b.laps > 0, 'the Toomemägi board still has its records');
 assert.ok(!b.rp?.raadi, 'no stage replay offered');
 console.log('after the deploy:', count('toomemagi'), 'Toomemägi laps,', count('raadi'), 'stage times; board:', b.laps, 'Toomemägi laps,', b.allTime.length, 'records; stage', b.raadi.laps);
+
+// the racing-line logging is gone (Martin at the launch): its table dropped, an old page told to stop sending
+assert.equal(sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'lines'").toArray().length, 0, 'no lines table');
+assert.equal((await L.fetch(new Request('https://www.linnaring.com/api/line', { method: 'POST', body: '{}', headers: { 'cf-connecting-ip': '10.0.0.2' } }))).status, 410, 'an old page is told to stop');
 
 // a run after the launch stays through the next wake-ups (the one-off is done once)
 sql.exec("INSERT INTO laps (track, name, car, ms, at, day, inp, ty) VALUES ('raadi', 'Player', 'impreza', 118000, '2026-11-26T17:00:00Z', '2026-11-26', 'kb', 'gravel')");

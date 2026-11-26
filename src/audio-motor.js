@@ -129,15 +129,16 @@ export const plainWhine = (vw, throttle) => Math.min(0.05, 0.004 + vw * 0.0012) 
 export const plainWhineHz = (vw) => 180 + vw * 38;
 
 // The Enyaq and the bZ4X, a motor at each axle: beside the plain whine a second sine a fifth over it, the two together
-// as loud as the whine alone. About town the fifth has 0.45 of the loudness; from 50 km/h it fades out, and from
-// 120 km/h on only the plain sine is left (Martin 26 Nov, picking it from four sketches: "number 2 is great (fifth)
-// but do fade out the double engine effect and the fifth ... transition starting from 50 kmh to 120 kmh")
+// as loud as the whine alone. Pulling away the fifth has 0.45 of the loudness; from 20 km/h it fades out, and from
+// 70 km/h on only the plain sine is left (Martin 26 Nov, picking it from four sketches: "number 2 is great (fifth)
+// but do fade out the double engine effect and the fifth", first from 50 to 120 km/h, an hour later "make the ev
+// sound transition from 20 to 70")
 const FIFTH_CARS = { enyaq: 1, bz4x: 1 };
 export const hasFifth = (spec) => !!FIFTH_CARS[spec.id];
 export const FIFTH = 1.5;
 // its share of the loudness (0..1, the whine keeps the square root of the rest) at this wheel speed (m/s)
 export function fifthShare(vw) {
-  const x = ramp(Math.abs(vw), 50 / 3.6, 120 / 3.6);
+  const x = ramp(Math.abs(vw), 20 / 3.6, 70 / 3.6);
   return 0.45 * (1 - x * x * (3 - 2 * x));
 }
 

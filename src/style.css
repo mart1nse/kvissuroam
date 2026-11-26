@@ -784,10 +784,10 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i.behind { color: #ff5a6e; }
 :is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
-/* desktop: from the minimap up, the count, your line, then the names (the first just over your line) and the
-   notes on top; how many names fit is worked out in src/net/people.js */
+/* desktop: from the minimap up, the count, your line, "+N MORE", then the names (A to Z read down, Z just over
+   your line) and the notes on top; how many names fit is worked out in src/net/people.js */
 body:not(.touch) #people { display: flex; flex-direction: column-reverse; align-items: flex-start; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
   pointer-events: auto; overscroll-behavior: contain; scrollbar-width: none; }
 /* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
 body:not(.touch) #people .who::-webkit-scrollbar { display: none; }

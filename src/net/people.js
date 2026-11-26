@@ -1,9 +1,13 @@
 // Who is online, next to the minimap: "3 ONLINE" plus small notes as people join and leave.
 // Only players whose car is on the map count (Martin, 2026-11-17: the count showed people who sat in
 // the menu or had the game in a background tab). On desktop (Martin, 2026-11-24) the list grows up from
-// the minimap: the count, your line over it, then the names going up as far as there is room under the race
-// button (its vote line and chip), then "+N MORE". While the race list or results show there, the race
-// panel comes first (down to your line at most) and the names fill what is left under it (Martin, 24 Nov).
+// the minimap: the count, your line over it, then the names over that as far as there is room under the race
+// button (its vote line and chip). While the race list or results show there, the race panel comes first (down
+// to your line at most) and the names fill what is left under it (Martin, 24 Nov).
+// The names go from A to Z whatever their letters' case, read from the top down on every list (Martin, 26 Nov:
+// "helps to find people to watch"; on desktop they were in order from your line up, so Z to A read down): on
+// desktop the wheel scrolls down to the rest, and "+N MORE" over your line says how many are under the view.
+// The drivers on the map come first, then those in the garage or watching (greyed).
 // On phones (Martin, 2026-11-24) the list sits on the right, beside the race button and down to the gas pedal:
 // the count, your line, then as many names as fit there (a name with a lap record takes its line and a bit),
 // then "+N MORE". No joined/left notes on phones (no room there for them).
@@ -29,6 +33,10 @@ import { KUDOS_PAIR } from './kudosrules.js';
 const NOTE_MS = 6000;
 const LIST_MAX = 60;              // rows of room on desktop at most (the list scrolls past them)
 const LIST_ALL = 120;             // names listed on desktop at most (the server lets 100 in)
+// names from A to Z, capitals or not, the same order on every screen whatever its language (a player's id for two
+// of the same name, so they do not swap places)
+const ABC = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+const byName = (a, b) => ABC.compare(a.name || '', b.name || '') || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 export const ME_COLOUR = '#ffd45e';
 // the thumbs up button (src/kudos.js), the same neon thumb as the sign in the back window
 export const THUMB = '<svg viewBox="8 8 86 86" aria-hidden="true"><path d="M30 46L42 22Q46 11 53 15Q59 20 56 31L53 42L80 42Q88 42 87 49Q87 54 82 55Q87 57 86 62Q85 67 80 67Q85 69 84 73Q83 78 78 78Q82 80 81 84Q80 88 74 88L30 88ZM15 46L25 46L25 90L15 90Z"/></svg>';    // your own arrow on the maps         // rows on a phone, "+N MORE" included
@@ -55,10 +63,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const box = document.createElement('div');
   box.id = 'people';
   // (Martin, 2026-11-23: the count on top, then you, then the others; no light before the count)
-  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><div class="up hidden"></div><ul class="feed"></ul><ul class="who st hidden"></ul>';
+  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><div class="up hidden"></div><ul class="who hidden"></ul><ul class="feed"></ul><ul class="who st hidden"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
-  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" over the names)
+  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" under the names)
   const elSt = box.querySelector('.who.st');      // (desktop: those on a Majoraadi run, under its pill: src/style.css)
 
   const list = document.createElement('div');
@@ -137,12 +145,13 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
     fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
     // (Martin, 2026-11-24: all names listed, the mouse wheel scrolls those that do not fit; no scrollbar)
-    // (Martin, 24 Nov: "+N MORE" kept, over the names, when they do not all fit; it takes one row)
+    // (Martin, 24 Nov: "+N MORE" kept when they do not all fit, on the side where the names out of view are,
+    // under them since 26 Nov; it takes one row)
     const mh = `${Math.round((nNames > fitRows ? fitRows - 1 : fitRows) * rowH)}px`;
     if (elWho.style.maxHeight !== mh) { elWho.style.maxHeight = mh; edges(); }
   }
-  // a soft fade at the end that has more names past it (desktop: first name at the bottom, so scrollTop
-  // is 0 there and negative scrolled up)
+  // a soft fade at the end that has more names past it (desktop: A at the top, scrollTop 0 there and growing as
+  // the wheel goes down to Z)
   // (Martin 2026-11-24, 55 online: reading the list's height straight after changing it made the browser lay the
   // page out there and then, 5 to 15 ms each time somebody came, went or voted. The fade and the "+N MORE" go by
   // the rows' count and height and by where the wheel left the list, which the scroll event gives when it is laid out.)
@@ -150,12 +159,12 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   function edges() {
     const step = rowPx || 16, room = nNames > fitRows ? fitRows - 1 : fitRows;
     const over = elWho.classList.contains('hidden') ? 0 : (rowCount - room) * step;
-    const up = -scrolled;
-    const a = over > 2 && up < over - 2, b = over > 2 && up > 2;
+    const down = Math.max(0, scrolled);
+    const a = over > 2 && down > 2, b = over > 2 && down < over - 2;
     if (a !== elWho.classList.contains('more-up')) elWho.classList.toggle('more-up', a);
     if (b !== elWho.classList.contains('more-down')) elWho.classList.toggle('more-down', b);
-    // the names out of view above (all rows are the same height)
-    const n = over > 2 ? Math.ceil((over - up - 2) / step) : 0;
+    // the names out of view below (all rows are the same height)
+    const n = over > 2 ? Math.ceil((over - down - 2) / step) : 0;
     if (n !== upN) { upN = n; elUp.textContent = `+${n} MORE`; elUp.classList.toggle('hidden', n <= 0); }
   }
   if (!touch) elWho.addEventListener('scroll', () => { scrolled = elWho.scrollTop; edges(); }, { passive: true });
@@ -214,7 +223,6 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elCount.classList.toggle('solo', n === 1);
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
-    const byName = (a, b) => a.name.localeCompare(b.name);
     const all = n < 2 && !inGarage.length ? [] : [...drivers.filter((p) => !idle(p)).sort(byName), ...drivers.filter(idle).sort(byName), ...inGarage.filter((p) => !ids.has(p.id)).sort(byName)];
     const rowOf = (p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
@@ -301,7 +309,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       refresh();
     },
     // big map opened: list everyone driving, then those connected but not on the map (menu,
-    // background tab), greyed out and not counted
+    // background tab), greyed out and not counted; each from A to Z
     showRoster(car = myCar) {
       myCar = car;
       // always listed, alone too (Martin, 2026-11-23: alone on the map the list was hidden, so it looked
@@ -310,7 +318,7 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       const vm = mp.online ? votes?.() : null;
       const onMap = (p) => p.x !== undefined && !idle(p);
       const driving = others.filter(onMap), away = others.filter((p) => !onMap(p));
-      shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving, ...away];
+      shown = [{ id: mp.id, name: `${mp.name || 'YOU'} (you)`, me: true, car: mp.car, x: car?.x, z: car?.z }, ...driving.sort(byName), ...away.sort(byName)];
       const sel = (p) => picked === (p.me ? 'me' : p.id) && canWatch(p);
       const tail = (p) => (sel(p) ? ` <small class="go">${p.me ? 'CLICK AGAIN TO DRIVE' : 'CLICK AGAIN TO WATCH'}</small>` : '');
       const row = (p, i) => `<li data-i="${i}" class="${p.me ? 'me' : p.x === undefined || idle(p) ? 'idle' : ''}${sel(p) ? ' sel' : ''}"${sel(p) ? ` title="${p.me ? 'Click again to drive your car' : 'Click again to watch'}"` : ''}>${mark(vm, p.id)}${p.me ? '<b>▲</b>' : `${onMap(p) ? kuBtn(p) : ''}<b style="color:${p.colour}">●</b>`} ${escapeHtml(p.name)}${carTag(p.car)}${p.wn && !p.me && onMap(p) ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}${p.w === 'garage' && !p.me ? ' <small>GARAGE</small>' : p.w === 'watch' && !p.me ? ' <small>WATCHING</small>' : p.x === undefined && !p.me ? ' <small>AWAY</small>' : ''}${p.me && mp.stealth ? ' <small>HIDDEN</small>' : ''}${tail(p)}</li>`;

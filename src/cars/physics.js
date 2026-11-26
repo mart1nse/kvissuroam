@@ -8,6 +8,7 @@
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
 import { crashHit, crashStep } from './crash.js';
+import { HANG, edgeStart, edgeStep } from './tip.js';
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
@@ -116,6 +117,13 @@ const DAMP = 2 * 0.5 * Math.sqrt(SPRING);
 const STATIC = G / SPRING;
 const BUMP = STATIC + 0.09;      // travel where the bump stops start
 const FLOOR = 0.13;              // the body never sits lower than this below its ride height
+// a car let go over an edge by tip.js, until it stands on its wheels again:
+const TIP_AIR_T = 0.6;           // its turning in the air dies away in this time (s)
+const TIP_AIR_MAX = 1.25;        // and it leans no further than this (rad)
+const TIP_BACK = 3.5, TIP_BACK_A = 7;   // down on its nose, it falls back onto its wheels: fastest (rad/s), gathering pace (rad/s2)
+const RAIL_IN = 2.5;              // a car come onto a deck from beside it, past its railing, is eased inside it at this pace (m/s)
+const TIP_WALL = 2.5;             // falling past the wall it went over, its tail is eased clear of it at this pace (m/s)
+const LEAN_FREE = 0.2;           // m of lean the springs take before the body's end is what meets the ground
 const SUSP = { SPRING, DAMP, STATIC, BUMP };
 // Raised kerbs (world.kerbAt): a wheel whose kerb height jumps by more than KERB_STEP in one step has met
 // a kerb face. Climbing it takes up to KERB_KNOCK m/s of the wheel's speed into the kerb (per 15 cm above
@@ -186,6 +194,7 @@ export function createCar(spec, pose) {
     // load is the weight on the tyres as a share of the car's own weight
     hy: pose.y ?? 0, vyUp: 0, lastGround: null, load: 1,
     airborne: false, airTime: 0, landed: 0,
+    tip: null, tipped: 0,        // an end over an edge and tipping (tip.js); let go over one, until back on its wheels
     pitchRate: 0, rollRate: 0,
     pitch: 0, roll: 0, groundPitch: 0, groundRoll: 0,
     rocket: spec.thrusters ? rocketState(spec.id) : null, thrustN: 0,
@@ -550,7 +559,7 @@ const tmpG = [0, 0];
 const tmpA = [0, 0];
 const tmpR = [0, 0, 0];
 const tmpT = [];
-const tmpW = [0, 0, 0, 0, 0, 0, 0, 0], tmpH = [0, 0, 0, 0];
+const tmpW = [0, 0, 0, 0, 0, 0, 0, 0], tmpH = [0, 0, 0, 0], tmpE = [0, 0, 0, 0];
 // is (x, z) close enough to a trunk that the distance field there is the trunk's?
 function nearTrunk(t, x, z) {
   for (let i = 0; i < t.length; i += 3) {
@@ -750,7 +759,8 @@ function substep(car, input, world, dt) {
   const pRLx = car.x - fx * car.b - rx * hw, pRLz = car.z - fz * car.b - rz * hw;
   const pRRx = car.x - fx * car.b + rx * hw, pRRz = car.z - fz * car.b + rz * hw;
   // (groundAt knows about bridge decks; a plain test world only needs heightAt)
-  const gy = car.hy + 0.4;
+  // (a car tipping over an edge, tip.js, hangs below the top its other wheels stand on: asked from up there)
+  const gy = (car.tip ? Math.max(car.hy, car.tip.hS) : car.hy) + 0.4;
   let hFL = world.groundAt ? world.groundAt(pFLx, pFLz, gy) : world.heightAt(pFLx, pFLz);
   let hFR = world.groundAt ? world.groundAt(pFRx, pFRz, gy) : world.heightAt(pFRx, pFRz);
   let hRL = world.groundAt ? world.groundAt(pRLx, pRLz, gy) : world.heightAt(pRLx, pRLz);
@@ -762,9 +772,19 @@ function substep(car, input, world, dt) {
     stn = stoneWheels(car, world, s, fx, fz, rx, rz, tmpW, dt);
     if (stn) { hFL += stn.lift[0]; hFR += stn.lift[1]; hRL += stn.lift[2]; hRR += stn.lift[3]; }
   }
-  const groundY = (hFL + hFR + hRL + hRR) / 4;
-  car.groundPitch = Math.atan2((hFL + hFR - hRL - hRR) / 2, L);       // nose-up positive
-  car.groundRoll = Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
+  // an edge under a slow car (tip.js): the wheels still on top carry it and the end that hangs tips down, where
+  // the mean of the four would have the whole car fall at once. Looked at only when the ground under the wheels
+  // differs by more than any road's does.
+  let tip = null;
+  if (car.tip || Math.max(hFL, hFR, hRL, hRR) - Math.min(hFL, hFR, hRL, hRR) > HANG) {
+    tmpE[0] = hFL; tmpE[1] = hFR; tmpE[2] = hRL; tmpE[3] = hRR;
+    if (!car.tip) edgeStart(car, world, tmpE, fx, fz, rx, rz, gy);
+    if (car.tip) tip = edgeStep(car, world, tmpE, fx, fz, rx, rz, dt);
+    else { hFL = tmpE[0]; hFR = tmpE[1]; hRL = tmpE[2]; hRR = tmpE[3]; }      // (one wheel alone over an edge)
+  }
+  const groundY = tip ? tip.y : (hFL + hFR + hRL + hRR) / 4;
+  car.groundPitch = tip ? tip.gp : Math.atan2((hFL + hFR - hRL - hRR) / 2, L);       // nose-up positive
+  car.groundRoll = tip ? tip.gr : Math.atan2((hFL + hRL - hFR - hRR) / 2, s.track);   // left side high -> rolls right
   const surfF = world.surfaceAt(car.x + fx * car.a, car.z + fz * car.a, gy);
   const surfR = world.surfaceAt(car.x - fx * car.b, car.z - fz * car.b, gy);
   const table = car.tyres === 'gravel' ? SURF_G : SURF;
@@ -783,7 +803,7 @@ function substep(car, input, world, dt) {
   if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
   if (car.inWater && (car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35) {
     // washed or jumped out onto land: drive on from here
-    car.inWater = false; car.sunk = false; car.waterTime = 0;
+    car.inWater = false; car.sunk = false; car.waterTime = 0; car.tipped = 0;
     car.hy = car.y = Math.max(car.y, groundY); car.vyUp = 0; car.lastGround = null;
   }
   if (car.inWater) {
@@ -820,11 +840,21 @@ function substep(car, input, world, dt) {
 
   // ---- heave: the body rides the ground on its springs and flies when the ground drops away
   // faster than it can fall
-  const vGround = car.lastGround === null ? 0 : (groundY - car.lastGround) / dt;
-  car.lastGround = groundY;
-  const comp = groundY + STATIC - car.hy;     // spring travel in use; below zero the wheels hang clear
+  // (a car that went over an edge nose first, tip.js, comes down on its nose, not through the ground up to its
+  // wheels: the ground is that much higher for it while it leans)
+  const restY = car.tipped ? groundY + Math.max(0, car.halfLen * Math.abs(Math.sin(car.pitch - car.groundPitch)) + car.halfWid * Math.abs(Math.sin(car.roll - car.groundRoll)) - LEAN_FREE) : groundY;
+  const vGround = car.lastGround === null ? 0 : (restY - car.lastGround) / dt;
+  car.lastGround = restY;
+  const comp = restY + STATIC - car.hy;     // spring travel in use; below zero the wheels hang clear
   let lift = 0;                               // upward acceleration from the suspension
-  if (comp > 0) {
+  if (tip) {
+    // (tipping over an edge: the body lies as the wheels on top and the edge hold it, the springs at rest)
+    const y0 = car.hy;
+    car.hy += (groundY - car.hy) * Math.min(1, dt * 40);
+    car.vyUp = Math.max(-12, Math.min(4, (car.hy - y0) / dt));
+    lift = G;
+    car.airborne = false; car.airTime = 0;
+  } else if (comp > 0) {
     // (a kerb or the lip of a deck is a step in the ground: the damper only sees so much of it)
     lift = SPRING * comp + DAMP * Math.max(-4, Math.min(4, vGround - car.vyUp));
     if (comp > BUMP) lift += 6 * SPRING * (comp - BUMP);
@@ -838,9 +868,11 @@ function substep(car, input, world, dt) {
   } else {
     car.airborne = true; car.airTime += dt;
   }
-  car.vyUp += (lift - G) * dt;
-  car.hy += car.vyUp * dt;
-  if (car.hy < groundY - FLOOR) { car.hy = groundY - FLOOR; if (car.vyUp < 0) car.vyUp = 0; }
+  if (!tip) {
+    car.vyUp += (lift - G) * dt;
+    car.hy += car.vyUp * dt;
+    if (car.hy < restY - FLOOR) { car.hy = restY - FLOOR; if (car.vyUp < 0) car.vyUp = 0; }
+  }
   // weight on the tyres: light over a crest, heavy in a dip, none in the air
   if (car.airborne) car.load = 0;
   else car.load += (Math.min(2.5, lift / G) - car.load) * Math.min(1, dt * 40);
@@ -1523,9 +1555,35 @@ function substep(car, input, world, dt) {
   }
 
   // ---- bridge railings
-  if (world.railPush && world.railPush(car.x, car.z, car.y + 0.4, hwid, tmpR)) {
-    const nx = tmpR[0], nz = tmpR[1];
-    car.x += nx * tmpR[2]; car.z += nz * tmpR[2];
+  // (a car tipping over an edge, tip.js, hangs below the top it is leaving: its railings and walls are met from
+  // up there, where its carrying wheels are)
+  const topY = (car.tip ? Math.max(car.y, car.tip.hS) : car.y) + 0.4;
+  // (felt at the nose, the middle and the tail, as the terrace walls below are: with the middle alone a car nosed
+  // square against a railing had its front wheels past the deck's edge, and fell through the bridge, 26 Nov)
+  let railD = 0, railX = 0, railZ = 0;
+  if (world.railPush) {
+    const mid = world.railPush(car.x, car.z, topY, hwid, tmpR);
+    if (mid) { railD = tmpR[2]; railX = tmpR[0]; railZ = tmpR[1]; }
+    // (the nose and the tail against the railings of the deck the middle is on, and only an end that has been
+    // inside them: a car reaching a deck from beside it, over the gap between the two decks of Sõpruse sild, is
+    // not drawn in end by end; its middle, which has always been put inside at once, a metre in one step, is
+    // eased in instead)
+    const deck = world.deckUnder ? world.deckUnder(car.x, car.z, topY) : null;
+    if (deck) {
+      const ends = car.railIn || (car.railIn = [null, null, null]);
+      if (!mid) ends[2] = deck;
+      else if (ends[2] !== deck && railD > RAIL_IN * dt) railD = RAIL_IN * dt;
+      for (let i = 0; i < 2; i++) {
+        const k = i === 0 ? 0.6 : -0.6, ex = car.x + fx * hl * k, ez = car.z + fz * hl * k;
+        if (world.deckUnder(ex, ez, topY) !== deck) ends[i] = null;
+        else if (!world.railPush(ex, ez, topY, hwid, tmpR, deck)) ends[i] = deck;
+        else if (ends[i] === deck && tmpR[2] > railD) { railD = tmpR[2]; railX = tmpR[0]; railZ = tmpR[1]; }
+      }
+    } else if (car.railIn) car.railIn[0] = car.railIn[1] = car.railIn[2] = null;
+  }
+  if (railD > 0) {
+    const nx = railX, nz = railZ;
+    car.x += nx * railD; car.z += nz * railD;
     const vn = wvx * nx + wvz * nz;
     if (vn < 0) {
       crashHit(car, nx, nz, wvx, wvz);
@@ -1540,8 +1598,10 @@ function substep(car, input, world, dt) {
   if (world.ledgePush) {
     let depth = 0, lnx = 0, lnz = 0;
     for (const k of [0.6, 0, -0.6]) {
-      if (world.ledgePush(car.x + fx * hl * k, car.z + fz * hl * k, car.y + 0.4, hwid + 0.25, tmpR) && tmpR[2] > depth) { depth = tmpR[2]; lnx = tmpR[0]; lnz = tmpR[1]; }
+      if (world.ledgePush(car.x + fx * hl * k, car.z + fz * hl * k, topY, hwid + 0.25, tmpR) && tmpR[2] > depth) { depth = tmpR[2]; lnx = tmpR[0]; lnz = tmpR[1]; }
     }
+    // (falling past the wall it went over, its tail still against it: eased clear, not put clear at once)
+    if (car.tipped && depth > TIP_WALL * dt) depth = TIP_WALL * dt;
     if (depth > 0) {
       car.x += lnx * depth; car.z += lnz * depth;
       const vn = wvx * lnx + wvz * lnz;
@@ -1555,7 +1615,7 @@ function substep(car, input, world, dt) {
   }
 
   // ---- body attitude
-  car.y = Math.max(car.hy, groundY - 0.06);     // the drawn wheels may sink a little, not through the road
+  car.y = Math.max(car.hy, restY - 0.06);     // the drawn wheels may sink a little, not through the road
   const bump = ((sf.bump + sr.bump) / 2) * Math.min(1, speed / 12);
   // (an upshift biting snaps the body back on its springs a little harder than the pull alone, and it
   // shudders as the driveline winds up and springs back: bite)
@@ -1571,15 +1631,35 @@ function substep(car, input, world, dt) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with
     car.pitch += car.pitchRate * dt;
     car.roll += car.rollRate * dt;
+    if (car.tipped) {
+      // (let go over an edge, tip.js: the turning it left with dies away in the air, and it does not go right over)
+      const k = Math.exp(-dt / TIP_AIR_T);
+      car.pitchRate *= k; car.rollRate *= k;
+      car.pitch = Math.max(-TIP_AIR_MAX, Math.min(TIP_AIR_MAX, car.pitch));
+      car.roll = Math.max(-TIP_AIR_MAX, Math.min(TIP_AIR_MAX, car.roll));
+    }
   } else {
     const p0 = car.pitch, r0 = car.roll;
     // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
     const follow = Math.min(1, dt * (9 + 16 * Math.max(car.jolt || 0, car.bite || 0)));
-    car.pitch += (tPitch - car.pitch) * follow;
-    car.roll += (tRoll - car.roll) * follow;
+    let dp = (tPitch - car.pitch) * follow, dr = (tRoll - car.roll) * follow;
+    if (car.tipped) {
+      // (down on its nose or its side after an edge: it drops back onto its wheels, no faster than a car falls over)
+      // (it starts to fall from rest and gathers pace)
+      car.tipped = Math.min(TIP_BACK, car.tipped + TIP_BACK_A * dt);
+      const lim = car.tipped * dt;
+      if (Math.abs(tPitch - car.pitch) < 0.08 && Math.abs(tRoll - car.roll) < 0.08) car.tipped = 0;
+      dp = Math.max(-lim, Math.min(lim, dp)); dr = Math.max(-lim, Math.min(lim, dr));
+    }
+    car.pitch += dp;
+    car.roll += dr;
     const k = Math.min(1, dt * 12);
     car.pitchRate += (Math.max(-0.7, Math.min(0.7, (car.pitch - p0) / dt)) - car.pitchRate) * k;
     car.rollRate += (Math.max(-0.5, Math.min(0.5, (car.roll - r0) / dt)) - car.rollRate) * k;
+    // (an end over an edge: the body lies as tip.js has it, about that axis)
+    if (tip) {
+      if (tip.ax === 0) { car.pitch = tip.ang; car.pitchRate = tip.rate; } else { car.roll = tip.ang; car.rollRate = tip.rate; }
+    }
   }
   const roll1 = (car.vx / s.wheelRadius) * dt, k1 = ((car.reversing ? -1 : 1) / s.wheelRadius) * dt;
   car.wheelSpin += roll1;
@@ -1601,6 +1681,7 @@ export function resetCar(car, pose) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.y = pose.y ?? car.y;
   car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1;
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
+  car.tip = null; car.tipped = 0;
   car.vx = car.vy = car.yawRate = 0;
   car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;

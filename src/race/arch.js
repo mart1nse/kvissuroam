@@ -1,36 +1,31 @@
 // The arches over a rally stage's start and finish, drawn after the real ones at Rally Estonia (Martin 26 Nov 2026,
-// with his photos: "draft some real-life looking banners instead (without logos or texts). for start arch use the
-// design of the visit estonia arch. and for the finish one, use the black, bigger and more robust. also see that
-// there are flames going out of the finish one"). Faces are left plain where the real ones carry adverts, and
-// `panels` says where each such face lies, for adverts later.
+// with his photos: "draft some real-life looking banners instead (without logos or texts) ... for the finish one,
+// use the black, bigger and more robust. also see that there are flames going out of the finish one", then "as
+// the finish line one looks so cool, then add this also the start"). Both are the black gantry: two square black
+// towers and a black beam between them with a thin red line along their feet, a box truss along the top with
+// flame cannons and lamps on it. Faces are left plain where the real ones carry adverts, and `panels` says where
+// each such face lies, for adverts later. `glow` fills the opening with a see-through sheet of light (the stage's
+// finish halo: raadi.js sets how strong).
 //
-//  - start: the inflatable arch. A blue beam with rounded top corners and a band along its foot (a dark strip, a
-//    fading row of orange squares, orange going to red into the blue), on two white legs that taper towards the
-//    ground and lean out a little at the foot, an orange fade at their tops, black weight bags at their feet and
-//    guy ropes out to pegs. Its edges are rounded (bevelled), as a blown-up thing is.
-//  - finish: the black gantry. Two square black towers and a black beam between them with a thin red line along
-//    their feet, a box truss along the top with flame cannons and lamps on it. `glow` fills its opening with a
-//    see-through sheet of light (the stage's finish halo: raadi.js sets how strong).
-//  - flames (finish): `flames.fire()` sends a column of fire up from each cannon for FLAME_S seconds (raadi.js says
-//    when). One mesh of camera-facing strips drawn by a small shader; it is in the picture from the start, collapsed
-//    to nothing while the cannons are quiet, so its shader is made ready with the rest (src/warm.js) and nothing is
-//    made or compiled when it fires.
+// Flames: `flames.fire(s)` sends a column of fire up from each cannon for s seconds, `flames.stop()` lets it die
+// down at once (raadi.js says when). One mesh of camera-facing strips drawn by a small shader; it is in the picture
+// from the start, collapsed to nothing while the cannons are quiet, so its shader is made ready with the rest
+// (src/warm.js) and nothing is made or compiled when it fires.
 //
 // Each arch is one mesh (the lowest graphics level counts every piece it draws) and both share one material and
 // one small picture: the faces' paint, and a white patch that the plain faces take their colour through. Its parts
 // never share a face with each other (two faces in one place flicker: the first arches' lines of light did).
-// The legs and towers are solid (world.addSolids).
+// The towers are solid (world.addSolids).
 import * as THREE from 'three';
 import { paintScale } from '../world/paintscale.js';
 import { still } from '../still.js';
 import { glowTex } from './decor.js';
 
-export const FLAME_S = 5;
-const BLUE = 0x2268dc, WHITE = 0xf2f2ee, BLACK = 0x111114, BAG = 0x18181b, TRUSS = 0x2a2b30, ROPE = 0x303034;
+const BLACK = 0x111114, BAG = 0x18181b, TRUSS = 0x2a2b30;
 
-// ---- the picture: four painted faces in a row of squares, and a white patch
-const CELL = 128, CELLS = 5;
-const R_BEAM = 0, R_LEG = 1, R_BLACK = 2, R_BLACKBEAM = 3, R_PLAIN = 4;
+// ---- the picture: the black faces with their red line (towers, beam) and a white patch
+const CELL = 128, CELLS = 3;
+const R_BLACK = 0, R_BLACKBEAM = 1, R_PLAIN = 2;
 let mat = null;
 function material() {
   if (mat) return mat;
@@ -40,26 +35,6 @@ function material() {
   const g = c.getContext('2d');
   const at = (r, f) => { g.save(); g.translate(r * s, 0); g.scale(s / CELL, s / CELL); f(); g.restore(); };
   // (the canvas's top is the face's top)
-  at(R_BEAM, () => {
-    let f = g.createLinearGradient(0, 0, 0, CELL);
-    f.addColorStop(0, '#2a74e6'); f.addColorStop(0.62, '#1f60d4'); f.addColorStop(0.7, '#ff7a1c'); f.addColorStop(0.8, '#e8361f'); f.addColorStop(0.84, '#30282a');
-    g.fillStyle = f; g.fillRect(0, 0, CELL, CELL);
-    g.fillStyle = '#2c2c30'; g.fillRect(0, 0.84 * CELL, CELL, 0.16 * CELL);
-    // a row of orange squares fading out towards the middle
-    const q = CELL * 0.045;
-    for (let i = 0; i < CELL / q; i++) for (let j = 0; j < 2; j++) {
-      if ((i + j) % 2) continue;
-      const u = i * q / CELL, a = Math.max(0, 1 - Math.min(u, 1 - u) * 3.2);
-      if (a <= 0) continue;
-      g.fillStyle = `rgba(255,128,30,${(0.85 * a).toFixed(2)})`;
-      g.fillRect(i * q, 0.86 * CELL + j * q, q, q);
-    }
-  });
-  at(R_LEG, () => {
-    const f = g.createLinearGradient(0, 0, 0, CELL);
-    f.addColorStop(0, '#e8361f'); f.addColorStop(0.06, '#ff7a1c'); f.addColorStop(0.16, '#f2f2ee'); f.addColorStop(1, '#f2f2ee');
-    g.fillStyle = f; g.fillRect(0, 0, CELL, CELL);
-  });
   for (const [r, line] of [[R_BLACK, 0.95], [R_BLACKBEAM, 0.9]]) at(r, () => {
     g.fillStyle = '#111114'; g.fillRect(0, 0, CELL, CELL);
     g.fillStyle = '#c8141e'; g.fillRect(0, line * CELL, CELL, 0.018 * CELL);
@@ -70,23 +45,6 @@ function material() {
   tex.anisotropy = 4;
   mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
   return mat;
-}
-
-// a flat outline (x across, y up) made thick along the road, its edges rounded by `round` m
-function slab(pts, depth, round = 0, seg = 1) {
-  const sh = new THREE.Shape();
-  pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
-  sh.closePath();
-  const g = new THREE.ExtrudeGeometry(sh, { depth: depth - round * 2, curveSegments: seg, bevelEnabled: round > 0, bevelThickness: round, bevelSize: round, bevelSegments: 2 });
-  g.translate(0, 0, -(depth - round * 2) / 2);
-  return g.index ? g.toNonIndexed() : g;
-}
-// the outline of a rectangle with its two top corners rounded by r (anticlockwise, as a Shape wants)
-function roundTop(x0, y0, x1, y1, r) {
-  const out = [[x0, y0], [x1, y0]];
-  for (let i = 0; i <= 4; i++) { const t = (i / 4) * Math.PI / 2; out.push([x1 - r + Math.cos(t) * r, y1 - r + Math.sin(t) * r]); }
-  for (let i = 0; i <= 4; i++) { const t = Math.PI / 2 + (i / 4) * Math.PI / 2; out.push([x0 + r + Math.cos(t) * r, y1 - r + Math.sin(t) * r]); }
-  return out;
 }
 
 // corners gathered into one mesh. put(geo, hex, region): the faces looking along the road (front and back) wear
@@ -139,46 +97,7 @@ function gather() {
   };
 }
 
-// ---- the inflatable start arch. a: from the road's middle to the inside of a leg at its foot
-const IN = { FOOT_W: 0.85, TOP_W: 1.55, LEAN: 0.35, DEEP: 0.75, BEAM_D: 0.95, BEAM_H: 1.75, CLEAR: 4.7, ROUND: 0.16 };
-function inflatable(b, a) {
-  const { FOOT_W, TOP_W, LEAN, DEEP, BEAM_D, BEAM_H, CLEAR, ROUND } = IN;
-  const top = CLEAR + BEAM_H;
-  const legs = [];
-  for (const s of [-1, 1]) {
-    // a leg's outline: its foot at a .. a + FOOT_W, its top (inside the beam) LEAN further in and TOP_W wide
-    const xi0 = a, xo0 = a + FOOT_W, xi1 = a - LEAN, xo1 = a - LEAN + TOP_W, y1 = CLEAR + 0.5;
-    const pts = [[xi0, -0.3], [xo0, -0.3], [xo1, y1], [xi1, y1]].map(([x, y]) => [x * s, y]);
-    b.put(slab(s > 0 ? pts : pts.reverse(), DEEP, ROUND), WHITE, R_LEG);
-    legs.push({ s, x0: xi0, x1: xo0, xi1, xo1 });
-    // a weight bag at its foot, and two guy ropes from its top out to pegs
-    b.box(FOOT_W + 0.5, 0.32, DEEP + 0.4, BAG, s * (a + FOOT_W / 2), 0.1, 0);
-    for (const dz of [-1, 1]) {
-      const fx = s * (a + FOOT_W + 1.8), fz = dz * 2.2, tx = s * (xo1 - 0.25), ty = CLEAR + 0.2, tz = dz * DEEP / 2;
-      // (a thin rod from the peg to the leg's top: laid along +z, then turned to look at the top)
-      const l = Math.hypot(fx - tx, ty, fz - tz);
-      const r = new THREE.CylinderGeometry(0.012, 0.012, l, 3).rotateX(Math.PI / 2).translate(0, 0, l / 2);
-      r.lookAt(new THREE.Vector3(tx - fx, ty, tz - fz));
-      r.translate(fx, 0, fz);
-      b.put(r, ROPE);
-      b.box(0.05, 0.25, 0.05, ROPE, fx, 0.08, fz);
-    }
-  }
-  // the beam: wider than the legs' tops, its top corners rounded
-  const half = a - LEAN + TOP_W + 0.25;
-  b.put(slab(roundTop(-half, CLEAR, half, top, 0.7), BEAM_D, ROUND, 4), BLUE, R_BEAM);
-  return {
-    top,
-    solids: legs.map((l) => ({ x: l.s * (l.x0 + l.x1) / 2, hx: (l.x1 - l.x0) / 2 + 0.1, hz: DEEP / 2 })),
-    panels: {
-      beam: [-half + 0.7, CLEAR + BEAM_H * 0.3, half - 0.7, top - 0.15],
-      legs: legs.map((l) => [l.s * l.x0, 0.4, l.s * (l.xi1 + l.xo1) / 2, CLEAR]).map(([p, y0, q, y1]) => [Math.min(p, q), y0, Math.max(p, q), y1]),
-    },
-    open: null,
-  };
-}
-
-// ---- the black gantry at the finish. a: from the road's middle to the inside of a tower
+// ---- the black gantry. a: from the road's middle to the inside of a tower
 const GA = { TOWER_W: 1.45, TOWER_D: 1.2, BEAM_H: 1.6, BEAM_D: 0.9, TRUSS: 0.5, BAY: 0.75 };
 function gantry(b, a, clear) {
   const { TOWER_W, TOWER_D, BEAM_H, BEAM_D, TRUSS, BAY } = GA;
@@ -240,12 +159,12 @@ function flameMesh(jets) {
   geo.setAttribute('corner', new THREE.Float32BufferAttribute(corner, 3));
   geo.setIndex(idx);
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, jets[0][1] + FIRE_H / 2, 0), 20);
-  const uniforms = { uT: { value: 0 }, uOn: { value: 0 } };
+  const uniforms = { uT: { value: 0 }, uOn: { value: 0 }, uEnd: { value: 5 }, uH: { value: FIRE_H } };
   const m = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: `
       attribute vec3 corner;
-      uniform float uT, uOn;
+      uniform float uT, uOn, uEnd, uH;
       varying vec2 vUv; varying float vSeed, vLife;
       void main() {
         if (uOn < 0.5) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
@@ -255,8 +174,8 @@ function flameMesh(jets) {
         vec3 side = normalize(cross(up, normalize(-c.xyz)));
         float j = corner.z, t = uT - j * 0.06;
         float grow = smoothstep(0.0, 0.35, t), puff = 0.88 + 0.12 * sin(t * 11.0 + j * 2.1) * sin(t * 4.3 + j);
-        float h = ${FIRE_H.toFixed(1)} * (0.2 + 0.8 * grow) * puff;
-        vLife = grow * (1.0 - smoothstep(${(FLAME_S - 0.7).toFixed(2)}, ${FLAME_S.toFixed(2)}, t));
+        float h = uH * (0.2 + 0.8 * grow) * puff;
+        vLife = grow * (1.0 - smoothstep(uEnd - 0.5, uEnd, t));
         vUv = vec2(corner.x * 0.5 + 0.5, corner.y);
         vSeed = j * 7.31;
         // (wider far off, so that from the first corner, 360 m away, a column is still a few pixels across)
@@ -297,24 +216,26 @@ function flameMesh(jets) {
   return {
     mesh,
     get on() { return uniforms.uOn.value > 0; },
-    fire() { uniforms.uT.value = 0; uniforms.uOn.value = 1; },
+    // s seconds of fire h m high (it rises in a third of a second and dies down over the last half second)
+    fire(s, h = FIRE_H) { uniforms.uT.value = 0; uniforms.uEnd.value = Math.max(0.6, s); uniforms.uH.value = h; uniforms.uOn.value = 1; },
+    // die down now
+    stop() { if (uniforms.uOn.value) uniforms.uEnd.value = Math.min(uniforms.uEnd.value, uniforms.uT.value + 0.5); },
     update(dt) {
       if (!uniforms.uOn.value) return;
       uniforms.uT.value += Math.min(dt || 0.016, 0.1);
-      if (uniforms.uT.value > FLAME_S + 0.4) uniforms.uOn.value = 0;
+      if (uniforms.uT.value > uniforms.uEnd.value + 0.4) uniforms.uOn.value = 0;
     },
   };
 }
 
 // x, z: the middle of the road under the arch; tx, tz: the way the stage runs there; half: from the road's middle
-// to the inside of each leg at the ground; kind: 'start' or 'finish'; clear: the height under the finish's beam;
-// glow: a sheet of light in the finish's opening. Returns the group, `panels` (the free faces, [x0, y0, x1, y1] in
-// the arch's own metres: x across the road from its middle, y up from its foot, on both faces), `glow` (that
-// sheet's mesh, or null) and `flames` (the finish's fire, or null).
-export function buildArch({ group, world, x, z, tx, tz, half, kind = 'start', clear = 4.3, glow = false }) {
+// to the inside of each tower; clear: the height under the beam; glow: a sheet of light in the opening. Returns
+// the group, `panels` (the free faces, [x0, y0, x1, y1] in the arch's own metres: x across the road from its middle, y up from its foot, on both faces), `glow` (that
+// sheet's mesh, or null) and `flames` (its fire).
+export function buildArch({ group, world, x, z, tx, tz, half, clear = 4.3, glow = false }) {
   const yaw = Math.atan2(tx, tz), a = half, rx = Math.cos(yaw), rz = -Math.sin(yaw);
   const b = gather();
-  const it = kind === 'finish' ? gantry(b, a, clear) : inflatable(b, a);
+  const it = gantry(b, a, clear);
   // (it stands on the highest ground under its feet and its middle; the feet reach down into a slope)
   const feet = it.solids.map((s) => world.heightAt(x + rx * s.x, z + rz * s.x));
   const y = Math.max(world.heightAt(x, z), ...feet);
@@ -322,12 +243,12 @@ export function buildArch({ group, world, x, z, tx, tz, half, kind = 'start', cl
   g.position.set(x, y, z);
   g.rotation.y = yaw;
   g.add(b.mesh());
-  // the legs and towers reach down to the ground under them
+  // the towers reach down to the ground under them
   for (const [k, s] of it.solids.entries()) {
     const drop = y - feet[k];
     if (drop > 0.05) {
       const f = gather();
-      f.box(s.hx * 2 - 0.02, drop + 0.3, s.hz * 2 - 0.02, kind === 'finish' ? BLACK : BAG, s.x, -drop / 2 + 0.1, 0);
+      f.box(s.hx * 2 - 0.02, drop + 0.3, s.hz * 2 - 0.02, BLACK, s.x, -drop / 2 + 0.1, 0);
       g.add(f.mesh());
     }
   }
@@ -343,11 +264,8 @@ export function buildArch({ group, world, x, z, tx, tz, half, kind = 'start', cl
     sheet.renderOrder = 4;
     g.add(sheet);
   }
-  let flames = null;
-  if (it.jets) {
-    flames = flameMesh(it.jets);
-    g.add(flames.mesh);
-  }
+  const flames = flameMesh(it.jets);
+  g.add(flames.mesh);
 
   group.add(g);
   world.addSolids(it.solids.map((s) => ({ x: x + rx * s.x, z: z + rz * s.x, yaw, hx: s.hx, hz: s.hz })));

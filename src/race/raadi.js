@@ -46,16 +46,16 @@ const BEAM_DIM = 0.25, RING_DIM = 0.5, RING_H = 2.4;   // the column and its rin
 // finish. `off`: from the gravel's edge to the inside of a leg. The finish's legs stand wide: the runs logged so
 // far cross that line within the gravel but come to it up to 1.7 m off its right edge and leave it 0.5 m off its left.
 // The finish's beam is lower (Martin 26 Nov: "lower the finish one just a touch"), and its opening is the finish halo.
-// Since 26 Nov afternoon they look like the real ones (his photos): the inflatable blue arch at the start, the black
-// gantry with flame cannons at the finish.
-const ARCH_START = { at: START + 5, off: 1.9, kind: 'start' }, ARCH_FIN = { at: FIN, off: 3.2, kind: 'finish', clear: 4.3, glow: true };
-// The finish's flames (Martin 26 Nov: "if you turn around the first corner and car is facing the finish arch, then
-// have flames ... for 5 seconds (or if player crosses the finish line if get there earlier)"). Out of the stage's
-// first corner the road does run straight at the finish arch, 360 m off, but the manor and the park's trees stand
-// between (looked along the stage from 2.2 m up, 26 Nov): the first stretch that faces the arch with it in sight
-// is the one out of the corner at 318, towards the pond, 280 to 200 m off. So: once a run, from FLAME_FROM on along
-// the stage, the car within FLAME_R of the arch and pointing at it within FLAME_COS; or at the finish.
-const FLAME_FROM = 320, FLAME_R = 420, FLAME_COS = 0.9;
+// Since 26 Nov afternoon both are the black gantry with flame cannons from his photos of Rally Estonia; the start's
+// 12 m past the line and lower ("move it 2m more up the road and make it a touch lower so that flames would be
+// seen" from behind the car at the lights).
+const ARCH_START = { at: START + 6, off: 1.9, clear: 3.6 }, ARCH_FIN = { at: FIN, off: 3.2, clear: 4.3, glow: true };
+// The flames (Martin 26 Nov 15:18). At the start "just one splash of the flames right when timer starts":
+// START_FIRE: seconds and metres high, short so that from behind the car at the line the burst is in the picture. At the finish "only right after the last corner when arc becomes visible and until player
+// goes over the line (or max 5 sec)": once a run, from FLAME_FROM along the stage (the last corner's apex is 854,
+// the finish 875, the arch in sight all the way), the car pointing at the arch within FLAME_COS, for at most
+// FLAME_S; they die down as the car crosses the line.
+const START_FIRE = [1.1, 4], FLAME_FROM = 856, FLAME_COS = 0.7, FLAME_S = 5;
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -474,7 +474,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   }
 
   let lineInfo = null;
-  function fire() { st.flamed = true; arches[1]?.flames?.fire(); }
+  function fire() { st.flamed = true; arches[1]?.flames?.fire(FLAME_S); }
   const arches = [];
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
@@ -494,7 +494,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     yield;
     // the arches over the start and the finish
     for (const A of [ARCH_START, ARCH_FIN]) {
-      const arch = buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, kind: A.kind, clear: A.clear, glow: !!A.glow });
+      const arch = buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, clear: A.clear, glow: !!A.glow });
       arches.push(arch);
       // the finish halo (Martin 23 Nov: "finish line rectangle halo"), since 26 Nov the finish arch's opening filled
       // with light ("fill the neon glow to fit inside of it exactly"), pulsing while a run is on
@@ -954,6 +954,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         lCap.textContent = green ? 'GO!' : left <= LAST_S ? `${n}` : `SS16 MAJORAADI · ${STAGE_KM} KM`;
         lights.classList.remove('hidden'); lights.classList.toggle('go', green);
         if (green) {
+          arches[0]?.flames.fire(...START_FIRE);           // a burst from the start arch at green
           st.phase = 'run'; st.pin = null; st.t0 = time; st.prog = START; st.off = 0; st.back = 0; st.lag = st.slow = 0;
           rec?.begin(time);
           log?.begin(car, carId);
@@ -980,7 +981,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         // (also with the last check still open: the car's place on the stage waits there, and the finish is what
         // judges it)
         if (ev?.fin != null && st.phase === 'run') {
-          if (!st.flamed) fire();
+          arches[1]?.flames?.stop();
           {
             const f = ev.fin, tc = st.prevTime + (time - st.prevTime) * f, t = tc - st.t0 + st.pen;
             const trace = rec?.finish(tc, time, car);
@@ -1010,15 +1011,12 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
         for (const b of barriers) if (b.t !== b.want) { b.t += Math.sign(b.want - b.t) * Math.min(Math.abs(b.want - b.t), dt * 1.2); moving = true; }
         if (moving) drawBarriers();
       }
-      // the finish arch's flames: once a run, when the car comes out of the first corner facing it (or at the finish)
-      const fl = arches[1]?.flames;
-      if (fl) {
-        if (st.phase === 'run' && !st.flamed && st.prog >= FLAME_FROM) {
-          const [fx, fz] = P[ARCH_FIN.at], dx = fx - x, dz = fz - z, d = Math.hypot(dx, dz);
-          if (d < FLAME_R && (Math.sin(car.yaw) * dx - Math.cos(car.yaw) * dz) / d > FLAME_COS) fire();
-        }
-        fl.update(dt);
+      // the finish arch's flames: once a run, out of the last corner facing it (they die down at the line, above)
+      if (st.phase === 'run' && !st.flamed && st.prog >= FLAME_FROM && arches[1]) {
+        const [fx, fz] = P[ARCH_FIN.at], dx = fx - x, dz = fz - z, d = Math.hypot(dx, dz) || 1;
+        if ((Math.sin(car.yaw) * dx - Math.cos(car.yaw) * dz) / d > FLAME_COS) fire();
       }
+      for (const a of arches) a.flames.update(dt);
       bales.update(car, dt);
       tape.update(car, dt);
       knocks.update(car, dt);

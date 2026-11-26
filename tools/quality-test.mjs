@@ -177,6 +177,14 @@ function runSharp(start, card, seconds = 300, timed = true) {
   createQuality(hooks(), caps, {});
   const both = [mem.get('kvissuroam.alive2'), tab.get('kvissuroam.alive2')].map((m) => JSON.parse(m || '{}'));
   check(both.every((m) => m.level >= 0 && m.t > 0), `a page on screen marks this tab and the browser (${JSON.stringify(both)})`);
+  // a tab standing aside while another plays (src/onetab.js) draws no frames: it keeps no mark to go stale, and
+  // marks again when it plays
+  mem.clear(); tab.clear();
+  const q = createQuality(hooks(), caps, {});
+  q.setAside(true);
+  check(!mem.get('kvissuroam.alive2') && !tab.get('kvissuroam.alive2'), 'a tab aside keeps no mark');
+  q.setAside(false);
+  check(!!mem.get('kvissuroam.alive2') && !!tab.get('kvissuroam.alive2'), 'and marks again when it plays');
   delete globalThis.localStorage; delete globalThis.sessionStorage;
 }
 

@@ -371,8 +371,11 @@ export function createQuality(hooks, caps, opts = {}) {
     const tex = hooks.renderer?.info?.memory?.textures ?? null;
     return { s: Math.round(onScreenMs / 1000), heap, tex };
   };
+  // (a tab standing aside while another plays, src/onetab.js, draws no frames to keep its mark fresh: it keeps none,
+  // or a game opened beside it 25 s on would take the stale mark for a page that died on screen)
+  let aside = false;
   const markAlive = () => {
-    if (opts.headless || current < 0) return;
+    if (opts.headless || current < 0 || aside) return;
     const m = JSON.stringify({ ladder: ladderId, level: current, ...clue(), t: Date.now() });
     store(ALIVE, m);
     try { sess()?.setItem(ALIVE, m); } catch {}
@@ -447,6 +450,11 @@ export function createQuality(hooks, caps, opts = {}) {
     onChange(f) { listeners.push(f); },
     // pause judging for s seconds (coming back to the tab, a jump across the map)
     hold(s) { gov.hold(s); },
+    // this tab stands aside for another one (src/onetab.js), or plays again
+    setAside(b) {
+      aside = !!b;
+      if (aside) markGone(); else if (typeof document === 'undefined' || !document.hidden) markAlive();
+    },
     recheck() { gov.recheck(); },
     // ms: the frame's length; jsMs: how much of it the game's own code took (the rest is the
     // browser and the graphics card), kept as a running average for the readout

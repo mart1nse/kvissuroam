@@ -183,6 +183,7 @@ import { createSpectate } from './spectate.js';
 import { createSideCam } from './sidecam.js';
 import { createIdlePark, alwaysJudged, REST_S } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
+import { createOneTab } from './onetab.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
@@ -237,14 +238,33 @@ if (!isTouch && !navigator.webdriver && !stored('kvissuroam.guard2')) {
     localStorage.setItem('kvissuroam.guard2', '1');
   } catch {}
 }
-// The game open in two tabs or windows at once (Martin 26 Nov: "perhaps show that game is open in another tab"):
-// both draw on the same graphics card and share the processor, which a player feels as stutter. Each page says
-// hello on a channel only its own site hears, the others answer, and every page that hears of another says so.
+// One game tab online at a time (src/onetab.js; Martin 26 Nov: "you are online in another tab, continue here?"). A
+// tab opened while another plays asks YOU'RE PLAYING IN ANOTHER TAB · CONTINUE HERE before it loads anything, and the
+// tab it is taken from goes to the garage and offline and draws nothing (standAside, below), with the same question.
+// (?onetab=0 for trying two at once; never with ?off=100)
+let tabAside = false;
+const oneTab = createOneTab({ on: !STEALTH && params.get('onetab') !== '0', onLost: () => standAside() });
+// (while aside, keys do nothing but Enter or Space, which is CONTINUE HERE: Esc in the garage would drive off)
+for (const ev of ['keydown', 'keyup']) {
+  addEventListener(ev, (e) => {
+    if (!tabAside) return;
+    e.stopImmediatePropagation();
+    if (ev === 'keydown' && !e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space')) { e.preventDefault(); continueHere(true); }
+  }, true);
+}
+// The game open in two tabs or windows at once that do not share that rule (Martin 26 Nov: "perhaps show that game is
+// open in another tab"): both draw on the same graphics card and share the processor, which a player feels as
+// stutter. Each page says hello on a channel only its own site hears, the others answer, and a page that hears of
+// such a one says so. A page that keeps to one tab online answers 'here2', which pages from before it ignore: 'here'
+// comes from a page of an older version, or one without the rule (?off=100, no Web Locks), online beside this one.
 let otherTab = false;
 const tellOtherTab = () => { if (otherTab) return; otherTab = true; try { hud?.toast('LINNARING IS OPEN IN ANOTHER TAB OR WINDOW TOO: CLOSE ONE FOR SMOOTH PLAY', 7000); } catch { /* (before the screen is made: said once it is) */ } };
 try {
   const tabs = new BroadcastChannel('linnaring-tabs');
-  tabs.onmessage = (e) => { if (e.data === 'hello') tabs.postMessage('here'); if (e.data === 'hello' || e.data === 'here') tellOtherTab(); };
+  tabs.onmessage = (e) => {
+    if (e.data === 'hello') tabs.postMessage(oneTab.on ? 'here2' : 'here');
+    if (e.data === 'here' || (!oneTab.on && (e.data === 'hello' || e.data === 'here2'))) tellOtherTab();
+  };
   tabs.postMessage('hello');
 } catch { /* no BroadcastChannel: say nothing */ }
 const xlow = isTouch || params.get('xlow') === '0' ? '' : params.has('xlow') ? 'asked for with ?xlow'
@@ -598,6 +618,8 @@ tunnelEl.id = 'tunnel';
 document.body.appendChild(tunnelEl);
 
 async function boot() {
+  // (another tab plays: nothing is loaded until CONTINUE HERE, or until that tab is closed and this one is in front)
+  if (!(await oneTab.first)) { standAside(); await new Promise((go) => { bootWait = go; }); }
   const bar = $('#loadbar');
   world = await loadWorldData((p) => { bar.style.width = `${Math.round(p * 80)}%`; });
   $('#attribution').textContent = `Map data: ${world.meta.attribution}. Street furniture: © Mapillary, CC BY-SA. Shops: © OpenStreetMap contributors, ODbL`;
@@ -1007,6 +1029,7 @@ async function boot() {
     dropModel: (id) => carModels?.dropCarModel(id, freeModel),
     onPlate: (p) => { if (model) setCarPlate(model, p); },
   });
+  if (tabAside) mp.rest();                      // (taken over by another tab while this one loaded)
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
     onKudos: () => {},
     // (from the big map's list, a second click on a name: the map closes first, then the camera goes to them)
@@ -1232,7 +1255,7 @@ async function boot() {
   $('#menu').classList.remove('hidden');
   mode = 'menu';
   stats.ready();
-  if (params.has('drive')) startDriving();
+  if (params.has('drive') && !tabAside) startDriving();
 }
 
 // another player's car on a map: an arrow in their own colour pointing forward (up), drawn around the origin
@@ -1333,7 +1356,7 @@ function buildMenu() {
 
 let softwareTold = false;
 function startDriving() {
-  if (mode === 'drive') return;
+  if (mode === 'drive' || tabAside) return;
   if (still && warmGate && !warmedUp() && !(readyWait && performance.now() - readyWait > 40000)) {
     if (!readyWait) { readyWait = performance.now(); showReady(); }
     return;
@@ -1487,10 +1510,49 @@ const idlePark = createIdlePark({
 // garage first, and the garage starts this clock afresh (Martin 26 Nov: 20 minutes standing, then 20 in the garage)
 function restCheck() {
   if (!mp) return;
+  if (tabAside) { mp.rest(); return; }          // (another tab plays: offline until CONTINUE HERE)
   const map = mode === 'drive' && !document.hidden && !watch?.active;
   if (!map && Date.now() - idlePark.here > restS * 1000 * (watch?.active ? 3 : 1)) mp.rest(); else mp.wake();
 }
 setInterval(restCheck, 30000);
+
+// Another tab took the game up (CONTINUE HERE there, src/onetab.js): this one stands aside as an idle car does, to
+// the garage (a timed lap or a stage run ends there, a spectator stops watching), and goes offline. A racer leaves
+// the race first, as with the race button: off the grid before the lights, QUIT after them (gone with the connection
+// alone, the server would hold the race open 45 s for the page to come back). It draws nothing and makes no sound
+// meanwhile, and shows the same question as a tab opened while another plays.
+function standAside() {
+  if (tabAside) return;
+  tabAside = true;
+  $('#othertab').classList.remove('hidden');
+  if (readyWait) { readyWait = 0; showReady(); }
+  if (mode === 'drive') { closeOverlays(); openGarage(); }
+  const rv = mp?.online ? raceMode?.view() : null;
+  if (rv?.on && rv.racers?.some((x) => x.id === mp.id && !x.out && x.ms == null)) mp.raceSend({ t: 'rj', on: 0 });
+  mp?.rest();
+  audio.setBackground?.(true);
+  gfx.setAside(true);
+}
+// CONTINUE HERE (steal: from the tab that plays), or by itself when this tab is in front and no tab plays any more
+// (free). Back online in the garage; a tab that waited at its start loads now.
+let taking = false, bootWait = null;
+async function continueHere(steal) {
+  if (!tabAside || taking) return;
+  taking = true;
+  let ok = false;
+  try { ok = await (steal ? oneTab.take() : oneTab.free()); } finally { taking = false; }
+  if (!ok || !tabAside) return;
+  tabAside = false;
+  $('#othertab').classList.add('hidden');
+  if (steal) stats.count('tabs');
+  audio.setBackground?.(document.hidden);
+  gfx.setAside(false); gfx.hold(3);
+  quietAt = performance.now(); clock.reset?.(); settle = 1.5;      // (the first frames after the pause are no hitch)
+  mp?.wake();
+  if (bootWait) { const go = bootWait; bootWait = null; go(); }
+}
+$('#tabhere').addEventListener('click', () => continueHere(true));
+setInterval(() => { if (tabAside && !document.hidden && document.hasFocus()) continueHere(false); }, 1500);
 
 // A lap record's replay (src/race/replay.js), from a time on the LAP TIMES board (desktop): fetched, then watched
 // like another player's car once we are on the map (from the garage: DRIVE first). A Raadi stage replay takes our
@@ -2118,7 +2180,7 @@ async function keepAwake() {
 keepAwake();
 for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, keepAwake, { passive: true });
 document.addEventListener('visibilitychange', () => {
-  audio.setBackground?.(document.hidden);           // no engine noise from a tab or app in the background
+  audio.setBackground?.(document.hidden || tabAside);   // no engine noise from a tab or app in the background (or one aside)
   if (document.hidden) { mp?.setDriving(!!raceMode?.holding); mp?.setWhere('away'); return; }   // (no frames run in a hidden tab to tell the server)
   keepAwake();
   clock.reset?.();
@@ -2156,6 +2218,7 @@ const lastFrame = { js: 0, build: 0, draw: 0, net: 0, car: 0, progs: 0, tex: 0, 
 for (const [t, ev] of [[window, 'blur'], [window, 'focus'], [document, 'visibilitychange']]) t.addEventListener(ev, () => { quietAt = performance.now(); });
 function frame(ts) {
   requestAnimationFrame(frame);
+  if (tabAside) return;                       // (another tab plays: nothing drawn or worked out here, see standAside)
   const gap = ts - rafLast;
   rafLast = ts;
   if (gap > 2 && gap < 50) rafMs += (gap - rafMs) * 0.05;

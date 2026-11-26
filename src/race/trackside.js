@@ -462,7 +462,7 @@ export function createTrackside(world, scene) {
       if (bi < st.treeFrom) continue;
       if (PLAYGROUND.some(([px, pz, pr]) => Math.hypot(x - px, z - pz) < pr + 1.5)) continue;
       const t = { x, z, h: 5.5 + r() * 2, s: 2.1 + r() * 0.8, tint: r() };
-      if (!winbaumLot(x, z, 1.5, 6)) trees.push(t);       // (not on the Winbaum cabin's lot or in front of it, ?winbaum=N)
+      if (!winbaumLot(x, z, 1.5, 6)) trees.push(t);       // (not on the Winbaum cabin's lot or in front of it, ?winbaum=1)
     }
   }
   let treeMesh = null;

@@ -331,7 +331,7 @@ export function createKaubamaja(scene, world, { shadows = true } = {}) {
       // line of the last corner (Martin, 19 Nov), each (a, b) in the roof frame: a along Küüni, b along the park face
       for (const [a, b] of [[-21, 1.5], [-25.5, -1], [-28.5, 3.5], [-32.5, 0], [-36.5, 3.2]]) {
         const [x, z] = at(a, b), y = h(x, z), yaw = SIDES.kuuni.yaw;
-        if (winbaumLot(x, z, 2.2, 2)) continue;            // (room for the Winbaum cabin, ?winbaum=N)
+        if (winbaumLot(x, z, 2.2, 2)) continue;            // (room for the Winbaum cabin, ?winbaum=1)
         p.box(3.8, 0.1, 1.7, COL.wood, x, y + 0.42, z, yaw);
         p.box(3.5, 0.38, 1.45, 0x55525e, x, y + 0.18, z, yaw);
         solids.push({ x, z, yaw, hx: 1.9, hz: 0.85 });

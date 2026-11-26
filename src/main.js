@@ -42,7 +42,7 @@ import { createKuuni, kuuniWalls, kuuniProps, kuuniVectors } from './world/kuuni
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
 import { createPepleri, pepleriWalls, pepleriProps, pepleriVectors } from './world/pepleri.js';
 import { createKaubamaja, kaubamajaWalls } from './world/kaubamaja.js';
-import { createWinbaum } from './world/winbaum.js';
+import { createWinbaum, winbaumClear } from './world/winbaum.js';
 import { createKeskus, keskusWalls, keskusProps } from './world/keskus.js';
 import { createKeskusTee, keskusTeeVectors } from './world/keskustee.js';
 import { createOrident, oridentWalls } from './world/orident.js';
@@ -767,7 +767,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of raadiStartClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of raadiStartClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); for (const id of winbaumClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : [])] });
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
   ulikooliSignSkip(world);                      // Werner's name is painted on its own front
@@ -789,7 +789,7 @@ async function boot() {
   kuperjanovi = createKuperjanovi(scene, world, { shadows: !isTouch });
   pepleri = createPepleri(scene, world, { shadows: !isTouch });
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
-  winbaum = createWinbaum(scene, world, { shadows: !isTouch });        // the Winbaum cabin advert by LAP START (only with ?winbaum=N)
+  winbaum = createWinbaum(scene, world, { shadows: !isTouch });        // the Winbaum cabin advert by LAP START (only with ?winbaum=1)
   keskus = createKeskus(scene, world, { shadows: !isTouch });
   keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
   orident = createOrident(scene, world, { shadows: !isTouch });

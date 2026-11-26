@@ -26,12 +26,26 @@ export function haloTex() {
   });
 }
 
-// the column of light over the stage's start: bright at the foot, fading out up into the sky (1 px = 1 m of 256)
+// the column of light over the stage's start, fading out up into the sky (1 px = 1 m of 256).
+// Bluish cyan all the way up (Martin 26 Nov: "Make it in some color, the bluish cyan-like perhaps"): it was cyan
+// only at the foot and pink above, added to the picture as light, and against the pink sky that read as a pale
+// column of no colour. It is laid over the picture now (raadi.js), so the sky behind takes its colour.
 export function beamTex() {
   return canvasTex(8, 256, (g, w, h) => {
     const f = g.createLinearGradient(0, h, 0, 0);
-    f.addColorStop(0, 'rgba(47,243,255,0.6)'); f.addColorStop(0.008, 'rgba(47,243,255,0.2)'); f.addColorStop(0.05, 'rgba(120,150,255,0.1)');
-    f.addColorStop(0.4, 'rgba(255,43,214,0.08)'); f.addColorStop(1, 'rgba(255,43,214,0)');
+    f.addColorStop(0, 'rgba(45,215,255,0.42)'); f.addColorStop(0.05, 'rgba(35,200,255,0.36)');
+    f.addColorStop(0.4, 'rgba(35,180,255,0.28)'); f.addColorStop(1, 'rgba(45,150,255,0)');
+    g.fillStyle = f; g.fillRect(0, 0, w, h);
+  });
+}
+
+// the ring of light round the foot of that column, lying along the ground (2.4 m high): a bright line at the
+// ground, gone a metre and a half up. It is what stays of the column at the lights and through a run.
+export function ringTex() {
+  return canvasTex(4, 64, (g, w, h) => {
+    const f = g.createLinearGradient(0, h, 0, 0);
+    f.addColorStop(0, 'rgba(120,240,255,0.95)'); f.addColorStop(0.07, 'rgba(70,225,255,0.7)'); f.addColorStop(0.2, 'rgba(45,205,255,0.32)');
+    f.addColorStop(0.6, 'rgba(40,190,255,0.08)'); f.addColorStop(1, 'rgba(40,190,255,0)');
     g.fillStyle = f; g.fillRect(0, 0, w, h);
   });
 }

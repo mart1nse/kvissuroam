@@ -24,13 +24,14 @@ import { jobs } from '../jobs.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createBales } from './bales.js';
 import { createKnocks } from './knock.js';
-import { chevronTex, haloTex, beamTex } from './decor.js';
+import { chevronTex, haloTex, beamTex, ringTex } from './decor.js';
 import { createStartKit } from './startkit.js';
 import { createTape } from './tape.js';
 import { SURFACE } from '../world/data.js';
 // (the stage's rules, its tables and what a run is: src/race/raadirules.js, which the server runs too)
 import { OFF_LIMIT, BACK_LIMIT, BACK_WARN, FIN_FLAG, SHORT_M, P, HW, N, START, FIN, TAN, S, side, MORE_BALES, TRACK_ROUND, TRACK_W, ROUND, yawAt, LINES, ARCS, penText, resetText, judgeStep, markRun, resetRun } from './raadirules.js';
 import { buildLine } from './raadi-line.js';
+import { buildArch } from './arch.js';
 import { CRASH_PEN } from '../cars/crash.js';
 
 const KEY = 'kvissuroam.raadi';            // this browser's stage times
@@ -39,6 +40,12 @@ const KEY = 'kvissuroam.raadi';            // this browser's stage times
 // roughly 20m diameter. have the halo go up to the sky ... so it is seen from far away ... make a quick fade out and
 // fade in, together like 0.5s"): START_R m round it, a column of light BEAM_H m high, the fade FADE_S each way.
 const START_R = 10, BEAM_H = 256, FADE_S = 0.2;
+const BEAM_DIM = 0.25, RING_DIM = 0.5, RING_H = 2.4;   // the column and its ring in the count and the run, of their strength with no run on
+// The arches (src/race/arch.js): the start's stands 10 m past the line, beyond the clock, where the view from behind
+// the waiting car has it in the picture, its legs outside the tape on the left; the finish's over the flying
+// finish. `off`: from the gravel's edge to the inside of a leg. The finish's legs stand wide: the runs logged so
+// far cross that line within the gravel but come to it up to 1.7 m off its right edge and leave it 0.5 m off its left.
+const ARCH_START = { at: START + 5, off: 1.9 }, ARCH_FIN = { at: FIN, off: 3.2 };
 const BUILD_R = 600;                       // the stage's things are built within this of it
 const GONE_R = 450;                        // further than this from the park's middle the car has left the stage (its far points are 290 m out)
 // The start clock (Martin 23 Nov: "a screen showing red, yellow and green/go", by the FIA rules). The WRC's
@@ -457,6 +464,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   }
 
   let lineInfo = null;
+  const arches = [];
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
     if (oldTracks) yield* buildTracks();
@@ -483,6 +491,11 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     }
     sign('stop', N - 1, HW[N - 1] + 1.4);
     yield;
+    // the arches over the start and the finish
+    for (const [word, A] of [ARCH_START, ARCH_FIN].entries()) {
+      arches.push(buildArch({ group, world, x: P[A.at][0], z: P[A.at][1], tx: TAN[A.at][0], tz: TAN[A.at][1], half: HW[A.at] + A.off, word }));
+      yield;
+    }
     // the straw bales at the apexes (src/race/bales.js)
     bales.build();
     yield;
@@ -736,25 +749,55 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   }
   // (Martin 25 Nov: gone sooner, 6 s, and more see-through; it fades out over its last seconds, style.css)
   function showAgain() { st.againUntil = performance.now() + 6000; again.classList.remove('hidden'); }
-  // the column of light over the start spot: one open cylinder, seen from far (no fog), while no run is on
-  let beam = null;
-  // (made through the work queue, so warm.js holds it back unseen until its shader and picture are on the card)
-  let beamQueued = false;
-  function showBeam(on) {
+  // the column of light over the start spot: one open cylinder, seen from far (no fog), and a ring of light
+  // round its foot that follows the ground. Whole while no run is on. In the count and the run, and round a car
+  // that stands inside it, the column stays at BEAM_DIM of that and the ring at RING_DIM (Martin 26 Nov: "if you
+  // start the timed lap with the lights, then have a way of leaving it on the screen, but with much lower
+  // intensity on ... the placement of the car initially so some of the effect is kept but you see the road and
+  // skid marks"): it had gone out at the lights. They ease from one strength to the other in a third of a second.
+  let beam = null, ring = null;
+  // (made through the work queue, so warm.js holds them back unseen until their shader and picture are on the card)
+  let beamQueued = false, ringQueued = false;
+  const ease = (m, to, dt) => {
+    const d = to - m.material.opacity;
+    if (d) m.material.opacity += Math.sign(d) * Math.min(Math.abs(d), Math.min(dt || 0.016, 0.05) * 3);
+    m.visible = m.material.opacity > 0.004;
+  };
+  // on: the car is within sight of the column; dim: a run or its count is on, or the car stands in the circle
+  function showBeam(on, dim, dt) {
     if (!beam) {
       if (!on || beamQueued) return;
       beamQueued = true;
       jobs.add(function* () {
         const sp = startPose(), geo = new THREE.CylinderGeometry(START_R, START_R, BEAM_H, 48, 1, true);
-        const b = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
+        const b = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
         b.position.set(sp.x, groundY(sp.x, sp.z) - 0.3 + BEAM_H / 2, sp.z);
         b.renderOrder = 5;
+        b.visible = false;
         scene.add(b);
         beam = b;
       }, 'raadi start beam');
       return;
     }
-    beam.visible = on;
+    ease(beam, on ? (dim ? BEAM_DIM : 1) : 0, dt);
+    if (ring) ease(ring, on ? (dim ? RING_DIM : 1) : 0, dt);
+    else if (on && built && !ringQueued) {
+      // (once the stage's ground is there: its foot lies on the ground all the way round, and the column's own
+      // foot, made from far off with whatever height was at hand, is put down on it too)
+      ringQueued = true;
+      jobs.add(function* () {
+        const sp = startPose(), y0 = groundY(sp.x, sp.z), geo = new THREE.CylinderGeometry(START_R, START_R, RING_H, 48, 1, true);
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setY(i, groundY(sp.x + pos.getX(i), sp.z + pos.getZ(i)) - y0 + (pos.getY(i) > 0 ? RING_H : 0) + 0.04);
+        const r = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: ringTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        r.position.set(sp.x, y0, sp.z);
+        r.renderOrder = 5;
+        r.visible = false;
+        scene.add(r);
+        if (beam) beam.position.y = y0 - 0.3 + BEAM_H / 2;
+        ring = r;
+      }, 'raadi start ring');
+    }
   }
   // a quick fade to dark and back over the whole screen, the car put on the line in the dark
   const fader = document.createElement('div');
@@ -791,6 +834,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
     get prog() { return st.prog; },
     get log() { return log; },
     get line() { return lineInfo; },
+    get arches() { return arches; },
     get barriers() { return barriers; },
     get lit() { return st.phase === 'count' && performance.now() - st.countAt > COUNT_S * 1000; },
     // the seconds to green (the test drive holds the clock with it to take its pictures)
@@ -834,7 +878,10 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
       const dStart = Math.hypot(x - P[START][0], z - P[START][1]);
       const dMid = Math.hypot(x - 2660, z - 470);
       const near = dMid < BUILD_R;
-      showBeam((st.phase === 'idle' || st.phase === 'done') && !st.jump && dMid < 3000);
+      {
+        const sp = startPose(), inside = Math.hypot(x - sp.x, z - sp.z) < START_R + 1;
+        showBeam(dMid < 3000, st.phase === 'count' || st.phase === 'run' || st.jump || inside, dt);
+      }
       // (the whole stage's ground is fetched first: it is 560 m across, and the weakest setups only keep 420 m
       // of ground round the car, so from the start line the east loop would have no heights to stand things on)
       if (near && !built) {

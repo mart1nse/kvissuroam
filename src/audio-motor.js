@@ -122,11 +122,24 @@ function gear(k, sum) {
   };
 }
 
-// the plain whine every electric car but the Rocket has, as audio.js plays it: its level (the gain of one sine)
-// at this wheel speed (m/s) and pedal
+// the plain whine every electric car but the Rocket has (two have a fifth beside it, below), as audio.js plays it: its
+// level (the gain of one sine) at this wheel speed (m/s) and pedal
 export const plainWhine = (vw, throttle) => Math.min(0.05, 0.004 + vw * 0.0012) * (0.5 + throttle * 0.5);
 // and its pitch (Hz). It does not follow the wheels in proportion: 180 Hz standing still, 38 Hz more for each m/s
 export const plainWhineHz = (vw) => 180 + vw * 38;
+
+// The Enyaq and the bZ4X, a motor at each axle: beside the plain whine a second sine a fifth over it, the two together
+// as loud as the whine alone. About town the fifth has 0.45 of the loudness; from 50 km/h it fades out, and from
+// 120 km/h on only the plain sine is left (Martin 26 Nov, picking it from four sketches: "number 2 is great (fifth)
+// but do fade out the double engine effect and the fifth ... transition starting from 50 kmh to 120 kmh")
+const FIFTH_CARS = { enyaq: 1, bz4x: 1 };
+export const hasFifth = (spec) => !!FIFTH_CARS[spec.id];
+export const FIFTH = 1.5;
+// its share of the loudness (0..1, the whine keeps the square root of the rest) at this wheel speed (m/s)
+export function fifthShare(vw) {
+  const x = ramp(Math.abs(vw), 50 / 3.6, 120 / 3.6);
+  return 0.45 * (1 - x * x * (3 - 2 * x));
+}
 
 const BUILD = { gear };
 

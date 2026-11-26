@@ -306,21 +306,24 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
 .pad.rocket button.no .ic { opacity: .35; filter: none; }
 .pad.rocket button.no b { opacity: .5; }
 .pad.rocket button.no small { color: #fff; text-shadow: none; }
-/* On a desktop the same two discs stand small inside the rev counter, side by side over the speed, where Martin
-   drew them (26 Nov): seen better than the bar under the dial, and a mouse can hold BOOST or click FLIP. No name
-   in them at that size, only the icon and the line under it. The speed moves down a touch to make room. */
-.pad.rocket.dial button { --rd: calc(var(--d) * .15); width: var(--rd); height: var(--rd); right: auto; bottom: auto; top: calc(var(--d) * .345 - var(--rd) / 2);
+/* On a desktop the same two discs stand small inside the rev counter (Martin 26 Nov): seen better than the bar
+   under the dial, and a mouse can hold BOOST or click FLIP. No name in them at that size, only the icon and the
+   line under it. First over the speed, where he drew them; then, his second thought the same morning, "just
+   above the other buttons and raise the speed number instead": side by side over the fan, the gear and the tyre,
+   between the dial's last two numbers, with the speed, its unit and the kW moved up to make room. */
+.pad.rocket.dial button { --rd: calc(var(--d) * .14); width: var(--rd); height: var(--rd); right: auto; bottom: auto; top: calc(var(--d) * .78 - var(--rd) / 2);
   padding: 0; pointer-events: auto; cursor: pointer; font-size: 0; box-shadow: 0 0 12px -4px var(--c), inset 0 1px 0 rgba(255, 255, 255, .2); -webkit-tap-highlight-color: transparent; }
-.pad.rocket.dial button.boost { left: calc(50% - var(--d) * .088 - var(--rd) / 2); }
-.pad.rocket.dial button.flip { left: calc(50% + var(--d) * .088 - var(--rd) / 2); }
+.pad.rocket.dial button.boost { left: calc(50% - var(--d) * .078 - var(--rd) / 2); }
+.pad.rocket.dial button.flip { left: calc(50% + var(--d) * .078 - var(--rd) / 2); }
 .pad.rocket.dial button b { display: none; }
 .pad.rocket.dial .ic { width: 42%; height: 42%; }
 .pad.rocket.dial button small { font-size: calc(var(--d) * .031); line-height: 1.05; min-height: 0; letter-spacing: 0; }
 .pad.rocket.dial button:hover { background: radial-gradient(circle at 50% 28%, rgba(120, 72, 200, .74), rgba(30, 12, 66, .84) 72%); }
 .pad.rocket.dial button.no { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); cursor: default; }
 @media (max-width: 950px) { .pad.rocket.dial button small { display: none; } .pad.rocket.dial .ic { width: 50%; height: 50%; } }
-body.rocketdial #speed { transform: translateY(-46%); font-size: calc(var(--d) * .235); }
-body.rocketdial #unit { top: 63.5%; }
+body.rocketdial #speed { top: 38.5%; transform: translateY(-50%); font-size: calc(var(--d) * .26); }
+body.rocketdial #unit { top: 52.5%; }
+body.rocketdial #dial text.kw { transform: translateY(-22px); }   /* (in the dial's own units: from 73 % down the dial to 62 %) */
 /* a fan car's suction fans (spec.fanDown): a small fan left of the gear, turning for as long as they run (always),
    faster when they are run up (src/rocketui.js) */
 #fan { position: absolute; left: 25%; bottom: 3.3%; width: calc(var(--d) * .12); height: calc(var(--d) * .12); padding: 0; border: none; background: none;

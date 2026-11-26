@@ -471,6 +471,8 @@ function freeStart() {
 const history = [];              // recent safe poses for "back to last intact spot"
 let histTimer = 0;
 let wetAt = null;                // where and when the car went into the water: { x, z, t }
+let wreckAt = null;              // where and when the car crashed onto its roof (cars/crash.js), while it lies there
+const roofedEl = $('#roofed');
 let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -1382,7 +1384,9 @@ function openGarage() {
   $('#hud').classList.add('hidden');
   $('#touch').classList.add('hidden');
   $('#sunk').classList.add('hidden');
+  roofedEl.classList.add('hidden');
   if (car.inWater) { if (stage && atRaadi()) stage.goStart(); else goHome(); }    // (a Raadi pond: its stage start)
+  else if (car.crash) goLastSpot();             // (left lying on its roof: back on its wheels before the crash, as R does)
   car.vx = car.vy = car.yawRate = 0;
 }
 
@@ -1435,7 +1439,7 @@ function place(pose) {
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
-  wetAt = null;
+  wetAt = null; wreckAt = null; roofedEl.classList.add('hidden');
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   launch = null;
   $('#sunk').classList.add('hidden');
@@ -1474,7 +1478,8 @@ async function goLastSpot() {
   respawning = true;
   try {
     const sx = wetAt ? wetAt.x : car.x, sz = wetAt ? wetAt.z : car.z;
-    const opts = wetAt ? { ref: wetAt.t, sx, sz, minAge: 3, minDist: 15 } : { ref: car.time, sx, sz, minAge: 3, minDist: 0 };
+    // (off its roof after a crash: a spot at least three seconds before the wall, so lying there a while buys nothing)
+    const opts = wetAt ? { ref: wetAt.t, sx, sz, minAge: 3, minDist: 15 } : { ref: wreckAt ? wreckAt.t : car.time, sx, sz, minAge: 3, minDist: 0 };
     let pick = pickFromHistory(world, history, opts);
     for (let k = 0; pick?.wait && k < 20; k++) {
       // (a spot far back along the route may be in a part of the map that is not loaded any more)
@@ -2167,6 +2172,10 @@ function frame(ts) {
     histTimer -= dt;
     if (car.inWater && !wetAt) { wetAt = { x: car.x, z: car.z, t: car.time - car.waterTime }; stats.count('water'); }
     else if (!car.inWater) wetAt = null;
+    // (a crash that ends on the roof, cars/crash.js: R then goes back to before it, however long the car has lain there)
+    if (car.crash && !wreckAt) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at }; stats.count('roof'); }
+    else if (!car.crash) wreckAt = null;
+    roofedEl.classList.toggle('hidden', !(car.crash?.onRoof && car.crash.t - car.crash.tRoof > 0.5));
     if (histTimer <= 0 && !car.inWater && !car.airborne && car.surface !== SURFACE.WATER && world.sdfAt(car.x, car.z) > 1.6) {
       histTimer = 0.5;
       // (standing still adds nothing: the list then reaches further back along the route)

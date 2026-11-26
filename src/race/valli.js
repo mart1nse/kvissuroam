@@ -5,6 +5,7 @@
 //     road meets a wall instead of the sharp edge of the house
 import * as THREE from 'three';
 import { createTrack } from './race.js';
+import { crashHit } from '../cars/crash.js';
 
 const SIGN0 = 10, PROHIBIT = SIGN0 + 1, NO_ENTRY = SIGN0 + 2;
 const ENTRY_SIGN = 90;                       // lap index of the signs, right side against the wall (Martin's pink box)
@@ -206,6 +207,7 @@ export function createValli(world, group, merged) {
           const wvx = car.vx * fx + car.vy * rx, wvz = car.vx * fz + car.vy * rz;
           const vn = wvx * nx * cs + wvz * nz * cs;
           if (vn < 0) {
+            crashHit(car, nx * cs, nz * cs, wvx, wvz);          // (fast and square: onto its roof, cars/crash.js)
             const nvx = wvx - 1.25 * vn * nx * cs, nvz = wvz - 1.25 * vn * nz * cs;
             car.vx = nvx * fx + nvz * fz; car.vy = nvx * rx + nvz * rz;
             car.yawRate *= 0.6;

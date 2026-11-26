@@ -158,6 +158,7 @@ import { setCarPlate } from './cars/plate.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
 import { createBoard } from './race/board.js';
+import { TRACK_ICON } from './race/trackpick.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
 import { pavedPatches, cornerOverPaint } from './race/corners.js';
 import { junctionOverPaint } from './race/junctionkerbs.js';
@@ -1047,7 +1048,11 @@ async function boot() {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
     tp.id = 'trackpills';
-    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Majoraadi rally stage start">MAJORAADI</button>';
+    // each with its circuit's outline before the name, from the lap's and the stage's own lines (Martin 26 Nov: "a
+    // minioutline of the track and stage as an icon before the text"): the lists' marks (trackpick.js), drawn in
+    // the button's cyan, left out of what a screen reader says (the name follows)
+    const mark = (id) => TRACK_ICON[id].replace(/ role="img" aria-label="[^"]*"><title>[^<]*<\/title>/, ' aria-hidden="true">');
+    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>`;
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId });
@@ -1492,7 +1497,7 @@ function trackPills() {
   if (at === pillAt) return;
   pillAt = at;
   const b = document.querySelector('#trackpills [data-act="track-raadi"]');
-  if (b) { b.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
+  if (b) { b.lastChild.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
 }
 
 function goHome() {

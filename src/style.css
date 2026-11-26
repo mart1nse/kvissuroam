@@ -1239,6 +1239,10 @@ body.touch #stageagain { top: calc(34% + 40px); }
 #trackpills button:active { transform: scale(.96); }
 #trackpills button.here { background: rgba(26, 84, 120, .7); color: #fff; }
 @media (hover: hover) and (pointer: fine) { #trackpills button:hover { background: rgba(26, 84, 120, .75); } }
+/* each circuit's outline before its name (Martin 26 Nov), in the letters' colour: cyan, white on the stage's own pill */
+#trackpills button { display: inline-flex; align-items: center; }
+#trackpills svg.trk { width: 1.5em; height: 1.5em; margin: -.3em .5em -.3em 0; flex: none; }
+#trackpills svg.trk path { stroke: currentColor; stroke-width: 80; }
 /* phones: right under the top buttons, the race button and its chip one row lower (Martin 23 Nov: "move the raadi
    start and other track buttons upward to the right, maybe above the race button": they sat at the bottom between
    the pedals). Away while a race's lights or its standings show: those need the room, and nobody leaves then. */

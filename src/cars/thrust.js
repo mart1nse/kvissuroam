@@ -30,12 +30,12 @@ const G = 9.81;
 // all, which is the tail's 80 kN for 2 s and no more. So BOOST's push follows the pressure, the share of the gas
 // still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
 // quite done; at EMPTY of a tank nothing useful is left and the valves shut. A FLIP is its fixed half tank.
-const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
+export const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
 const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
 export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
 const TOP_SHORT = 1.2 / 3.6;       // the motors' push meets the air's a little under the limiter: BOOST's ends there too
-const FADE = 30 / 3.6;             // BOOST eases off over this much speed, to nothing at the car's top speed (m/s)
+export const FADE = 30 / 3.6;             // BOOST eases off over this much speed, to nothing at the car's top speed (m/s)
 // (Martin 26 Nov: "the ground launch acceleration curve just a tad slower": the push was 0.45 s to 10.6 m/s, 2.4 g;
 // now 2 g for a little longer, to the same height)
 const LIFT_T = 0.52;               // the lift-off push lasts this long (s)...

@@ -75,20 +75,25 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   const [, f, ms, n] = a;
   // (a stage time has its penalty seconds on top of the drive's own time)
   if (Math.abs(ms + (l.pen || 0) * 1000 - l.ms) > 2) { row.note = `the stored drive is of ${fmt(ms)}`; if (l.at > '2026-11-26') notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: the stored drive is another lap's (${fmt(ms)})`); continue; }
-  const xs = new Float64Array(n), zs = new Float64Array(n), ys = new Float64Array(n);
-  let x = 0, z = 0, y = 0;
-  for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; }
-  if (l.track === 'raadi') {
-    row.stage = stageCheck(xs, zs, l.pen || 0);
-    if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
-  }
+  const xs = new Float64Array(n), zs = new Float64Array(n), ys = new Float64Array(n), roll = new Float64Array(n);
+  let x = 0, z = 0, y = 0, ro = 0;
+  for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; ro += a[9 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; roll[i] = ro / 1000; }
   if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
   const lim = limits.get(l.car);
-  if (!lim) { row.note = 'not judged (thrusters)'; continue; }
-  const j = judgeDrive(xs, zs, ys, lim);
+  if (l.track === 'raadi') {
+    // (a car with thrusters leaves the start line harder than the others)
+    row.stage = stageCheck(xs, zs, l.pen || 0, lim?.gas?.launch);
+    if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
+  }
+  if (!lim) { row.note = 'not judged'; continue; }
+  const j = judgeDrive(xs, zs, ys, lim, { roll });
   row.over = { pull: j.pull, grip: j.grip, stop: j.stop, top: j.top };
+  // (a car with thrusters, the Rocket: the gas its drive used over what the tank held, of a full tank, the tanks it
+  // was counted to use in all, and the seconds of a kickflip in it)
+  const gas = lim.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used, ${j.air} s of a kickflip` : '';
+  if (lim.gas) Object.assign(row.over, { gas: j.gas, spent: j.spent, air: j.air });
   const worst = Math.max(j.pull, j.grip, j.stop, j.top);
-  if (j.why) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE DRIVE DOES NOT HOLD for this car (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`);
+  if (j.why) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE DRIVE DOES NOT HOLD for this car (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${gas})`);
   else if (worst > CLOSE) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: near a limit (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}; refused past ${OVER_MAX})`);
 }
 

@@ -513,7 +513,10 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
             const f = a / (a - b);
             const cx = st.prev.x + (x - st.prev.x) * f, cz = st.prev.z + (z - st.prev.z) * f;
             const lat = Math.abs(-(cx - start.x) * start.tz + (cz - start.z) * start.tx);
-            if (lat < start.hw + 6) {
+            // (a car in the air on a kickflip starts no lap: once a lap is on there are none, and its first seconds
+            // are not flown either. Martin 26 Nov 2026: "before hotlap starts in spawn it is ok to flip")
+            if (lat < start.hw + 6 && car.rocket?.flight && !st.running) toast('LAND FIRST · NO LAP FROM THE AIR', 2600);
+            else if (lat < start.hw + 6) {
               const tc = st.prevTime + (time - st.prevTime) * f;
               if (st.running) {
                 const lapT = tc - st.t0;

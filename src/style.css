@@ -1229,7 +1229,9 @@ body.touch #rallylights { top: calc(max(6px, env(safe-area-inset-top)) + 78px); 
 #stageagain:not(.hidden) { animation: stagefade 6s ease-in both; }
 @keyframes stagefade { 0% { opacity: .8; } 40% { opacity: .8; } 100% { opacity: 0; } }
 body.touch #stageagain { top: calc(34% + 40px); }
-#rbtn.away { font-size: .8em; animation: none; opacity: .9; }
+/* (on a stage run the race button keeps the race button's letters: Martin 26 Nov, at .8em they sat tiny in the big pill;
+   RACE STARTING takes RACE FINISHED's size, racemode.js) */
+#rbtn.away { animation: none; opacity: .9; }
 /* (desktop: on the right under the top buttons, clear of the race button at the top left: Martin 23 Nov) */
 #trackpills { right: max(10px, env(safe-area-inset-right)); top: calc(max(8px, env(safe-area-inset-top)) + 68px); display: flex; gap: 6px; pointer-events: auto; }
 #trackpills button { padding: 6px 12px; border: none; border-radius: 999px; background: rgba(18, 6, 43, .55); color: var(--cyan);

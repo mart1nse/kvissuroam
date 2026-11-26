@@ -4,7 +4,8 @@
 // The first car stands to the left and half a length ahead, the second to the right, the third ahead, the fourth behind.
 // more=&aatest=1: with edge smoothing, as a desktop with a graphics card draws them (these pictures are drawn in
 // software, where the game leaves it off, and a faded car is drawn another way without it: see setFade in
-// src/net/multiplayer.js). info=1: what a frame sends to the graphics card with the cars faded, and then with the
+// src/net/multiplayer.js). Stand-ins (phone=1 and more than three kinds of car, or wait=5000 before the cars are
+// built) fade the same way, and the count of them solid and see-through is printed. info=1: what a frame sends to the graphics card with the cars faded, and then with the
 // same cars solid (their hotlap flag dropped): fading must not add to it.
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -45,6 +46,14 @@ let flags = 8 | 3;      const bots = CARS.map((car, k) => {
 });
 await page.waitForTimeout(+arg('wait', 45000));
 console.log('sees', await page.evaluate(() => __game.mp().players().length), 'drivers');
+// the stand-ins drawn (a phone's fourth kind of car and on, a car not built yet): solid and see-through (Martin 26 Nov:
+// they stayed solid in the start crowd)
+const standins = () => page.evaluate(() => {
+  const n = { solid: 0, seeThrough: 0 };
+  __game.scene.traverse((o) => { if (o.isInstancedMesh && o.visible && /^remote far cars/.test(o.name)) n[/see-through$/.test(o.name) ? 'seeThrough' : 'solid'] += o.count; });
+  return n;
+});
+console.log('stand-ins', JSON.stringify(await standins()));
 await page.screenshot({ path: `${out}/${label}.png`, timeout: 240000 });
 // what a frame draws: pieces sent to the graphics card (least and most over 12 frames), triangles, shaders
 const drawn = () => page.evaluate(async () => {
@@ -55,10 +64,11 @@ const drawn = () => page.evaluate(async () => {
 if (arg('info')) {
   console.log('faded', JSON.stringify(await drawn()));
   flags = 3;
-  // (our car held where it is: the solid cars would push it away)
-  const hold = setInterval(() => page.evaluate(([x, z, yaw]) => __game.place({ x, z, yaw }), [p0[0], p0[1], yaw]).catch(() => {}), 150);
+  // (our car held where it is: the solid cars would push it away. Not by place(): a car just put somewhere passes
+  // through the others for 2 s, so everybody would stay faded)
+  const hold = setInterval(() => page.evaluate(([x, z, yaw]) => { const c = __game.car; c.x = x; c.z = z; c.yaw = yaw; c.vx = c.vy = c.yawRate = 0; }, [p0[0], p0[1], yaw]).catch(() => {}), 150);
   await page.waitForTimeout(+arg('settle', 12000));
-  console.log('solid', JSON.stringify(await drawn()));
+  console.log('solid', JSON.stringify(await drawn()), 'stand-ins', JSON.stringify(await standins()));
   clearInterval(hold);
   await page.screenshot({ path: `${out}/${label}-solid.png`, timeout: 240000 });
 }

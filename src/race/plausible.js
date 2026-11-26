@@ -89,7 +89,9 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   // speed at each sample from the places on both sides of it (level, and with the climb), its heading, and
   // whether a hop is near (those samples are not driving)
   const vh = new Float64Array(n), e = new Float64Array(n), hd = new Float64Array(n), hop = new Uint8Array(n), pw = new Float64Array(n + 1);
-  for (let i = 1; i < n; i++) if (Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]) > HOP) for (let j = Math.max(0, i - 12); j < Math.min(n, i + 12); j++) hop[j] = 1;
+  // (k.hop: the caller knows which samples are an R, the race desk does: there a long step is not taken for one)
+  if (k.hop) hop.set(k.hop);
+  else for (let i = 1; i < n; i++) if (Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]) > HOP) for (let j = Math.max(0, i - 12); j < Math.min(n, i + 12); j++) hop[j] = 1;
   const at = (v) => lim.pull[Math.min(lim.pull.length - 1, Math.floor(v / BIN))];
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), t = (b - a) * STEP;

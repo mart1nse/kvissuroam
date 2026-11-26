@@ -5,18 +5,25 @@ This tool fetches the runs, draws the four wheel paths of each one again, and su
 
   python3 tools/race/raadi-lines.py fetch [dir]            new runs from the live site into dir/runs.ndjson
   python3 tools/race/raadi-lines.py map [dir] [out.png]    the worn ground as a picture over the stage (to look at)
-  python3 tools/race/raadi-lines.py bake [dir]             src/race/raadi-line.json and public/raadi-line.png (what the game draws)
+  python3 tools/race/raadi-lines.py bake [dir]             src/race/raadi-line.json and src/race/raadi-line.png (what the game draws)
   python3 tools/race/raadi-lines.py synth [dir] [n]        made-up runs to try the tool with (never used for the real line)
 
 dir: /mnt/project-files/raadi-lines unless given. Options after the command: since=2026-11-26T12:00 (runs from then
 on), done=1 (finished runs only).
 
 How the runs are merged. Each wheel leaves wear along its path: 1 a metre for rolling, up to SLIDE more where its
-axle slides (as hard as the game's own tyre marks are drawn). The sum over all runs, per run, on a CELL grid of the
-ground, smoothed over BLUR metres, is the wear W. On the stage's gravel (the map's paths, the stage's own width,
-the park's wider gravel) the worn band is swept darker, and what is swept off lies beside it (the smoothed wear
-further out, less the wear itself); on grass and dirt light wear presses the grass and heavier wear takes it to
-soil. The game lays the result along the stage as one strip of picture (see bake).
+axle slides (as hard as the game's own tyre marks are drawn). The sum over all runs, per run that came by (a drive
+of the launch and the first corner alone counts there and nowhere else), on a CELL grid of the ground, smoothed over
+BLUR metres, is the wear W. On the stage's gravel (the map's paths, the stage's own width, the park's wider gravel)
+the worn band is swept darker, and what is swept off lies beside it (the smoothed wear further out, less the wear
+itself); on grass and dirt light wear presses the grass and heavier wear takes it to soil. The game lays the result
+along the stage as one strip of picture (see bake).
+
+The start is on tarmac (Martin 26 Nov 10:07: "highly detailed ... various lengths launch skid marks and then the
+corner darkening for the braking area and the full 1st corner"). There the picture holds a fourth share, rubber:
+a soft dark band where the cars brake, turn and slide. And every stretch a wheel slid on the tarmac is kept as a
+mark of its own, a ribbon as wide as the tyre (`marks` in raadi-line.json): the wheelspin away from the line, each
+launch as long as it was, a locked wheel into the corner, the slide through it.
 """
 import base64, gzip, json, math, os, sys, urllib.request
 import numpy as np
@@ -25,14 +32,37 @@ from PIL import Image, ImageDraw
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../')
 SITE = 'https://www.linnaring.com'
 R = json.load(open(ROOT + 'src/race/raadi.json'))
+PA = json.load(open(ROOT + 'src/world/raadipaths.json'))
 P = np.array(R['pts'], float); HW = np.array(R['hw'], float); N = len(P); START = R['start']; FIN = R['finish']
+TAIL_M, TAIL_STEP = 30.0, 2.0            # the strip runs on this far past the stage's last point (the cars stop there)
+
+
+def tail_points():
+    """the road on from the stage's last point (the path of raadipaths.json that passes through it), every TAIL_STEP"""
+    for g in PA['gravel']:
+        L = np.array(g['line'], float)
+        k = np.nonzero(np.hypot(L[:, 0] - P[-1, 0], L[:, 1] - P[-1, 1]) < 0.6)[0]
+        if not len(k) or k[0] == len(L) - 1: continue
+        rest = L[k[0]:]; cum = np.r_[0, np.cumsum(np.hypot(np.diff(rest[:, 0]), np.diff(rest[:, 1])))]
+        d = np.arange(TAIL_STEP, min(TAIL_M, cum[-1]) + 1e-6, TAIL_STEP)
+        return np.round(np.c_[np.interp(d, cum, rest[:, 0]), np.interp(d, cum, rest[:, 1])], 2)
+    return np.zeros((0, 2))
+
+
+TAIL = tail_points()
+Q = np.vstack([P, TAIL]); M = len(Q)     # the strip's centre line: the stage's points and the tail
 F = 10                                   # values a sample (src/race/linelog.js)
 CELL = 0.2                               # metres a cell of the ground grid
 PAD = 22                                 # metres of grid round the stage
 SLIDE = 3.0                              # a wheel sliding at full strength wears this much more than rolling
 BLUR_MIN = 0.25                          # metres: the least the summed wear is smoothed over
-X0 = math.floor(P[:, 0].min() - PAD); Z0 = math.floor(P[:, 1].min() - PAD)
-GW = int(math.ceil((P[:, 0].max() + PAD - X0) / CELL)); GH = int(math.ceil((P[:, 1].max() + PAD - Z0) / CELL))
+X0 = math.floor(Q[:, 0].min() - PAD); Z0 = math.floor(Q[:, 1].min() - PAD)
+GW = int(math.ceil((Q[:, 0].max() + PAD - X0) / CELL)); GH = int(math.ceil((Q[:, 1].max() + PAD - Z0) / CELL))
+BRAKE = 1.5                              # on tarmac: a wheel rolling under the brakes leaves this much, rolling free ROLL_T
+ROLL_T = 0.35
+SHORT_M, SHORT_FROM, SHORT_SLOW = 400.0, 20.0, 3.0   # a drive this short that did not finish was for the launch:
+                                         # it ends where, SHORT_FROM in, the car is slower than SHORT_SLOW m/s
+COVER_R, CC = 4.0, 2.0                   # a run "came by" within this of its path; counted on a grid of CC metres
 
 
 def args():
@@ -103,6 +133,16 @@ def wheel_paths(s, m):
     return out
 
 
+def kept(r, s):
+    """the samples of a run that count: a short drive made for the launch and the first corner ends where the car all
+    but stood still or ran backwards (a spin, a wall), whatever came after"""
+    if r.get('done'): return s
+    d = np.r_[0, np.cumsum(np.hypot(np.diff(s[:, 0]), np.diff(s[:, 1])))] / 100
+    if d[-1] >= SHORT_M: return s
+    slow = np.nonzero((d > SHORT_FROM) & (s[:, 3] < SHORT_SLOW * 10))[0]
+    return s[:slow[0]] if len(slow) else s
+
+
 def splat(grid, x, z, w):
     """adds the weights w at the points (x, z), shared between the four cells round each"""
     gx = (x - X0) / CELL - 0.5; gz = (z - Z0) / CELL - 0.5
@@ -114,13 +154,37 @@ def splat(grid, x, z, w):
     np.add.at(grid, (iz + 1, ix), w * (1 - tx) * tz); np.add.at(grid, (iz + 1, ix + 1), w * tx * tz)
 
 
+def came_by(x, z):
+    """the cells of the CC grid within COVER_R of a car's path, as 0 / 1"""
+    cw = int(math.ceil(GW * CELL / CC)); ch = int(math.ceil(GH * CELL / CC))
+    g = np.zeros((ch, cw), bool)
+    d = np.hypot(np.diff(x), np.diff(z)); k = np.maximum(1, np.ceil(d / (CC * 0.5))).astype(int)
+    for i in np.nonzero(d < 5)[0]:
+        t = (np.arange(k[i] + 1) / k[i])
+        ix = ((x[i] + (x[i + 1] - x[i]) * t - X0) / CC).astype(int); iz = ((z[i] + (z[i + 1] - z[i]) * t - Z0) / CC).astype(int)
+        ok = (ix >= 0) & (iz >= 0) & (ix < cw) & (iz < ch)
+        g[iz[ok], ix[ok]] = True
+    rr = int(math.ceil(COVER_R / CC)); out = np.zeros_like(g)
+    for a in range(-rr, rr + 1):
+        for b in range(-rr, rr + 1):
+            if a * a + b * b > (COVER_R / CC + 0.5) ** 2: continue
+            out[max(0, a):ch + min(0, a), max(0, b):cw + min(0, b)] |= g[max(0, -a):ch + min(0, -a), max(0, -b):cw + min(0, -b)]
+    return out
+
+
 def wear(runs):
-    """(roll, slide, n): wheel passes and sliding per cell, summed over the runs; n: the runs that counted"""
-    roll = np.zeros((GH, GW)); slide = np.zeros((GH, GW)); n = 0
+    """(roll, slide, brake, cover, n): wheel passes, sliding and rolling under the brakes per cell, summed over the
+    runs; cover: how many runs came by each cell; n: the runs that counted"""
+    roll = np.zeros((GH, GW)); slide = np.zeros((GH, GW)); brk = np.zeros((GH, GW)); n = 0
+    cover = np.zeros((int(math.ceil(GH * CELL / CC)), int(math.ceil(GW * CELL / CC))))
     for r in runs:
         s = samples(r)
-        if s is None or len(s) < 100: continue
+        if s is None or len(s) < 60: continue
+        s = kept(r, s)
+        if len(s) < 40: continue
         n += 1
+        cover += came_by(s[:, 0] / 100, s[:, 1] / 100)
+        braking = (s[:, 9] & 1) > 0
         for (x, z, sl, air) in wheel_paths(s, r.get('m') or [0, 0, 0, 0]):
             dx = np.diff(x); dz = np.diff(z); d = np.hypot(dx, dz)
             ok = (d > 1e-3) & (d < 5) & ~air[1:]                  # (not across a jump of the car, not in the air)
@@ -134,7 +198,11 @@ def wear(runs):
             w = d[idx] / k[idx] / CELL
             splat(roll, px, pz, w)
             splat(slide, px, pz, w * (sl[idx] + (sl[idx + 1] - sl[idx]) * t))
-    return roll, slide, n
+            splat(brk, px, pz, w * braking[idx + 1])
+    # the count on the fine grid, smoothed, and never under one run
+    c = np.kron(cover, np.ones((int(round(CC / CELL)),) * 2))[:GH, :GW]
+    c = np.pad(c, ((0, GH - c.shape[0]), (0, GW - c.shape[1])), mode='edge')
+    return roll, slide, brk, np.maximum(1, blur(c, 1.5)), n
 
 
 def blur(a, sigma):
@@ -156,50 +224,68 @@ def blur(a, sigma):
     return out
 
 
-def gravel_mask():
-    """where the game's ground is gravel round the stage (the map's roads there at their widths, the stage at its
-    own, the park's wider gravel), as tools/race/raadi-gravel.py takes it"""
-    V = json.load(open(ROOT + 'public/data/vectors.json')); PA = json.load(open(ROOT + 'src/world/raadipaths.json'))
+TAR_R = 14.0                             # round the start, up to where the gravel begins: what is not gravel is tarmac
+
+
+def ground_masks():
+    """(gravel, tarmac) round the stage, each 0..1 per cell. Gravel: the map's roads there at their widths, the stage
+    at its own, the park's wider gravel, as tools/race/raadi-gravel.py takes it. Tarmac: the bands painted on the
+    start lane (raadipaths.json `paint`), and round the first corner, inside Narva mnt's paving, all that is not
+    gravel."""
+    V = json.load(open(ROOT + 'public/data/vectors.json'))
     S = 2                                        # (drawn at twice the grid, for smooth edges)
-    im = Image.new('L', (GW * S, GH * S), 0); d = ImageDraw.Draw(im)
+    def sheet():
+        im = Image.new('L', (GW * S, GH * S), 0); return im, ImageDraw.Draw(im)
     px = lambda p: ((p[0] - X0) / CELL * S, (p[1] - Z0) / CELL * S)
-    def band(pts, w):
+    def band(pts, w, d):
         q = [px(p) for p in pts]
         d.line(q, fill=255, width=max(1, int(round(w / CELL * S))), joint='curve')
         r = w / CELL * S / 2
         for a in q: d.ellipse([a[0] - r, a[1] - r, a[0] + r, a[1] + r], fill=255)
+    done = lambda im: np.asarray(im.resize((GW, GH), Image.BOX), float) / 255
+    im, d = sheet()
     x0, x1, z0, z1 = X0, X0 + GW * CELL, Z0, Z0 + GH * CELL
     for r in V['roads'] + PA['add']:
         if r.get('s') not in (2, 3): continue                     # (gravel and dirt roads only)
         xs = [p[0] for p in r['pts']]; zs = [p[1] for p in r['pts']]
         if max(xs) < x0 or min(xs) > x1 or max(zs) < z0 or min(zs) > z1: continue
-        band(r['pts'], r.get('w', 4))
-    for g in PA['gravel']: band(g['line'], g['w'])
-    for i in range(R.get('gravelFrom', 0), N - 1): band([P[i], P[i + 1]], 2 * HW[i])
-    for a in PA['aprons']:
-        q = a if isinstance(a, list) else a.get('pts') or a.get('ring')
-        pts = [px((q[i], q[i + 1])) for i in range(0, len(q), 2)] if not isinstance(q[0], list) else [px(p) for p in q]
-        d.polygon(pts, fill=255)
-    return np.asarray(im.resize((GW, GH), Image.BOX), float) / 255
+        band(r['pts'], r.get('w', 4), d)
+    for g in PA['gravel']: band(g['line'], g['w'], d)
+    for i in range(R.get('gravelFrom', 0), N - 1): band([P[i], P[i + 1]], 2 * HW[i], d)
+    for a in PA['aprons'] + PA.get('fillets', []):
+        d.polygon([px((a[i], a[i + 1])) for i in range(0, len(a), 2)], fill=255)
+    g = done(im)
+    im, d = sheet()
+    for p in PA['paint']: band(p['pts'], p['w'], d)
+    paint = done(im)
+    im, d = sheet()
+    band(P[:R.get('gravelFrom', 0) + 2], 2 * TAR_R, d)
+    zone = done(im)
+    g = g * (1 - paint)
+    return g, np.maximum(paint, zone * (1 - g))
 
 
 def worn(runs, o):
-    """the worn ground: W (wear per run, smoothed), the same on a level scale 0..1, and the runs that counted"""
-    roll, slide, n = wear(runs)
+    """the worn ground: W (wear per run that came by, smoothed), WT (the same as tarmac takes it: little from a
+    wheel that only rolls, more under the brakes) and the runs that counted"""
+    roll, slide, brk, cover, n = wear(runs)
     if not n: sys.exit('no runs')
     # (smoothed more while the runs are few, as an estimate of where the many will drive: 0.6 m for 3 runs, 0.47 m
     # for 10, 0.3 m for 100, never under BLUR_MIN)
-    sig = float(o['blur']) if 'blur' in o else min(0.7, max(BLUR_MIN, 0.75 * n ** -0.2))
-    W = blur(roll + SLIDE * slide, sig) / n
-    print(f'{n} runs, smoothed over {sig:.2f} m')
-    return W, n
+    full = sum(1 for r in runs if r.get('done'))
+    sig = float(o['blur']) if 'blur' in o else min(0.7, max(BLUR_MIN, 0.75 * max(1, full) ** -0.2))
+    W = blur(roll + SLIDE * slide, sig) / cover
+    WT = blur(ROLL_T * roll + BRAKE * brk + SLIDE * slide, sig) / cover
+    print(f'{n} runs ({full} to the finish), smoothed over {sig:.2f} m')
+    return W, WT, n
 
 
 # ---------------------------------------------------------------- a picture to look at
 def draw_map(d, out, o):
     runs = load_runs(d, o)
-    W, n = worn(runs, o)
-    g = gravel_mask()
+    W, WT, n = worn(runs, o)
+    g, tar = ground_masks()
+    g = np.maximum(g, tar)
     top = np.percentile(W[W > 0.02], 97) if (W > 0.02).any() else 1
     v = np.clip(W / top, 0, 1) ** 0.6
     img = np.zeros((GH, GW, 3))
@@ -217,18 +303,22 @@ def draw_map(d, out, o):
 
 # ---------------------------------------------------------------- what the game draws
 # One strip of picture laid along the stage: across it u = 0..1 is E metres left to E metres right of the centre
-# line, along it v = 0..1 is the stage's points I0 to I1. TW x TH texels, each holding how worn the ground is there
-# as three shares 0..255: R gravel swept, G loose gravel lying beside the swept band, B grass worn to soil. The
-# game turns each into a factor on the ground's colour, factor = colour ^ share (src/race/raadi-line.js), so shares
-# add up where the strip lies on itself: the stage crosses its own path and drives one stretch twice, and inside a
-# tight corner a strip this wide folds over itself. There each layer gets its part of the wear, by a weight that
-# fades to nothing at the strip's own edges (so no layer ends at a visible line) and the parts sum to the whole.
+# line, along it v = 0..1 is the strip's points I0 to I1 (the stage's, from a little before the start line, and the
+# tail past its last one). TW x TH texels, each holding how worn the ground is there as four shares 0..255: R gravel
+# swept, G loose gravel lying beside the swept band, B grass worn to soil, and 255 - A rubber on tarmac (A is full
+# where there is none, so a browser that multiplies colour by alpha on its own loses next to nothing). The game
+# turns each into a factor on the ground's colour, factor = colour ^ share (src/race/raadi-line.js), so shares add up
+# where the strip lies on itself: the stage crosses its own path and drives one stretch twice, and inside a tight
+# corner a strip this wide folds over itself. There each layer gets its part of the wear, by a weight that fades to
+# nothing at the strip's own edges (so no layer ends at a visible line) and the parts sum to the whole.
 E = 9.0                                  # metres either side of the centre line
 K = 12                                   # quads across the strip (the mesh; 1.5 m each)
 TW, TH = 64, 4096
 EDGE_M, END_M = 2.0, 4.0                 # the weight fades over this at the strip's sides and its two ends
-TAN = np.array([(P[min(N - 1, i + 1)] - P[max(0, i - 1)]) for i in range(N)]); TAN /= np.hypot(TAN[:, 0], TAN[:, 1])[:, None]
-I0 = max(START - 3, R.get('gravelFrom', 0)); I1 = N - 1
+TAN = np.array([(Q[min(M - 1, i + 1)] - Q[max(0, i - 1)]) for i in range(M)]); TAN /= np.hypot(TAN[:, 0], TAN[:, 1])[:, None]
+I0 = max(0, START - 3); I1 = M - 1
+MARK_MIN, MARK_SHOW = 0.04, 0.15         # a mark is kept where the slide is over MARK_MIN, if it reaches MARK_SHOW
+PATCH = 0.15                             # a tyre's contact patch: the width of a mark laid sideways (src/skidmarks.js)
 
 
 def sstep(a, b, x):
@@ -237,19 +327,19 @@ def sstep(a, b, x):
 
 
 def strip_pos(fi, d):
-    """the ground under the strip at stage index fi (may be fractional) and d metres right of the centre line"""
-    i = np.clip(np.floor(fi).astype(int), 0, N - 2); t = fi - i
-    ax = P[i, 0] - TAN[i, 1] * d; az = P[i, 1] + TAN[i, 0] * d
-    bx = P[i + 1, 0] - TAN[i + 1, 1] * d; bz = P[i + 1, 1] + TAN[i + 1, 0] * d
+    """the ground under the strip at index fi of its line (may be fractional) and d metres right of the centre"""
+    i = np.clip(np.floor(fi).astype(int), 0, M - 2); t = fi - i
+    ax = Q[i, 0] - TAN[i, 1] * d; az = Q[i, 1] + TAN[i, 0] * d
+    bx = Q[i + 1, 0] - TAN[i + 1, 1] * d; bz = Q[i + 1, 1] + TAN[i + 1, 0] * d
     return ax + (bx - ax) * t, az + (bz - az) * t
 
 
-CUM = np.r_[0, np.cumsum(np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])))]
+CUM = np.r_[0, np.cumsum(np.hypot(np.diff(Q[:, 0]), np.diff(Q[:, 1])))]
 
 
 def weight(fi, d):
     """a layer's weight: 1 in the strip, fading out at its sides and ends"""
-    m = np.interp(fi, np.arange(N), CUM)
+    m = np.interp(fi, np.arange(M), CUM)
     return sstep(0, EDGE_M, E - np.abs(d)) * sstep(0, END_M, m - CUM[I0]) * sstep(0, END_M, CUM[I1] - m)
 
 
@@ -268,7 +358,7 @@ def layers():
         for j in range(K):
             # the quad's corners as the game orders them: (i, j), (i, j+1), (i+1, j), (i+1, j+1)
             c = [(i, ds[j]), (i, ds[j + 1]), (i + 1, ds[j]), (i + 1, ds[j + 1])]
-            xy = [strip_pos(np.array(float(q[0])), q[1]) if q[0] < N - 1 else (P[q[0], 0] - TAN[q[0], 1] * q[1], P[q[0], 1] + TAN[q[0], 0] * q[1]) for q in c]
+            xy = [(Q[q[0], 0] - TAN[q[0], 1] * q[1], Q[q[0], 1] + TAN[q[0], 0] * q[1]) for q in c]
             for tri in ((0, 1, 2), (2, 1, 3)):
                 (x0, z0), (x1, z1), (x2, z2) = [(float(xy[k][0]), float(xy[k][1])) for k in tri]
                 area = (x1 - x0) * (z2 - z0) - (x2 - x0) * (z1 - z0)
@@ -289,23 +379,66 @@ def layers():
     return Hs
 
 
-def looks(W, g):
-    """the three shares over the ground: gravel swept, loose gravel beside the swept band, grass worn to soil"""
+def looks(W, WT, g, tar):
+    """the four shares over the ground: gravel swept, loose gravel beside the swept band, grass worn to soil, rubber
+    on tarmac"""
     on = W[(W > 0.02) & (g > 0.5)]
     top = float(np.percentile(on, 97)) if on.size else 1.0
     wn = W / top
     wide = blur(W, 0.75) / top
     swept = g * (1 - np.exp(-2.2 * wn))
     loose = g * np.clip(2.2 * wide - 1.6 * wn, 0, 1) * sstep(0.02, 0.12, wide)
-    soil = (1 - g) * np.clip(0.75 * wn, 0, 1) ** 0.8
-    return swept, loose, soil, top
+    soil = (1 - g) * (1 - tar) * np.clip(0.75 * wn, 0, 1) ** 0.8
+    # tarmac: the band the cars keep to, a shade darker, and darker again where they brake, turn in and slide
+    ont = WT[(WT > 0.02) & (tar > 0.5)]
+    topt = float(np.percentile(ont, 97)) if ont.size else 1.0
+    rubber = tar * (1 - np.exp(-2.0 * blur(WT, 0.35) / topt))
+    return swept, loose, soil, rubber, top
+
+
+def marks(runs, tar):
+    """every stretch a wheel slid on the tarmac, as a ribbon: [x, z, w, a, ...] per point in whole numbers, x and z
+    in cm from the start line's point, w the mark's width in cm (a tyre's, broader when it is dragged sideways), a
+    its strength 0..100"""
+    out = []
+    ox, oz = P[START]
+    for r in runs:
+        s = samples(r)
+        if s is None or len(s) < 60: continue
+        s = kept(r, s)
+        if len(s) < 40: continue
+        m = r.get('m') or [0, 0, 0, 0]
+        tyre = (m[3] or 20) / 100
+        yaw = s[:, 2] / 1000; hx = np.sin(yaw); hz = -np.cos(yaw)
+        for (x, z, sl, air) in wheel_paths(s, m):
+            a = np.where(air, 0, sl) * sstep(0.35, 0.65, sample(tar, x, z))
+            dx = np.gradient(x); dz = np.gradient(z); l = np.hypot(dx, dz)
+            cb = np.where(l > 0.02, np.abs(dx * hx + dz * hz) / np.maximum(l, 1e-6), 1.0)
+            w = tyre * cb + PATCH * np.sqrt(np.clip(1 - cb * cb, 0, 1))
+            step = np.r_[np.hypot(np.diff(x), np.diff(z)), 99]          # (to the next sample)
+            live = a > MARK_MIN
+            i = 0; n = len(a)
+            while i < n:
+                if not live[i]: i += 1; continue
+                j = i
+                while j + 1 < n and live[j + 1] and step[j] < 3: j += 1
+                if a[i:j + 1].max() >= MARK_SHOW:
+                    k0 = i - 1 if i > 0 and step[i - 1] < 3 else i; k1 = j + 1 if j + 1 < n and step[j] < 3 else j
+                    if k1 > k0:
+                        row = []
+                        for k in range(k0, k1 + 1):
+                            ak = a[k] if i <= k <= j else 0.0
+                            row += [int(round((x[k] - ox) * 100)), int(round((z[k] - oz) * 100)), int(round(w[k] * 100)), int(round(ak * 100))]
+                        out.append(row)
+                i = j + 1
+    return out
 
 
 def bake(d, o):
     runs = load_runs(d, o)
-    W, n = worn(runs, o)
-    g = gravel_mask()
-    swept, loose, soil, top = looks(W, g)
+    W, WT, n = worn(runs, o)
+    g, tar = ground_masks()
+    swept, loose, soil, rubber, top = looks(W, WT, g, tar)
     Hs = layers()
     fi = I0 + (np.arange(TH) + 0.5) / TH * (I1 - I0)
     dd = -E + 2 * E * (np.arange(TW) + 0.5) / TW
@@ -313,7 +446,7 @@ def bake(d, o):
     x, z = strip_pos(FI, DD)
     h = weight(FI, DD); H = sample(Hs, x, z)
     part = np.where(H > 1e-3, np.minimum(1, h / np.maximum(H, 1e-3)), 1.0)
-    img = np.stack([sample(a, x, z) * part for a in (swept, loose, soil)], -1)
+    img = np.stack([sample(a, x, z) * part for a in (swept, loose, soil, rubber)], -1)
     img8 = np.round(np.clip(img, 0, 1) * 255).astype(np.uint8)
     # which quads of each row of the mesh have anything on them (the others are left out)
     cols = []
@@ -324,12 +457,16 @@ def bake(d, o):
         c = np.nonzero(live[r0:r1].any(0))[0]
         if not len(c): cols.append([0, 0]); continue
         cols.append([max(0, int(math.floor((c[0] - 1) / cpq))), min(K, int(math.floor((c[-1] + 1) / cpq)) + 1)])
-    Image.fromarray(img8, 'RGB').save(ROOT + 'src/race/raadi-line.png', optimize=True)
+    img8[..., 3] = 255 - img8[..., 3]
+    Image.fromarray(img8, 'RGBA').save(ROOT + 'src/race/raadi-line.png', optimize=True)
+    mk = marks(runs, tar)
     when = max((r['at'] for r in runs), default='')
-    json.dump({'v': 1, 'i0': I0, 'i1': I1, 'e': E, 'k': K, 'runs': n, 'until': when, 'cols': cols}, open(ROOT + 'src/race/raadi-line.json', 'w'), separators=(',', ':'))
+    json.dump({'v': 2, 'i0': I0, 'i1': I1, 'e': E, 'k': K, 'runs': n, 'until': when, 'tail': TAIL.tolist(), 'cols': cols, 'marks': mk},
+              open(ROOT + 'src/race/raadi-line.json', 'w'), separators=(',', ':'))
     quads = sum(b - a for a, b in cols)
     print(f'{n} runs (the last at {when}), full wear {top:.2f} passes a run; {quads} quads of {len(cols) * K}; '
-          f'picture {TW}x{TH}, {os.path.getsize(ROOT + "src/race/raadi-line.png") // 1024} KB; layers up to {Hs.max():.2f}')
+          f'picture {TW}x{TH}, {os.path.getsize(ROOT + "src/race/raadi-line.png") // 1024} KB; layers up to {Hs.max():.2f}; '
+          f'{len(mk)} marks of {sum(len(m) for m in mk) // 4} points, json {os.path.getsize(ROOT + "src/race/raadi-line.json") // 1024} KB')
 
 
 # ---------------------------------------------------------------- made-up runs to try the tool with

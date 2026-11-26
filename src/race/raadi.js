@@ -459,7 +459,7 @@ export function createStage({ world, scene, toast, place, onRun, wood, beep, bes
   function* build() {
     // the worn line made from real runs (src/race/raadi-line.js), in place of the tracks along an ideal line
     if (oldTracks) yield* buildTracks();
-    else lineInfo = yield* buildLine({ group, P, TAN, S, groundY });
+    else lineInfo = yield* buildLine({ group, P, START, groundY });
     yield;
     // signs: yellow time control and the red start flag; the start clock; the line
     sign('tc', 1, HW[1] + 1.4);

@@ -1042,7 +1042,7 @@ async function boot() {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
     tp.id = 'trackpills';
-    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Raadi rally stage start">RAADI</button>';
+    tp.innerHTML = '<button data-act="track-toome" title="Toomemägi lap start">TOOMEMÄGI</button><button data-act="track-raadi" title="Majoraadi rally stage start">MAJORAADI</button>';
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null });
@@ -1245,7 +1245,7 @@ let garage = null;
 function layoutMenu() {
   garage?.sync(carId);
   const d = $('#drivecar');
-  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'RAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
+  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
 function buildMenu() {
@@ -1461,7 +1461,7 @@ function trackPills() {
   if (at === pillAt) return;
   pillAt = at;
   const b = document.querySelector('#trackpills [data-act="track-raadi"]');
-  if (b) { b.textContent = at ? '↺ RAADI START' : 'RAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Raadi rally stage start'; }
+  if (b) { b.textContent = at ? '↺ MAJORAADI START' : 'MAJORAADI'; b.classList.toggle('here', at); b.title = at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start'; }
 }
 
 function goHome() {

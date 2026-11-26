@@ -61,7 +61,8 @@ const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 const YAW_TAU = 0.12;              // the side nozzles stop the nose swinging in about this long (s)
 const MAX_T = 6;                   // no flight longer than this (s)
 const LOW_WALL = 1.5;              // a wall that belongs to no house stops the car only this low over the ground (m)
-const TREE_TOP = 6;                // a tree is flown over from this far above the ground (m), into below it
+const TREE_TOP = 6;                // a tree is flown over from this far above the ground (m), into below it (where the world does not say how high each is solid)
+const ROOF_STEP = 0.3;             // a roof this far over the wheels is still come down on, a higher one is a wall (as in physics.js)
 
 // nozzle order in rocket.noz (0..1, how hard each works): 4 rear (left to right), down front-left,
 // front-right, rear-left, rear-right, and the two at the nose that turn it: left, right
@@ -148,7 +149,7 @@ export function rocketStep(car, input, world, dt, droop = 0) {
 }
 
 // ---------------------------------------------------------------------------------------------- the plan
-const tmpT = [];
+const tmpT = [], tmpTT = [];
 const ground = (world, x, z, y) => (world.groundAt ? world.groundAt(x, z, y + 0.4) : world.heightAt(x, z));
 
 // height and vertical speed before the landing burn: the lift-off push, then free flight
@@ -608,12 +609,21 @@ function fly(car, world, dt, droop = 0) {
     // (a wall is in the way when the house it belongs to stands higher than the car is; one with no house to it,
     // a garden wall, a fence's footing, only low down)
     let wall = world.sdfAt(pose.x, pose.z) < car.halfWid * 0.9;
-    if (wall && world.roofAt) {
+    // (the map's houses have their roofs, which the car can come down on, 26 Nov: only what stands higher than its
+    // wheels there is a wall, as for a car driving on a roof, physics.js)
+    if (wall && world.wallTop) wall = world.wallTop(pose.x, pose.z, pose.y + 0.4) > pose.y + ROOF_STEP;
+    else if (wall && world.roofAt) {
       let top = -1e9;
       for (let k = 0; k < 5; k++) top = Math.max(top, world.roofAt(pose.x + (k === 1 ? 2 : k === 2 ? -2 : 0), pose.z + (k === 3 ? 2 : k === 4 ? -2 : 0)));
       wall = top > -1e8 ? pose.y < top + 0.2 : up < LOW_WALL;
     }
-    const tree = !wall && up < TREE_TOP && world.trunksNear && world.trunksNear(pose.x, pose.z, car.halfWid + 0.3, tmpT).length > 0;
+    // (a tree: its trunk and lower boughs, as high as the map says that tree is solid; through its top the car flies)
+    let tree = false;
+    if (!wall && world.trunksNear) {
+      tmpTT.length = 0;
+      const n = world.trunksNear(pose.x, pose.z, car.halfWid + 0.3, tmpT, tmpTT).length / 3;
+      for (let i = 0; i < n && !tree; i++) tree = tmpTT.length ? pose.y < tmpTT[i] : up < TREE_TOP;
+    }
     if (wall || tree || (!done && up < -0.08)) { letGo(car, p.t > dt ? (pose.roll - roll0) / dt : p.side, true, up); return; }
   }
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.pitch = pose.pitch;

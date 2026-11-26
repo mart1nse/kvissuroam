@@ -1063,6 +1063,9 @@ async function boot() {
     halo: (on) => race.finishHalo(on),
     // on a Raadi time attack: not pulled into a race or counted in its vote, only offered a small JOIN
     busy: stageBusy, unbusy: () => { stage?.cancel('STAGE LEFT FOR THE RACE'); mp.setDriving(true); },
+    // (a car with thrusters does not race: Martin 26 Nov, "do not allow the tesla to take part in races". It
+    // laps on its own, with BOOST and without FLIP once the lap is on: ctl.flipOff below)
+    noRace: () => !!car.spec.thrusters,
     // (desktop: a name in the race list follows that car, like the online list)
     onWatch: isTouch ? null : (id) => watch?.start(id), watching: () => watch?.id || null,
   });

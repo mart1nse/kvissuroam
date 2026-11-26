@@ -138,7 +138,7 @@ const POSE_KEEP = 5000;                               // a car that has not sent
 // ahead of the server's: how far ahead it has ever been is kept (top), and a stamp past that is not believed.
 // V_MAX is for any car; one seen going over V_ASK has its own top speed looked up (carLimit: the game's physics,
 // once per kind of car) and is held to TOP_K of that from then on.
-const V_MAX = 110, STEP_ROOM = 1;                     // m/s (396 km/h), and metres
+const V_MAX = 116, STEP_ROOM = 1;                     // m/s (418 km/h; 110 until the Roadster Rocket, shown to nobody yet, was given its 405), and metres
 const V_ASK = 45, V_TOP_K = 1.15, V_TOP_ROOM = 3;
 const GAP_MS = 1500, FRESH_MS = 2000, FLAG_FRESH = 64;
 const JUMPS_MAX = 12, JUMP_LEAK = 5000;

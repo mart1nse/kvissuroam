@@ -325,7 +325,13 @@ body.touch.rocketpad #people .who > li > .nm { max-width: calc(var(--flipr) - va
    between the dial's last two numbers, with the speed and the kW moved up to make room. And "a touch more higher"
    with no km/h under the speed ("on the tach you do not need km/h text showing"): level with those two numbers. */
 .pad.rocket.dial button { --rd: calc(var(--d) * .135); width: var(--rd); height: var(--rd); right: auto; bottom: auto; top: calc(var(--d) * .752 - var(--rd) / 2);
-  padding: 0; pointer-events: auto; cursor: pointer; font-size: 0; box-shadow: 0 0 12px -4px var(--c), inset 0 1px 0 rgba(255, 255, 255, .2); -webkit-tap-highlight-color: transparent; }
+  padding: 0; pointer-events: auto; cursor: pointer; font-size: 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); -webkit-tap-highlight-color: transparent; }
+/* (no halo round them in the dial: "you can reduce the halo of the two new tach buttons as the lower fan button does
+   not have it too", Martin 26 Nov. Only while gas goes out do the rings glow a little) */
+.pad.rocket.dial .ring, .pad.rocket.dial .ic { filter: none; }
+.pad.rocket.dial button small { text-shadow: none; }
+.pad.rocket.dial button.held { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+.pad.rocket.dial button.use .ring { filter: drop-shadow(0 0 2px #fff); }
 .pad.rocket.dial button.boost { left: calc(50% - var(--d) * .074 - var(--rd) / 2); }
 .pad.rocket.dial button.flip { left: calc(50% + var(--d) * .074 - var(--rd) / 2); }
 .pad.rocket.dial button b { display: none; }

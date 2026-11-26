@@ -18,6 +18,7 @@ const RUB1 = 13;           // ... and where it makes the most
 const MIST_RATE = 32;      // puffs per second from one of a Rocket's corner nozzles blowing hard at the ground...
 const MIST_UP = 4;         // ...from under this many metres up
 const MIST_LAND = 0.7;     // ...and this much more of them from a car coming down (the landing burn)
+const MIST_LIFT = 0.5;     // ...or from one lifting off, whose steam also rises more
 const FAN_DUST = 16;       // puffs per second from a fan car's suction fans at full speed on gravel...
 const FAN_GROUND = [0, 0, 1, 0.7];   // ...and each ground's share of that: grass, paving, gravel, dirt (physics.js SURF)
 const DUST = -0.85;        // a puff's shade for dust (below 0: towards the dust colour)
@@ -232,11 +233,13 @@ export function createSmoke(world) {
     // (coming down, the landing burn pushes out more of it and further than the lift-off did: Martin 25 Nov, from
     // Tesla's film. The car is coming down when it is lower than it was at the last look.)
     const land = owed.up !== undefined && up < owed.up - 1e-3 ? 1 : 0;
+    // (and the lift-off push stands in its own steam: more of it, and rising. Martin 26 Nov: "a bit more steamy")
+    const off = !land && up < 2.5 ? 1 : 0;
     owed.up = up;
     for (let i = 0; i < 4; i++) {
       const k = noz[NOZ_DOWN + i];
       if (k <= 0.25) { owed[i] = 0; continue; }
-      owed[i] += MIST_RATE * (1 + MIST_LAND * land) * Math.max(0.4, thinK) * k * near * dt;
+      owed[i] += MIST_RATE * (1 + MIST_LAND * land + MIST_LIFT * off) * Math.max(0.4, thinK) * k * near * dt;
       if (owed[i] < 1) continue;
       const N = NOZZLES[NOZ_DOWN + i], along = mid - N[2];
       const x = car.x + fx * along + sx * N[0], z = car.z + fz * along + sz * N[0];
@@ -244,7 +247,7 @@ export function createSmoke(world) {
         owed[i] -= 1;
         // out along the ground, away from the middle of the car, any way round
         const a = Math.atan2(sz * N[0] - fz * N[2], sx * N[0] - fx * N[2]) + (Math.random() - 0.5) * 2.6, v = (3 + 6 * Math.random()) * (1 + 0.35 * land);
-        puff(x, gyc + 0.15, z, wvx * 0.35 + Math.cos(a) * v, 0.4 + Math.random() * 1.2, wvz * 0.35 + Math.sin(a) * v, 0.6 + 0.6 * k + 0.25 * land);
+        puff(x, gyc + 0.15, z, wvx * 0.35 + Math.cos(a) * v, 0.4 + Math.random() * (1.2 + 1.6 * off), wvz * 0.35 + Math.sin(a) * v, 0.6 + 0.6 * k + 0.25 * land + 0.2 * off);
       }
     }
   }

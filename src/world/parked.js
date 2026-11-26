@@ -54,6 +54,7 @@ import { VAKSALI_CARS } from './vaksali.js';
 import { LENNUAKADEEMIA_CARS } from './lennuakadeemia.js';
 import { ULENURME_KONSUM_CARS } from './ulenurmekonsum.js';
 import { still, stir } from '../still.js';
+import { onTopOf } from '../cars/tops.js';
 
 // ---------------------------------------------------------------- what stands where
 // paint: colour, and solid (not metallic) for the plain whites
@@ -239,7 +240,7 @@ function takeTemplate(id, model, parts = takeParts(id, model, !!TINT[id])) {
   const paintPart = parts.find((p) => p.paint || p.tint);
   const T = {
     id, lod: null, parts, near: null, nearMats: null, paints: new Map(),
-    hl: model.size.length / 2, hw: model.size.width / 2, wb: model.wheelbase, tr: model.track,
+    hl: model.size.length / 2, hw: model.size.width / 2, ht: model.size.height || 1.45, wb: model.wheelbase, tr: model.track,
     mass: MASS[id] || CARS[id]?.mass || 1500,
     ownPaint: parts.find((p) => p.paint)?.mat || { color: new THREE.Color(0xffffff), roughness: 0.4, metalness: 0.3 },
     paintMat: paintPart?.mat, tinted: !!paintPart?.tint,
@@ -261,7 +262,7 @@ function workerTemplate(id, d) {
   const u = unpackParked(d);
   const T = {
     id, lod: u.lod, low: u.low, parts: null, near: u.near, nearMats: u.nearMats, paintAt: u.paintAt, paints: new Map(),
-    hl: u.size.length / 2, hw: u.size.width / 2, wb: u.wheelbase, tr: u.track,
+    hl: u.size.length / 2, hw: u.size.width / 2, ht: u.size.height || 1.45, wb: u.wheelbase, tr: u.track,
     mass: MASS[id] || CARS[id]?.mass || 1500,
     ownPaint: u.own ? { color: new THREE.Color().fromArray(u.own.color), roughness: u.own.roughness, metalness: u.own.metalness } : { color: new THREE.Color(0xffffff), roughness: 0.4, metalness: 0.3 },
     paintMat: u.paintAt >= 0 ? u.nearMats[u.paintAt] : undefined, tinted: u.tinted,
@@ -579,6 +580,15 @@ export function createParked(scene, world, opts = {}) {
     b.vx -= j * o.nx / b.mass; b.vz -= j * o.nz / b.mass; b.w -= lb * j / b.inertia;
   }
   const grad = [0, 0], trunks = [];
+  // a parked car's top as src/cars/tops.js has it, with how far it moved since the last frame (one knocked sliding)
+  const near = [];
+  function topOf(b) {
+    const y = b.y + (b.lift || 0), v = b.top;
+    if (!v) return (b.top = { x: b.x, z: b.z, y, yaw: b.yaw, hl: b.hl, hw: b.hw, h: b.T.ht, bus: !!b.s.bus, dx: 0, dz: 0, dyaw: 0, vx: 0, vz: 0 });
+    v.dx = b.x - v.x; v.dz = b.z - v.z; v.dyaw = b.yaw - v.yaw; v.vx = b.moving ? b.vx : 0; v.vz = b.moving ? b.vz : 0;
+    v.x = b.x; v.z = b.z; v.y = y; v.yaw = b.yaw;
+    return v;
+  }
   let saveIn = 0;
   function step(b, dt) {
     b.x += b.vx * dt; b.z += b.vz * dt; b.yaw += b.w * dt;
@@ -647,12 +657,18 @@ export function createParked(scene, world, opts = {}) {
         if (T) spawn(s, T); else if (T === false) s.done = true;
       }
     }
-    // ---- bumps
+    // ---- bumps; and their tops for a car that comes down on one (src/cars/tops.js): those near the car
     const cb = { x: car.x, z: car.z, yaw: car.yaw, hl: car.halfLen, hw: car.halfWid };
+    near.length = 0;
     for (const b of bodies) {
       const reach = b.hl + cb.hl + 1;
-      if (Math.abs(b.x - car.x) < reach && Math.abs(b.z - car.z) < reach && Math.abs(car.y - b.y) < 2.5) hitByCar(car, cb, b);
+      if (Math.abs(b.x - car.x) > reach + 4 || Math.abs(b.z - car.z) > reach + 4) { b.top = null; continue; }
+      const v = topOf(b);
+      near.push(v);
+      // (a car up on it, or coming down on it, is not bumped sideways: it stands on its top)
+      if (Math.abs(b.x - car.x) < reach && Math.abs(b.z - car.z) < reach && Math.abs(car.y - b.y) < 2.5 && !onTopOf(car.y, v, car.x, car.z)) hitByCar(car, cb, b);
     }
+    world.setTops?.('parked', near);
     for (const b of bodies) {
       if (!b.moving) continue;
       for (let i = 0; i < 2; i++) if (b.moving) step(b, dt / 2);

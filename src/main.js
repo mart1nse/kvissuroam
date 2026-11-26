@@ -169,6 +169,7 @@ import { playtechWalls } from './race/playtech.js';
 import { valliWalls } from './race/valli.js';
 import { valliStreetWalls, valliStreetProps } from './race/vallistreet.js';
 import { baeriStreetWalls, baeriStreetProps } from './race/baeristreet.js';
+import { carry as carryOnTop } from './cars/tops.js';
 import { pickFromHistory, searchDry, dryLevel, roofLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
@@ -1232,6 +1233,7 @@ function setCar(id, now = false) {
     console.warn('Car model failed, using placeholder', err);
     model = buildPlaceholder(spec);
   }
+  car.topH = model.size?.height;                   // (how tall it is, for the other players' cars to come down on it: src/cars/tops.js)
   model.group.rotation.order = 'YXZ';
   model.group.traverse((o) => { o.layers.enable(1); if (o.isMesh) { o.castShadow = true; } });   // layer 1: drawn again over street photos
   if (mp?.plate) setCarPlate(model, mp.plate);       // our own number plate (typed in the garage, src/race/board.js)
@@ -2140,8 +2142,10 @@ function frame(ts) {
       ctl.quickRefill = STEALTH;
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
     }
-    if (mode === 'drive' && !watch?.active) stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
-    else {
+    if (mode === 'drive' && !watch?.active) {
+      stepCar(car, board?.open || setup.isOpen ? idle : ctl, world, dt);
+      carryOnTop(car);          // (up on another vehicle that moves: carried with it, src/cars/tops.js)
+    } else {
       // choosing a car: let it settle on its springs but not roll or creep away
       const x = car.x, z = car.z, yaw = car.yaw;
       stepCar(car, idle, world, dt);
@@ -2163,6 +2167,7 @@ function frame(ts) {
       // (behind the menu and in the garage the others do not see our car, so nobody pushes it: it stays on the
       // start's spot until DRIVE finds it a free one)
       if (mode === 'drive') mp.collide(hitCar);
+      world.setTops('remote', mode === 'drive' ? mp.tops : []);
       trackside.collide(hitCar);
       props.update(hitCar, dt);
       updateShelters(hitCar, dt, audio);           // bus shelters: shattered glass, bent frames

@@ -2445,8 +2445,12 @@ function frame(ts) {
   if (!optEl.classList.contains('hidden')) showGfx();
 }
 
-// debug / test hook
-window.__game = {
+// debug / test hook: the whole of it only for the automated tests and on a developer's own machine. On the live
+// site the console gets the hitch account alone (26 Nov 2026: with the car in reach, `__game.car.spec` was one
+// line to a car with twice the pull and grip, and two Audi 200 lap records were driven that way. The server now
+// judges a record's drive against the car, src/race/plausible.js: this only takes the easy way in away.)
+const devHook = navigator.webdriver || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+window.__game = !devHook ? { hitches } : {
   hitches,
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },

@@ -24,6 +24,7 @@ import { lapGates, throughGate } from '../src/race/lapgates.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
+import { carLimitsSteps, judgeDrive } from '../src/race/plausible.js';
 
 const TRACK = 'toomemagi';
 // The shortest time believed on each circuit (driving time, penalty seconds left out). Until 25 Nov 2026 these were
@@ -242,18 +243,19 @@ function thru(q, ax, az, bx, bz) {
   return Math.hypot(ax + dx * t - q.x, az + dz * t - q.z) < q.r;
 }
 // what is wrong with a replay's samples ('' for nothing): driving ms is the time without penalty seconds
-function checkTrace(text, track, driving) {
+// (drive: given the samples' places, xs, zs and heights ys, for the judging of the car itself: src/race/plausible.js)
+function checkTrace(text, track, driving, drive = {}) {
   const a = text.split(',').map(Number);
   const [v, f, ms, n] = a;
   if (v !== 1 || f !== 21 || !Number.isInteger(n) || a.length !== 4 + n * f || !a.every(Number.isInteger)) return 'shape';
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
   const g = GATES[track];
-  let x = 0, z = 0, px = 0, pz = 0, gate = 0, hops = 0;
-  const xs = new Float64Array(n), zs = new Float64Array(n);
+  let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0;
+  const xs = drive.xs = new Float64Array(n), zs = drive.zs = new Float64Array(n), ys = drive.ys = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100;
-    xs[i] = x; zs[i] = z;
+    x += a[4 + i * f] / 100; z += a[4 + i * f + 1] / 100; y += a[4 + i * f + 2] / 100;
+    xs[i] = x; zs[i] = z; ys[i] = y;
     if (i === 0 && Math.hypot(x - g.first.x, z - g.first.z) > g.first.r) return 'start';
     if (i && Math.hypot(x - px, z - pz) > 12) {
       // R puts the car back on a spot it drove through at least 3 s before and the lap goes on (main.js
@@ -306,6 +308,7 @@ export class Lobby extends DurableObject {
     if (!cols.includes('pen')) this.sql.exec('ALTER TABLE laps ADD COLUMN pen INTEGER');
     // 1: a lap that would be its car's best (of all time or of today) waits here, off the board, until its replay has
     // come and held up (see "Replays"); null: on the board. (25 Nov 2026: before, the board believed any time.)
+    // 2: taken off the board for good (a lap found to be driven in a tuned car): no replay brings it back.
     if (!cols.includes('hold')) this.sql.exec('ALTER TABLE laps ADD COLUMN hold INTEGER');
     // small values kept between wake-ups: the signing secret and the finished lap board
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
@@ -313,6 +316,7 @@ export class Lobby extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS replay_refused (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, why TEXT NOT NULL, bytes INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS replays (track TEXT NOT NULL, car TEXT NOT NULL, ms INTEGER NOT NULL, name TEXT NOT NULL, at TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (track, car))');
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
+    this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
     // (checkpoint 2 about 10 s early, the audi200 record's replay shows the route) and the replay of that record.
     // The new gates (src/race/lapgates.js) stop such laps; the lap board is made again from what is left.
@@ -322,6 +326,17 @@ export class Lobby extends DurableObject {
       this.sql.exec("DELETE FROM replays WHERE track = 'toomemagi' AND car = 'audi200' AND ms = 168444");
       this.sql.exec("DELETE FROM meta WHERE k = 'board'");
       this.setMeta('cleanup-2026-11-24', '1');
+    }
+    // One-off (26 Nov 2026, a player's report to Martin: "look at the 200's best lap, somehow tuned"): two Audi 200
+    // laps driven in a car with changed figures. 3351 (2:45.29, the record: its replay shows twice the car's pull at
+    // every speed and 2.3 g in bends and under braking) and 3280 (2:47.96, the record before it: two parts of the lap
+    // faster than any F40 has driven them, 5 s under the best of 635 laps in that car). Off the board, kept in the
+    // table (hold 2); the record's replay goes. Drives are judged against the car from now on (src/race/plausible.js).
+    if (!this.meta('cleanup-2026-11-26')) {
+      this.sql.exec("UPDATE laps SET hold = 2 WHERE track = 'toomemagi' AND car = 'audi200' AND ((id = 3351 AND ms = 165288) OR (id = 3280 AND ms = 167961))");
+      this.sql.exec("DELETE FROM replays WHERE track = 'toomemagi' AND car = 'audi200' AND ms = 165288");
+      this.sql.exec("DELETE FROM meta WHERE k = 'board'");
+      this.setMeta('cleanup-2026-11-26', '1');
     }
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
@@ -766,6 +781,29 @@ export class Lobby extends DurableObject {
   // Since 25 Nov 2026 (security review: a lap of 61 s posted by hand would have topped the board) a lap that would be
   // its car's best of all time or of today is held off the board until this replay of it has held up; the lap answer
   // lists such laps under `hold`, and the page sends their replays at once.
+  // Since 26 Nov 2026 (two Audi 200 records driven with the car's figures changed in the browser) the drive is also
+  // held against the car: no more pull, grip or braking than the game's own physics gives it (src/race/plausible.js).
+
+  // What a car can do, measured on the game's physics the first time a replay of it comes (kept while this object
+  // is awake). In slices of 150 steps with the event loop let in between: all at once it is 0.1 to 0.3 s in which
+  // nobody's positions would go out.
+  carLimit(car) {
+    let p = this.limits.get(car);
+    if (!p) {
+      p = (async () => {
+        const it = carLimitsSteps(CARS[car], 150);
+        for (;;) {
+          const r = it.next();
+          if (r.done) return r.value;
+          await new Promise((go) => setTimeout(go, 0));
+        }
+      })();
+      p.catch(() => this.limits.delete(car));
+      this.limits.set(car, p);
+    }
+    return p;
+  }
+
   async takeReplay(req, ip) {
     if (this.over(`r|${ip}`, 6, 60000)) return json({ error: 'too many requests' }, 429);
     const text = await req.text();
@@ -775,26 +813,44 @@ export class Lobby extends DurableObject {
     const car = cleanCar(body?.car), track = cleanTrack(body?.track), ms = Math.round(Number(body?.ms));
     const tk = await this.readTicket(body?.k);
     // a refusal is kept (the last 50) so a record without a replay can be told why: GET /api/replay?refused=1
-    const refuse = (why, name = '', n = 0) => {
+    // (told: what the page hears, when the list should say more than the sender is told)
+    const refuse = (why, name = '', n = 0, told = why) => {
       this.sql.exec('INSERT INTO replay_refused (at, track, car, ms, name, why, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), track, car || '?', ms || 0, name, why, n);
       this.sql.exec('DELETE FROM replay_refused WHERE id <= (SELECT MAX(id) FROM replay_refused) - 50');
-      return json({ error: why === 'invalid' || why === 'no such lap' || why === 'not the record' ? why : `replay refused: ${why}` }, 400);
+      return json({ error: told === 'invalid' || told === 'no such lap' || told === 'not the record' ? told : `replay refused: ${told}` }, 400);
     };
     if (!car || !tk || !(ms > 0) || typeof body?.z !== 'string') return refuse('invalid');
     const lap = this.sql.exec('SELECT id, name, at, day, pen, hold, splits, cp, inp, ty FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, track).toArray()[0];
     if (!lap) return refuse('no such lap');
+    if (lap.hold === 2) return refuse('not the record', lap.name);     // (taken off the board for good)
     // the best of the laps on the board (a held lap is not on it yet)
-    const best = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL', track, car).one().m;
-    const record = best == null || ms <= best;
+    const bestNow = () => this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL', track, car).one().m;
+    const hadNow = () => this.sql.exec('SELECT ms FROM replays WHERE track = ? AND car = ?', track, car).toArray()[0];
+    let best = bestNow(), had = hadNow();
     if (!lap.hold && best !== ms) return refuse('not the record', lap.name);
-    const had = this.sql.exec('SELECT ms FROM replays WHERE track = ? AND car = ?', track, car).toArray()[0];
     if (!lap.hold && had && had.ms <= ms) return json({ ok: true });  // (that record's replay came already)
-    let bytes, why;
+    let bytes, why, told;
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
-      why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000);
+      const drive = {};
+      why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive);
+      if (!why) {
+        // the car itself: seconds of the drive over what this car can do (the list of refusals gets the figures,
+        // the sender only that it was the car)
+        // (if the limits cannot be worked out the drive is not judged: an honest record must not wait on a fault here)
+        let lim = null;
+        try { lim = await this.carLimit(car); } catch (err) { console.error('car limits', car, err); }
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim);
+        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top})`; told = 'car'; }
+      }
     } catch { why = 'unreadable'; }
-    if (why) return refuse(why, lap.name, bytes?.length || 0);
+    if (why) return refuse(why, lap.name, bytes?.length || 0, told);
+    // (the lap as it is now: this waited for the unpacking and perhaps the car's limits, and the same replay sent
+    // twice at once must not put the lap on the board twice)
+    lap.hold = this.sql.exec('SELECT hold FROM laps WHERE id = ?', lap.id).toArray()[0]?.hold;
+    if (lap.hold === undefined || lap.hold === 2) return refuse('no such lap', lap.name);
+    best = bestNow(); had = hadNow();
+    const record = best == null || ms <= best;
     let ann = {};
     if (lap.hold) {
       // the held lap has its drive: it goes on the board now, and is told to everyone as a new lap would be
@@ -985,7 +1041,7 @@ export class Lobby extends DurableObject {
     if (path === '/api/laps.csv' || path === '/api/laps.json') {
       if (this.over(`d|${ip}`, 6, 60000)) return busy();
       // the .json is the complete record (the nightly backup saves it, see .github/workflows/backup-laps.yml)
-      // (hold 1: a lap still waiting for its replay, or whose replay did not hold up: not on the board)
+      // (hold 1: a lap still waiting for its replay, or whose replay did not hold up: not on the board; 2: taken off it)
       if (path.endsWith('.json')) return json(this.sql.exec('SELECT id, track, name, car, ms, at, day, splits, cp, inp, ty, pen, hold FROM laps ORDER BY id').toArray());
       const rows = this.sql.exec("SELECT id, track, name, car, ms, at, COALESCE(inp, 'kb') AS input, COALESCE(ty, 'road') AS tyres, COALESCE(pen, 0) AS pen, COALESCE(hold, 0) AS held FROM laps ORDER BY id").toArray();
       // (a name that starts like a formula gets an apostrophe, so a spreadsheet shows it as text

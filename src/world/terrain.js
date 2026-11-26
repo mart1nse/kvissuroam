@@ -566,7 +566,7 @@ export function createTerrain(world, renderer, opts) {
           mesh.userData.kerb = km;
         }
         const id = `${s.sx}_${s.sz}_${tx}_${ty}`;
-        const ch = { seg, B: 1, url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, gone: false };
+        const ch = { seg, B: 1, url: `${BASE}${id}.jpg`, xurl: xSet.has(id) ? `${BASE}x/${id}.jpg` : null, matX: null, xstate: 'none', mesh, sector: s, mask: null, matHi: null, state: 'low', cx: x0 + tile / 2, cz: z0 + tile / 2, half: tile / 2, gone: false };
         s.chunks.push(ch);
         chunks.add(ch);
         yield;
@@ -662,18 +662,31 @@ export function createTerrain(world, renderer, opts) {
     if (ch.matX) { setMat(ch, ch.matHi || matLow); ch.matX.map.dispose(); ch.matX.dispose(); ch.matX = null; }
     if (ch.xstate !== 'failed') ch.xstate = 'none';
   }
-  function update(camPos) {
+  // hold: { pts: [[x, z], ...], r } or null. The sharp ground within r of those points (r left out: as far as the
+  // camera loads it) is loaded and kept as if the camera were near (the Majoraadi stage on a desktop: the whole stage's ground is ready behind GETTING READY
+  // at its start, and nothing new comes onto the graphics card during a run; Martin 26 Nov: "no surprises")
+  let heldWait = 0;
+  function update(camPos, hold = null) {
     const want = [];
+    heldWait = 0;
     for (const ch of chunks) {
       ch.d = Math.hypot(ch.cx - camPos.x, ch.cz - camPos.z);
+      if (hold && ch.holdFor !== hold) {
+        // (from the nearest edge of the tile: as far as the camera loads sharp ground, unless the hold says less)
+        const r = hold.r ?? rHi;
+        ch.holdFor = hold;
+        ch.held = hold.pts.some(([x, z]) => Math.hypot(Math.max(0, Math.abs(ch.cx - x) - ch.half), Math.max(0, Math.abs(ch.cz - z) - ch.half)) < r);
+      }
+      const held = !!hold && ch.held;
+      if (held && ch.state !== 'hi' && ch.state !== 'failed') heldWait++;
       const k = ch.B === 1 ? (ch.d > LOD2 + 30 ? 2 : 1) : ch.B === 2 ? (ch.d < LOD2 - 30 ? 1 : ch.d > LOD4 + 30 ? 4 : 2) : ch.d < LOD4 - 30 ? 2 : 4;
       if (k !== ch.B) { ch.B = k; ch.mesh.geometry.setIndex(lodIndex(ch.seg, k)); }
       if (ch.xurl) {
         if (ch.state === 'hi' && ch.xstate === 'none' && ch.d < 200 && loading < 4) loadX(ch);
         else if (ch.xstate === 'on' && ch.d > 300) dropX(ch);
       }
-      if (ch.state === 'low' && ch.d < rHi) want.push(ch);
-      else if (ch.state === 'hi' && ch.d > rHi + 260) {
+      if (ch.state === 'low' && (ch.d < rHi || held)) want.push(ch);
+      else if (ch.state === 'hi' && ch.d > rHi + 260 && !held) {
         dropX(ch);
         setMat(ch, matLow);
         ch.matHi.map.dispose();
@@ -688,5 +701,6 @@ export function createTerrain(world, renderer, opts) {
     want.sort((p, q) => p.d - q.d);
     for (const ch of want) { if (loading >= 4) break; load(ch); }
   }
-  return { group, update, addSector, addSectorSteps, removeSector, setCoarse, pending: () => loading };
+  // (pending: pictures on their way, and held ground not sharp yet; held: the tiles the hold keeps)
+  return { group, update, addSector, addSectorSteps, removeSector, setCoarse, pending: () => loading + heldWait, held: () => [...chunks].filter((ch) => ch.holdFor && ch.held).length };
 }

@@ -78,7 +78,8 @@ enough to make that happen at DRIVE.
   window's last five minutes, `__game.hitches`, and the "Short hitches while driving" card on /stats, per 10
   minutes alone and in a crowd). When a player reports stutter, read that card before guessing. A frame rate that hops all the time (four or more
   of the last 120 frames late) is shown as an uneven frame rate, not as hitches (26 Nov: a phone on HIGH read 5364
-  hitches in 5 minutes); `node tools/hitches-test.mjs` holds the rule. Work done on the
+  hitches in 5 minutes), with the frames of 29 ms and more dropped meanwhile counted and named beside it (26 Nov: a Mac at 60 Hz
+  felt constant short hitches while the line said "uneven 41% · no hitches"); `node tools/hitches-test.mjs` holds the rule. Work done on the
   page outside the frame (a message handler, a worker's answer) is timed with `outside.note(what, t0)`.
 - Reuse geometry and materials (instancing, merged meshes); dispose what is removed from the scene.
 - New shader variants: warm them (`renderer.compileAsync`) rather than compiling on the first frame.

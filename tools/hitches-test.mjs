@@ -112,5 +112,19 @@ const drive = (h, secs, frame, since0 = 0) => {
   ok('60 Hz: the line', /^screen 60 Hz · 1 hitch in the last 30 s/.test(h.line), h.line);
 }
 
+// 9. Martin's Mac, 26 Nov 2026 (Chrome, 60 Hz): stretches with a dropped frame every 20 frames, felt as constant short
+// hitches, while the line said "frame rate uneven 41% of the time · no hitches". The dropped frames are counted and
+// named; hitches stay the frames that stand out
+{
+  const h = createHitches();
+  let n = 0;
+  for (let t = 0, i = 0; t < 60000; i++) { const rough = Math.floor(t / 10000) % 2 === 1; const ms = rough && i % 20 === 0 ? 33.4 : 16.67; if (ms > 30) n++; t += ms; h.frame(ms, true, F, { since: t / 1000 }, 16.67, 1); }
+  const r = h.recent;
+  ok('Mac 60 Hz: uneven part of the time', r.uneven / r.secs > 0.3 && r.uneven / r.secs < 0.6, r.uneven / r.secs);
+  ok('Mac 60 Hz: most dropped frames counted', r.drops + r.n >= n - 6 && r.drops > n / 2, [r.drops, r.n, n]);
+  ok('Mac 60 Hz: the line names them', /frame rate uneven \d+% of the time, \d+ frames dropped \(\d+ graphics card or browser\) · /.test(h.line), h.line);
+  console.log('     ' + h.line);
+}
+
 console.log(fails ? `\n${fails} failed` : '\nall ok');
 process.exit(fails ? 1 : 0);

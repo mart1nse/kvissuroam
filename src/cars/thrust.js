@@ -73,11 +73,11 @@ const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s)...
 // ...but a bend's own turn, up to YAW_HOLD_R of it, is held on for longer (Martin 27 Nov, "increase the length of the turn it
 // holds once X during turn", then "let the turn last 4 more sec, with slowly dying out the turn"): it fades out smoothly
-// over YAW_HOLD_T, the path bending round with it, so a bend at 0.6 rad/s carries the car on about 80 degrees in a 3.8 s
-// flight, still turning a little as it lands. A spin's turn past that still eases out over YAW_TAU, so a FLIP from a
+// over YAW_HOLD_T, the path bending round with it, so a bend at 0.6 rad/s carries the car on about 50 degrees, the turn
+// gone just before a 3.8 s flight lands. A spin's turn past that still eases out over YAW_TAU, so a FLIP from a
 // power slide does not whirl.
 const YAW_HOLD_R = 0.6;            // rad/s
-const YAW_HOLD_T = 5;              // s: the held turn is gone by this long after the press
+const YAW_HOLD_T = 3;              // s: the held turn is gone by this long after the press (5 s for a moment, 27 Nov: "reduce the length of the turn by 2 sec")
 const YAW_LINE = 1.2;              // the nose is turned onto the line of travel over this long from the press...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
 const MAX_T = 6;                   // no flight longer than this (s)

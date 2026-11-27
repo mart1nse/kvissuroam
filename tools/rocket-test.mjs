@@ -492,4 +492,25 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...none on paving or grass, none in the air, none from a car without fans', puffs(spec, { surface: 1, throttle: 1 }) === 0 && puffs(spec, { surface: 0, throttle: 1 }) === 0 && puffs(spec, { surface: 2, throttle: 1, y: 2 }) === 0 && puffs(m3, { surface: 2, throttle: 1 }) === 0);
 }
 
+// ---- FLIP pressed in a bend (Martin 27 Nov, "carry on, then line up"): the path goes straight on, the nose keeps
+// turning a little while its swing eases out, and it is brought onto the line of travel before the landing
+{
+  const res = [];
+  for (const [kmh, st] of [[60, 0.5], [100, 0.3], [40, 1]]) {
+    const w = world(), c = fresh(w, kmh);
+    for (let t = 0; t < 3; t += dt) stepCar(c, { up: c.vx * 3.6 < kmh ? 0.5 : 0, steer: st }, w, dt);
+    const y0 = c.yaw, rate = c.yawRate, head0 = c.yaw + Math.atan2(c.vy, c.vx);
+    let carried = 0, land = null;
+    for (let t = 0; t < 6 && land === null; t += dt) {
+      stepCar(c, { flip: t < 0.05 ? 1 : 0, steer: st }, w, dt);
+      if (t < 1.3) carried = Math.max(carried, Math.abs(c.yaw - y0));
+      if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx) };
+    }
+    res.push({ kmh, carried: carried * 57.3, want: Math.abs(rate) * 0.4 * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
+  }
+  check('FLIP in a bend: the nose carries on turning (the swing eased out over 0.4 s) and lands lined up with the travel',
+    res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(r.slip) < 3),
+    res.map((r) => `${r.kmh} km/h: on ${r.carried.toFixed(0)} deg, lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
+}
+
 process.exit(ok ? 0 : 1);

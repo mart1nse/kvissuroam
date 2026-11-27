@@ -2,7 +2,7 @@
 // grid, the lights go out, and in the run to the start line (before their lap timers start) a racer
 // and the roamer are put half on top of the leading racer. Nobody should be pushed: race cars pass
 // through each other and through roamers from the lights (Martin, 2026-11-22). Then the same with the
-// roamer and a car that left the race, which should bump as usual.
+// roamer and a car that left the race, which bumps as usual once out of the start lane.
 // Needs the game served with its server on :8787 (npm run build && npx wrangler dev --port 8787) and
 // Playwright. Usage: node tools/race-ghost-test.mjs
 import { createRequire } from 'module';
@@ -66,17 +66,28 @@ const overlap = async (label) => {
 const [ma, mb, mc] = await overlap('racing, before the line:');
 const ok1 = ma < 0.3 && mb < 0.3 && mc < 0.3 && listed[0] && listed[1];
 
-// B leaves the race: B and the roamer C should bump again, A still passes through both
+// B leaves the race: B and the roamer C bump again. (The grid is on the straight's line back past the last corner,
+// off the lap's road, so a car put there is not in the start lane, src/race/startlane.js; a row of it that were on
+// that road would be, and B would pass through to the line: the lanes are ended here.) They are driven together, not
+// put on top of each other: a car put somewhere passes through for a moment, and a pair that has passed through does
+// not bump until apart.
 await B.evaluate(() => __game.mp().raceSend({ t: 'rj', on: 0 }));
 await B.waitForFunction(() => !__game.raceMode().ghost, null, { timeout: 5000 });
 await B.waitForTimeout(500);
+const laneB = await B.evaluate(() => __game.lane().on);
+console.log('B out of the race, on the grid: in the start lane:', laneB);
+await B.evaluate(() => __game.lane().end()); await C.evaluate(() => __game.lane().end());
+const move = (p, q) => p.evaluate((q) => { const c = __game.car; c.x = q.x; c.z = q.z; c.yaw = q.yaw; c.vx = c.vy = c.yawRate = 0; }, q);
 const pb = { x: a0.x + rx * 9, z: a0.z + rz * 9, yaw: a0.yaw };
 const pc = { x: pb.x + rx * 1.2 + fx * 1.5, z: pb.z + rz * 1.2 + fz * 1.5, yaw: a0.yaw };
-await place(B, pb); await place(C, pc);
-await B.waitForTimeout(2500);
+await move(B, pb); await move(C, { ...pc, x: pc.x + fx * 6, z: pc.z + fz * 6 });
+await B.waitForTimeout(3000);
+const b1 = await pos(B);
+await move(C, pc);
+await B.waitForTimeout(1500);
 const b2 = await pos(B), c2 = await pos(C);
-const ok2 = +moved(b2, pb) > 0.3 && +moved(c2, pc) > 0.3;
-console.log('B out of the race, roamer C on top of B: B moved', moved(b2, pb), 'C moved', moved(c2, pc));
+const ok2 = +moved(b2, b1) + +moved(c2, pc) > 0.4;          // (a pair passing through: about 0.1 m in all)
+console.log('B out of the race and the lane, roamer C driven into B: B moved', moved(b2, b1), 'C moved', moved(c2, pc));
 
 console.log(ok1 && ok2 ? 'PASS' : 'FAIL', { ok1, ok2 });
 await ba.close(); await bb.close(); await bc.close();

@@ -9,13 +9,16 @@
 
 const LONG = 4.8, WIDE = 2.6;   // metres: a car whose middle is this near a spot's, along it and across, stands on it
 const STEP = 7;              // metres between spots one behind the other
+// the bays' spots: metres along the lap from its spawn point, the first and the last, and metres to the right of its
+// centre line (src/race/startlane.js counts the bays as the start lane for a car put there, until it is on the road)
+export const BAYS = { from: -STEP, to: 3 * STEP, right: 5.9 };
 // along the lap from its spawn point: [metres along (minus is back up the street), metres to the right]
 function layout() {
   const out = [];
   // the bays by the theatre park: their middle is 5.9 m right of the lap's centre line (the bollards stand at
   // 7.9, the lap's edge at 3.8), flat from 10 m back up the street to 25 m on (further back the ground there
   // humps where the kerb bends in to the Vanemuine steps, and further on it bends in to the corner)
-  for (let a = -STEP; a <= 3 * STEP; a += STEP) out.push([a, 5.9]);
+  for (let a = BAYS.from; a <= BAYS.to; a += STEP) out.push([a, BAYS.right]);
   // the lap road back up the street, two side by side (the wall of the park above is 4 m left of the line)
   for (let a = -STEP; a >= -70; a -= STEP) out.push([a, -1.7], [a, 1.7]);
   return out;

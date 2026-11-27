@@ -75,7 +75,7 @@ export class EngineCore {
     this.rpmE = 800; this.yId = 0; this.yA = 0; this.yT = 9; this.yk = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
-    this.n = 0; this.cfg = null; this.cutN = 0;
+    this.n = 0; this.cfg = null; this.cutN = 0; this.idleS = 800;
     // anti-lag (cfg.antilag): how long the throttle has been shut, the run of bangs going, the crack of the
     // last one and the rattle's tick; bangs counts the big ones (the processor tells the page: a flame each)
     this.liftT = 0; this.alsRun = 0; this.alsK = 0; this.crack = 0; this.rtl = 0; this.bangs = 0;
@@ -127,9 +127,11 @@ export class EngineCore {
 
   fire(ev) {
     const c = this.cfg, rpm = this.rpmE, n = this.noise, ld = this.ld, ov = this.ovr;
-    const overrun = ld < 0.05 && rpm > this.in.idle + 500;
-    // (dragged past the redline the valves float: every firing comes out different)
-    let amp = (c.base + (1 - c.base) * ld) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * c.rough * (1 + 5 * ov));
+    const idle = this.idleS, overrun = ld < 0.05 && rpm > idle + 500;
+    // (dragged past the redline the valves float: every firing comes out different; and a race engine's wild
+    // cams make its idle lumpy, roughIdle: no two firings alike until the revs come up)
+    const rgh = c.rough * (1 + 5 * ov) + (c.roughIdle || 0) * (1 - ld) * clamp(1 - (rpm - idle) / 1500, 0, 1);
+    let amp = (c.base + (1 - c.base) * ld) * this.bias[ev.cyl - 1] * (1 + (n() * 2 - 1) * rgh);
     let nz = c.noise * (0.6 + 0.8 * ld), tauDeg = c.pulseDeg * (0.85 + 0.3 * ld);
     // an upshift biting: the first firings in the new gear bark, harder and sharper (src/audio-shift.js)
     const bk = this.brk;
@@ -165,7 +167,8 @@ export class EngineCore {
       if (n() < this.als * a * (1 + 1.6 * this.alsRun)) ({ amp, nz, tauDeg } = this.bang());
       else { this.alsRun *= 0.55; if (n() < 0.3 * a) { amp = 0.8 + n() * 0.6; nz = 0.6; tauDeg = c.pulseDeg * 0.5; } }
     }
-    const tau = clamp(tauDeg / (rpm * 6) * this.sr, this.sr * 0.00022, this.sr * 0.004);
+    // (pulseMax: an open race exhaust's pulse stays short at low revs too, s; so its idle is hard and bright)
+    const tau = clamp(tauDeg / (rpm * 6) * this.sr, this.sr * 0.00022, this.sr * (c.pulseMax || 0.004));
     // no two combustions are alike: the pulse also lands a fraction of a degree early or late
     const late = Math.max(0, (n() * 2 - 1) * c.jitter * (1 + 3 * ov) / (rpm * 6) * this.sr);
     // (edge: the pulse rises in a fraction of its blowdown time, the front of a near-shock wave; louder and
@@ -174,7 +177,7 @@ export class EngineCore {
     if (this.pulses.length < 24) this.pulses.push({ bank: ev.bank, amp, nz, tau, rise, t: -late });
     // valvetrain / injector tick for this cylinder. With smoothTop it is heard at idle and low revs, then
     // lost under the engine (kept up on a loud engine, the ticks run together into a sharp hiss)
-    const quiet = clamp(1 - (rpm - this.in.idle) / (0.3 * this.in.redline), 0, 1);
+    const quiet = clamp(1 - (rpm - idle) / (0.3 * this.in.redline), 0, 1);
     this.clicks = Math.round(this.sr * 0.00035);
     this.clickAmp = c.tick * (this.smooth ? 0.12 + 0.88 * quiet : 0.4 + 0.6 * rpm / this.in.redline);
   }
@@ -195,15 +198,20 @@ export class EngineCore {
     // per-block smoothing and filter updates
     const kr = 1 - Math.exp(-len / (sr * 0.025)), kl = 1 - Math.exp(-len / (sr * 0.06));
     // a touch of idle lope: real engines never hold their idle exactly
-    const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 : 0;
+    const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 + (c.lopeFast ? Math.sin(this.n / sr * 9.1) * c.lopeFast : 0) : 0;
+    // idleUp: the engine heard idling higher than the physics' idle (a hot rally engine at about 1800 rpm with its
+    // anti-lag's idle-up; the car's own idle, which the launch and the clutch work from, stays as it is): lifted
+    // at idle, less as the revs rise, gone 2000 rpm above it
+    this.idleS = c.idleUp || I.idle;
+    const up = c.idleUp ? (c.idleUp - I.idle) * clamp(1 - (I.rpm - I.idle) / 2000, 0, 1) : 0;
     // an upshift's gear going in with the revs still above its speed (src/audio-shift.js): the revs are
     // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a
     // couple of swings as the driveline winds up and springs back
     if (I.yankId !== this.yId) {
       this.yId = I.yankId; this.yA = I.yank || 0; this.yT = 0; this.yTi = I.yankTight || 0;
-      if (this.yA > 0) this.rpm = Math.max(300, I.rpm);
+      if (this.yA > 0) this.rpm = Math.max(300, I.rpm);   // (idleUp is gone by the revs an upshift drops to)
     }
-    this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
+    this.rpm += (Math.max(300, I.rpm + up + lope) - this.rpm) * kr;
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
       // (per car: yank, the size of the swing, and yankHz, how fast it swings; it dies away over the same
@@ -246,8 +254,9 @@ export class EngineCore {
     const dTheta = rpm * 6 / sr;
     const ev = this.events, banks = this.banks, res = this.res, pulses = this.pulses;
     const intake = c.intake * load * (0.15 + rr) * (1 + 1.5 * bl), hiss = c.turbo ? c.hiss * this.boost * this.boost : 0;
-    // (more growl in a downshift's blip, and more still in an upshift's bark; and with the camera back)
-    const rasp = this.rasp * (0.3 + 0.7 * load) * (0.25 + 0.75 * clamp(rr, 0, 1)) * (1 + ov + bl + 1.2 * this.brk + 0.7 * this.grw), rk = c.raspDrive || 6;
+    // (more growl in a downshift's blip, and more still in an upshift's bark; and with the camera back. raspIdle: the
+    // share left at idle, more on an open race exhaust; on the overrun higher up it is the usual 0.3)
+    const ri = 0.3 + ((c.raspIdle ?? 0.3) - 0.3) * clamp(1 - (rpm - this.idleS) / 1500, 0, 1), rasp = this.rasp * (ri + (1 - ri) * load) * (0.25 + 0.75 * clamp(rr, 0, 1)) * (1 + ov + bl + 1.2 * this.brk + 0.7 * this.grw), rk = c.raspDrive || 6;
     // over-rev: the straight-cut gears howl as the wheels drag the engine past its limit
     // (its pitch wanders a little with the shaft's wind-up, so it is not a pure test tone)
     if (ov > 0.001) this.hjit = (this.hjit || 0) * 0.85 + (n() * 2 - 1) * 0.004;
@@ -281,7 +290,7 @@ export class EngineCore {
     // throttle's quieter note: c.gain, not gain)
     const crackFall = Math.exp(-1 / (sr * 0.0022)), rtlFall = Math.exp(-1 / (sr * 0.00035));
     const rtlRate = this.als ? this.alsK * (60 + 160 * this.alsRun) * this.alsRattle / sr : 0;
-    const crackLv = 0.9 * c.gain * this.on, rtlLv = 0.2 * c.gain * this.on * this.alsRattle;
+    const crackLv = (c.crack ?? 0.9) * c.gain * this.on, rtlLv = 0.2 * c.gain * this.on * this.alsRattle;
     for (let s = 0; s < len; s++) {
       const th0 = this.theta; let th1 = th0 + dTheta;
       for (let k = 0; k < ev.length; k++) {

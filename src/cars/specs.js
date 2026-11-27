@@ -602,10 +602,13 @@ export const CARS = {
     wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
     cdA: 0.31 * 1.95,
     drive: 'awd',
-    rearShare: 0.6,             // one motor in front, two behind
+    // one motor in front, two behind. With the wheel turned the rear pair gets more of it (Martin 27 Nov: "if i floor
+    // it, it would not kick the tail out much": at 0.6 it hardly stepped out at all; at 0.75 a floored bend swings the
+    // tail out up to about 100 km/h, more than the F40's or the M3's), with the wheel straight two thirds, which keeps
+    // the launch's 1.67 s to 100 (0.75 all the time spins the rears: 1.9 s). No traction control ("if there is a
+    // traction control, then lets try to remove it": it was tc 1, tcSlip 1.5, and the split 0.6).
+    rearShare: 0.66, rearShareBend: 0.75,
     grip: 1.2,
-    tc: 1,                      // the motors hold the tyres at their grip limit while the wheel is straight
-    tcSlip: 1.5,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that
     // figure, which also made the car brake and corner harder than before. Martin 26 Nov: the weight was meant "to
@@ -614,6 +617,9 @@ export const CARS = {
     // what other cars' do; 0.5 until then, "ducks and dives also quite a bit". At the 2100 kg of later that day:
     // 1.67 s, 21.5 m, 1.9 g)
     fanDown: 12000, squat: 0.3,
+    // lean: the body rolls this much of what other cars' do in a bend (Martin 27 Nov: "when cornering car leans over a
+    // lot, I think there should be a lot less roll side to side": 6 degrees at 1 g, 11 at its 1.9 g; now 2 and 3.5)
+    lean: 0.3,
     // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
     // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
     // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty

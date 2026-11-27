@@ -1126,7 +1126,10 @@ function substep(car, input, world, dt) {
   // only once the front wheels start to spin. Nothing moves torque towards
   // the axle with grip to spare, so a rear-biased car that floors it on a
   // loaded rear axle can break the tail loose while the front still grips.
-  const base = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
+  const base0 = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
+  // (s.rearShareBend: a split set in software that sends more to the rear the more the wheel is turned, so a floored
+  // bend kicks the tail out while a straight launch keeps the drive where the tyres take it: the Roadster Rocket)
+  const base = s.rearShareBend ? base0 + (s.rearShareBend - base0) * Math.min(1, Math.abs(steerIn) / 0.25) : base0;
   let shareR = s.rearShareMax ? base + (s.rearShareMax - base) * Math.min(1, car.slipVF / 2) : base;
   // A two-motor EV sets its split in software. Floored in a slide at modest
   // speed it lets the rear motor do more of the work, so the front wheels stop
@@ -1801,7 +1804,8 @@ function substep(car, input, world, dt) {
   // and dive a car's springs let through)
   const axBody = (car.ax - (car.thrustN || 0) / (car.spec.mass - (car.gasOut || 0))) * (car.spec.squat ?? 1);
   const tPitch = car.groundPitch + axBody * 0.0075 + bump * 0.012 * Math.sin(car.time * 31 + car.x) + (car.bite || 0) * 0.026 * shud + (car.stone ? car.stone.kP : 0);
-  const tRoll = car.groundRoll - car.ay * 0.011 + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
+  // (s.lean: how much of the usual body roll in a bend a car's springs let through)
+  const tRoll = car.groundRoll - car.ay * 0.011 * (s.lean ?? 1) + bump * 0.014 * Math.sin(car.time * 27 + car.z * 1.3) + (car.stone ? car.stone.kR : 0);
   if (car.airborne) {
     // nothing to turn the body in flight: it keeps the rotation it left the ground with
     car.pitch += car.pitchRate * dt;

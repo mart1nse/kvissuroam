@@ -66,23 +66,23 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   // BOOST alone (no throttle key): the motors are held at full power too
   const alone = run({ boost: 1 });
   check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
-  // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 60 s (was 120), and nothing is locked:
+  // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 10 s (27 Nov; 60 s, 120 before), and nothing is locked:
   // with the button still held after running dry nothing blows, and it fills all the same
   const w = world(), car = b.car;
   let t = 0, moved = false;
   const dry0 = car.rocket.tank;
-  for (; t < 15; t += dt) { stepCar(car, { boost: 1 }, w, dt); if (t > 0.3 && car.thrustN > 0) moved = true; }   // (the valves take a moment to shut)
-  check('run dry with BOOST still held: nothing blows, and the tank fills', !moved && Math.abs(car.rocket.tank - dry0 - (15 * TANK_S) / REFILL_S) < 0.05, `${dry0.toFixed(2)} to ${car.rocket.tank.toFixed(2)} s of tank in 15 s`);
+  for (; t < 3; t += dt) { stepCar(car, { boost: 1 }, w, dt); if (t > 0.3 && car.thrustN > 0) moved = true; }   // (the valves take a moment to shut)
+  check('run dry with BOOST still held: nothing blows, and the tank fills', !moved && Math.abs(car.rocket.tank - dry0 - (3 * TANK_S) / REFILL_S) < 0.05, `${dry0.toFixed(2)} to ${car.rocket.tank.toFixed(2)} s of tank in 3 s`);
   // let go and pressed again: BOOST blows on what there is
   stepCar(car, {}, w, dt);
   for (let k = 0; k < 20; k++) stepCar(car, { boost: 1 }, w, dt);
   check('...let go and pressed again, BOOST blows on what there is', car.thrustN > 5000 && car.rocket.on, `${(car.thrustN / 1000).toFixed(0)} kN`);
   {
-    // left alone it fills to the top at a whole tank in 60 s (the cars of this file share the one tank, so this car first)
+    // left alone it fills to the top at a whole tank in 10 s (the cars of this file share the one tank, so this car first)
     const from = car.rocket.tank; let tf = 0;
     for (; car.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(car, {}, w, dt);
     stepCar(car, {}, w, dt);
-    check('...and left alone the tank fills to the top, a whole one in 60 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
+    check('...and left alone the tank fills to the top, a whole one in 10 s', Math.abs(tf - ((TANK_S - from) / TANK_S) * REFILL_S) < 0.5, `${from.toFixed(2)} s of tank to full in ${tf.toFixed(1)} s`);
     check('...and the car weighs its full 2100 kg again', spec.mass === 2100 && car.gasOut < 1, `${(spec.mass - car.gasOut).toFixed(0)} kg`);
   }
   {
@@ -90,11 +90,11 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     const wp = world(), q = fresh(wp);
     for (let k = 0; k < 120; k++) stepCar(q, { up: 1, boost: 1 }, wp, dt);
     const used = q.rocket.tank; let tf = 0;
-    for (let k = 0; k < 720; k++) stepCar(q, {}, wp, dt);
-    const after6 = q.rocket.tank;
+    for (let k = 0; k < 240; k++) stepCar(q, {}, wp, dt);
+    const after6 = q.rocket.tank;   // (two seconds on)
     for (; q.rocket.tank < TANK_S && tf < 200; tf += dt) stepCar(q, {}, wp, dt);
-    check('a tank a little used starts filling at once', used < TANK_S - 3 && Math.abs(after6 - used - (6 * TANK_S) / REFILL_S) < 0.02 && Math.abs(tf + 6 - ((TANK_S - used) / TANK_S) * REFILL_S) < 0.5, `${used.toFixed(2)} s left after 1 s of BOOST, ${after6.toFixed(2)} s six seconds on, full ${(tf + 6).toFixed(0)} s after letting go`);
-    // from empty: 60 s to full; FLIP works with half a tank in it and not before, BOOST with a tenth
+    check('a tank a little used starts filling at once', used < TANK_S - 3 && Math.abs(after6 - used - (2 * TANK_S) / REFILL_S) < 0.02 && Math.abs(tf + 2 - ((TANK_S - used) / TANK_S) * REFILL_S) < 0.1, `${used.toFixed(2)} s left after 1 s of BOOST, ${after6.toFixed(2)} s two seconds on, full ${(tf + 2).toFixed(1)} s after letting go`);
+    // from empty: 10 s to full (10 % a second); FLIP works with half a tank in it and not before, BOOST with a tenth
     const we0 = world(), z = fresh(we0); z.rocket.tank = 0;
     let tz = 0, boostAt = null, flipAt = null, early = false;
     for (; z.rocket.tank < TANK_S && tz < 200; tz += dt) {
@@ -106,22 +106,22 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
         if (z.rocket.launched) { flipAt = tz; if (z.rocket.tank < -1e-6) early = true; break; }
       }
     }
-    check('from empty: BOOST works with a tenth of a tank in it (6 s), FLIP with half (half a minute)', boostAt > 5.5 && boostAt < 7 && flipAt > 29 && flipAt < 33 && !early, `BOOST after ${boostAt === null ? '-' : boostAt.toFixed(1)} s, FLIP after ${flipAt === null ? '-' : flipAt.toFixed(1)} s`);
+    check('from empty: BOOST works with a tenth of a tank in it (1 s), FLIP with half (5 s)', boostAt > 0.95 && boostAt < 1.55 && flipAt > 4.95 && flipAt < 5.55 && !early, `BOOST after ${boostAt === null ? '-' : boostAt.toFixed(1)} s, FLIP after ${flipAt === null ? '-' : flipAt.toFixed(1)} s`);
     const wf = world(), ff = fresh(wf); ff.rocket.tank = 0; let tfull = 0;
     for (; ff.rocket.tank < TANK_S && tfull < 200; tfull += dt) stepCar(ff, {}, wf, dt);
-    check('...and an empty tank is full again in a minute', Math.abs(tfull - REFILL_S) < 0.5, `${tfull.toFixed(1)} s`);
+    check('...and an empty tank is full again in 10 s', REFILL_S === 10 && Math.abs(tfull - REFILL_S) < 0.05, `${tfull.toFixed(1)} s`);
   }
   // offline testing (?off=100): the filling takes 2 s
   { const wq = world(), q = fresh(wq); q.rocket.tank = 0; let tq = 0;
     for (; q.rocket.tank < TANK_S && tq < 10; tq += dt) stepCar(q, { quickRefill: true }, wq, dt);
     check('the quick filling of offline mode takes 2 s', Math.abs(tq - 2) < 0.05 && q.rocket.tank >= TANK_S, `${tq.toFixed(2)} s`); }
   // the gas is weight: with the tank empty the car is 250 kg lighter and a little quicker on the motors (the tank
-  // takes in about 6 kg during the run, filling at a whole one a minute)
+  // takes in what it fills meanwhile, a whole one in 10 s: about 40 kg by 100 km/h)
   const we = world(), e = fresh(we);
   e.rocket.tank = 0;
   let te = 0, e100 = null;
   for (; te < 5 && e100 === null; te += dt) { stepCar(e, { up: 1 }, we, dt); if (speedKmh(e) >= 100) e100 = te + dt; }
-  check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250) < 9 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
+  check('an empty tank: 250 kg lighter, 0-100 km/h quicker', Math.abs(e.gasOut - 250 * (1 - e100 / REFILL_S)) < 3 && e100 < base.t100 - 0.03 && e100 > 1.3, `${(spec.mass - e.gasOut).toFixed(0)} kg, ${e100.toFixed(2)} s against ${base.t100.toFixed(2)} s`);
 }
 
 // ---- the suction fans can be switched off (car.fanOff, the fan icon): the tyres carry the weight alone

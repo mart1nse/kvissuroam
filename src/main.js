@@ -152,7 +152,7 @@ import { refillTank } from './cars/thrust.js';
 import { createBigMap } from './bigmap.js';
 import { createIntro } from './intro.js';
 import { createPhoneTextures } from './world/phonetex.js';
-import { slots as startSlots, pick as pickSlot } from './race/startslots.js';
+import { slots as startSlots, pick as pickSlot, BAYS } from './race/startslots.js';
 import { createStartLane } from './race/startlane.js';
 import { createRace, createTrack, snapRoadsToTrack, levelTrackShoulders, escapeHtml } from './race/race.js';
 import { createMultiplayer } from './net/multiplayer.js';
@@ -972,7 +972,7 @@ async function boot() {
   startPose = { x: s.x, z: s.z, yaw: s.heading, y: world.heightAt(s.x, s.z) };
   const startTrack = createTrack();
   startSpots = startSlots(startTrack, startPose);
-  lane = createStartLane(startTrack, (i) => race?.edgeShift(i));
+  lane = createStartLane(startTrack, (i) => race?.edgeShift(i), BAYS);
   hud = createHud(world);
   if (otherTab) { otherTab = false; tellOtherTab(); }    // (heard before there was a screen to say it on)
   rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
@@ -1594,6 +1594,7 @@ function place(pose) {
   placedAt = performance.now();
   if (Math.hypot(pose.x - car.x, pose.z - car.z) > 200) fixBonnet(car);   // (put somewhere far off, home or the stage's start: a fresh bonnet; R keeps it as it is)
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
+  lane?.placed(pose.x, pose.z);                     // (onto the start lane's road, by R or the map: it passes through the others to the line)
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
   if (mode === 'drive' && ((shrinker?.pending || 0) > 0 || !world.ready(pose.x, pose.z))) getReady();
   wetAt = null; wreckAt = null; roofPut = null;

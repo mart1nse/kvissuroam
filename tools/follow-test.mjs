@@ -268,4 +268,32 @@ const F40 = drives.f40;
   assert.ok(w.desk.s.racers[0].arm, 'seen on the grid');
   assert.deepEqual(Object.keys(w.desk.view().racers[0]).sort(), ['car', 'id', 'name']);
 }
+// 14) a busy page's stamps (27 Nov 2026: 142 of 958 race finishes refused for the car in three days). A page stamps a
+// position when it sends it, a few ms after the moment it is of; on 27 Nov a quarter of the pages online wandered by
+// 5 ms and more. Every honest drive, sent every 6 or 7 frames at 60 Hz with its stamps wandering by 8 ms (more than
+// any page seen that night), reads under 3 s over its car's limits; before evenStamps most of them read 4 to 12 s.
+// The tuned Audi is still refused with them.
+{
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const wander = () => 8 * Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  const sent = (pts) => {
+    const f = { xs: [], zs: [], ys: [], ss: [], as: [], back: [] };
+    for (let t = 0; t < (pts.length - 1) * 100; t += rnd() < 0.5 ? 100 : 116.7) {
+      const k = Math.floor(t / 100), u = t / 100 - k, a = pts[k], b = pts[k + 1];
+      f.xs.push(a[0] + (b[0] - a[0]) * u); f.zs.push(a[1] + (b[1] - a[1]) * u); f.ys.push(a[2] + (b[2] - a[2]) * u);
+      f.ss.push(Math.max(f.ss.at(-1) ?? 0, Math.round(t + wander()))); f.as.push(t + 1e6 + 40 + 30 * rnd());
+    }
+    return driven(f);
+  };
+  const read = [];
+  for (const [name, pts] of Object.entries(drives)) {
+    const d = sent(pts), j = judgeDrive(d.xs, d.zs, d.ys, limitNow.get(name), { hop: d.hop });
+    read.push(`${name} ${Math.max(j.pull, j.grip, j.stop, j.top)}`);
+    assert.equal(j.why, '', `${name}: an honest drive from a busy page reads ${JSON.stringify(j)}`);
+  }
+  const d = sent(tuned), j = judgeDrive(d.xs, d.zs, d.ys, limitNow.get('audi200'), { hop: d.hop });
+  assert.equal(j.why, 'pull', `the tuned Audi from a busy page: ${JSON.stringify(j)}`);
+  console.log(`stamps wandering 8 ms, s over: ${read.join(', ')}; the tuned Audi ${j.pull} (pull)`);
+}
 console.log(`ok: ${Object.keys(drives).length} honest drives followed to the finish; made-up, shaved, cut, hopped, early and tuned ones refused`);

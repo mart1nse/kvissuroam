@@ -1641,6 +1641,18 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #kudopop b, #kudopop div { font-weight: 700; }
 #kudopop small { margin-left: .5em; opacity: .7; font-weight: 400; }
 #kudopop .more { opacity: .6; font-size: .9em; }
+/* THUMBS UP FROM <name>: a moment on the right, faint, when somebody gives us one (src/kudonote.js, Martin 2026-11-27) */
+#kudonote { right: max(14px, env(safe-area-inset-right)); top: 38%; pointer-events: none; color: #fff; white-space: nowrap; max-width: 46vw;
+  overflow: hidden; text-overflow: ellipsis; font-size: clamp(11px, 1.05vw, 15px); letter-spacing: .12em; font-weight: 600;
+  text-shadow: 0 0 6px rgba(255, 43, 214, .7), 0 1px 2px rgba(18, 6, 43, .8); opacity: 0; transform: translateX(12px); transition: opacity .5s, transform .5s; }
+/* (phones: low on the right, between the BRAKE and GAS buttons and the car's name under them; the online list
+   takes the right side's top) */
+body.touch #kudonote { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 22px); right: max(18px, env(safe-area-inset-right)); }
+#kudonote.on { opacity: .55; transform: none; transition-duration: .25s; }
+#kudonote span { opacity: .8; }
+#kudonote i { display: inline-block; width: .6em; height: .6em; margin: 0 .4em .1em .1em; border-radius: 50%; vertical-align: middle; background: var(--c, #fff); box-shadow: 0 0 5px var(--c, #fff); }
+#kudonote b { font-weight: 800; }
+#kudonote small { font-size: .85em; opacity: .75; }
 
 /* ---- the drag strip (src/race/drag.js, ?drag=1): the panel takes the lap panel's look (above), the shift light,
    the two cars' progress, the christmas tree with the launch revs, the question on the line, the timeslip */

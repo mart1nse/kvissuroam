@@ -243,7 +243,8 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
     const sb = (t, r, len, wid, y0, y1, hex, yaw = 0) => { const [x, z] = S(t, r); p.box(len, y1 - y0, wid, hex, x, h(x, z) + (y0 + y1) / 2, z, SYAW + yaw); };
 
     // ================= the park stretch
-    // the clipped hedge along the park, on a low granite kerb
+    // the clipped hedge along the park, on a granite edging flush with the paving. Cars drive through it and
+    // over the edging into the park (Martin, 27 Nov: room for donuts after the finish), as through other bushes.
     {
       const t0 = 12, t1 = 49.5, n = Math.round((t1 - t0) / 1.6), hr = 1.0;
       for (let k = 0; k <= n; k++) {
@@ -251,40 +252,14 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
         if (K.leafy.ok) K.leafy.bush(x, y - 0.02, z, 2.0, 1.15, SYAW + k, [0.82, 0.95, 0.82], 1.25);
         else p.box(1.7, 1.05, 1.2, 0x5e9a5e, x, y + 0.52, z, SYAW);
       }
-      sb((t0 + t1) / 2, hr - 0.04, t1 - t0 + 1, 0.18, -0.2, 0.14, 0xd6d2dc);
-      const [cx, cz] = S((t0 + t1) / 2, hr - 0.75);
-      solids.push({ x: cx, z: cz, yaw: SYAW, hx: (t1 - t0) / 2 + 0.6, hz: 0.65 });
+      sb((t0 + t1) / 2, hr - 0.04, t1 - t0 + 1, 0.18, -0.2, 0.03, 0xd6d2dc);
     }
-    // gravel beds round the lindens, benches facing the street, lamp posts between
-    for (const [k, t] of ROW_T.entries()) {
+    // gravel beds round the lindens, lamp posts between (the benches facing the street, the kvass trailer, its
+    // umbrella and stools are knockable props: kuuniProps below)
+    for (const t of ROW_T) {
       const r = ROW(t);
       sb(t, r + 0.2, 6.2, 5.0, -0.2, 0.04, 0xcbbfae);                     // the bed
       sb(t, r - 2.4, 6.2, 0.16, -0.2, 0.1, 0xb9b4c2);                      // its kerb
-      if (k < ROW_T.length - 1) {
-        const tb = t + 5.5, rb = ROW(tb);                                  // half way to the next tree
-        sb(tb, rb - 3.0, 2.0, 0.45, 0.42, 0.48, 0xa8806e); sb(tb, rb - 2.75, 2.0, 0.06, 0.48, 0.92, 0xa8806e);  // seat and back
-        for (const d of [-0.85, 0.85]) sb(tb + d, rb - 2.95, 0.08, 0.5, 0, 0.44, 0x34313f);
-        const [bx, bz] = S(tb, rb - 2.95);
-        solids.push({ x: bx, z: bz, yaw: SYAW, hx: 1.05, hz: 0.35 });
-      }
-    }
-    // the yellow kvass trailer by the Poe corner, with its umbrella and a table: moved right with the lindens
-    // (4 m, like their beds and benches), so it stands in front of the row and not in the street
-    {
-      const t = 43.5, r = ROW(t) - 4.7, [x, z] = S(t, r), y = h(x, z);
-      const tank = new THREE.CylinderGeometry(1.0, 1.0, 3.4, 20).rotateZ(Math.PI / 2);
-      p.add(tank, 0xf6c048, x, y + 1.55, z, SYAW);
-      for (const d of [-1.7, 1.7]) p.add(new THREE.SphereGeometry(1.0, 16, 10).scale(0.35, 1, 1), 0xf6c048, ...S(t + d, r).flatMap((v, i) => (i ? [y + 1.55, v] : [v])), SYAW);
-      sb(t, r, 3.6, 1.6, 0.45, 0.6, 0x4a4652);
-      for (const d of [-0.85, 0.85]) { const [wx, wz] = S(t, r + d); p.add(new THREE.CylinderGeometry(0.36, 0.36, 0.18, 14).rotateX(Math.PI / 2), 0x2a2830, wx, y + 0.36, wz, SYAW + Math.PI / 2); }
-      sb(t + 2.6, r, 1.6, 0.12, 0.45, 0.55, 0x4a4652);
-      sb(t - 1.2, r - 0.95, 0.6, 0.12, 1.1, 1.7, 0xd9d4e0);              // the tap box
-      const [ux, uz] = S(t - 2.6, r - 2.4), uy = h(ux, uz);
-      p.add(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 6), 0xe8e4ee, ux, uy + 1.2, uz);
-      p.add(new THREE.ConeGeometry(1.5, 0.55, 8, 1, true), 0xe84a4a, ux, uy + 2.45, uz);
-      sb(t - 2.6, r - 2.4, 0.7, 0.7, 0.72, 0.76, 0xe8e4ee);
-      for (const d of [-0.7, 0.7]) sb(t - 2.6 + d, r - 2.4, 0.42, 0.42, 0.44, 0.48, 0x4c4858);
-      solids.push({ x, z, yaw: SYAW, hx: 2.4, hz: 1.1 });
     }
 
     // ================= the kiosk's terrace on the Poe corner: barrel tables, an umbrella, planters
@@ -414,13 +389,25 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
   };
 }
 
-// knockable street furniture on the park stretch: [kind, x, z, bearing]
+// knockable street furniture on the park stretch: [kind, x, z, bearing] (kinds in src/world/props.js)
 export function kuuniProps() {
-  const LIGHT = 0, BIN = 4;
+  const LIGHT = 0, BIN = 4, KUUNIBENCH = 48, KVASS = 49, PARASOL = 50, STOOL = 51;
   const deg = (Math.atan2(SU[0], -SU[1]) * 180) / Math.PI;      // the bearing of the street towards Poe
   const out = [];
   // on the right, in the row of lindens like the start straight's lamps (1.4 m in front of its trees): the head over the street
   for (const t of [13.5, 35.5]) { const [x, z] = S(t - 2, ROW(t) - 1.4); out.push([LIGHT, x, z, deg - 90]); }
   for (const t of [24.5]) { const [x, z] = S(t + 1.6, ROW(t) - 3.0); out.push([BIN, x, z, deg]); }       // beside a bench
+  // the benches half way between the lindens, facing the street (Martin 27 Nov: "make them hittable")
+  for (const t of ROW_T.slice(0, -1)) { const tb = t + 5.5, [x, z] = S(tb, ROW(tb) - 2.95); out.push([KUUNIBENCH, x, z, deg - 90]); }
+  // the yellow kvass trailer by the Poe corner, its drawbar to Poe, with the umbrella over a table and two stools
+  // beside it: moved right with the lindens (4 m, like their beds and benches), so it stands in front of the row
+  // and not in the street
+  {
+    const t = 43.5, r = ROW(t) - 4.7, [x, z] = S(t, r);
+    out.push([KVASS, x, z, deg]);
+    const [ux, uz] = S(t - 2.6, r - 2.4);
+    out.push([PARASOL, ux, uz, deg]);
+    for (const d of [-0.7, 0.7]) { const [sx, sz] = S(t - 2.6 + d, r - 2.4); out.push([STOOL, sx, sz, deg]); }
+  }
   return out;
 }

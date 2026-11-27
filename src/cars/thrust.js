@@ -314,7 +314,10 @@ const KICK_C = 1 / (Math.exp(-Math.atan(KICK_W * KICK_TAU) / (KICK_W * KICK_TAU)
 const HALF_BASE = 1.5;                            // metres from the middle to an axle, and a little: the nose wheels stay over the ground
 const FIGHTS = new WeakMap();
 // the three trembles of one axis: [amplitude, turns a second, phase] each
-const trio = (h, i, amp, f0, f1) => [0, 1, 2].map((k) => [amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
+// (a touch slower, Martin 27 Nov: "the shudders left right etc, make them just a touch slower": the side to side swing
+// and the nodding at SHAKE_K of what they were, the roll's trembling at ROLL_SHAKE_K)
+const SHAKE_K = 0.85, ROLL_SHAKE_K = 0.9;
+const trio = (h, i, amp, f0, f1, sk = SHAKE_K) => [0, 1, 2].map((k) => [amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * sk * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
 const sum3 = (w, t) => w[0][0] * Math.sin(w[0][1] * t + w[0][2]) + w[1][0] * Math.sin(w[1][1] * t + w[1][2]) + w[2][0] * Math.sin(w[2][1] * t + w[2][2]);
 function fight(p) {
   let f = FIGHTS.get(p);
@@ -327,7 +330,7 @@ function fight(p) {
     T, tE, room, tb: p.tb, tl: p.tl,
     over: (OVER_MIN + OVER_MORE * rnd(h, 0)) * Math.min(1, room / 0.5),
     hunt: [],
-    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9]),    // turns
+    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9], ROLL_SHAKE_K),    // turns
     pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8]),  // radians
     yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8]),
     kick: (3.2 + 1.4 * rnd(h, 4)) * DEG,          // the nose dips this far as the tail kicks up first

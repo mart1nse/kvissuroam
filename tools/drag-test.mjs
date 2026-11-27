@@ -177,6 +177,13 @@ await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10
 await A.keyboard.press('h');
 await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 30000 });
 console.log('H at the strip: on the line again');
+// and from anywhere within 2 km of it (Martin 27 Nov: a car rolled out past the end after a quick run was taken to Toomemägi)
+await A.keyboard.press('Backspace');
+await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10000 });
+await A.evaluate(() => { const D = __game.drag().strip.frame, c = __game.car, w = __game.world, [x, z] = D.at(1400, 40); c.x = x; c.z = z; c.y = c.hy = w.heightAt(x, z) + 0.05; c.vx = c.vy = 0; c.lastGround = null; });
+await A.keyboard.press('h');
+await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 60000 });
+console.log('H 1.2 km from the strip: on the line again');
 }
 
 // ---- 3) a second page pulls into the other lane: the race of two

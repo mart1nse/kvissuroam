@@ -36,7 +36,11 @@ const AMBER_S = 0.5;                        // the sportsman's tree: each amber 
 const PRACTICE_WAIT = [1.4, 2.4];           // s from PRACTICE to the first amber (a random wait, as the tree's own)
 const NO_START_S = 8;                       // past green with no clutch drop: the run is off
 const ROLLOUT_MS = 10000;                   // after the finish: others still pass through the car this long
-const HERE_M = 250;                         // 'at the strip' this far past either end of it
+const HERE_M = 250;                         // the TIMESLIP tab shows this far past either end of the strip
+// 'at the strip' within this of its middle: H puts the car back on the line from anywhere in it (Martin 27 Nov: "put to
+// the drag strip if i am in a 2km circle around it"; at 250 m past the ends a car rolled out after a quick run was out
+// of it, and H took it to Toomemägi). The garage's card and LAP TIMES's tab follow the same circle.
+const NEAR_M = 2000;
 const STUCK_S = 4;                          // the clutch dropped and the car not off the line in this long (its own clock): the run is off
 const LANE_OUT = 4.9;                       // m from the lane's middle: out of the lane (over the centre line or the edge)
 const DONE_GONE = 260;                      // m away from the strip after a run: the timeslip goes
@@ -488,8 +492,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // on the line or on a run: the others' cars pass through ours (and ours through theirs)
     // (and after the run while the car is still rolling out down the strip: the other lane's car may stop beside it)
     get busy() { return st.phase === 'line' || st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && performance.now() - st.doneAt < ROLLOUT_MS); },
-    // at the strip: on it in any way, or within its reach (H puts the car back on the line from here, as at Majoraadi's start)
-    get here() { const c = st.car; return !!c && (st.phase !== 'off' || Math.hypot(c.x - MID[0], c.z - MID[1]) < QUARTER / 2 + HERE_M); },
+    // at the strip: on it in any way, or within 2 km of it (H puts the car back on the line from here, as at Majoraadi's start)
+    get here() { const c = st.car; return !!c && (st.phase !== 'off' || Math.hypot(c.x - MID[0], c.z - MID[1]) < NEAR_M); },
     get lanes() { return st.lanes; },
     // waiting on the line, before a tree (the camera rises and looks round meanwhile, src/main.js): our car's spot and
     // the other lane's [ox, oz], beside it across the strip, and the way the strip runs; null otherwise

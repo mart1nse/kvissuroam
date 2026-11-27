@@ -52,11 +52,13 @@
   .hero img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
   .hero figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .big { padding: 18px 18px 18px; }
-  .big .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 4px; }
-  .big .num { font: 900 italic clamp(64px, 12vw, 112px)/1 Montserrat, system-ui, sans-serif; letter-spacing: -.01em;
+  .big .head { display: flex; flex-wrap: wrap; gap: 8px 40px; margin-bottom: 8px; }
+  .big .stat { display: flex; flex-direction: column; }
+  /* (padding: the italic figures lean out of their box and the gradient clips at its edges) */
+  .big .num { font: 900 italic clamp(46px, 7.5vw, 80px)/1.12 Montserrat, system-ui, sans-serif; letter-spacing: -.01em; padding: 0 .12em 0 .06em; margin-left: -.06em;
               background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .big .what { font: 800 clamp(18px, 2.6vw, 26px)/1.2 Montserrat, system-ui, sans-serif; color: var(--ink); }
-  .big .what small { display: block; font: 400 14px/1.4 system-ui, sans-serif; color: var(--ink2); margin-top: 4px; }
+  .big .what { font: 700 clamp(15px, 1.8vw, 19px)/1.25 Montserrat, system-ui, sans-serif; color: var(--ink); }
+  .big .more { color: var(--ink2); font-size: 14px; margin: 4px 0 0; }
   .big .chart { height: 180px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
   footer a, .sub a { color: var(--cyan); }
@@ -126,9 +128,11 @@
     const busy = typ.filter((x) => x.h >= 18 && x.h <= 22), busyAvg = busy.length ? busy.reduce((a, x) => a + x.v, 0) / busy.length : 0;
     const typEst = typ.some((x) => x.est);
     top.innerHTML = `
-      <div class="head"><span class="num">${fmt(avgDay / 24)}</span>
-        <span class="what">views of the WINBAUM.EE sign every hour, on average${fullM.length ? '' : ' (estimate)'}
-          <small>About ${fmt(avgDay)} a day, day and night together. In the evening, from 18:00 to 23:00, about ${fmt(busyAvg)} an hour.</small></span></div>
+      <div class="head">
+        <div class="stat"><span class="num">${fmt(avgDay / 24)}</span><span class="what">views an hour</span></div>
+        <div class="stat"><span class="num">${fmt(avgDay)}</span><span class="what">views a day</span></div>
+      </div>
+      <p class="more">Views of the WINBAUM.EE sign on average${fullM.length ? '' : ' (estimates until the counter has full days)'}, day and night together. In the evening, from 18:00 to 23:00, about ${fmt(busyAvg)} an hour.</p>
       <h3>A typical day, hour by hour${typEst ? ' <span style="text-transform:none;letter-spacing:0">(estimate)</span>' : ''}</h3>
       ${chart(typ.map((x) => ({ v: x.v, est: x.est, label: hh(x.h).slice(0, 2), tip: `${hh(x.h)}–${hh((x.h + 1) % 24)}: about ${fmt(x.v)} views${x.est ? ' (estimate)' : ''}` })), 3)}`;
     out.innerHTML = `

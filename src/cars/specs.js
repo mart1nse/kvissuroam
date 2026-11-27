@@ -539,8 +539,9 @@ export const CARS = {
     grip: 1.2,                  // tarmac rally rubber under 1230 kg (gravel tyres are gravel tyres, as on every car)
     abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
     bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
-    // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js)
-    exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true },
+    // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js: the big
+    // bangs of engine-sounds.js antilag), the flames a touch bigger than the 22B's (Martin 2026-11-27)
+    exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true, flameSize: 1.3 },
     engine: {
       type: 'ice',
       idle: 1000,               // a race engine's lumpy idle

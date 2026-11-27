@@ -813,6 +813,7 @@ async function boot() {
   pepleri = createPepleri(scene, world, { shadows: !isTouch });
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
   winbaum = createWinbaum(scene, world, { shadows: !isTouch });        // the Winbaum cabin advert by LAP START (only with ?winbaum=1)
+  winbaum.bindClicks(camera, canvas, () => (mode === 'drive' ? car : null));   // tapping the cabin or its sign opens winbaum.ee (after the posters: hover)
   keskus = createKeskus(scene, world, { shadows: !isTouch });
   keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
   orident = createOrident(scene, world, { shadows: !isTouch });

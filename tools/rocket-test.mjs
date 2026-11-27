@@ -76,9 +76,10 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     check('...0-300 km/h in about 3.4 s', t300 > 3.1 && t300 < 3.7, `${t300.toFixed(2)} s`);
     check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 120000 && first > 50000 && first < 60000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
   }
-  // BOOST alone (no throttle key): the motors are held at full power too
+  // BOOST alone (no throttle key): the motors are held at full power too, trimmed to what the tyres take (Martin 27
+  // Nov: "when I click only on boost, it sometimes shows some wheelspin"); with the gas pedal too they light up
   const alone = run({ boost: 1 });
-  check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
+  check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.06, `${alone.t100.toFixed(2)} s, ${b.t100.toFixed(2)} s with the gas pedal`);
   // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 10 s (27 Nov; 60 s, 120 before), and nothing is locked:
   // with the button still held after running dry nothing blows, and it fills all the same
   const w = world(), car = b.car;
@@ -579,5 +580,12 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     res.every((r) => r.off * r.side > 0.8 && r.off * r.side < 1.2 && r.most < 1.5) && res[0].side === 1 && res[1].side === -1,
     res.map((r) => `rolls ${r.side > 0 ? 'right' : 'left'}: lands ${r.off.toFixed(2)} m over`).join('; '));
 }
+
+// ---- BOOST alone: the wheels roll (see the 0-100 checks above; down here, as these runs use the shared tank)
+  {
+    const spin = (inp) => { const w = world(), c = fresh(w); let most = 0; for (let t = 0; t < 2; t += dt) { stepCar(c, inp, w, dt); most = Math.max(most, c.slipVR || 0); } return most; };
+    const a = spin({ boost: 1 }), g = spin({ boost: 1, up: 1 }), bend = spin({ boost: 1, steer: 0.5 });
+    check('...without the rear wheels lighting up, straight on or in a bend (with the gas pedal they do)', a < 5 && bend < 8 && g > 15, `${a.toFixed(1)} and ${bend.toFixed(1)} m/s of wheelspin at the most, ${g.toFixed(0)} with the gas`);
+  }
 
 process.exit(ok ? 0 : 1);

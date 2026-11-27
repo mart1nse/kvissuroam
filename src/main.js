@@ -1284,7 +1284,7 @@ async function boot() {
     scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
   }
   setCar(carId);
-  if (resume?.pose) place(resume.pose);       // (back where the car was before the graphics were lost)
+  if (resume?.pose) place(resume.pose, true);       // (back where the car was before the graphics were lost)
   camYaw = car.yaw; camSnap = true; droneYaw = car.yaw; droneDir.set(Math.sin(car.yaw), -Math.cos(car.yaw));
   buildMenu();
   bar.style.width = '100%';
@@ -1521,6 +1521,7 @@ function openGarage() {
   race?.cancel('LAP CANCELLED · GARAGE', false, 'jump');
   if (stage?.phase === 'run') stage.cancel('STAGE CANCELLED · GARAGE');
   drag?.cancel('DRAG RUN CANCELLED');
+  fixBonnet(car);                               // (the garage puts a fresh bonnet on: Martin 27 Nov)
   if (!(raceMode?.ghost && !raceMode?.holding)) car.vx = car.vy = car.yawRate = 0;
   // the track picker on the track the car is at, so that DRIVE leaves it there (a pick in the garage still moves it)
   if (stage && !trackPicked) { board?.follow(atRaadi() ? 'raadi' : atDrag() ? 'drag' : 'toome'); layoutMenu(); }
@@ -1627,11 +1628,14 @@ let placedAt = -1e9;               // when the car was last put somewhere (ms)
 // why the car is being put somewhere else in one go, for the game stats when that ends a timed lap (src/stats.js lap):
 // home (START, H, the TOOMEMÄGI button), map, garage; anything else is 'other'. Forgotten as a lap starts.
 let lapMove = '';
-function place(pose) {
+// keep: R (back to a spot of the same drive) and the picture coming back after lost graphics keep the bonnet
+// as it was; every other move (H, a track button, the map, a race's grid, the stage's or the drag line's start)
+// puts a fresh one on (Martin 27 Nov: "make the bonnet come back after garage or movement to other world")
+function place(pose, keep = false) {
   drag?.placed();                                  // (put anywhere but onto the drag strip's line: a drag run is off)
   watch?.stop();                                   // (put somewhere: back in your own car)
   placedAt = performance.now();
-  if (Math.hypot(pose.x - car.x, pose.z - car.z) > 200) fixBonnet(car);   // (put somewhere far off, home or the stage's start: a fresh bonnet; R keeps it as it is)
+  if (!keep) fixBonnet(car);
   resetCar(car, { ...pose, y: pose.y ?? world.heightAt(pose.x, pose.z) });
   lane?.placed(pose.x, pose.z);                     // (onto the start lane's road, by R or the map: it passes through the others to the line)
   shrinker?.jump(scene, pose.x, pose.z);          // pictures of this spot that were resting come back now (phonetex.js)
@@ -1705,7 +1709,7 @@ async function goLastSpot() {
       for (let i = history.length - 1; i >= 0; i--) if (history[i].roof) history.splice(i, 1);
       const down = searchDry(world, sx, sz, bigmap.nearestRoad, { from: 0, to: 250 });
       if (down) {
-        place(down);
+        place(down, true);
         race?.hopped(down.x, down.z);
         if (race?.running) stats.lap('r');
         if (stage?.reset(car.time)) stats.stage('reset');
@@ -1728,7 +1732,7 @@ async function goLastSpot() {
     if (!pick && stage?.running) return stage.goStart();
     if (!pick) pick = searchDry(world, sx, sz, bigmap.nearestRoad);
     if (!pick) return stage && atRaadi() ? stage.goStart() : goHome();
-    place(pick);
+    place(pick, true);
     if (pick.roof) roofPut = { x: pick.x, z: pick.z, y: pick.y };
     race?.hopped(pick.x, pick.z);
     if (race?.running) stats.lap('r');               // (R in a timed lap: it goes on from that spot)

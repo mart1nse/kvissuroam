@@ -70,7 +70,12 @@ const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 // alongside the swing easing out (until 27 Nov night it started 1.3 s in, after the swing: a car pressed from a
 // power slide, its tail out and the nose turning fast, swung on 40 to 50 degrees and then all the way back, Martin:
 // "if you just finish a flip and do it then it sort of goes crazy and turns itself around back straight").
-const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s; a turn's 0.5 rad/s carries on 11 degrees)
+const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s)...
+// ...but a bend's own turn, up to YAW_HOLD_R of it, is held on for longer (Martin 27 Nov, "increase the length of the turn it
+// holds once X during turn"): it eases out over YAW_HOLD_T, so a bend at 0.5 rad/s carries the car on round about 30 degrees
+// in the air (was 11). A spin's turn past that still eases out over YAW_TAU, so a FLIP from a power slide does not whirl.
+const YAW_HOLD_R = 0.6;            // rad/s
+const YAW_HOLD_T = 1.0;            // s
 const YAW_LINE = 1.2;              // the nose is turned onto the line of travel over this long from the press...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
 const MAX_T = 6;                   // no flight longer than this (s)
@@ -101,7 +106,8 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 // The nose at time t of a flight, and how fast it turns (rad, rad/s): the swing it had eases out, and over the first
 // YAW_LINE (or to the landing burn, if sooner) it is brought onto the line of travel (lineTurn: the shortest way
 // round from where the swing ends; worked out from the plan's own numbers, so the other players' pages fly the same)
-const yawCarry = (p, t) => p.yawR * YAW_TAU * (1 - Math.exp(-t / YAW_TAU));
+const yawHeld = (p) => Math.max(-YAW_HOLD_R, Math.min(YAW_HOLD_R, p.yawR));
+const yawCarry = (p, t) => { const h = yawHeld(p); return h * YAW_HOLD_T * (1 - Math.exp(-t / YAW_HOLD_T)) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
 // (the path turns by the nose's carried swing, so the line of travel and the nose differ by the slide at the press)
 function lineTurn(p) {
   if (Math.hypot(p.vx, p.vz) <= YAW_MIN_V) return 0;
@@ -142,7 +148,8 @@ function yawAt(p, t) {
 }
 function yawRateAt(p, t) {
   const [a, b] = lineSpan(p), u = (t - a) / (b - a);
-  return p.yawR * Math.exp(-t / YAW_TAU) + (u > 0 && u < 1 ? (lineTurn(p) * 6 * u * (1 - u)) / (b - a) : 0);
+  const h = yawHeld(p);
+  return h * Math.exp(-t / YAW_HOLD_T) + (p.yawR - h) * Math.exp(-t / YAW_TAU) + (u > 0 && u < 1 ? (lineTurn(p) * 6 * u * (1 - u)) / (b - a) : 0);
 }
 
 // The tank belongs to the car, not to one drive in it: back from the garage it is as full as it was left.
@@ -548,7 +555,9 @@ function valves(p, f, t, noz, spec, lean) {
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
   // and after that answer its trembling
   // (and turn it onto the line of travel before the landing: + is to the right, which the left one pushes)
-  if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6 * Math.exp(-t / YAW_TAU) / Math.exp(-0.5);
+  // (only the swing past the bend's own turn, which is held on: yawHeld)
+  const past = p.yawR - yawHeld(p);
+  if (t < 2 * YAW_TAU && Math.abs(past) > 0.05) noz[past > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6 * Math.exp(-t / YAW_TAU) / Math.exp(-0.5);
   const yt = lineTurn(p);
   if (Math.abs(yt) > 0.03) {
     const [a, b] = lineSpan(p), u = (t - a) / (b - a);

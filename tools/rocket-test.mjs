@@ -524,14 +524,15 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     let carried = 0, land = null;
     for (let t = 0; t < 6 && land === null; t += dt) {
       stepCar(c, { flip: t < 0.05 ? 1 : 0, steer: st }, w, dt);
-      if (t < 1.3) carried = Math.max(carried, Math.abs(c.yaw - y0));
+      if (c.rocket.flight) carried = Math.max(carried, Math.abs(c.yaw - y0));
       if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx) };
     }
-    res.push({ kmh, carried: carried * 57.3, want: Math.abs(rate) * 0.4 * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
+    const h = Math.min(Math.abs(rate), 0.6);   // (thrust.js: up to 0.6 rad/s held on over 1 s, the rest eased out over 0.4 s)
+    res.push({ kmh, rate, carried: carried * 57.3, want: (h * (1 - Math.exp(-3.7)) + (Math.abs(rate) - h) * 0.4) * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
   }
-  check('FLIP in a bend: the nose carries on turning (the swing eased out over 0.4 s) and lands lined up with the travel',
+  check('FLIP in a bend: the nose carries on turning (a bend\'s turn held on over 1 s, a spin\'s eased out over 0.4 s) and lands lined up with the travel',
     res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(r.slip) < 3),
-    res.map((r) => `${r.kmh} km/h: on ${r.carried.toFixed(0)} deg, lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
+    res.map((r) => `${r.kmh} km/h, ${r.rate.toFixed(2)} rad/s: on ${r.carried.toFixed(0)} deg (${r.want.toFixed(0)} wanted), lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
   check('...and keeps the turn: it lands pointing as far round from its way at the press as the nose swung on',
     res.every((r) => Math.abs(r.nose) > 0.7 * r.want && Math.abs(Math.abs(r.nose) - r.carried) < 3 + 0.2 * r.carried),
     res.map((r) => `${r.kmh} km/h: lands ${Math.abs(r.nose).toFixed(0)} deg round, swung ${r.carried.toFixed(0)}`).join('; '));

@@ -1230,8 +1230,12 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       const p = poseNow(car, sendPose, hotlap(), fresh());
       const out = new Array(STAMP + 1);
       for (let k = 0; k < STAMP; k++) out[k] = Math.round(p[k] * POSE_SC[k]) / POSE_SC[k];
-      // when this position was taken, by our own clock (ms within the minute; see addPose)
-      out[STAMP] = Date.now() % 60000;
+      // when this position was taken, by our own clock (ms within the minute; see addPose): the frame's own moment,
+      // the one the physics step was worked out for, not now. Now is later in the frame by however long the work in
+      // between took, 5 ms and more on a busy page (27 Nov 2026: read by the server's race check as the car speeding
+      // up and slowing down, worker/follow.js evenStamps; and the others' screens placed the car by it too)
+      const ft = document.timeline?.currentTime;
+      out[STAMP] = Math.round(Number.isFinite(ft) ? performance.timeOrigin + ft : Date.now()) % 60000;
       send({ t: 's', p: out });
     }
     // (on a lap with no connection, the server full or the line down for a moment: where the car is goes to the

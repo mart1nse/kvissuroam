@@ -180,6 +180,51 @@ export function follow(r, f, x, z, now, go, free = false, st = null, y = 0) {
   return ev;
 }
 
+// A page's stamp is taken a few ms after the moment its position is of (27 Nov 2026: the car check refused 142 of 958
+// race finishes in three days, 15 in 100, whole races at once, where the record drives of the same cars read nothing).
+// The stamp is the page's clock when it sends, later in the frame than the physics step, by however long the work in
+// between took; on a busy page that wanders by 5 ms and more (a quarter of the pages online on 27 Nov), which is 5 to
+// 10 % of a tenth of a second. Read as times, the places then seem to speed up and slow down by that much from one to
+// the next, and a car at 40 m/s seems to gain and lose more in half a second than its engine gives in two: a weak car
+// read 4 to 8 s over its pull at 3 to 5 ms of wander (tools/follow-test.mjs 14). The car's own path says when it was
+// where: over a second of it, time against the distance driven is a smooth curve (its speed changes only so fast), so
+// each stamp is set onto that curve, fitted through the stamps around it. At most JITTER_MAX away from its own stamp;
+// not where the car crawls (time against distance is steep there), not across a gap in the positions or an R.
+const EVEN_K = 8;                // stamps either side that the curve is fitted through
+const EVEN_GAP = 400;            // ms between two positions: the curve does not reach across more
+const EVEN_V = 4;                // m/s at the least over the span
+const JITTER_MAX = 30;           // ms a stamp may be moved
+export function evenStamps(T, xs, zs, back = []) {
+  const n = T.length, out = Float64Array.from(T), s = new Float64Array(n), cut = new Uint8Array(n);
+  for (let i = 1; i < n; i++) {
+    const d = Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]);
+    s[i] = s[i - 1] + d;
+    if (T[i] - T[i - 1] > EVEN_GAP || d > HOP) cut[i] = 1;            // (the curve stops before position i)
+  }
+  for (const i of back) if (i >= 0 && i < n) { cut[i] = 1; if (i + 1 < n) cut[i + 1] = 1; }
+  for (let i = 0; i < n; i++) {
+    let a = i, b = i;
+    while (a > 0 && i - a < EVEN_K && !cut[a]) a--;
+    while (b < n - 1 && b - i < EVEN_K && !cut[b + 1]) b++;
+    if (b - a < 2 * EVEN_K || i - a < 2 || b - i < 2) continue;
+    if (s[b] - s[a] < EVEN_V * (T[b] - T[a]) / 1000) continue;
+    // least squares of T = c0 + c1 u + c2 u^2, u = distance from position i over half the span's (within -1 to 1)
+    const w = (s[b] - s[a]) / 2;
+    let S0 = 0, S1 = 0, S2 = 0, S3 = 0, S4 = 0, Y0 = 0, Y1 = 0, Y2 = 0;
+    for (let j = a; j <= b; j++) {
+      const u = (s[j] - s[i]) / w, u2 = u * u, y = T[j] - T[i];
+      S0++; S1 += u; S2 += u2; S3 += u2 * u; S4 += u2 * u2; Y0 += y; Y1 += y * u; Y2 += y * u2;
+    }
+    // (Cramer's rule on the 3 x 3 normal equations)
+    const det = S0 * (S2 * S4 - S3 * S3) - S1 * (S1 * S4 - S3 * S2) + S2 * (S1 * S3 - S2 * S2);
+    if (!(Math.abs(det) > 1e-9)) continue;
+    const c0 = (Y0 * (S2 * S4 - S3 * S3) - S1 * (Y1 * S4 - S3 * Y2) + S2 * (Y1 * S3 - S2 * Y2)) / det;
+    out[i] = T[i] + Math.max(-JITTER_MAX, Math.min(JITTER_MAX, c0));
+  }
+  for (let i = 1; i < n; i++) if (out[i] < out[i - 1]) out[i] = out[i - 1];
+  return out;
+}
+
 // The lap as it was followed, for the judging of the car itself (src/race/plausible.js judgeDrive): its places
 // `step` s apart, { xs, zs, ys, hop } (hop: the samples round an R, which are not driving), or null when too little
 // of it is known (the server restarted near the end). Each position's time is the sender's own stamp, carried over
@@ -190,8 +235,9 @@ export function driven(f, step = 0.1) {
   if (n < 50) return null;
   let off = Infinity;
   for (let i = 0; i < n; i++) off = Math.min(off, f.as[i] - f.ss[i]);
-  const T = new Float64Array(n);
-  for (let i = 0; i < n; i++) { T[i] = Math.min(f.as[i], Math.max(f.ss[i] + off, f.as[i] - LEAD_MAX)); if (i && T[i] < T[i - 1]) T[i] = T[i - 1]; }
+  const T0 = new Float64Array(n);
+  for (let i = 0; i < n; i++) { T0[i] = Math.min(f.as[i], Math.max(f.ss[i] + off, f.as[i] - LEAD_MAX)); if (i && T0[i] < T0[i - 1]) T0[i] = T0[i - 1]; }
+  const T = evenStamps(T0, f.xs, f.zs, f.back);
   const ms = step * 1000, m = Math.floor((T[n - 1] - T[0]) / ms) + 1;
   if (m < 50) return null;
   const xs = new Float64Array(m), zs = new Float64Array(m), ys = new Float64Array(m), hop = new Uint8Array(m);

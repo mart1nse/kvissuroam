@@ -176,6 +176,7 @@ import { carry as carryOnTop } from './cars/tops.js';
 import { pickFromHistory, searchDry, dryLevel, roofLevel } from './respawn.js';
 import { createQuality, probeGpu, createGpuTimer, createLag, weakDesktop } from './quality.js';
 import { stats } from './stats.js';
+import { createAdViews } from './adviews.js';
 import { createRaceMode } from './race/racemode.js';
 import { createStage, onStage } from './race/raadi.js';
 import { stageGravel } from './race/raadi-edge.js';
@@ -456,7 +457,7 @@ const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '
 addEventListener('keydown', (e) => { if (DRIVE_KEYS.has(e.code) || (e.code === 'KeyA' && input.wasd)) pads.keyUsed(); }, true);
 let ctl = input.state;           // what drives the car this frame: the keys, or pads.state
 const audio = createAudio();
-let winbaum, kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
+let winbaum, adViews, kuperjanovi, kaubamaja, keskus, keskusTee, pepleri, pepVan, orident, delta, kuuni, vabadusLights;
 let raceMode = null;               // the online race (src/race/racemode.js)
 let rocketUi = null, plumes = null;               // the thrusters' tank on screen (src/rocketui.js)
 // thumbs up between players: a neon sign in the receiver's back window, then a small thumb in its row there
@@ -814,6 +815,7 @@ async function boot() {
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
   winbaum = createWinbaum(scene, world, { shadows: !isTouch });        // the Winbaum cabin advert by LAP START (only with ?winbaum=1)
   winbaum.bindClicks(camera, canvas, () => (mode === 'drive' ? car : null));   // tapping the cabin or its sign opens winbaum.ee (after the posters: hover)
+  adViews = createAdViews(world);                                     // how often the adverts are seen, for /ads (src/adviews.js)
   keskus = createKeskus(scene, world, { shadows: !isTouch });
   keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
   orident = createOrident(scene, world, { shadows: !isTouch });
@@ -2637,6 +2639,7 @@ function frame(ts) {
     const far = camera.far;
     if (still) { warm++; camera.far = 25 + (far - 25) * (warm / WARM_FRAMES) ** 2; camera.updateProjectionMatrix(); }
     if (treesHidden) { treesHidden = false; for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = true; }
+    adViews?.update(camera, rawDt, mode === 'drive' && !document.hidden && !bigmap.isOpen);   // the adverts seen (src/adviews.js)
     const d0 = performance.now(), progs0 = renderer.info.programs?.length || 0, tex0 = renderer.info.memory.textures;
     shrinker?.wake();                              // a picture of a place the car is coming back to (phonetex.js)
     onePass(scene);                                // see-through sheets in one go (src/still.js)

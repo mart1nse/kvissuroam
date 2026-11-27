@@ -550,7 +550,7 @@ export const CARS = {
     exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true, flameSize: 1.3 },
     engine: {
       type: 'ice',
-      idle: 1000,               // a race engine's lumpy idle
+      idle: 1800,               // a hot rally engine's high, lumpy idle (Martin's Goodwood recording of a WRC 04, 27 Nov: about 1820 rpm)
       redline: 7500,            // (no source gives the limit: about where a restricted 2.0 WRC engine's power ends)
       shiftRpm: 7300,
       brakeDown: 0.9,           // braking into a corner it comes down early and keeps the revs up

@@ -199,19 +199,15 @@ export class EngineCore {
     const kr = 1 - Math.exp(-len / (sr * 0.025)), kl = 1 - Math.exp(-len / (sr * 0.06));
     // a touch of idle lope: real engines never hold their idle exactly
     const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 + (c.lopeFast ? Math.sin(this.n / sr * 9.1) * c.lopeFast : 0) : 0;
-    // idleUp: the engine heard idling higher than the physics' idle (a hot rally engine at about 1800 rpm with its
-    // anti-lag's idle-up; the car's own idle, which the launch and the clutch work from, stays as it is): lifted
-    // at idle, less as the revs rise, gone 2000 rpm above it
-    this.idleS = c.idleUp || I.idle;
-    const up = c.idleUp ? (c.idleUp - I.idle) * clamp(1 - (I.rpm - I.idle) / 2000, 0, 1) : 0;
+    this.idleS = I.idle;
     // an upshift's gear going in with the revs still above its speed (src/audio-shift.js): the revs are
     // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a
     // couple of swings as the driveline winds up and springs back
     if (I.yankId !== this.yId) {
       this.yId = I.yankId; this.yA = I.yank || 0; this.yT = 0; this.yTi = I.yankTight || 0;
-      if (this.yA > 0) this.rpm = Math.max(300, I.rpm);   // (idleUp is gone by the revs an upshift drops to)
+      if (this.yA > 0) this.rpm = Math.max(300, I.rpm);
     }
-    this.rpm += (Math.max(300, I.rpm + up + lope) - this.rpm) * kr;
+    this.rpm += (Math.max(300, I.rpm + lope) - this.rpm) * kr;
     let yOff = 0; this.yk = 0;
     if (this.yA > 0 && this.yT < 0.45) {
       // (per car: yank, the size of the swing, and yankHz, how fast it swings; it dies away over the same

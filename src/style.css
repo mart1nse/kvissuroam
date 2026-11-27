@@ -182,6 +182,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   font-size: clamp(10px, 1.4vw, 14px); letter-spacing: .14em; text-transform: uppercase; color: var(--sun); text-shadow: 0 0 8px rgba(255, 150, 60, .8), 1px 1px 0 var(--ink);
 }
 #dash { right: max(14px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); --d: clamp(150px, 21vw, 270px); display: flex; flex-direction: column; align-items: center; }
+/* a quick note just above the rev counter (FLIP pressed where it does nothing), a dark pill as #lapsplit and the map's hint */
+#flipnote { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 2; pointer-events: none; white-space: nowrap;
+  padding: .45em 1.1em; font-size: clamp(10px, 1.05vw, 13px); font-style: italic; font-weight: 800; letter-spacing: .16em; color: var(--sun);
+  background: rgba(18, 6, 43, .72); border-radius: 999px; text-shadow: 0 0 10px rgba(255, 180, 60, .7); opacity: 0; transition: opacity .2s; }
+#flipnote.show { opacity: 1; }
+#flipnote:empty { display: none; }
+/* (a phone: over the rev counter are the map and BOOST, so the note goes to the bottom middle of the screen, over the
+   road between the steering and the pedals. #dash's middle is at max(18px, safe left) + padw / 2 and its foot padh + 6px up) */
+body.touch #flipnote { left: calc(50% + 50vw - max(18px, env(safe-area-inset-left)) - var(--padw) / 2); bottom: calc(14px - var(--padh) - 6px);
+  padding: .45em 1em; font-size: 11px; letter-spacing: .14em; }
 /* round tachometer around the speed: white marks on a see-through face, red numbers from the rev limiter on */
 #tach { position: relative; width: var(--d); height: var(--d); }
 #dial { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.5px rgba(10, 2, 30, .95)) drop-shadow(0 0 5px rgba(10, 2, 30, .5)); }

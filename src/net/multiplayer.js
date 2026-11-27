@@ -1150,7 +1150,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (!r.ok) return null;
     const name = decodeURIComponent(r.headers.get('x-name') || ''), ms = Number(r.headers.get('x-ms'));
     const rp = await unpack(new Uint8Array(await r.arrayBuffer()));
-    return { ...rp, track, car, name, lapMs: ms };
+    // what drove it (Martin 27 Nov: "show in small the controller icon too"): the record's line on the board, which
+    // has the lap's `inp` (null on a lap from before 20 Nov: then no mark)
+    const part = track === 'raadi' ? board?.raadi : board;
+    const row = [...(part?.allTime || []), ...(part?.today || []), ...(part?.recent || [])].find((x) => x.car === car && x.ms === ms);
+    return { ...rp, track, car, name, lapMs: ms, inp: row?.inp || null };
   }
 
   // Our record laps' replays: a lap's samples wait here (in memory only, they are big) until the server has the

@@ -789,10 +789,12 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i.behind { color: #ff5a6e; }
 :is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
-/* desktop: from the minimap up, the count, your line, "+N MORE", then the names (A to Z read down, Z just over
-   your line) and the notes on top; how many names fit is worked out in src/net/people.js */
+/* desktop: from the minimap up, the count, your line, the names (A to Z read down, Z just over your line, those in
+   the garage or watching at the top: Martin 27 Nov), "+N MORE" and the notes on top. The rows go in from your line
+   up (src/net/people.js), so the list rests at its bottom end and what is cut off is the top; how many names fit is
+   worked out in src/net/people.js */
 body:not(.touch) #people { display: flex; flex-direction: column-reverse; align-items: flex-start; }
-body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
+body:not(.touch) #people .who:not(.hidden) { display: flex; flex-direction: column-reverse; list-style: none; margin: 0 0 3px; padding: 0; gap: 1px; overflow: hidden auto;
   pointer-events: auto; overscroll-behavior: contain; scrollbar-width: none; }
 /* (Martin, 2026-11-24) the mouse wheel scrolls the names, no scrollbar; a soft fade where more names are */
 body:not(.touch) #people .who::-webkit-scrollbar { display: none; }
@@ -1235,9 +1237,12 @@ body.touch #rlights { top: 30%; font-size: 13px; }
 /* the car each player drives, short, after the name (Martin, 2026-11-23) */
 #people small.car, #roster small.car { margin-left: .4em; font-size: .85em; font-weight: 400; font-style: italic; letter-spacing: .04em; color: #fff; opacity: .82; }
 #roster li small.car { font-size: 11px; letter-spacing: .06em; margin-left: 5px; }
-/* players in the garage (Martin, 2026-11-23): listed after the drivers, greyed */
+/* players in the garage (Martin, 2026-11-23): greyed, at the far end from your line (Martin, 27 Nov: on desktop at the
+   top). On desktop no thumb, so an unseen stand-in of its height keeps their rows as high as the others (the list
+   counts the names out of view by rows of one height: src/net/people.js) */
 #people .who li.gar { opacity: .45; }
 #people .who li.gar > i { box-shadow: none; }
+body:not(.touch) #people .who > li.gar::before { content: ''; display: inline-block; width: 0; height: 1.15em; margin-bottom: .06em; vertical-align: middle; }
 #people .who small.at { margin-left: .4em; font-size: .85em; font-style: italic; }
 
 /* ---- the Raadi rally stage (MAJORAADI, src/race/raadi.js): the clock in the lap panel's look, the start

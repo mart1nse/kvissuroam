@@ -1,6 +1,6 @@
 // The options' sections fold open and shut by their titles, only the titles at first, and which were open is remembered
-// over a reload (Martin 2026-11-27). Desktop has SOUND, GRAPHICS, CONTROLS and KEYBOARD (every key, src/keylist.js;
-// WASD and ?drag=1 change it); phones (844x390, 800x304) SOUND and GRAPHICS only, and the shut panel fits the screen.
+// over a reload (Martin 2026-11-27). Desktop has KEYBOARD first (every key, src/keylist.js; WASD and ?drag=1 change it),
+// then SOUND, GRAPHICS and CONTROLS; phones (844x390, 800x304) SOUND and GRAPHICS only, and the shut panel fits the screen.
 // Needs the vite dev server: node tools/options-sections-test.mjs [base] [shotdir]   (about 4 minutes)
 import { createRequire } from 'module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -25,6 +25,8 @@ const state = (p) => p.evaluate(() => [...document.querySelectorAll('#options .o
   body: s.querySelector('.optbody').getClientRects().length > 0,
 })));
 async function tapTitle(p, sec, phone) {
+  // (with KEYBOARD open the titles under it are further down the panel, which scrolls: bring the title into view first)
+  await p.evaluate((k) => document.querySelector(`#options [data-sec="${k}"] .opthead`)?.scrollIntoView({ block: 'nearest' }), sec);
   const r = await p.locator(`#options [data-sec="${sec}"] .opthead`).boundingBox();
   if (!r) return fail(`no ${sec} title to tap`);
   if (phone) await p.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); else await p.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
@@ -40,8 +42,8 @@ const keyText = (p) => p.evaluate(() => document.getElementById('opt-keylist').i
   p.on('pageerror', (e) => fail('page error ' + e.message));
   await load(p);
   let s = await state(p);
-  if (s.map((x) => x.sec).join() !== 'sound,gfx,controls,keys') fail('sections ' + s.map((x) => x.sec).join());
-  if (s.every((x) => x.title && !x.body)) pass('four titles, all shut at first'); else fail('first look ' + JSON.stringify(s));
+  if (s.map((x) => x.sec).join() !== 'keys,sound,gfx,controls') fail('sections ' + s.map((x) => x.sec).join());
+  if (s.every((x) => x.title && !x.body)) pass('four titles, KEYBOARD first, all shut at first'); else fail('first look ' + JSON.stringify(s));
   if (shots) await p.screenshot({ path: `${shots}/desktop-shut.png` });
   await tapTitle(p, 'keys');
   await tapTitle(p, 'sound');
@@ -66,7 +68,7 @@ const keyText = (p) => p.evaluate(() => document.getElementById('opt-keylist').i
   await load(p);
   s = await state(p);
   const open = s.filter((x) => x.body).map((x) => x.sec).join();
-  if (open === 'controls,keys') pass('open sections remembered over a reload'); else fail('after reload open: ' + open);
+  if (open === 'keys,controls') pass('open sections remembered over a reload'); else fail('after reload open: ' + open);
   await ctx.close();
 }
 // ---- the drag strip's keys under ?drag=1

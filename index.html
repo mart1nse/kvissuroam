@@ -204,7 +204,11 @@
     </div>
     <div id="options" class="hidden">
       <h3>OPTIONS</h3>
-      <!-- each section folds open and shut by its title; which are open is remembered (src/main.js, kvissuroam.optopen) -->
+      <!-- each section folds open and shut by its title; which are open is remembered (src/main.js, kvissuroam.optopen); KEYBOARD first on desktop, Martin 2026-11-27 -->
+      <section class="optsec desktop-only" data-sec="keys">
+      <h4 class="opthead" role="button" tabindex="-1" aria-expanded="false">KEYBOARD</h4>
+      <div class="optbody" id="opt-keylist"></div>
+      </section>
       <section class="optsec" data-sec="sound">
       <h4 class="opthead" role="button" tabindex="-1" aria-expanded="false">SOUND</h4>
       <div class="optbody">
@@ -233,10 +237,6 @@
       <p class="small optkeys" id="opt-inputnow"></p>
       <button class="neon small optsetup" id="opt-setup">SET UP GAMEPAD / WHEEL</button>
       </div>
-      </section>
-      <section class="optsec desktop-only" data-sec="keys">
-      <h4 class="opthead" role="button" tabindex="-1" aria-expanded="false">KEYBOARD</h4>
-      <div class="optbody" id="opt-keylist"></div>
       </section>
       <button class="neon small" data-act="options-close">CLOSE</button>
     </div>

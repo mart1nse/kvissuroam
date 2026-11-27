@@ -509,8 +509,9 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('...none on paving or grass, none in the air, none from a car without fans', puffs(spec, { surface: 1, throttle: 1 }) === 0 && puffs(spec, { surface: 0, throttle: 1 }) === 0 && puffs(spec, { surface: 2, throttle: 1, y: 2 }) === 0 && puffs(m3, { surface: 2, throttle: 1 }) === 0);
 }
 
-// ---- FLIP pressed in a bend (Martin 27 Nov, "carry on, then line up"): the path goes straight on, the nose keeps
-// turning a little while its swing eases out, and it is brought onto the line of travel before the landing
+// ---- FLIP pressed in a bend (Martin 27 Nov, "carry on, then line up"): the nose keeps turning a little while its
+// swing eases out, the path bends round with it, and the nose is brought onto the line of travel before the landing,
+// which keeps the turn (until the evening of 27 Nov the path went straight on and the landing undid it)
 {
   const res = [];
   for (const [kmh, st] of [[60, 0.5], [100, 0.3], [40, 1]]) {
@@ -528,6 +529,9 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('FLIP in a bend: the nose carries on turning (the swing eased out over 0.4 s) and lands lined up with the travel',
     res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(r.slip) < 3),
     res.map((r) => `${r.kmh} km/h: on ${r.carried.toFixed(0)} deg, lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
+  check('...and keeps the turn: it lands pointing as far round from its way at the press as the nose swung on',
+    res.every((r) => Math.abs(r.nose) > 0.7 * r.want && Math.abs(Math.abs(r.nose) - r.carried) < 3 + 0.2 * r.carried),
+    res.map((r) => `${r.kmh} km/h: lands ${Math.abs(r.nose).toFixed(0)} deg round, swung ${r.carried.toFixed(0)}`).join('; '));
 }
 
 process.exit(ok ? 0 : 1);

@@ -27,7 +27,8 @@ const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="
 // onWatch(track, car): watch a record's replay (desktop; none on phones)
 // carNow(): the car picked in the garage, whose row is open when the board opens
 // drag: the drag strip (src/race/drag.js) when its card is in the garage (?drag=1 on a desktop), else null
-export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car, drag = null }) {
+// nearTrack(): the track the car is at ('toome', 'raadi', 'drag') or null, which LAP TIMES opens on
+export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car, drag = null, nearTrack = null }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
 
@@ -322,7 +323,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
 
   function show() {
     opened.add(carNow());
-    tab = picker?.picked || 'toome';            // (the track picked in the garage)
+    tab = nearTrack?.() || picker?.picked || 'toome';     // (the track the car is at, else the one picked in the garage)
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)

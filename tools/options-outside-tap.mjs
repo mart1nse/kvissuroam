@@ -26,7 +26,9 @@ async function run(name, vp, phone) {
   if (!(await open())) fail('options did not open');
   if (shots) await p.screenshot({ path: `${shots}/${name}-open.png` });
   // inside the panel: a choice keeps it open
-  await tap(await box('#opt-sound button')); if (!(await open())) fail('tap inside closed the panel');
+  // (the sections start shut, Martin 2026-11-27: a tap on a title opens one and keeps the panel open)
+  await tap(await box('#options .opthead')); if (!(await open())) fail('tap inside closed the panel');
+  await tap(await box('#opt-sound button')); if (!(await open())) fail('tap on a choice closed the panel');
   // empty spot on the 3D view, left middle
   await tap({ x: vp.width * 0.3, y: vp.height * 0.45 });
   if (await open()) fail('tap on the view did not close'); else console.log('  view tap closes');

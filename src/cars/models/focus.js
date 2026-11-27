@@ -8,6 +8,7 @@
 // tears it off at speed.
 import * as THREE from 'three';
 import { Soup, buildBody, cutArches, clipSoup, decals, probe, rpoly, rect, stroke, grow, box, blob, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
+import { useGlbBody, glbHooks } from './glbbody.js';
 import { lathe, spokeFace, tyreAndRim } from './parts.js';
 
 // real car: 4152 x 1770 x 1380-1420 mm, wheelbase 2615, track 1550 front and rear, 225/630 R18 on 8 x 18 (sources in specs.js)
@@ -18,11 +19,11 @@ const PAINT = 0xf3f4f1;                      // white
 const BON = { z0: -2.04, z1: -1.03, w0: 0.6, w1: 0.7 };
 
 // ---------------------------------------------------------------- wheel
-// white OZ rally wheel, ten slim spokes, big discs behind it with red eight-pot calipers. Axis on X, outer face +X.
+// white OZ rally wheel, sixteen slim spokes as on the scan, big discs behind it with red eight-pot calipers. Axis on X, outer face +X.
 function ozWheel(R, width, rimR) {
   const s = tyreAndRim(R, width, rimR, { lip: 'alloy', caliper: 'reflector', disc: 0.8 });
   const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.8, x0 = x1 - 0.022;
-  s.add(spokeFace({ n: 10, rf, r1: rf * 0.3, r2: rf * 0.92, big: 0.2, round: 0.008, depth: 0.018, x0, x1, pal: 'alloy' }));
+  s.add(spokeFace({ n: 16, rf, r1: rf * 0.3, r2: rf * 0.92, big: 0.14, round: 0.008, depth: 0.018, x0, x1, pal: 'alloy' }));
   s.add(lathe([[rf * 0.26, x0 - 0.01], [rf * 0.26, x0 + 0.012], [rf * 0.15, x0 + 0.018], [0.001, x0 + 0.02]], 'darkalloy', 20));
   return s;
 }
@@ -63,7 +64,7 @@ function underside(s, d) {
   return o;
 }
 
-export function buildFocus() {
+export function buildFocus({ scan = true } = {}) {
   const D = DIMS;
   const body = buildBody({
     top: [[ZF, 0.5], [ZF + 0.006, 0.6, 0.03], [ZF + 0.06, 0.69, 0.04], [ZF + 0.24, 0.75, 0.12], [-1.5, 0.84, 0.3], [-1.03, 0.92, 0.06],
@@ -181,5 +182,34 @@ export function buildFocus() {
   // (turning the hinge by a takes a direction at angle t in the y-z plane to t - a)
   const turn = ((lidA - wsA) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
   car.bonnet = { pivot, rest: turn - 0.14, len: BON.z1 - BON.z0, mid: [0, (pr.topY(0, BON.z0) + hinge[1]) / 2 - hinge[1], (BON.z0 + BON.z1) / 2 - hinge[2]] };
-  return car;
+  if (!scan) return car;
+  // Martin's scan (27 Nov). Its wheel wells are closed and dark already: no liners. Its flares come out to the tyres'
+  // outer walls (track 1.55 m on 225 tyres, flares 1.766 m wide): the wheels sit flush where they are. The bonnet comes cut out of it as
+  // a mesh of its own (material 'bonnet', glb-tools/generic/build2.py), with the engine bay's dark tray in the body.
+  return useGlbBody(car, 'focus.glb', { liner: false, tail: 0.3, brake: 2.2, onLoad: 'focusBonnet' });
 }
+
+// The scan's bonnet on the hinge: where build2.py cut it (game axes, metres), the hinge at the foot of the windscreen,
+// a point high on the windscreen it comes to lie against, and the middle of its front edge.
+const SCAN_BONNET = { hinge: [0, 0.872, -1.083], ws: [0, 1.277, -0.122], front: [0, 0.63, -1.875] };
+// Once the scan is on: its bonnet goes into the pivot in place of the stand-in's, which bonnet.js swings and throws.
+// (Only a car built on the page has car.bonnet: other players' Focuses keep the scan's bonnet shut on the body.)
+glbHooks.focusBonnet = (meshes, car) => {
+  const b = car.bonnet, mesh = car.group.children.find((o) => o.isMesh && o.material?.name === 'bonnet');
+  if (!b || !mesh) return;
+  const p = b.pivot, h = SCAN_BONNET.hinge;
+  for (const c of [...p.children]) p.remove(c);                 // (the stand-in's lid and underside)
+  // the panel in a holder of its own: bonnet.js moves the pivot's children (to the panel's middle as it tumbles, back
+  // to 0 for a fresh bonnet), the mesh itself stays at the hinge's offset (its geometry is the template's, in the car's axes)
+  const hold = new THREE.Group(); hold.name = 'focus_bonnet_scan';
+  car.group.remove(mesh); mesh.position.set(-h[0], -h[1] + mesh.position.y, -h[2]); hold.add(mesh); p.add(hold);
+  p.position.set(...h); p.rotation.set(0, 0, 0); p.visible = true;
+  if (b.v) b.v.hinge = [...h];
+  const wsA = Math.atan2(SCAN_BONNET.ws[1] - h[1], SCAN_BONNET.ws[2] - h[2]);
+  const lidA = Math.atan2(SCAN_BONNET.front[1] - h[1], SCAN_BONNET.front[2] - h[2]);
+  b.rest = (((lidA - wsA) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - 0.14;
+  b.len = h[2] - SCAN_BONNET.front[2];
+  mesh.geometry.computeBoundingBox?.();
+  const c = mesh.geometry.boundingBox.getCenter(new THREE.Vector3());
+  b.mid = [c.x - h[0], c.y - h[1], c.z - h[2]];
+};

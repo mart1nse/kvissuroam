@@ -124,7 +124,7 @@ const FLOOR = 0.13;              // the body never sits lower than this below it
 const TIP_AIR_T = 0.6;           // its turning in the air dies away in this time (s)
 const TIP_AIR_MAX = 1.25;        // and it leans no further than this (rad)
 const TIP_BACK = 3.5, TIP_BACK_A = 7;   // down on its nose, it falls back onto its wheels: fastest (rad/s), gathering pace (rad/s2)
-const TIP_SMALL = 0.12;          // come down leaning less than this (rad), the small dip of a fast car: it lands as from any jump
+const TIP_SMALL = 0.2;          // come down leaning less than this (rad), the small dip of a fast car: it lands as from any jump
 const RAIL_IN = 2.5;              // a car come onto a deck from beside it, past its railing, is eased inside it at this pace (m/s)
 const TIP_WALL = 2.5;             // falling past the wall it went over, its tail is eased clear of it at this pace (m/s)
 const LEAN_FREE = 0.2;           // m of lean the springs take before the body's end is what meets the ground

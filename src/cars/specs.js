@@ -640,10 +640,11 @@ export const CARS = {
     lean: 0.3,
     // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail, 4 under the corners (a lift-off and
     // a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two tanks when full (600 litres at
-    // about 380 bar), which the car is lighter by when they are empty. The tail's push: 60 kN, and no launch suction
-    // while it blows (physics.js), for 0.6 s to 100 on BOOST with a foot of rollout as Tesla times it (Martin 27 Nov,
-    // "0.6 should be the time with rollout"; 0.75 s from a standstill). It was 80 kN with the suction: 0.42 s.
-    thrusters: { rear: 60000, down: 72000, yaw: 20000, gasKg: 250 },
+    // about 380 bar), which the car is lighter by when they are empty. The tail's push: 45 kN, for 0.64 s to 100 on
+    // THRUST and the gas pedal with a foot of rollout as Tesla times it, 0.8 s from a standstill (Martin 27 Nov: "keep
+    // the fans, but reduce the overall level of boost on all speeds so that the 0-100 would be 0.64 with rollout").
+    // It was 80 kN: 0.42 s.
+    thrusters: { rear: 45000, down: 72000, yaw: 20000, gasKg: 250 },
     engine: {
       type: 'ev',
       maxPowerKw: 1000,

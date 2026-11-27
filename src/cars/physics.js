@@ -1007,11 +1007,10 @@ function substep(car, input, world, dt) {
   // up to LAUNCH_FAN_KMH, back to their own by 20 km/h more; the wheel turned the least bit or the tail out and they
   // are back at once, so the car steps out as ever. The Rocket, Martin 27 Nov: "if you add for straight line launch a
   // lot more suction from the fans up to lets say 40kmh": its rear tyres then hold enough for 1.7 s to 100 with a
-  // foot of rollout, as Tesla times it, 1.9 s from a standstill, and still spin up a little. None while BOOST blows:
-  // Martin 27 Nov, for its 0.6 s with rollout, "perhaps you could reduce the additional fans which we added")
+  // foot of rollout, as Tesla times it, 1.9 s from a standstill, and still spin up a little)
   if (s.fanLaunch && fanN) {
     const v = Math.hypot(car.vx, car.vy) * 3.6, slip = Math.abs(Math.atan2(car.vy, Math.max(Math.abs(car.vx), 1)));
-    const want = (car.throttle || 0) >= 0.5 && !car.burn && !(car.brake > 0) && !(+input.handbrake) && !(car.thrustN > 0) ? Math.min(1, Math.max(0, 1 - (v - LAUNCH_FAN_KMH) / 20)) * Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - LAUNCH_FAN_STEER[0]) / (LAUNCH_FAN_STEER[1] - LAUNCH_FAN_STEER[0]))) * Math.min(1, Math.max(0, 1 - (slip - LAUNCH_FAN_SLIP[0]) / (LAUNCH_FAN_SLIP[1] - LAUNCH_FAN_SLIP[0]))) : 0;
+    const want = (car.throttle || 0) >= 0.5 && !car.burn && !(car.brake > 0) && !(+input.handbrake) ? Math.min(1, Math.max(0, 1 - (v - LAUNCH_FAN_KMH) / 20)) * Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - LAUNCH_FAN_STEER[0]) / (LAUNCH_FAN_STEER[1] - LAUNCH_FAN_STEER[0]))) * Math.min(1, Math.max(0, 1 - (slip - LAUNCH_FAN_SLIP[0]) / (LAUNCH_FAN_SLIP[1] - LAUNCH_FAN_SLIP[0]))) : 0;
     car.fanLaunchK = (car.fanLaunchK ?? 0) + (want - (car.fanLaunchK ?? 0)) * Math.min(1, dt * 8);
     fanN *= 1 + (s.fanLaunch - 1) * car.fanLaunchK;
   }

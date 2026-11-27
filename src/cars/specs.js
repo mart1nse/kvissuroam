@@ -638,10 +638,12 @@ export const CARS = {
     // lean: the body rolls this much of what other cars' do in a bend (Martin 27 Nov: "when cornering car leans over a
     // lot, I think there should be a lot less roll side to side": 6 degrees at 1 g, 11 at its 1.9 g; now 2 and 3.5)
     lean: 0.3,
-    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
-    // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
-    // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty
-    thrusters: { rear: 80000, down: 72000, yaw: 20000, gasKg: 250 },
+    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail, 4 under the corners (a lift-off and
+    // a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two tanks when full (600 litres at
+    // about 380 bar), which the car is lighter by when they are empty. The tail's push: 60 kN, and no launch suction
+    // while it blows (physics.js), for 0.6 s to 100 on BOOST with a foot of rollout as Tesla times it (Martin 27 Nov,
+    // "0.6 should be the time with rollout"; 0.75 s from a standstill). It was 80 kN with the suction: 0.42 s.
+    thrusters: { rear: 60000, down: 72000, yaw: 20000, gasKg: 250 },
     engine: {
       type: 'ev',
       maxPowerKw: 1000,

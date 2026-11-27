@@ -50,6 +50,12 @@ const GAS_PULL_K = 1.1;              // what the car gains over this share of it
 const GAS_FLOOR = 0.3;               // m/s in half a second over the tyres and motors that is not yet taken for gas
 export const GAS_OVER = 0.1;         // of a full tank: the gas a drive may use over what there was
 const SIDE_K = 1;                    // gas turns the car's path only as it pushes it on: by this share of that push at the most
+// ...and on a timed run, judged by its motors and tyres alone (noGas) against its limits with the tank full, smaller
+// leeways than other cars get (Martin 27 Nov, "yes tighten and check other tesla hacks": with the 35 % and 50 % of
+// any car, fans hacked to three times their pull and a sixth of a lap's time passed). The honest records of the other
+// cars reach at the most 1.01 of their grip and 1.00 of their brakes; honest Rocket drives of every kind 0.91 and
+// 1.005 (tools/rocket-judge-test.mjs). Its fans at 1.5 times brake at 1.17, at twice 1.22 sideways and 1.34 braking.
+const THRUST_PULL_K = 1.15, THRUST_GRIP_K = 1.08, THRUST_STOP_K = 1.08;
 // in the air and going over: rolled this far (rad) and turning this fast (rad/s; a kickflip: a whole turn in
 // 1.7 s) while its height bends as a falling thing's does, this far (m) over the middle of where it was AIR_T s
 // before and will be AIR_T s after (free fall: 3.1 m, whatever the ground does). The records of 26 Nov: 0.43 rad
@@ -117,11 +123,12 @@ export function* carLimitsSteps(spec, every = 0) {
   }
   // (the same with the tank full, for a timed run judged without the gas, noGas: the 250 kg of gas left in would
   // otherwise be leeway, and a car 700 kg lighter passed)
-  let pullFull = null;
+  let pullFull = null, stopFull = 0;
   if (T) {
-    const a = (yield* flatOut(spec, every, false, true)).pull, b = spec.fanDown ? (yield* flatOut(spec, every, true, true)).pull : a;
-    pullFull = new Float64Array(Math.max(a.length, b.length));
-    for (let k = 0; k < pullFull.length; k++) pullFull[k] = Math.max(a[k] || 0, b[k] || 0);
+    const a = yield* flatOut(spec, every, false, true), b = spec.fanDown ? yield* flatOut(spec, every, true, true) : a;
+    pullFull = new Float64Array(Math.max(a.pull.length, b.pull.length));
+    for (let k = 0; k < pullFull.length; k++) pullFull[k] = Math.max(a.pull[k] || 0, b.pull[k] || 0);
+    stopFull = Math.max(a.stop, b.stop);
   }
   // sideways: the tyre's grip on dry paving (road tyres there, the better of the two), the car's own rubber,
   // the best patch of road (physics.js: 5 % either way), and suction fans' weight if it has them
@@ -139,7 +146,11 @@ export function* carLimitsSteps(spec, every = 0) {
   // goes); a, the most the tail nozzles push the car at its lightest (m/s2); fill, seconds an empty tank takes to
   // fill; launch, the hardest it leaves a standstill (m/s2, for a stage's start: worker/stagecheck.js; the motors'
   // pull and the nozzles' push together, which is a third more than the car does with both: 0 to 100 in 0.58 s)
-  if (pullFull) lim.pullFull = pullFull;
+  // (a car with thrusters on a timed run, judged without the gas: as it is there, the tank full, all its weight on)
+  if (pullFull) {
+    const full = (1 + (spec.fanDown || 0) / (spec.mass * G)) / fans, stopF = Math.max(stopFull, 0.5 * G);
+    lim.full = { pull: pullFull, stop: stopF, grip: grip * full, loose: { grip: gripLoose * full, stop: Math.max(0.4 * G, stopF * (gripLoose / grip)) } };
+  }
   if (T) lim.gas = { dv: GAS_V * Math.log(spec.mass / light), a: T.rear / light, fill: REFILL_S, launch: pull[0] + T.rear / light };
   cache.set(spec.id, lim);
   return lim;
@@ -162,14 +173,16 @@ export function carLimits(spec) {
 // with a dozen knocks (the first of the day in a car is held for its replay too) reads as nothing.
 // k.noGas: a car with thrusters judged by its motors and tyres alone, as any other car (a timed lap or a stage run,
 // where the game has no BOOST since Martin 27 Nov: "lets remove boost option from timed efforts"); its kickflip
-// check stays. With the gas allowed a 10 s tank hid tunes of up to twice the motors.
+// check stays. With the gas allowed a 10 s tank hid tunes of up to twice the motors. It is judged against lim.full
+// with the THRUST_ leeways.
 // k.loose: 1 for each sample on loose ground (gravel), judged there against lim.loose's grip and brakes: a half
 // second counts as loose when it starts and ends there.
 export function judgeDrive(xs, zs, ys, lim, k = {}) {
   const n = xs.length, out = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, spent: 0, why: '' };
   if (!lim || n < 25) return out;
-  const gas = k.noGas ? null : lim.gas;
-  const pullK = k.pull ?? PULL_K, gripK = k.grip ?? GRIP_K, stopK = k.stop ?? STOP_K;
+  const gas = k.noGas ? null : lim.gas, full = !!(k.noGas && lim.full);
+  if (full) lim = { ...lim, ...lim.full };
+  const pullK = k.pull ?? (full ? THRUST_PULL_K : PULL_K), gripK = k.grip ?? (full ? THRUST_GRIP_K : GRIP_K), stopK = k.stop ?? (full ? THRUST_STOP_K : STOP_K);
   const loose = k.loose && lim.loose ? k.loose : null;
   const looseK = k.looseGrip ?? Math.min(gripK, LOOSE_GRIP_K);
   // (the grip a half second may use, its leeway in)
@@ -181,8 +194,7 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   // (k.hop: the caller knows which samples are an R, the race desk does: there a long step is not taken for one)
   if (k.hop) hop.set(k.hop);
   else for (let i = 1; i < n; i++) if (Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]) > HOP) for (let j = Math.max(0, i - 12); j < Math.min(n, i + 12); j++) hop[j] = 1;
-  const P = (k.noGas && lim.pullFull) || lim.pull;
-  const at = (v) => P[Math.min(P.length - 1, Math.floor(v / BIN))];
+  const at = (v) => lim.pull[Math.min(lim.pull.length - 1, Math.floor(v / BIN))];
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), t = (b - a) * STEP;
     const dx = xs[b] - xs[a], dz = zs[b] - zs[a], dy = ys[b] - ys[a];

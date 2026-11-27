@@ -142,6 +142,14 @@ const TIMED_HONEST = [
   ['fans off: round and round, 2 minutes', [[120, off(laps(80 / 3.6, 330 / 3.6))]], { fanOff: true }],
   ['on gravel tyres, 2 minutes', [[120, off(laps(40 / 3.6, 200 / 3.6))]], { tyres: 'gravel' }],
   ['into the wall and on', [[16, { up: 1 }], [6, { up: 1, right: 1 }], [6, { up: 1 }]], { world: { ...road, sdfAt: (x, z) => z + 900 } }],
+  // (at the car's limits, 27 Nov evening, when its leeways came down to THRUST_GRIP_K / THRUST_STOP_K 1.08 and
+  // THRUST_PULL_K 1.15: round a circle, a floored spiral, five stops from speed, braking into bends, a slalom)
+  ['round at 60 km/h, full lock', [[6, (t, car) => ({ up: car.vx * 3.6 < 60 ? 1 : 0 })], [12, (t, car) => ({ up: car.vx * 3.6 < 60 ? 0.7 : 0.2, steer: 1 })]]],
+  ['round at 130 km/h, 0.6 lock', [[8, (t, car) => ({ up: car.vx * 3.6 < 130 ? 1 : 0 })], [12, (t, car) => ({ up: car.vx * 3.6 < 130 ? 0.7 : 0.2, steer: 0.6 })]]],
+  ['floored on full lock', [[3, { up: 1 }], [14, { up: 1, steer: 1 }]]],
+  ['five stops from 100 to 330 km/h', [100, 200, 330, 150, 250].flatMap((v) => [[30, (t, car) => ({ up: car.vx * 3.6 < v ? 1 : 0, steer: straight(car) })], [6, (t, car) => ({ down: 1, steer: straight(car) })], [3, { up: 1 }]])],
+  ['braking into bends, flat out of them', Array.from({ length: 8 }, (_, i) => [[5, { up: 1 }], [1.6, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat()],
+  ['a slalom at 100 km/h', [[5, { up: 1 }], [12, (t) => ({ up: 0.6, steer: Math.sin(t * 2.5) })]]],
 ];
 worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0 };
 for (const [name, plan, opt] of TIMED_HONEST) {
@@ -159,6 +167,11 @@ const TIMED_CHEATS = [
   ['BOOST still working (an old or changed page)', spec, GREEDY, {}, ''],
   ['BOOST tapped now and then', spec, [[150, (t, car) => ({ ...off(laps(80 / 3.6, 300 / 3.6))(t, car), boost: t % 20 < 1.5 })]], {}, ''],
   ['a car 700 kg lighter', copy((s) => { s.mass -= 700; }), [[150, off(laps(150 / 3.6, 380 / 3.6))]], {}, ''],
+  // (27 Nov evening: with the leeways of any car these passed; a sixth of a lap with fans at three times)
+  ['fans at 1.5 times', copy((s) => { s.fanDown *= 1.5; }), [[180, off(laps(80 / 3.6, 300 / 3.6))]], {}, 'stop'],
+  ['fans at twice', copy((s) => { s.fanDown *= 2; }), [[14, { up: 1 }], [4, { down: 1 }], [130, off(laps(60 / 3.6, 250 / 3.6))]], {}, ''],
+  ['motors at 1.3 times', copy((s) => { s.engine.maxPowerKw *= 1.3; s.engine.maxWheelForce *= 1.3; }), HONEST.at(-1)[1], HONEST.at(-1)[2], 'pull'],
+  ['the launch suction on at every speed', spec, HONEST.at(-1)[1], { ...HONEST.at(-1)[2], each: (car) => { car.fanLaunchK = 1; } }, ''],
 ];
 for (const [name, s, plan, opt, want] of TIMED_CHEATS) {
   const d = drive(s, plan, opt), j = timed(d);

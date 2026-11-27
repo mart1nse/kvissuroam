@@ -1229,9 +1229,9 @@ export class Lobby extends DurableObject {
         // is refused for that below, and its car is judged as if all of it were tarmac)
         const where = {};
         // (a car with thrusters has no BOOST on a timed lap or a stage run since Martin 27 Nov: judged by its motors
-        // alone, noGas, and its start by what they do with the tank full, pullFull: the Rocket's leave a standstill
+        // alone, noGas, and its start by what they do with the tank full, full.pull: the Rocket's leave a standstill
         // at 18 m/s2 on their launch suction, over the 14 any other car may)
-        launch = lim?.pullFull?.[0] || 0;
+        launch = lim?.full?.pull?.[0] || 0;
         if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch, where);
         const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose, noGas: true });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));

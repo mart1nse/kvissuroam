@@ -432,6 +432,15 @@ export class Lobby extends DurableObject {
       this.sql.exec("DELETE FROM meta WHERE k = 'board'");
       this.setMeta('cleanup-raadi-launch', '1');
     }
+    // One-off (Martin, 27 Nov 2026, "Remove both Impreza runs"): Savage's two Majoraadi Impreza runs (1:35.15 and
+    // 1:38.17) were driven with about 1.6 times the car's grip on gravel, which the car check let through until #842.
+    // Off the board for good (hold 2, reversible), the record's drive dropped, the board made again.
+    if (!this.meta('cleanup-2026-11-27')) {
+      this.sql.exec("UPDATE laps SET hold = 2 WHERE track = 'raadi' AND car = 'impreza' AND ((id = 5628 AND ms = 98173) OR (id = 5629 AND ms = 95152))");
+      this.sql.exec("DELETE FROM replays WHERE track = 'raadi' AND car = 'impreza' AND ms = 95152");
+      this.sql.exec("DELETE FROM meta WHERE k = 'board'");
+      this.setMeta('cleanup-2026-11-27', '1');
+    }
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.rl = new Map();          // rate limit counters (in memory: they only matter while it is busy)

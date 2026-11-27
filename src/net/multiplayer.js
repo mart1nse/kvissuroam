@@ -57,6 +57,10 @@ const THRU = HOT | FRESH;        // either: nobody bumps this car
 const NEW_S = 2;
 const FANS_OFF = 256;            // flag: a fan car's suction fans are switched off (no dust from it)
 const BOOSTING = 128;            // flag: a Rocket's rear nozzles are blowing (src/cars/thrust.js; 64 is the start lane's)
+// what is driving the car (Martin 27 Nov: the mark beside a watched player's name, src/spectate.js): bits 1024-4096 of
+// the flags, 0 from a page from before this, then kb, pad, wheel, touch (src/race/inpicons.js)
+const INP_SHIFT = 10, INP_KINDS = ['', 'kb', 'pad', 'wheel', 'touch'];
+export const inpOfPose = (p) => INP_KINDS[((p?.[20] | 0) >> INP_SHIFT) & 7] || null;
 // A see-through car's solid pieces where the picture has edge smoothing (see setFade): not blended, but each pixel's
 // samples given to the piece in the share of its strength (alpha to coverage), so many pixels a sample more and so
 // many a sample less by a fine pattern on the screen (the 4 by 4 ordered one; COVER_FADE is one sample's share).
@@ -325,7 +329,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (everywhere unless ?raadi=0): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null, onDrag = null, dragPose = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null, onDrag = null, dragPose = null, inp = () => null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -1211,9 +1215,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // what the others need to hear this car and see its tyres smoke and mark the road: engine revs,
     // wheelspin, how hard each axle is sliding and rubbing, and flags (1 on the rev limiter, 2 in water,
     // 4 on paving, 8 on a hotlap: the lap timer is running, 16 on gravel, 32 on dirt; none of 4/16/32 out of
-    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off; 512 thrown over by a hard crash)
+    // the water is grass; 64 just put on the start and in the start lane; 128 a Rocket's BOOST; 256 its fans switched off; 512 thrown over by a hard crash; 1024-4096 what drives it, INP_KINDS)
     out[14] = car.rpm || 0; out[15] = car.slipV || 0; out[16] = car.skidF || 0; out[17] = car.skidR || 0; out[18] = car.rubF || 0; out[19] = car.rubR || 0;
-    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0) | (car.crash ? CRASH_FLAG : 0);
+    out[20] = (cutHold > 0 ? 1 : 0) | (car.inWater ? 2 : 0) | (car.surface === 1 ? 4 : 0) | (hot ? HOT : 0) | (lane ? FRESH : 0) | (car.surface === 2 ? 16 : car.surface === 3 ? 32 : 0) | (car.thrustN > 0 ? BOOSTING : 0) | (car.fanOff ? FANS_OFF : 0) | (car.crash ? CRASH_FLAG : 0)
+      | (Math.max(0, INP_KINDS.indexOf(inp() || '')) << INP_SHIFT);
     return out;
   }
   function update(car, dt, active) {

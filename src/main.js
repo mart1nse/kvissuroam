@@ -1017,6 +1017,7 @@ async function boot() {
     samples: aaSamples,
     // (on the Raadi stage from the start clock on: everybody starts from the same spot, so two players waiting
     // at the line would sit inside each other and push; Martin 2026-11-24, ready for many on the stage)
+    inp: () => inpNow(),                 // (what drives our car, in its flags: the mark beside our name for a spectator)
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     // just put on the start and still on the lap's road before the line: the same, without the glow (Martin 25 Nov)
     // (or put somewhere a moment ago, by R, the map or a start: nobody is bumped by a car that appears beside them)

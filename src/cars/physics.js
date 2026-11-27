@@ -153,7 +153,14 @@ const SURF = [
   { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
-const WIDE_LOOSE = 0.5;          // wide road tyres off paving: grip 1 - (spec.grip - 1) x this
+const WIDE_LOOSE = 0.5;
+// Suction fans off paving (Martin 27 Nov: "is the fan system as efficient on lumpy and uneven gravel as it is on
+// tarmac?"; he picked 40 %): the skirts seal against a smooth road only. Over gravel, dirt and grass the air leaks in
+// under them between the stones and ruts (two to three times the gap, and fans of a given power hold a suction that
+// falls with the gap to about the two-thirds power), so each axle gets this share of its part of spec.fanDown there.
+// The server's lap check holds the same share on a stage's gravel (src/race/plausible.js).
+export const FAN_LOOSE = 0.4;
+const FAN_SEAL_RATE = 12;        // ...eased in and out over about a twelfth of a second as an axle crosses the edge          // wide road tyres off paving: grip 1 - (spec.grip - 1) x this
 // Gravel tyres (Martin 2026-11-23: road or gravel, picked in the garage or by the tyre icon on the tach):
 // narrow, soft, deep blocks that dig into loose ground and squirm on tarmac. The same table with more
 // bite on gravel, dirt and grass and less on paving, a softer, later-peaking tread on tarmac, and the
@@ -1000,14 +1007,22 @@ function substep(car, input, world, dt) {
   // up to LAUNCH_FAN_KMH, back to their own by 20 km/h more; the wheel turned the least bit or the tail out and they
   // are back at once, so the car steps out as ever. The Rocket, Martin 27 Nov: "if you add for straight line launch a
   // lot more suction from the fans up to lets say 40kmh": its rear tyres then hold enough for 1.7 s to 100 with a
-  // foot of rollout, as Tesla times it, 1.9 s from a standstill, and still spin up a little)
+  // foot of rollout, as Tesla times it, 1.9 s from a standstill, and still spin up a little. None while BOOST blows:
+  // Martin 27 Nov, for its 0.6 s with rollout, "perhaps you could reduce the additional fans which we added")
   if (s.fanLaunch && fanN) {
     const v = Math.hypot(car.vx, car.vy) * 3.6, slip = Math.abs(Math.atan2(car.vy, Math.max(Math.abs(car.vx), 1)));
-    const want = (car.throttle || 0) >= 0.5 && !car.burn && !(car.brake > 0) && !(+input.handbrake) ? Math.min(1, Math.max(0, 1 - (v - LAUNCH_FAN_KMH) / 20)) * Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - LAUNCH_FAN_STEER[0]) / (LAUNCH_FAN_STEER[1] - LAUNCH_FAN_STEER[0]))) * Math.min(1, Math.max(0, 1 - (slip - LAUNCH_FAN_SLIP[0]) / (LAUNCH_FAN_SLIP[1] - LAUNCH_FAN_SLIP[0]))) : 0;
+    const want = (car.throttle || 0) >= 0.5 && !car.burn && !(car.brake > 0) && !(+input.handbrake) && !(car.thrustN > 0) ? Math.min(1, Math.max(0, 1 - (v - LAUNCH_FAN_KMH) / 20)) * Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - LAUNCH_FAN_STEER[0]) / (LAUNCH_FAN_STEER[1] - LAUNCH_FAN_STEER[0]))) * Math.min(1, Math.max(0, 1 - (slip - LAUNCH_FAN_SLIP[0]) / (LAUNCH_FAN_SLIP[1] - LAUNCH_FAN_SLIP[0]))) : 0;
     car.fanLaunchK = (car.fanLaunchK ?? 0) + (want - (car.fanLaunchK ?? 0)) * Math.min(1, dt * 8);
     fanN *= 1 + (s.fanLaunch - 1) * car.fanLaunchK;
   }
-  const fanK = 1 + fanN / (m * G);
+  // (each axle's share of the suction by the ground under it: FAN_LOOSE)
+  if (fanN) {
+    const k = Math.min(1, dt * FAN_SEAL_RATE);
+    car.sealF = (car.sealF ?? 1) + ((surfF === 1 ? 1 : FAN_LOOSE) - (car.sealF ?? 1)) * k;
+    car.sealR = (car.sealR ?? 1) + ((surfR === 1 ? 1 : FAN_LOOSE) - (car.sealR ?? 1)) * k;
+  }
+  const fanF = fanN * (car.sealF ?? 1) * (car.b / L), fanR = fanN * (car.sealR ?? 1) * (car.a / L);
+  const fanK = 1 + (fanF + fanR) / (m * G);
   const gripLock = Math.atan((1.25 * fanK * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
   // In a slide the front wheels need the slide angle on top of the usual lock
@@ -1102,9 +1117,9 @@ function substep(car, input, world, dt) {
   // (in the air a trace of load is kept so nothing below divides by zero)
   const tl = Math.max(load, 1e-4);
   // (suction fans press the car down while it is near the road; they add no mass)
-  const fan = fanN * Math.min(1, load * 4);
-  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + (fan * car.b) / L;
-  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + (fan * car.a) / L;
+  const near = Math.min(1, load * 4);
+  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + fanF * near;
+  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + fanR * near;
 
   // ---- slip angles
   const v0 = 2.0;
@@ -1152,7 +1167,7 @@ function substep(car, input, world, dt) {
   // (held on the brakes at a standstill, as in a burnout, the pads grip like static friction: whatever
   // pushes the car is met up to the brakes' and tyres' limit, so it creeps at most a few cm a second)
   const bSign = Math.max(-1, Math.min(1, car.vx / 0.05));
-  const brakeTotal = brake * (s.brakeG ?? 1.05) * (m * G + fan) * Math.min(1, load * 4);
+  const brakeTotal = brake * (s.brakeG ?? 1.05) * (m * G + (fanF + fanR) * near) * Math.min(1, load * 4);
   // (in a burnout the brake is held just hard enough to pin the front wheels rather than stamped on, so the
   // rear brakes fight the engine a little less: the 190E only just manages it, revs struggling; the front
   // brakes grip like static friction at a standstill, see bSign)

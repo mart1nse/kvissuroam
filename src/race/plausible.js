@@ -26,7 +26,7 @@
 //   gas    the most the tank was overdrawn by, as a share of a full one: refused past GAS_OVER
 //   air    seconds the car was turning over while in free flight: a kickflip, which the game does not allow
 //          once a lap or a stage run is on (refused at any: AIR_MAX)
-import { createCar, stepCar, TYRE_GRIP } from '../cars/physics.js';
+import { createCar, stepCar, TYRE_GRIP, FAN_LOOSE } from '../cars/physics.js';
 import { GAS_V, REFILL_S, FADE, TANK_S, refillTank } from '../cars/thrust.js';
 
 const G = 9.81;
@@ -56,6 +56,12 @@ const SIDE_K = 1;                    // gas turns the car's path only as it push
 // cars reach at the most 1.01 of their grip and 1.00 of their brakes; honest Rocket drives of every kind 0.91 and
 // 1.005 (tools/rocket-judge-test.mjs). Its fans at 1.5 times brake at 1.17, at twice 1.22 sideways and 1.34 braking.
 const THRUST_PULL_K = 1.15, THRUST_GRIP_K = 1.08, THRUST_STOP_K = 1.08;
+// ...and on a stage's gravel, its fans there at physics.js FAN_LOOSE (Martin 27 Nov: "modify the check to be as fool
+// proof as possible"): sideways no more than the gravel's best patches give (the honest stage records of the other
+// cars read nothing over at that; honest Rocket drives on gravel 0.88 of it), its pull and brakes measured on gravel,
+// the pull with 5 % over its best patches. Its fans sealed as on paving there (the page telling of paving under it)
+// read 1.03 sideways, 1.06 braking and 1.4 pulling; at 1.5 times 1.1 pulling; 1.15 times the grip 1.04 pulling.
+const THRUST_LOOSE_K = 1.0, THRUST_LOOSE_PULL_K = 1.05;
 // in the air and going over: rolled this far (rad) and turning this fast (rad/s; a kickflip: a whole turn in
 // 1.7 s) while its height bends as a falling thing's does, this far (m) over the middle of where it was AIR_T s
 // before and will be AIR_T s after (free fall: 3.1 m, whatever the ground does). The records of 26 Nov: 0.43 rad
@@ -66,6 +72,8 @@ const AIR_ROLL = 1.2, AIR_SPIN = 2, AIR_UP = 2.2, AIR_T = 0.8;
 export const AIR_MAX = 0;            // seconds of that a drive may have
 
 const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
+const flatGravel = { ...flat, surfaceAt: () => 2 };
+const LOOSE_PATCH = 1.13;            // loose ground's best patches (physics.js: 13 % either way), for its pull
 
 // What a car can do, measured once on the game's physics: flat out from a standstill to its top speed on a flat
 // dry road, then a full stop. pull[k]: the most it gains in speed per second (m/s2) at k * BIN m/s or above
@@ -76,9 +84,11 @@ const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1,
 const cache = new Map();
 // (one run: flat out from a standstill to its top speed, then a full stop. fanOff: with the suction fans off;
 // a car with thrusters is run with its tank held empty, the gas's weight off it, or with full: held full, as it is
-// all through a timed run now that there is no BOOST on one)
-function* flatOut(spec, every, fanOff, full = false) {
+// all through a timed run now that there is no BOOST on one; gravel: on flat gravel, on these tyres)
+function* flatOut(spec, every, fanOff, full = false, gravel = null) {
   const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
+  const ground = gravel ? flatGravel : flat;
+  if (gravel) car.tyres = gravel;
   const dt = 1 / 60, W = 30;                             // (half-second spans)
   const light = () => { if (car.rocket) car.rocket.tank = full ? TANK_S : 0; };
   const steady = !!spec.thrusters;
@@ -89,7 +99,7 @@ function* flatOut(spec, every, fanOff, full = false) {
     light();
     // (a car with thrusters is held straight: the rear-driven Rocket with its fans off spins on a floored wheel left
     // alone, and its limits then read ~265 km/h; judged by its motors alone on a timed run that was 1.7 s over at 405)
-    stepCar(car, steady ? { up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) } : { up: 1 }, flat, dt);
+    stepCar(car, steady ? { up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) } : { up: 1 }, ground, dt);
     const s = Math.hypot(car.vx, car.vy);
     v.push(s);
     if (s > top + 0.02) { top = s; still = 0; } else still++;   // (stops once the speed has not risen for 6 s)
@@ -103,7 +113,7 @@ function* flatOut(spec, every, fanOff, full = false) {
   for (let k = pull.length - 2; k >= 0; k--) if (pull[k + 1] > pull[k]) pull[k] = pull[k + 1];
   let stop = 0;
   const b = [Math.hypot(car.vx, car.vy)];
-  for (let i = 0; i < 60 * 4; i++) { light(); stepCar(car, { down: 1 }, flat, dt); b.push(Math.hypot(car.vx, car.vy)); }
+  for (let i = 0; i < 60 * 4; i++) { light(); stepCar(car, { down: 1 }, ground, dt); b.push(Math.hypot(car.vx, car.vy)); }
   for (let i = 0; i + 60 < b.length; i++) if (b[i + 60] > 5) stop = Math.max(stop, b[i] - b[i + 60]);
   if (car.rocket) refillTank(spec.id);
   return { top, pull, stop };
@@ -123,12 +133,24 @@ export function* carLimitsSteps(spec, every = 0) {
   }
   // (the same with the tank full, for a timed run judged without the gas, noGas: the 250 kg of gas left in would
   // otherwise be leeway, and a car 700 kg lighter passed)
-  let pullFull = null, stopFull = 0;
+  let pullFull = null, pullLoose = null, stopFull = 0, stopLoose = 0;
   if (T) {
     const a = yield* flatOut(spec, every, false, true), b = spec.fanDown ? yield* flatOut(spec, every, true, true) : a;
     pullFull = new Float64Array(Math.max(a.pull.length, b.pull.length));
     for (let k = 0; k < pullFull.length; k++) pullFull[k] = Math.max(a.pull[k] || 0, b.pull[k] || 0);
     stopFull = Math.max(a.stop, b.stop);
+    // (and on gravel, a stage past its tarmac start: the motors there pull only what the rear tyres hold, the fans at
+    // physics.js FAN_LOOSE; on either tyre, fans on or off, the best patch of gravel: a spinning tyre holds more of its grip on gravel than on
+    // paving, so at some speeds that is more than on paving)
+    pullLoose = new Float64Array(pullFull.length); stopLoose = 0;
+    for (const [fanOff, tyres] of [[false, 'gravel'], [false, 'road'], [true, 'gravel'], [true, 'road']]) {
+      if (fanOff && !spec.fanDown) continue;
+      const g = yield* flatOut(spec, every, fanOff, true, tyres);
+      stopLoose = Math.max(stopLoose, g.stop);
+      // (held 2 rows, 14 km/h, further up: where the tyres hold more than in that one run the car reaches a little
+      // more than its top speed there, at which the table has nothing left)
+      for (let k = 0; k < pullLoose.length; k++) for (let j = Math.max(0, k - 2); j <= k; j++) pullLoose[k] = Math.max(pullLoose[k], (g.pull[j] || 0) * LOOSE_PATCH);
+    }
   }
   // sideways: the tyre's grip on dry paving (road tyres there, the better of the two), the car's own rubber,
   // the best patch of road (physics.js: 5 % either way), and suction fans' weight if it has them
@@ -139,17 +161,21 @@ export function* carLimitsSteps(spec, every = 0) {
   // (physics.js WIDE_LOOSE), the loose ground's patches (13 % either way); braking by the same share
   const wide = spec.grip ?? 1, looseWide = wide > 1 ? 1 - (wide - 1) * 0.5 : wide;
   // (and a car built for loose ground holds its own share more there: physics.js spec.looseGrip, the Focus WRC)
-  const gripLoose = G * Math.max(TYRE_GRIP('gravel', 2) * Math.min(1, wide), TYRE_GRIP('road', 2) * looseWide) * (spec.looseGrip ?? 1) * 1.13 * fans;
+  // (the fans hold FAN_LOOSE of their suction there: their skirts seal against a smooth road only)
+  const fansLoose = 1 + (FAN_LOOSE * (spec.fanDown || 0)) / (light * G);
+  const gripLoose = G * Math.max(TYRE_GRIP('gravel', 2) * Math.min(1, wide), TYRE_GRIP('road', 2) * looseWide) * (spec.looseGrip ?? 1) * 1.13 * fansLoose;
   const stopAll = Math.max(stop, 0.5 * G);
   lim = { top, pull, stop: stopAll, grip, loose: { grip: gripLoose, stop: Math.max(0.4 * G, stopAll * (gripLoose / grip)) } };
   // thrusters: dv, the speed a full tank can add (m/s: all its gas out at GAS_V, the car growing lighter as it
   // goes); a, the most the tail nozzles push the car at its lightest (m/s2); fill, seconds an empty tank takes to
   // fill; launch, the hardest it leaves a standstill (m/s2, for a stage's start: worker/stagecheck.js; the motors'
-  // pull and the nozzles' push together, which is a third more than the car does with both: 0 to 100 in 0.58 s)
+  // pull and the nozzles' push together, which is more than the car does with both: 0 to 100 in 0.75 s)
   // (a car with thrusters on a timed run, judged without the gas: as it is there, the tank full, all its weight on)
   if (pullFull) {
     const full = (1 + (spec.fanDown || 0) / (spec.mass * G)) / fans, stopF = Math.max(stopFull, 0.5 * G);
-    lim.full = { pull: pullFull, stop: stopF, grip: grip * full, loose: { grip: gripLoose * full, stop: Math.max(0.4 * G, stopF * (gripLoose / grip)) } };
+    const fullLoose = (1 + (FAN_LOOSE * (spec.fanDown || 0)) / (spec.mass * G)) / fansLoose, gripLooseF = gripLoose * fullLoose;
+    // (its brakes on gravel measured there too, the best patch's: a locked tyre holds more of its grip on gravel)
+    lim.full = { pull: pullFull, stop: stopF, grip: grip * full, loose: { grip: gripLooseF, stop: Math.max(0.4 * G, stopLoose * LOOSE_PATCH), pull: pullLoose } };
   }
   if (T) lim.gas = { dv: GAS_V * Math.log(spec.mass / light), a: T.rear / light, fill: REFILL_S, launch: pull[0] + T.rear / light };
   cache.set(spec.id, lim);
@@ -184,7 +210,7 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   if (full) lim = { ...lim, ...lim.full };
   const pullK = k.pull ?? (full ? THRUST_PULL_K : PULL_K), gripK = k.grip ?? (full ? THRUST_GRIP_K : GRIP_K), stopK = k.stop ?? (full ? THRUST_STOP_K : STOP_K);
   const loose = k.loose && lim.loose ? k.loose : null;
-  const looseK = k.looseGrip ?? Math.min(gripK, LOOSE_GRIP_K);
+  const looseK = k.looseGrip ?? Math.min(gripK, full ? THRUST_LOOSE_K : LOOSE_GRIP_K);
   // (the grip a half second may use, its leeway in)
   const gripAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.grip * looseK : lim.grip * gripK);
   const stopAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.stop : lim.stop);
@@ -194,13 +220,15 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   // (k.hop: the caller knows which samples are an R, the race desk does: there a long step is not taken for one)
   if (k.hop) hop.set(k.hop);
   else for (let i = 1; i < n; i++) if (Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]) > HOP) for (let j = Math.max(0, i - 12); j < Math.min(n, i + 12); j++) hop[j] = 1;
-  const at = (v) => lim.pull[Math.min(lim.pull.length - 1, Math.floor(v / BIN))];
+  // (the car's own pull at a speed: on loose ground its pull there, where the limits have one: lim.full.loose.pull)
+  const lp = loose && lim.loose.pull, lpK = (k.loosePull ?? THRUST_LOOSE_PULL_K) / pullK;
+  const at = (v, i) => { const t = lp && loose[i] ? lp : lim.pull; return t[Math.min(t.length - 1, Math.floor(v / BIN))] * (t === lp ? lpK : 1); };
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), t = (b - a) * STEP;
     const dx = xs[b] - xs[a], dz = zs[b] - zs[a], dy = ys[b] - ys[a];
     vh[i] = Math.hypot(dx, dz) / t; hd[i] = Math.atan2(dx, dz);
     e[i] = (dx * dx + dz * dz + dy * dy) / (2 * t * t) + G * ys[i];        // energy per kg: speed (the climb's too) and height
-    pw[i + 1] = pw[i] + at(vh[i]) * vh[i] * STEP;                           // what the car's own pull adds, summed
+    pw[i + 1] = pw[i] + at(vh[i], i) * vh[i] * STEP;                           // what the car's own pull adds, summed
   }
   const H = Math.round(0.5 / STEP);                      // half a second of samples
   const turn = (a, b) => { const d = hd[b] - hd[a]; return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); };

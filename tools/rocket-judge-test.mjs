@@ -15,7 +15,7 @@ import { carLimits, judgeDrive, STEP, OVER_MAX, GAS_OVER } from '../src/race/pla
 
 const verbose = process.argv.includes('--v');
 const spec = CARS.rocket, lim = carLimits(spec);
-const show = (j) => `pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top} gas ${j.gas} air ${j.air} (counted ${j.spent} tanks)${j.why ? ` REFUSED: ${j.why}` : ''}`;
+const show = (j) => `pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top} gas ${j.gas} air ${j.air} burst ${j.burst} (counted ${j.spent} tanks)${j.why ? ` REFUSED: ${j.why}` : ''}`;
 
 // a flat dry road with a wall across it at z = -WALL (the car starts at 0 heading for it, yaw 0 looks down -z)
 const WALL = 9000;
@@ -153,7 +153,7 @@ const TIMED_HONEST = [
   ['braking into bends, flat out of them', Array.from({ length: 8 }, (_, i) => [[5, { up: 1 }], [1.6, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat()],
   ['a slalom at 100 km/h', [[5, { up: 1 }], [12, (t) => ({ up: 0.6, steer: Math.sin(t * 2.5) })]]],
 ];
-worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0 };
+worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, burst: 0 };
 for (const [name, plan, opt] of TIMED_HONEST) {
   const d = drive(spec, plan, opt), j = timed(d);
   if (verbose) console.log(`timed   ${name.padEnd(64)} ${show(j)}  (top ${d.top.toFixed(0)} km/h)`);
@@ -202,7 +202,7 @@ const STAGE_HONEST = [
   ['gravel tyres: round at 120 km/h, 0.3 lock', [[8, (t, car) => ({ up: car.vx * 3.6 < 120 ? 1 : 0 })], [14, (t, car) => ({ up: car.vx * 3.6 < 120 ? 0.8 : 0.3, steer: 0.3 })]], { world: gravel, tyres: 'gravel' }],
   ['road tyres: five stops from 60 to 200 km/h', [60, 120, 200, 90, 160].flatMap((v) => [[25, (t, car) => ({ up: car.vx * 3.6 < v ? 1 : 0, steer: straight(car) })], [6, (t, car) => ({ down: 1, steer: straight(car) })], [3, { up: 1 }]]), { world: gravel }],
 ];
-worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0 };
+worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, burst: 0 };
 for (const [name, plan, opt] of STAGE_HONEST) {
   const d = drive(spec, plan, opt), j = onGravel(d);
   if (verbose) console.log(`gravel  ${name.padEnd(64)} ${show(j)}  (top ${d.top.toFixed(0)} km/h)`);

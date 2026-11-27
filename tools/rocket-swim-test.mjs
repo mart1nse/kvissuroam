@@ -122,7 +122,8 @@ const bad = [];
 for (const sp of pick) {
   n++;
   const label = `${sp.kind} (${sp.x.toFixed(0)}, ${sp.z.toFixed(0)}) ${(sp.wl - world.heightAt(sp.x + sp.nx * 14, sp.z + sp.nz * 14)).toFixed(1)} m deep`;
-  const b = run(rocket, sp, { boost: 1 }, 12);
+  // (BOOST with the gas held, as a player would: with a 7 s tank since 27 Nov, BOOST alone ran dry 2 m down in one spot)
+  const b = run(rocket, sp, { boost: 1, up: 1 }, 12);
   if (b.out && b.land) { boostOut++; worstT = Math.max(worstT, b.out.t); } else bad.push(`BOOST did not bring it out: ${label}`);
   const c = run(rocket, sp, { up: 1 }, 25);
   if (c.out && c.land) { crawlOut++; worstCrawl = Math.max(worstCrawl, c.out.t); } else bad.push(`the fans' crawl did not bring it out: ${label}`);
@@ -131,7 +132,7 @@ for (const sp of pick) {
   if (verbose) console.log(`${label}: BOOST ${b.out ? `out in ${b.out.t.toFixed(1)} s at ${b.out.kmh.toFixed(0)} km/h, ${b.back.toFixed(1)} m up the shore` : 'IN'}; crawl ${c.out ? `${c.out.t.toFixed(1)} s` : 'IN'}`);
 }
 for (const l of bad) console.log(l);
-check(`BOOST towards the shore brings the Rocket up the bank and onto land (${n} places)`, boostOut === n, `${boostOut}/${n}, slowest ${worstT.toFixed(1)} s`);
+check(`BOOST and gas towards the shore bring the Rocket up the bank and onto land (${n} places)`, boostOut === n, `${boostOut}/${n}, slowest ${worstT.toFixed(1)} s`);
 check('...and so does the fans\' crawl on the motors alone', crawlOut === n, `${crawlOut}/${n}, slowest ${worstCrawl.toFixed(1)} s`);
 check('...with the fans off and nothing pressed it stays in the water', idleIn === n, `${idleIn}/${n}`);
 

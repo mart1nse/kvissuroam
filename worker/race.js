@@ -18,7 +18,7 @@
 // (worker/follow.js): a finish is taken only from a car it saw stand on the grid, start after its lights, pass
 // the lap's gates in order and cross the line, and at about the moment it saw that. (Until then "finished" was
 // the racer's word, and one sent two minutes after the lights won any race.)
-import { CARS } from '../src/cars/specs.js';
+import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
 import { follow, newFollow, finishInGap, driven, PASS } from './follow.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
 import { judgeDrive } from '../src/race/plausible.js';
@@ -113,10 +113,15 @@ export class RaceDesk {
   }
   // in the race now (on the grid or driving it, not finished or out): keeps the place even from the garage
   racing(id) { return this.s.phase === 'on' && this.s.racers.some((r) => r.id === id && !r.out && r.ms == null); }
-  // A car with thrusters does not race (Martin 26 Nov: "do not allow the tesla to take part in races"): whoever
-  // sits in one is no driver or spectator here, so they are not in a vote's pool, cannot vote or join, and one
-  // who takes such a car before their lights is out of the list again (changed).
+  // A car with thrusters does not race (Martin 26 Nov: "do not allow the tesla to take part in races"). Whoever sits
+  // in one may still vote and join (Martin 27 Nov, "vote, then swap car"): the vote or join names the car they race
+  // in instead (sw, the last one their page had before), which goes on the list and their page swaps into on the grid.
+  // Without a car to race in they are left off; one who takes such a car before their lights is off the list again
+  // (changed), and one still in it at their lights is out (check).
   noRace(car) { return !!CARS[car]?.thrusters; }
+  swapCar(sw) { return typeof sw === 'string' && Object.hasOwn(CARS, sw) && !this.noRace(sw) && !HIDDEN_CARS.includes(sw) ? sw : null; }
+  // the car a driver goes on the list in: their own, or for one that does not race the one they named
+  raceCar(car, sw) { return this.noRace(car) ? this.swapCar(sw) : car; }
   // everyone connected and driving (not a ghost), id -> attachment
   drivers() {
     const out = new Map();
@@ -124,7 +129,7 @@ export class RaceDesk {
       if (ws === this.skip) continue;
       const a = ws.deserializeAttachment();
       if (!this.live(ws, a)) continue;
-      if (a?.id && !a.ghost && a.drv && !this.noRace(a.car)) out.set(a.id, a);
+      if (a?.id && !a.ghost && a.drv) out.set(a.id, a);
     }
     return out;
   }
@@ -137,7 +142,7 @@ export class RaceDesk {
       if (ws === this.skip) continue;
       const a = ws.deserializeAttachment();
       if (!this.live(ws, a)) continue;
-      if (a?.id && !a.ghost && !a.drv && a.w === 'watch' && !this.noRace(a.car)) out.set(a.id, a);
+      if (a?.id && !a.ghost && !a.drv && a.w === 'watch') out.set(a.id, a);
     }
     return out;
   }
@@ -204,7 +209,8 @@ export class RaceDesk {
     s.tGrid = now + COUNT_MS;
     s.tGreen = s.tGrid + GRID_MS + HOLD_MIN + Math.floor(Math.random() * (HOLD_MAX - HOLD_MIN));
     s.seed = Math.floor(Math.random() * 1e9);
-    s.racers = [...ids].slice(0, MAX_RACERS).map((id) => ({ id, name: d.get(id)?.name || '?', car: d.get(id)?.car || 'w201' }));
+    s.racers = [...ids].map((id) => ({ id, name: d.get(id)?.name || '?', car: this.raceCar(d.get(id)?.car || 'w201', s.votes[id]?.sw), ...(this.noRace(d.get(id)?.car) ? { sw: 1 } : {}) }))
+      .filter((r) => r.car).slice(0, MAX_RACERS);
     s.votes = {};
     this.fol.clear();
     // first at the lights (the restart vote opens then, and everyone has to hear it: Martin 2026-11-22
@@ -233,6 +239,15 @@ export class RaceDesk {
     const s = this.s;
     if (s.phase !== 'on') return;
     if (now >= s.tGreen + MAX_RACE_MS) { this.close('time', now); return; }
+    // (on the list from a car that does not race, sw, and still in it at their lights: the page never swapped, out;
+    // looked at once, at the lights)
+    let d = null;
+    for (const r of s.racers) {
+      if (!r.sw || now < (r.go || s.tGreen)) continue;
+      d ||= new Map([...this.watchers(), ...this.drivers()]);
+      if (!r.out && r.ms == null && this.noRace(d.get(r.id)?.car)) r.out = 'car';
+      delete r.sw;
+    }
     this.quiet(now);
     // nobody left on the grid before the lights: nothing to race
     for (const r of s.racers) if (r.cl) this.settle(r, now);
@@ -366,10 +381,12 @@ export class RaceDesk {
       case 'rv': {          // vote (start or restart, whichever is open), or take it back
         if (me.ghost) return true;
         const b = this.ballot(now);
-        if (!b.voters.has(me.id)) { this.sendTo(ws); return true; }
+        // (from a car that does not race, a vote names the car to race in: a page that sends none is not taken)
+        if (!b.voters.has(me.id) || (m.on && b.kind === 'start' && !this.raceCar(me.car, m.sw))) { this.sendTo(ws); return true; }
         this.lapse(now);
         if (m.on && this.s.votes[me.id]?.k !== b.kind) this.count(b.kind);
-        if (m.on) this.s.votes[me.id] = { k: b.kind, t: now }; else delete this.s.votes[me.id];
+        // (sw: the car the vote races in, theirs or the one named from a car that does not race, should they be in one at the start)
+        if (m.on) { const sw = this.raceCar(me.car, m.sw); this.s.votes[me.id] = { k: b.kind, t: now, ...(sw ? { sw } : {}) }; } else delete this.s.votes[me.id];
         if (m.on) this.tally(now, me.id);
         this.save(); this.send();
         return true;
@@ -377,12 +394,13 @@ export class RaceDesk {
       case 'rj': {          // join or leave before the lights
         if (me.ghost || this.s.phase !== 'on') return true;
         const ph = this.phase(now), i = this.s.racers.findIndex((r) => r.id === me.id);
-        const room = i < 0 && this.s.racers.length < MAX_RACERS && (me.drv || me.w === 'watch') && !this.noRace(me.car);
-        if (m.on && ph === 'count' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car });
+        const car = this.raceCar(me.car, m.sw), sw = this.noRace(me.car) ? { sw: 1 } : {};
+        const room = i < 0 && this.s.racers.length < MAX_RACERS && (me.drv || me.w === 'watch') && !!car;
+        if (m.on && ph === 'count' && room) this.s.racers.push({ id: me.id, name: me.name, car, ...sw });
         // missed the countdown: on the grid at the back; once the race is on, a start of one's own there
         // (g on the grid, go lights out: the race time is counted from go)
-        else if (m.on && ph === 'grid' && room) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1 });
-        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car: me.car, late: 1, g: now - 5000, go: now + LATE_GO });
+        else if (m.on && ph === 'grid' && room) this.s.racers.push({ id: me.id, name: me.name, car, late: 1, ...sw });
+        else if (m.on && ph === 'race' && room && now < this.s.tGreen + LATE_MS && !this.openForStart()) this.s.racers.push({ id: me.id, name: me.name, car, late: 1, g: now - 5000, go: now + LATE_GO, ...sw });
         else if (!m.on && i >= 0 && (ph !== 'race' || now < (this.s.racers[i].go || 0))) this.s.racers.splice(i, 1);
         else if (!m.on && i >= 0 && !this.s.racers[i].out && this.s.racers[i].ms == null) this.s.racers[i].out = 'quit';
         this.check(now); this.save(); this.send();

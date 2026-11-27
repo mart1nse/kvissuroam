@@ -1189,6 +1189,8 @@ async function boot() {
     // (a car with thrusters does not race: Martin 26 Nov, "do not allow the tesla to take part in races". It
     // laps on its own, without BOOST and FLIP once the lap is on: ctl.flipOff and ctl.boostOff below)
     noRace: () => !!car.spec.thrusters,
+    // ...but it may vote and join: it races in the last car driven before it (raceCar), swapped into on the grid
+    swapTo: raceCar, swapCar: (id) => { setCar(id, true); return car; },
     // (desktop: a name in the race list follows that car, like the online list)
     onWatch: isTouch ? null : (id) => watch?.start(id), watching: () => watch?.id || null,
   });
@@ -1322,10 +1324,17 @@ function freeModel(group) {
     }
   });
 }
+// the car a race is driven in from one that does not race (the Rocket): the last one picked before it
+function raceCar() {
+  let id = null;
+  try { id = localStorage.getItem('kvissuroam.raceCar'); } catch { /* no storage */ }
+  return id && CARS[id] && carShown(id) && !CARS[id].thrusters ? id : 'w201';
+}
 function setCar(id, now = false) {
   if (!CARS[id] || !carShown(id)) return;
   carId = id;
   localStorage.setItem('kvissuroam.car', id);
+  if (!CARS[id].thrusters) try { localStorage.setItem('kvissuroam.raceCar', id); } catch { /* no storage */ }
   // (behind the opening drone flight the car isn't on screen, so picking one only marks it: it is built
   // when DRIVE is pressed, and choosing stays instant. In the garage later it is swapped as you see it.)
   clearTimeout(pickTimer);
@@ -2283,7 +2292,7 @@ let rocketOff = false, flipOff = false;   // the thrusters' buttons do nothing j
 let flipWas = false, boostWas = false;   // FLIP / BOOST held last frame (a press where it does nothing says why, once a press)
 // (Martin 27 Nov: "if a lap is ongoing, then quick small text pops up somewhere" when FLIP or X is pressed)
 const flipWhy = (w = 'FLIP') => (rocketOff ? `NO ${w} BEFORE THE START` : raceMode?.ghost ? `NO ${w} IN A RACE`
-  : stage?.running ? `NO ${w} ON MAJORAADI` : `NO ${w} ON A TIMED LAP`);
+  : stage?.running ? `NO ${w} ON STAGE` : `NO ${w} ON A TIMED LAP`);
 
 // Coming back from another tab: the first frames arrive late and unevenly while the browser warms
 // up again. Don't count them as a struggling device, and ease the step size back in instead of

@@ -621,6 +621,10 @@ export const CARS = {
     // the fans off to all of it, from 60 to 120 km/h). It still launches straight, and below 40 km/h floored it lets the
     // tyres spin as every car's does (donuts, drifts).
     tc: 1, tcSlip: 1.5, tcBend: 0.7, tcHigh: 0.9, tcEven: true,
+    // Reverse (Martin 27 Nov: "when reversing with the rocket let it not redline instantly"): its thousand kW spun the
+    // rear tyres at 30 m/s and the motor to 8,600 rpm from a standstill. In reverse the traction control is all on and
+    // the motors give at most reverseG of the car's weight, as a road car's reverse: 0-30 km/h backwards in about 2 s.
+    reverseG: 0.45,
     grip: 1.2,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that
@@ -659,9 +663,14 @@ export const CARS = {
     efficiency: 0.93,
     shiftTime: 0,
     // Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg said
-    // nowhere (it was 340 on the motors, with BOOST on to about 370). The motors' push meets the air's about 1.1
-    // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
-    limiter: 390.1, limiterNoFans: 406.2,
+    // nowhere (it was 340 on the motors, with BOOST on to about 370). The motors' push meets the air's about 1.7
+    // km/h under the limiter (1.1 before the fade below), so each limiter stands that much over the figure the car reaches.
+    limiter: 390.7, limiterNoFans: 406.8,
+    // The last of its top speed comes slowly (Martin 27 Nov: "let the top speed of the rocket come a little bit slower in
+    // the last 15-20 kmh. currently it cuts off abruptly"): over the last topEase km/h the motors give less and less, to
+    // topEaseK of their push at the limit, so the pull fades from about 0.2 g to nothing instead of stopping dead.
+    // 380 to 388 km/h took 1.1 s and now 2.6 s, 400 to 404 with the fans off 1 s and now 3.2 s; 389 comes at 22 s, not 21.
+    topEase: 18, topEaseK: 0.65,
     abs: 0.5,
     ref: { zeroTo100: 1.9, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 1.9 s from a standstill, 1.7 s with a foot of rollout as Tesla times its cars (Martin 27 Nov), on the launch suction, fanLaunch; 2.6 s without it)
   },

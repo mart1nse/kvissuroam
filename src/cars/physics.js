@@ -317,7 +317,10 @@ function evPush(s, wAbs, vAbs, reversing, top = s.limiter) {
   let f = Math.min(e.maxWheelForce, (e.maxPowerKw * 1000 * s.efficiency) / Math.max(wAbs, 0.5));
   const wLim = (top || 180) / 3.6 * 1.15;            // motor speed limit
   if (wAbs > wLim - 2) f *= Math.max(0, (wLim - wAbs) / 2);
+  if (reversing && s.reverseG) f = Math.min(f, s.reverseG * s.mass * G);   // (a gentle reverse: see the Rocket's spec)
   const lim = reversing ? 30 : top;
+  // (spec.topEase: the push fades over the last this many km/h to topEaseK of itself, smoothly; see the Rocket's spec)
+  if (lim && s.topEase && !reversing) { const u = Math.min(1, Math.max(0, (lim - vAbs * 3.6) / s.topEase)); f *= s.topEaseK + (1 - s.topEaseK) * u * u * (3 - 2 * u); }
   if (lim && vAbs * 3.6 > lim - 2) f *= Math.max(0, (lim - vAbs * 3.6) / 2);
   return f;
 }
@@ -1242,7 +1245,8 @@ function substep(car, input, world, dt) {
   // (and floored at low speed it stays out of the way, as in a manual: the tyres light up from a standstill,
   // and a flick where the wheel passes the centre or the car swings round backwards keeps its wheelspin
   // instead of the tyres being pulled back to grip mid swing; Martin 2026-11-21)
-  const tcLow = throttle >= 0.9 ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
+  // (in reverse, a car with a gentle reverse, spec.reverseG, keeps all of it)
+  const tcLow = throttle >= 0.9 && !(car.reversing && s.reverseG) ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
   // (s.tcBend: a light setting that stays on in a bend at this share of its strength, letting that much less of the
   // drive past what the rear tyres can take: the tail steps out, but not round; s.tcEven: on a straight too. Fast it is
   // more of it again from TC_BEND_KMH; all of it with the fans off: a thousand kW on two tyres would spin the car at 300 km/h)

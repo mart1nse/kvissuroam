@@ -35,7 +35,7 @@ const TRAP = 20.1168;                       // 66 ft: the trap speed is the aver
 const AMBER_S = 0.5;                        // the sportsman's tree: each amber half a second, then green
 const PRACTICE_WAIT = [1.4, 2.4];           // s from PRACTICE to the first amber (a random wait, as the tree's own)
 const NO_START_S = 8;                       // past green with no clutch drop: the run is off
-const STUCK_MS = 4000;                      // the clutch dropped and the car not off the line in this long: the run is off
+const STUCK_S = 4;                          // the clutch dropped and the car not off the line in this long (its own clock): the run is off
 const LANE_OUT = 4.9;                       // m from the lane's middle: out of the lane (over the centre line or the edge)
 const DONE_GONE = 260;                      // m away from the strip after a run: the timeslip goes
 const FEED_HZ = 30;                         // our place to the other driver, in a race of two
@@ -524,7 +524,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         st.prev = { d, t: ct };
         if (st.t.q != null) finishRun(false);
         // (stopped, turned back or gone off the strip before the line: no time)
-        else if ((st.leave && Math.abs(car.vx) < 0.5 && ct - st.leave.t > 4) || Math.abs(w) > 40 || d < -30 || (!st.leave && now - st.tA > STUCK_MS)) finishRun(true);
+        else if ((st.leave && Math.abs(car.vx) < 0.5 && ct - st.leave.t > 4) || Math.abs(w) > 40 || d < -30 || (!st.leave && ct - st.carA > STUCK_S)) finishRun(true);
       }
       // ---- after the run
       if (st.phase === 'done') {

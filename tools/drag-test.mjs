@@ -138,11 +138,12 @@ await Promise.all([A, B].map((p) => p.evaluate(() => { const d = __game.drag(), 
 const [ra, rb] = await Promise.all([run(A, -0.25), run(B, -0.02)]);
 const dp = await Promise.all([A, B].map((p) => p.evaluate(() => ({ n: window.__dp, s: (performance.now() - window.__dpT) / 1000 }))));
 console.log(`the other car's place heard: Ann ${dp[0].n} times in ${dp[0].s.toFixed(0)} s, Bob ${dp[1].n} in ${dp[1].s.toFixed(0)} s (sent once a frame up to 30 a second; this machine draws a few frames a second)`);
+console.log('Ann:', JSON.stringify(ra.res));
+console.log('Bob:', JSON.stringify(rb.res));
 assert.ok(dp[0].n > 20 && dp[1].n > 20, 'the place feed came');
 await Promise.all([A, B].map((p) => p.waitForFunction(() => /WIN|LOSS/.test(document.querySelector('#dragslip h3')?.textContent || ''), null, { timeout: 25000 })));
 const va = (await state(A)).slipText.split('\n')[0], vb = (await state(B)).slipText.split('\n')[0];
-console.log('Ann:', va, JSON.stringify(ra.res));
-console.log('Bob:', vb, JSON.stringify(rb.res));
+console.log('Ann:', va, '| Bob:', vb);
 assert.ok(/WIN/.test(va) !== /WIN/.test(vb), 'one wins, the other loses');
 const aWon = !ra.res.dnf && (rb.res.dnf || ra.res.tot < rb.res.tot);
 assert.ok(!ra.res.dnf && !rb.res.dnf, 'both ran the quarter mile');

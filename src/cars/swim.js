@@ -1,7 +1,7 @@
 // The Roadster Rocket in the water (Martin 27 Nov: "thrust working under water ... bringing it possibly back ashore
 // following the underwater upward slope when coming out"). Any other car that goes into the river floats a moment
 // and goes down (physics.js). The Rocket's cold-gas nozzles blow under water as they do in the air, so BOOST
-// pushes it along, at the surface or on the bed, against the water's drag (a full tank about 30 km/h, a near-empty
+// pushes it along, at the surface or on the bed, against the water's drag (a full tank about 20 km/h, a near-empty
 // one a walk); the two nose jets turn it the way the wheel is held. With the suction fans on, the tyres are held
 // down onto the bed hard enough for the motors to crawl it along, forward or back, and up the bank. Either way it
 // keeps to the bed as that rises towards the shore and comes up out of the water onto land at the speed it has.
@@ -12,7 +12,7 @@ import { NOZ_YAW } from './thrust.js';
 
 const G = 9.81;
 // (the water's drag on the body: half of 1000 kg/m3 x a drag figure of 0.8 x 2 m2 facing it, over 2100 kg; with the
-// still water's own slowing in physics.js a full tank's 80 kN comes to about 8 m/s)
+// still water's own slowing in physics.js a full tank's push, 45 kN, comes to about 5.5 m/s)
 const DRAG_Q = 0.38;                // per metre, along the car
 const DRAG_SIDE = 3;                // ...and this many times that sideways
 const CRAWL_V = 2.5;                // the motors crawl it along the bed this fast with the fans on (m/s, 9 km/h)...

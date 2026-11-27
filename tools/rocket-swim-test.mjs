@@ -149,7 +149,7 @@ check('...with the fans off and nothing pressed it stays in the water', idleIn =
   check('...and BOOST brings it up again', !s.car.sunk);
   // speed under water on a full tank
   const v = run(rocket, sp, { boost: 1 }, 0.8, 3, (car) => { car.yaw += Math.PI; });
-  check('under water BOOST is a slow push: about 30 km/h on a full tank', Math.hypot(v.car.vx, v.car.vy) * 3.6 < 40 && Math.hypot(v.car.vx, v.car.vy) * 3.6 > 15, `${(Math.hypot(v.car.vx, v.car.vy) * 3.6).toFixed(0)} km/h after 0.8 s`);
+  check('under water BOOST is a slow push: about 20 km/h on a full tank', Math.hypot(v.car.vx, v.car.vy) * 3.6 < 30 && Math.hypot(v.car.vx, v.car.vy) * 3.6 > 12, `${(Math.hypot(v.car.vx, v.car.vy) * 3.6).toFixed(0)} km/h after 0.8 s`);
 }
 console.log(ok ? 'all ok' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

@@ -17,8 +17,8 @@ const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
 const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinning rear wheels under throttle (a figure eight)
-const TC_BEND_KMH = 120;   // a light setting (spec.tcBend) is all there again from this speed on, fully 60 km/h higher...
-const TC_BEND_NOFANS_KMH = 60;   // ...and from this one with the fans off (the Rocket's rears hold far less then: it stepped out and round at 110 to 170)
+const TC_BEND_KMH = 90, TC_BEND_SPAN = 30;   // a light setting (spec.tcBend) grows from this speed on to spec.tcHigh, this many km/h higher...
+const TC_BEND_NOFANS_KMH = 60, TC_NOFANS_SPAN = 60;   // ...and with the fans off from this one to all of it (the Rocket's rears hold far less then: it stepped out and round at 110 to 170)
 const FAST_KEEP_KMH = 150;   // ...and from this speed its stability control keeps the fronts to what the rears balance (see latCapF)
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
@@ -1187,9 +1187,10 @@ function substep(car, input, world, dt) {
   const tcLow = throttle >= 0.9 ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
   // (s.tcBend: a light setting that stays on in a bend at this share of its strength, letting that much less of the
   // drive past what the rear tyres can take: the tail steps out, but not round; s.tcEven: on a straight too. Fast it is
-  // all there again, TC_BEND_KMH: a thousand kW on two tyres would spin the car at 300 km/h with the fans off)
+  // more of it again from TC_BEND_KMH; all of it with the fans off: a thousand kW on two tyres would spin the car at 300 km/h)
   const vKmh = Math.hypot(car.vx, car.vy) * 3.6;
-  const bendK = s.tcBend ? s.tcBend + (1 - s.tcBend) * Math.min(1, Math.max(0, (vKmh - (car.fanOff ? TC_BEND_NOFANS_KMH : TC_BEND_KMH)) / 60)) : 0;
+  const bendTop = car.fanOff ? 1 : s.tcHigh ?? 1;
+  const bendK = s.tcBend ? s.tcBend + (bendTop - s.tcBend) * Math.min(1, Math.max(0, car.fanOff ? (vKmh - TC_BEND_NOFANS_KMH) / TC_NOFANS_SPAN : (vKmh - TC_BEND_KMH) / TC_BEND_SPAN)) : 0;
   const tcWant = s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (bendK && (s.tcEven || Math.abs(steerIn) >= 0.1) ? bendK : 1) : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));

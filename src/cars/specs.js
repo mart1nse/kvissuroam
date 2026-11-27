@@ -609,11 +609,11 @@ export const CARS = {
     drive: 'rwd',
     // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
     // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
-    // traction control. thats the best part when the back steps out a bit. lets try it constant"): at tcBend of its
-    // strength, all of it again from 120 km/h (60 with the fans off). Floored in a bend the tail steps out 25 to 45
-    // degrees, about as the Carrera GT's; weaving floored at 20 to 40 km/h 3 to 8 (full traction control: 1 or 2); it
-    // still launches straight, and below 40 km/h floored it lets the tyres spin as every car's does (donuts, drifts).
-    tc: 1, tcSlip: 1.5, tcBend: 0.8, tcEven: true,
+    // traction control. thats the best part when the back steps out a bit. lets try it constant"; then "lets try 70% up to
+    // 90kmh and move gradually to 90% by 120kmh"): tcBend of its strength up to 90 km/h, rising to tcHigh by 120 (with
+    // the fans off to all of it, from 60 to 120 km/h). It still launches straight, and below 40 km/h floored it lets the
+    // tyres spin as every car's does (donuts, drifts).
+    tc: 1, tcSlip: 1.5, tcBend: 0.7, tcHigh: 0.9, tcEven: true,
     grip: 1.2,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that

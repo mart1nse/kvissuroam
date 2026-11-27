@@ -49,10 +49,10 @@ if (bad) { console.log(`\n${bad} rows where the throttle did not turn the fronts
 
 // The hairpin pivot (Martin 2026-11-27: "at very low speeds and also standing still, when I have the handbrake on,
 // turn full lock, give it the beans, it should start dragging the front around quicker"). From a standstill or a crawl,
-// handbrake, full lock and full throttle all at once for 2 s: how far round the car has come after 1 and 2 s and how
+// handbrake, full lock and full throttle all at once for 2 s (the push eases in as the revs rise, Martin 27 Nov): how far round the car has come after 1 and 2 s and how
 // far its middle has gone. Judged on the rally cars with an engine (22B, Focus WRC, 200 Avant): at least PIVOT_MIN
 // degrees in the 2 s from a standstill on tarmac and on gravel, no car past PIVOT_MAX (a spin on the spot, not a turn).
-const PIVOT_MIN = 150, PIVOT_MAX = 270, RALLY = ['impreza', 'focus', 'audi200'];
+const PIVOT_MIN = 140, PIVOT_MAX = 270, RALLY = ['impreza', 'focus', 'audi200'];
 let badPivot = 0;
 for (const [surf, name] of [[1, 'tarmac'], [2, 'gravel']]) {
   for (const kmh of [0, 5, 10]) {

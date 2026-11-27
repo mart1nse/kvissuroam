@@ -88,6 +88,7 @@ const DONUT_EASE = 4;            // ...its moment changing at most this much a s
 const EV_SLIDE_REAR = 0.7;
 const PIVOT_KMH = [10, 20];      // a four-wheel-drive hairpin pivot (handbrake, full lock, floored) is all there with the rear axle slower than this, gone past the second (km/h)
 const PIVOT_PUSH = 0.16, PIVOT_YAW = 2.8, PIVOT_EASE = 0.8;   // ...its push (share of m*g*L as yaw moment), easing off over the last this much (rad/s) before the rate it turns towards
+const PIVOT_FROM = 0.3, PIVOT_REVS = 0.85, PIVOT_RISE = 1.2;   // ...starting at this share of it, then coming in at up to 1.5 x this much a second with the revs up to this share of the shift point, half that from idle
 // The donut helper (the yaw push that holds a donut in its band, with its ease-in, softening and wander, and the
 // twin-motor EVs' rear shift in a slide) is off for every car since Martin drove them without it (2026-11-22: the
 // manual cars light their tyres up, so the driver modulates a donut himself, and it felt more natural). ?donut=1
@@ -1524,10 +1525,18 @@ function substep(car, input, world, dt) {
   // scrub fight the swing more than a real car does, so on the spot it turned only 30 degrees in two seconds. While the
   // fronts spin, a push helps them round, as much as their ground's grip allows, easing off as the car turns towards
   // PIVOT_YAW: about half way round in a second from standing still, all the way in under two.
-  if (pivot > 0 && car.pullF > 0) {
+  // (it eases in, Martin 2026-11-27: the push starts at PIVOT_FROM and builds up over about half a second, slower the
+  // lower the revs: floored from idle it starts gently and quickens as the engine comes up towards PIVOT_REVS of its
+  // shift point. An electric motor counts as revs up. Let go, it is gone in a quarter second.)
+  {
+    const revK = e.type === 'ev' ? 1 : Math.min(1, Math.max(0, (car.rpm - (e.idle ?? 750)) / (PIVOT_REVS * e.shiftRpm - (e.idle ?? 750))));
+    const k0 = car.pivotK || 0;
+    car.pivotK = pivot > k0 ? Math.min(pivot, Math.max(k0, PIVOT_FROM * pivot) + PIVOT_RISE * (0.5 + revK) * dt) : Math.max(pivot, k0 - 4 * dt);
+  }
+  if (car.pivotK > 0 && pivot > 0 && car.pullF > 0) {
     const turn = Math.sign(steerIn), have = car.yawRate * turn;
     const room = Math.min(1, Math.max(0, (PIVOT_YAW - have) / PIVOT_EASE));
-    MZ += turn * pivot * car.pullF * room * PIVOT_PUSH * Math.min(1, sf.mu * tyreF) * m * G * L * load;
+    MZ += turn * car.pivotK * car.pullF * room * PIVOT_PUSH * Math.min(1, sf.mu * tyreF) * m * G * L * load;
   }
   // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and
   // the driveline winds up first. The slip-angle model overstates the bite there (and the donut hold

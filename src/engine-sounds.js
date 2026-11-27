@@ -27,6 +27,8 @@
 // lopeFast: a quicker wander of the idle (rpm); roughIdle: extra firing-to-firing roughness at idle (wild cams);
 //          raspIdle: the share of the rasp left at idle (default 0.3); pulseMax: the longest a pulse lasts (s, default
 //          0.004: an open race pipe's stays short, a hard bright idle); crack: an anti-lag bang's snap (default 0.9).
+// limVary: s, each limiter cut heard up to this much late at its start and end (off the page's grid of frames),
+//          and each with its own depth, a soft cut now and then (every other firing let through), pops and bark.
 // antilag: a rally car's anti-lag on a lift (from alsRpm, default 3000, fully 1500 above): the chance of a bang
 //          per firing, the bangs coming in runs with a crack on each, the firings between them spitting; alsRattle
 //          (default 1): the metallic rattle and clicking between the bangs, rattleF its pitch (Hz, default 2500).
@@ -204,6 +206,7 @@ export const ENGINE_SOUNDS = {
     turbo: true, turboMuffle: 100, hiss: 0.03, whistle: 1.0, whistleF: 1.05,
     pops: 0.04, crackle: 0.3, smoothTop: true,
     antilag: 0.03, crack: 1.4, alsRattle: 1, rattleF: 2500,
+    limVary: 0.012,           // (each bounce off the limiter its own, Martin 2026-11-27: 1st on Majoraadi spends long there)
   },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy

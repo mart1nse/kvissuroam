@@ -76,6 +76,9 @@ export class EngineCore {
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0; this.idleS = 800;
+    // (limVary: the cut as heard, cutS, follows the page's a few milliseconds late by a random amount each time;
+    // cutSt is this cut's character)
+    this.cutS = 0; this.cutW = 0; this.cutAt = 0; this.cutSt = { amp: 0.35, soft: 0, pop: 1, bark: 0.5 };
     // anti-lag (cfg.antilag): how long the throttle has been shut, the run of bangs going, the crack of the
     // last one and the rattle's tick; bangs counts the big ones (the processor tells the page: a flame each)
     this.liftT = 0; this.alsRun = 0; this.alsK = 0; this.crack = 0; this.rtl = 0; this.bangs = 0;
@@ -139,17 +142,22 @@ export class EngineCore {
     // (and through the yank the combustion is loaded hard while the gear drags the revs down, eased as
     // they spring back: the firings swell and thin with the swing)
     if (this.yk) { amp *= 1 + 0.45 * this.yk; nz *= 1 + 0.5 * Math.abs(this.yk); }
-    if (this.in.cut || this.in.shift) {
+    const cutNow = c.limVary ? this.cutS : this.in.cut, cs = this.cutSt;
+    if (cutNow || this.in.shift) {
       // ignition cut on the rev limiter (or for an upshift): the cylinder only pumps air, and on a hot,
       // loud engine some of the unburnt charge goes off in the exhaust (a shift crackles more)
       this.cutN++;
-      amp *= c.cutAmp ?? 0.35; nz *= 0.7;
-      if (c.pops && n() < c.pops * (this.in.shift ? 3 : 0.8)) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
+      // (limVary: each limiter cut its own, so a long spell on the limiter does not buzz the same: how much is
+      // cut, now and then a soft cut that lets every other firing through weakly, more or fewer pops)
+      const own = c.limVary && cutNow && !this.in.shift;
+      if (own && cs.soft && (this.cutN & 1)) amp *= cs.soft;
+      else { amp *= own ? cs.amp : c.cutAmp ?? 0.35; nz *= 0.7; }
+      if (c.pops && n() < c.pops * (this.in.shift ? 3 : 0.8) * (own ? cs.pop : 1)) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
       // (anti-lag keeps firing into the pipe through an upshift's cut: it bangs in the gap)
       if (this.als && this.in.shift && n() < this.als * 0.9) ({ amp, nz, tauDeg } = this.bang());
     } else if (this.cutN) {
       // the first firings after the cut light what collected meanwhile: the bark of an engine on its limiter
-      amp *= 1 + (c.limBark ?? 0.5) * Math.min(1, this.cutN / 3); this.cutN = Math.max(0, this.cutN - 3);
+      amp *= 1 + (c.limVary ? cs.bark : c.limBark ?? 0.5) * Math.min(1, this.cutN / 3); this.cutN = Math.max(0, this.cutN - 3);
     }
     if (overrun) {
       amp *= c.overrun ?? 0.8;
@@ -200,6 +208,20 @@ export class EngineCore {
     // a touch of idle lope: real engines never hold their idle exactly
     const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 + (c.lopeFast ? Math.sin(this.n / sr * 9.1) * c.lopeFast : 0) : 0;
     this.idleS = I.idle;
+    // limVary (s): the page steps the cut at its frame rate, so a long spell on the limiter bounces on a grid of
+    // whole frames; heard, each cut starts and ends up to limVary later, and each gets a character of its own
+    if (c.limVary) {
+      const want = I.cut ? 1 : 0;
+      if (want !== this.cutW) { this.cutW = want; this.cutAt = this.n + Math.floor(n() * c.limVary * sr); }
+      if (this.cutS !== this.cutW && this.n >= this.cutAt) {
+        this.cutS = this.cutW;
+        if (this.cutS) {
+          const st = this.cutSt, k = c.cutAmp ?? 0.35;
+          st.amp = k * (0.35 + 1.1 * n()); st.soft = n() < 0.3 ? 0.45 + 0.35 * n() : 0;
+          st.pop = 0.4 + 1.8 * n() * n(); st.bark = (c.limBark ?? 0.5) * (0.4 + 1.3 * n());
+        }
+      }
+    }
     // an upshift's gear going in with the revs still above its speed (src/audio-shift.js): the revs are
     // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a
     // couple of swings as the driveline winds up and springs back

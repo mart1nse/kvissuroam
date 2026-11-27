@@ -559,12 +559,16 @@ function engineForce(car, throttle, dt) {
   else if (car.revCut > 0) {
     car.revCut -= dt;
     if (car.revCut <= 0) car.revCut = (launch ? car.free : wheelRpm) > e.redline - car.cutDrop ? 1e-4 : 0;
-  } else if ((launch ? car.free : wheelRpm) >= e.redline) {
+  } else if (launch ? car.free >= e.redline : wheelRpm >= e.redline - (car.cutEarly || 0)) {
     // No two bounces are alike: each cut lasts a little longer or shorter and lets the revs fall a
     // different way before the engine fires again, so the limiter stutters rather than buzzes.
     const r1 = hash(car.time * 7.31 + car.x * 0.13), r2 = hash(car.time * 3.17 + car.z * 0.11 + 5.2);
     car.revCut = (e.revCut ?? REV_CUT_TIME) * (0.7 + 0.9 * r1);
     car.cutDrop = Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) * (0.5 + 2.2 * r2 * r2);
+    // (engine.revCutEarly, rpm: now and then the next cut comes in a little under the redline, mostly only just
+    // under it: a long spell on the limiter, the Focus WRC in 1st on Majoraadi, does not bounce to one beat; revved
+    // free on the grid or in neutral it still goes all the way)
+    if (e.revCutEarly) car.cutEarly = e.revCutEarly * hash(car.time * 5.71 + car.x * 0.07 + 2.9) ** 2;
   }
   // (when the tyres let go the engine is suddenly unloaded and flares up ahead of the wheels a little)
   const rpmTo = Math.min(Math.max(rpm, car.carry, throttle > 0.5 ? stall + 1600 * (car.spin || 0) * throttle : 0), e.redline);
@@ -1971,7 +1975,7 @@ export function resetCar(car, pose) {
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.tip = null; car.tipped = 0; car.roofG?.fill(NaN); car.highAt = undefined; car.onHigh = false; car.rise = 0; car.onTop = car.carriedBy = null;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.hbOpen = false; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.cutEarly = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.hbOpen = false; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.crash = null; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
   car.rpm = car.spec.engine.idle ?? 0; car.kw = 0; car.regenIn = car.pedalIn = 0;

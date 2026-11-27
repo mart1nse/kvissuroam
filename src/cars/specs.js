@@ -572,9 +572,11 @@ export const CARS = {
       rollStallRpm: 5500,
       converterGain: 1.5,
     },
-    // 6-speed Xtrac sequential (all sources; no ratios published): a close set on tarmac gearing, the gears topping out at
-    // about 80, 104, 126, 150, 175 and 200 km/h (estimated)
-    gears: [2.5, 1.923, 1.587, 1.333, 1.143, 1.0],
+    // 6-speed Xtrac sequential (all sources; no ratios published, so estimated). Martin 2026-11-27: 1st ran past 70 km/h
+    // (it topped out at 80, longer than the road 22B's 66). A rally box's 1st is short, for hairpins and the launch, and
+    // the steps close up towards 6th: at 7500 rpm the gears top out at about 63, 88, 113, 140, 170 and 200 km/h (shifted
+    // at 7300: 60, 85, 110, 136, 165), the top speed kept where it was. Same 0-100 (3.6 s); a tarmac set, as the grip is.
+    gears: [3.2, 2.27, 1.77, 1.43, 1.18, 1.0],
     reverse: 2.8,
     finalDrive: 4.45,
     efficiency: 0.85,           // three differentials

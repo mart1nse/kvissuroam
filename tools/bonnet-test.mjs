@@ -26,7 +26,8 @@ function hit(id, kmh, deg = 0) {
   return { car, peak, world };
 }
 
-for (const [kmh, deg, want] of [[40, 0, 'shut'], [48, 0, 'shut'], [55, 0, 'up'], [80, 0, 'up'], [90, 60, 'shut'], [120, 60, 'up'], [160, 0, 'up']]) {
+// (57: coasting the 6 m in 1st, which runs to 63 km/h since 27 Nov, the engine takes off about 5 km/h before the wall)
+for (const [kmh, deg, want] of [[40, 0, 'shut'], [48, 0, 'shut'], [57, 0, 'up'], [80, 0, 'up'], [90, 60, 'shut'], [120, 60, 'up'], [160, 0, 'up']]) {
   const { car, peak } = hit('focus', kmh, deg);
   check(car.bonnet.state === want, `${kmh} km/h at ${deg} deg off straight: ${(peak * 3.6).toFixed(0)} km/h into the wall -> ${car.bonnet.state} (want ${want})`);
 }

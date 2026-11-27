@@ -2498,13 +2498,16 @@ function frame(ts) {
     $('#sunk').classList.toggle('hidden', !car.sunk);   // gone again if the car drifts out onto land
     // 0-100 stopwatch
     const kmh = speedKmh(car);
-    if (kmh < 1 && !launch) launch = { t: null, done: false };
+    // (the Rocket's from a foot of rollout, as Tesla times its cars: the clock starts once it has rolled 0.3 m from
+    // where it stood, Martin 27 Nov: "show 0-100 time for tesla on the screen with rollout, but only for tesla")
+    const rollout = car.spec.id === 'rocket' ? 0.3048 : 0;
+    if (kmh < 1 && (!launch || launch.t === null)) launch = { t: null, done: false, x: car.x, z: car.z };
     if (launch && !launch.done) {
-      if (launch.t === null) { if (kmh > 1.5 && car.throttle > 0 && !car.reversing) launch.t = 0; }
+      if (launch.t === null) { if (kmh > 1.5 && car.throttle > 0 && !car.reversing && Math.hypot(car.x - launch.x, car.z - launch.z) >= rollout) launch.t = 0; }
       else {
         launch.t += dt;
         if (car.throttle < 1 || car.inWater) launch = null;
-        else if (kmh >= 100) { launch.done = true; hud.toast(`0–100 KM/H · ${launch.t.toFixed(1)} S`); }
+        else if (kmh >= 100) { launch.done = true; hud.toast(`0–100 KM/H · ${launch.t.toFixed(1)} S${rollout ? ' · 1 FT ROLLOUT' : ''}`); }
       }
     }
     if (launch?.done && kmh < 1) launch = null;

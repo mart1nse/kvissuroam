@@ -614,12 +614,6 @@ export const CARS = {
     // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
     // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
     drive: 'rwd',
-    // ...with a small front motor that pulls only while the car is pointed and rolling straight (Martin 27 Nov: "what
-    // would it need to still get the 1.7 to a hundred without thrusters ... I like how if i step on it and it is at the
-    // littlest of angles it wants to step out"): 30 % of the drive at the front from a standstill, gone with the wheel
-    // turned past 0.04 or the tail 5 degrees out (physics.js FA_STEER, FA_SLIP). The rears still spin up off the line.
-    // (Two motors on the rear axle can only pass on what two tyres hold: 2.4 s at best with all the traction control.)
-    frontAssist: 0.3,
     // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
     // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
     // traction control. thats the best part when the back steps out a bit. lets try it constant"; then "lets try 70% up to
@@ -636,6 +630,11 @@ export const CARS = {
     // what other cars' do; 0.5 until then, "ducks and dives also quite a bit". At the 2100 kg of later that day:
     // 1.67 s, 21.5 m, 1.9 g)
     fanDown: 12000, squat: 0.3,
+    // (launch suction: floored, the wheel straight and the car rolling straight, the fans suck 3.3 times as hard, about
+    // twice the car's weight, up to 40 km/h and back to 12 kN by 60; the least turn of the wheel and they are back at once.
+    // Martin 27 Nov: "if you add for straight line launch a lot more suction from the fans up to lets say 40kmh". Two
+    // rear tyres then hold 1000 kW for 1.9 s to 100, 1.7 with a foot of rollout as Tesla times it, and still spin up)
+    fanLaunch: 3.3,
     // lean: the body rolls this much of what other cars' do in a bend (Martin 27 Nov: "when cornering car leans over a
     // lot, I think there should be a lot less roll side to side": 6 degrees at 1 g, 11 at its 1.9 g; now 2 and 3.5)
     lean: 0.3,
@@ -661,7 +660,7 @@ export const CARS = {
     // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
     limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 1.7, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. Martin 27 Nov: 1.7 s, with frontAssist; rear-driven alone it was 2.6 s)
+    ref: { zeroTo100: 1.9, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 1.9 s from a standstill, 1.7 s with a foot of rollout as Tesla times its cars (Martin 27 Nov), on the launch suction, fanLaunch; 2.6 s without it)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

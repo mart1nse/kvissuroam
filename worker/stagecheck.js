@@ -23,7 +23,7 @@ const HOP = 12, BACK_AGE = 20, BACK_R = 8;   // R, as the replay check knows it 
 // xs, zs: the run's places, 0.1 s apart from the green light to the finish line; pen: the penalty seconds in its time.
 // launch: how hard this car leaves a standstill when that is harder than LAUNCH_A (m/s2: a car with thrusters, whose
 // BOOST could be held from the green light until 27 Nov 2026: src/race/plausible.js gas.launch; since, its motors
-// with the tank full, pullFull[0], 18 m/s2 for the Rocket with its front motor).
+// with the tank full, pullFull[0], 18 m/s2 for the Rocket on its launch suction).
 // '' when the run holds, else what is wrong with it. out, when given, gets `loose`: 1 for each place the run was past
 // the tarmac start, on the stage's gravel (the car check judges those against gravel's grip: src/race/plausible.js).
 export function stageCheck(xs, zs, pen = 0, launch = 0, out = null) {

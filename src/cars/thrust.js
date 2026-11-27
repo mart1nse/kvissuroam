@@ -65,9 +65,12 @@ const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 // path ran straight on and the line-up below turned the nose back to it before landing, undoing the turn: Martin, "before
 // landing it turns itself back exactly as it would have jumped from the straight line"). Then, before the landing
 // burn, the nose is turned onto the line it travels along: that takes out only the slide it had at the press, so it
-// comes down straight whatever it was doing, and as far round as the bend took it.
+// comes down straight whatever it was doing, and as far round as the bend took it. The line-up starts at the press,
+// alongside the swing easing out (until 27 Nov night it started 1.3 s in, after the swing: a car pressed from a
+// power slide, its tail out and the nose turning fast, swung on 40 to 50 degrees and then all the way back, Martin:
+// "if you just finish a flip and do it then it sort of goes crazy and turns itself around back straight").
 const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s; a turn's 0.5 rad/s carries on 11 degrees)
-const YAW_LINE0 = 1.3;             // the nose is turned onto the line of travel from this long into the flight...
+const YAW_LINE = 1.2;              // the nose is turned onto the line of travel over this long from the press...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
 const MAX_T = 6;                   // no flight longer than this (s)
 const LOW_WALL = 1.5;              // a wall that belongs to no house stops the car only this low over the ground (m)
@@ -94,9 +97,9 @@ export const NOZZLES = [
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 
-// The nose at time t of a flight, and how fast it turns (rad, rad/s): the swing it had eases out, and from YAW_LINE0
-// to the landing burn it is brought onto the line of travel (lineTurn: the shortest way round from where the swing
-// ends; worked out from the plan's own numbers, so the other players' pages fly the same)
+// The nose at time t of a flight, and how fast it turns (rad, rad/s): the swing it had eases out, and over the first
+// YAW_LINE (or to the landing burn, if sooner) it is brought onto the line of travel (lineTurn: the shortest way
+// round from where the swing ends; worked out from the plan's own numbers, so the other players' pages fly the same)
 const yawCarry = (p, t) => p.yawR * YAW_TAU * (1 - Math.exp(-t / YAW_TAU));
 // (the path turns by the nose's carried swing, so the line of travel and the nose differ by the slide at the press)
 function lineTurn(p) {
@@ -131,7 +134,7 @@ export function flightPath(p, t, out) {
   return out;
 }
 const tmpP = [0, 0, 0, 0];
-const lineSpan = (p) => { const a = Math.min(YAW_LINE0, 0.6 * p.tb); return [a, Math.max(a + 0.3, p.tb)]; };
+const lineSpan = (p) => [0, Math.max(0.3, Math.min(YAW_LINE, p.tb))];
 function yawAt(p, t) {
   const [a, b] = lineSpan(p);
   return p.yaw0 + yawCarry(p, t) + lineTurn(p) * smooth((t - a) / (b - a));

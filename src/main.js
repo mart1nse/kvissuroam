@@ -1158,7 +1158,11 @@ async function boot() {
     tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme (H there: back on the line)"><span>DRAG STRIP</span></button>' : ''}`;
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null,
+    // (LAP TIMES opens on the track the car is at, Martin 27 Nov: "default open the track that is closest to you ... makes
+    // the lap times when finished in raadi for instance more relevant"; near none, or a card just picked in the
+    // garage: the garage's pick)
+    nearTrack: () => (mode === 'menu' && trackPicked ? null : atRaadi() ? 'raadi' : atDrag() ? 'drag' : race.track.nearest(car.x, car.z).d < 300 ? 'toome' : null) });
   {
     // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
     const drv = $('#driver'), left = document.createElement('div');

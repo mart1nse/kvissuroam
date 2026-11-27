@@ -1148,10 +1148,10 @@ async function boot() {
     // minioutline of the track and stage as an icon before the text"): the lists' marks (trackpick.js), drawn in
     // the button's cyan, left out of what a screen reader says (the name follows)
     const mark = (id) => TRACK_ICON[id].replace(/ role="img" aria-label="[^"]*"><title>[^<]*<\/title>/, ' aria-hidden="true">');
-    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme"><span>DRAG STRIP</span></button>' : ''}`;
+    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme (H there: back on the line)"><span>DRAG STRIP</span></button>' : ''}`;
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId });
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null });
   {
     // the garage's tyre choice, left of the driver's name (the right side has LAP TIMES and CONTROLS)
     const drv = $('#driver'), left = document.createElement('div');
@@ -1355,7 +1355,7 @@ let garage = null;
 function layoutMenu() {
   garage?.sync(carId);
   const d = $('#drivecar');
-  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : 'TOOMEMÄGI'}` : CARS[carId].short;
+  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : board?.track === 'drag' ? 'ÜLENURME' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
 function buildMenu() {
@@ -1407,7 +1407,8 @@ function startDriving() {
     // in-game buttons; Martin 23 Nov: a fresh game, RAADI picked, dropped there on road tyres)
     const toRaadi = board.track === 'raadi' && !atRaadi();
     if (toRaadi) stage.goStart();
-    else if (board.track === 'toome' && trackPicked && atRaadi()) goHome();
+    else if (board.track === 'drag') { if (trackPicked || !atDrag()) goDrag(); }
+    else if (board.track === 'toome' && trackPicked && (atRaadi() || atDrag())) goHome();
     if (board.track === 'raadi' && (toRaadi || trackPicked)) tyrePending = { k: 'gravel', t: performance.now() };
     else if (board.track === 'toome' && (trackPicked || !droveOnce)) tyrePending = { k: 'road', t: performance.now() };
     trackPicked = false;
@@ -1510,7 +1511,7 @@ function openGarage() {
   drag?.cancel('DRAG RUN CANCELLED');
   if (!(raceMode?.ghost && !raceMode?.holding)) car.vx = car.vy = car.yawRate = 0;
   // the track picker on the track the car is at, so that DRIVE leaves it there (a pick in the garage still moves it)
-  if (stage && !trackPicked) { board?.follow(atRaadi() ? 'raadi' : 'toome'); layoutMenu(); }
+  if (stage && !trackPicked) { board?.follow(atRaadi() ? 'raadi' : atDrag() ? 'drag' : 'toome'); layoutMenu(); }
 }
 
 // A car left standing on the map with nobody at the controls goes to the garage, off the map for everyone
@@ -1629,7 +1630,18 @@ function place(pose) {
 // H and the home button: back to the start of the circuit the car is at (Raadi's stage start when out at
 // Raadi, Martin 23 Nov; the TOOMEMÄGI button still goes to Küüni from there)
 function homeHere() {
-  if (stage && mode === 'drive' && atRaadi()) { raceMode?.out('map'); stage.goStart(); } else goHome();
+  if (stage && mode === 'drive' && atRaadi()) { raceMode?.out('map'); stage.goStart(); }
+  // (at the drag strip: back on its line, Martin 27 Nov: "i wonder if H should put you back on start of drag?")
+  else if (mode === 'drive' && atDrag()) goDrag();
+  else goHome();
+}
+// the drag strip (?drag=1, desktops): at it, and onto its line from anywhere (the DRAG STRIP button, H there, DRIVE
+// with ÜLENURME picked), on road tyres
+function atDrag() { return !!drag && !isTouch && drag.here; }
+function goDrag() {
+  if (!drag || isTouch) return;
+  raceMode?.out('map'); stage?.teleported();
+  if (drag.goLine(car) && tyres === 'gravel') tyrePending = { k: 'road', t: performance.now() };
 }
 // (after the name, in brackets, how many are on a timed stage run now, on the line or past green, ourselves too
 // (Martin 26 Nov: "After majoraadi text, show in brackets how many are on an active timed stage"); nothing when
@@ -2155,7 +2167,7 @@ document.addEventListener('click', (e) => {
   if (act === 'reset') goLastSpot();
   else if (act === 'home') homeHere();
   else if (act === 'track-toome') { goHome(); if (mode === 'drive') tyrePending = { k: 'road', t: performance.now() }; }
-  else if (act === 'track-drag') { if (mode === 'drive' && drag) { raceMode?.out('map'); stage?.teleported(); if (drag.goLine() && tyres === 'gravel') tyrePending = { k: 'road', t: performance.now() }; } }
+  else if (act === 'track-drag') { if (mode === 'drive') goDrag(); }
   else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); tyrePending = { k: 'gravel', t: performance.now() }; } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }

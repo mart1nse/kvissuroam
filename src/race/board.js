@@ -25,7 +25,8 @@ const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="
 // stage: the Raadi rally stage (on unless ?raadi=0): then a track picker in place of the outline, and both circuits' times
 // onWatch(track, car): watch a record's replay (desktop; none on phones)
 // carNow(): the car picked in the garage, whose row is open when the board opens
-export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car }) {
+// drag: the drag strip (src/race/drag.js) when its card is in the garage (?drag=1 on a desktop), else null
+export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car, drag = null }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
 
@@ -309,8 +310,10 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     const r = least(mp.board?.allTime || []);
     return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
   };
-  const mine = (id) => (id === 'raadi' ? stage.best().any : least(race.laps));
-  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack }) : null;
+  // (the drag strip's best: this browser's quickest clean quarter mile in any car)
+  const dragBest = () => { const l = Object.values(drag?.best || {}).filter((b) => Number.isFinite(b?.et)); return l.length ? { ms: Math.min(...l.map((b) => b.et)) * 1000 } : null; };
+  const mine = (id) => (id === 'raadi' ? stage.best().any : id === 'drag' ? dragBest() : least(race.laps));
+  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record: (id) => (id === 'drag' ? null : record(id)), mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
   if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden');

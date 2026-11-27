@@ -10,11 +10,11 @@
 //  - or somebody drives into the other box: the server starts the tree for both at the same moment.
 // The tree is the sportsman's: pre-stage and stage lit, three ambers half a second apart, then green. A puts the
 // car into first, which drops the clutch at the revs the engine has then (too few bog, too many spin the tyres):
-// before green it is a red light, a false start, and in a race of two that loses. From there the gears are the
-// driver's: a shift light on the panel says when.
-// The run is timed as a drag strip times it: reaction time from green to the clutch drop, elapsed time from the
-// car's leaving the line to the quarter mile, the 60 ft, 330 ft, 1/8 mile (with its speed), 1000 ft, and the trap
-// speed over the last 66 ft. A timeslip shows after the finish, with this car's best (kept in this browser), and
+// the car out of the stage beam before green is a red light, a false start, and in a race of two that loses. From
+// there the gears are the driver's: a shift light on the panel says when.
+// The run is timed as a drag strip times it (NHRA): reaction time from green to the car leaving the stage beam,
+// elapsed time from there to the quarter mile, the 60 ft, 330 ft, 1/8 mile (with its speed), 1000 ft, and the trap
+// speed over the last 66 ft; R/T + ET, green to the finish, under them. A timeslip shows after the finish, with this car's best (kept in this browser), and
 // BACK TO THE LINE (R) puts the car back in its lane at once. In a race of two the first over the line wins (each
 // car's own reaction and run, not whose message reached the server first); a red light or leaving one's lane loses.
 //
@@ -35,6 +35,8 @@ const TRAP = 20.1168;                       // 66 ft: the trap speed is the aver
 const AMBER_S = 0.5;                        // the sportsman's tree: each amber half a second, then green
 const PRACTICE_WAIT = [1.4, 2.4];           // s from PRACTICE to the first amber (a random wait, as the tree's own)
 const NO_START_S = 8;                       // past green with no clutch drop: the run is off
+const ROLLOUT_MS = 10000;                   // after the finish: others still pass through the car this long
+const HERE_M = 250;                         // 'at the strip' this far past either end of it
 const STUCK_S = 4;                          // the clutch dropped and the car not off the line in this long (its own clock): the run is off
 const LANE_OUT = 4.9;                       // m from the lane's middle: out of the lane (over the centre line or the edge)
 const DONE_GONE = 260;                      // m away from the strip after a run: the timeslip goes
@@ -195,7 +197,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       st.jump = false;
       requestAnimationFrame(() => { fader.style.opacity = '0'; });
       const c = st.car;
-      if (!c || !free() || st.phase !== 'off' || (st.lanes[lane] && st.lanes[lane].id !== mp?.id)) return;
+      if (!c || !free() || (st.phase !== 'off' && st.phase !== 'done') || (st.lanes[lane] && st.lanes[lane].id !== mp?.id)) return;
+      st.phase = 'off';
       toLine(lane);
     }, FADE_S * 1000 + 20);
   }
@@ -240,7 +243,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   }
   function startTree(go, duel, run) {
     st.phase = 'tree'; st.go = go; st.duel = duel; st.run = run;
-    st.red = false; st.tA = 0; st.leave = null; st.prev = null; st.t = {}; st.v = {}; st.foul = false; st.dnf = false; st.res = null; st.win = false;
+    st.red = false; st.tA = 0; st.rt = null; st.leave = null; st.prev = null; st.t = {}; st.v = {}; st.foul = false; st.dnf = false; st.res = null; st.win = false;
     hideAsk();
     elMsg.textContent = duel ? `VS ${duel.name || 'THE OTHER LANE'}` : 'PRACTICE';
   }
@@ -257,10 +260,9 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       if (dir < 0 || !c.neutral) return true;
       const now = performance.now();
       stickShift(c, 1);
+      // (the red light, if any, comes as the car leaves the stage beam: see the run in update())
       st.tA = now; st.carA = c.time;
-      st.red = now < st.go;
       st.phase = 'run'; st.pin = null;
-      if (st.red) toast('RED LIGHT · FALSE START', 2600);
       return true;
     }
     stickShift(c, dir);
@@ -272,12 +274,13 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     if (st.phase === 'done') return;
     st.dnf = dnf || !st.t.q;
     st.phase = 'done'; st.pin = null; st.doneAt = performance.now();
+    st.cool = true;          // (a run over in its box, a no-start: out of the box and back in to go again, the timeslip stays)
     unstick();
     const t = st.t, v = st.v;
-    const rt = st.tA ? (st.tA - st.go) / 1000 : null;
+    const rt = st.leave ? st.rt : null;
     const res = { rt, t60: t.f60, t330: t.f330, t8: t.e8, v8: v.e8, t1000: t.f1000, et: t.q, vq: v.q, red: st.red, foul: st.foul, dnf: st.dnf,
-      // (for the race: from green to the line, the reaction and the run on one clock)
-      tot: !st.dnf && st.tA ? rt + (st.leave.t - st.carA) + t.q : null };
+      // (for the race: from green to the finish line, the reaction and the run, R/T + ET)
+      tot: !st.dnf && st.leave ? rt + t.q : null };
     st.res = res;
     // this car's best: a clean run (no red light, in its lane)
     const id = st.car.spec.id;
@@ -320,6 +323,9 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     const r = st.res, o = st.duel?.res || {}, id = st.car.spec.id, b = best[id];
     const name = st.duel ? escapeHtml(st.duel.name || 'OTHER') : '';
     const rt = (x) => (x.rt == null ? '–' : `${x.rt < 0 ? '−' : ''}${Math.abs(x.rt).toFixed(3)}`);
+    // (the 1/4 mile's ET runs from the car leaving the line, as on a real slip; with the reaction: green to the finish,
+    // what decides a race of two)
+    const sum = (x) => (x.tot == null || x.dnf ? '–' : x.tot.toFixed(3));
     slip.innerHTML = `<h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
       <table><thead><tr><th></th><th>YOU</th>${st.duel ? `<th>${name}</th>` : ''}</tr></thead><tbody>
       ${slipRow('R/T', rt(r), rt(o))}
@@ -330,7 +336,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       ${slipRow('1000 FT', fmt(r.t1000), fmt(o.t1000))}
       ${slipRow('1/4 MILE', `<b>${r.dnf ? 'DNF' : fmt(r.et)}</b>`, `<b>${o.dnf ? 'DNF' : fmt(o.et)}</b>`)}
       ${slipRow('TRAP KM/H', `<b>${kmh(r.vq)}</b>`, `<b>${kmh(o.vq)}</b>`)}
-      </tbody></table>
+      </tbody><tbody class="sum">${slipRow('R/T + ET', sum(r), sum(o))}</tbody></table>
       <p class="pb">${st.car.spec.short.toUpperCase()} BEST · ${b ? `${b.et.toFixed(3)} @ ${b.vq} KM/H` : 'NO CLEAN RUN YET'}${r.foul ? ' · OUT OF LANE' : ''}</p>
       <button data-drag="again">↺ BACK TO THE LINE <kbd>R</kbd></button>`;
     slip.classList.remove('hidden');
@@ -442,13 +448,17 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // the strip's gearbox is in: A and Z go to shift(), not the automatic's hand shifts
     get stick() { return !!st.car?.stick && st.phase !== 'off'; },
     // on the line or on a run: the others' cars pass through ours (and ours through theirs)
-    get busy() { return st.phase === 'line' || st.phase === 'tree' || st.phase === 'run'; },
+    // (and after the run while the car is still rolling out down the strip: the other lane's car may stop beside it)
+    get busy() { return st.phase === 'line' || st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && performance.now() - st.doneAt < ROLLOUT_MS); },
+    // at the strip: on it in any way, or within its reach (H puts the car back on the line from here, as at Majoraadi's start)
+    get here() { const c = st.car; return !!c && (st.phase !== 'off' || Math.hypot(c.x - MID[0], c.z - MID[1]) < QUARTER / 2 + HERE_M); },
     get lanes() { return st.lanes; },
     get result() { return st.res; },
     get best() { return best; },
     shift, practice, leave, again, cancel, message, heard, dragPose,
     // the DRAG STRIP button: straight onto the line of a free lane
-    goLine() {
+    goLine(car = st.car) {
+      if (car) st.car = car;          // (DRIVE with ÜLENURME picked: before the first frame of driving)
       if (!canDrive || !st.car || !free()) return false;
       const ours = (l) => !st.lanes[l] || st.lanes[l].id === mp?.id;
       const lane = st.phase !== 'off' && ours(st.lane) ? st.lane : ours(0) ? 0 : ours(1) ? 1 : -1;
@@ -474,13 +484,15 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
           if (!b) continue;
           const taken = !!st.lanes[l] && st.lanes[l].id !== mp?.id;
           const mine = st.phase !== 'off' && st.lane === l;
-          ease(b.beam, dm < 2500 && st.phase === 'off' && !taken ? 0.5 : 0, dt);
-          ease(b.ring, dm < 700 && !taken && (st.phase === 'off' || (mine && st.phase === 'line')) ? 0.9 : 0, dt);
+          // (after a run too: driving back into a box is one way to go again, Martin 27 Nov, R the other)
+          const open = st.phase === 'off' || st.phase === 'done';
+          ease(b.beam, dm < 2500 && open && !taken ? 0.5 : 0, dt);
+          ease(b.ring, dm < 700 && !taken && (open || (mine && st.phase === 'line')) ? 0.9 : 0, dt);
         }
       }
       // ---- into a box
       const [d, w] = stripPos(car);
-      if (st.phase === 'off' && canDrive && !st.jump && strip.built && free()) {
+      if ((st.phase === 'off' || st.phase === 'done') && canDrive && !st.jump && strip.built && free()) {
         const inBox = (l) => d > BOX_D0 && d < BOX_D1 + 3 && Math.abs(w - LANES[l]) < BOX_HW;
         const along = Math.cos(car.yaw - STRIP_YAW) > 0.5, slow = Math.abs(car.vx) < 22;
         let l = inBox(0) ? 0 : inBox(1) ? 1 : -1;
@@ -510,6 +522,11 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         if (st.prev && !st.leave && d - st.stagedD >= ROLL) {
           const f = (st.stagedD + ROLL - st.prev.d) / Math.max(1e-6, d - st.prev.d);
           st.leave = { t: st.prev.t + (ct - st.prev.t) * Math.max(0, Math.min(1, f)) };
+          // the reaction time as on a real timeslip (Martin 27 Nov: "research first how it is usually done"): from green
+          // to the car leaving the stage beam, its roll-out from the clutch drop in it, so R/T + ET is green to the finish.
+          // Out of the beam before green: a red light (A a moment before green is no foul if the car is not out yet).
+          st.rt = (st.tA - st.go) / 1000 + (st.leave.t - st.carA);
+          if (st.rt < 0) { st.red = true; toast('RED LIGHT · FALSE START', 2600); }
         }
         if (st.leave && st.prev) {
           // a line's moment: the time between this frame and the last at which the nose crossed it

@@ -79,6 +79,7 @@ export class EngineCore {
     // (limVary: the cut as heard, cutS, follows the page's a few milliseconds late by a random amount each time;
     // cutSt is this cut's character)
     this.cutS = 0; this.cutW = 0; this.cutAt = 0; this.cutSt = { amp: 0.35, soft: 0, pop: 1, bark: 0.5 };
+    this.cutN0 = 0; this.cutN1 = 0; this.cutHold = 0; this.early = 0; this.rpmWas = 0; this.fireTo = 0;
     // anti-lag (cfg.antilag): how long the throttle has been shut, the run of bangs going, the crack of the
     // last one and the rattle's tick; bangs counts the big ones (the processor tells the page: a flame each)
     this.liftT = 0; this.alsRun = 0; this.alsK = 0; this.crack = 0; this.rtl = 0; this.bangs = 0;
@@ -209,18 +210,34 @@ export class EngineCore {
     const lope = I.rpm < I.idle + 150 ? Math.sin(this.n / sr * 2.3) * c.lope + Math.sin(this.n / sr * 0.7) * c.lope * 0.6 + (c.lopeFast ? Math.sin(this.n / sr * 9.1) * c.lopeFast : 0) : 0;
     this.idleS = I.idle;
     // limVary (s): the page steps the cut at its frame rate, so a long spell on the limiter bounces on a grid of
-    // whole frames; heard, each cut starts and ends up to limVary later, and each gets a character of its own
+    // whole frames; heard, each cut starts and ends up to limVary later, and each gets a character of its own.
+    // limGap (s): the cut as heard holds on a while and then fires a while, together about limGap at the least,
+    // so a quick refire on spinning wheels (loose ground in 1st: the page bounced every 50 ms) is not heard as
+    // a buzz; limLong: that share of the cuts hold one and a half to two and a half times limGap, a long lazy bounce; limEarly (rpm): now and
+    // then the cut is heard a little before the redline. Only the sound: the car's own limiter, which sets its
+    // pace on loose ground, is left as it is (Martin 2026-11-27)
     if (c.limVary) {
-      const want = I.cut ? 1 : 0;
-      if (want !== this.cutW) { this.cutW = want; this.cutAt = this.n + Math.floor(n() * c.limVary * sr); }
-      if (this.cutS !== this.cutW && this.n >= this.cutAt) {
-        this.cutS = this.cutW;
+      const want = I.cut ? 1 : 0, sec = sr;
+      if (want !== this.cutW) { this.cutW = want; this.cutAt = this.n + Math.floor(n() * c.limVary * sec); }
+      let go = this.cutS !== this.cutW && this.n >= this.cutAt;
+      // (the hold: a cut heard is not let go before its time is up, and once let go the engine is heard firing a
+      // while before the next, whatever the page does meanwhile)
+      if (go && this.cutS && this.n - this.cutN0 < this.cutHold) go = false;
+      if (go && !this.cutS && this.n < this.fireTo) go = false;
+      // (heard early: revs near the redline, rising, on the throttle, and not straight after a cut)
+      if (!go && !this.cutS && c.limEarly && I.throttle > 0.5 && I.rpm >= I.redline - this.early && I.rpm > this.rpmWas && this.n >= this.fireTo) go = true;
+      if (go) {
+        this.cutS = this.cutS ? 0 : 1;
         if (this.cutS) {
           const st = this.cutSt, k = c.cutAmp ?? 0.35;
           st.amp = k * (0.35 + 1.1 * n()); st.soft = n() < 0.3 ? 0.45 + 0.35 * n() : 0;
           st.pop = 0.4 + 1.8 * n() * n(); st.bark = (c.limBark ?? 0.5) * (0.4 + 1.3 * n());
-        }
+          this.cutN0 = this.n;
+          this.cutHold = (c.limGap || 0) * sec * (n() < (c.limLong || 0) ? 1.5 + n() : 0.35 + 0.25 * n());
+          this.early = c.limEarly ? c.limEarly * n() * n() : 0;
+        } else { this.cutN1 = this.n; this.fireTo = this.n + (c.limGap || 0) * sec * (0.4 + 0.35 * n()); }
       }
+      this.rpmWas = I.rpm;
     }
     // an upshift's gear going in with the revs still above its speed (src/audio-shift.js): the revs are
     // wrenched down at once, past the new gear's, and swing back about 8 times a second, dying out in a

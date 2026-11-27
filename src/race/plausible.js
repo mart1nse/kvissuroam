@@ -169,7 +169,7 @@ export function* carLimitsSteps(spec, every = 0) {
   // thrusters: dv, the speed a full tank can add (m/s: all its gas out at GAS_V, the car growing lighter as it
   // goes); a, the most the tail nozzles push the car at its lightest (m/s2); fill, seconds an empty tank takes to
   // fill; launch, the hardest it leaves a standstill (m/s2, for a stage's start: worker/stagecheck.js; the motors'
-  // pull and the nozzles' push together, which is more than the car does with both: 0 to 100 in 0.75 s)
+  // pull and the nozzles' push together, which is more than the car does with both: 0 to 100 in 0.8 s)
   // (a car with thrusters on a timed run, judged without the gas: as it is there, the tank full, all its weight on)
   if (pullFull) {
     const full = (1 + (spec.fanDown || 0) / (spec.mass * G)) / fans, stopF = Math.max(stopFull, 0.5 * G);

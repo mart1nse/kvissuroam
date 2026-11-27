@@ -92,11 +92,13 @@ console.log(`ok  ${HONEST.length} honest drives with BOOST: at most ${JSON.strin
 
 // ---- a changed page
 const copy = (change) => { const s = structuredClone(spec); change(s); return s; };
-const GREEDY = [[150, laps(80 / 3.6, 300 / 3.6, fromHalf)]], DRY = [[25, { up: 1, boost: 1 }], [5, { down: 1 }]];
+// (5 minutes, the cheats' 40 s and 150 s doubled: at 45 kN since 27 Nov a tank blows for 10 s, not 6, and a cheat
+// shows in the gas account more slowly)
+const GREEDY = [[300, laps(80 / 3.6, 300 / 3.6, fromHalf)]], DRY = [[25, { up: 1, boost: 1 }], [5, { down: 1 }]];
 const CHEATS = [
   // the tank
-  ['the tank never empties', spec, [[40, laps(80 / 3.6, 300 / 3.6, () => true)]], { each: (car) => { car.rocket.tank = TANK_S; car.rocket.dry = false; } }, 'gas'],
-  ['the 2 second test refill switched on', spec, [[150, ((f) => (t, car) => ({ ...f(t, car), quickRefill: true }))(laps(80 / 3.6, 300 / 3.6, whenFull))]], {}, 'gas'],
+  ['the tank never empties', spec, [[80, laps(80 / 3.6, 300 / 3.6, () => true)]], { each: (car) => { car.rocket.tank = TANK_S; car.rocket.dry = false; } }, 'gas'],
+  ['the 2 second test refill switched on', spec, [[300, ((f) => (t, car) => ({ ...f(t, car), quickRefill: true }))(laps(80 / 3.6, 300 / 3.6, whenFull))]], {}, 'gas'],
   ['the tank fills while BOOST blows', spec, [[60, laps(80 / 3.6, 300 / 3.6, () => true)]], { each: (car) => { car.rocket.tank = Math.min(TANK_S, car.rocket.tank + TANK_S / 60 / 4); car.rocket.dry = false; } }, 'gas'],
   ['twice the gas in the tanks', copy((s) => { s.thrusters.gasKg *= 2; s.mass += 250; }), GREEDY, {}, 'gas'],
   ['half as much gas for the same push', spec, GREEDY, { each: (car) => { if (car.rocket.on) car.rocket.tank = Math.min(TANK_S, car.rocket.tank * (1 + 1 / 60 / 4.06)); } }, 'gas'],

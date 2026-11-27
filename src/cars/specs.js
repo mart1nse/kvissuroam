@@ -602,7 +602,7 @@ export const CARS = {
     short: 'Roadster Rocket',
     tag: 'Rocket',
     year: 2028,
-    blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
+    blurb: 'two electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
     mass: 2100,                 // estimate, with driver and both gas tanks full (Martin 25 Nov: 250 kg on the first 1950, "some data predicts it being higher"; 26 Nov: "reduce tesla weight again, by 100kg")
     wheelbase: 2.65,
     track: 1.64,
@@ -728,7 +728,7 @@ export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', '
 
 // Cars nobody is shown yet (Martin 2026-11-25: the Rocket is hidden from all until he says): not in the garage,
 // not on the lap board, not accepted by the server. Stealth mode (?off=100, src/net/stealth.js) drives them.
-export const HIDDEN_CARS = ['rocket', 'focus'];   // (the Focus WRC: Martin 26 Nov, behind ?off=100 until he says)
+export const HIDDEN_CARS = ['focus'];   // (the Focus WRC: Martin 26 Nov, behind ?off=100 until he says; the Rocket live for everyone since 27 Nov)
 
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [

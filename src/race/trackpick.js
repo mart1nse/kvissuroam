@@ -39,16 +39,28 @@ export const TRACKS = [
   { id: 'raadi', name: 'MAJORAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi, secs: 5 },
 ];
 
+// The drag strip at Ülenurme (?drag=1, desktop only, Martin 27 Nov 2026: "ÜLENURME TOOMEMÄE MAJORAADI, toomemäe in
+// the center and default pick"): a card left of Toomemägi. Its outline is the quarter mile seen from above, the start
+// line across its foot; the dot runs it as a car does, slow off the line and faster to the end, then waits there.
+const DRAG_PATH = { d: 'M150 960L150 40', w: '300', h: '1000', sf: ['40', '960', '260', '960'],
+  // (both of the dot's animations: three quarters of the time to the end, speeding up all the way, then a rest)
+  motion: 'calcMode="spline" keyTimes="0;0.75;1" keySplines="0.6 0 0.9 0.55;0 0 1 1"' };
+export const DRAG_TRACK = { id: 'drag', name: 'ÜLENURME', km: '0.4', surface: 'ASPHALT', meta: 'DRAG STRIP · 1/4 MILE', modes: [['race', 'DRAG RACE'], ['', 'PRACTICE']], path: DRAG_PATH, secs: 3.2,
+  // (a drag strip's time is seconds and thousandths, not a lap's minutes)
+  fmt: (ms) => (ms / 1000).toFixed(3) };
+
 // A fresh page always opens with Toomemägi picked (Martin 23 Nov: the last pick is not remembered); a link
-// with ?track=raadi opens with that one.
-export function pickedTrack() {
+// with ?track=raadi opens with that one (?track=drag with the drag strip's card there).
+export function pickedTrack(drag = false) {
   const t = new URLSearchParams(location.search).get('track');
-  return TRACKS.some((x) => x.id === t) ? t : 'toome';
+  return TRACKS.some((x) => x.id === t) || (drag && t === 'drag') ? t : 'toome';
 }
 
-// record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null
-export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) {
-  let picked = pickedTrack();
+// record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null;
+// drag: the drag strip's card too, first in the row
+export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, drag = false }) {
+  const cards = drag ? [DRAG_TRACK, ...TRACKS] : TRACKS;
+  let picked = pickedTrack(drag);
   const el = document.createElement('div');
   el.id = 'trackpick';
   el.setAttribute('role', 'radiogroup');
@@ -56,18 +68,19 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick }) 
   after.after(el);
   let shown = '';
   function render() {
-    const html = TRACKS.map((t) => {
-      const on = t.id === picked, r = record(t.id), m = on ? mine?.(t.id) : null, p = t.path;
+    const html = cards.map((t) => {
+      const on = t.id === picked, r = record(t.id), m = on ? mine?.(t.id) : null, p = t.path, fmt = t.fmt || ((ms) => fmtTime(ms / 1000));
       // the dot and its tail going round (t.secs a time), the start line across a lap, a start mark on a stage
-      const tail = `<path d="${p.d}" class="tail" pathLength="1000" stroke-dasharray="${TAIL} ${1000 - TAIL}"><animate attributeName="stroke-dashoffset" from="${TAIL}" to="${TAIL - 1000}" dur="${t.secs}s" repeatCount="indefinite"/></path>`
-        + `<g class="dot"><circle r="44" class="glow"/><circle r="19"/><animateMotion dur="${t.secs}s" repeatCount="indefinite" path="${p.d}"/></g>`;
+      // (p.motion: the drag strip's dot speeding up and then resting at the end, the tail with it)
+      const tail = `<path d="${p.d}" class="tail" pathLength="1000" stroke-dasharray="${TAIL} ${1000 - TAIL}"><animate attributeName="stroke-dashoffset" ${p.motion ? `values="${TAIL};${TAIL - 1000};${TAIL - 1000}" ${p.motion}` : `from="${TAIL}" to="${TAIL - 1000}"`} dur="${t.secs}s" repeatCount="indefinite"/></path>`
+        + `<g class="dot"><circle r="44" class="glow"/><circle r="19"/><animateMotion ${p.motion ? `keyPoints="0;1;1" ${p.motion} ` : ''}dur="${t.secs}s" repeatCount="indefinite" path="${p.d}"/></g>`;
       const sf = p.start ? `<circle class="sf" cx="${p.start[0]}" cy="${p.start[1]}" r="9"/>` : `<line class="sf" x1="${p.sf[0]}" y1="${p.sf[1]}" x2="${p.sf[2]}" y2="${p.sf[3]}"/>`;
       return `<button class="tcard${on ? ' on' : ''}" data-track="${t.id}" role="radio" aria-checked="${on}">
         <svg viewBox="0 0 ${p.w} ${p.h}" aria-hidden="true"><path class="halo" d="${p.d}"/><path class="tube" d="${p.d}"/><path class="core" d="${p.d}"/>${sf}${tail}</svg>
         <span class="tx"><b class="nm">${t.name}</b><small class="meta">${t.km} KM · <i>${t.surface}</i>${on ? `<u style="text-decoration:none"> · ${t.meta}</u>` : ''}</small>
         <span class="modes">${t.modes.map(([c, w]) => `<i class="${c}">${w}</i>`).join('')}</span>
-        <span class="dl"><em>RECORD</em><span>${r ? `<b>${fmtTime(r.ms / 1000)}</b>${on ? `<small>${escapeHtml(r.name || '')}${r.car ? ` · ${escapeHtml(r.car)}` : ''}</small>` : ''}` : '<small>NO TIME YET</small>'}</span>
-        ${on ? `<em>YOUR BEST</em><span>${m ? `<b>${fmtTime(m.ms / 1000)}</b>` : '<small>–</small>'}</span>` : ''}</span>
+        <span class="dl"><em>RECORD</em><span>${r ? `<b>${fmt(r.ms)}</b>${on ? `<small>${escapeHtml(r.name || '')}${r.car ? ` · ${escapeHtml(r.car)}` : ''}</small>` : ''}` : '<small>NO TIME YET</small>'}</span>
+        ${on ? `<em>YOUR BEST</em><span>${m ? `<b>${fmt(m.ms)}</b>` : '<small>–</small>'}</span>` : ''}</span>
         </span>
       </button>`;
     }).join('');

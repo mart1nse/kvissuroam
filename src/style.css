@@ -1646,6 +1646,7 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #dragslip table { width: 100%; border-collapse: collapse; }
 #dragslip th, #dragslip td { padding: 2px 4px; text-align: right; border-bottom: 1px dashed rgba(0, 0, 0, .15); white-space: nowrap; }
 #dragslip th:first-child { text-align: left; font-weight: 700; letter-spacing: .06em; }
+#dragslip tbody.sum th, #dragslip tbody.sum td { border-bottom: none; border-top: 1px solid rgba(0, 0, 0, .35); padding-top: 4px; }
 #dragslip thead th { font-size: 11px; letter-spacing: .1em; max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
 #dragslip p.pb { margin: 8px 0 10px; font-size: 11px; letter-spacing: .06em; text-align: center; color: #444; }
 #dragslip button { display: block; width: 100%; font-size: 13px; }

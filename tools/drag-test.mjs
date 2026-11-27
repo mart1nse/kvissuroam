@@ -108,10 +108,25 @@ console.log('practice:', JSON.stringify(s.res));
 assert.ok(!s.res.red && !s.res.dnf && s.res.et > 8 && s.res.et < 25 && s.res.vq > 100, 'a clean quarter mile');
 for (const k of ['t60', 't330', 't8', 'v8', 't1000']) assert.ok(Number.isFinite(s.res[k]), `${k} timed`);
 assert.ok(s.res.t60 < s.res.t330 && s.res.t330 < s.res.t8 && s.res.t8 < s.res.t1000 && s.res.t1000 < s.res.et, 'splits in order');
+// (as on a real slip: the reaction from green to the car leaving the stage beam, the ET from there; R/T + ET under them)
+assert.ok(Math.abs(s.res.tot - (s.res.rt + s.res.et)) < 1e-6, 'R/T + ET is the total');
+assert.ok(/R\/T \+ ET\s+[\d.]+/.test(s.slipText), `R/T + ET on the slip:\n${s.slipText}`);
 console.log(s.slipText.replace(/\n+/g, ' | '));
 if (shots) await A.screenshot({ path: `${shots}/drag-slip.png` });
-await A.keyboard.press('r');
-await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 15000 });
+// the boxes after a run (Martin 27 Nov): back into the lane's box, the car is on the line again (the car moved there by
+// hand, as driving back the quarter mile would take this machine minutes)
+await A.evaluate(() => {
+  const D = __game.drag().strip.frame, c = __game.car, w = __game.world, [x, z] = D.at(-6, 5.5), [x2, z2] = D.at(4, 5.5);
+  c.x = x; c.z = z; c.yaw = Math.atan2(x2 - x, -(z2 - z)); c.y = c.hy = w.heightAt(x, z) + 0.05; c.vx = c.vy = c.yawRate = 0; c.lastGround = null; c.airborne = false;
+});
+await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 30000 });
+console.log('after the run: into the box, on the line again');
+// H at the strip: off the line (Backspace), then H puts the car back on it
+await A.keyboard.press('Backspace');
+await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10000 });
+await A.keyboard.press('h');
+await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 30000 });
+console.log('H at the strip: on the line again');
 }
 
 // ---- 3) a second page pulls into the other lane: the race of two

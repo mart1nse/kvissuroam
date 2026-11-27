@@ -18,7 +18,10 @@ const PER = NOZ * 2;                // a mist and a core for each nozzle
 const FAR = 300;                    // metres: no jets drawn further off
 // metres at full blow: the four at the tail, the four under the corners (in Tesla's film the jets that roll the
 // car and set it down are longer than the car is wide), the two at the nose
-const LEN_REAR = 3.4, LEN_DOWN = 3.2, LEN_YAW = 1.3;
+// (the corner jets a touch longer since 27 Nov, 3.2 before, and a jet that is not at its hardest is less of a
+// stub: its length goes as the 0.4th power of how hard it blows, the square root before. Martin: "reducing short
+// ones and making the ones left a touch longer")
+const LEN_REAR = 3.4, LEN_DOWN = 3.5, LEN_YAW = 1.4, LEN_POW = 0.4;
 const GAS_SEEN = 14;                // m/s: how fast the gas that is seen moves out along a jet (the slower, the more a turning car's jets arc)
 const BEND_MAX = 1.15;              // a jet's far end points at most this far off its nozzle's way (rad)
 const STEAM = 0.5;                  // a nozzle blowing at its hardest is this much wider (the lift-off push, the landing burn)
@@ -165,7 +168,7 @@ export function createPlumes() {
       if (k <= 0.02) continue;
       const N = NOZZLES[i], big = i < NOZ_DOWN;
       // (the jet shivers: its length by a tenth, quicker than the eye follows)
-      const len = (big ? LEN_REAR : i < NOZ_YAW ? LEN_DOWN : LEN_YAW) * Math.sqrt(k) * (0.92 + 0.08 * Math.sin(clock * 61 + i * 2.1 + seedOf) + 0.05 * Math.sin(clock * 37 + i) + 0.06 * Math.sin(clock * 3.1 + i * 1.7 + seedOf));
+      const len = (big ? LEN_REAR : i < NOZ_YAW ? LEN_DOWN : LEN_YAW) * Math.pow(k, LEN_POW) * (0.92 + 0.08 * Math.sin(clock * 61 + i * 2.1 + seedOf) + 0.05 * Math.sin(clock * 37 + i) + 0.06 * Math.sin(clock * 3.1 + i * 1.7 + seedOf));
       // (blowing at its hardest a corner jet is a thicker, steamier column)
       // (and it breathes: a tenth wider and narrower, slowly, each jet in its own time)
       const own = seedOf + i * 2.39;

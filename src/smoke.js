@@ -22,6 +22,7 @@ const MIST_RATE = 32;      // puffs per second from one of a Rocket's corner noz
 const MIST_UP = 4;         // ...from under this many metres up
 const MIST_LAND = 0.7;     // ...and this much more of them from a car coming down (the landing burn)
 const MIST_LIFT = 0.5;     // ...or from one lifting off, whose steam also rises more
+const BOIL_RATE = 26;      // puffs per second of a Rocket's BOOST blowing under water, boiling up at the surface over its tail
 const FAN_DUST = 16;       // puffs per second from a fan car's suction fans at full speed on gravel...
 const FAN_GROUND = [0, 0, 1, 0.7];   // ...and each ground's share of that: grass, paving, gravel, dirt (physics.js SURF)
 const DUST = -0.85;        // a puff's shade for dust (below 0: towards the dust colour)
@@ -267,6 +268,27 @@ export function createSmoke(world) {
   }
   const myMist = [0, 0, 0, 0];
 
+  // A Rocket's BOOST under water (src/cars/swim.js): the gas comes up as a boil of white water over and behind its
+  // tail, which is also where a car on the river bed is seen to be. st: { owed }.
+  function boil(car, noz, st, dt) {
+    const k = (noz[0] + noz[1] + noz[2] + noz[3]) / 4;
+    if (k < 0.05) { st.owed = 0; return; }
+    st.owed += BOIL_RATE * k * Math.max(0.4, thinK) * dt;
+    if (st.owed < 1) return;
+    const wl = car.waterLevel ?? (world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel);
+    const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
+    const r = () => Math.random() - 0.5;
+    while (st.owed >= 1) {
+      st.owed -= 1;
+      // (over the back half of the car and just behind it, where it reaches the top; the deeper the car, the wider it
+      // has spread by then, and the camera behind looks across it at the car)
+      const deep = Math.min(4, Math.max(0, wl - car.y)), b = car.b ?? car.spec.wheelbase / 2;
+      const along = -b - 1 + Math.random() * (b + 1.5), across = r() * (1.8 + 0.5 * deep);
+      puff(car.x + fx * along + sx * across, wl + 0.05, car.z + fz * along + sz * across, r() * 1.5, 0.3 + Math.random() * 0.5, r() * 1.5, 0.9 + 0.5 * k);
+    }
+  }
+  const myBoil = { owed: 0 };
+
   // A fan car's suction fans (spec.fanDown) on loose ground (Martin 25 Nov: "on fine looser ground like gravel
   // should a bit throw up sand too"): they pull the air from under the floor, and the dust with it, and blow it
   // out behind the car. They never stop, so a haze hangs about a standing car too; run up by the pedal or by
@@ -324,9 +346,10 @@ export function createSmoke(world) {
     if (active && car && !car.inWater && car.spec.dpfSmoke) exhaust(car, dt);
     if (active && car && !car.inWater && car.spec.exhaust?.flame) flames(car, dt);
     for (const o of others) {
-      if (o.inWater || (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > far * far)) continue;
+      if (car && (o.x - car.x) ** 2 + (o.z - car.z) ** 2 > far * far) continue;
       let st = theirs.get(o.id);
       if (!st) theirs.set(o.id, st = { soot: sootState(), tyres: tyreState() });
+      if (o.inWater) { if (o.noz) boil(o, o.noz, st.boil || (st.boil = { owed: 0 }), dt); continue; }
       if (o.soot) exhaust(o, dt, st.soot);
       if (o.tyres) tyres(o, dt, st.tyres);
       if (o.noz) mist(o, o.noz, st.mist || (st.mist = [0, 0, 0, 0]), dt);
@@ -337,6 +360,7 @@ export function createSmoke(world) {
     if (active && car && !car.inWater) tyres(car, dt, myTyres);
     else myTyres.heat[0] = myTyres.heat[1] = 0;
     if (active && car && car.rocket && !car.inWater) mist(car, car.rocket.noz, myMist, dt);
+    if (active && car && car.rocket && car.inWater) boil(car, car.rocket.noz, myBoil, dt);
     if (active && car && car.spec.fanDown && !car.inWater) fanDust(car, car.surface, myFan, dt);
     if (active && car) wreck(car, dt, myWreck);
 

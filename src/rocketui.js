@@ -60,7 +60,8 @@ export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys 
       // (seconds until the tank holds a jump again; it does not fill in a flight or while BOOST blows)
       const short = r.tank < JUMP_S - 1e-6 && !r.flight;
       const left = short ? Math.ceil(((JUMP_S - r.tank) / TANK_S) * (r.refillS || REFILL_S)) : 0;
-      const canFlip = !off && !timed && r.tank >= JUMP_S - 1e-6, canBoost = !off && !timed && (r.on || (!r.dry && r.tank >= BOOST_MIN * TANK_S));
+      // (no kickflip from the water, where BOOST still works: src/cars/swim.js)
+      const canFlip = !off && !timed && !car.inWater && r.tank >= JUMP_S - 1e-6, canBoost = !off && !timed && (r.on || (!r.dry && r.tank >= BOOST_MIN * TANK_S));
       const jumps = Math.floor(r.tank / JUMP_S + 1e-6);                    // kickflips in the tank
       const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${timed ? 1 : 0}|${using ? 1 : 0}`;
       if (key === last) return;

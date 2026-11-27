@@ -61,7 +61,7 @@
 <body>
 <div class="wrap">
   <h1><a href="/">LINNARING</a> · ADVERTS</h1>
-  <p class="sub">How often the adverts in the game are seen and tapped by the people driving it. Counted by the game itself, anonymously (no names, addresses or cookies). A view is an advert on screen, near enough to read, for a second in all; it counts again after 5 seconds out of sight, so every lap driven past is one more. Hours and days are Tallinn time; the figures refresh every minute.</p>
+  <p class="sub">How often the adverts in the game are seen and tapped by the people driving it. Counted by the game itself, anonymously (no names, addresses or cookies). A view is an advert on screen, near enough to read, for a second in all; it counts again after 5 seconds out of sight, so every lap driven past is one more. The time on screen is counted to the second as well, also while a car stands still (resting after a finish, waiting at the start), but only while the game is open and in front. Hours and days are Tallinn time; the figures refresh every minute.</p>
   <main id="out"><p class="note">Loading…</p></main>
   <footer>Counted from 27 November 2026. <a href="/winbaum">Winbaum's own page</a> · <a href="/stats">Game stats</a> · <a href="/">Play LINNARING</a></footer>
 </div>
@@ -111,12 +111,12 @@
         <h2>All adverts</h2>
         <p class="note">The last 24 hours, and the average and busiest day and hour since each advert is counted.</p>
         <div class="scroll"><table class="sum">
-          <tr><th>Advert</th><th>Views, 24 h</th><th>Average day</th><th>Peak hour</th><th>Peak day</th><th>On screen, 24 h</th><th>Visits that saw it</th><th>Taps, 24 h</th></tr>
+          <tr><th>Advert</th><th>Views, 24 h</th><th>Average day</th><th>Peak hour</th><th>Peak day</th><th>On screen, 24 h</th><th>Seconds a view</th><th>Visits that saw it</th><th>Taps, 24 h</th></tr>
           ${F.map(({ ad, f }) => `<tr><td>${ad.page ? `<a href="${ad.page}">${esc(ad.name)}</a>` : esc(ad.name)}<small>${f.counted ? `counted since ${dayName(f.counted)}` : ad.est ? 'estimated until its counter starts' : 'no views counted yet'}</small></td>
             <td>${fmt(f.v24)}${E(f.est24)}</td><td>${f.avgDay ? fmt(f.avgDay) : '–'}${f.avgDay ? E(f.avgEst) : ''}</td>
             <td>${f.peakHour ? `${fmt(f.peakHour.v)}<small>${hh(f.peakHour.h)}${f.peakHour.day ? `, ${dayName(f.peakHour.day)}` : ''}${f.peakHour.est ? ', estimate' : ''}</small>` : '–'}</td>
             <td>${f.peakDay ? `${fmt(f.peakDay.n)}<small>${dayName(f.peakDay.day)}${f.peakDay.est ? ', estimate' : ''}</small>` : '–'}</td>
-            <td>${hrs(f.s24)}</td><td>${f.u24 ? fmt(f.u24) : '–'}</td><td>${f.counted || f.c24 ? fmt(f.c24) : '–'}</td></tr>`).join('')}
+            <td>${hrs(f.s24)}</td><td>${f.s24 && f.v24 && !f.est24 ? Math.round(f.s24 / f.v24) : '–'}</td><td>${f.u24 ? fmt(f.u24) : '–'}</td><td>${f.counted || f.c24 ? fmt(f.c24) : '–'}</td></tr>`).join('')}
         </table></div>
       </section>
       ${F.map(({ ad, f }) => `
@@ -128,6 +128,7 @@
           <div class="tile"><span>Average day</span><b>${f.avgDay ? fmt(f.avgDay) : '–'}</b><small>${f.avgDay ? `about ${fmt(f.avgDay / 24)} an hour${f.avgEst ? ' (estimate)' : ''}` : 'after its first full day'}</small></div>
           <div class="tile"><span>Peak hour</span><b>${f.peakHour ? fmt(f.peakHour.v) : '–'}</b><small>${f.peakHour ? `${hh(f.peakHour.h)}–${hh((f.peakHour.h + 1) % 24)}${f.peakHour.day ? `, ${dayName(f.peakHour.day)}` : ''}` : ''}</small></div>
           <div class="tile"><span>Peak day</span><b>${f.peakDay ? fmt(f.peakDay.n) : '–'}</b><small>${f.peakDay ? `${dayName(f.peakDay.day)}${f.peakDay.est ? ' (estimate)' : ''}` : ''}</small></div>
+          <div class="tile"><span>On screen, 24 h</span><b>${hrs(f.s24)}</b><small>${f.s24 && f.v24 && !f.est24 ? `about ${Math.round(f.s24 / f.v24)} s a view` : 'time in view while driving'}</small></div>
           <div class="tile"><span>Taps, 24 h</span><b>${f.counted || f.c24 ? fmt(f.c24) : '–'}</b><small>${f.cAll ? `${fmt(f.cAll)} in all` : 'that opened the site'}</small></div>
         </div>
         <h3>The last 24 hours, hour by hour</h3>

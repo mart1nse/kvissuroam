@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar } from '../src/cars/physics.js';
-import { TANK_S, BOOST_MIN, refillTank } from '../src/cars/thrust.js';
+import { TANK_S, BOOST_MIN, REFILL_S, refillTank } from '../src/cars/thrust.js';
 import { carLimits, judgeDrive, STEP, OVER_MAX, GAS_OVER } from '../src/race/plausible.js';
 
 const verbose = process.argv.includes('--v');
@@ -86,7 +86,7 @@ for (const [name, plan, opt] of HONEST) {
   if (verbose) console.log(`honest  ${name.padEnd(64)} ${show(j)}  (valves open ${d.blown.toFixed(1)} s, ${d.out.toFixed(2)} tanks out, top ${d.top.toFixed(0)} km/h)`);
   for (const k of Object.keys(worst)) worst[k] = Math.max(worst[k], j[k]);
   assert.equal(j.why, '', `honest, ${name}: refused (${show(j)})`);
-  assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1 && j.gas === 0 && j.spent <= 0.8 * (1 + d.t / 60) && j.air === 0, `honest, ${name}: too near a limit (${show(j)})`);
+  assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1 && j.gas === 0 && j.spent <= 0.8 * (1 + d.t / REFILL_S) && j.air === 0, `honest, ${name}: too near a limit (${show(j)})`);
 }
 console.log(`ok  ${HONEST.length} honest drives with BOOST: at most ${JSON.stringify(worst)} (refused past ${OVER_MAX} s, gas past ${GAS_OVER} of a tank)`);
 
@@ -103,7 +103,12 @@ const CHEATS = [
   // the car
   ['thrusters three times as strong, three times the gas', copy((s) => { s.thrusters.rear *= 3; s.thrusters.gasKg *= 3; s.mass += 500; }), GREEDY, {}, ''],
   ['BOOST that does not ease off at the top speed', copy((s) => { s.limiter = s.limiterNoFans = 520; }), [[110, { up: 1, boost: 1 }]], { each: (car) => { car.rocket.tank = Math.max(car.rocket.tank, 4); car.rocket.dry = false; } }, 'speed'],
-  ['twice the motors', copy((s) => { s.engine.maxPowerKw *= 2; s.engine.maxWheelForce *= 2; s.fanDown += s.mass * 9.81; }), [[14, { up: 1 }], [4, { down: 1 }], [130, laps(60 / 3.6, 250 / 3.6, () => false)]], {}, ''],
+  // (motors made stronger: since the tank fills in 10 s, not a minute (Martin 27 Nov), honest BOOST can add about
+  // 0.8 g on average for as long as a drive lasts, so twice the motors with BOOST never pressed reads as an honest car
+  // using it and is not refused; with BOOST used as well it is, and three times the motors without it)
+  ['twice the motors, and BOOST', copy((s) => { s.engine.maxPowerKw *= 2; s.engine.maxWheelForce *= 2; s.fanDown += s.mass * 9.81; }), GREEDY, {}, ''],
+  ['1.5 times the motors, and BOOST', copy((s) => { s.engine.maxPowerKw *= 1.5; s.engine.maxWheelForce *= 1.5; s.fanDown += 0.5 * s.mass * 9.81; }), GREEDY, {}, ''],
+  ['three times the motors', copy((s) => { s.engine.maxPowerKw *= 3; s.engine.maxWheelForce *= 3; s.fanDown += 2 * s.mass * 9.81; }), [[14, { up: 1 }], [4, { down: 1 }], [130, laps(60 / 3.6, 250 / 3.6, () => false)]], {}, ''],
   ['a car 700 kg lighter', copy((s) => { s.mass -= 700; }), GREEDY, {}, ''],
   ['fans that pull twice the car\'s weight down', copy((s) => { s.fanDown += 2 * s.mass * 9.81; }), [[9, { up: 1 }], [9, { up: 1, right: 1 }], [9, { up: 1, left: 1 }], [8, (t) => ({ up: 1, steer: Math.sin(t * 2.2) })]], { world: near }, 'grip'],
 ];

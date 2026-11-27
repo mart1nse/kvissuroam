@@ -525,12 +525,13 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     for (let t = 0; t < 6 && land === null; t += dt) {
       stepCar(c, { flip: t < 0.05 ? 1 : 0, steer: st }, w, dt);
       if (c.rocket.flight) carried = Math.max(carried, Math.abs(c.yaw - y0));
-      if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx) };
+      if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx), t };
     }
-    const h = Math.min(Math.abs(rate), 0.6);   // (thrust.js: up to 0.6 rad/s held on over 1 s, the rest eased out over 0.4 s)
-    res.push({ kmh, rate, carried: carried * 57.3, want: (h * (1 - Math.exp(-3.7)) + (Math.abs(rate) - h) * 0.4) * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
+    // (thrust.js: up to 0.6 rad/s held on, fading smoothly to nothing over 5 s; the rest eased out over 0.4 s)
+    const h = Math.min(Math.abs(rate), 0.6), u = Math.min(1, (land ? land.t : 4) / 5);
+    res.push({ kmh, rate, carried: carried * 57.3, want: (h * 5 * (u - u ** 3 + u ** 4 / 2) + (Math.abs(rate) - h) * 0.4) * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
   }
-  check('FLIP in a bend: the nose carries on turning (a bend\'s turn held on over 1 s, a spin\'s eased out over 0.4 s) and lands lined up with the travel',
+  check('FLIP in a bend: the nose carries on turning (a bend\'s turn fading out over 5 s, a spin\'s over 0.4 s) and lands lined up with the travel',
     res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(r.slip) < 3),
     res.map((r) => `${r.kmh} km/h, ${r.rate.toFixed(2)} rad/s: on ${r.carried.toFixed(0)} deg (${r.want.toFixed(0)} wanted), lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
   check('...and keeps the turn: it lands pointing as far round from its way at the press as the nose swung on',

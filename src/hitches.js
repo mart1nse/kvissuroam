@@ -42,7 +42,7 @@ export const outside = {
 };
 
 const SPAN = 300;                  // seconds of driving remembered
-export const WHY = { build: 'building', draw: 'drawing', online: 'other players', game: 'game code', card: 'graphics card or browser', 'page:net': 'server messages', 'page:car': 'a new car model' };
+export const WHY = { build: 'building', draw: 'drawing', online: 'other players', game: 'game code', card: 'graphics card or browser', 'page:net': 'server messages', 'page:car': 'a new car model', 'page:sound': 'engine sound' };
 
 const lateAt = (ms) => Math.max(ms * 1.75, ms + 6);
 // a frame this long is felt however uneven the frame rate (a refresh missed at 60 Hz: see above)

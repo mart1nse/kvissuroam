@@ -2384,7 +2384,7 @@ function frame(ts) {
     if (car.rocket) {
       ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
       ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
-      if (ctl.flip && !flipWas && flipOff && mode === 'drive' && !watch?.active) hud.toast(flipWhy(), 1600, { small: true });
+      if (ctl.flip && !flipWas && flipOff && mode === 'drive' && !watch?.active) hud.note(flipWhy(), 1600);
       flipWas = !!ctl.flip;
       // (no quick refill under ?off=100 any more: Martin 27 Nov, "so it will behave the same as prod will"; it was 2 s)
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);

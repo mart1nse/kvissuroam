@@ -157,7 +157,9 @@ console.log('ok  a kickflip in the drive is refused, at any speed');
     const xs = [], zs = [], ys = [], roll = [];
     let crashed = false, most = 0;
     for (let t = 0, next = 0; t < 16; t += 1 / 60) {
-      stepCar(car, t < 2.4 ? { up: 0.2 } : { up: 1, boost: t > 9 && t < 12, steer: 0.3 }, wall, 1 / 60);
+      // Some throttle on the way in: with the lighter traction control (70 % to 90 km/h) a car sliding sideways or
+      // backwards on 0.2 slowed under the 140 km/h a crash needs before it reached the wall.
+      stepCar(car, t < 2.4 ? { up: 0.3 } : { up: 1, boost: t > 9 && t < 12, steer: 0.3 }, wall, 1 / 60);
       crashed ||= !!car.crash; most = Math.max(most, Math.abs(car.roll || 0));
       if (t >= next) { xs.push(car.x); zs.push(car.z); ys.push(car.y); roll.push(car.roll || 0); next += STEP; }
     }

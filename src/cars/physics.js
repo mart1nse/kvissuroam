@@ -9,7 +9,7 @@ import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
 import { bonnetStep } from './bonnet.js';
 import { crashHit, crashStep } from './crash.js';
-import { HANG, CLEAR, edgeStart, edgeStep } from './tip.js';
+import { HANG, CLEAR, TIPPED, edgeStart, edgeStep } from './tip.js';
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
@@ -17,6 +17,9 @@ const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
 const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinning rear wheels under throttle (a figure eight)
+const TC_BEND_KMH = 90, TC_BEND_SPAN = 30;   // a light setting (spec.tcBend) grows from this speed on to spec.tcHigh, this many km/h higher...
+const TC_BEND_NOFANS_KMH = 60, TC_NOFANS_SPAN = 60;   // ...and with the fans off from this one to all of it (the Rocket's rears hold far less then: it stepped out and round at 110 to 170)
+const FAST_KEEP_KMH = 150;   // ...and from this speed its stability control keeps the fronts to what the rears balance (see latCapF)
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
@@ -121,6 +124,7 @@ const FLOOR = 0.13;              // the body never sits lower than this below it
 const TIP_AIR_T = 0.6;           // its turning in the air dies away in this time (s)
 const TIP_AIR_MAX = 1.25;        // and it leans no further than this (rad)
 const TIP_BACK = 3.5, TIP_BACK_A = 7;   // down on its nose, it falls back onto its wheels: fastest (rad/s), gathering pace (rad/s2)
+const TIP_SMALL = 0.12;          // come down leaning less than this (rad), the small dip of a fast car: it lands as from any jump
 const RAIL_IN = 2.5;              // a car come onto a deck from beside it, past its railing, is eased inside it at this pace (m/s)
 const TIP_WALL = 2.5;             // falling past the wall it went over, its tail is eased clear of it at this pace (m/s)
 const LEAN_FREE = 0.2;           // m of lean the springs take before the body's end is what meets the ground
@@ -829,7 +833,7 @@ function substep(car, input, world, dt) {
     stn = stoneWheels(car, world, s, fx, fz, rx, rz, tmpW, dt);
     if (stn) { hFL += stn.lift[0]; hFR += stn.lift[1]; hRL += stn.lift[2]; hRR += stn.lift[3]; }
   }
-  // an edge under a slow car (tip.js): the wheels still on top carry it and the end that hangs tips down, where
+  // an edge under a car (tip.js; fast, only a little): the wheels still on top carry it and the end that hangs tips down, where
   // the mean of the four would have the whole car fall at once. Looked at only when the ground under the wheels
   // differs by more than any road's does.
   let tip = null;
@@ -931,7 +935,9 @@ function substep(car, input, world, dt) {
   // (a car that went over an edge nose first, tip.js, comes down on its nose, not through the ground up to its
   // wheels: the ground is that much higher for it while it leans)
   // (only on ground that is a slope a car stands on: with its wheels on two levels, on a roof's edge, there is no such ground to lean against)
-  let restY = car.tipped && Math.abs(car.groundPitch) < 0.7 && Math.abs(car.groundRoll) < 0.7 ? groundY + Math.max(0, car.halfLen * Math.abs(Math.sin(car.pitch - car.groundPitch)) + car.halfWid * Math.abs(Math.sin(car.roll - car.groundRoll)) - LEAN_FREE) : groundY;
+  // (not a fast car's small dip, TIP_SMALL: that comes down on its wheels as from any jump)
+  const dipOnly = car.tipped === TIPPED && Math.abs(car.pitch) < TIP_SMALL && Math.abs(car.roll) < TIP_SMALL;
+  let restY = car.tipped && !dipOnly && Math.abs(car.groundPitch) < 0.7 && Math.abs(car.groundRoll) < 0.7 ? groundY + Math.max(0, car.halfLen * Math.abs(Math.sin(car.pitch - car.groundPitch)) + car.halfWid * Math.abs(Math.sin(car.roll - car.groundRoll)) - LEAN_FREE) : groundY;
   // (up among roofs the ground under a car can be another all at once: a wheel past a dormer, the end of a tip
   // over an edge, levels a step apart. The body is let up to it at ROOF_LIFT, not put there; at pace a roof
   // rising under the car is not that)
@@ -1126,10 +1132,7 @@ function substep(car, input, world, dt) {
   // only once the front wheels start to spin. Nothing moves torque towards
   // the axle with grip to spare, so a rear-biased car that floors it on a
   // loaded rear axle can break the tail loose while the front still grips.
-  const base0 = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
-  // (s.rearShareBend: a split set in software that sends more to the rear the more the wheel is turned, so a floored
-  // bend kicks the tail out while a straight launch keeps the drive where the tyres take it: the Roadster Rocket)
-  const base = s.rearShareBend ? base0 + (s.rearShareBend - base0) * Math.min(1, Math.abs(steerIn) / 0.25) : base0;
+  const base = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
   let shareR = s.rearShareMax ? base + (s.rearShareMax - base) * Math.min(1, car.slipVF / 2) : base;
   // A two-motor EV sets its split in software. Floored in a slide at modest
   // speed it lets the rear motor do more of the work, so the front wheels stop
@@ -1182,7 +1185,13 @@ function substep(car, input, world, dt) {
   // and a flick where the wheel passes the centre or the car swings round backwards keeps its wheelspin
   // instead of the tyres being pulled back to grip mid swing; Martin 2026-11-21)
   const tcLow = throttle >= 0.9 ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
-  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb && !car.burn ? s.tc * tcLow : 0;
+  // (s.tcBend: a light setting that stays on in a bend at this share of its strength, letting that much less of the
+  // drive past what the rear tyres can take: the tail steps out, but not round; s.tcEven: on a straight too. Fast it is
+  // more of it again from TC_BEND_KMH; all of it with the fans off: a thousand kW on two tyres would spin the car at 300 km/h)
+  const vKmh = Math.hypot(car.vx, car.vy) * 3.6;
+  const bendTop = car.fanOff ? 1 : s.tcHigh ?? 1;
+  const bendK = s.tcBend ? s.tcBend + (bendTop - s.tcBend) * Math.min(1, Math.max(0, car.fanOff ? (vKmh - TC_BEND_NOFANS_KMH) / TC_NOFANS_SPAN : (vKmh - TC_BEND_KMH) / TC_BEND_SPAN)) : 0;
+  const tcWant = s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (bendK && (s.tcEven || Math.abs(steerIn) >= 0.1) ? bendK : 1) : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';
@@ -1291,6 +1300,17 @@ function substep(car, input, world, dt) {
     const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock), 0.85 * car.abs);
     const balanced = (latCapR * car.b) / car.a;
     if (balanced < latCapF) latCapF += (balanced - latCapF) * straight * brake;
+  }
+  // The same at speed under power for a car with a light traction control in bends (s.tcBend, the Roadster Rocket: a
+  // thousand kW on the rear tyres alone leaves them little sideways bite, and from about 270 km/h with the fans off the
+  // tail wandered out on a straight road with nothing to catch it, the steering's lock being a few thousandths there).
+  // Its stability control trims the fronts to what the rears balance while the wheel is about straight, fading in
+  // from FAST_KEEP_KMH.
+  if (s.tcBend && throttle > 0 && !hb && brake === 0) {
+    const fast = Math.min(1, Math.max(0, (speed * 3.6 - FAST_KEEP_KMH) / 50));
+    const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock));
+    const balanced = (latCapR * car.b) / car.a;
+    if (fast > 0 && balanced < latCapF) latCapF += (balanced - latCapF) * straight * fast;
   }
   if (hb) latCapR *= 0.45;
 
@@ -1822,6 +1842,9 @@ function substep(car, input, world, dt) {
     // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
     const follow = Math.min(1, dt * (9 + 16 * Math.max(car.jolt || 0, car.bite || 0)));
     let dp = (tPitch - car.pitch) * follow, dr = (tRoll - car.roll) * follow;
+    // (a fast car's small dip over an edge, tip.js: on the ground it is a car down from a jump, its body follows
+    // the ground as ever; a slow fall back from it would lag behind a slope it lands on and throw it up off that)
+    if (dipOnly) car.tipped = 0;
     if (car.tipped) {
       // (down on its nose or its side after an edge: it drops back onto its wheels, no faster than a car falls over)
       // (it starts to fall from rest and gathers pace)

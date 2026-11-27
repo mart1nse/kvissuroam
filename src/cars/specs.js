@@ -539,8 +539,9 @@ export const CARS = {
     grip: 1.2,                  // tarmac rally rubber under 1230 kg (gravel tyres are gravel tyres, as on every car)
     abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
     bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
-    // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js)
-    exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true },
+    // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js: the big
+    // bangs of engine-sounds.js antilag), the flames a touch bigger than the 22B's (Martin 2026-11-27)
+    exhaust: { x: 0.5, y: 0.27, back: 0.66, flame: true, flameSize: 1.3 },
     engine: {
       type: 'ice',
       idle: 1000,               // a race engine's lumpy idle
@@ -572,9 +573,11 @@ export const CARS = {
       rollStallRpm: 5500,
       converterGain: 1.5,
     },
-    // 6-speed Xtrac sequential (all sources; no ratios published): a close set on tarmac gearing, the gears topping out at
-    // about 80, 104, 126, 150, 175 and 200 km/h (estimated)
-    gears: [2.5, 1.923, 1.587, 1.333, 1.143, 1.0],
+    // 6-speed Xtrac sequential (all sources; no ratios published, so estimated). Martin 2026-11-27: 1st ran past 70 km/h
+    // (it topped out at 80, longer than the road 22B's 66). A rally box's 1st is short, for hairpins and the launch, and
+    // the steps close up towards 6th: at 7500 rpm the gears top out at about 63, 88, 113, 140, 170 and 200 km/h (shifted
+    // at 7300: 60, 85, 110, 136, 165), the top speed kept where it was. Same 0-100 (3.6 s); a tarmac set, as the grip is.
+    gears: [3.2, 2.27, 1.77, 1.43, 1.18, 1.0],
     reverse: 2.8,
     finalDrive: 4.45,
     efficiency: 0.85,           // three differentials
@@ -601,13 +604,17 @@ export const CARS = {
     cgHeight: 0.42,             // battery in the floor
     wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
     cdA: 0.31 * 1.95,
-    drive: 'awd',
-    // one motor in front, two behind. With the wheel turned the rear pair gets more of it (Martin 27 Nov: "if i floor
-    // it, it would not kick the tail out much": at 0.6 it hardly stepped out at all; at 0.75 a floored bend swings the
-    // tail out up to about 100 km/h, more than the F40's or the M3's), with the wheel straight two thirds, which keeps
-    // the launch's 1.67 s to 100 (0.75 all the time spins the rears: 1.9 s). No traction control ("if there is a
-    // traction control, then lets try to remove it": it was tc 1, tcSlip 1.5, and the split 0.6).
-    rearShare: 0.66, rearShareBend: 0.75,
+    // Rear-wheel drive: two motors, both on the rear axle (the production car revealed in 2026: Top Gear, "two motors,
+    // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
+    // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
+    drive: 'rwd',
+    // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
+    // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
+    // traction control. thats the best part when the back steps out a bit. lets try it constant"; then "lets try 70% up to
+    // 90kmh and move gradually to 90% by 120kmh"): tcBend of its strength up to 90 km/h, rising to tcHigh by 120 (with
+    // the fans off to all of it, from 60 to 120 km/h). It still launches straight, and below 40 km/h floored it lets the
+    // tyres spin as every car's does (donuts, drifts).
+    tc: 1, tcSlip: 1.5, tcBend: 0.7, tcHigh: 0.9, tcEven: true,
     grip: 1.2,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that
@@ -642,7 +649,7 @@ export const CARS = {
     // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
     limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 1.6, top: 389, powerKw: 1000 },
+    ref: { zeroTo100: 2.6, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 2.6 s is what the rears' grip allows at 2100 kg on 12 kN of fans; AWD did 1.67 s)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

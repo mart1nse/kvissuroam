@@ -164,7 +164,7 @@ function freeze(s, ms) {
 // ---- Short hitches while driving (src/hitches.js; Martin 2026-11-25: stutters with 85 to 95 online that the
 // frame times on his screen did not show, and that no headless test drive can feel). Each late frame while
 // plain driving (up to 60 a visit) counts as "device:kind:value" in the bundle's `hit`:
-//   why  build | draw | online | game | card | page:net | page:car      what the frame before was busy with
+//   why  build | draw | online | game | card | page:net | page:car | page:sound   what the frame before was busy with
 //   new  shaders | pictures | car | none      what that frame sent to the graphics card first
 //   len (ms), on (others online), t (since DRIVE or since the car was last put somewhere)
 // and `hitT` the seconds of such driving per "device:others online", so /stats can say hitches per 10 minutes

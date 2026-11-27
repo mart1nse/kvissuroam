@@ -11,6 +11,7 @@ import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
 import { createMotor, motorKind, motorRegen, plainWhine, plainWhineHz, hasFifth, fifthShare, FIFTH } from './audio-motor.js';
 import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
+import { outside } from './hitches.js';
 
 const ENGINE_LEVEL = 0.4;
 // Other players' cars: the nearest few get a voice each (engine, motor whine, turbo, tyres), placed by
@@ -36,6 +37,7 @@ export function createAudio() {
   let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
   let fan = null, fanS = 0;   // a fan car's suction fans (spec.fanDown): made when such a car is first driven
   let motor = null, motorWant = null;   // the Rocket's motors (src/audio-motor.js): made when it is first driven
+  let bangs = 0;   // the anti-lag bangs our engine has told of so far (engine-worklet.js)
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
   let muted = false, fifthOn = false, ev = false, turbo = false, background = false;
   let notify = true;   // the chimes (someone joins or leaves, a lap record, a race call): OPTIONS > SOUND > NOTIFICATIONS
@@ -125,6 +127,9 @@ export function createAudio() {
     ctx.audioWorklet.addModule(`${import.meta.env.BASE_URL}engine-worklet.js`).then(() => {
       workletReady = true;
       synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+      // (our own engine tells of its anti-lag bangs, cfg.antilag: each big one is seen as a flame, smoke.js)
+      synth.port.onmessage = (ev) => { const t0 = performance.now(); bangs = ev.data.bangs ?? bangs; outside.note('sound', t0); };
+      synth.port.postMessage({ tell: true });
       synthGain = ctx.createGain(); synthGain.gain.value = ENGINE_LEVEL;
       synth.connect(synthGain).connect(bus);
       // (a gear change's blip and bark also go round the compressor, so they hit: src/audio-shift.js)
@@ -420,6 +425,7 @@ export function createAudio() {
       const sh = shiftSound.step(car, t);
       // (seen as well as heard: smoke.js lights a flame at the tailpipe of a car with spec.exhaust.flame)
       car.exhaustPop = dead ? 0 : sh.crackle * Math.max(0, Math.min(1, (sh.rpm - 2500) / 3000));
+      car.exhaustBangs = bangs;
       // (the room the revs add round the engine near its limiter, but not round a gear change: updateSpace)
       room = dead ? 0 : revRoom(sh.rpm, e.redline); roomGear = sh.gear; roomDown = sh.down;
       if (sh.clunk && !dead) clunk(ctx, noiseBuf, sh.clunk.up ? space.burst : bus, sh.clunk.k, t + 0.005 + sh.clunk.after, sh.clunk.up);

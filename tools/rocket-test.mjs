@@ -34,18 +34,22 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   // (1.6 s until 26 Nov, when the fans went back to 12 kN so that the 250 kg added count: Martin, "a means to reduce
   // the insane acceleration, braking and cornering power")
   // (2100 kg from 26 Nov: "reduce tesla weight again, by 100kg")
-  check('0-100 km/h on the motors is 1.7 s at 2100 kg', Math.abs(base.t100 - 1.67) < 0.08, `${base.t100.toFixed(2)} s`);
+  // (27 Nov: rear-wheel drive, two motors on the rear axle as on the car revealed in 2026; 1.67 s on AWD, Martin: "what
+  // about rwd with a bit of traction control?")
+  check('0-100 km/h on the motors is 2.6 s at 2100 kg, on the rear tyres alone', spec.drive === 'rwd' && Math.abs(base.t100 - 2.62) < 0.08 && Math.abs(base.car.yaw) < 0.03, `${base.t100.toFixed(2)} s, ${(base.car.yaw * 57.3).toFixed(1)} deg off its line`);
   // (Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg; it
   // was 340 on the motors)
   check('top speed on the motors is 389 km/h', Math.abs(base.top - 389) < 0.3, `${base.top.toFixed(1)} km/h`);
   {
     const w = world(), car = fresh(w); car.fanOff = true;
     let top = 0;
-    for (let t = 0; t < 60; t += dt) { stepCar(car, { up: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
-    check('...and 405 km/h with the fans switched off', Math.abs(top - 405) < 0.3, `${top.toFixed(1)} km/h`);
+    // (a driver holding it straight: with the fans off the launch lights the rears up and the tail wanders out a little
+    // as the light traction control lets it, which wants a touch of opposite lock, 27 Nov)
+    for (let t = 0; t < 60; t += dt) { stepCar(car, { up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) }, w, dt); top = Math.max(top, speedKmh(car)); }
+    check('...and 405 km/h with the fans switched off, straight on (the stability control holds it there)', Math.abs(top - 405) < 0.3 && Math.abs(car.yaw) < 0.05, `${top.toFixed(1)} km/h, ${(car.yaw * 57.3).toFixed(1)} deg off its line`);
   }
   const b = run({ up: 1, boost: 1 });
-  check('0-100 km/h with BOOST is about 0.6 s (Tesla: 0-60 mph in under 0.59 s)', b.t100 > 0.5 && b.t100 < 0.64, `${b.t100.toFixed(2)} s`);
+  check('0-100 km/h with BOOST is about 0.7 s (Tesla: 0-60 mph in under 0.59 s; 0.58 s on AWD)', b.t100 > 0.6 && b.t100 < 0.74, `${b.t100.toFixed(2)} s`);
   // (the tank blows down: the push follows the gas left, 80 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
   check('BOOST blows a full tank down in under 6 s, then its valves shut', b.t > 5.4 && b.t < 6 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
   // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
@@ -129,8 +133,15 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const go = (fanOff) => { const w = world(), c = fresh(w); c.fanOff = fanOff; let t = 0; while (speedKmh(c) < 100 && t < 10) { stepCar(c, { up: 1 }, w, dt); t += dt; } return t; };
   const stop = (fanOff) => { const w = world(), c = fresh(w, 100); c.fanOff = fanOff; for (let t = 0; t < 0.5; t += dt) { stepCar(c, {}, w, dt); c.vx = 100 / 3.6; } const z0 = c.z; let t = 0; while (c.vx > 0.3 && t < 10) { stepCar(c, { down: 1 }, w, dt); t += dt; } return Math.abs(c.z - z0); };
   const g1 = go(false), g0 = go(true), s1 = stop(false), s0 = stop(true);
-  check('fans off: 0-100 km/h takes about 2.5 s, not 1.7', Math.abs(g1 - 1.67) < 0.08 && g0 > 2.3 && g0 < 2.75, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
+  check('fans off: 0-100 km/h takes about 4 s, not 2.6 (2.5 on AWD)', Math.abs(g1 - 2.62) < 0.08 && g0 > 3.7 && g0 < 4.5, `${g1.toFixed(2)} s on, ${g0.toFixed(2)} s off`);
   check('...and stopping from 100 km/h about 36 m, not 22', s1 > 20.5 && s1 < 24.5 && s0 > 32 && s0 < 40, `${s1.toFixed(1)} m on, ${s0.toFixed(1)} m off`);
+}
+// ---- floored in a bend the tail steps out, but the light traction control keeps it from going right round (27 Nov)
+{
+  const slide = (kmh, st) => { const w = world(), c = fresh(w, kmh); c.vx = kmh / 3.6; for (let t = 0; t < 1.5; t += dt) stepCar(c, { up: c.vx * 3.6 < kmh ? 0.3 : 0, steer: st }, w, dt);
+    let peak = 0; for (let t = 0; t < 2; t += dt) { stepCar(c, { up: 1, steer: st }, w, dt); peak = Math.max(peak, Math.abs(Math.atan2(c.vy, Math.max(c.vx, 1))) * 57.3); } return peak; };
+  const a = slide(60, 0.3), b2 = slide(100, 0.6), c2 = slide(100, 0.3);
+  check('floored in a bend the tail steps out 20 to 50 degrees, at 60 and at 100 km/h', [a, b2, c2].every((d) => d > 20 && d < 50), `${a.toFixed(0)}, ${b2.toFixed(0)}, ${c2.toFixed(0)} deg`);
 }
 
 // ---- one FLIP: fly it and report
@@ -481,6 +492,27 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   const idle = puffs(spec, { surface: 2 }, 4), full = puffs(spec, { surface: 2, throttle: 1 }, 4), dirt = puffs(spec, { surface: 3, throttle: 1 }, 4);
   check('the fans raise a little dust on gravel standing still, more run up, less on dirt', idle >= 3 && idle <= 18 && full > idle * 2.5 && full <= 60 && dirt > 5 && dirt < full, `${idle} idling, ${full} run up, ${dirt} on dirt (puffs alive)`);
   check('...none on paving or grass, none in the air, none from a car without fans', puffs(spec, { surface: 1, throttle: 1 }) === 0 && puffs(spec, { surface: 0, throttle: 1 }) === 0 && puffs(spec, { surface: 2, throttle: 1, y: 2 }) === 0 && puffs(m3, { surface: 2, throttle: 1 }) === 0);
+}
+
+// ---- FLIP pressed in a bend (Martin 27 Nov, "carry on, then line up"): the path goes straight on, the nose keeps
+// turning a little while its swing eases out, and it is brought onto the line of travel before the landing
+{
+  const res = [];
+  for (const [kmh, st] of [[60, 0.5], [100, 0.3], [40, 1]]) {
+    const w = world(), c = fresh(w, kmh);
+    for (let t = 0; t < 3; t += dt) stepCar(c, { up: c.vx * 3.6 < kmh ? 0.5 : 0, steer: st }, w, dt);
+    const y0 = c.yaw, rate = c.yawRate, head0 = c.yaw + Math.atan2(c.vy, c.vx);
+    let carried = 0, land = null;
+    for (let t = 0; t < 6 && land === null; t += dt) {
+      stepCar(c, { flip: t < 0.05 ? 1 : 0, steer: st }, w, dt);
+      if (t < 1.3) carried = Math.max(carried, Math.abs(c.yaw - y0));
+      if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx) };
+    }
+    res.push({ kmh, carried: carried * 57.3, want: Math.abs(rate) * 0.4 * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
+  }
+  check('FLIP in a bend: the nose carries on turning (the swing eased out over 0.4 s) and lands lined up with the travel',
+    res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(r.slip) < 3),
+    res.map((r) => `${r.kmh} km/h: on ${r.carried.toFixed(0)} deg, lands ${r.slip.toFixed(1)} deg off its line`).join('; '));
 }
 
 process.exit(ok ? 0 : 1);

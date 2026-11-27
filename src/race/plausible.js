@@ -194,22 +194,27 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     // by a share of what it adds to the speed: a path that turns harder than the tyres can with nothing pushing is
     // not the gas. While nothing blows the tank fills.
     const span = H * STEP, fill = (gas.dv * span) / gas.fill;
-    let tank = gas.dv, low = 0, spent = 0, wasF = false, wasS = false;
+    let tank = gas.dv, low = 0, spent = 0, wasF = false, wasS = false, wasGas = false;
     for (let a = 0; a + H < n; a += H) {
       const b = a + H;
       let skip = false;
       for (let j = a; j <= b && !skip; j++) skip = !!hop[j];
-      if (skip) { tank = Math.min(gas.dv, tank + fill); wasF = wasS = false; continue; }
+      if (skip) { tank = Math.min(gas.dv, tank + fill); wasF = wasS = wasGas = false; continue; }
       const v = (vh[a] + vh[b]) / 2;
       const room = gas.a * THRUST_K * span * Math.max(0, Math.min(1, (lim.top - v) / FADE + 0.5));
       let fwd = Math.max(0, (e[b] - e[a] - (pw[b] - pw[a]) * GAS_PULL_K - PULL_SLACK / 2) / Math.max(v, 2));
       const side = vh[a] > 5 && vh[b] > 5 ? Math.max(0, turn(a, b) * Math.min(vh[a], vh[b]) - gripAt(a, b) * span) : 0;
-      const overF = fwd > room + GAS_FLOOR, paid = Math.min(side, fwd * SIDE_K), overS = side - paid > GAS_FLOOR;
+      // (while the gas is plainly blowing, pushing the car on now or just before, it may turn the path with all of its
+      // push that is not going into speed: BOOST on a car sliding well sideways, a rear-wheel-drive Rocket after a spin,
+      // pushes across its path while the motors account for the speed. With no gas to be seen, only its forward share.)
+      const blowing = fwd > GAS_FLOOR || wasGas;
+      const overF = fwd > room + GAS_FLOOR, paid = Math.min(side, Math.max(fwd * SIDE_K, blowing ? room - Math.min(fwd, room) : 0)), overS = side - paid > GAS_FLOOR;
       if (overF) { fwd = room; if (wasF) out.pull += wasF === 1 ? 2 * span : span; }
       if (overS && wasS) out.grip += wasS === 1 ? 2 * span : span;
       wasF = overF ? (wasF ? 2 : 1) : false; wasS = overS ? (wasS ? 2 : 1) : false;
       const used = Math.min(Math.hypot(fwd, paid), room + GAS_FLOOR);
       if (used > GAS_FLOOR) { tank -= used; spent += used; } else tank = Math.min(gas.dv, tank + fill);
+      wasGas = fwd > GAS_FLOOR;
       if (-tank > low) low = -tank;
     }
     out.gas = Math.round((low / gas.dv) * 100) / 100; out.spent = Math.round((spent / gas.dv) * 100) / 100;

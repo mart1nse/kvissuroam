@@ -41,6 +41,8 @@ const GRIP_K = 1.35;                 // sideways: this share of the tyres' grip 
 const LOOSE_GRIP_K = 1.1;
 const STOP_K = 1.5;                  // braking: this share of the car's own full stop
 const TOP_K = 1.12;                  // faster than this share of its top speed (a long hill adds a little)
+export const BURST_K = 1.3;         // a timed run's thruster car: a second gaining over this share of its motors is a burst (BOOST tapped)
+export const BURST_MAX = 1.5;       // seconds of bursts a timed run may have (honest drives read 0, on hilly gravel 0.6; taps 2.9)
 export const OVER_MAX = 3;           // seconds over a limit a lap may have before it is refused
 const BIN = 2;                       // m/s per step of the pull table
 // a car with thrusters:
@@ -204,7 +206,7 @@ export function carLimits(spec) {
 // k.loose: 1 for each sample on loose ground (gravel), judged there against lim.loose's grip and brakes: a half
 // second counts as loose when it starts and ends there.
 export function judgeDrive(xs, zs, ys, lim, k = {}) {
-  const n = xs.length, out = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, spent: 0, why: '' };
+  const n = xs.length, out = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, spent: 0, burst: 0, why: '' };
   if (!lim || n < 25) return out;
   const gas = k.noGas ? null : lim.gas, full = !!(k.noGas && lim.full);
   if (full) lim = { ...lim, ...lim.full };
@@ -231,6 +233,12 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     pw[i + 1] = pw[i] + at(vh[i], i) * vh[i] * STEP;                           // what the car's own pull adds, summed
   }
   const H = Math.round(0.5 / STEP);                      // half a second of samples
+  // (a burst, below: the speed over half a second, the middle one of its samples' steps, as a sample taken a frame
+  // early or late reads a step short or long; and its energy a second later against what the motors give then)
+  const seg = new Float64Array(H);
+  const chord = (j) => { for (let q = 0; q < H; q++) seg[q] = Math.hypot(xs[j - q] - xs[j - q - 1], zs[j - q] - zs[j - q - 1], ys[j - q] - ys[j - q - 1]); seg.sort(); return seg[H >> 1] / STEP; };
+  const burstAt = (i) => { const a = i - 2 * H, u = chord(a), w = chord(i);
+    return (w * w - u * u) / 2 + G * (ys[i] + ys[i - H] - ys[a] - ys[a - H]) / 2 > (pw[i - (H >> 1)] - pw[a - (H >> 1)]) * BURST_K + PULL_SLACK; };
   const turn = (a, b) => { const d = hd[b] - hd[a]; return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); };
   for (let i = 0; i < n; i++) {
     if (vh[i] > lim.top * TOP_K && !hop[i]) out.top += STEP;
@@ -239,6 +247,9 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     const over = (f) => f(o, m) && f(m, i);
     // (a car with thrusters: its pull and its bends are judged with the gas, below)
     if (!gas && over((a, b) => e[b] - e[a] > (pw[b] - pw[a]) * pullK + PULL_SLACK / 2)) out.pull += STEP;
+    // (a car with thrusters on a timed run: a short blow of the gas gains far over the motors in one half second, and
+    // is over before two on end show it; such half seconds are counted on their own, burst)
+    if (full && i > 3 * H && !hop[i - 3 * H - 1] && burstAt(i)) out.burst += STEP;
     // (a stop: the speed shed, the hill's share left out, only while the car rolls on)
     if (vh[i] > 3 && over((a, b) => vh[a] - vh[b] - (G * Math.max(0, ys[b] - ys[a])) / Math.max(5, vh[a]) > stopAt(a, b) * stopK * H * STEP)) out.stop += STEP;
     // (sideways: how far the heading turns, times the speed; a car all but standing has no path to speak of)
@@ -287,7 +298,8 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     }
   }
   for (const key of ['pull', 'grip', 'stop', 'top']) { out[key] = Math.round(out[key] * 10) / 10; if (!out.why && out[key] > OVER_MAX) out.why = key; }
-  out.air = Math.round(out.air * 10) / 10;
+  out.air = Math.round(out.air * 10) / 10; out.burst = Math.round(out.burst * 10) / 10;
+  if (!out.why && out.burst > BURST_MAX) out.why = 'pull';
   if (!out.why && out.gas > GAS_OVER) out.why = 'gas';
   if (!out.why && out.air > AIR_MAX) out.why = 'air';
   return out;

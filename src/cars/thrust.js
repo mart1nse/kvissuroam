@@ -26,11 +26,12 @@ export const REFILL_S = 10;        // an empty tank is full again after this lon
 export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (tests only; ?off=100 had it until Martin 27 Nov)
 
 const G = 9.81;
-// The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
-// all, which is the tail's 45 kN for 3.6 s and no more. So BOOST's push follows the pressure, the share of the gas
+// The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 114 kN s of push in
+// all, which is the tail's 45 kN for 2.5 s and no more. So BOOST's push follows the pressure, the share of the gas
 // still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
-// quite done; at EMPTY of a tank nothing useful is left and the valves shut. A FLIP is its fixed half tank.
-export const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
+// quite done; at EMPTY of a tank nothing useful is left and the valves shut, 7 s of holding from full (Martin 27 Nov:
+// "reduce the length of thrust to 7 s at a time"; 10 s at 650 m/s). A FLIP is its fixed half tank: two to a tank.
+export const GAS_V = 455;                 // cold gas leaves a nozzle at about this speed (m/s)
 const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
 export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)

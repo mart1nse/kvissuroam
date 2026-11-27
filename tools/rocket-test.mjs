@@ -59,10 +59,11 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   const b = run({ up: 1, boost: 1 });
   // (Martin 27 Nov: "reduce the overall level of boost on all speeds so that the 0-100 would be 0.64 with rollout")
   check('0-100 km/h with BOOST is about 0.8 s from a standstill, 0.64 s with a foot of rollout', b.t100 > 0.76 && b.t100 < 0.9, `${b.t100.toFixed(2)} s`);
-  // (the tank blows down: the push follows the gas left, 45 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
-  check('BOOST blows a full tank down in about 10 s, then its valves shut', b.t > 9.4 && b.t < 10.8 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
+  // (the tank blows down: the push follows the gas left, 45 kN on a full tank; 250 kg at 455 m/s is 114 kN s.
+  // Martin 27 Nov: "reduce the length of thrust to 7 s at a time")
+  check('BOOST blows a full tank down in 7 s, then its valves shut', b.t > 6.7 && b.t < 7.4 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
   // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
-  check('BOOST takes it to about 385 km/h on one tank, and never past 389', b.top > 375 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
+  check('BOOST takes it to about 360 km/h on one tank, and never past 389', b.top > 350 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
   {
     const w = world(), car = fresh(w, 387);
     let top = 0;
@@ -73,8 +74,8 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
     for (; !ci.rocket.dry && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
-    check('...0-300 km/h in about 3.7 s', t300 > 3.4 && t300 < 4, `${t300.toFixed(2)} s`);
-    check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 120000 && first > 38000 && first < 45000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
+    check('...0-300 km/h in about 4.3 s', t300 > 4 && t300 < 4.7, `${t300.toFixed(2)} s`);
+    check('...on no more push than 250 kg of gas holds (114 kN s)', push < 114000 && push > 95000 && first > 38000 && first < 45000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
   }
   // BOOST alone (no throttle key): the motors are held at full power too, trimmed to what the tyres take (Martin 27
   // Nov: "when I click only on boost, it sometimes shows some wheelspin"); with the gas pedal too they light up

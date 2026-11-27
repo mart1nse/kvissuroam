@@ -449,11 +449,12 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     hopped(x, z) { if (st.prev) st.prev = { x, z }; st.along = null; },
     // a hard crash into a wall (cars/crash.js: over 140 km/h and straight at it) in a timed lap: CRASH_PEN seconds
     // on the lap's time, however the car lands (Martin 26 Nov: a wall is no brake). The clock and the splits show
-    // them from here on; the lap goes to the board with them, marked as penalty seconds (lap.pen).
+    // them from here on; the lap goes to the board with them, marked as penalty seconds (lap.pen). No notice at
+    // the crash itself (Martin 27 Nov: "just dont show it"); the lap's own finish line still says INCL. +N S.
+    // Majoraadi's run keeps its notice (raadi.js).
     crashed() {
       if (!st.running) return;
       st.pen += CRASH_PEN;
-      toast(`+${CRASH_PEN} S FOR THE CRASH`, 2600);
     },
     get pen() { return st.running ? st.pen : 0; },
     refreshBest() { lastBestKey = ''; },

@@ -146,6 +146,9 @@ assert.ok(await A.evaluate(() => !!document.querySelector('#dragslip [data-drag=
 await A.mouse.click(Math.round(vp.width * 0.3), Math.round(vp.height * 0.55));
 await folded();
 console.log('slip: stays, folds on a click elsewhere, opens again from its tab');
+// the slip folded after the run: one clean button back onto the line, R beside it (Martin 27 Nov)
+assert.ok(await A.evaluate(() => !document.querySelector('#dragback').classList.contains('hidden') && /BACK TO THE LINE\s*R/.test(document.querySelector('#dragback').textContent)), 'BACK TO THE LINE after the run');
+if (shots) await A.screenshot({ path: `${shots}/drag-back-button.png` });
 // on the board (Martin 27 Nov: the strip's own tab on LAP TIMES): the server took the clean run, and the Ülenurme tab
 // has it in its car's row, as ET in seconds
 const etMs = Math.round(s.res.et * 1000), carId = await A.evaluate(() => __game.car.spec.id);
@@ -187,7 +190,14 @@ await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().la
 console.log('H 1.2 km from the strip: on the line again');
 // the folded slip goes with the car (Martin 27 Nov: "it needs to survive moving between worlds"): not in a lane, there
 // at Toomemägi, and only its ✕ puts it away; then back into the lane for the race of two
-assert.ok(await A.evaluate(() => document.querySelector('#dragsliptab').classList.contains('hidden')), 'no tab in a lane');
+assert.ok(await A.evaluate(() => document.querySelector('#dragsliptab').classList.contains('hidden') && document.querySelector('#dragback').classList.contains('hidden')), 'no tab or button in a lane');
+await A.keyboard.press('Backspace');
+await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10000 });
+// out of the lane at the strip after a run: the button, H beside it, puts the car on the line
+await A.waitForFunction(() => !document.querySelector('#dragback').classList.contains('hidden') && /H/.test(document.querySelector('#dragback kbd')?.textContent || ''), null, { timeout: 5000 });
+await A.click('#dragback');
+await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 30000 });
+console.log('BACK TO THE LINE button: on the line again');
 await A.keyboard.press('Backspace');
 await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10000 });
 await A.evaluate(() => document.querySelector('[data-act="track-toome"]').click());

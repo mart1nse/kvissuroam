@@ -121,6 +121,15 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     <p class="other"></p><p class="how"></p>`;
   hudEl.appendChild(ask);
   const elOther = ask.querySelector('.other'), elHow = ask.querySelector('.how');
+  // after a run, while the car is at the strip and the slip is folded: one button back onto the start line (Martin 27
+  // Nov: "if you have finished a run on the drag strip, then leave a nice clean button on the page to go back to
+  // startline"); R does the same just after the run, H from anywhere within 2 km
+  const backBtn = document.createElement('button');
+  backBtn.id = 'dragback';
+  backBtn.className = 'hidden';
+  hudEl.appendChild(backBtn);
+  let backKey = '', ranHere = false;
+  backBtn.addEventListener('click', () => { backBtn.blur(); if (!again()) goLine(); });
   const slip = document.createElement('div');
   slip.id = 'dragslip';
   slip.className = 'hidden';
@@ -313,6 +322,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     st.dnf = dnf || !st.t.q;
     st.phase = 'done'; st.pin = null; st.doneAt = performance.now();
     st.cool = true;          // (a run over in its box, a no-start: out of the box and back in to go again, the timeslip stays)
+    ranHere = true;
     unstick();
     const t = st.t, v = st.v;
     const rt = st.leave ? st.rt : null;
@@ -401,6 +411,18 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   function otherText() {
     const o = st.lanes[1 - st.lane];
     elOther.innerHTML = o ? `<b>${escapeHtml(o.name || 'SOMEBODY')}</b> IS IN THE OTHER LANE` : 'THE OTHER LANE IS FREE · ANYONE WHO PULLS IN THERE RACES YOU';
+  }
+  // the DRAG STRIP button, H, DRIVE with ÜLENURME picked, BACK TO THE LINE away from the line: onto the line of a free lane
+  function goLine(car = st.car) {
+    if (car) st.car = car;          // (DRIVE with ÜLENURME picked: before the first frame of driving)
+    if (!canDrive || !st.car || !free()) return false;
+    const ours = (l) => !st.lanes[l] || st.lanes[l].id === mp?.id;
+    const lane = st.phase !== 'off' && ours(st.lane) ? st.lane : ours(0) ? 0 : ours(1) ? 1 : -1;
+    if (lane < 0) { toast('BOTH LANES ARE TAKEN', 2000); return true; }
+    if (st.phase === 'run' || st.phase === 'tree') cancel();
+    st.phase = 'off';
+    toLine(lane);
+    return true;
   }
   // R after a run: straight back onto the line in the same lane (or the other, if that one is taken now)
   function again() {
@@ -518,17 +540,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     get runs() { return runs; },
     shift, practice, leave, again, cancel, message, heard, dragPose, closeSlip,
     // the DRAG STRIP button: straight onto the line of a free lane
-    goLine(car = st.car) {
-      if (car) st.car = car;          // (DRIVE with ÜLENURME picked: before the first frame of driving)
-      if (!canDrive || !st.car || !free()) return false;
-      const ours = (l) => !st.lanes[l] || st.lanes[l].id === mp?.id;
-      const lane = st.phase !== 'off' && ours(st.lane) ? st.lane : ours(0) ? 0 : ours(1) ? 1 : -1;
-      if (lane < 0) { toast('BOTH LANES ARE TAKEN', 2000); return true; }
-      if (st.phase === 'run' || st.phase === 'tree') cancel();
-      st.phase = 'off';
-      toLine(lane);
-      return true;
-    },
+    goLine,
     // the car was put somewhere (place() in main.js): unless it was onto our line, the run is off
     placed() { if (!st.placing && st.phase !== 'off') cancel(st.phase === 'done' ? '' : 'DRAG RUN CANCELLED'); },
     update(car, dt, look = null) {
@@ -621,6 +633,13 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       // the folded slip's tab: wherever the car is, but not in a lane (the tree has that edge of the screen then)
       const tabOn = !!lastSlip && canDrive && slip.classList.contains('hidden') && st.phase !== 'line' && st.phase !== 'tree' && st.phase !== 'run';
       if (tabOn === slipTab.classList.contains('hidden')) slipTab.classList.toggle('hidden', !tabOn);
+      // the BACK TO THE LINE button: after a run here, not in a lane, the slip folded (it has its own then)
+      const near = Math.hypot(car.x - MID[0], car.z - MID[1]) < NEAR_M;
+      if (!near) ranHere = false;
+      const backOn = ranHere && canDrive && near && (st.phase === 'done' || st.phase === 'off') && slip.classList.contains('hidden') && !st.jump && !look;
+      if (backOn === backBtn.classList.contains('hidden')) backBtn.classList.toggle('hidden', !backOn);
+      const key = st.phase === 'done' ? 'R' : 'H';
+      if (backOn && key !== backKey) { backKey = key; backBtn.innerHTML = `↺ BACK TO THE LINE <kbd>${key}</kbd>`; }
       // ---- our place to the other driver, 30 times a second
       if (st.duel && (st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && now - st.doneAt < 2500)) && mp) {
         st.feedT -= dt;

@@ -3,7 +3,7 @@
 // The real physics drives the car on a flat road: away gently to 60 km/h, a cruise, the pedal let go, braked
 // to a stop; then floored to 200 km/h, the pedal let go for 3.5 s, floored again, let go and braked hard to a
 // stop. The sound is made by the game's own code in Chromium's OfflineAudioContext, stepped at 60 Hz as the game
-// steps it, at the game's levels, with the Rocket's fans and the wind as audio.js plays them (copied below), so a
+// steps it, at the game's levels, with the Rocket's fans (src/audio-fan.js) and the wind as audio.js plays them (the wind copied below), so a
 // clip is what the driver hears. --solo leaves fans and wind out.
 //
 // Run: NODE_PATH=$(npm root -g) node tools/motor-sound-demo.mjs <outdir> [kinds] [--solo] [--gain=<dB>]
@@ -124,31 +124,17 @@ for (const kind of kinds) {
       }
     }
     if (!SOLO) {
-      // the fans (audio.js makeFan, fanSound) ...
-      const FANS = spec.fanDown ? 1 : 0, FAN_TONE = 0.035 * FANS, FAN_AIR = 0.11 * FANS, FAN_UP = 0.3;   // (silent in a car without fans)
-      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;
-      const air = ctx.createGain(); air.gain.value = 0;
-      noise.connect(f).connect(air).connect(master);
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = 0.5;
-      const tone = ctx.createGain(); tone.gain.value = 0;
-      const osc = [1, 1.017, 0.989, 1.5].map((k, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; g.gain.value = i < 3 ? 1 : 0.35; o.connect(g).connect(lp); o.start(0); return [o, k]; });
-      lp.connect(tone).connect(master);
+      // the fans (src/audio-fan.js, as audio.js fanSound plays them on a smooth road; silent in a car without fans) ...
+      const { createFan, FAN_UP } = await import('/src/audio-fan.js');
+      const fan = spec.fanDown ? createFan(ctx, master, nb) : null;
       // ... and the wind (audio.js update)
       const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 600; wf.Q.value = 0.5;
       const wl = ctx.createBiquadFilter(); wl.type = 'lowpass'; wl.frequency.value = 1800; wl.Q.value = -3;
       const wg = ctx.createGain(); wg.gain.value = 0;
       noise.connect(wf).connect(wl).connect(wg).connect(ctx.destination);
-      let fanS = 0;
       for (let i = 0; i < n; i++) {
         const t = i / FPS, v = F[i * 4 + 1], thr = F[i * 4 + 2];
-        const want = 0.5 + 0.5 * Math.max(thr, Math.min(1, v / 14));
-        if (Math.abs(want - fanS) >= 0.01) {
-          fanS = want;
-          for (const [o, r] of osc) o.frequency.setTargetAtTime((120 + 260 * want) * r, t, FAN_UP);
-          f.frequency.setTargetAtTime(450 + 700 * want, t, FAN_UP);
-          tone.gain.setTargetAtTime(FAN_TONE * want * want, t, FAN_UP);
-          air.gain.setTargetAtTime(FAN_AIR * want * want, t, FAN_UP);
-        }
+        if (fan) fan.step(t, 0.5 + 0.5 * Math.max(thr, Math.min(1, v / 14)), FAN_UP, false, false, 0, v);
         wf.frequency.setTargetAtTime(650 + Math.min(v, 50) * 9, t, 0.1);
         wg.gain.setTargetAtTime(Math.min(0.115, v * 0.0025) * 0.5, t, 0.1);   // (the wind goes to the master, 0.5)
       }

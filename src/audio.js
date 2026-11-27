@@ -9,6 +9,7 @@ import { ENGINE_SOUNDS } from './engine-sounds.js';
 import { createSpace, chaseBack, revRoom } from './audio-space.js';
 import { blowOff, shiftBlowOff } from './audio-turbo.js';
 import { createShiftSound, clunk, chirp } from './audio-shift.js';
+import { createFan, FAN_UP } from './audio-fan.js';
 import { createMotor, motorKind, motorRegen, plainWhine, plainWhineHz, hasFifth, fifthShare, FIFTH } from './audio-motor.js';
 import { createSqueal, createGravel, loadTyreWorklet, setSquealKind, squealKind, EV_SQUEAL_TRIM } from './audio-tyres.js';
 import { outside } from './hitches.js';
@@ -35,7 +36,7 @@ export function spinAmount(c) {
 export function createAudio() {
   let ctx = null, master, engGain, osc1, osc2, filt, windGain, windFilt, windLp, whine, whineGain, fifth, fifthGain, skidGain, skidFilt, spinGain, spinFilt;
   let jetGain, jetLow, jetS = 0, jetR = 0, wasFlight = false;   // a Rocket's nozzles (src/cars/thrust.js)
-  let fan = null, fanS = 0;   // a fan car's suction fans (spec.fanDown): made when such a car is first driven
+  let fan = null;   // a fan car's suction fans (spec.fanDown, src/audio-fan.js): made when such a car is first driven
   let motor = null, motorWant = null;   // the Rocket's motors (src/audio-motor.js): made when it is first driven
   let bangs = 0;   // the anti-lag bangs our engine has told of so far (engine-worklet.js)
   let skid = 0, spinS = 0, lastLanded = 0, lastKerb = 0, noiseBuf = null, lastBoost = 0, lastPsh = 0, boostSince = -1, airArmed = false, wasShift = false;
@@ -310,35 +311,17 @@ export function createAudio() {
     jetOut[0] = Math.min(1.3, rear / 4 + rest / 4); jetOut[1] = rear / 4;
     return jetOut;
   }
-  // Suction fans under the floor (spec.fanDown): they turn all the time, so the car is never silent. Four fans a
-  // hair apart in speed beat against each other (the whir), and the air they pull through the floor hisses. They
-  // idle with the car at rest and run up with the pedal or the speed (FAN_UP s to follow).
-  const FAN_TONE = 0.035, FAN_AIR = 0.11, FAN_UP = 0.3;   // (quieter since 26 Nov, Martin: "reduce the default fan sound": 3 dB down run up, 7 dB down idling)
-  function makeFan() {
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.9;
-    const air = ctx.createGain(); air.gain.value = 0;
-    noiseSrc.connect(f).connect(air).connect(bus);
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = 0.5;
-    const tone = ctx.createGain(); tone.gain.value = 0;
-    const osc = [1, 1.017, 0.989, 1.5].map((k, i) => {
-      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; g.gain.value = i < 3 ? 1 : 0.35;
-      o.connect(g).connect(lp); o.start();
-      return [o, k];
-    });
-    lp.connect(tone).connect(bus);
-    return { f, air, tone, osc };
-  }
-  function fanSound(car, dead, v) {
+  // Suction fans under the floor (spec.fanDown): they turn all the time, so the car is never silent (src/audio-fan.js:
+  // the whir, the hiss, their moods and the peaks when the suction is lost)
+  let fanVy = 0;
+  function fanSound(car, dead, v, flying, jolt) {
     const want = dead || !car.spec.fanDown || car.fanOff ? 0 : 0.5 + 0.5 * Math.max(car.throttle, Math.min(1, v / 14));
-    if (Math.abs(want - fanS) < 0.01 && (want > 0 || fanS === 0)) return;
-    if (!fan) { if (!noiseSrc) return; fan = makeFan(); }
+    if (!fan) { if (!want || !noiseBuf) return; fan = createFan(ctx, bus, noiseBuf); }
+    // (a knock through the floor: a kerb, a stone, a landing, or the body thrown up or down by a bump)
+    const vy = car.vyUp || 0, dv = Math.abs(vy - fanVy); fanVy = vy;
+    const knock = Math.max(jolt, Math.min(1, Math.max(0, (dv - 0.5) / 2.5)));
     // (switched off by the driver they run down, heard; a car left or wrecked is cut)
-    const t = ctx.currentTime, on = want > 0, k = on ? want : fanS, tc = on ? FAN_UP : car.fanOff && !dead ? 0.45 : 0.08;
-    fanS = want;
-    for (const [o, r] of fan.osc) o.frequency.setTargetAtTime((120 + 260 * k) * r, t, tc);
-    fan.f.frequency.setTargetAtTime(450 + 700 * k, t, tc);
-    fan.tone.gain.setTargetAtTime(on ? FAN_TONE * Math.pow(k, 2) : 0, t, tc);
-    fan.air.gain.setTargetAtTime(on ? FAN_AIR * Math.pow(k, 2) : 0, t, tc);
+    fan.step(ctx.currentTime, want, want > 0 ? FAN_UP : car.fanOff && !dead ? 0.45 : 0.08, car.surface !== 1, flying, knock, v);
   }
   // the valves snapping open for a kickflip's lift-off: a short hard burst
   function jetPop(out, level) {
@@ -370,10 +353,11 @@ export function createAudio() {
     if (!ctx) return;
     const t = ctx.currentTime;
     const landed = car.landed || 0;
-    if (active && !car.inWater && landed > 1 && landed > lastLanded + 0.5) thump(landed);
+    let fanKnock = 0;                                                // (what the suction fans feel of it: audio-fan.js)
+    if (active && !car.inWater && landed > 1 && landed > lastLanded + 0.5) { thump(landed); fanKnock = Math.min(1, landed / 5); }
     lastLanded = landed;
     const kerb = car.kerbHit || 0;
-    if (active && !car.inWater && kerb > 0.08 && kerb > lastKerb + 0.06) knock(kerb);
+    if (active && !car.inWater && kerb > 0.08 && kerb > lastKerb + 0.06) { knock(kerb); fanKnock = Math.max(fanKnock, Math.min(1, kerb * 1.3)); }
     lastKerb = kerb;
     const v = Math.hypot(car.vx, car.vy);
     const dead = !active || car.inWater || !!car.crash?.onRoof;      // (on its roof after a crash, crash.js: the engine has stopped)
@@ -449,7 +433,7 @@ export function createAudio() {
     windFilt.frequency.setTargetAtTime(rumble ? 320 : 650 + Math.min(v, 50) * 9, t, 0.1);
     const windLevel = rumble ? Math.min(0.22, vw * 0.0081) : Math.min(0.115, v * 0.0025) * (flying ? 0.7 : 1);
     windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
-    fanSound(car, dead, v);
+    fanSound(car, dead, v, flying, fanKnock);
     // a Rocket's nozzles (told only while they change), the burst of a lift-off and the tyres meeting the road again
     // (and under water too, where BOOST still blows: src/cars/swim.js)
     const jl = jetLevels(dead && !(active && car.inWater) ? null : car.rocket?.noz);
@@ -509,6 +493,7 @@ export function createAudio() {
     v.squeal = createSqueal(ctx, noiseSrc, v.mix, { voices: 1 });
     v.gravel = createGravel(ctx, v.mix); v.loose = 0;
     v.jet = 0; v.jetGain = null;                                 // (a Rocket's nozzles: made when one is first heard)
+    v.fan = null; v.fy = null; v.fvy = 0; v.ft = 0;               // (a fan car's suction fans, src/audio-fan.js: made when one is first heard)
     voices.push(v);
     return v;
   }
@@ -519,6 +504,7 @@ export function createAudio() {
     // (its motors are only hushed: the next car this voice gets is often of the same kind, and making them anew
     // is many words to the sound thread; bind() takes them apart when the next car has others or none)
     if (v.motor) v.motor.step(t, 0, 0, 0, true);
+    if (v.fan) v.fan.step(t, 0, 0.08, false, false, 0, 0);
     if (v.synth) v.synth.port.postMessage({ state: { on: 0 } });
   }
   function bind(v, r, d) {
@@ -530,6 +516,8 @@ export function createAudio() {
     // (a car with motors of its own sound, src/audio-motor.js: made when it is first heard, taken apart when let go)
     v.motorWant = v.ev ? motorKind(r.spec) : null;
     if (v.motor && v.motor.kind !== v.motorWant) { v.motor.stop(); v.motor = null; }
+    if (v.fan && !r.spec.fanDown) { v.fan.stop(); v.fan = null; }
+    v.fy = null;
     if (v.cfg && workletReady && !v.synth) {
       try {
         v.synth = new AudioWorkletNode(ctx, 'engine-sound', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
@@ -587,6 +575,18 @@ export function createAudio() {
       if (jet > 0.6 && v.jet < 0.2 && r.noz[4] > 0.5 && noiseBuf) jetPop(v.mix, 1);
       v.jet = jet;
       v.jetGain.gain.setTargetAtTime(Math.pow(jet, 0.7) * 0.22, t, 0.04);
+    }
+    // its suction fans: as our own (fanSound), the knocks read off how its body is thrown up and down
+    if (s.fanDown) {
+      if (!v.fan && noiseBuf) v.fan = createFan(ctx, v.mix, noiseBuf);
+      let knock = 0;
+      if (v.fy !== null && t > v.ft) {
+        const vy = (r.y - v.fy) / (t - v.ft);
+        knock = Math.min(1, Math.max(0, (Math.abs(vy - v.fvy) - 0.8) / 2.5)); v.fvy = vy;
+      }
+      v.fy = r.y; v.ft = t;
+      const want = r.fanOff ? 0 : 0.5 + 0.5 * Math.max(r.throttle, Math.min(1, speed / 14));
+      if (v.fan) v.fan.step(t, want, want > 0 ? FAN_UP : 0.45, !r.paved, false, knock, speed);
     }
     const k = r.paved ? Math.max(r.skidF, r.skidR) : 0;
     v.skid += (k - v.skid) * 0.36;                              // (as 0.2 a frame at 60, now called 30 times a second)
@@ -776,7 +776,9 @@ export function createAudio() {
     setSquealKind, get squealKind() { return squealKind(); },
     // (for tests: which of the motor sounds of src/audio-motor.js our car has, null for none)
     get motorKind() { return motor?.kind || null; },
+    // (and whether its suction fans, src/audio-fan.js, have been made)
+    get fanOn() { return !!fan; },
     // (for tests: which other cars have a voice, how far off they are and how loud)
-    get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, motor: v.motor?.kind || null, node: v.out })); },
+    get remoteVoices() { return voices.filter((v) => v.id !== null).map((v) => ({ id: v.id, car: v.carId, d: v.d, gain: v.out.gain.value, delay: v.delay.delayTime.value, pan: v.pan?.pan.value, synth: !!v.synth, motor: v.motor?.kind || null, fan: !!v.fan, node: v.out })); },
   };
 }

@@ -57,10 +57,10 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     check('...and 405 km/h with the fans switched off, straight on (the stability control holds it there)', Math.abs(top - 405) < 0.3 && Math.abs(car.yaw) < 0.05, `${top.toFixed(1)} km/h, ${(car.yaw * 57.3).toFixed(1)} deg off its line`);
   }
   const b = run({ up: 1, boost: 1 });
-  // (Martin 27 Nov: "0.6 should be the time with rollout", a foot of it as Tesla times: 0.75 s from a standstill)
-  check('0-100 km/h with BOOST is about 0.75 s from a standstill, 0.6 s with a foot of rollout (no launch suction while it blows)', b.t100 > 0.7 && b.t100 < 0.86, `${b.t100.toFixed(2)} s`);
-  // (the tank blows down: the push follows the gas left, 60 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
-  check('BOOST blows a full tank down in about 7.5 s, then its valves shut', b.t > 7 && b.t < 8.2 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
+  // (Martin 27 Nov: "reduce the overall level of boost on all speeds so that the 0-100 would be 0.64 with rollout")
+  check('0-100 km/h with BOOST is about 0.8 s from a standstill, 0.64 s with a foot of rollout', b.t100 > 0.76 && b.t100 < 0.9, `${b.t100.toFixed(2)} s`);
+  // (the tank blows down: the push follows the gas left, 45 kN on a full tank; 250 kg at 650 m/s is 163 kN s)
+  check('BOOST blows a full tank down in about 10 s, then its valves shut', b.t > 9.4 && b.t < 10.8 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
   // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
   check('BOOST takes it to about 385 km/h on one tank, and never past 389', b.top > 375 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
   {
@@ -73,12 +73,13 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     const wi = world(), ci = fresh(wi);
     let ti = 0, t300 = null, push = 0, first = 0;
     for (; !ci.rocket.dry && ti < 12; ti += dt) { stepCar(ci, { up: 1, boost: 1 }, wi, dt); push += ci.thrustN * dt; if (ti > 0.2 && !first) first = ci.thrustN; if (t300 === null && speedKmh(ci) >= 300) t300 = ti + dt; }
-    check('...0-300 km/h in about 3.4 s', t300 > 3.1 && t300 < 3.7, `${t300.toFixed(2)} s`);
-    check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 120000 && first > 50000 && first < 60000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
+    check('...0-300 km/h in about 3.7 s', t300 > 3.4 && t300 < 4, `${t300.toFixed(2)} s`);
+    check('...on no more push than 250 kg of gas holds (163 kN s)', push < 163000 && push > 120000 && first > 38000 && first < 45000, `${(push / 1000).toFixed(0)} kN s, ${(first / 1000).toFixed(0)} kN after 0.2 s`);
   }
-  // BOOST alone (no throttle key): the motors are held at full power too
+  // BOOST alone (no throttle key): the motors are held at full power too, trimmed to what the tyres take (Martin 27
+  // Nov: "when I click only on boost, it sometimes shows some wheelspin"); with the gas pedal too they light up
   const alone = run({ boost: 1 });
-  check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.02, `${alone.t100.toFixed(2)} s`);
+  check('BOOST alone drives the motors too', Math.abs(alone.t100 - b.t100) < 0.06, `${alone.t100.toFixed(2)} s, ${b.t100.toFixed(2)} s with the gas pedal`);
   // the tank fills by itself whenever it is not full (Martin 26 Nov), a whole tank in 10 s (27 Nov; 60 s, 120 before), and nothing is locked:
   // with the button still held after running dry nothing blows, and it fills all the same
   const w = world(), car = b.car;
@@ -579,5 +580,12 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     res.every((r) => r.off * r.side > 0.8 && r.off * r.side < 1.2 && r.most < 1.5) && res[0].side === 1 && res[1].side === -1,
     res.map((r) => `rolls ${r.side > 0 ? 'right' : 'left'}: lands ${r.off.toFixed(2)} m over`).join('; '));
 }
+
+// ---- BOOST alone: the wheels roll (see the 0-100 checks above; down here, as these runs use the shared tank)
+  {
+    const spin = (inp) => { const w = world(), c = fresh(w); let most = 0; for (let t = 0; t < 2; t += dt) { stepCar(c, inp, w, dt); most = Math.max(most, c.slipVR || 0); } return most; };
+    const a = spin({ boost: 1 }), g = spin({ boost: 1, up: 1 }), bend = spin({ boost: 1, steer: 0.5 });
+    check('...without the rear wheels lighting up, straight on or in a bend (with the gas pedal they do)', a < 5 && bend < 8 && g > 15, `${a.toFixed(1)} and ${bend.toFixed(1)} m/s of wheelspin at the most, ${g.toFixed(0)} with the gas`);
+  }
 
 process.exit(ok ? 0 : 1);

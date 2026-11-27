@@ -13,7 +13,7 @@
 // And the small fan in the rev counter of a car with suction fans.
 import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN } from './cars/thrust.js';
 
-export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys = () => 'SHIFT BOOST · X FLIP' }) {
+export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys = () => 'SHIFT THRUST · X FLIP' }) {
   // (the discs in use: the phone's, or the rev counter's)
   const discs = touch || !dial ? pad : dial;
   const bBoost = discs.querySelector('.boost'), bFlip = discs.querySelector('.flip');
@@ -82,7 +82,7 @@ export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys 
       if (!touch) {
         fill.bar.style.width = `${pct}%`;
         const k = keys();
-        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : timed ? 'NO BOOST OR FLIP ON A TIMED RUN' : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;
+        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : timed ? 'NO THRUST OR FLIP ON A TIMED RUN' : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;
         cls(bar, 'reload', !canBoost && !off && !timed); cls(bar, 'use', using);
       }
     },

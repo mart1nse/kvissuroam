@@ -26,7 +26,7 @@ export const ACTIONS = [
   { id: 'handbrake', label: 'HANDBRAKE', held: true },
   { id: 'look', label: 'LOOK BACK', held: true },
   // (a car with thrusters only, src/cars/thrust.js)
-  { id: 'boost', label: 'BOOST (ROCKET)', held: true },
+  { id: 'boost', label: 'THRUST (ROCKET)', held: true },
   { id: 'flip', label: 'FLIP (ROCKET)', held: true },
   { id: 'view', label: 'DRONE VIEW' },
   { id: 'reset', label: 'LAST SPOT' },

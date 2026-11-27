@@ -65,8 +65,14 @@ const MAPS = {
   stage: [LIST('line', 'start', 'finish', 'reset', 'crash', 'x:cut', 'x:off', 'x:wrong', 'x:corner', 'x:garage', 'x:race', 'x:moved', 'x:restart', 'x:quit', 'x:lights',
     'ty:gravel', 'ty:road', 'pen:0', 'pen:1-4', 'pen:5-9', 'pen:10+'), N],
   stageCar: [(k) => Object.hasOwn(CARS, k), N],               // finished stage runs per car
+  // the adverts in the world (src/adviews.js, from 27 Nov 2026), by id: wb the Winbaum roof sign, an the Anderson's
+  // hologram, tp the TOREPOOD banner on Tasku (its taps: every TOREPOOD poster). v views, s seconds on screen, u visits
+  // that saw it, c taps that opened its site; views, seconds and taps also go per Tartu hour into adH (/ads, /winbaum)
+  ad: [(k) => AD_KEY.test(k), SEC],
 };
 const TIMES = { menu: SEC, drive: SEC, km: KM };
+const ADS = ['wb', 'an', 'tp'];
+const AD_KEY = /^(wb|an|tp):(v|s|u|c)$/;
 
 // keep the numbers in a bundle sane: v rounded, between 0 and max
 const num = (v, max, dp = 0) => {
@@ -94,6 +100,9 @@ export function addBundle(t, b, { country = '', hour = 0 } = {}) {
       if (name === 'frz' && !dst[k] && Object.keys(dst).length >= 1500) continue;
       add(dst, k, num(v, max, 1));
     }
+  }
+  if (b.ad && typeof b.ad === 'object' && !Array.isArray(b.ad)) {
+    for (const id of ADS) for (const k of ['v', 's', 'c']) { const v = num(b.ad[`${id}:${k}`], SEC, 1); if (v) add((t.adH ||= {}), `${id}:${k}:${hour}`, v); }
   }
   if (typeof b.peak === 'number') t.peak = Math.max(t.peak || 0, num(b.peak, 150));
   // trouble per kind of device (crashes, freezes, lost 3D picture, errors): kept as "phone:stall"
@@ -432,6 +441,31 @@ export class Stats extends DurableObject {
         const { err, ghostIds, ...total } = body.total;
         return json({ ...body, total: { ...total, ghosts: Object.keys(ghostIds || {}).length } });
       };
+      if (url.searchParams.get('ads')) {
+        // the adverts' pages /ads and /winbaum (public/ads.html, winbaum.html): per day each advert's views, seconds on
+        // screen, visits that saw it, taps, and views/seconds/taps per Tartu hour, with the day's lap starts (each drives
+        // past the Winbaum sign: its estimate before the counter, 27 Nov 2026), and the last 24 hours hour by hour
+        const hit = this.cache.get('ads');
+        if (hit && Date.now() - hit.at < 60000) return json(hit.body);
+        const now = Date.now();
+        const parse = (t) => { try { return JSON.parse(t); } catch { return {}; } };
+        const hourly = (d, id, k) => Array.from({ length: 24 }, (_, h) => Math.round(d.adH?.[`${id}:${k}:${h}`] || 0));
+        const one = (d, id) => ({ v: d.ad?.[`${id}:v`] || 0, s: Math.round(d.ad?.[`${id}:s`] || 0), u: d.ad?.[`${id}:u`] || 0, c: d.ad?.[`${id}:c`] || 0 });
+        const days = this.sql.exec('SELECT day, data FROM days ORDER BY day').toArray().map((r) => {
+          const d = parse(r.data);
+          return { day: r.day, ls: d.laps?.start || 0, drove: d.drove || 0,
+            ads: Object.fromEntries(ADS.map((id) => [id, { ...one(d, id), h: hourly(d, id, 'v'), hs: hourly(d, id, 's'), hc: hourly(d, id, 'c') }])) };
+        });
+        const from = hourKey(now - 23 * HOUR);
+        const hours = this.sql.exec('SELECT hour, data FROM hours WHERE hour >= ? ORDER BY hour', from).toArray().map((r) => {
+          const d = parse(r.data);
+          return { at: Date.parse(r.hour + ':00:00Z'), ls: d.laps?.start || 0, ads: Object.fromEntries(ADS.map((id) => [id, one(d, id)])) };
+        });
+        const counted = Object.fromEntries(ADS.map((id) => [id, days.find((d) => d.ads[id].v > 0)?.day || null]));
+        const body = { to: new Date(now).toISOString(), today: tartuDay(), counted, days, hours };
+        this.cache.set('ads', { at: now, body });
+        return json(body);
+      }
       if (url.searchParams.get('hours')) {
         // the last 24 hours: this hour so far and the 23 before it
         const hit = this.cache.get('h24');

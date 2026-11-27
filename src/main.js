@@ -38,7 +38,7 @@ import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsma
 import { createPootsmani12, pootsmani12Walls } from './world/pootsmani12.js';
 import { createAngerja, angerjaWalls } from './world/angerja.js';
 import { createRaekoda, raekodaWalls } from './world/raekoda.js';
-import { createKuuni, kuuniWalls, kuuniProps, kuuniVectors } from './world/kuuni.js';
+import { createKuuni, kuuniWalls, kuuniProps, kuuniVectors, kuuniSigns } from './world/kuuni.js';
 import { createKuperjanovi, kuperjanoviWalls } from './world/kuperjanovi.js';
 import { createPepleri, pepleriWalls, pepleriProps, pepleriVectors } from './world/pepleri.js';
 import { createKaubamaja, kaubamajaWalls } from './world/kaubamaja.js';
@@ -798,6 +798,7 @@ async function boot() {
   arukulaSignSkip(world);                       // the factory shop's boards are painted on its wall
   kaupmeheSignSkip(world);                      // the Coop's name is painted on its wall
   turu4SignSkip(world);                         // Zeppelin's and Aura's letters are painted on their walls
+  kuuniSigns(world);                            // the taproom's box sign on two more sides of its kiosk
   const attachSigns = createSigns(world);
   janese = createJanese(scene, world, { shadows: !isTouch });
   aksi = createAksi(scene, world, { shadows: !isTouch });

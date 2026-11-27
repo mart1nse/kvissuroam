@@ -32,7 +32,7 @@ import { thinProps, handZones } from './world/propspacing.js';
 import { createJanese } from './world/janese.js';
 import { createParked } from './world/parked.js';
 import { createBusStops, busStopProps, busStopClear, STOPS } from './world/busstops.js';
-import { adsReady } from './world/adverts.js';
+import { adsReady, extraPosters } from './world/adverts.js';
 import { createAksi, aksiProps } from './world/aksi.js';
 import { createPootsmani, pootsmaniProps, pootsmaniWalls } from './world/pootsmani.js';
 import { createPootsmani12, pootsmani12Walls } from './world/pootsmani12.js';
@@ -815,8 +815,8 @@ async function boot() {
   kaubamaja = createKaubamaja(scene, world, { shadows: !isTouch });
   winbaum = createWinbaum(scene, world, { shadows: !isTouch });        // the Winbaum cabin advert by LAP START (only with ?winbaum=1)
   winbaum.bindClicks(camera, canvas, () => (mode === 'drive' ? car : null));   // tapping the cabin or its sign opens winbaum.ee (after the posters: hover)
-  adViews = createAdViews(world);                                     // how often the adverts are seen, for /ads (src/adviews.js)
   keskus = createKeskus(scene, world, { shadows: !isTouch });
+  adViews = createAdViews({ winbaum, holo: kuuni.holo, posters: extraPosters });   // how often the adverts are seen and tapped, for /ads (src/adviews.js)
   keskusTee = createKeskusTee(scene, world, { shadows: !isTouch });
   orident = createOrident(scene, world, { shadows: !isTouch });
   delta = createDelta(scene, world, { shadows: !isTouch });

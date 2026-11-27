@@ -231,7 +231,8 @@ export const stats = {
   // something went wrong: glLost (the browser took the 3D picture away), frz1 and frz3 (froze 1 or 3 s while driving)
   trouble(k) { if (on) inc(b.trouble, k); },
   count(k, n = 1) { if (on) inc(b.misc, k, n); },
-  // an advert in the world seen (src/adviews.js): 'wb:v' a view, 'wb:s' seconds on screen, 'wb:u' the first view of a visit
+  // an advert in the world seen (src/adviews.js), by its id: 'wb:v' a view, 'wb:s' seconds on screen, 'wb:u' the first view of
+  // a visit, 'wb:c' a tap that opened its site
   ad(k, n = 1) { if (on) inc(b.ad, k, n); },
   smash(k, n = 1) { if (on && n > 0) inc(b.smash, k, n); },
   lap(k, extra) {

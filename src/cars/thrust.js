@@ -317,7 +317,11 @@ const FIGHTS = new WeakMap();
 // (a touch slower, Martin 27 Nov: "the shudders left right etc, make them just a touch slower": the side to side swing
 // and the nodding at SHAKE_K of what they were, the roll's trembling at ROLL_SHAKE_K)
 const SHAKE_K = 0.85, ROLL_SHAKE_K = 0.9;
-const trio = (h, i, amp, f0, f1, sk = SHAKE_K) => [0, 1, 2].map((k) => [amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * sk * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
+// (ka, kf: the flight's own measure, Martin 27 Nov: "add some variance from jump to jump how it behaves, so the amplitude
+// and frequency of the rolls moves just a touch here and there": up to 20 % bigger or smaller, 8 % quicker or slower, the
+// same for all three axes; from the plan, so the other players see the same)
+const FLIP_AMP = 0.2, FLIP_FREQ = 0.08;
+const trio = (h, i, amp, f0, f1, sk = SHAKE_K, ka = 1, kf = 1) => [0, 1, 2].map((k) => [ka * amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * kf * sk * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
 const sum3 = (w, t) => w[0][0] * Math.sin(w[0][1] * t + w[0][2]) + w[1][0] * Math.sin(w[1][1] * t + w[1][2]) + w[2][0] * Math.sin(w[2][1] * t + w[2][2]);
 function fight(p) {
   let f = FIGHTS.get(p);
@@ -326,13 +330,14 @@ function fight(p) {
   const T = Math.min(ROLL_T, p.tb - ROLL_T0), tE = ROLL_T0 + T;
   // (the time there is for catching the roll: a landing right after it gets a smaller overshoot)
   const room = Math.max(0.05, p.tl - tE);
+  const ka = 1 + FLIP_AMP * (2 * rnd(h, 90) - 1), kf = 1 + FLIP_FREQ * (2 * rnd(h, 91) - 1);
   f = {
     T, tE, room, tb: p.tb, tl: p.tl,
     over: (OVER_MIN + OVER_MORE * rnd(h, 0)) * Math.min(1, room / 0.5),
     hunt: [],
-    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9], ROLL_SHAKE_K),    // turns
-    pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8]),  // radians
-    yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8]),
+    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9], ROLL_SHAKE_K, ka, kf),    // turns
+    pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8], SHAKE_K, ka, kf),  // radians
+    yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8], SHAKE_K, ka, kf),
     kick: (3.2 + 1.4 * rnd(h, 4)) * DEG,          // the nose dips this far as the tail kicks up first
     nose: (1 + 0.8 * rnd(h, 5)) * DEG,            // ...and is held this far up in the landing burn
     flut: [0, 1, 2, 3].map((i) => TURN * (5 + 4 * rnd(h, 40 + i))), drift: [0, 1, 2, 3].map((i) => TURN * (0.6 + 0.9 * rnd(h, 44 + i))),

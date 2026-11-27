@@ -614,6 +614,12 @@ export const CARS = {
     // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
     // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
     drive: 'rwd',
+    // ...with a small front motor that pulls only while the car is pointed and rolling straight (Martin 27 Nov: "what
+    // would it need to still get the 1.7 to a hundred without thrusters ... I like how if i step on it and it is at the
+    // littlest of angles it wants to step out"): 30 % of the drive at the front from a standstill, gone with the wheel
+    // turned past 0.04 or the tail 5 degrees out (physics.js FA_STEER, FA_SLIP). The rears still spin up off the line.
+    // (Two motors on the rear axle can only pass on what two tyres hold: 2.4 s at best with all the traction control.)
+    frontAssist: 0.3,
     // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
     // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
     // traction control. thats the best part when the back steps out a bit. lets try it constant"; then "lets try 70% up to
@@ -655,7 +661,7 @@ export const CARS = {
     // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
     limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 2.6, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 2.6 s is what the rears' grip allows at 2100 kg on 12 kN of fans; AWD did 1.67 s)
+    ref: { zeroTo100: 1.7, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. Martin 27 Nov: 1.7 s, with frontAssist; rear-driven alone it was 2.6 s)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

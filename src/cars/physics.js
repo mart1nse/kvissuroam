@@ -21,6 +21,7 @@ const TC_BEND_KMH = 90, TC_BEND_SPAN = 30;   // a light setting (spec.tcBend) gr
 const TC_BEND_NOFANS_KMH = 60, TC_NOFANS_SPAN = 60;   // ...and with the fans off from this one to all of it (the Rocket's rears hold far less then: it stepped out and round at 110 to 170)
 const FAST_KEEP_KMH = 150;   // ...and from this speed its stability control keeps the fronts to what the rears balance (see latCapF)
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
+const FA_STEER = [0.01, 0.04], FA_SLIP = [0.03, 0.08], FA_RATE = 8;   // spec.frontAssist: all of it with the wheel inside the first, none past the second (steer share; body slip, rad); eases at this rate (1/s)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HB_REV_UP = 9000;         // rpm/s: how fast a free engine (clutch in on the race grid's launch control) revs up at full throttle
@@ -1099,7 +1100,7 @@ function substep(car, input, world, dt) {
   // ---- longitudinal forces
   const dir = car.reversing ? -1 : 1;
   const hb = +input.handbrake || 0;
-  const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
+  const drivenF = s.drive !== 'rwd' || !!s.frontAssist, drivenR = s.drive !== 'fwd';
   // (wide performance tyres: spec.grip scales every surface; on gravel tyres only a lower figure stays,
   // the bus's hard rubber, since every car gets the same kind of gravel tyre)
   // Wide performance rubber only helps on paving: on loose ground and grass it floats on top instead of
@@ -1148,6 +1149,15 @@ function substep(car, input, world, dt) {
     car.evSlide = (car.evSlide || 0) + (kSlide * throttle - (car.evSlide || 0)) * Math.min(1, dt * 4);
   } else car.evSlide = (car.evSlide || 0) * Math.exp(-dt * 4);
   if (car.evSlide > 0) shareR += (Math.max(shareR, EV_SLIDE_REAR) - shareR) * car.evSlide;
+  // (s.frontAssist: a rear-driven car with a small front motor that only helps while it is pointed straight and
+  // rolling straight, this share of the drive; the wheel turned the least bit or the tail out and it lets go, so the
+  // car is rear-driven in every bend. Not in a burnout, on the brake or on the handbrake. The Rocket, Martin 27 Nov:
+  // 1.7 s to 100 on the motors, and still "at the littlest of angles it wants to step out")
+  if (s.frontAssist) {
+    const straight = hb || car.burn || brake > 0 ? 0 : Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - FA_STEER[0]) / (FA_STEER[1] - FA_STEER[0]))) * Math.min(1, Math.max(0, 1 - (bodySlip - FA_SLIP[0]) / (FA_SLIP[1] - FA_SLIP[0])));
+    car.faK = (car.faK ?? straight) + (straight - (car.faK ?? straight)) * Math.min(1, dt * FA_RATE);
+    shareR = 1 - s.frontAssist * car.faK;
+  }
   // The handbrake on a four-wheel-drive car works as on a WRC car (Martin 2026-11-26): pulling it opens the
   // centre coupling, so the rear wheels lock on their own while the engine keeps driving the fronts with all of
   // its torque. The throttle sets how fast the front wheels turn through a handbrake turn, pulling the nose
@@ -1198,7 +1208,7 @@ function substep(car, input, world, dt) {
   const tcWant = s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (bendK && (s.tcEven || Math.abs(steerIn) >= 0.1) ? bendK : 1) : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
-  const evFront = e.type === 'ev' && s.drive !== 'rwd';
+  const evFront = e.type === 'ev' && (s.drive !== 'rwd' || !!s.frontAssist);
   const axle = (front, share, surf, cap, lon, alpha, brakeK) => {
     let slipV = front ? car.slipVF : car.slipVR;
     const kappa = slipV / Math.max(Math.abs(car.vx), 3);
@@ -1340,7 +1350,7 @@ function substep(car, input, world, dt) {
   // (locked once the brake and the cornering together ask more than the tyres have, and only as far as the
   // brake itself has squeezed on: braked at a donut's quickest moment, the wheels' cornering load alone locked
   // them at the first touch, the nose stopped dead and the slide died in a second instead of fading)
-  const lockF = !drivenF && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) * Math.min(1, Math.abs(brakeF) / capF) : 0;
+  const lockF = (!drivenF || !!s.frontAssist) && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) * Math.min(1, Math.abs(brakeF) / capF) : 0;
   if (lockF > 0) {
     const ux = car.vx, uy = car.vy + car.a * car.yawRate, un = Math.max(Math.hypot(ux, uy), BURN_SLIDE_V);
     const bx = -capF * ux / un, by = -capF * uy / un;

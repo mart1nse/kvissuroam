@@ -85,8 +85,8 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   // efforts", live that evening; its laps since are judged by the motors alone, as the server does)
   const boosted = !!lim?.gas && l.at < '2026-11-28';
   if (l.track === 'raadi') {
-    // (a car with thrusters on BOOST left the start line harder than the others)
-    row.stage = stageCheck(xs, zs, l.pen || 0, boosted ? lim.gas.launch : 0, where);
+    // (a car with thrusters leaves the start line harder than the others: on BOOST, and since 27 Nov on its motors)
+    row.stage = stageCheck(xs, zs, l.pen || 0, boosted ? lim.gas.launch : lim?.pullFull?.[0] || 0, where);
     if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
   }
   if (!lim) { row.note = 'not judged'; continue; }

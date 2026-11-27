@@ -106,7 +106,7 @@ export function createRoadPainter(world, size) {
     for (const a of e.areas) { ring(ctx, a); ctx.fill('evenodd'); if (due(ctx)) yield; }
     for (const r of e.roads) {
       if (r.s === 2 || r.s === 3) continue;
-      ctx.strokeStyle = KERBED.has(r.type) && r.w >= 4.5 ? '#ff0' : '#f00';
+      ctx.strokeStyle = KERBED.has(r.type) && r.w >= 4.5 && !r.noKerb ? '#ff0' : '#f00';   // (noKerb: a road through woods, its asphalt ends in sand)
       ctx.lineWidth = r.w;
       line(ctx, r.pts);
       ctx.stroke();
@@ -151,7 +151,7 @@ export function createRoadPainter(world, size) {
     for (const a of e.areas) { tctx.fillStyle = toneOf(a.c, a.t === 2); ring(tctx, a); tctx.fill('evenodd'); if (due(tctx)) yield; }
     for (const r of e.roads) {
       if (r.s === 2 || r.s === 3) continue;
-      tctx.strokeStyle = toneOf(r.c, r.s === 1);
+      tctx.strokeStyle = r.tone || toneOf(r.c, r.s === 1);           // (tone: a road's own, 'rgb(lum, warm, fine)', src/world/tln/pirita.js)
       tctx.lineWidth = r.w + 2.5;
       line(tctx, r.pts);
       tctx.stroke();

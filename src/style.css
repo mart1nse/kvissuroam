@@ -1321,6 +1321,8 @@ body.touch #stageagain { top: calc(34% + 40px); }
 #trackpills button { display: inline-flex; align-items: center; }
 #trackpills svg.trk { width: 1.5em; height: 1.5em; margin: -.3em .5em -.3em 0; flex: none; }
 #trackpills svg.trk path { stroke: currentColor; stroke-width: 80; }
+/* (?tln=1: the other city's pill, in pink so it reads as a way out of this map, not another circuit in it) */
+#trackpills button.city { color: var(--pink); }
 /* phones: right under the top buttons, the race button and its chip one row lower (Martin 23 Nov: "move the raadi
    start and other track buttons upward to the right, maybe above the race button": they sat at the bottom between
    the pedals). Away while a race's lights or its standings show: those need the room, and nobody leaves then. */
@@ -1374,6 +1376,10 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .tcard.on .dot .glow { display: inline; }
 @media (hover: hover) and (pointer: fine) { #trackpick .tcard:hover { opacity: 1; } }
 #trackpick .tcard:focus-visible { outline: 2px solid var(--sun); outline-offset: 4px; }
+/* the choice of city (?tln=1, src/race/trackpick.js): the pill before a city's tracks that goes back to the cities */
+#trackpick .tcity { flex: none; align-self: center; border: none; border-radius: 999px; padding: .55em 1.1em; font: 800 .72em var(--font); letter-spacing: .2em; white-space: nowrap; color: var(--cyan); background: rgba(47, 243, 255, .16); cursor: pointer; }
+#trackpick .tcity:hover { background: rgba(47, 243, 255, .3); }
+#trackpick .tcity:focus-visible { outline: 2px solid var(--sun); outline-offset: 4px; }
 /* phones, and a window too low for the row: pills (under the logo on phones, in the corner on a low desktop window) */
 @media (max-height: 520px) {
   #trackpick { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(3vw, env(safe-area-inset-right)); width: auto; flex: none; min-height: 0; max-height: none; container-type: normal; flex-direction: column; align-items: flex-end; gap: 6px; margin: 0; }

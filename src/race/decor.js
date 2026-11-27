@@ -1,6 +1,7 @@
 // Track furniture: glowing chevron boards hovering over each corner (pointing the way to turn)
 // and a start/finish gantry with a chequered line across Küüni. Built as the ground loads.
 import * as THREE from 'three';
+import { TARTU } from '../city.js';
 
 const TURN = 0.5;              // radians of heading change over ~30 m that count as a corner
 
@@ -148,7 +149,7 @@ function bannerTex() {
 // The Lai -> Vabaduse -> Emajõe junction is two left turns in a row. Since its outline follows the rebuilt
 // kerbs (19 Nov) the second, by the bridge, measures sharper, but the corner board and the corner
 // clearing (SPECIAL 920 in trackside.js) belong at the first, the turn off Lai.
-const PINNED = [920];
+const PINNED = TARTU ? [920] : [];
 
 export function findCorners(track) {
   const { P, N } = track;
@@ -220,7 +221,8 @@ export function createDecor(track, world) {
     const [px, pz] = P[c.i];
     const ox = tin[1] * c.dir, oz = -tin[0] * c.dir;        // outward side of the turn (left of travel for a right turn)
     const off = HW[c.i] * 0.55;
-    if (c === first && c.dir < 0) {
+    // (Tallinn: no big board. Its first left turn is Kose into Lükati, a corner of the lap, not its start)
+    if (c === first && c.dir < 0 && TARTU) {
       const { x, z, yaw } = startBoardSpot(track, corners);
       items.push({ x, z, yaw, big: true, mesh: null, phase: 0 });
       continue;

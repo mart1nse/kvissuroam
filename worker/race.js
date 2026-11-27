@@ -19,7 +19,7 @@
 // the lap's gates in order and cross the line, and at about the moment it saw that. (Until then "finished" was
 // the racer's word, and one sent two minutes after the lights won any race.)
 import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
-import { follow, newFollow, finishInGap, driven, PASS } from './follow.js';
+import { driven, TOOME } from './follow.js';
 import { OLD_PAGES_UNTIL } from './cutover.js';
 import { judgeDrive } from '../src/race/plausible.js';
 
@@ -75,6 +75,7 @@ export const needRestart = (n) => Math.floor(n / 2) + 1;
 export class RaceDesk {
   // lobby: the Durable Object (its sockets, meta storage and broadcast)
   constructor(lobby) {
+    this.course = lobby.course || TOOME;     // the lobby's circuit as the server follows it (follow.js: Toomemägi or Pirita-Kose)
     this.lobby = lobby;
     let s = null;
     try { s = JSON.parse(lobby.meta('race')); } catch { s = null; }
@@ -290,8 +291,8 @@ export class RaceDesk {
     }
     let f = this.fol.get(id);
     // (and what the racer's car can do is worked out meanwhile, for the judging of its drive at the finish)
-    if (!f || f.race !== s.id) { this.fol.set(id, f = newFollow(s.id)); this.lobby.carLimit?.(r.car)?.catch?.(() => {}); }
-    const ev = follow(r, f, p[0], p[1], now, r.go || s.tGreen, !!CARS[r.car]?.thrusters, Number.isFinite(p[21]) ? p[21] : null, Number(p[2]) || 0);
+    if (!f || f.race !== s.id) { this.fol.set(id, f = this.course.newFollow(s.id)); this.lobby.carLimit?.(r.car)?.catch?.(() => {}); }
+    const ev = this.course.follow(r, f, p[0], p[1], now, r.go || s.tGreen, !!CARS[r.car]?.thrusters, Number.isFinite(p[21]) ? p[21] : null, Number(p[2]) || 0);
     if (!ev) return;
     // (over the line with its "finished" already here: that is the finish)
     if (ev === 'finish' && r.cl) { this.settle(r, now); this.check(now); this.save(); this.send(); }
@@ -316,7 +317,7 @@ export class RaceDesk {
       // not seen over the line. The connection was down as the car crossed it: as if the positions had come, at
       // the earliest moment the lap's last part allows. Or a race of one from a page that does not send positions
       // while alone (see cutover.js): believed as before.
-      const f = this.fol.get(r.id), gap = finishInGap(r, f?.race === s.id ? f : null, c.at, go + c.ms);
+      const f = this.fol.get(r.id), gap = this.course.finishInGap(r, f?.race === s.id ? f : null, c.at, go + c.ms);
       if (gap != null) fin = Math.min(Math.max(c.ms, gap - go, since - FINISH_LATE), since);
       else if (c.at < OLD_PAGES_UNTIL && s.racers.length === 1) fin = Math.min(Math.max(c.ms, since - FINISH_LATE), since);
     }
@@ -337,7 +338,7 @@ export class RaceDesk {
     }
     if (fin == null) {
       r.out = 'ref';
-      this.lobby.raceRefused?.(r, c.ms, car || (r.jp ? `jumped ${r.jp} times` : r.gt == null ? (r.arm ? 'never over the start line' : 'not seen standing on the grid') : `gates ${r.gt} of ${PASS.length}`));
+      this.lobby.raceRefused?.(r, c.ms, car || (r.jp ? `jumped ${r.jp} times` : r.gt == null ? (r.arm ? 'never over the start line' : 'not seen standing on the grid') : `gates ${r.gt} of ${this.course.PASS.length}`));
       return true;
     }
     // (a late joiner's own time plus how late their lights went out: the race's clock, so a late joiner is
@@ -413,7 +414,7 @@ export class RaceDesk {
         // racer's lights went out, and not under a believable lap. And since 26 Nov against the lap as the server
         // followed it (settle): the word waits a moment for the position that shows the car over the line.
         const ms = Math.round(Number(m.ms)), since = now - (r ? r.go || this.s.tGreen : now);
-        if (!r || r.ms != null || r.out || !(ms >= RACE_MIN_MS && ms <= MAX_RACE_MS) || ms > since + FINISH_EARLY) return true;
+        if (!r || r.ms != null || r.out || !(ms >= (this.lobby.lapMin ?? RACE_MIN_MS) && ms <= MAX_RACE_MS) || ms > since + FINISH_EARLY) return true;
         r.cl ||= { ms, at: now };
         if (!this.settle(r, now)) this.lobby.ctx.storage.setAlarm(now + CLAIM_WAIT + 100).catch?.(() => {});
         this.check(now); this.save(); this.send();

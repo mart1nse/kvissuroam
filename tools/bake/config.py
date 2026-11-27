@@ -9,6 +9,11 @@ cut into square sectors that the game streams in around the car.
 import json
 import os
 
+# Which city's map is baked (Tallinn since 28 Nov 2026, Martin: "lets start"): CITY=tallinn python3 tools/bake/...
+# Each city has its own origin, far-scenery rectangle, start and drivable outline (boundary<_city>.json); the
+# game reads Tartu's map from public/data/ and Tallinn's from public/data/tln/.
+CITY = os.environ.get('CITY', 'tartu')
+SFX = '' if CITY == 'tartu' else '_' + CITY
 E0, N0, H0 = 657800.0, 6477150.0, 34.0
 SECTOR = 640.0         # sector size (m)
 GRID0 = -800.0         # sector (0,0) starts at x = z = GRID0
@@ -25,14 +30,23 @@ OVERVIEW_PX = (3024, 4292)
 MOSAIC_RES = 1.25      # working orthophoto mosaic for roof colours / driveway detection
 # start: driveway of Kvissentali tee 8, facing the street (north)
 START_E, START_N = 657870.0, 6477151.0
+if CITY == 'tallinn':
+    # Pirita, Kose and Kloostrimetsa (Martin's first area, 27 Nov 2026): the origin by the Pirita velodrome, sea level 0
+    E0, N0, H0 = 548000.0, 6592000.0, 0.0
+    CX0, CX1, CZ0, CZ1 = -8000.0, 12000.0, -8000.0, 12000.0      # the terrain model sheets 6384, 6385, 6394, 6395
+    OVERVIEW_PX = (3048, 3048)
+    START_E, START_N = 547300.0, 6592300.0
 
 _here = os.path.dirname(os.path.abspath(__file__))
-BOUNDARY = json.load(open(os.path.join(_here, 'boundary.json')))
-DETAIL_AREA = json.load(open(os.path.join(_here, 'detail_area.json')))   # extra-detail zone (Kvissentali)
+BOUNDARY = json.load(open(os.path.join(_here, f'boundary{SFX}.json')))
+_da = os.path.join(_here, f'detail_area{SFX}.json')
+DETAIL_AREA = json.load(open(_da)) if os.path.exists(_da) else None      # extra-detail zone (Kvissentali; none in Tallinn)
 
 
 def _detail():
     from shapely.geometry import Polygon, box
+    if not DETAIL_AREA:
+        return set(), []
     poly = Polygon(DETAIL_AREA)
     hi, xt = set(), []
     minx, miny, maxx, maxy = poly.bounds
@@ -52,9 +66,10 @@ def _detail():
 
 # sectors with 4x4 orthophoto tiles (0.16 m/px) instead of 2x2 (0.31 m/px), and the extra-sharp tiles
 HI_SECTORS, XTILES = _detail()
-HI_SECTORS |= {(0, 0), (1, 0), (0, 1), (1, 1)}
+if CITY == 'tartu':
+    HI_SECTORS |= {(0, 0), (1, 0), (0, 1), (1, 1)}
 # open-country sectors (hardly any buildings) get a single tile (0.63 m/px); written by rural.py
-_rural = os.path.join(_here, 'rural_sectors.json')
+_rural = os.path.join(_here, f'rural_sectors{SFX}.json')
 RURAL_SECTORS = {tuple(s) for s in json.load(open(_rural))} if os.path.exists(_rural) else set()
 
 

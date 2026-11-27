@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { TALLINN } from './city.js';
 
 // Drone shot behind the opening menu: a slow closed loop along the Emajõgi through the city centre
 // (past Kaarsild, along the river bend, back over the old town and Toomemägi). World x is east and
 // z is south; each point is [x, z, height above the ground below].
-const PATH = [
+const TARTU_PATH = [
   [1000, 1950, 85],     // over the river north-west of the centre, heading downstream into town
   [1330, 2330, 75],
   [1560, 2620, 65],     // Kaarsild
@@ -16,6 +17,26 @@ const PATH = [
   [1120, 2720, 95],
   [920, 2320, 95],
 ];
+// Tallinn (src/city.js): up the Pirita river from the bridge by the yacht harbour, over the rowing reach and the
+// Lükati bridge, north up Lükati tee and back west over the Kloostrimetsa pines, past the convent ruins
+const TALLINN_PATH = [
+  [-950, -250, 85],     // over Pirita tee by the bridge
+  [-700, -130, 75],
+  [-350, 60, 70],       // the river's wide reach
+  [0, 210, 70],
+  [300, 240, 75],
+  [500, 290, 70],       // the Lükati bridge
+  [850, 330, 75],
+  [1150, 200, 85],
+  [1200, -150, 95],     // up Lükati tee
+  [1100, -450, 100],
+  [700, -440, 100],     // back west over Kloostrimetsa tee and the pines
+  [300, -450, 95],
+  [-150, -560, 95],
+  [-550, -560, 90],     // the convent
+  [-850, -420, 90],
+];
+const PATH = TALLINN ? TALLINN_PATH : TARTU_PATH;
 const SPEED = 15;        // m/s along the loop
 const LOOK_AHEAD = 150;  // metres ahead along the loop the camera looks at, down on the ground
 // gentle climbs and dips on top of the path heights: [metres up/down, metres along the loop per wave]

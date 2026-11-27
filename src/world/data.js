@@ -3,7 +3,8 @@
 
 import { jobs } from '../jobs.js';
 import { topAt } from '../cars/tops.js';
-const BASE = `${import.meta.env.BASE_URL}data/`;
+import { DATA } from '../city.js';
+const BASE = DATA;              // (this city's map: src/city.js)
 
 async function fetchBuf(name) {
   const r = await fetch(BASE + name);

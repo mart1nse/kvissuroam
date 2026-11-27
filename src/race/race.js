@@ -10,7 +10,8 @@
 // up Kroonuaia and back, the river loop backwards, Lai from the hill).
 // Near the track its edges glow faintly so the way is clear.
 import * as THREE from 'three';
-import TRACK from './track.json';
+import { TRACK } from './circuit.js';
+import { TARTU } from '../city.js';
 import { createDecor } from './decor.js';
 import { createLandmarks } from './landmarks.js';
 import { jobs } from '../jobs.js';
@@ -32,7 +33,7 @@ const SLOW_FREE = 2;
 const CUT_TEXT = 'SHORT CUT · LAP CANCELLED';
 const BACK_LIMIT = 100;        // metres driven the wrong way along the lap before it is cancelled (Martin, 24 Nov)
 const BACK_WARN = 25;          // ... and from this far on the panel says WRONG WAY
-const LOCAL_KEY = 'kvissuroam.laps';
+const LOCAL_KEY = TARTU ? 'kvissuroam.laps' : 'kvissuroam.laps.tallinn';     // (each city's circuit its own)
 const CP_KEY = TRACK.checkpoints.join(',');      // which checkpoints a lap's split times belong to
 
 export function fmtTime(sec) {
@@ -110,7 +111,7 @@ export function createTrack() {
 }
 
 // inside kerbs drawn as a curve: [apex index, points either side, side of the turn (1 right, -1 left)]
-export const ROUND = [[628, 9, 1], [1035, 8, -1]];
+export const ROUND = TARTU ? [[628, 9, 1], [1035, 8, -1]] : [];
 
 // translucent glowing bands along both kerbs, built piece by piece as the ground under them loads
 function createEdges(track, world) {
@@ -291,7 +292,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   scene.add(edges.group);
   const decor = createDecor(track, world);
   scene.add(decor.group, decor.fixed);
-  const landmarks = createLandmarks(world, track);
+  // (the kiosks, parked cars and café terrace round Toomemägi's start: Tartu's only)
+  const landmarks = TARTU ? createLandmarks(world, track) : { group: new THREE.Group(), update() {} };
   scene.add(landmarks.group);
   const laps = loadLocal();                    // this browser's laps, newest last
 
@@ -558,7 +560,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
             }
           }
           // between the two trees on the lawn at the start of Baeri, on a hotlap or in a race: NICE CUT! (no rule, no penalty)
-          if (st.running || racing?.()) nice.check(st.prev.x, st.prev.z, x, z);
+          if (TARTU && (st.running || racing?.())) nice.check(st.prev.x, st.prev.z, x, z);
           if (st.running) {
             // the gates in order (checkpoints among them): the next one counts; one further on touched first is a
             // short cut, at once where only a short cut gets there, else when the next checkpoint or the finish comes

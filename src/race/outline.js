@@ -1,6 +1,6 @@
 // The start screen's track map: the real lap centre line as a neon outline (north up, like the
 // city map), with a bright dot lapping it. Clicking it opens the lap times board.
-import TRACK from './track.json';
+import { TRACK } from './circuit.js';
 
 const LAP_S = 7;               // seconds for the dot to go round
 const TAIL = 70;               // length of the dot's tail, in thousandths of the lap

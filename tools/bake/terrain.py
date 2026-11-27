@@ -29,7 +29,7 @@ CLEAR = 2.3            # a deck needs at least this much room under it (m)
 etak = {}
 # Bridges over the Emajõgi: world (x, z) of the middle, name, look (drawn by src/world/decks.js), and
 # the rise of the deck above a straight line between its ends where the real one is clearly humped.
-BRIDGES = [
+BRIDGES = [] if CITY != 'tartu' else [
     (1370, 2146, 'Kroonuaia sild', 'girder', None),
     (1485, 2282, 'Vabadussild', 'steelarch', None),
     (1622, 2765, 'Kaarsild', 'arch', 1.0),
@@ -38,6 +38,12 @@ BRIDGES = [
     (2630, 3805, 'Sõpruse sild', 'girder', None),
     (3786, 6514, 'Ihaste sild', 'girder', None),
 ]
+if CITY == 'tallinn':
+    # the two bridges of the Pirita-Kose-Kloostrimetsa circuit (world x, z of the middle)
+    BRIDGES = [
+        (-833, -301, 'Pirita sild', 'girder', None),
+        (496, 271, 'Lükati sild', 'girder', None),
+    ]
 
 
 def known_bridge(x, z):
@@ -161,6 +167,8 @@ def mark_water_crossings(roads, river_u, others=()):
     Over the Emajõgi the whole ETAK segment becomes the bridge. Over other water only the stretch over
     the water and a few metres beyond is cut out of the road as a bridge (marked small), because a
     segment there can run on for hundreds of metres. roads is changed in place."""
+    if CITY == 'tallinn':
+        others, river_u = list(others) + [river_u], Polygon()
     other_u = unary_union(list(others)) if len(others) else None
     near = other_u.buffer(6.0) if other_u is not None else None
     k = 0
@@ -276,11 +284,30 @@ def water(hN):
     streams = feats('E_203_vooluveekogu_a')
     ponds = feats('E_202_seisuveekogu_a', detail_box)
     main = [g for p, g in streams if 'Emaj' in (p.get('nimetus') or '')]
+    if CITY == 'tallinn':
+        # Tallinn: the sea and the Pirita river (sea level from its mouth up past the Lükati bridge) are one water
+        main = [g for p, g in streams if 'Pirita' in (p.get('nimetus') or '')] + [g for p, g in feats('E_201_meri_a', detail_box.buffer(2000))]
     if not main and not os.environ.get('BAKE_ONLY'):
         main = [max((g for p, g in streams), key=lambda g: g.area)]
     # (a partial bake far from the Emajõgi has no river: RIVER_LEVEL gives its level for meta.json)
     river_u = unary_union(main) if main else Polygon()
     others = [g for p, g in streams if g.intersects(detail_box) and not g.intersects(river_u.buffer(-1))] + [g for p, g in ponds]
+    if CITY == 'tallinn':
+        # the Pirita above the Lükati bridge falls 14 m through the valley (the mill at Vesiveski): cut into pieces of
+        # about 120 m, each at its own level, so the water lies in its bed all the way and not 4 m down a canyon
+        cut = []
+        for g in others:
+            if g.area < 20000:
+                cut.append(g)
+                continue
+            minx, miny, maxx, maxy = g.bounds
+            for x in np.arange(minx, maxx, 120.0):
+                for y in np.arange(miny, maxy, 120.0):
+                    q = g.intersection(box(x, y, x + 120.0, y + 120.0))
+                    for part in (q.geoms if hasattr(q, 'geoms') else [q]):
+                        if part.geom_type == 'Polygon' and part.area > 12:
+                            cut.append(part)
+        others = cut
     others = [g for g in others if g.area > 12]
     other_u = unary_union(others)
     rv = rast([river_u], X0 - 0.5, Z0 - 0.5, W1 + 1, H1 + 1, 1.0)

@@ -4,6 +4,7 @@
 // for the boxes and poles. They are scenery only.
 import * as THREE from 'three';
 import { paintScale } from './paintscale.js';
+import { DATA } from '../city.js';
 
 // [background, text, glow]: rough brand colours, a neon look for everything else
 const STYLES = [
@@ -178,7 +179,7 @@ export function createSigns(world) {
     return group.children.length ? group : null;
   }
 
-  fetch(`${import.meta.env.BASE_URL}data/signs.json`).then((r) => r.json()).then((d) => {
+  fetch(`${DATA}signs.json`).then((r) => r.json()).then((d) => {
     data = d;
     for (const f of waiting.splice(0)) f();
   }).catch(() => { /* no signs baked: play without them */ });

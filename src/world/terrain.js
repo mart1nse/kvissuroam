@@ -3,8 +3,9 @@ import { sunDirection } from './sky.js';
 import { deckTopGeometry } from './decks.js';
 import { createRoadPainter } from './roadtex.js';
 import { jobs } from '../jobs.js';
+import { DATA } from '../city.js';
 
-const BASE = `${import.meta.env.BASE_URL}data/ortho/`;
+const BASE = `${DATA}ortho/`;              // (this city's map: src/city.js)
 
 const SUN = sunDirection();
 

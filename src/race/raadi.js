@@ -776,7 +776,8 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
   // On the start itself, and until the car is DISC_OUT m out of the circle, neither shows: only a filled circle on
   // the ground, the disc (Martin 26 Nov: "once you have driven out of it 5m, it becomes the column again").
   let beam = null, ring = null, disc = null;
-  // (made through the work queue, so warm.js holds them back unseen until their shader and picture are on the card)
+  // (made through the work queue, so warm.js holds them back unseen until their shader and picture are on the card;
+  // drawn in one go from the start, as src/still.js would make them, so the shader made ready is the one drawn)
   let beamQueued = false, ringQueued = false;
   const ease = (m, to, dt) => {
     const d = to - m.material.opacity;
@@ -791,7 +792,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
       beamQueued = true;
       jobs.add(function* () {
         const sp = startPose(), geo = new THREE.CylinderGeometry(START_R, START_R, BEAM_H, 48, 1, true);
-        const b = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        const b = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: beamTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, forceSinglePass: true }));
         b.position.set(sp.x, groundY(sp.x, sp.z) - 0.3 + BEAM_H / 2, sp.z);
         b.renderOrder = 5;
         b.visible = false;
@@ -811,7 +812,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
         const sp = startPose(), y0 = groundY(sp.x, sp.z), geo = new THREE.CylinderGeometry(START_R, START_R, RING_H, 48, 1, true);
         const pos = geo.attributes.position;
         for (let i = 0; i < pos.count; i++) pos.setY(i, groundY(sp.x + pos.getX(i), sp.z + pos.getZ(i)) - y0 + (pos.getY(i) > 0 ? RING_H : 0) + 0.04);
-        const r = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: ringTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        const r = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: ringTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, forceSinglePass: true }));
         r.position.set(sp.x, y0, sp.z);
         r.renderOrder = 5;
         r.visible = false;
@@ -824,7 +825,7 @@ export function createStage({ world, scene, camera = null, toast, place, onRun, 
         dg.rotateX(-Math.PI / 2);
         const dp = dg.attributes.position;
         for (let i = 0; i < dp.count; i++) dp.setY(i, groundY(sp.x + dp.getX(i), sp.z + dp.getZ(i)) - y0 + 0.05);
-        const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: discTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: discTex(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, forceSinglePass: true }));
         d.position.set(sp.x, y0, sp.z);
         d.renderOrder = 5;
         d.visible = false;

@@ -662,17 +662,18 @@ export const CARS = {
     finalDrive: 1.0,
     efficiency: 0.93,
     shiftTime: 0,
-    // Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg said
-    // nowhere (it was 340 on the motors, with BOOST on to about 370). The motors' push meets the air's about 1.7
-    // km/h under the limiter (1.1 before the fade below), so each limiter stands that much over the figure the car reaches.
-    limiter: 390.7, limiterNoFans: 406.8,
+    // Top speeds (Martin 27 Nov: "no thrust, fan on: maximum capped to 376 / no thrust, fan off: maximum capped to 391 /
+    // thrust on, fan off: maximum 405 / thrust on, fan on: maximum 387", the 405 an easter egg said nowhere; 389 and 405
+    // on the motors from 26 Nov). The motors' push meets the air's about 1.7 km/h under the limiter (with the fade
+    // below), so each limiter stands that much over the figure the car reaches. thrustTop: with THRUST held (thrust.js).
+    limiter: 377.5, limiterNoFans: 392.7, thrustTop: 387, thrustTopNoFans: 405,
     // The last of its top speed comes slowly (Martin 27 Nov: "let the top speed of the rocket come a little bit slower in
     // the last 15-20 kmh. currently it cuts off abruptly"): over the last topEase km/h the motors give less and less, to
     // topEaseK of their push at the limit, so the pull fades from about 0.2 g to nothing instead of stopping dead.
-    // 380 to 388 km/h took 1.1 s and now 2.6 s, 400 to 404 with the fans off 1 s and now 3.2 s; 389 comes at 22 s, not 21.
+    // (the last 8 km/h to its top on the motors took 1.1 s and then 2.6 s)
     topEase: 18, topEaseK: 0.65,
     abs: 0.5,
-    ref: { zeroTo100: 1.9, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 1.9 s from a standstill, 1.7 s with a foot of rollout as Tesla times its cars (Martin 27 Nov), on the launch suction, fanLaunch; 2.6 s without it)
+    ref: { zeroTo100: 1.9, top: 387, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 1.9 s from a standstill, 1.7 s with a foot of rollout as Tesla times its cars (Martin 27 Nov), on the launch suction, fanLaunch; 2.6 s without it)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

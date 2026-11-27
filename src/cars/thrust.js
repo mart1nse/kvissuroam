@@ -125,7 +125,8 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) r.tank = 0; };
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
-// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not 10: tests only).
+// kickflip: a race, a timed lap, the Raadi stage), boostOff (no BOOST: the same; Martin 27 Nov, "lets remove boost
+// option from timed efforts"), quickRefill (an empty tank is full again in 2 s, not 10: tests only).
 // r.on: BOOST's valves are open; r.dry: they shut for want of gas with the button still held (it must be let go).
 // droop: how far the wheels hang below the body in the air (m, the physics' own spring travel at rest): a flight
 // ends where they first touch, see fly.
@@ -151,7 +152,7 @@ export function rocketStep(car, input, world, dt, droop = 0) {
   // BOOST
   // (open valves stay open down to EMPTY; shut ones open with BOOST_MIN in the tank, and after running dry only
   // at a new press, so a held button does not sputter as the tank fills)
-  const held = !!input.boost;
+  const held = !!input.boost && !input.boostOff;
   if (!held) r.dry = false;
   const on = held && !off && (r.on ? r.tank > EMPTY * TANK_S : !r.dry && r.tank >= BOOST_MIN * TANK_S);
   if (r.on && !on && held && !off) r.dry = true;

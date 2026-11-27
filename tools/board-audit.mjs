@@ -81,18 +81,21 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; ro += a[9 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; roll[i] = ro / 1000; }
   if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
   const lim = limits.get(l.car), where = {};
+  // (a car with thrusters: BOOST worked on timed runs until Martin's 27 Nov "lets remove boost option from timed
+  // efforts", live that evening; its laps since are judged by the motors alone, as the server does)
+  const boosted = !!lim?.gas && l.at < '2026-11-28';
   if (l.track === 'raadi') {
-    // (a car with thrusters leaves the start line harder than the others)
-    row.stage = stageCheck(xs, zs, l.pen || 0, lim?.gas?.launch, where);
+    // (a car with thrusters on BOOST left the start line harder than the others)
+    row.stage = stageCheck(xs, zs, l.pen || 0, boosted ? lim.gas.launch : 0, where);
     if (row.stage) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE RUN DOES NOT HOLD by the stage's rules (${row.stage})`);
   }
   if (!lim) { row.note = 'not judged'; continue; }
-  const j = judgeDrive(xs, zs, ys, lim, { roll, loose: where.loose });   // (a stage run's gravel against gravel's grip)
+  const j = judgeDrive(xs, zs, ys, lim, { roll, loose: where.loose, noGas: !boosted });   // (a stage run's gravel against gravel's grip)
   row.over = { pull: j.pull, grip: j.grip, stop: j.stop, top: j.top };
   // (a car with thrusters, the Rocket: the gas its drive used over what the tank held, of a full tank, the tanks it
   // was counted to use in all, and the seconds of a kickflip in it)
-  const gas = lim.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used, ${j.air} s of a kickflip` : '';
-  if (lim.gas) Object.assign(row.over, { gas: j.gas, spent: j.spent, air: j.air });
+  const gas = boosted ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used, ${j.air} s of a kickflip` : '';
+  if (lim.gas) Object.assign(row.over, boosted ? { gas: j.gas, spent: j.spent, air: j.air } : { air: j.air });
   const worst = Math.max(j.pull, j.grip, j.stop, j.top);
   if (j.why) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: THE DRIVE DOES NOT HOLD for this car (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${gas})`);
   else if (worst > CLOSE) notes.push(`${l.track} ${l.car} ${fmt(l.ms)} ${l.name}: near a limit (seconds over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}; refused past ${OVER_MAX})`);

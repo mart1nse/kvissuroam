@@ -1183,7 +1183,7 @@ async function boot() {
     // (somebody else on a stage run, by what their car last sent: the server does not count them for the vote either)
     staged: (id) => { const p = mp.poseOf(id); return !!p && !!(p[20] & 8) && Math.hypot(p[0] - 2660, p[1] - 470) < 600; },
     // (a car with thrusters does not race: Martin 26 Nov, "do not allow the tesla to take part in races". It
-    // laps on its own, with BOOST and without FLIP once the lap is on: ctl.flipOff below)
+    // laps on its own, without BOOST and FLIP once the lap is on: ctl.flipOff and ctl.boostOff below)
     noRace: () => !!car.spec.thrusters,
     // (desktop: a name in the race list follows that car, like the online list)
     onWatch: isTouch ? null : (id) => watch?.start(id), watching: () => watch?.id || null,
@@ -2272,10 +2272,10 @@ const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 const aloft = {};                  // our car as the things on the ground see it while it flies a kickflip
 let rocketOff = false, flipOff = false;   // the thrusters' buttons do nothing just now (waiting for a start); no kickflip (a race, a timed lap)
-let flipWas = false;               // FLIP held last frame (a press where it does nothing says why, once a press)
+let flipWas = false, boostWas = false;   // FLIP / BOOST held last frame (a press where it does nothing says why, once a press)
 // (Martin 27 Nov: "if a lap is ongoing, then quick small text pops up somewhere" when FLIP or X is pressed)
-const flipWhy = () => (rocketOff ? 'NO FLIP BEFORE THE START' : raceMode?.ghost ? 'NO FLIP IN A RACE'
-  : stage?.running ? 'NO FLIP ON MAJORAADI' : 'NO FLIP ON A TIMED LAP');
+const flipWhy = (w = 'FLIP') => (rocketOff ? `NO ${w} BEFORE THE START` : raceMode?.ghost ? `NO ${w} IN A RACE`
+  : stage?.running ? `NO ${w} ON MAJORAADI` : `NO ${w} ON A TIMED LAP`);
 
 // Coming back from another tab: the first frames arrive late and unevenly while the browser warms
 // up again. Don't count them as a struggling device, and ease the step size back in instead of
@@ -2378,14 +2378,16 @@ function frame(ts) {
   if (world.ready(car.x, car.z) && !bigmap.isOpen) {
     // (on the race grid a four-wheel-drive car waits with the clutch in, revving: src/cars/physics.js)
     car.gridHold = !!(raceMode?.pin || stage?.pin);
-    // (a car with thrusters, Martin 2026-11-25: in a race, on a timed lap and on the Raadi stage BOOST works,
-    // to be spent where it pays, and FLIP does not; neither does while the car waits for its start, where
-    // the tank is filled so that everybody sets off with the same)
+    // (a car with thrusters: in a race, on a timed lap and on the Raadi stage neither FLIP nor BOOST works (Martin
+    // 27 Nov, "lets remove boost option from timed efforts": the server then judges its laps by its motors alone),
+    // nor while the car waits for its start, where the tank is filled)
     if (car.rocket) {
       ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
       ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
+      ctl.boostOff = flipOff && !rocketOff;
       if (ctl.flip && !flipWas && flipOff && mode === 'drive' && !watch?.active) hud.note(flipWhy(), 1600);
-      flipWas = !!ctl.flip;
+      else if (ctl.boost && !boostWas && ctl.boostOff && mode === 'drive' && !watch?.active) hud.note(flipWhy('BOOST'), 1600);
+      flipWas = !!ctl.flip; boostWas = !!ctl.boost;
       // (no quick refill under ?off=100 any more: Martin 27 Nov, "so it will behave the same as prod will"; it was 2 s)
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
     }

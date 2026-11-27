@@ -126,6 +126,47 @@ for (const [name, s, plan, opt, want] of CHEATS) {
 }
 console.log(`ok  ${CHEATS.length} changed cars and tanks: every one refused`);
 
+// ---- a timed lap or a stage run: no BOOST in the game (Martin 27 Nov, "lets remove boost option from timed
+// efforts"), so the server judges the Rocket by its motors and tyres alone (noGas), as any other car
+const timed = (d, l = lim) => judgeDrive(d.xs, d.zs, d.ys, l, { roll: d.roll, noGas: true });
+const off = (f) => (t, car) => ({ ...(typeof f === 'function' ? f(t, car) : f), boost: 0 });
+const TIMED_HONEST = [
+  ['hard driving', HONEST.at(-1)[1], HONEST.at(-1)[2]],
+  ['flat out, a stop, round and round 80 to 300 km/h', [[22, { up: 1 }], [5, { down: 1 }], [180, off(laps(80 / 3.6, 300 / 3.6))]]],
+  ['round and round 20 to 120 km/h, tail out', [[180, (t, car) => ({ ...off(laps(20 / 3.6, 120 / 3.6))(t, car), steer: 0.6 * Math.sin(t * 1.3) })]]],
+  ['a handbrake slide, floored out of it', [[4, { up: 1 }], [1.2, { up: 1, right: 1, hb: 1, handbrake: 1 }], [6, { up: 1, left: 0.6 }], [4, (t, car) => ({ up: 1, steer: straight(car) })], [4, { down: 1 }]]],
+  ['donuts', [[2, { up: 1 }], [12, { up: 1, right: 1 }], [3, { down: 1 }]]],
+  ['over the hills', [[20, { up: 1 }], [3, { down: 1 }], [60, off(laps(60 / 3.6, 220 / 3.6))]], { world: hills }],
+  ['fans off: to 405 km/h', [[50, (t, car) => ({ up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) })], [6, { down: 1 }]], { fanOff: true }],
+  ['fans off: round and round, 2 minutes', [[120, off(laps(80 / 3.6, 330 / 3.6))]], { fanOff: true }],
+  ['on gravel tyres, 2 minutes', [[120, off(laps(40 / 3.6, 200 / 3.6))]], { tyres: 'gravel' }],
+  ['into the wall and on', [[16, { up: 1 }], [6, { up: 1, right: 1 }], [6, { up: 1 }]], { world: { ...road, sdfAt: (x, z) => z + 900 } }],
+];
+worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0 };
+for (const [name, plan, opt] of TIMED_HONEST) {
+  const d = drive(spec, plan, opt), j = timed(d);
+  if (verbose) console.log(`timed   ${name.padEnd(64)} ${show(j)}  (top ${d.top.toFixed(0)} km/h)`);
+  assert.equal(d.blown, 0);
+  for (const k of Object.keys(worst)) worst[k] = Math.max(worst[k], j[k]);
+  assert.equal(j.why, '', `timed, ${name}: refused (${show(j)})`);
+  assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1 && j.air === 0, `timed, ${name}: too near a limit (${show(j)})`);
+}
+console.log(`ok  ${TIMED_HONEST.length} honest drives on a timed run, no BOOST, judged by the motors alone: at most ${JSON.stringify(worst)}`);
+const TIMED_CHEATS = [
+  ['twice the motors', copy((s) => { s.engine.maxPowerKw *= 2; s.engine.maxWheelForce *= 2; s.fanDown += s.mass * 9.81; }), [[14, { up: 1 }], [4, { down: 1 }], [130, off(laps(60 / 3.6, 250 / 3.6))]], {}, 'pull'],
+  ['1.5 times the motors', copy((s) => { s.engine.maxPowerKw *= 1.5; s.engine.maxWheelForce *= 1.5; s.fanDown += 0.5 * s.mass * 9.81; }), [[14, { up: 1 }], [4, { down: 1 }], [130, off(laps(60 / 3.6, 250 / 3.6))]], {}, 'pull'],
+  ['BOOST still working (an old or changed page)', spec, GREEDY, {}, ''],
+  ['BOOST tapped now and then', spec, [[150, (t, car) => ({ ...off(laps(80 / 3.6, 300 / 3.6))(t, car), boost: t % 20 < 1.5 })]], {}, ''],
+  ['a car 700 kg lighter', copy((s) => { s.mass -= 700; }), [[150, off(laps(150 / 3.6, 380 / 3.6))]], {}, ''],
+];
+for (const [name, s, plan, opt, want] of TIMED_CHEATS) {
+  const d = drive(s, plan, opt), j = timed(d);
+  if (verbose) console.log(`tcheat  ${name.padEnd(64)} ${show(j)}  (valves open ${d.blown.toFixed(1)} s, top ${d.top.toFixed(0)} km/h)`);
+  assert.ok(j.why, `timed, ${name}: must be refused (${show(j)})`);
+  if (want) assert.equal(j.why, want, `timed, ${name}: refused for ${j.why}, expected ${want} (${show(j)})`);
+}
+console.log(`ok  ${TIMED_CHEATS.length} changed cars and BOOST on a timed run: every one refused (twice the motors too, which the gas let by)`);
+
 // ---- a kickflip inside the drive (the game allows none once a lap or a stage run is on)
 const downs = { ...road, heightAt: (x, z) => 5 * Math.sin(z / 90) };   // (long gentle hills: on the steep ones a bank ends the flight at once)
 for (const [kmh, world] of [[60, road], [140, road], [280, road], [90, downs], [200, downs]]) {
@@ -137,6 +178,7 @@ for (const [kmh, world] of [[60, road], [140, road], [280, road], [90, downs], [
   const j = judge(d);
   if (verbose) console.log(`flight  at ${String(kmh).padStart(3)} km/h${world === downs ? ' over hills' : ''}`.padEnd(72), show(j), `(most roll ${Math.max(...d.roll.map(Math.abs)).toFixed(2)})`);
   assert.equal(j.why, 'air', `a kickflip at ${kmh} km/h must be refused as a flight (${show(j)})`);
+  assert.ok(timed(d).why, `a kickflip at ${kmh} km/h on a timed run must be refused (${show(timed(d))})`);
   // (told without the samples' roll, as a race lap followed from positions is, it is not judged for that)
   assert.equal(judgeDrive(d.xs, d.zs, d.ys, lim).air, 0);
 }

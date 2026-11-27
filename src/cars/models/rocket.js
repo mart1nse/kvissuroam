@@ -1,8 +1,10 @@
-// 2028 Tesla Roadster Rocket (Martin 2026-11-25). The body is Martin's scanned model (public/models/rocket.glb, his
-// Tripo model of 27 Nov, 2.4 million triangles in one piece with the wheels fused on, made light with
-// glb-tools/highpoly: the scan's tyres cut out, what is never seen taken away, brought down to some 45 thousand
-// triangles; paint a very light whitish silver, glass dark, black parts evened, the full-width red light bar of
-// Tesla's photo drawn in the black band at the back, gold rims on the four tail nozzles, plates).
+// 2028 Tesla Roadster Rocket (Martin 2026-11-25). The body is Martin's Tripo model of 27 Nov (public/models/rocket.glb),
+// made with Tripo's smart mesh (clean flat panels, 28 thousand triangles in parts: body, wheels, seats ...) and put
+// together with glb-tools/highpoly (splice.py, stage3.py): its wheels, insides and the inner face of its double glass left out, its rear diffuser (an
+// empty pocket with loose discs) replaced by the diffuser and four tail nozzles of his first, high-poly scan of the
+// same morning, sized to the first scan (5 % narrower and lower than the smart mesh came); paint a very light whitish
+// silver, glass dark, black parts evened, the full-width red light bar of Tesla's photo as a strip of its own, gold
+// rims on the four tail nozzles, plates. 12 thousand triangles, 1.1 MB.
 // What is built here is the light stand-in that shows until the scan has loaded (a low two-seater drawn in the
 // kit's way), plus the wheels. The ten cold-gas nozzles are where the scan has them (NOZZLES in src/cars/thrust.js:
 // four in a row in the diffuser, one under each sill just behind each wheel, one each side of the nose); the
@@ -14,8 +16,8 @@ import { lathe, tyreAndRim } from './parts.js';
 import { useGlbBody } from './glbbody.js';
 
 // (Tesla has published no size: these are the scan's at the 2.65 m wheelbase. Its tyres are about 245/35 R19 in front
-// and 325/30 R20 behind, their outer walls where the scan's were: flush with the arches)
-const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.611, trackFront: 1.669, wheelRadius: 0.356, wheelRadiusFront: 0.326 };
+// and 325/30 R20 behind, their outer walls where the model's were: flush with the arches)
+const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.619, trackFront: 1.601, wheelRadius: 0.356, wheelRadiusFront: 0.326 };
 const ZF = -2.1, ZR = 2.2, HZ = DIMS.wheelbase / 2;
 
 // (the nozzles are marked where src/cars/plumes.js draws their jets: where the scanned body has them)

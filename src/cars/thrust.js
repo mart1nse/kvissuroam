@@ -110,15 +110,22 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 // round from where the swing ends; worked out from the plan's own numbers, so the other players' pages fly the same)
 const yawHeld = (p) => Math.max(-YAW_HOLD_R, Math.min(YAW_HOLD_R, p.yawR));
 // (the held turn's rate is h * (1 - smooth(t / YAW_HOLD_T)); summed, h * T * (u - u^3 + u^4 / 2) with u = t / T, at most 1)
-const holdSum = (t) => { const u = clamp01(t / YAW_HOLD_T); return YAW_HOLD_T * (u - u * u * u + (u * u * u * u) / 2); };
-const yawCarry = (p, t) => { const h = yawHeld(p); return h * holdSum(t) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
-// (the path turns by the nose's carried swing, so the line of travel and the nose differ by the slide at the press)
+const holdSum = (t, T) => { const u = clamp01(t / T); return T * (u - u * u * u + (u * u * u * u) / 2); };
+// (the nose: the held turn over YAW_HOLD_T. The path only over PATH_HOLD_T: Martin 27 Nov, "make the initial turn as is,
+// then slow out the turning of the car quicker and replace it with turning around on its axis, so the forward motions
+// and car rotations are differentiated". The car goes on round on its own axis while its way bends no further, and
+// comes down pointing further round than it travels: the tyres take that as a slide.)
+const PATH_HOLD_T = 1.0;
+const carry = (p, t, T) => { const h = yawHeld(p); return h * holdSum(t, T) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
+const yawCarry = (p, t) => carry(p, t, YAW_HOLD_T);
+const pathCarry = (p, t) => carry(p, t, PATH_HOLD_T);
+// (the nose is lined up with the line of travel at the press: the slide it had then is taken out)
 function lineTurn(p) {
   if (Math.hypot(p.vx, p.vz) <= YAW_MIN_V) return 0;
   const d = Math.atan2(p.vx, -p.vz) - p.yaw0;
   return Math.atan2(Math.sin(d), Math.cos(d));
 }
-// The path over the ground: the speed at the press, its heading turned by yawCarry (the corner jets push it round as the
+// The path over the ground: the speed at the press, its heading turned by pathCarry (the corner jets push it round as the
 // nose swings: at 30 m/s and a turn of 0.5 rad/s 15 m/s2 at first, a tenth of what they have). Summed once a plan in
 // steps of PATH_DT (the other players' pages from the same numbers), read between them.
 const PATH_DT = 1 / 60, paths = new WeakMap();
@@ -128,7 +135,7 @@ function pathOf(p) {
   const n = Math.ceil(MAX_T / PATH_DT) + 2;
   a = new Float64Array(2 * n);
   for (let i = 1; i < n; i++) {
-    const c = yawCarry(p, (i - 0.5) * PATH_DT), cs = Math.cos(c), sn = Math.sin(c);
+    const c = pathCarry(p, (i - 0.5) * PATH_DT), cs = Math.cos(c), sn = Math.sin(c);
     a[2 * i] = a[2 * i - 2] + (p.vx * cs - p.vz * sn) * PATH_DT;
     a[2 * i + 1] = a[2 * i - 1] + (p.vz * cs + p.vx * sn) * PATH_DT;
   }
@@ -140,7 +147,7 @@ export function flightPath(p, t, out) {
   const a = pathOf(p), u = Math.max(0, Math.min(MAX_T, t)) / PATH_DT, i = Math.min(Math.floor(u), a.length / 2 - 2), f = u - i;
   out[0] = p.x0 + a[2 * i] + (a[2 * i + 2] - a[2 * i]) * f;
   out[1] = p.z0 + a[2 * i + 1] + (a[2 * i + 3] - a[2 * i + 1]) * f;
-  const c = yawCarry(p, t), cs = Math.cos(c), sn = Math.sin(c);
+  const c = pathCarry(p, t), cs = Math.cos(c), sn = Math.sin(c);
   out[2] = p.vx * cs - p.vz * sn; out[3] = p.vz * cs + p.vx * sn;
   return out;
 }

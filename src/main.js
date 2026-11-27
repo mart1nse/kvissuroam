@@ -2272,6 +2272,10 @@ const s0Short = () => CARS[carId].short.toUpperCase();
 const idle = {};
 const aloft = {};                  // our car as the things on the ground see it while it flies a kickflip
 let rocketOff = false, flipOff = false;   // the thrusters' buttons do nothing just now (waiting for a start); no kickflip (a race, a timed lap)
+let flipWas = false;               // FLIP held last frame (a press where it does nothing says why, once a press)
+// (Martin 27 Nov: "if a lap is ongoing, then quick small text pops up somewhere" when FLIP or X is pressed)
+const flipWhy = () => (rocketOff ? 'NO FLIP BEFORE THE START' : raceMode?.ghost ? 'NO FLIP IN A RACE'
+  : stage?.running ? 'NO FLIP ON MAJORAADI' : 'NO FLIP ON A TIMED LAP');
 
 // Coming back from another tab: the first frames arrive late and unevenly while the browser warms
 // up again. Don't count them as a struggling device, and ease the step size back in instead of
@@ -2380,6 +2384,8 @@ function frame(ts) {
     if (car.rocket) {
       ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
       ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
+      if (ctl.flip && !flipWas && flipOff && mode === 'drive' && !watch?.active) hud.toast(flipWhy(), 1600, { small: true });
+      flipWas = !!ctl.flip;
       // (no quick refill under ?off=100 any more: Martin 27 Nov, "so it will behave the same as prod will"; it was 2 s)
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
     }

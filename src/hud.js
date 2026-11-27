@@ -191,14 +191,17 @@ export function createHud(world) {
       elTyre.setAttribute('aria-label', kind === 'gravel' ? 'Gravel tyres: change to road tyres' : 'Road tyres: change to gravel tyres');
     },
     setCar(s) { spec = s; elName.textContent = s.name.toUpperCase(); buildDial(s.engine); },
-    toast(text, ms = 3200) {
+    // (small: a quick note in smaller letters, such as FLIP pressed where it does nothing, Martin 27 Nov)
+    toast(text, ms = 3200, { small = false } = {}) {
       // (clear below the Raadi stage's time panel at the top middle: it grows a line for its messages, and the
       // penalty note sat over it; Martin 23 Nov: "leaving off the track a touch lower")
-      const panel = !document.body.classList.contains('touch') && document.querySelector('#stage:not(.hidden)');
+      // (a small note goes below the timed lap's panel too, clear of its checkpoint line)
+      const panel = !document.body.classList.contains('touch') && document.querySelector(small ? ':is(#stage, #lap):not(.hidden)' : '#stage:not(.hidden)');
       // (and room for that line when it is not there yet: a penalty puts it up in the same moment)
-      const below = panel?.offsetParent ? panel.getBoundingClientRect().bottom + 12 + (panel.querySelector('.msg')?.textContent ? 0 : 28) : 0;
+      const below = panel?.offsetParent ? panel.getBoundingClientRect().bottom + (panel.id === 'lap' ? 8 : 12 + (panel.querySelector('.msg')?.textContent ? 0 : 28)) : 0;
       elToast.style.top = below > innerHeight * 0.16 ? `${Math.round(below)}px` : '';
       elToast.textContent = text;
+      elToast.classList.toggle('small', small);
       elToast.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => elToast.classList.remove('show'), ms);

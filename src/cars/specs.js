@@ -607,12 +607,13 @@ export const CARS = {
     // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
     // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
     drive: 'rwd',
-    // The motors keep the rears at their grip with the wheel straight, so it launches straight (without: 0-100 in 2.9 s
-    // and 20 degrees sideways off the line), and in a bend lightly, at tcBend of that (Martin 27 Nov: "if i floor it,
-    // it would not kick the tail out much", then on RWD "what about rwd with a bit of traction control?"): floored in
-    // a bend the tail steps out 25 to 45 degrees, about as the Carrera GT's does; with none it swung right round up to
-    // 140 km/h, at 0.5 up to 100.
-    tc: 1, tcSlip: 1.5, tcBend: 0.8,
+    // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
+    // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
+    // traction control. thats the best part when the back steps out a bit. lets try it constant"): at tcBend of its
+    // strength, all of it again from 120 km/h (60 with the fans off). Floored in a bend the tail steps out 25 to 45
+    // degrees, about as the Carrera GT's; weaving floored at 20 to 40 km/h 3 to 8 (full traction control: 1 or 2); it
+    // still launches straight, and below 40 km/h floored it lets the tyres spin as every car's does (donuts, drifts).
+    tc: 1, tcSlip: 1.5, tcBend: 0.8, tcEven: true,
     grip: 1.2,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that

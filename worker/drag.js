@@ -12,26 +12,36 @@
 // While the tree and the run are on, each sends its place on the strip about 30 times a second ('dp'), passed on
 // at once to the other driver only (feed): their car is drawn where it is on the other screen, not 0.1 s late as
 // the ordinary positions are. That stream has its own allowance and does not count against the socket's.
-// Nothing here is stored in the lobby's tables. Who holds a lane (and its run) is also written on that driver's socket
-// (dl, dr, da, do in its attachment), so a lobby woken from hibernation with its pages still connected has its lanes
-// back; after a restart (every socket gone) the pages say 'in' again when they are on a line (on 'welcome').
-const RUN_MAX = 60000;          // a lane on a run longer than this is freed (a page gone quiet)
+// Who holds a lane (and its run) is also written on that driver's socket (dl, dr, da, dg, do in its attachment), so a
+// lobby woken from hibernation with its pages still connected has its lanes back; after a restart (every socket gone)
+// the pages say 'in' again when they are on a line (on 'welcome').
+// A clean quarter mile, practice or race, goes on the drag strip's board (the lobby's laps table, track 'drag'; Martin
+// 27 Nov 2026) when it is a run this desk started for that socket, the server's own clock has run at least its
+// R/T + ET since its green, and the car could have done it (src/race/dragrules.js).
 const LEAD_MS = 2600;           // a race of two: green this long after both are in (+ up to RAND_MS), the first amber 1.5 s before it
 const RAND_MS = 900;
 const SOLO_MIN = 400, SOLO_MAX = 6000;     // a practice's green: this soon and no later
 const FEED_MAX = 45;            // place messages a second a socket may send (it sends 30)
+const CLOCK_SLACK = 1500;       // a run's figures may come this much before its R/T + ET after green has passed here (the page's estimate of this clock)
+const TIME_MAX = 120000;        // and no later than this after green
+// a lane on a run longer than this is freed (a page gone quiet): not before its figures could still come, since a page
+// under 20 frames a second drives in slow motion (a quarter mile of 18 s took 87 s on a test machine, 27 Nov 2026,
+// and its lane had been freed at 60 s with the run, so the time never reached the board)
+const RUN_MAX = TIME_MAX + SOLO_MAX + 2000;
+
+import { dragRefused } from '../src/race/dragrules.js';
 
 export class DragDesk {
   constructor(lobby) {
     this.lobby = lobby;
-    this.lanes = [null, null];  // { id, name, ws, run, at, opp }
+    this.lanes = [null, null];  // { id, name, ws, run, at, go, opp, kept }
     this.n = 0;
     this.rate = new WeakMap();
     // (woken from hibernation: the lanes as their sockets hold them)
     for (const ws of lobby.ctx?.getWebSockets?.() || []) {
       let a = null;
       try { a = ws.deserializeAttachment(); } catch { /* closing */ }
-      if (a?.id && !a.x && (a.dl === 1 || a.dl === 2) && !this.lanes[a.dl - 1]) this.lanes[a.dl - 1] = { id: a.id, name: a.name, ws, run: a.dr || '', at: a.da || Date.now(), opp: a.do || '' };
+      if (a?.id && !a.x && (a.dl === 1 || a.dl === 2) && !this.lanes[a.dl - 1]) this.lanes[a.dl - 1] = { id: a.id, name: a.name, ws, run: a.dr || '', at: a.da || Date.now(), go: a.dg || 0, opp: a.do || '' };
     }
   }
   // a lane's holder written on their socket (k: the lane, or -1 for none)
@@ -41,8 +51,8 @@ export class DragDesk {
       const a = ws.deserializeAttachment();
       if (!a?.id) return;
       const l = this.lanes[k];
-      delete a.dl; delete a.dr; delete a.da; delete a.do;
-      if (l && l.ws === ws) { a.dl = k + 1; if (l.run) { a.dr = l.run; a.da = l.at; } if (l.opp) a.do = l.opp; }
+      delete a.dl; delete a.dr; delete a.da; delete a.dg; delete a.do;
+      if (l && l.ws === ws) { a.dl = k + 1; if (l.run) { a.dr = l.run; a.da = l.at; a.dg = l.go; } if (l.opp) a.do = l.opp; }
       ws.serializeAttachment(a);
     } catch { /* closing */ }
   }
@@ -65,7 +75,7 @@ export class DragDesk {
     const [a, b] = this.lanes;
     if (!a || !b || a.run || b.run || a.id === b.id) return;
     const run = `d${++this.n}${now % 100000}`, go = now + LEAD_MS + Math.round(Math.random() * RAND_MS);
-    a.run = b.run = run; a.at = b.at = now; a.opp = b.id; b.opp = a.id;
+    a.run = b.run = run; a.at = b.at = now; a.go = b.go = go; a.kept = b.kept = false; a.opp = b.id; b.opp = a.id;
     this.mark(a.ws, 0); this.mark(b.ws, 1);
     this.lobby.broadcast({ t: 'drag', op: 'go', run, go, l: [a.id, b.id] });
   }
@@ -84,7 +94,7 @@ export class DragDesk {
         return true;
       } else {
         this.out(me.id);
-        this.lanes[m.l] = { id: me.id, name: me.name, ws, run: '', at: now, opp: '' };
+        this.lanes[m.l] = { id: me.id, name: me.name, ws, run: '', at: now, go: 0, opp: '' };
         this.mark(ws, m.l);
         this.tell();
         this.pair(now);
@@ -97,7 +107,7 @@ export class DragDesk {
       const l = this.lanes[k];
       if (l && !l.run) {
         const go = Math.max(now + SOLO_MIN, Math.min(now + SOLO_MAX, Math.round(m.go)));
-        l.run = `p${++this.n}${now % 100000}`; l.at = now; l.opp = '';
+        l.run = `p${++this.n}${now % 100000}`; l.at = now; l.go = go; l.kept = false; l.opp = '';
         this.mark(ws, k);
         const ids = [null, null];
         ids[k] = me.id;
@@ -108,7 +118,17 @@ export class DragDesk {
       const r = {};
       for (const k of ['rt', 'et', 't60', 't330', 't8', 't1000', 'v8', 'vq', 'tot']) { const v = m.r[k]; r[k] = Number.isFinite(v) && Math.abs(v) < 1000 ? v : null; }
       for (const k of ['red', 'foul', 'dnf']) r[k] = m.r[k] ? 1 : 0;
-      this.lobby.broadcast({ t: 'drag', op: 'res', id: me.id, run: m.run, r });
+      const l = this.lanes.find((x) => x?.ws === ws && x.run === m.run);
+      // (a race of two's figures to both pages: each judges the race from the two runs)
+      if (m.run.startsWith('d')) this.lobby.broadcast({ t: 'drag', op: 'res', id: me.id, run: m.run, r });
+      // the board: once a run, one this desk started for this socket, not sooner after its green than it took
+      if (l && l.go && !l.kept) {
+        l.kept = true;
+        const took = now - l.go, need = ((r.rt ?? 0) + (r.et ?? 0)) * 1000;
+        const why = took < need - CLOCK_SLACK || took > TIME_MAX ? 'clock' : dragRefused(me.car, r);
+        if (!why) this.lobby.dragTime?.({ name: me.name, car: me.car, ip: me.ip, inp: m.inp, r });
+        else if (why !== 'not clean') this.lobby.dragRefused?.(me, r, why);
+      }
     }
     if (changed) this.tell();
     return true;

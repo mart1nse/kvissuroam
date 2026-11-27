@@ -50,6 +50,10 @@ const kmh = (v) => (v == null ? '–' : `${Math.round(v)}`);
 
 function loadBest() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } }
 function saveBest(b) { try { localStorage.setItem(KEY, JSON.stringify(b)); } catch { /* private window */ } }
+// this browser's last clean runs, newest first, for LAP TIMES' Ülenurme tab: { car, ms (ET), at, inp }
+const RUNS_KEY = 'kvissuroam.dragruns', RUNS_KEPT = 10;
+function loadRuns() { try { const l = JSON.parse(localStorage.getItem(RUNS_KEY)); return Array.isArray(l) ? l : []; } catch { return []; } }
+function saveRuns(l) { try { localStorage.setItem(RUNS_KEY, JSON.stringify(l)); } catch { /* private window */ } }
 
 // where on the strip a car is: d of its nose down the strip, w of its middle across
 function stripPos(car) {
@@ -65,9 +69,11 @@ function linePose(car, lane) {
   return { x, z, yaw: STRIP_YAW };
 }
 
-export function createDrag({ world, scene, place, toast, mp = null, canDrive = true, free = () => true, ready = () => true, wasd = () => false, carName = (id) => id, shadows = true }) {
+// inp(): what drives the car now ('kb', 'pad', 'wheel'), kept with a time on the board
+// beep(kind): the start lights' sound ('pip', 'go': src/audio.js, as at Majoraadi's start)
+export function createDrag({ world, scene, place, toast, mp = null, canDrive = true, free = () => true, ready = () => true, wasd = () => false, carName = (id) => id, shadows = true, inp = () => null, beep = () => {} }) {
   const strip = createDragStrip({ world, scene, shadows });
-  const best = loadBest();
+  const best = loadBest(), runs = loadRuns();
   const st = {
     phase: 'off',           // off, line (on the line, waiting), tree (the lights are running), run, done
     lane: 0, pin: null, go: 0, run: '', duel: null, cool: false, jump: false,
@@ -85,11 +91,15 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   const panel = document.createElement('div');
   panel.id = 'drag';
   panel.className = 'hidden';
-  panel.innerHTML = `<div class="lt"><span class="lbl">DRAG · <span class="ln"></span></span><b>0.000</b></div>
+  panel.innerHTML = `<div class="lt"><span class="lbl">DRAG · <span class="ln"></span></span><b>0.000</b><span class="rt"></span></div>
     <div class="shift"><i></i><i></i><i></i><i></i><i></i></div>
     <div class="bars"><div class="me"><i></i></div><div class="op hidden"><i></i><span></span></div></div>
     <div class="lb"><span class="lbl">BEST <span class="car"></span></span><b class="best"></b></div><div class="msg"></div>`;
   hudEl.appendChild(panel);
+  // (the reaction time beside the clock once the car is out of the stage beam, Martin 27 Nov: "show the reaction time
+  // you got already during the run too")
+  const elRt = panel.querySelector('.lt .rt');
+  const showRt = (rt) => { elRt.textContent = rt == null ? '' : `R/T ${rt < 0 ? '−' : ''}${Math.abs(rt).toFixed(3)}`; elRt.classList.toggle('red', rt != null && rt < 0); };
   const elTime = panel.querySelector('.lt b'), elLane = panel.querySelector('.ln'), elBest = panel.querySelector('.best'), elCar = panel.querySelector('.car'), elMsg = panel.querySelector('.msg');
   const leds = [...panel.querySelectorAll('.shift i')], barMe = panel.querySelector('.bars .me i'), barOp = panel.querySelector('.bars .op'), barOpI = barOp.querySelector('i'), barOpN = barOp.querySelector('span');
   const treeEl = document.createElement('div');
@@ -112,6 +122,19 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   slip.id = 'dragslip';
   slip.className = 'hidden';
   hudEl.appendChild(slip);
+  // The timeslip stays up until it is closed (Martin 27 Nov: "let the results stay up until someone closes them, clicks
+  // somewhere else for instance, also always allow to reopen the slip, sort of fold it down when near drag"): ✕ or a
+  // click anywhere else folds it into a tab on the screen's right edge, there while the car is at the strip (not
+  // during a tree or a run); the tab opens the last slip again.
+  const slipTab = document.createElement('button');
+  slipTab.id = 'dragsliptab';
+  slipTab.className = 'hidden';
+  slipTab.title = 'The last timeslip';
+  slipTab.innerHTML = '<span>TIMESLIP</span>';
+  hudEl.appendChild(slipTab);
+  let lastSlip = '';
+  slipTab.addEventListener('click', () => { slipTab.blur(); openSlip(); });
+  addEventListener('pointerdown', (e) => { if (!slip.classList.contains('hidden') && !slip.contains(e.target) && !slipTab.contains(e.target)) foldSlip(); }, true);
   for (const el of [ask, slip]) el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-drag]');
     if (!b) return;
@@ -119,6 +142,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     if (b.dataset.drag === 'practice') practice();
     else if (b.dataset.drag === 'leave') leave();
     else if (b.dataset.drag === 'again') again();
+    else if (b.dataset.drag === 'fold') foldSlip();
   });
   const fader = document.createElement('div');
   fader.style.cssText = `position:fixed;inset:0;background:#0b0420;opacity:0;pointer-events:none;z-index:9000;transition:opacity ${FADE_S}s ease`;
@@ -211,9 +235,10 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     st.go = 0; st.run = ''; st.duel = null; st.red = false; st.leave = null; st.prev = null; st.t = {}; st.v = {}; st.foul = false; st.dnf = false; st.res = null; st.win = false; st.tA = 0;
     c.stick = true; c.neutral = true; c.stickRev = false; c.free = c.rpm;
     st.stagedD = stripPos(c)[0];
-    hideSlip();
+    foldSlip();
     showAsk();
     elMsg.textContent = '';
+    showRt(null);
     // (the lane is taken on the server in update(), once the strip and the ground round it are ready: after a jump
     // from across the map the place loads first, so a race of two does not start while one of us cannot see it)
     st.said = false;
@@ -243,6 +268,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   }
   function startTree(go, duel, run) {
     st.phase = 'tree'; st.go = go; st.duel = duel; st.run = run;
+    st.beepK = -1; showRt(null);
     st.red = false; st.tA = 0; st.rt = null; st.leave = null; st.prev = null; st.t = {}; st.v = {}; st.foul = false; st.dnf = false; st.res = null; st.win = false;
     hideAsk();
     elMsg.textContent = duel ? `VS ${duel.name || 'THE OTHER LANE'}` : 'PRACTICE';
@@ -291,7 +317,9 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       pb = true;
     }
     st.pb = pb;
-    if (st.duel) mp?.dragSend({ t: 'drag', op: 'end', run: st.run, r: pack(res) });
+    if (!res.dnf && !res.red && !res.foul) { runs.unshift({ car: id, ms: Math.round(res.et * 1000), at: new Date().toISOString(), inp: inp() }); runs.length = Math.min(runs.length, RUNS_KEPT); saveRuns(runs); }
+    // (every run's figures to the server: a race of two's to the other page, a clean one onto the board, worker/drag.js)
+    if (st.run) mp?.dragSend({ t: 'drag', op: 'end', run: st.run, r: pack(res), inp: inp() });
     mp?.dragSend({ t: 'drag', op: 'out' });
     judge();
     showSlip();
@@ -326,7 +354,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // (the 1/4 mile's ET runs from the car leaving the line, as on a real slip; with the reaction: green to the finish,
     // what decides a race of two)
     const sum = (x) => (x.tot == null || x.dnf ? '–' : x.tot.toFixed(3));
-    slip.innerHTML = `<h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
+    slip.innerHTML = lastSlip = `<button class="x" data-drag="fold" aria-label="Fold the timeslip" title="Fold (it stays on the right edge while you are at the strip)">✕</button><h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
       <table><thead><tr><th></th><th>YOU</th>${st.duel ? `<th>${name}</th>` : ''}</tr></thead><tbody>
       ${slipRow('R/T', rt(r), rt(o))}
       ${slipRow('60 FT', fmt(r.t60), fmt(o.t60))}
@@ -341,7 +369,14 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       <button data-drag="again">↺ BACK TO THE LINE <kbd>R</kbd></button>`;
     slip.classList.remove('hidden');
   }
-  function hideSlip() { slip.classList.add('hidden'); }
+  function foldSlip() { slip.classList.add('hidden'); }
+  // the last slip again (its BACK TO THE LINE only while that run is the one just over)
+  function openSlip() {
+    if (!lastSlip) return;
+    slip.innerHTML = lastSlip;
+    if (st.phase !== 'done') slip.querySelector('[data-drag="again"]')?.remove();
+    slip.classList.remove('hidden');
+  }
   function showAsk() {
     ask.classList.remove('hidden');
     const up = wasd() ? 'E' : 'A';
@@ -370,7 +405,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     st.pin = null;
     if (was !== 'done') { unstick(); mp?.dragSend({ t: 'drag', op: 'out' }); }
     st.phase = 'off';
-    hideAsk(); hideSlip();
+    hideAsk(); foldSlip();
     if (why && was !== 'done') toast(why, 2200);
   }
 
@@ -392,6 +427,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       const go = local(m.go);
       const mine = m.l.indexOf(mp?.id);
       for (let k = 0; k < 2; k++) if (m.l[k] && m.l[k] !== mp?.id) shown[k] = { go, id: m.l[k], run: m.run, red: false, win: false };
+      // (our practice as the server started it: its name for the run, which our figures go back under)
+      if (mine >= 0 && !m.l[1 - mine] && (st.phase === 'tree' || st.phase === 'run') && !st.duel && mine === st.lane) st.run = m.run;
       // a race of two that we are in: the tree runs for both of us
       if (mine >= 0 && m.l[1 - mine] && (st.phase === 'line' || (st.phase === 'tree' && !st.duel && !st.tA)) && mine === st.lane) {
         const id = m.l[1 - mine];
@@ -439,6 +476,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   }
 
   let lastShift = -1;
+  const wv = { x: 0, z: 0, ox: 0, oz: 0, yaw: 0 };
   return {
     strip,
     get phase() { return st.phase; },
@@ -453,8 +491,17 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // at the strip: on it in any way, or within its reach (H puts the car back on the line from here, as at Majoraadi's start)
     get here() { const c = st.car; return !!c && (st.phase !== 'off' || Math.hypot(c.x - MID[0], c.z - MID[1]) < QUARTER / 2 + HERE_M); },
     get lanes() { return st.lanes; },
+    // waiting on the line, before a tree (the camera rises and looks round meanwhile, src/main.js): our car's spot and
+    // the other lane's [ox, oz], beside it across the strip, and the way the strip runs; null otherwise
+    get waitView() {
+      if (st.phase !== 'line' || !st.pin) return null;
+      const [ax, az] = D.at(0, LANES[st.lane]), [bx, bz] = D.at(0, LANES[1 - st.lane]);
+      wv.x = st.pin.x; wv.z = st.pin.z; wv.ox = st.pin.x + bx - ax; wv.oz = st.pin.z + bz - az; wv.yaw = STRIP_YAW;
+      return wv;
+    },
     get result() { return st.res; },
     get best() { return best; },
+    get runs() { return runs; },
     shift, practice, leave, again, cancel, message, heard, dragPose,
     // the DRAG STRIP button: straight onto the line of a free lane
     goLine(car = st.car) {
@@ -507,6 +554,12 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         st.said = true;
         mp?.dragSend({ t: 'drag', op: 'in', l: st.lane });
       }
+      // ---- the tree's beeps (Martin 27 Nov: "start light beeps too"): a pip as each amber lights and the long high one
+      // of Majoraadi's start at green (none at green after a red light); once each, the latest only after a slow frame
+      if ((st.phase === 'tree' || st.phase === 'run') && st.go) {
+        const t = (now - st.go) / 1000, k = t >= 0 ? 3 : t >= -AMBER_S ? 2 : t >= -2 * AMBER_S ? 1 : t >= -3 * AMBER_S ? 0 : -1;
+        if (k > st.beepK) { st.beepK = k; if (t < 0.5 && !(k === 3 && st.red)) beep(k === 3 ? 'go' : 'pip'); }
+      }
       // ---- the tree
       if (st.phase === 'tree') {
         const t = (now - st.go) / 1000;
@@ -527,6 +580,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
           // Out of the beam before green: a red light (A a moment before green is no foul if the car is not out yet).
           st.rt = (st.tA - st.go) / 1000 + (st.leave.t - st.carA);
           if (st.rt < 0) { st.red = true; toast('RED LIGHT · FALSE START', 2600); }
+          showRt(st.rt);
         }
         if (st.leave && st.prev) {
           // a line's moment: the time between this frame and the last at which the nose crossed it
@@ -548,8 +602,12 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         elTime.textContent = st.res?.dnf ? 'DNF' : fmt(st.res?.et);
         // (the other driver's figures never came: they left, or their page lost its connection)
         if (st.duel && !st.duel.res && now - st.doneAt > 20000) { st.duel.res = { dnf: 1, red: 0, foul: 0, rt: null, tot: null }; judge(); showSlip(); }
-        if (Math.hypot(car.x - MID[0], car.z - MID[1]) > QUARTER / 2 + DONE_GONE) { st.phase = 'off'; hideSlip(); }
+        if (Math.hypot(car.x - MID[0], car.z - MID[1]) > QUARTER / 2 + DONE_GONE) st.phase = 'off';      // (the slip stays up till closed)
       }
+      // the folded slip's tab: at the strip, not while a tree or a run is on
+      const tabOn = !!lastSlip && canDrive && slip.classList.contains('hidden') && st.phase !== 'tree' && st.phase !== 'run'
+        && (st.phase !== 'off' || Math.hypot(car.x - MID[0], car.z - MID[1]) < QUARTER / 2 + HERE_M);
+      if (tabOn === slipTab.classList.contains('hidden')) slipTab.classList.toggle('hidden', !tabOn);
       // ---- our place to the other driver, 30 times a second
       if (st.duel && (st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && now - st.doneAt < 2500)) && mp) {
         st.feedT -= dt;

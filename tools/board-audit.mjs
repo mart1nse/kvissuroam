@@ -55,7 +55,8 @@ async function get(path, kind) {
 
 const laps = await get('/api/laps.json');
 // (--all: with the laps taken off the board too, to see what this would have said of them)
-const board = laps.filter((l) => l.hold == null || (process.argv.includes('--all') && l.hold === 2));
+// (the drag strip's quarter miles have no drive stored: the server judges them by src/race/dragrules.js as they come)
+const board = laps.filter((l) => l.track !== 'drag' && (l.hold == null || (process.argv.includes('--all') && l.hold === 2)));
 const notes = [], out = { at: new Date().toISOString(), site: FROM || SITE, laps: laps.length, records: [], parts: [], refused: {} };
 
 // ---- 1) the records' drives

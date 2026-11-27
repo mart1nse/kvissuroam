@@ -3,7 +3,8 @@
 import { tyreIcon } from '../hud.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
-import { createTrackPicker, TRACK_ICON, TRACKS } from './trackpick.js';
+import { createTrackPicker, TRACK_ICON, TRACKS, DRAG_CARD } from './trackpick.js';
+import { DRAG_LIMITS } from './dragrules.js';
 import { cleanPlate, typedPlate } from '../net/plates.js';
 import { OWN_PLATE } from '../cars/plate.js';
 
@@ -182,6 +183,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     topBusy = true; topAt = performance.now();
     const q = new URLSearchParams({ me: mp.name || '', toomemagi: bests(race.laps) });
     if (stage) q.set('raadi', bests(stage.runs.filter((r) => r.inp)));
+    if (drag) q.set('drag', bests(dragOwn()));
     fetch(`/api/top?${q}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (j?.toomemagi) { top = j; render(); } }).catch(() => {})
       .finally(() => { topBusy = false; if (topAgain) { topAgain = false; topSoon(); } });
@@ -214,7 +216,9 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   // 2026-11-24: no underline or button, something people find as they click around): wherever that time shows.
   // track: the server's name for the circuit ('toomemagi' or 'raadi')
   const watchable = (track, r) => !!(onWatch && r && mp.board?.rp?.[track]?.[r.car] === r.ms);
-  const time = (track, r) => (watchable(track, r) ? `<b class="rp" data-rp="${track}|${escapeHtml(r.car)}">${fmtTime(r.ms / 1000)}</b>` : `<b>${fmtTime(r.ms / 1000)}</b>`);
+  // (a drag strip's time in seconds and thousandths, as on its timeslip)
+  const fmtOf = (track, ms) => (track === 'drag' ? (ms / 1000).toFixed(3) : fmtTime(ms / 1000));
+  const time = (track, r) => (watchable(track, r) ? `<b class="rp" data-rp="${track}|${escapeHtml(r.car)}">${fmtOf(track, r.ms)}</b>` : `<b>${fmtOf(track, r.ms)}</b>`);
   const srv = (t) => (t === 'raadi' ? 'raadi' : 'toomemagi');
   const least = (list) => list.reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
   // a circuit's record over all cars: the time (its replay where there is one), the driver and the car
@@ -226,7 +230,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     const pick = (list, id) => list?.find((r) => r.car === id);
     const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
     // which controller drove each lap shows only once laps exist with more than one kind
-    const kinds = new Set([...(b?.inputs || []), ...(b?.raadi?.inputs || []), ...race.laps.map((l) => l.inp || 'kb'), ...(stage?.runs || []).map((l) => l.inp || 'kb')]);
+    const kinds = new Set([...(b?.inputs || []), ...(b?.raadi?.inputs || []), ...(drag ? b?.drag?.inputs || [] : []), ...race.laps.map((l) => l.inp || 'kb'), ...(stage?.runs || []).map((l) => l.inp || 'kb')]);
     // the tyres, marked where they are not the circuit's usual ones: gravel on Toomemägi, road at Raadi
     // (Raadi runs from before tyres were kept carry none and get no mark)
     const ty = (r) => (r?.track === 'raadi' ? r.ty === 'road' : r?.ty === 'gravel') ? tyreMark(r.ty) : '';
@@ -245,7 +249,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     // latest laps by anyone (20 on desktop, the 5 newest on phones: style.css)
     const recent = (b?.recent || []).slice(0, 20)
       .map((l) => `<li>${ic(l)}${time('toomemagi', l)} <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
-    if (stage) { renderBoth({ b, pick, day, ic, cell, when, both }); return; }
+    if (stage) { renderTabs({ b, pick, day, ic, cell, when, both }); return; }
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
       <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
@@ -256,44 +260,69 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
 
-  // Toomemägi and Raadi side by side (Martin, 23 Nov 2026), and one list of the latest laps on both, each
-  // with the circuit's small outline. Raadi's times come from the server like Toomemägi's (its part of the
-  // board, `raadi`); while the server cannot be reached the table shows this browser's own runs.
-  function renderBoth({ b, pick, day, ic, cell, when, both }) {
-    const me = mp.name, R0 = b?.raadi;
+  // One tab a track (Martin, 27 Nov 2026: "perhaps worth putting the results page in tabs based on track"; until then
+  // Toomemägi and Majoraadi side by side, 23 Nov): the cards' order in the garage, ÜLENURME (the drag strip, with
+  // ?drag=1 on a desktop) · TOOMEMÄGI · MAJORAADI, each with its record, its table of cars (the five best a car when
+  // a row opens, your best with its place) and its last laps, yours and everyone's. The board opens on the track
+  // picked in the garage; a tab picked stays while the page is open. Raadi's and the strip's times come from the
+  // server like Toomemägi's (their parts of the board, `raadi` and `drag`); while the server cannot be reached
+  // Raadi's table shows this browser's own runs.
+  let tab = null;
+  function renderTabs({ b, pick, day, ic, cell, when, both }) {
+    const me = mp.name, R0 = b?.raadi, D0 = b?.drag;
     const runs = stage.runs.map((r) => ({ ...r, name: me, track: 'raadi' }));
     // (the server keeps the tyres as gravel or nothing: nothing is road tyres there)
     const net = (list) => (list || []).map((r) => ({ ...r, track: 'raadi', ty: r.ty || 'road' }));
     const today = new Date().toDateString();
     const bestOf = (list, id) => list.filter((r) => r.car === id).reduce((m, r) => (!m || r.ms < m.ms ? r : m), null);
-    const kept = runs.filter((r) => r.inp);                      // (the ones that count: see best() in raadi.js)
-    const everR = R0 ? net(R0.allTime) : kept, todayR = R0 ? net(R0.today) : kept.filter((r) => new Date(r.at).toDateString() === today);
-    const rowsT = order.map((id) => { const [e, t] = both('toomemagi', id, pick(b?.allTime, id), pick(b?.today, id)); return carRows(id, 'toomemagi', e, t, own(race.laps, id, ic), cell); }).join('');
-    // (the server's lists of the stage only while it can be reached: offline the table is this browser's own runs)
-    const rowsR = order.map((id) => {
-      const [e, t] = R0 && top?.raadi ? both('raadi', id, null, null, (r) => net([r])[0]) : [[bestOf(everR, id)].filter(Boolean), [bestOf(todayR, id)].filter(Boolean)];
-      return carRows(id, 'raadi', e, t, own(kept, id, ic, 'raadi'), cell);
-    }).join('');
     const [T, R] = TRACKS;
-    // the circuit's record over all cars beside its name, with who drove it and in what (Martin, 26 Nov 2026; the
-    // server's lists only, so offline there is none)
-    const recT = least(b?.allTime || []), recR = R0 ? least(net(R0.allTime)) : null;
+    const tabs = [...(drag ? [DRAG_CARD] : []), T, R];
+    if (!tabs.some((t) => t.id === tab)) tab = 'toome';
     const head = (t, sub, r, track) => `<h3>${TRACK_ICON[t.id]}${t.name} <small>${t.km} KM · ${t.surface}${sub ? ` · ${sub}` : ''}</small>${rec(r, track, ic)}</h3>`;
-    const table = (rows) => `<table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>`;
-    const tag = (l) => TRACK_ICON[l.track || 'toome'];
-    const mine = [...race.laps.map((l) => ({ ...l, track: 'toome' })), ...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5)
-      .map((l) => `<li>${tag(l)}${ic(l)}${time(srv(l.track), l)} ${escapeHtml(cars[l.car]?.short || l.car)} <small>${when(l.at)}</small></li>`).join('');
-    const recent = [...(b?.recent || []).map((l) => ({ ...l, track: 'toome' })), ...(R0 ? net(R0.recent) : runs)].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 20)
-      .map((l) => `<li>${tag(l)}${ic(l)}${time(srv(l.track), l)} <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
+    const table = (rows, you = 'YOUR BEST') => `<table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">${you}</th></tr></thead>${rows}</table>`;
+    const lists = (mine, recent, what) => (mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST ${what}</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST ${what} · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : '');
+    const line = (l, track, who) => `<li>${ic(l)}${time(track, l)} ${who ? `<i>${escapeHtml(l.name)}</i> ` : ''}${escapeHtml(cars[l.car]?.short || l.car)} <small>${who ? day(l.at) : when(l.at)}</small></li>`;
+    let body = '', count = '';
+    if (tab === 'toome') {
+      const rows = order.map((id) => { const [e, t] = both('toomemagi', id, pick(b?.allTime, id), pick(b?.today, id)); return carRows(id, 'toomemagi', e, t, own(race.laps, id, ic), cell); }).join('');
+      const mine = race.laps.slice(-5).reverse().map((l) => line(l, 'toomemagi')).join('');
+      const recent = (b?.recent || []).slice(0, 20).map((l) => line(l, 'toomemagi', true)).join('');
+      body = `${head(T, 'LAP', least(b?.allTime || []), 'toomemagi')}${table(rows)}${lists(mine, recent, 'LAPS')}`;
+      count = b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi driven` : 'lap times are offline';
+    } else if (tab === 'raadi') {
+      const kept = runs.filter((r) => r.inp);                      // (the ones that count: see best() in raadi.js)
+      const everR = R0 ? net(R0.allTime) : kept, todayR = R0 ? net(R0.today) : kept.filter((r) => new Date(r.at).toDateString() === today);
+      // (the server's lists of the stage only while it can be reached: offline the table is this browser's own runs)
+      const rows = order.map((id) => {
+        const [e, t] = R0 && top?.raadi ? both('raadi', id, null, null, (r) => net([r])[0]) : [[bestOf(everR, id)].filter(Boolean), [bestOf(todayR, id)].filter(Boolean)];
+        return carRows(id, 'raadi', e, t, own(kept, id, ic, 'raadi'), cell);
+      }).join('');
+      const mine = [...runs].sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5).map((l) => line(l, 'raadi')).join('');
+      const recent = (R0 ? net(R0.recent) : runs).slice().sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 20).map((l) => line(l, 'raadi', true)).join('');
+      body = `${head(R, 'STAGE', R0 ? least(net(R0.allTime)) : null, 'raadi')}${table(rows)}${lists(mine, recent, 'RUNS')}`;
+      count = R0 ? `${R0.laps} run${R0.laps === 1 ? '' : 's'} of the Majoraadi stage driven` : 'stage times are offline';
+    } else {
+      // the drag strip: the quarter mile's ET (from the car leaving the line, as a timeslip has it), clean runs only
+      const ownD = dragOwn();
+      const rows = order.filter((id) => DRAG_LIMITS[id]).map((id) => { const [e, t] = both('drag', id, pick(D0?.allTime, id), pick(D0?.today, id)); return carRows(id, 'drag', e, t, own(ownD, id, ic, 'drag'), cell); }).join('');
+      const mine = (drag.runs || []).slice(0, 5).map((l) => line(l, 'drag')).join('');
+      const recent = (D0?.recent || []).slice(0, 20).map((l) => line(l, 'drag', true)).join('');
+      body = `${head(DRAG_CARD, '1/4 MILE ET', least(D0?.allTime || []), 'drag')}${table(rows)}${lists(mine, recent, 'RUNS')}`;
+      count = D0 ? `${D0.laps} clean quarter mile${D0.laps === 1 ? '' : 's'} at Ülenurme` : 'drag times are offline';
+    }
+    const bar = tabs.map((t) => `<button class="btab${t.id === tab ? ' on' : ''}" data-tab="${t.id}" role="tab" aria-selected="${t.id === tab}">${TRACK_ICON[t.id]}<span>${t.name}</span></button>`).join('');
     panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TARTU · LAP TIMES</h2>
-      <p class="small">${b ? `${b.laps} lap${b.laps === 1 ? '' : 's'} of Toomemägi${R0 ? ` and ${R0.laps} run${R0.laps === 1 ? '' : 's'} of the Majoraadi stage` : ''} driven` : 'lap times are offline'}</p>
-      <div class="boards"><div class="bcol">${head(T, 'LAP', recT, 'toomemagi')}${table(rowsT)}</div><div class="bcol">${head(R, 'STAGE', recR, 'raadi')}${table(rowsR)}</div></div>
-      ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}
+      <div class="btabs" role="tablist">${bar}</div>
+      <p class="small">${count}</p>
+      <div class="boards"><div class="bcol">${body}</div></div>
       <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
+  // this browser's best on the strip per car, as the board's laps are
+  const dragOwn = () => Object.entries(drag?.best || {}).filter(([, v]) => Number.isFinite(v?.et)).map(([car, v]) => ({ car, ms: Math.round(v.et * 1000), at: v.at, inp: v.inp }));
 
   function show() {
     opened.add(carNow());
+    tab = picker?.picked || 'toome';            // (the track picked in the garage)
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
@@ -307,16 +336,18 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       const r = net && (!own || net.ms <= own.ms) ? net : own && { ...own, name: mp.name };
       return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
     }
-    const r = least(mp.board?.allTime || []);
+    const r = least((id === 'drag' ? mp.board?.drag?.allTime : mp.board?.allTime) || []);
     return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null;
   };
   // (the drag strip's best: this browser's quickest clean quarter mile in any car)
   const dragBest = () => { const l = Object.values(drag?.best || {}).filter((b) => Number.isFinite(b?.et)); return l.length ? { ms: Math.min(...l.map((b) => b.et)) * 1000 } : null; };
   const mine = (id) => (id === 'raadi' ? stage.best().any : id === 'drag' ? dragBest() : least(race.laps));
-  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record: (id) => (id === 'drag' ? null : record(id)), mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
+  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
   if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden');
+    const tb = e.target.closest('[data-tab]');
+    if (tb) { tab = tb.dataset.tab; render(); return; }
     const rp = e.target.closest('[data-rp]');
     if (rp) { const [track, car] = rp.dataset.rp.split('|'); onWatch(track, car); return; }
     // a car's row opens or closes, in both circuits' tables at once

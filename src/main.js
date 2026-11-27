@@ -542,6 +542,8 @@ let wreckAt = null;              // where and when the car crashed hard into a w
 let camYaw = 0, menuAngle = 2.5;
 let camDist = 6.4, camY = 0, camSlope = 0, camSnap = true, camSwoop = 0;   // chase rig, eased; camSnap: jump straight to the car; camSwoop: seconds left of the glide in from the menu view
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+// waiting on the drag strip's line: the raised view that looks round (see the camera in the frame loop); k its weight
+const dragWait = { k: 0, t: 0, x: 0, z: 0, ox: 0, oz: 0, yaw: 0 }, dragWaitPos = new THREE.Vector3(), dragWaitLook = new THREE.Vector3();
 let intro = null, introFocus = null;   // drone flyover behind the opening menu
 const dronePos = new THREE.Vector3(), droneLook = new THREE.Vector3();
 let flyIn = null;                // the one second flight from the drone to the chase camera
@@ -1139,6 +1141,8 @@ async function boot() {
     free: () => mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost && !stageBusy(),
     // (GETTING READY over: the lane is taken only then, so a race does not start while the place still loads)
     ready: () => !readyOn,
+    inp: () => inpNow(),
+    beep: (kind) => audio.beep?.(kind),
   });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
@@ -2591,6 +2595,29 @@ function frame(ts) {
       camLook.lerp(droneLook.set(tg.x + dx * ahead, camY, tg.z + dz * ahead), dw);
       wantFov += (55 - wantFov) * dw; warp *= 1 - dw;
     }
+    // Waiting on the drag strip's line (Martin 27 Nov 2026: "raise the camera and tilt it around a bit, so you can see if
+    // someone has arrived. always try to show at least half of the other car's place too. cam lock to usual driving
+    // screen once it is starting"): the view rises behind the two lanes and swings slowly from side to side round a
+    // point between our car and the other lane's spot, so both stay in the picture; when the tree starts it is the
+    // chase view again within about half a second.
+    const wvw = drag?.waitView, wOn = !!wvw && !(ctl.look && !board?.open) && !WV;
+    if (wvw) { dragWait.x = wvw.x; dragWait.z = wvw.z; dragWait.ox = wvw.ox; dragWait.oz = wvw.oz; dragWait.yaw = wvw.yaw; }
+    // (eased by the wall clock: on a slow computer the game's own runs slower, and the view must be down by green)
+    dragWait.k += ((wOn ? 1 : 0) - dragWait.k) * (1 - Math.exp(-(wOn ? 0.8 : 6) * Math.min(rawDt, 0.25)));
+    if (!wOn && dragWait.k < 0.002) { dragWait.k = 0; dragWait.t = 0; }
+    if (dragWait.k > 0) {
+      const W = dragWait;
+      if (wOn) W.t += dt;
+      // (straight behind at first, then about 30 degrees to either side and back over some 18 s, the height
+      // breathing a little, round the point midway between the two lanes; looking down past it, so both spots sit
+      // a little above the middle of the picture, clear of the map and the question at the bottom)
+      const mx = (W.x + W.ox) / 2, mz = (W.z + W.oz) / 2, gy = world.heightAt(mx, mz);
+      const a = W.yaw + Math.sin(W.t * 0.35) * 0.5, ax = Math.sin(a), az = -Math.cos(a);
+      dragWaitPos.set(mx - ax * 12.5, gy + 5.6 + Math.sin(W.t * 0.23) * 0.7, mz - az * 12.5);
+      dragWaitLook.set(mx + ax, gy - 1.2, mz + az);
+      const k = smooth(W.k);
+      camPos.lerp(dragWaitPos, k); camLook.lerp(dragWaitLook, k);
+    }
     // 5 / 6: round to the car's side from whichever of those it is (B held looks back as ever)
     if (camSnap0) sideCam.snap();
     const sv = sideCam.update(tg, camYaw, dt, camera.aspect, camPos, camLook, !(ctl.look && !board?.open));
@@ -2780,7 +2807,7 @@ window.__game = !devHook ? { hitches } : {
   hitches,
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
-  get car() { return car; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
+  get car() { return car; }, get camera() { return camera; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
   skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {

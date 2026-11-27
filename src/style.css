@@ -1139,6 +1139,15 @@ body:not(.touch) #rlist.live { width: max-content; min-width: min(340px, 26vw); 
 #rsplash.go { animation: rsplash 4.8s ease-out both; }
 @keyframes rsplash { 0% { opacity: 0; transform: scale(1.6); } 8% { opacity: 1; transform: scale(.96); } 13% { transform: scale(1); } 82% { opacity: 1; } 100% { opacity: 0; } }
 body.touch #rsplash { top: 22%; font-size: 12px; }
+/* NICE CUT! between the two trees at the start of Baeri (Martin 2026-11-27, src/race/nicecut.js): the lap record's
+   letters and pink shadow, see-through, 3 s on and then 0.8 s fading out */
+#nicecut { left: 0; right: 0; top: 42%; z-index: 3; display: flex; justify-content: center; align-items: center; gap: .3em; pointer-events: none;
+  font-family: 'Russo One', var(--font); font-size: clamp(14px, 1.5vw, 26px); }
+#nicecut .k { font-size: 3.6em; line-height: 1; color: #fff; letter-spacing: .04em; text-shadow: .05em .05em 0 var(--hot), 0 0 .25em rgba(255, 43, 214, .8); }
+#nicecut svg { width: 3.4em; height: 3.4em; fill: rgba(255, 255, 255, .25); stroke: #fff; stroke-width: 6; stroke-linejoin: round; filter: drop-shadow(.12em .12em 0 var(--hot)) drop-shadow(0 0 .25em rgba(255, 43, 214, .8)); }
+#nicecut.go { animation: nicecut 3.8s ease-out both; }
+@keyframes nicecut { 0% { opacity: 0; transform: scale(1.5); } 6% { opacity: .55; transform: scale(.96); } 10% { transform: scale(1); } 79% { opacity: .55; } 100% { opacity: 0; } }
+body.touch #nicecut { top: 40%; font-size: 11px; }
 body.racesplash #lapsplit { visibility: hidden; }
 #rlights .sub { font-size: max(9.5px, .45em); font-weight: 700; letter-spacing: .1em; opacity: .85; }
 /* phones (Martin 2026-11-25): on the left, between the minimap and the lap timer: the race line (wrapping, two lines

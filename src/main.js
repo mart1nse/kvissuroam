@@ -1072,6 +1072,8 @@ async function boot() {
   race = createRace({
     world, scene, toast: (t, ms) => hud.toast(t, ms),
     rec: createRecorder(mp.pose),
+    // (in a race the tree-gap cut at the start of Baeri gets its NICE CUT! too, src/race/nicecut.js)
+    racing: () => !!raceMode?.ghost,
     // (the lap's finish and each start of the lap timer are told to the server as they happen: it times the lap itself)
     onLap: (lap, info) => { mp.lapMark('f', lap.ms - (lap.pen || 0) * 1000); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => {

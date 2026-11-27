@@ -17,6 +17,7 @@ import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
 import { lapGates, lapGatesSteps, throughGate } from './lapgates.js';
 import { CRASH_PEN } from '../cars/crash.js';
+import { createNiceCut } from './nicecut.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
 const OFF_LIMIT = 300;         // metres off the track before the lap is cancelled
@@ -279,8 +280,9 @@ function loadLocal() {
 }
 
 // rec: the lap's replay recorder (src/race/replay.js), or none
-export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor, rec = null }) {
+export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFor, rec = null, racing = null }) {
   const track = createTrack();
+  const nice = createNiceCut();                // the tree gap at the start of Baeri (nicecut.js)
   if (!GATES) {
     const out = [];
     jobs.add(function* () { yield* lapGatesSteps(TRACK, out); GATES ||= out; }, 'lap gates');
@@ -554,6 +556,8 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }
+          // between the two trees on the lawn at the start of Baeri, on a hotlap or in a race: NICE CUT! (no rule, no penalty)
+          if (st.running || racing?.()) nice.check(st.prev.x, st.prev.z, x, z);
           if (st.running) {
             // the gates in order (checkpoints among them): the next one counts; one further on touched first is a
             // short cut, at once where only a short cut gets there, else when the next checkpoint or the finish comes

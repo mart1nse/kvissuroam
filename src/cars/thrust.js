@@ -59,10 +59,13 @@ const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (
 const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
 const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 // A flight from a bend (Martin 27 Nov: "should the rotation somewhat continue when clicking flip during a turn? maybe
-// start turning but reduce the amount of turn progressively"; he picked "carry on, then line up"). In the air nothing
-// bends the path, so the car flies straight on along the line it had; the body keeps the turning it had and the nose
-// jets ease it out over YAW_TAU (it was 0.12 s: the turn seemed to stop dead), and then, before the landing burn, turn
-// the nose onto the line the car travels along, so it comes down straight whatever it was doing at the press.
+// start turning but reduce the amount of turn progressively"; he picked "carry on, then line up"). The body keeps the
+// turning it had and the nose jets ease it out over YAW_TAU (it was 0.12 s: the turn seemed to stop dead); the corner
+// jets bend the path round with it, so the car travels on the way its nose has come to point (until 27 Nov evening the
+// path ran straight on and the line-up below turned the nose back to it before landing, undoing the turn: Martin, "before
+// landing it turns itself back exactly as it would have jumped from the straight line"). Then, before the landing
+// burn, the nose is turned onto the line it travels along: that takes out only the slide it had at the press, so it
+// comes down straight whatever it was doing, and as far round as the bend took it.
 const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s; a turn's 0.5 rad/s carries on 11 degrees)
 const YAW_LINE0 = 1.3;             // the nose is turned onto the line of travel from this long into the flight...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
@@ -95,11 +98,39 @@ const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 // to the landing burn it is brought onto the line of travel (lineTurn: the shortest way round from where the swing
 // ends; worked out from the plan's own numbers, so the other players' pages fly the same)
 const yawCarry = (p, t) => p.yawR * YAW_TAU * (1 - Math.exp(-t / YAW_TAU));
+// (the path turns by the nose's carried swing, so the line of travel and the nose differ by the slide at the press)
 function lineTurn(p) {
   if (Math.hypot(p.vx, p.vz) <= YAW_MIN_V) return 0;
-  const d = Math.atan2(p.vx, -p.vz) - (p.yaw0 + p.yawR * YAW_TAU);
+  const d = Math.atan2(p.vx, -p.vz) - p.yaw0;
   return Math.atan2(Math.sin(d), Math.cos(d));
 }
+// The path over the ground: the speed at the press, its heading turned by yawCarry (the corner jets push it round as the
+// nose swings: at 30 m/s and a turn of 0.5 rad/s 15 m/s2 at first, a tenth of what they have). Summed once a plan in
+// steps of PATH_DT (the other players' pages from the same numbers), read between them.
+const PATH_DT = 1 / 60, paths = new WeakMap();
+function pathOf(p) {
+  let a = paths.get(p);
+  if (a) return a;
+  const n = Math.ceil(MAX_T / PATH_DT) + 2;
+  a = new Float64Array(2 * n);
+  for (let i = 1; i < n; i++) {
+    const c = yawCarry(p, (i - 0.5) * PATH_DT), cs = Math.cos(c), sn = Math.sin(c);
+    a[2 * i] = a[2 * i - 2] + (p.vx * cs - p.vz * sn) * PATH_DT;
+    a[2 * i + 1] = a[2 * i - 1] + (p.vz * cs + p.vx * sn) * PATH_DT;
+  }
+  paths.set(p, a);
+  return a;
+}
+// where the plan's path is at time t (out[0], out[1]: x, z) and how fast it goes there (out[2], out[3]: m/s along x, z)
+export function flightPath(p, t, out) {
+  const a = pathOf(p), u = Math.max(0, Math.min(MAX_T, t)) / PATH_DT, i = Math.min(Math.floor(u), a.length / 2 - 2), f = u - i;
+  out[0] = p.x0 + a[2 * i] + (a[2 * i + 2] - a[2 * i]) * f;
+  out[1] = p.z0 + a[2 * i + 1] + (a[2 * i + 3] - a[2 * i + 1]) * f;
+  const c = yawCarry(p, t), cs = Math.cos(c), sn = Math.sin(c);
+  out[2] = p.vx * cs - p.vz * sn; out[3] = p.vz * cs + p.vx * sn;
+  return out;
+}
+const tmpP = [0, 0, 0, 0];
 const lineSpan = (p) => { const a = Math.min(YAW_LINE0, 0.6 * p.tb); return [a, Math.max(a + 0.3, p.tb)]; };
 function yawAt(p, t) {
   const [a, b] = lineSpan(p);
@@ -378,8 +409,9 @@ export function flightPose(p, t, out) {
   const k = smooth(t / p.tl);
   const turn = p.side * TURN * (rollMain(f, t) + rollPlay(f, t));
   const h = p.cg, sn = Math.sin(turn);
-  out.x = p.x0 + p.vx * t - Math.cos(yaw) * h * sn;
-  out.z = p.z0 + p.vz * t - Math.sin(yaw) * h * sn;
+  flightPath(p, t, tmpP);
+  out.x = tmpP[0] - Math.cos(yaw) * h * sn;
+  out.z = tmpP[1] - Math.sin(yaw) * h * sn;
   out.y = tmpY[0] + h * (1 - Math.cos(turn));
   out.vy = tmpY[1];
   out.yaw = yaw + yawPlay(f, t);
@@ -538,7 +570,7 @@ export function planFlip(car, world, side = 1) {
     v0: Math.max(-1, Math.min(2, car.vyUp || 0)), yaw0: car.yaw, yawR: Math.max(-3, Math.min(3, car.yawRate || 0)),
     p0: car.pitch, r0: car.roll, cg: car.spec.cgHeight, side, vl: LIFT_V, tb: 0, tl: 0, yl: 0, vland: 0, pl: 0, rl: 0, t: 0,
   };
-  const gAt = (t, y) => ground(world, p.x0 + p.vx * t, p.z0 + p.vz * t, y);
+  const gAt = (t, y) => (flightPath(p, t, tmpP), ground(world, tmpP[0], tmpP[1], y));
   // (the way down that starts with a burn at tb: how long it takes, where it ends, and how far above the ground
   // there. Heights and speeds are taken against the ground's own line, which rises or falls along the flight)
   let tl = 0, vland = 0, yEnd = 0;
@@ -571,7 +603,8 @@ export function planFlip(car, world, side = 1) {
   p.tb = lo; p.tl = tl; p.vland = vland;
   // the spot: the ground under the four wheels as the car will stand on it
   const yawL = yawAt(p, tl);
-  stand(car.spec, world, p.x0 + p.vx * tl, p.z0 + p.vz * tl, yawL, yEnd, tmpG);
+  flightPath(p, tl, tmpP);
+  stand(car.spec, world, tmpP[0], tmpP[1], yawL, yEnd, tmpG);
   const lim = (v) => Math.max(-0.6, Math.min(0.6, v));
   p.yl = Math.abs(tmpG[0] - yEnd) < 0.5 ? tmpG[0] : yEnd; p.pl = lim(tmpG[1]); p.rl = lim(tmpG[2]);
   return p;
@@ -665,7 +698,8 @@ function fly(car, world, dt, droop = 0) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.pitch = pose.pitch;
   car.y = car.hy = pose.y; car.vyUp = pose.vy;
   const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
-  car.vx = p.vx * fx + p.vz * fz; car.vy = p.vx * rx + p.vz * rz;
+  flightPath(p, p.t, tmpP);
+  car.vx = tmpP[2] * fx + tmpP[3] * fz; car.vy = tmpP[2] * rx + tmpP[3] * rz;
   car.yawRate = done ? 0 : yawRateAt(p, p.t);
   car.pitchRate = car.rollRate = 0;
   car.throttle = 0; car.brake = 0; car.ax = car.ay = 0; car.thrustN = 0;

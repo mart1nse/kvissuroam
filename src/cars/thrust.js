@@ -73,11 +73,10 @@ const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s)...
 // ...but a bend's own turn, up to YAW_HOLD_R of it, is held on for longer (Martin 27 Nov, "increase the length of the turn it
 // holds once X during turn", then "let the turn last 4 more sec, with slowly dying out the turn"): it fades out smoothly
-// over YAW_HOLD_T, the path bending round with it, so a bend at 0.6 rad/s carries the car on about 50 degrees, the turn
-// gone just before a 3.8 s flight lands. A spin's turn past that still eases out over YAW_TAU, so a FLIP from a
-// power slide does not whirl.
+// over YAW_HOLD_T, so a bend at 0.6 rad/s carries the nose on about 35 degrees (the car's way bends only at first, PATH_HOLD_T
+// below). A spin's turn past that still eases out over YAW_TAU, so a FLIP from a power slide does not whirl.
 const YAW_HOLD_R = 0.6;            // rad/s
-const YAW_HOLD_T = 3;              // s: the held turn is gone by this long after the press (5 s for a moment, 27 Nov: "reduce the length of the turn by 2 sec")
+export const YAW_HOLD_T = 2;       // s: the held turn is gone by this long after the press (5 s, then 3, then 2 with the path apart: "reduce the angle it turns")
 const YAW_LINE = 1.2;              // the nose is turned onto the line of travel over this long from the press...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
 const MAX_T = 6;                   // no flight longer than this (s)
@@ -114,8 +113,9 @@ const holdSum = (t, T) => { const u = clamp01(t / T); return T * (u - u * u * u 
 // (the nose: the held turn over YAW_HOLD_T. The path only over PATH_HOLD_T: Martin 27 Nov, "make the initial turn as is,
 // then slow out the turning of the car quicker and replace it with turning around on its axis, so the forward motions
 // and car rotations are differentiated". The car goes on round on its own axis while its way bends no further, and
-// comes down pointing further round than it travels: the tyres take that as a slide.)
-const PATH_HOLD_T = 1.0;
+// comes down pointing further round than it travels: the tyres take that as a slide. Then "make the car rotate around
+// its axis even pretty much right from the start, but reduce the angle it turns": the way stops bending within 0.3 s.)
+export const PATH_HOLD_T = 0.3;
 const carry = (p, t, T) => { const h = yawHeld(p); return h * holdSum(t, T) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
 const yawCarry = (p, t) => carry(p, t, YAW_HOLD_T);
 const pathCarry = (p, t) => carry(p, t, PATH_HOLD_T);

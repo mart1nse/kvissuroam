@@ -3,7 +3,7 @@
 // Run: node tools/rocket-test.mjs   (add --v for every flight's figures)
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar, speedKmh } from '../src/cars/physics.js';
-import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN, refillTank, planFlip, flightPose, flightNozzles, NOZ } from '../src/cars/thrust.js';
+import { TANK_S, JUMP_S, REFILL_S, BOOST_MIN, refillTank, planFlip, flightPose, flightNozzles, NOZ, YAW_HOLD_T, PATH_HOLD_T } from '../src/cars/thrust.js';
 import { createSmoke } from '../src/smoke.js';
 
 const spec = CARS.rocket;
@@ -528,13 +528,13 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
       if (t > 0.5 && !c.rocket.flight) land = { nose: c.yaw - head0, slip: Math.atan2(c.vy, c.vx), t };
     }
     // (thrust.js: up to 0.6 rad/s held on, fading smoothly to nothing over 3 s; the rest eased out over 0.4 s)
-    // (the path bends only over the first 1 s: it comes down pointing further round than it travels by the difference)
+    // (the path bends only over the first PATH_HOLD_T: it comes down pointing further round than it travels by the difference)
     const h = Math.min(Math.abs(rate), 0.6), sum = (T) => { const u = Math.min(1, (land ? land.t : 4) / T); return T * (u - u ** 3 + u ** 4 / 2); };
     let after = 99;
     if (land) { for (let t = 0; t < 1; t += dt) stepCar(c, { steer: st, up: 0.4 }, w, dt); after = Math.atan2(c.vy, c.vx) * 57.3; }
-    res.push({ kmh, rate, after, slipWant: h * (sum(3) - sum(1)) * 57.3, carried: carried * 57.3, want: (h * sum(3) + (Math.abs(rate) - h) * 0.4) * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
+    res.push({ kmh, rate, after, slipWant: h * (sum(YAW_HOLD_T) - sum(PATH_HOLD_T)) * 57.3, carried: carried * 57.3, want: (h * sum(YAW_HOLD_T) + (Math.abs(rate) - h) * 0.4) * 57.3, nose: land ? land.nose * 57.3 : 99, slip: land ? land.slip * 57.3 : 99 });
   }
-  check('FLIP in a bend: the nose carries on turning on its own axis (a bend\'s turn fading out over 3 s, a spin\'s over 0.4 s) while its way bends only over the first second, and comes down that much further round than it travels',
+  check(`FLIP in a bend: the nose carries on turning on its own axis (a bend's turn fading out over ${YAW_HOLD_T} s, a spin's over 0.4 s) while its way bends only over the first ${PATH_HOLD_T} s, and comes down that much further round than it travels`,
     res.every((r) => r.carried > 0.7 * r.want && r.carried < 1.4 * r.want + 2 && Math.abs(Math.abs(r.slip) - r.slipWant) < 3 + 0.15 * r.slipWant),
     res.map((r) => `${r.kmh} km/h, ${r.rate.toFixed(2)} rad/s: on ${r.carried.toFixed(0)} deg (${r.want.toFixed(0)} wanted), lands ${Math.abs(r.slip).toFixed(1)} deg off its line (${r.slipWant.toFixed(0)} wanted)`).join('; '));
   check('...and the tyres take that slide within a second of the landing',

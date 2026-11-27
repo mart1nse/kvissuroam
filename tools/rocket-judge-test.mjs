@@ -107,7 +107,7 @@ const CHEATS = [
   // 0.8 g on average for as long as a drive lasts, so twice the motors with BOOST never pressed reads as an honest car
   // using it and is not refused; with BOOST used as well it is, and three times the motors without it)
   ['twice the motors, and BOOST', copy((s) => { s.engine.maxPowerKw *= 2; s.engine.maxWheelForce *= 2; s.fanDown += s.mass * 9.81; }), GREEDY, {}, ''],
-  // (1.5 times the motors with BOOST passed the gas account once the front motor came, 27 Nov; that account now only
+  // (1.5 times the motors with BOOST passed the gas account once the launch got quicker, 27 Nov; that account now only
   // judges laps from before 28 Nov, and the timed runs' check below refuses it)
   ['three times the motors', copy((s) => { s.engine.maxPowerKw *= 3; s.engine.maxWheelForce *= 3; s.fanDown += 2 * s.mass * 9.81; }), [[14, { up: 1 }], [4, { down: 1 }], [130, laps(60 / 3.6, 250 / 3.6, () => false)]], {}, ''],
   ['a car 700 kg lighter', copy((s) => { s.mass -= 700; }), GREEDY, {}, ''],

@@ -15,10 +15,10 @@ export function tyreIcon(kind) {
 
 export function createHud(world) {
   const elSpeed = $('#speed'), elGear = $('#gear'), elStreet = $('#street');
-  const elName = $('#carname'), elToast = $('#toast'), elTyre = $('#tyre');
+  const elName = $('#carname'), elToast = $('#toast'), elTyre = $('#tyre'), elNote = $('#flipnote');
   const map = $('#minimap');
   const ctx = map.getContext('2d');
-  let spec = null, toastTimer = 0, streetTimer = 0, lastStreet = '';
+  let spec = null, noteTimer = 0, toastTimer = 0, streetTimer = 0, lastStreet = '';
   let overlay = null;
   const face = $('#dial .face'), needle = $('#dial .needle'), tach = $('#tach');
   let dialMax = 8000, dialRed = 7000, needleShown = -999, needleV = 0, needleDrawn = -999, needleHot = false;
@@ -207,6 +207,16 @@ export function createHud(world) {
       toastTimer = setTimeout(() => elToast.classList.remove('show'), ms);
     },
     // a message taken down early, if it is still the one showing (its first words)
+    // A quick note just above the rev counter, in a dark pill as the other short messages (FLIP pressed where it does
+    // nothing: Martin 27 Nov, "move the no flip during timed lap ... above the tach, also take the design language of
+    // some other message")
+    note(text, ms = 1600) {
+      if (!elNote) return;
+      elNote.textContent = text;
+      elNote.classList.add('show');
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => elNote.classList.remove('show'), ms);
+    },
     untoast(start) { if (elToast.textContent.startsWith(start)) { clearTimeout(toastTimer); elToast.classList.remove('show'); } },
     // The needle moves every frame (the numbers only a few times a second), eased like a real needle
     // with a little mass, so the limiter bounce and the shifts sweep instead of jumping.

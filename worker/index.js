@@ -1211,7 +1211,7 @@ export class Lobby extends DurableObject {
     let best = bestNow(), had = hadNow();
     if (!lap.hold && best !== ms) return refuse('not the record', lap.name);
     if (!lap.hold && had && had.ms <= ms) return json({ ok: true });  // (that record's replay came already)
-    let bytes, why, told;
+    let bytes, why, told, launch = 0;
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
@@ -1229,8 +1229,10 @@ export class Lobby extends DurableObject {
         // is refused for that below, and its car is judged as if all of it were tarmac)
         const where = {};
         // (a car with thrusters has no BOOST on a timed lap or a stage run since Martin 27 Nov: judged by its motors
-        // alone, noGas, and its start like any car's; the Rocket's motors leave a standstill at 12 m/s2)
-        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, 0, where);
+        // alone, noGas, and its start by what they do with the tank full, pullFull: the Rocket's leave a standstill
+        // at 18 m/s2 since its front motor, over the 14 any other car may)
+        launch = lim?.pullFull?.[0] || 0;
+        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch, where);
         const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose, noGas: true });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
         // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
@@ -1238,7 +1240,7 @@ export class Lobby extends DurableObject {
         if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${lim?.gas ? `; ${j.air} s of a kickflip` : ''})`; told = 'car'; }
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
-      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
       if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }

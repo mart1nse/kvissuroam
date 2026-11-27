@@ -75,22 +75,25 @@ run(1600, 3020, 1700, 3020, 4);           // past it, 50 to 60 m away: one view
 assert.equal(seen['wb:v'], 1); assert.equal(seen['wb:u'], 1);
 run(1700, 3020, 1600, 3020, 0.5);         // straight back at once, still in sight: no second view
 assert.equal(seen['wb:v'], 1);
-run(1800, 3300, 1800, 3300, 6, false);    // far away for 6 s
-run(1620, 3040, 1660, 3040, 0.6);         // a glimpse of 0.6 s: none
+run(1900, 3400, 1900, 3400, 6, false);    // far away for 6 s
+run(1620, 3040, 1660, 3040, 0.3);         // a glimpse of 0.3 s: none
 assert.equal(seen['wb:v'], 1);
-run(1800, 3300, 1800, 3300, 6, false);
+run(1900, 3400, 1900, 3400, 6, false);
 run(1620, 3040, 1660, 3040, 2);           // another lap past it: a second view, the visit already counted
 assert.equal(seen['wb:v'], 2); assert.equal(seen['wb:u'], 1);
 run(1640, 3040, 1640, 3040, 3, false);    // beside it looking away: nothing on screen
-assert.equal(seen['wb:v'], 2);
-assert.ok(seen['wb:s'] > 5 && seen['wb:s'] < 8, `seconds ${seen['wb:s']}`);
+// a flying lap at 200 km/h straight past it (55 m/s, looking ahead along x): counted
+run(1900, 3400, 1900, 3400, 6, false);
+{ const before = seen['wb:v']; for (let t = 0; t < 3; t += 1 / 60) { const x = 1540 + 55 * t; cam.position.set(x, 2, 3050); cam.lookAt(x + 100, 2, 3050); cam.updateMatrixWorld(); av.update(cam, 1 / 60, true); } assert.equal(seen['wb:v'], before + 1, 'a fast pass'); }
+assert.equal(seen['wb:v'], 3);
+assert.ok(seen['wb:s'] > 6 && seen['wb:s'] < 11, `seconds ${seen['wb:s']}`);
 g.visible = false;                        // a cabin that is not shown is never seen
 run(1600, 3020, 1700, 3020, 4);
-assert.equal(seen['wb:v'], 2);
+assert.equal(seen['wb:v'], 3);
 // the one-sided Tasku banner: from its front (+z) a view, from behind none
 const lookT = (z) => { for (let t = 0; t < 2; t += 1 / 60) { cam.position.set(2000, 2, z); cam.lookAt(2000, 12, 3000); cam.updateMatrixWorld(); av.update(cam, 1 / 60, true); } };
 lookT(2960); assert.equal(seen['tp:v'], undefined);
-run(1800, 3300, 1800, 3300, 6, false);
+run(1900, 3400, 1900, 3400, 6, false);
 lookT(3040); assert.equal(seen['tp:v'], 1);
 // taps: by the site opened
 window.open('https://www.winbaum.ee/', '_blank'); window.open('https://andersonbeer.com/'); window.open('https://www.yaga.ee/torepood-2'); window.open('https://example.com/');

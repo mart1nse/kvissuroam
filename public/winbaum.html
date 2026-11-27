@@ -164,7 +164,7 @@
     out.innerHTML = `
       <section class="card">
         <h2>Views of the WINBAUM.EE sign</h2>
-        <p class="note">A view is the sign on screen within 60 m for a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view. The time on screen is counted to the second too, also while a car stands still beside it.${counted ? ` Counted since ${dayName(counted)}.` : ' Until the counted views catch up with the laps started past the sign, the figures here are estimates from those laps (the counted ones are above).'}</p>
+        <p class="note">A view is the sign on screen within 100 m for half a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view. The time on screen is counted to the second too, also while a car stands still beside it.${counted ? ` Counted since ${dayName(counted)}.` : ' Until the counted views catch up with the laps started past the sign, the figures here are estimates from those laps (the counted ones are above).'}</p>
         <div class="tiles">
           <div class="tile"><span>Last 24 hours</span><b>${fmt(last24)}</b><small>views${est24 ? ' (estimate)' : ''}</small></div>
           <div class="tile"><span>Average day</span><b>${fmt(avgDay)}</b><small>views a day${fullM.length ? ` over ${fullM.length} counted day${fullM.length > 1 ? 's' : ''}` : ' (estimate)'}</small></div>

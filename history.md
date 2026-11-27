@@ -668,3 +668,194 @@ Commits merged to main in the 24 h before the run:
 - 4bc853c More vaporwave words for new player names, one shared pool (#683)
 - 0b47aef Raadi: BACK TO STAGE START more see-through and gone after 6 s, fading out (#682)
 - 6af963a Phones: race button on the left under the race line, the right side all the online list's (#681)
+
+## 2026-11-27 (main 6c18547, runs 01:2x and 01:5x UTC)
+
+One figure OVER on both runs: phone total after 2 km through the centre (912, then 902 of 870). Not caused by a commit: the same phone pass alone on older commits read the same on this machine (142e57c, which read 788 in last night's run, now 886; c3e0cfb 863 and 904; 21cb008 871; main 887 and 895). The race of 30 was over on the first run only (27 of 10, then 4): noise. Machine: other work 0.15 of 4 cores, not busy.
+
+Table from the second run (`--force`, alone); first run in brackets where it differed.
+
+| Check | Figure | Budget | Result |
+|---|---|---|---|
+| Phone canvases at DRIVE | 129 (127) | 230 | OK |
+| Phone graphics card at DRIVE | 189 | 250 | OK |
+| Phone JS heap at DRIVE | 254 | 420 | OK |
+| Phone total at DRIVE | 572 (570) | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 626 (623) | 740 | OK |
+| Phone graphics card peak in a map jump | 223 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 206 | 250 | OK |
+| Phone total after 2 km through the centre | 902 (912) | 870 | OVER |
+| Phone graphics card peak through the centre | 431 (430) | 445 | OK |
+| Phone total at the Raadi stage (?raadi=1) | 459 (470) | 560 | OK |
+| Phone graphics card peak at the Raadi stage | 196 | 240 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 354 (357) | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 506 (507) | 760 | OK |
+| Lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 137 | 150 | OK |
+| Lowest graphics level along the Raadi stage: triangles in a frame (thousands) | 346 | 440 | OK |
+| Top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 287 (286) | 800 | OK |
+| Top graphics level along the Raadi stage: triangles in a frame (thousands) | 1345 (1338) | 3200 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 66 (41) | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.07 (0) | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 7.2 (7.4) | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 69 (72) | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 56 (68) | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0.11 (0.07) | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 6.6 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 81 (73) | - | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 5 | 8 | OK |
+| Lap drive: times the game was busy for over 33 ms | 3 | 4 | OK |
+| Lap drive: longest the game was busy without a break (ms) | 52 (50) | 100 | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 (1) | 2 | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 36 | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 144 (141) | 165 | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 3 (4) | 10 | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.76 (1.62) | 2 | OK |
+| Lap drive: page errors | 0 | 0 | OK |
+| Lap drive: building work queued twice | 0 | 0 | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 30 (31) | - | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 8 (10) | - | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 22 (35) | - | not judged |
+| Stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished) | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 25 ms | 2 | 8 | OK |
+| Stage drive: times the game was busy for over 33 ms | 2 (1) | 4 | OK |
+| Stage drive: longest the game was busy without a break (ms) | 48 (43) | 100 | OK |
+| Stage drive: frames whose game code took over 33 ms | 1 (0) | 2 | OK |
+| Stage drive: pictures sent to the graphics card (megapixels) | 24 (23) | 40 | OK |
+| Stage drive: frames that sent over 1.1 megapixels of pictures | 0 | 4 | OK |
+| Stage drive: most megapixels of pictures sent in one frame | 1.05 | 2 | OK |
+| Stage drive: page errors | 0 | 0 | OK |
+| Stage drive: building work queued twice | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 16 ms, not judged | 9 | - | not judged |
+| Stage drive: game code in a frame, the longest (ms), not judged | 47 (20) | - | not judged |
+| 60 players online: times the online code kept the page busy for over 5 ms in 40 s | 1 (2) | 10 | OK |
+| 60 players online: the online code's most in one stretch (ms) | 5.2 (6.1) | 12 | OK |
+| 60 players online: page errors | 0 | 0 | OK |
+| 60 players online: the online code per frame (ms), not judged | 0.55 (0.53) | - | not judged |
+| 60 players online: times the game was busy for over 25 ms, not judged | 0 (1) | - | not judged |
+| A race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s | 4 (27) | 10 | OK |
+| A race of 30: the online code's most in one stretch (ms) | 9.6 (8.6) | 12 | OK |
+| A race of 30: page errors | 0 | 0 | OK |
+| New kinds of car, 60 online: frames that sent over 3 MB of model to the graphics card | 0 | 1 | OK |
+| New kinds of car: page errors | 0 | 0 | OK |
+| New kinds of car: most model in one frame (MB), not judged | 2.03 | - | not judged |
+| New kinds of car: most pictures in one frame (megapixels), not judged | 4.19 | - | not judged |
+| Phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE | 5 | 5 | OK |
+| Phone, shaders built the iPhone way: most such programs in one frame | 2 | 2 | OK |
+| Phone, shaders built the iPhone way: page errors | 0 | 0 | OK |
+| The machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged | 0.15 | - | not judged |
+
+Against the 2026-11-26 run: phone total at DRIVE 534 -> 572 (canvases 93 -> 129), through the centre 788 -> 902, at the Raadi stage 441 -> 459. The canvas growth reads on last night's commit too, so it is this machine or something the page fetches, not the code. Timing figures over 10 % up (desktop longest busy 52 -> 66 ms, stage longest busy 28 -> 48 ms, lap busy over 16 ms 14 -> 30) are inside budget and match the slightly busier machine (0.15 cores, was 0.04).
+
+Boards: 26 records, 5067 laps compared, 1 worth a look: toomemagi cgt 2:32.53 siuru (lap 5401, 26 Nov), part 1 in 24.5 s against the best of 70 others in that car 25.7 s. Server refused: race finish 48, car 2.
+
+Commits merged in the last 24 h:
+
+- 6c18547 Winbaum.ee cabin advert left of LAP START, only with ?winbaum=1 (#840)
+- 6eeef93 Ford Focus RS WRC 03, hidden behind ?off=100: researched specs, anti-lag, and a bonnet that pops at 50 km/h hits and flies off over 100 (#839)
+- dbaba7b One game tab online at a time: "You're playing in another tab · Continue here" (#837)
+- 21cb008 Races: a minute after the winner, a racer making no progress round the lap is out (#838)
+- 001f364 AUTO graphics: the sharpest rungs (2x) only while the graphics card stays well under its limit (#836)
+- c3e0cfb Majoraadi: bales and barriers stand on the ground after a start from far away (#833)
+- f5c98e6 Majoraadi loads the whole stage behind GETTING READY; the hitch line counts dropped frames on an uneven frame rate (#835)
+- 017a6bd Race: a deploy mid-race no longer ends the race (#834)
+- 9f417ab Majoraadi start: a filled circle on the ground instead of the column while on the start (#832)
+- 13d7bcd LAP TIMES: each circuit's record over all cars beside its name, with driver and car (#831)
+- d2cf801 Online list: names A to Z read from the top down, capitals or not (#830)
+- aaca6b3 Majoraadi runners: the pill's count and its list hold steady for far-away cars (#829)
+- a81ba02 /stats: Majoraadi runners at the top of Online now, in orange (#828)
+- 35abd0f Watching a car: the track pills stay, with the Majoraadi runners under theirs (#827)
+- 0554e8e Desktop: players on a Majoraadi run listed under the MAJORAADI pill (#826)
+- a00bb72 Majoraadi pill: how many are on a timed stage run, in brackets (#825)
+- da8e9f6 Stand-in cars go see-through like the whole cars when passing through ours (#824)
+- 28cb420 Majoraadi open to everyone: test times deleted, stage counts on /stats (#817)
+- 5a6da39 Race results: a scroll by hand stays 30 s, then back to your row; phones can scroll the results (#823)
+- 47fcbe4 A second window of the game is no crash; Majoraadi waits for its stage before the lights (#821)
+- 5935daa Race list: a checkered flag and a gold time for racers through the line (#822)
+- fd0defe Track buttons: each circuit's outline before its name (#820)
+- 5ec5ad7 Hitch line: say what the screen runs at, and count pictures shown a refresh late on a fast screen (#819)
+- 9ba0da9 Hitch account: a frame rate that hops all the time is an uneven frame rate, not thousands of hitches (#818)
+- ad22d41 Majoraadi finish flames start on screen out of the last corner (#816)
+- 7db5215 Races: a racer standing still for a minute is out, so the race ends when the rest are through (#815)
+- dbea606 Majoraadi: the race button's letters at full size on a stage run (#814)
+- 2153ab2 Majoraadi flames sit lower and keep their shape (#813)
+- 6902967 Lap replays: a slider to any moment of the lap, a still frame while it is held (#812)
+- 0dfcca4 Racers' places over their cars for everyone, not only for those in the race (#811)
+- 10c296c Enyaq and bZ4X: the fifth fades out from 20 to 70 km/h (was 50 to 120) (#810)
+- 41431d5 Side views: 4 m out, in toward the car for a house or tall wall, then up; low things pass (#809)
+- 5c71f44 Race results: a thumbs up right after each driver's name (#808)
+- 4236ba2 Handbrake on every 4WD car works like a WRC car's: rears lock, the fronts stay driven (#807)
+- badedcf Majoraadi: black flame gantries at the start and finish, fireball flames (#806)
+- 8fa774d Bus shelter glass bursts when a car lands on the roof, at any speed; the frame stays as it was (#805)
+- 95416c2 Lap times: each car's five best drivers, of all time and of today, and your place after your best (#804)
+- 104641c Enyaq and bZ4X: a second whine a fifth over the plain one, fading out from 50 to 120 km/h (#803)
+- 78a7243 Land on vehicles and bus shelters: the bus roof, parked and other players' cars, shelter roofs (#802)
+- c72859c Enyaq and bZ4X: back to the original whine alone (#801)
+- 3e55ed4 Raadi skid marks: none on the grass, and gone within 3 m of the gravel starting (#800)
+- da3b841 Idle: 20 minutes standing on the map, then 20 more in the garage before going offline (#799)
+- a525d22 Enyaq and bZ4X: the two motors tuned to the plain whine, one chord at every speed (#798)
+- 4a1975d Options panel: a small gap between options in the same section (#797)
+- 8250aef Raadi skid marks: a quicker fade on the first corner's gravel (#796)
+- e286400 Raadi skid marks: on the start stretch's gravel too, and on into the first corner (#795)
+- 7f99981 Enyaq and bZ4X: the plain whine is back, and the two motors go with it at 0.7 of its loudness (#794)
+- 355b475 Options panel in the order Sound, Graphics, Controls (#793)
+- 6db6d8f Take the sharpness trim and the "picture held back" count out again (#792)
+- c3f9850 Thumbs up: one player to the same player at most 3 a day, judged by the server (#791)
+- b3406b3 No "km/h" under the speed on any electric car's tach; the kW stands in its place (#790)
+- 37e8764 Idle with room: still a 20 minute limit, and a page with nobody there for 20 minutes goes offline (#789)
+- 5d2651b Roofs a car can land on and drive over, treetops to fly through, R back onto the roof (#788)
+- 8840099 Raadi finish arch a touch lower, its opening filled with the finish glow (#787)
+- c546485 Raadi before launch: the garage ends a run, gravel judged as gravel, the stage for spectators, top ten checked (#786)
+- 830a777 Side views: 2 m out from the car with a wide lens, rising only where a house is nearer (#785)
+- 8b4cd48 Raadi: the start column bluish cyan and kept faintly through a run, arches over the start and the finish (#784)
+- dcf9326 Raadi and the race side by side: four small conflicts closed (#783)
+- 5148786 The Raadi stage is called Majoraadi wherever the player reads its name (#782)
+- 45d6259 Side views of the car on keys 5 and 6 (#781)
+- 89d168b Raadi line, second pass: skid marks on the tarmac start, the finish road as gravel, six apexes rounded (#780)
+- 2b17d80 Rocket: the server judges its BOOST and tank, refuses a kickflip in a lap, and its stage start holds (#779)
+- e1c9279 A slow car tips over an edge nose first; bridge railings hold a car nosed against them (#778)
+- a2d1c37 Wall crash: back on its wheels 70 times in 100, a side to balance on, the roof put back after 1 s, and 5 s on a timed lap (#777)
+- 6aeb428 Rocket: a kickflip ends at the wheels' first touch, and the car answers from there (#776)
+- deafd9b A record's drive is held against where the server saw the car during the lap; the lap clock's short side back to 1.5 s (#775)
+- 9f9d661 Rocket: no races, 2100 kg, 389 km/h and 405 with the fans off, no glow round the tach's two buttons (#774)
+- bafb80f Idle cars may stand while the server has room: the timeout only over 90 % full, a bus always (#773)
+- 5ffa1db Rocket: the hunt for level swings in round U's, the gauges run down as gas goes out, the tach's buttons a touch higher (#772)
+- 860e852 Enyaq and bZ4X: two motors heard, one whine for each axle, rising together (#771)
+- 19d4840 Board audit: a slow page's 2 s on the lap clock is by design, the note watches the rest of the leeway (#770)
+- 6f4c17d Leeway in the server's checks: wider where it costs an honest lap, and a reading of how much of each is used (#769)
+- cfeb865 Raadi line log: a run of 60 m is kept (a launch and the first corner, then H) (#768)
+- 4e0b9cf A wall is no brake: over 140 km/h and straight at it, the car ends on its roof (#767)
+- f33d532 Rocket's desktop tach: BOOST and FLIP just above the fan, gear and tyre row, the speed raised (#766)
+- 096da4b The car check in the race, Raadi runs judged again on the server, a nightly look at the boards (#765)
+- 0f5f82b Rocket: the motors sound like straight-cut race gears, and their note all but stops rising over 200 km/h (#764)
+- 75a3a85 Raadi: the stage's wheel tracks are a worn line made from real runs (first iteration, 7 runs) (#763)
+- c91b045 DRIVE: shaders not all waited for inside the click (#762)
+- 8d7d24d AUTO graphics keep the pictures even: sharpness is trimmed while pictures keep finishing a screen refresh late (#756)
+- 6cdbc90 Rocket: no more 12 s flights over falling ground, a later catch, round buttons in the desktop tach, the weight counts (#761)
+- e92e996 Perf check: race of 30 reruns when over, the lower run counts (#760)
+- 388331f Races and records by the server's own eyes: it follows each racer round the lap, times record laps, checks positions (#759)
+- a42ba3f Raadi: R in a timed run costs 5 s, and the run goes on from the spot the car is put back on (#758)
+- a81811d Rocket: the way down ends in one big burn of all four jets; the fans are quieter (#757)
+- 182f2d4 Raadi: timed runs write down where the wheels went, for a painted line made from real driving (#755)
+- 1404f32 Raadi start: Narva mnt beside the stage gets its street lights, signs, islands, lines and path (#754)
+- 2ce9bd8 Raadi bales: a hit presses a hollow into the bale and straw flies out (#747)
+- dc75aee Refused replays: the open list no longer says which limit a tuned drive broke (#753)
+- 3b4e22a Lap records: a record's drive is held against the car (two tuned Audi 200 records) (#752)
+- 0c5458c Rocket jets: soft columns of vapour with wisps and sway, not hard cones (#751)
+- 3d6ec3d Garage: the name is picked on the first open only, L and G work in the garage (#750)
+- 39348ae Rocket: BOOST and FLIP as glass discs with a ring gauge, FLIP shows x2 or x1, the tank fills in a minute (#749)
+- 96620cc Stats: top 10 driver names by time driven online (#748)
+- aa79f25 Rocket kickflip, third pass: jets arc with the roll, softer lift-off, slow last metres (#746)
+- aac01d5 Raadi bales: heavier (square on 680 to 950 kg, the edges 260 to 340) (#745)
+- bed24dd Rocket on phones: FLIP moves right and down, onto BOOST's line (#744)
+- 2ba6698 Rocket: the tank fills by itself whenever it is not full (#743)
+

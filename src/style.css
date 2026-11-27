@@ -223,6 +223,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 #toast { left: 50%; top: 16%; transform: translateX(-50%); font-size: clamp(13px, 2.2vw, 24px); font-style: italic; font-weight: 800; letter-spacing: .12em; color: var(--sun);
   text-shadow: 2px 2px 0 var(--hot), 0 0 16px rgba(255, 200, 80, .7); opacity: 0; transition: opacity .4s; white-space: nowrap; }
 #toast.show { opacity: 1; }
+#toast.small { font-size: clamp(11px, 1.3vw, 15px); letter-spacing: .14em; text-shadow: 1px 1px 0 var(--hot), 0 0 10px rgba(255, 200, 80, .6); }
 /* GETTING READY: the spot the car was just put on is still coming (also over the city map, right after the click) */
 #getready { position: fixed; left: 50%; top: 24%; transform: translateX(-50%); z-index: 9; pointer-events: none; padding: .35em 1em; border-radius: 999px;
   background: rgba(12, 4, 30, .72); font-size: clamp(12px, 1.8vw, 19px); font-style: italic; font-weight: 800; letter-spacing: .16em; color: var(--cyan);

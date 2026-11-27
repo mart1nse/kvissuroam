@@ -1088,8 +1088,11 @@ async function boot() {
     // (the lap's finish and each start of the lap timer are told to the server as they happen: it times the lap itself)
     onLap: (lap, info) => { mp.lapMark('f', lap.ms - (lap.pen || 0) * 1000); mp.submitLap(lap, info?.trace); stats.lap('finish', lap.car); raceMode?.lap(lap, info); },
     onEvent: (k, cps) => {
-      if (k === 'start') mp.lapMark('s');
-      stats.lap(k, cps); if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
+      if (k === 'start') { mp.lapMark('s'); lapMove = ''; }
+      // (the game stats: a lap that reached its first checkpoint, in which car; a lap ended by a jump, why it jumped)
+      if (k === 'cp1') { stats.lap('cp1', carId); return; }
+      stats.lap(k, cps, k === 'jump' ? lapMove || 'other' : undefined); if (k === 'jump') lapMove = '';
+      if (k === 'off' || k === 'cut' || k === 'jump') raceMode?.out(k);
       // (a Rocket starts every timed lap of its own with a full tank, so laps compare; in a race the tank is filled at the lights only)
       if (k === 'start' && car.rocket && !raceMode?.ghost) refillTank(car.spec.id);
     },
@@ -1506,6 +1509,7 @@ function openGarage() {
   // car from 80 km/h in 1.2 m with the clock still running, and no car check can see one instant stop). The
   // stage's count is left as it is: it starts again after the garage. In one's own online race, after the
   // lights, the car keeps its speed instead: the race's clock is the server's, and a stop is no gain then.
+  lapMove = 'garage';
   race?.cancel('LAP CANCELLED · GARAGE', false, 'jump');
   if (stage?.phase === 'run') stage.cancel('STAGE CANCELLED · GARAGE');
   drag?.cancel('DRAG RUN CANCELLED');
@@ -1612,6 +1616,9 @@ async function watchReplay(track, carOf) {
 }
 
 let placedAt = -1e9;               // when the car was last put somewhere (ms)
+// why the car is being put somewhere else in one go, for the game stats when that ends a timed lap (src/stats.js lap):
+// home (START, H, the TOOMEMÄGI button), map, garage; anything else is 'other'. Forgotten as a lap starts.
+let lapMove = '';
 function place(pose) {
   drag?.placed();                                  // (put anywhere but onto the drag strip's line: a drag run is off)
   watch?.stop();                                   // (put somewhere: back in your own car)
@@ -1660,6 +1667,7 @@ function trackPills() {
 }
 
 function goHome() {
+  lapMove = 'home';
   raceMode?.out('start');
   stage?.teleported();
   history.length = 0;
@@ -1691,6 +1699,7 @@ async function goLastSpot() {
       if (down) {
         place(down);
         race?.hopped(down.x, down.z);
+        if (race?.running) stats.lap('r');
         if (stage?.reset(car.time)) stats.stage('reset');
         return;
       }
@@ -1714,6 +1723,7 @@ async function goLastSpot() {
     place(pick);
     if (pick.roof) roofPut = { x: pick.x, z: pick.z, y: pick.y };
     race?.hopped(pick.x, pick.z);
+    if (race?.running) stats.lap('r');               // (R in a timed lap: it goes on from that spot)
     if (stage?.reset(pick.t)) stats.stage('reset');   // (a Raadi run goes on from that spot, 5 s dearer: raadi.js)
   } finally {
     respawning = false;
@@ -1752,6 +1762,7 @@ async function dropAt(x, z) {
   raceMode?.out('map');
   stage?.teleported();
   stats.count('mapjump');
+  lapMove = 'map';
   getReady();                                      // (at once: the click is answered before the map is read)
   parked.hold(8);
   // a pose that is safe to drop on (see respawn.js), with the height to drop at; on a bridge, the deck
@@ -2450,7 +2461,7 @@ function frame(ts) {
     else if (!car.inWater) wetAt = null;
     // (a crash that ends on the roof, cars/crash.js: R then goes back to before it, however long the car has lain there)
     // and on a timed lap or stage run every such crash is seconds, however the car lands (race.js, raadi.js)
-    if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); race?.crashed(); if (stage?.running) stats.stage('crash'); stage?.crashed(); }
+    if (car.crash && wreckAt?.c !== car.crash) { wreckAt = { x: car.crash.x, z: car.crash.z, t: car.crash.at, c: car.crash }; stats.count('roof'); if (race?.running) stats.lap('crash'); race?.crashed(); if (stage?.running) stats.stage('crash'); stage?.crashed(); }
     else if (!car.crash) wreckAt = null;
     // (up on a house's roof, where the walls are below the car: a spot there is one to be put back on, the first
     // R; see goLastSpot)
@@ -2484,7 +2495,9 @@ function frame(ts) {
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,
-    from: gapFrom, fz: lastFrame, uneven: hitches.uneven, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free' });
+    from: gapFrom, fz: lastFrame, uneven: hitches.uneven, doing: raceMode?.ghost ? 'race' : stage?.running || stage?.phase === 'count' ? 'stage' : race?.running ? 'hotlap' : 'free',
+    // (on the clock: a Majoraadi run from green, a Toomemägi lap, the same in an online race; time and km on /stats)
+    run: stage?.running ? 'stage' : race?.running ? (raceMode?.ghost ? 'race' : 'lap') : '' });
   // short hitches (src/hitches.js): was the frame before late, and what was it busy with
   // (since: the time since the drive began or the car was last put somewhere, a race's grid or a stage's start)
   hitches.frame(rawDt * 1000, felt, lastFrame, { others: mp.count, since: driveT ? (t0 - Math.max(driveT, placedAt || 0)) / 1000 : 0 }, rafMs, every);

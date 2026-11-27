@@ -12,7 +12,7 @@ const params = new URLSearchParams(location.search);
 const on = params.get('off') !== '100' && (params.get('stats') === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver && params.get('stats') !== '0'));
 const EVERY = 300000;
 
-const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, stage: {}, stageCar: {}, ad: {}, err: [] });
+const fresh = () => ({ v: 1, menu: 0, drive: 0, km: 0, car: {}, inp: {}, view: {}, gfx: {}, fps: {}, heat: {}, laps: {}, quit: {}, lapCar: {}, lapTry: {}, smash: {}, misc: {}, trouble: {}, death: {}, frz: {}, hit: {}, hitT: {}, stage: {}, stageCar: {}, runT: {}, runKm: {}, ad: {}, err: [] });
 let b = fresh();
 let first = null, sent = 0, loadMs = 0, loaded = false, drove = false, peak = 0, lapCp = -1, dev = '', wallAt = 0, perfAt = 0, driveAt = 0, frzN = 0, hitN = 0, onStage = false;
 const once = new Set();
@@ -54,7 +54,8 @@ function send(leaving = false, closing = false) {
   out.dev = dev;
   out.km = Math.round(out.km * 100) / 100;
   for (const k of ['menu', 'drive']) out[k] = Math.round(out[k] * 10) / 10;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'hitT', 'ad']) for (const [kk, v] of Object.entries(out[k])) out[k][kk] = Math.round(v * 10) / 10;
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'hitT', 'runT', 'ad']) for (const [kk, v] of Object.entries(out[k])) out[k][kk] = Math.round(v * 10) / 10;
+  for (const [kk, v] of Object.entries(out.runKm)) out.runKm[kk] = Math.round(v * 100) / 100;
   const body = JSON.stringify(out);
   sent = performance.now();
   const ok = () => {
@@ -73,7 +74,7 @@ function send(leaving = false, closing = false) {
 // a bundle that did not get through goes out with the next one
 function putBack(o) {
   for (const k of ['menu', 'drive', 'km']) b[k] += o[k] || 0;
-  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'smash', 'misc', 'trouble', 'death', 'frz', 'hit', 'hitT', 'stage', 'stageCar', 'ad']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
+  for (const k of ['car', 'inp', 'view', 'gfx', 'fps', 'heat', 'laps', 'quit', 'lapCar', 'lapTry', 'smash', 'misc', 'trouble', 'death', 'frz', 'hit', 'hitT', 'stage', 'stageCar', 'runT', 'runKm', 'ad']) for (const [kk, v] of Object.entries(o[k] || {})) inc(b[k], kk, v);
   b.err.push(...(o.err || []));
 }
 
@@ -235,10 +236,21 @@ export const stats = {
   // a visit, 'wb:c' a tap that opened its site
   ad(k, n = 1) { if (on) inc(b.ad, k, n); },
   smash(k, n = 1) { if (on && n > 0) inc(b.smash, k, n); },
-  lap(k, extra) {
+  // The Toomemägi lap (src/race/race.js onEvent, through main.js). In the bundle's `laps`: start (the lap clock started
+  // at the line on Küüni), finish, missed (over the line with a checkpoint missed), off and cut (the lap's rules: off the
+  // track; a short cut or the wrong way), jump (the car moved in one go: START or H, the map, the garage), reset
+  // (another car, or watching someone), quit (the page closed mid-lap); `lapCar` the finishes per car; `quit` how many
+  // checkpoints a lap ended without a finish had passed. From 27 Nov 2026 (Martin: the Majoraadi stage's kind of counts
+  // for the lap too): cp1 (a lap reached its first checkpoint) with `lapTry` the same per car (and <car>:f its finishes,
+  // so the two start together and a car's finish rate holds over any period), j:<why> beside each jump
+  // (home: START, H or the TOOMEMÄGI button; map; garage; other), r (R in a lap: it goes on from the spot) and crash
+  // (a hard crash in a lap, +5 s). extra: the car for finish and cp1, else the checkpoints passed.
+  lap(k, extra, why) {
     if (!on) return;
     inc(b.laps, k);
-    if (k === 'finish' && extra) inc(b.lapCar, extra);
+    if (k === 'finish' && extra) { inc(b.lapCar, extra); inc(b.lapTry, `${extra}:f`); }
+    if (k === 'cp1' && extra) inc(b.lapTry, extra);
+    if (k === 'jump' && why) inc(b.laps, `j:${why}`);
     if ((k === 'off' || k === 'cut' || k === 'jump' || k === 'reset' || k === 'quit') && extra != null) inc(b.quit, String(Math.min(6, extra)));
   },
   // The Majoraadi stage (src/race/raadi.js onRun; Martin 2026-11-26, at its launch: "Make sure stats start coming
@@ -281,8 +293,10 @@ export const stats = {
     errSeen.add(m);
     b.err.push(m);
   },
-  // every frame. s: { mode, dt, raw, felt, car, x, z, kmh, inp, view, gfx, others, lapCp, from, fz, doing }
-  // (from: when the frame before began; fz: what that frame did, see freeze() above; doing: free, hotlap, race, stage)
+  // every frame. s: { mode, dt, raw, felt, car, x, z, kmh, inp, view, gfx, others, lapCp, from, fz, doing, run }
+  // (from: when the frame before began; fz: what that frame did, see freeze() above; doing: free, hotlap, race, stage;
+  // run: what is on the clock, '' for nothing: stage (a Majoraadi run from green), lap (a Toomemägi lap), race (a lap of
+  // an online race), whose seconds and km go into `runT` and `runKm`, from 27 Nov 2026: Martin, "add hours and km driven")
   // (lapCp: checkpoints passed on the running lap, -1 when no lap is running)
   frame(s) {
     if (!on || document.hidden) return;
@@ -312,6 +326,7 @@ export const stats = {
     inc(b.gfx, String(s.gfx), dt);
     inc(b.heat, `${Math.floor(s.x / HEAT)},${Math.floor(s.z / HEAT)}`, dt);
     b.km += s.kmh / 3600 * dt;
+    if (s.run) { inc(b.runT, s.run, dt); inc(b.runKm, s.run, s.kmh / 3600 * dt); }
     for (const v of [100, 150, 200, 250]) if (s.kmh >= v && !once.has(`v${v}`)) { once.add(`v${v}`); inc(b.misc, `speed${v}`); }
     if (s.others > 0) {
       peak = Math.max(peak, s.others + 1);

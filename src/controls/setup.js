@@ -59,7 +59,7 @@ export function createSetup({ pads, toast = () => {}, onClose = () => {} }) {
     if (list.some((g) => g.direct)) return '';
     const viaSteam = 'With Steam open it is a gamepad here when this browser is started from Steam (add the browser to Steam as a non-Steam game), or when Steam\'s Desktop Layout is set to a gamepad.';
     return st?.supported
-      ? `<div class="srow"><span><b>STEAM CONTROLLER</b><small>Without Steam: CONNECT reads it straight from the browser, back grips included (R4 is BOOST, L4 is FLIP). ${viaSteam}</small></span><div class="seg"><button data-s="steam" class="${steamBusy ? 'on' : ''}">${steamBusy ? 'WAITING…' : 'CONNECT'}</button></div></div>`
+      ? `<div class="srow"><span><b>STEAM CONTROLLER</b><small>Without Steam: CONNECT reads it straight from the browser, back grips included (R4 is THRUST, L4 is FLIP). ${viaSteam}</small></span><div class="seg"><button data-s="steam" class="${steamBusy ? 'on' : ''}">${steamBusy ? 'WAITING…' : 'CONNECT'}</button></div></div>`
       : `<div class="srow"><span><b>STEAM CONTROLLER</b><small>${viaSteam} Without Steam it is only a mouse and keys; Chrome and Edge can connect it directly on this screen.</small></span></div>`;
   }
   let steamBusy = false, steamWait = 0;

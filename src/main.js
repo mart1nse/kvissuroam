@@ -985,7 +985,7 @@ async function boot() {
   if (otherTab) { otherTab = false; tellOtherTab(); }    // (heard before there was a screen to say it on)
   rocketUi = createRocketUi({ pad: $('#rocketpad'), dial: $('#rocketdial'), bar: $('#thrust'), fan: $('#fan'), touch: isTouch, keys: () => {
     const a = ctl === pads.state ? pads.active : null;
-    return a ? `${buttonName(a.gp, a.prof.btn.boost)} BOOST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT BOOST · X FLIP';
+    return a ? `${buttonName(a.gp, a.prof.btn.boost)} THRUST · ${buttonName(a.gp, a.prof.btn.flip)} FLIP` : 'SHIFT THRUST · X FLIP';
   } });
   skids = createSkidMarks(world);
   skids.setGrass(grassMarks);
@@ -2390,7 +2390,7 @@ function frame(ts) {
       ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
       ctl.boostOff = flipOff && !rocketOff;
       if (ctl.flip && !flipWas && flipOff && mode === 'drive' && !watch?.active) hud.note(flipWhy(), 1600);
-      else if (ctl.boost && !boostWas && ctl.boostOff && mode === 'drive' && !watch?.active) hud.note(flipWhy('BOOST'), 1600);
+      else if (ctl.boost && !boostWas && ctl.boostOff && mode === 'drive' && !watch?.active) hud.note(flipWhy('THRUST'), 1600);
       flipWas = !!ctl.flip; boostWas = !!ctl.boost;
       // (no quick refill under ?off=100 any more: Martin 27 Nov, "so it will behave the same as prod will"; it was 2 s)
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);

@@ -1690,6 +1690,13 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #dragslip button.x { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%;
   background: rgba(0, 0, 0, .08); color: #1b1822; font: 700 12px/1 var(--font); letter-spacing: 0; }
 #dragslip button.x:hover { background: rgba(0, 0, 0, .18); }
+/* after a run: one clean button back onto the start line, bottom middle */
+#dragback { left: 50%; bottom: max(16px, 5%); transform: translateX(-50%); z-index: 6; pointer-events: auto; padding: 11px 24px; border: none; border-radius: 999px; cursor: pointer;
+  font: 800 14px/1 var(--font); letter-spacing: .14em; color: #fff; white-space: nowrap; background: linear-gradient(100deg, var(--hot), var(--violet));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45), 0 0 18px rgba(255, 43, 214, .35); }
+#dragback:hover { filter: brightness(1.12); }
+#dragback:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+#dragback kbd { margin-left: 8px; padding: 1px 6px; border-radius: 4px; font: inherit; font-size: .8em; background: rgba(0, 0, 0, .3); }
 /* (folded: a tab on the right edge that opens it again, its ✕ above it puts it away) */
 #dragsliptab { right: 0; top: 50%; transform: translateY(-50%); z-index: 6; pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #dragsliptab .open { padding: 16px 8px; border: none; border-radius: 8px 0 0 8px; cursor: pointer;

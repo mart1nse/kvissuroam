@@ -2499,7 +2499,8 @@ function frame(ts) {
     // 0-100 stopwatch
     const kmh = speedKmh(car);
     // (the Rocket's from a foot of rollout, as Tesla times its cars: the clock starts once it has rolled 0.3 m from
-    // where it stood, Martin 27 Nov: "show 0-100 time for tesla on the screen with rollout, but only for tesla")
+    // where it stood, Martin 27 Nov: "show 0-100 time for tesla on the screen with rollout, but only for tesla"; the
+    // toast does not say so: "remove the rollout text part from the toast")
     const rollout = car.spec.id === 'rocket' ? 0.3048 : 0;
     if (kmh < 1 && (!launch || launch.t === null)) launch = { t: null, done: false, x: car.x, z: car.z };
     if (launch && !launch.done) {
@@ -2507,7 +2508,7 @@ function frame(ts) {
       else {
         launch.t += dt;
         if (car.throttle < 1 || car.inWater) launch = null;
-        else if (kmh >= 100) { launch.done = true; hud.toast(`0–100 KM/H · ${launch.t.toFixed(1)} S${rollout ? ' · 1 FT ROLLOUT' : ''}`); }
+        else if (kmh >= 100) { launch.done = true; hud.toast(`0–100 KM/H · ${launch.t.toFixed(1)} S`); }
       }
     }
     if (launch?.done && kmh < 1) launch = null;

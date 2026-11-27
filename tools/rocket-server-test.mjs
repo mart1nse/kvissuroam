@@ -29,7 +29,7 @@ const { stageCheck } = await import(root + '/worker/stagecheck.js');
 const { CARS } = await import(root + '/src/cars/specs.js');
 const { createCar, stepCar } = await import(root + '/src/cars/physics.js');
 const { planFlip, packPlan, flightPose, refillTank } = await import(root + '/src/cars/thrust.js');
-const { carLimits } = await import(root + '/src/race/plausible.js');
+// (the car's limits are worked out by the server itself: src/race/plausible.js)
 
 let clock = Date.UTC(2026, 10, 26, 9, 0, 0);
 Date.now = () => clock;
@@ -154,17 +154,18 @@ console.log('ok  a lap with a kickflip in its drive: refused (car: air)');
   assert.equal((await onBoard())?.ms, MS, 'the honest lap is on the board');
   assert.equal((await call('/api/board')).j.rp.toomemagi?.rocket, MS, 'its drive kept');
   const m = (await call('/api/margins')).j.kinds;
-  assert.ok(m.gas.n >= 2 && m.gas.max === 0, `the gas each Rocket drive used over its tank is kept for the nightly look (${JSON.stringify(m.gas)})`);
+  // (judged by its motors alone since Martin's 27 Nov "lets remove boost option from timed efforts": no gas account)
+  assert.ok(m.car.n >= 1 && m.car.max <= 1, `the honest Rocket lap's seconds over its car's limits are kept for the nightly look (${JSON.stringify(m.car)})`);
 }
-console.log('ok  made-up flight plans are dropped; an honest lap in the Rocket is taken, judged as a Rocket');
+console.log('ok  made-up flight plans are dropped; an honest lap in the Rocket is taken, judged by its motors');
 
 // 5) the Raadi stage's standing start. The Impreza's stage record of 26 Nov, its first metres driven as the Rocket
-// leaves the line: on the motors, and with BOOST held from the green light.
+// leaves the line: on the motors it holds as any car's start; with BOOST held from the green light (an old or
+// changed page: there is no BOOST on the stage since 27 Nov) it is a flying start, as the server now judges it.
 {
   const run = samples(raw('replays-raadi', 'impreza')), cum = [0];
   for (let i = 1; i < run.length; i++) cum.push(cum[i - 1] + Math.hypot(run[i][0] - run[i - 1][0], run[i][1] - run[i - 1][1]));
   const along = (s) => { let k = 0; while (k < cum.length - 2 && cum[k + 1] < s) k++; const f = (s - cum[k]) / (cum[k + 1] - cum[k] || 1); return [run[k][0] + (run[k + 1][0] - run[k][0]) * f, run[k][1] + (run[k + 1][1] - run[k][1]) * f]; };
-  const lim = carLimits(CARS.rocket);
   for (const boost of [0, 1]) {
     refillTank('rocket');
     const car = createCar(CARS.rocket, { x: 0, z: 0, yaw: 0, y: 0 }), xs = [], zs = [];
@@ -174,16 +175,8 @@ console.log('ok  made-up flight plans are dropped; an honest lap in the Rocket i
     let k = 0; while (cum[k] < far) k++;
     for (let i = k; i < run.length; i++) { xs.push(run[i][0]); zs.push(run[i][1]); }
     const X = Float64Array.from(xs), Z = Float64Array.from(zs);
-    // (on the motors alone it is within what any car may do; with BOOST it was 'a flying start' until 26 Nov)
-    assert.equal(stageCheck(X, Z, 0), boost ? 'a flying start' : '', boost ? 'as any other car it would be a flying start' : 'on the motors');
-    assert.equal(stageCheck(X, Z, 0, lim.gas.launch), '', `the Rocket's own start${boost ? ' with BOOST' : ''} holds`);
-    if (boost) console.log(`ok  the Rocket's standing start on the stage holds: ${far.toFixed(0)} m in 1.8 s with BOOST, as hard as ${lim.gas.launch.toFixed(0)} m/s2 allowed (other cars 14)`);
+    assert.equal(stageCheck(X, Z, 0), boost ? 'a flying start' : '', boost ? 'a start on BOOST is a flying start' : 'on the motors');
+    console.log(`ok  the Rocket's standing start on the stage ${boost ? `with BOOST (${far.toFixed(0)} m in 1.8 s) is a flying start` : `on its motors (${far.toFixed(0)} m in 1.8 s) holds`}`);
   }
-  // (twice as hard as that is still a flying start)
-  const X = [], Z = [];
-  for (let i = 0; i < 12; i++) { const [x, z] = along(0.5 * 2 * lim.gas.launch * (i * 0.1) ** 2); X.push(x); Z.push(z); }
-  let k = 0; while (cum[k] < 0.5 * 2 * lim.gas.launch * 1.1 ** 2) k++;
-  for (let i = k; i < run.length; i++) { X.push(run[i][0]); Z.push(run[i][1]); }
-  assert.equal(stageCheck(Float64Array.from(X), Float64Array.from(Z), 0, lim.gas.launch), 'a flying start');
 }
 console.log('ok  rocket and the server');

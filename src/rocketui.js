@@ -31,8 +31,8 @@ export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys 
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   return {
     // car: the car being driven (or null: nothing shown); off: neither button works just now (waiting for a
-    // start); noFlip: no kickflip (a race, a timed lap)
-    update(car, off = false, noFlip = false) {
+    // start); timed: a timed lap or the Majoraadi stage is on, where there is neither BOOST nor FLIP (Martin 27 Nov)
+    update(car, off = false, timed = false) {
       // (the suction fans, spec.fanDown: they never stop, and are run up by the pedal or by speed, as their
       // sound is in src/audio.js)
       if (fan) {
@@ -60,9 +60,9 @@ export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys 
       // (seconds until the tank holds a jump again; it does not fill in a flight or while BOOST blows)
       const short = r.tank < JUMP_S - 1e-6 && !r.flight;
       const left = short ? Math.ceil(((JUMP_S - r.tank) / TANK_S) * (r.refillS || REFILL_S)) : 0;
-      const canFlip = !off && !noFlip && r.tank >= JUMP_S - 1e-6, canBoost = !off && (r.on || (!r.dry && r.tank >= BOOST_MIN * TANK_S));
+      const canFlip = !off && !timed && r.tank >= JUMP_S - 1e-6, canBoost = !off && !timed && (r.on || (!r.dry && r.tank >= BOOST_MIN * TANK_S));
       const jumps = Math.floor(r.tank / JUMP_S + 1e-6);                    // kickflips in the tank
-      const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${noFlip ? 1 : 0}|${using ? 1 : 0}`;
+      const key = `${pct}|${left}|${canFlip ? 1 : 0}|${canBoost ? 1 : 0}|${off ? 1 : 0}|${timed ? 1 : 0}|${using ? 1 : 0}`;
       if (key === last) return;
       last = key;
       if (touch || dial) {
@@ -72,17 +72,17 @@ export function createRocketUi({ pad, dial = null, bar, fan = null, touch, keys 
           ring.flip[i].style.strokeDasharray = `${(share * HALF).toFixed(1)} 400`;
           cls(ring.flip[i], 'part', share < 1);
         }
-        text.boost.textContent = off ? 'OFF' : `${Math.round(pct)}%`;
-        text.flip.textContent = noFlip || off ? 'OFF' : short ? (left < 60 ? `${left} s` : mmss(left)) : `×${jumps}`;
+        text.boost.textContent = off || timed ? 'OFF' : `${Math.round(pct)}%`;
+        text.flip.textContent = timed || off ? 'OFF' : short ? (left < 60 ? `${left} s` : mmss(left)) : `×${jumps}`;
         cls(bBoost, 'no', !canBoost); cls(bFlip, 'no', !canFlip);
-        cls(bBoost, 'reload', !canBoost && !off);
+        cls(bBoost, 'reload', !canBoost && !off && !timed);
         cls(bBoost, 'use', using); cls(bFlip, 'use', using);
       }
       if (!touch) {
         fill.bar.style.width = `${pct}%`;
         const k = keys();
-        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : noFlip ? `${k.split(' · ')[0]} · NO FLIP ON A TIMED RUN` : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;
-        cls(bar, 'reload', !canBoost && !off); cls(bar, 'use', using);
+        text.bar.textContent = off ? 'THRUSTERS WAIT FOR THE START' : timed ? 'NO BOOST OR FLIP ON A TIMED RUN' : short ? `${k.split(' · ')[0]} · FLIP IN ${mmss(left)}` : `${k} ×${jumps}`;
+        cls(bar, 'reload', !canBoost && !off && !timed); cls(bar, 'use', using);
       }
     },
   };

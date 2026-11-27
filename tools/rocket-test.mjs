@@ -299,7 +299,7 @@ flip('a tree on the landing spot: hits it', { extra: trunk(84.7), expect: 'crash
 flip('a tree under the top of the arc is flown over', { extra: trunk(42) });
 flip('a guard rail under the top of the arc is flown over', { extra: { solidsNear: (x, z, reach, out) => { out.length = 0; out.push({ x: 0, z: -42, yaw: 0, hx: 6, hz: 0.15 }); return out; } } });
 
-// ---- FLIP switched off (a race, a timed lap): nothing happens and no gas goes; BOOST works as ever
+// ---- FLIP switched off alone: nothing happens and no gas goes; BOOST works as ever
 {
   const w = world(), car = fresh(w, 100);
   const tank0 = car.rocket.tank;
@@ -307,6 +307,13 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
   check('FLIP switched off: no jump, no gas used', !car.rocket.flight && car.rocket.tank === tank0);
   for (let t = 0; t < 1; t += dt) stepCar(car, { boost: 1, flipOff: true }, w, dt);
   check('...and BOOST still works', car.thrustN > 0 && car.rocket.tank < tank0 - 0.9, `${car.rocket.tank.toFixed(2)} s left`);
+}
+// ---- a timed lap or the stage (Martin 27 Nov, "lets remove boost option from timed efforts"): BOOST off too
+{
+  const w = world(), car = fresh(w, 100);
+  const tank0 = car.rocket.tank;
+  for (let t = 0; t < 1; t += dt) stepCar(car, { up: 1, boost: 1, flipOff: true, boostOff: true }, w, dt);
+  check('BOOST switched off: no push, no gas used', !car.rocket.on && car.thrustN === 0 && car.rocket.tank === tank0, `${car.rocket.tank.toFixed(2)} s left`);
 }
 
 // ---- two flips, then none until half a tank is back

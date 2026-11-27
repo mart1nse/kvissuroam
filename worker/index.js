@@ -1086,7 +1086,7 @@ export class Lobby extends DurableObject {
     }
   }
   // A Rocket told the others of a kickflip (the 'jmp' message) while its lap or stage run was on. The game allows
-  // none then (src/main.js flipOff: "no flip when hotlap has started", Martin 26 Nov 2026), so the page is a changed
+  // none then (src/main.js flipOff, and no BOOST either: "no flip when hotlap has started", Martin 26 Nov 2026), so the page is a changed
   // one: the lap is marked, and cannot become a record (lapClock). A flight begun before the start line is told
   // before the lap's start mark and is not counted; the game starts no lap while the car is in the air.
   lapFlight(sid, id) {
@@ -1211,7 +1211,7 @@ export class Lobby extends DurableObject {
     let best = bestNow(), had = hadNow();
     if (!lap.hold && best !== ms) return refuse('not the record', lap.name);
     if (!lap.hold && had && had.ms <= ms) return json({ ok: true });  // (that record's replay came already)
-    let bytes, why, told, launch;
+    let bytes, why, told;
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
@@ -1228,17 +1228,17 @@ export class Lobby extends DurableObject {
         // (a stage run: which of its places were on the gravel, from the stage's own rules; one the rules refuse
         // is refused for that below, and its car is judged as if all of it were tarmac)
         const where = {};
-        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, lim?.gas?.launch, where);
-        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose });
+        // (a car with thrusters has no BOOST on a timed lap or a stage run since Martin 27 Nov: judged by its motors
+        // alone, noGas, and its start like any car's; the Rocket's motors leave a standstill at 12 m/s2)
+        if (track === 'raadi') stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, 0, where);
+        const j = judgeDrive(drive.xs, drive.zs, drive.ys, lim, { roll: drive.roll, loose: where.loose, noGas: true });
         if (lim) this.margin('car', Math.max(j.pull, j.grip, j.stop, j.top));
         // (a car with thrusters: the gas its drive used over what its tank held, as a share of a full tank, and
         // the seconds it was turning over in the air, which is a kickflip inside the lap)
-        if (lim?.gas) this.margin('gas', j.gas);
-        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${lim?.gas ? `; gas over ${j.gas} of a tank, ${j.spent} tanks used; ${j.air} s of a kickflip` : ''})`; told = 'car'; }
-        launch = lim?.gas?.launch;
+        if (j.why) { why = `car: ${j.why} (s over: pull ${j.pull}, grip ${j.grip}, stop ${j.stop}, top ${j.top}${lim?.gas ? `; ${j.air} s of a kickflip` : ''})`; told = 'car'; }
       }
       // a stage run by the stage's own rules: its start, its way, its penalty seconds (worker/stagecheck.js)
-      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, launch); if (st) { why = `stage: ${st}`; told = 'stage'; } }
+      if (!why && track === 'raadi') { const st = stageCheck(drive.xs, drive.zs, (lap.pen || 0) - crashPen, 0); if (st) { why = `stage: ${st}`; told = 'stage'; } }
       // the lap by the server's own clock (a stage run: from its green light, without its penalty seconds)
       if (!why) { const c = this.lapClock(tk.sid, ms - (lap.pen || 0) * 1000, drive); if (c) { why = c; told = c.split(':')[0]; } }
     } catch { why = 'unreadable'; }

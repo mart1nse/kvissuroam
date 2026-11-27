@@ -27,7 +27,7 @@
 //   air    seconds the car was turning over while in free flight: a kickflip, which the game does not allow
 //          once a lap or a stage run is on (refused at any: AIR_MAX)
 import { createCar, stepCar, TYRE_GRIP } from '../cars/physics.js';
-import { GAS_V, REFILL_S, FADE, refillTank } from '../cars/thrust.js';
+import { GAS_V, REFILL_S, FADE, TANK_S, refillTank } from '../cars/thrust.js';
 
 const G = 9.81;
 export const STEP = 0.1;             // seconds between a replay's samples
@@ -69,17 +69,21 @@ const flat = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1,
 // 0.3 s of processor, and the server has every player's positions to pass on meanwhile)
 const cache = new Map();
 // (one run: flat out from a standstill to its top speed, then a full stop. fanOff: with the suction fans off;
-// a car with thrusters is run with its tank held empty, the gas's weight off it)
-function* flatOut(spec, every, fanOff) {
+// a car with thrusters is run with its tank held empty, the gas's weight off it, or with full: held full, as it is
+// all through a timed run now that there is no BOOST on one)
+function* flatOut(spec, every, fanOff, full = false) {
   const car = createCar(spec, { x: 0, z: 0, yaw: 0 });
   const dt = 1 / 60, W = 30;                             // (half-second spans)
-  const light = () => { if (car.rocket) car.rocket.tank = 0; };
+  const light = () => { if (car.rocket) car.rocket.tank = full ? TANK_S : 0; };
+  const steady = !!spec.thrusters;
   car.fanOff = fanOff;
   const v = [0];
   let top = 0, still = 0;
   for (let i = 0; i < 60 * 150 && still < 60 * 6; i++) {
     light();
-    stepCar(car, { up: 1 }, flat, dt);
+    // (a car with thrusters is held straight: the rear-driven Rocket with its fans off spins on a floored wheel left
+    // alone, and its limits then read ~265 km/h; judged by its motors alone on a timed run that was 1.7 s over at 405)
+    stepCar(car, steady ? { up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) } : { up: 1 }, flat, dt);
     const s = Math.hypot(car.vx, car.vy);
     v.push(s);
     if (s > top + 0.02) { top = s; still = 0; } else still++;   // (stops once the speed has not risen for 6 s)
@@ -111,6 +115,14 @@ export function* carLimitsSteps(spec, every = 0) {
     for (let k = 0; k < both.length; k++) both[k] = Math.max(pull[k] || 0, o.pull[k] || 0);
     pull = both; top = Math.max(top, o.top); stop = Math.max(stop, o.stop);
   }
+  // (the same with the tank full, for a timed run judged without the gas, noGas: the 250 kg of gas left in would
+  // otherwise be leeway, and a car 700 kg lighter passed)
+  let pullFull = null;
+  if (T) {
+    const a = (yield* flatOut(spec, every, false, true)).pull, b = spec.fanDown ? (yield* flatOut(spec, every, true, true)).pull : a;
+    pullFull = new Float64Array(Math.max(a.length, b.length));
+    for (let k = 0; k < pullFull.length; k++) pullFull[k] = Math.max(a[k] || 0, b[k] || 0);
+  }
   // sideways: the tyre's grip on dry paving (road tyres there, the better of the two), the car's own rubber,
   // the best patch of road (physics.js: 5 % either way), and suction fans' weight if it has them
   const fans = 1 + (spec.fanDown || 0) / (light * G);
@@ -126,6 +138,7 @@ export function* carLimitsSteps(spec, every = 0) {
   // goes); a, the most the tail nozzles push the car at its lightest (m/s2); fill, seconds an empty tank takes to
   // fill; launch, the hardest it leaves a standstill (m/s2, for a stage's start: worker/stagecheck.js; the motors'
   // pull and the nozzles' push together, which is a third more than the car does with both: 0 to 100 in 0.58 s)
+  if (pullFull) lim.pullFull = pullFull;
   if (T) lim.gas = { dv: GAS_V * Math.log(spec.mass / light), a: T.rear / light, fill: REFILL_S, launch: pull[0] + T.rear / light };
   cache.set(spec.id, lim);
   return lim;
@@ -146,12 +159,15 @@ export function carLimits(spec) {
 // Each second is judged as two halves and counts only when both are over: a wall, a landing or R (back to an
 // earlier spot) changes a car's speed or heading in one sample, tuning does it for seconds on end. So a messy lap
 // with a dozen knocks (the first of the day in a car is held for its replay too) reads as nothing.
+// k.noGas: a car with thrusters judged by its motors and tyres alone, as any other car (a timed lap or a stage run,
+// where the game has no BOOST since Martin 27 Nov: "lets remove boost option from timed efforts"); its kickflip
+// check stays. With the gas allowed a 10 s tank hid tunes of up to twice the motors.
 // k.loose: 1 for each sample on loose ground (gravel), judged there against lim.loose's grip and brakes: a half
 // second counts as loose when it starts and ends there.
 export function judgeDrive(xs, zs, ys, lim, k = {}) {
   const n = xs.length, out = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0, spent: 0, why: '' };
   if (!lim || n < 25) return out;
-  const gas = lim.gas;
+  const gas = k.noGas ? null : lim.gas;
   const pullK = k.pull ?? PULL_K, gripK = k.grip ?? GRIP_K, stopK = k.stop ?? STOP_K;
   const loose = k.loose && lim.loose ? k.loose : null;
   const looseK = k.looseGrip ?? Math.min(gripK, LOOSE_GRIP_K);
@@ -164,7 +180,8 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   // (k.hop: the caller knows which samples are an R, the race desk does: there a long step is not taken for one)
   if (k.hop) hop.set(k.hop);
   else for (let i = 1; i < n; i++) if (Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]) > HOP) for (let j = Math.max(0, i - 12); j < Math.min(n, i + 12); j++) hop[j] = 1;
-  const at = (v) => lim.pull[Math.min(lim.pull.length - 1, Math.floor(v / BIN))];
+  const P = (k.noGas && lim.pullFull) || lim.pull;
+  const at = (v) => P[Math.min(P.length - 1, Math.floor(v / BIN))];
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), t = (b - a) * STEP;
     const dx = xs[b] - xs[a], dz = zs[b] - zs[a], dy = ys[b] - ys[a];
@@ -218,6 +235,8 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
       if (-tank > low) low = -tank;
     }
     out.gas = Math.round((low / gas.dv) * 100) / 100; out.spent = Math.round((spent / gas.dv) * 100) / 100;
+  }
+  if (lim.gas) {
     // A kickflip: the car turns right over while it flies. (A car that rolls over on the road after a knock does
     // not fall freely for seconds; one that drives off an edge or a crest does not spin over.)
     const roll = k.roll, A = Math.round(AIR_T / STEP), wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));

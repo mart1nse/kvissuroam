@@ -33,6 +33,33 @@ for (const file of readdirSync(dir).sort()) {
   else assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1, `${file}: an honest record reads ${show(j)}`);
 }
 
+// ---- 1b) Majoraadi runs, their gravel judged against gravel's grip (27 Nov 2026: Savage's Impreza record, 1:35.15,
+// 12 s ahead of anyone in any car, about 1.6 times the car's grip on gravel; it stood against 1.35 times that grip)
+{
+  const { register } = await import('node:module');
+  register('data:text/javascript,' + encodeURIComponent(`export async function load(u, c, n) {
+    if (u.endsWith('.json')) return { format: 'json', source: (await import('node:fs')).readFileSync(new URL(u)), shortCircuit: true };
+    return n(u, c);
+  }`));
+  const { stageCheck } = await import('../worker/stagecheck.js');
+  for (const [folder, tuned] of [['replays-raadi', false], ['replays-raadi-tuned', true]]) {
+    const d = new URL(`./fixtures/${folder}/`, import.meta.url);
+    for (const file of readdirSync(d).sort()) {
+      const car = file.replace('.gz', ''), a = gunzipSync(readFileSync(new URL(file, d))).toString().split(',').map(Number);
+      const [, f, , n] = a;
+      const xs = new Float64Array(n), zs = new Float64Array(n), ys = new Float64Array(n), roll = new Float64Array(n);
+      let x = 0, z = 0, y = 0, ro = 0;
+      for (let i = 0; i < n; i++) { x += a[4 + i * f]; z += a[5 + i * f]; y += a[6 + i * f]; ro += a[9 + i * f]; xs[i] = x / 100; zs[i] = z / 100; ys[i] = y / 100; roll[i] = ro / 1000; }
+      const where = {};
+      stageCheck(xs, zs, 0, undefined, where);
+      const j = judgeDrive(xs, zs, ys, carLimits(CARS[car]), { roll, loose: where.loose });
+      console.log(`raadi ${car.padEnd(8)}${tuned ? ' tuned' : '      '} ${show(j)}${j.why ? `  REFUSED (${j.why})` : ''}`);
+      if (tuned) assert.equal(j.why, 'grip', `${folder}/${file}: the tuned stage record must be refused for its grip`);
+      else assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1, `${folder}/${file}: an honest stage record reads ${show(j)}`);
+    }
+  }
+}
+
 // ---- 2) and 3) drives on the physics
 // a flat dry road with a wall across it at z = -WALL (the car starts at 0 heading for it, yaw 0 looks down -z)
 const WALL = 2600;

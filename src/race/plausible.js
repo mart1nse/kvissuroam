@@ -34,6 +34,11 @@ export const STEP = 0.1;             // seconds between a replay's samples
 const HOP = 12;                      // m between two samples: more is R back to an earlier spot (worker checkTrace), not driving
 const PULL_K = 1.3, PULL_SLACK = 4;  // energy gained in a second: this share of the car's own, plus J/kg
 const GRIP_K = 1.35;                 // sideways: this share of the tyres' grip on dry paving
+// ... and on gravel this share of the grip there (27 Nov 2026: an Impreza took the Majoraadi record 12 s ahead of
+// anyone in any car, 1.16 g in its bends on gravel at the 90th in 100 where the honest records read 0.72 to 0.82;
+// against 1.35 it read 0.3 s over and stood. Every honest stage record of that morning reads 0 s at 1.0. Gravel's
+// limit already holds its best patches, 13 % over, so the paving's leeway is not needed on it.)
+const LOOSE_GRIP_K = 1.1;
 const STOP_K = 1.5;                  // braking: this share of the car's own full stop
 const TOP_K = 1.12;                  // faster than this share of its top speed (a long hill adds a little)
 export const OVER_MAX = 3;           // seconds over a limit a lap may have before it is refused
@@ -149,7 +154,9 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
   const gas = lim.gas;
   const pullK = k.pull ?? PULL_K, gripK = k.grip ?? GRIP_K, stopK = k.stop ?? STOP_K;
   const loose = k.loose && lim.loose ? k.loose : null;
-  const gripAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.grip : lim.grip);
+  const looseK = k.looseGrip ?? Math.min(gripK, LOOSE_GRIP_K);
+  // (the grip a half second may use, its leeway in)
+  const gripAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.grip * looseK : lim.grip * gripK);
   const stopAt = (a, b) => (loose && loose[a] && loose[b] ? lim.loose.stop : lim.stop);
   // speed at each sample from the places on both sides of it (level, and with the climb), its heading, and
   // whether a hop is near (those samples are not driving)
@@ -177,7 +184,7 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
     // (a stop: the speed shed, the hill's share left out, only while the car rolls on)
     if (vh[i] > 3 && over((a, b) => vh[a] - vh[b] - (G * Math.max(0, ys[b] - ys[a])) / Math.max(5, vh[a]) > stopAt(a, b) * stopK * H * STEP)) out.stop += STEP;
     // (sideways: how far the heading turns, times the speed; a car all but standing has no path to speak of)
-    if (!gas && vh[o] > 5 && vh[m] > 5 && vh[i] > 5 && over((a, b) => turn(a, b) * Math.min(vh[a], vh[b]) > gripAt(a, b) * gripK * H * STEP)) out.grip += STEP;
+    if (!gas && vh[o] > 5 && vh[m] > 5 && vh[i] > 5 && over((a, b) => turn(a, b) * Math.min(vh[a], vh[b]) > gripAt(a, b) * H * STEP)) out.grip += STEP;
   }
   if (gas) {
     // Half second by half second: what the car gained on its way (fwd, m/s) and what its path turned (side) over
@@ -196,7 +203,7 @@ export function judgeDrive(xs, zs, ys, lim, k = {}) {
       const v = (vh[a] + vh[b]) / 2;
       const room = gas.a * THRUST_K * span * Math.max(0, Math.min(1, (lim.top - v) / FADE + 0.5));
       let fwd = Math.max(0, (e[b] - e[a] - (pw[b] - pw[a]) * GAS_PULL_K - PULL_SLACK / 2) / Math.max(v, 2));
-      const side = vh[a] > 5 && vh[b] > 5 ? Math.max(0, turn(a, b) * Math.min(vh[a], vh[b]) - gripAt(a, b) * gripK * span) : 0;
+      const side = vh[a] > 5 && vh[b] > 5 ? Math.max(0, turn(a, b) * Math.min(vh[a], vh[b]) - gripAt(a, b) * span) : 0;
       const overF = fwd > room + GAS_FLOOR, paid = Math.min(side, fwd * SIDE_K), overS = side - paid > GAS_FLOOR;
       if (overF) { fwd = room; if (wasF) out.pull += wasF === 1 ? 2 * span : span; }
       if (overS && wasS) out.grip += wasS === 1 ? 2 * span : span;

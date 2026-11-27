@@ -1107,7 +1107,11 @@ function substep(car, input, world, dt) {
   // Martin 2026-11-23). Hard tyres (grip under 1, the bus) are as poor everywhere.
   const wide = car.tyres === 'gravel' ? Math.min(1, s.grip ?? 1) : s.grip ?? 1;
   const looseWide = wide > 1 ? 1 - (wide - 1) * WIDE_LOOSE : wide;
-  const tyreF = surfF === 1 ? wide : looseWide, tyreR = surfR === 1 ? wide : looseWide;
+  // (a car built for loose ground, spec.looseGrip: a rally car's long-travel suspension keeps its tyres in the gravel
+  // over every rut and crest, and its active differentials put the drive where the grip is, so on gravel, dirt and
+  // grass it holds and pulls harder than a road car on the same tyres: the Focus WRC, Martin 2026-11-27)
+  const lg = s.looseGrip ?? 1;
+  const tyreF = surfF === 1 ? wide : surfF === WATER ? looseWide : looseWide * lg, tyreR = surfR === 1 ? wide : surfR === WATER ? looseWide : looseWide * lg;
   // No surface grips the same everywhere: dust, damp, ruts and worn patches a few metres across
   // (more on loose ground than on paving), so a slide or a donut never repeats itself exactly.
   const patch = (x, z, k) => 1 + k * (0.55 * Math.sin(x * 0.83 + Math.sin(z * 0.31) * 2.1) * Math.sin(z * 0.71 + 1.3) + 0.45 * Math.sin((x + z) * 0.37 + Math.sin(x * 0.19) * 1.7));

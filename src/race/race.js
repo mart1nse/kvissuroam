@@ -569,6 +569,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
               if (g.cp < 0) return;
               const k = g.cp;
               st.cps.add(g.i);
+              if (st.cps.size === 1) onEvent?.('cp1');   // (for the game stats: a lap that got going)
               const t = time - st.t0 + st.pen;
               st.splits[k] = Math.round(t * 1000);
               if (!st.ref) st.ref = refLaps(carId);

@@ -47,9 +47,16 @@ const MAPS = {
   gfx: [(k) => /^(1[0-5]|[0-9])$/.test(k), SEC],
   fps: [LIST('<20', '20-30', '30-45', '45-60', '60+'), SEC],
   heat: [(k) => /^-?\d{1,3},-?\d{1,3}$/.test(k), SEC],
-  laps: [LIST('start', 'finish', 'missed', 'off', 'cut', 'jump', 'reset', 'quit'), N],
+  // the Toomemägi lap (src/stats.js lap()); from 27 Nov 2026 also cp1 (reached the first checkpoint), r (R in a lap),
+  // crash (a hard crash in a lap) and why a jump ended a lap (j:home START or H, j:map, j:garage, j:other)
+  laps: [LIST('start', 'finish', 'missed', 'off', 'cut', 'jump', 'reset', 'quit', 'cp1', 'r', 'crash', 'j:home', 'j:map', 'j:garage', 'j:other'), N],
   quit: [LIST('0', '1', '2', '3', '4', '5', '6'), N],         // checkpoints passed when a lap was given up
   lapCar: [(k) => Object.hasOwn(CARS, k), N],                  // finished laps per car
+  // laps per car that reached the first checkpoint, and <car>:f those finished (both from 27 Nov 2026)
+  lapTry: [(k) => Object.hasOwn(CARS, k.endsWith(':f') ? k.slice(0, -2) : k), N],
+  // seconds and km on the clock (27 Nov 2026 on): lap a Toomemägi lap, race a lap of an online race, stage a Majoraadi run
+  runT: [LIST('lap', 'race', 'stage'), SEC],
+  runKm: [LIST('lap', 'race', 'stage'), KM],
   smash: [LIST('prop', 'glass'), 200],
   // a page that died on screen, found by the graphics crash guard: device|os|memory GB|level|cap after|
   // where (load, menu, drive; tab: a new tab)|time on screen|script memory MB|pictures on the card (src/stats.js)
@@ -412,6 +419,22 @@ export class Stats extends DurableObject {
     return topDrivers(this.sql.exec(`SELECT data FROM ${table} WHERE ${col} >= ? ORDER BY ${col}`, from).toArray().map((r) => driversFrom(r.data)));
   }
 
+  // The laps on the lap boards, all time (Martin 27 Nov 2026, the Toomemägi lap on /stats): the lobby keeps a summary
+  // of them (worker/lapsum.js) and is asked for it at most once a minute; a lobby that does not answer leaves it out.
+  async lapBoard() {
+    const lb = this.env?.LOBBY;
+    if (!lb) return null;
+    if (this.boardSum && Date.now() - this.boardSum.at < 60000) return this.boardSum.v;
+    try {
+      const v = await lb.get(lb.idFromName('lobby')).lapSummary();
+      this.boardSum = { at: Date.now(), v };
+      return v;
+    } catch (err) {
+      console.error('lap summary', err);
+      return this.boardSum?.v ?? null;
+    }
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
     const ip = req.headers.get('cf-connecting-ip') || 'local';
@@ -484,29 +507,35 @@ export class Stats extends DurableObject {
           return { at: a, ...loadView(r.data.load, loadSpan(r.data.load, a, Math.min(now, a + HOUR))) };
         });
         // visits hour by hour, the 24 h tab's columns (the other tabs have them per day)
-        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0 }));
+        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, ls: r.data.laps?.start || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0 }));
         const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
-          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits, drivers: this.topDrivers('drive_hours', 'hour', from) };
+          load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits, drivers: this.topDrivers('drive_hours', 'hour', from), board: await this.lapBoard() };
         this.cache.set('h24', { at: Date.now(), body });
         return answer(body);
       }
-      const days = Math.max(1, Math.min(KEEP_DAYS, parseInt(url.searchParams.get('days'), 10) || 30));
-      const hit = this.cache.get(days);
+      // days=all: every day kept, from the first (the stats began on 20 Nov 2026; Martin 27 Nov: "all time")
+      const all = url.searchParams.get('days') === 'all';
+      const first = all ? this.sql.exec('SELECT MIN(day) AS d FROM days').one().d : null;
+      const days = all && first ? Math.max(1, Math.round((tartuStart(tartuDay()) - tartuStart(first)) / 86400000) + 1)
+        : Math.max(1, Math.min(KEEP_DAYS, parseInt(url.searchParams.get('days'), 10) || 30));
+      const key = all ? 'all' : days;
+      const hit = this.cache.get(key);
       if (hit && Date.now() - hit.at < 60000) return answer(hit.body);
-      const from = tartuDay(new Date(Date.now() - (days - 1) * 86400000));
+      const from = all && first ? first : tartuDay(new Date(Date.now() - (days - 1) * 86400000));
       const rows = this.sql.exec('SELECT day, data FROM days WHERE day >= ? ORDER BY day', from).toArray()
         .map((r) => { try { return { day: r.day, data: JSON.parse(r.data) }; } catch { return { day: r.day, data: {} }; } });
       const now = Date.now();
       const daySpan = (day, L) => { const a = tartuStart(day); return loadSpan(L, a, Math.min(now, a + 86400000)); };
       const daily = rows.map((r) => {
         const lv = loadView(r.data.load, daySpan(r.day, r.data.load));
-        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
+        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, ls: r.data.laps?.start || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
           load: lv && { on: lv.on, onMax: lv.onMax, wait: lv.wait, waitMax: lv.waitMax, tot: lv.tot, totMax: lv.totMax, away: lv.away } };
       });
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));
       const total = sumDays(rows.map((r) => r.data));
-      const body = { days, from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)), drivers: this.topDrivers('drive_days', 'day', from) };
-      this.cache.set(days, { at: Date.now(), body });
+      const body = { days, ...(all ? { all: true } : {}), from, to: tartuDay(), heat: HEAT, total, daily, names, load: loadView(total.load, loadSpan(total.load, tartuStart(from), now)),
+        drivers: this.topDrivers('drive_days', 'day', from), board: await this.lapBoard() };
+      this.cache.set(key, { at: Date.now(), body });
       return answer(body);
     }
     return json({ error: 'not found' }, 404);

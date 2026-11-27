@@ -73,7 +73,7 @@
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2); margin: 0 0 8px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .hours { height: 110px; }
-  .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px 14px; }
+  .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 14px; }
   .nums div b { display: block; font: 700 20px/1.2 Montserrat, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
   .nums div span { color: var(--ink2); font-size: 12.5px; }
   #map { width: 100%; aspect-ratio: 4 / 3; max-height: 720px; display: block; border-radius: 8px; background: #160735; touch-action: pan-y; }
@@ -92,6 +92,8 @@
   th.n { text-align: right; }
   .rtab td.n, .rtab th.n { width: auto; white-space: nowrap; }
   .rtab td.n small { color: var(--muted); margin-left: 5px; font-size: 11.5px; }
+  .rtab td.n small.by { display: inline-block; vertical-align: bottom; max-width: 11em; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 600px) { .rtab td.n small.by { display: block; margin: 1px 0 0 auto; } }
   td code { color: var(--ink2); word-break: break-word; font-size: 12.5px; }
   #tip { position: fixed; pointer-events: none; z-index: 9; background: #0b0320; border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; padding: 6px 9px; border-radius: 8px; width: max-content; max-width: min(340px, calc(100vw - 12px)); line-height: 1.4; overflow-wrap: break-word; display: none; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
@@ -118,7 +120,7 @@
       <p class="sub">How the game is played. Anonymous totals: no addresses or cookies are kept, and no names but the driver names the game itself shows (online now, top 10). Days are Tartu time.</p>
     </div>
     <div class="range" role="group" aria-label="Period">
-      <button data-days="1">24 h</button><button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button>
+      <button data-days="1">24 h</button><button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button><button data-days="0">All time</button>
     </div>
   </header>
   <section id="online" class="card" aria-live="polite"><h2><span class="live"></span>Online now</h2><p class="note">Loading…</p></section>
@@ -238,7 +240,6 @@
     carNames = d.names || carNames; renderOnline();
     var t = d.total || {}, misc = t.misc || {}, laps = t.laps || {};
     var sessions = t.sessions || 0, drove = t.drove || 0;
-    var cancelled = (laps.off || 0) + (laps.jump || 0) + (laps.reset || 0);
     var h = '';
     h += '<div class="tiles">' + [
       [fmt(sessions), 'game visits', fmt(t.loaded || 0) + ' got past loading'],
@@ -311,13 +312,8 @@
 
     var name = function (k) { return d.names[k] || k; };
     h += card('Cars', 'Time driven in each car.', bars(rowsOf(t.car, name), { show: dur, top: 12 }));
-    h += card('Laps finished per car', null, bars(rowsOf(t.lapCar, name), { colour: C.pink, top: 12 }));
-    h += card('Laps', fmt(laps.start) + ' laps started on the Toomemägi circuit.', bars([
-      ['finished', laps.finish || 0], ['checkpoint missed', laps.missed || 0], ['off the track', laps.off || 0],
-      ['reset or map jump', laps.jump || 0], ['changed car', laps.reset || 0], ['left mid-lap', laps.quit || 0]], { keep: true, colour: C.pink }));
-    h += card('Where laps are given up', 'Checkpoints passed when a lap was cancelled or left.', bars(rowsOf(t.quit, function (k) { return k + ' of 4'; }).sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }), { keep: true, colour: C.pink }));
-
-    h += stageCards(t, name);
+    h += lapCards(t, name, d.board || {}, days, d.hours);
+    h += stageCards(t, name, d.board || {});
     h += races(t, name);
 
     // devices by visits and by time spent driving, in the same order so the two can be compared at a glance
@@ -423,13 +419,96 @@
     return h;
   }
 
+  // ---- the Toomemägi lap (src/stats.js lap(), counted since 20 Nov 2026; Martin 27 Nov: "the stats has cool majoraadi
+  // stage starts etc. can you also give this for toomemägi"): laps from the line on Küüni, how they ended, where they
+  // were given up, per day and per car; and the lap board's own numbers, every lap on it since 16 Nov (worker/lapsum.js).
+  // Counted from 27 Nov 2026 only (NEW): time and km on the clock (Martin: "add hours and km driven"), R and hard
+  // crashes in a lap, which kind of jump ended a lap, and per car the laps past the first checkpoint and their finishes.
+  var NEW = '27 November 2026';
+  var dayName = function (iso) { try { return new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Europe/Tallinn', day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return String(iso).slice(0, 10); } };
+  var km = function (v) { return fmt(v, v < 100 ? 1 : 0) + ' km'; };
+  // the numbers row of a circuit's card: [value, label, tip (HTML)]
+  var numRow = function (nums) { return '<div class="nums">' + nums.map(function (x) { return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; };
+  // a board's fastest lap over all cars
+  var recordOf = function (B) {
+    var r = null;
+    for (var c in (B && B.cars) || {}) if (!r || B.cars[c].ms < r.ms) r = { ms: B.cars[c].ms, name: B.cars[c].name, car: c };
+    return r;
+  };
+  // a board, all time: per car its laps, drivers and record, and what they were driven with
+  function boardCard(title, B, name, colour, what) {
+    var cars = Object.keys(B.cars || {}).sort(function (a, b) { return B.cars[b].laps - B.cars[a].laps; });
+    var INP = { kb: 'keyboard', pad: 'gamepad', wheel: 'wheel', touch: 'touch' }, r = recordOf(B);
+    return card(title, fmt(B.laps) + ' ' + what + ' on the lap board by ' + fmt(B.drivers) + ' driver names since ' + esc(dayName(B.first)) + (r ? ', the record ' + lapTime(r.ms) + ' by ' + esc(r.name) + ' in the ' + esc(name(r.car)) : '') +
+      '. Every finished one that went online is kept; this card is all time whatever the period above.',
+      '<div class="pair"><div><table class="rtab"><thead><tr><th>Car</th><th class="n">' + (what === 'runs' ? 'Runs' : 'Laps') + '</th><th class="n">Drivers</th><th class="n">Record</th></tr></thead><tbody>' + cars.map(function (c) {
+        var x = B.cars[c];
+        return '<tr><td>' + esc(name(c)) + '</td><td class="n">' + fmt(x.laps) + '</td><td class="n">' + fmt(x.drivers) + '</td><td class="n">' + lapTime(x.ms) + '<small class="by">' + esc(x.name) + '</small></td></tr>';
+      }).join('') + '</tbody></table></div><div><h3>Driven with</h3>' + bars(rowsOf(B.inp, function (k) { return INP[k] || k; }), { colour: colour }) +
+      (B.pen ? '<p class="note foot">' + fmt(B.pen) + ' of them with penalty seconds.</p>' : '') + '</div></div>', true);
+  }
+  function lapCards(t, name, board, days, hourly) {
+    var L = t.laps || {}, Q = t.quit || {}, start = L.start || 0, fin = L.finish || 0;
+    // laps that got going: finished, over the line with a checkpoint missed, or ended past the first checkpoint
+    var past = fin + (L.missed || 0);
+    for (var q in Q) if (+q >= 1) past += Q[q];
+    var T = t.runT || {}, K = t.runKm || {}, secs = (T.lap || 0) + (T.race || 0), dist = (K.lap || 0) + (K.race || 0);
+    var B = board.toomemagi;
+    var nums = [
+      [fmt(start), 'laps started', 'The lap clock started at the line on Küüni. Driving over the line starts a lap too, and every finish starts the next one.'],
+      [fmt(past), 'past the first checkpoint', 'Laps that got going: finished, or ended after the first of the four checkpoints.'],
+      [fmt(fin), 'laps finished', pct(fin, past) + ' of the laps past the first checkpoint, ' + pct(fin, start) + ' of all started.'],
+      [secs ? dur(secs) : '–', 'driven on laps', 'Time on a running lap, online races too (' + dur(T.race || 0) + ' of it in races). Counted from ' + NEW + '.'],
+      [dist ? km(dist) : '–', 'on laps', 'Distance on a running lap, online races too. Counted from ' + NEW + '.'],
+      [fmt(L.r), 'R in a lap', 'Times a driver went back a few seconds with R; the lap goes on. Counted from ' + NEW + '.'],
+      [fmt(L.crash), 'hard crashes in a lap', 'Crashes into a wall that cost 5 s on the lap. Counted from ' + NEW + '.'],
+    ];
+    var h = card('Toomemägi lap', 'The 4.9 km circuit over Toomemägi, a flying lap from the line on Küüni. Counted since 20 November 2026; driving time and km, R and crashes in a lap since ' + NEW + '.', numRow(nums), true);
+    if (!start && !fin) return h + (B ? boardCard('Toomemägi lap board, all time', B, name, C.pink, 'laps') : '');
+    var J = ['home', 'map', 'garage', 'other'].reduce(function (a, k) { return a + (L['j:' + k] || 0); }, 0);
+    h += card('How Toomemägi laps ended', fmt(start) + ' laps started. Most that end before the first checkpoint were a drive over the line or the lap after a finish.', bars([
+      ['finished', fin], ['checkpoint missed', L.missed || 0], ['off the track', L.off || 0], ['cut or wrong way', L.cut || 0],
+      ['START or H', L['j:home'] || 0], ['map jump', L['j:map'] || 0], ['to the garage', L['j:garage'] || 0], ['other moves', L['j:other'] || 0],
+      ['START/map/garage', Math.max(0, (L.jump || 0) - J)],
+      ['changed car', L.reset || 0], ['page closed', L.quit || 0]], { keep: true, colour: C.pink }) +
+      '<p class="note foot">START or H: back to the lap start (the TOOMEMÄGI button too). Changed car: or began watching someone.' +
+      (J < (L.jump || 0) ? ' START, map and garage are told apart from ' + NEW + '; before that they are one line, START/map/garage.' : '') + '</p>');
+    h += card('Where Toomemägi laps were given up', 'Checkpoints passed when a lap was cancelled or left.', bars(rowsOf(t.quit, function (k) { return k + ' of 4'; }).sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }), { keep: true, colour: C.pink }));
+    // per car: finished (since 20 Nov), and from 27 Nov the laps past the first checkpoint and how many of those finished
+    var LC = t.lapCar || {}, LT = t.lapTry || {}, cs = {};
+    Object.keys(LC).forEach(function (c) { cs[c] = 1; });
+    Object.keys(LT).forEach(function (k) { cs[k.replace(/:f$/, '')] = 1; });
+    var cars = Object.keys(cs).sort(function (a, b) { return (LC[b] || 0) - (LC[a] || 0) || (LT[b] || 0) - (LT[a] || 0); });
+    h += card('Toomemägi laps per car', 'Laps finished in each car, and of the laps that got past the first checkpoint how many finished.', cars.length
+      ? '<table class="rtab"><thead><tr><th>Car</th><th class="n">Finished</th><th class="n">Past<br>checkpoint 1</th><th class="n">Of those<br>finished</th></tr></thead><tbody>' + cars.map(function (c) {
+          var tr = LT[c] || 0;
+          return '<tr><td>' + esc(name(c)) + '</td><td class="n">' + fmt(LC[c] || 0) + '</td><td class="n">' + (tr ? fmt(tr) : '–') + '</td><td class="n">' + (tr ? pct(LT[c + ':f'] || 0, tr) : '–') + '</td></tr>';
+        }).join('') + '</tbody></table><p class="note foot">Past checkpoint 1 and of those finished are counted from ' + NEW + '.</p>'
+      : '<p class="empty">Nothing yet.</p>');
+    // laps per day (or per hour on the 24 h tab): finished, and started but not finished
+    if (days.length) {
+      var mx = Math.max(1, Math.max.apply(null, days.map(function (r) { return r.ls || 0; })));
+      var cols = days.map(function (r) {
+        var s = r.ls || 0, f = Math.min(r.laps || 0, s), rest = s - f;
+        return '<div class="col" data-tip="' + esc(r.day) + '<br>' + fmt(s) + ' started · ' + fmt(r.laps || 0) + ' finished">' +
+          (rest ? '<div class="seg" style="height:' + (rest / mx * 100) + '%;background:' + C.violet + '"></div>' : '') +
+          (f ? '<div class="seg" style="height:' + (f / mx * 100) + '%;background:' + C.pink + '"></div>' : '') + '</div>';
+      }).join('');
+      h += card(hourly ? 'Toomemägi laps hour by hour' : 'Toomemägi laps per day', hourly ? 'The last 24 hours, Tartu time.' : null, '<div class="legend"><span><i style="background:' + C.pink + '"></i>finished</span><span><i style="background:' + C.violet + '"></i>started, not finished</span></div>' +
+        chart(cols, mx) + '<div class="axis"><span>' + esc(days[0].day) + '</span><span>' + fmt(mx) + ' at most</span><span>' + esc(days[days.length - 1].day) + '</span></div>', true);
+    }
+    if (B) h += boardCard('Toomemägi lap board, all time', B, name, C.pink, 'laps');
+    return h;
+  }
+
   // ---- the Majoraadi stage (src/stats.js stage(), counted from its launch on 26 Nov 2026): runs from the line to
   // the finish, why the others ended, tyres, penalty seconds, cars. Its times are on the lap board in the game.
-  function stageCards(t, name) {
-    var S = t.stage || {}, start = S.start || 0, fin = S.finish || 0;
+  function stageCards(t, name, board) {
+    var S = t.stage || {}, start = S.start || 0, fin = S.finish || 0, B = board.raadi;
+    var secs = (t.runT || {}).stage || 0, dist = (t.runKm || {}).stage || 0;
     var out = ['cut', 'off', 'wrong', 'corner', 'garage', 'race', 'moved', 'restart', 'quit'].reduce(function (a, k) { return a + (S['x:' + k] || 0); }, 0);
     var clean = S['pen:0'] || 0;
-    var h = card('Majoraadi stage', 'The rally stage in Raadi manor park, 1.7 km of gravel from a standing start. Counted since it opened to everyone on 26 November 2026.', '<div class="nums">' + [
+    var h = card('Majoraadi stage', 'The rally stage in Raadi manor park, 1.7 km of gravel from a standing start. Counted since it opened to everyone on 26 November 2026; driving time and km since ' + NEW + '.', numRow([
       [fmt(S.line), 'put on the start line', 'Times a car drove into the start circle (or used the MAJORAADI button) and the start lights began to count.'],
       [fmt(start), 'runs started', 'The lights went green. ' + fmt(S['x:lights']) + ' left the line before green.'],
       [fmt(fin), 'runs finished', pct(fin, start) + ' of the runs started crossed the finish.'],
@@ -437,8 +516,10 @@
       [fmt(out), 'runs not finished', 'Cancelled by the stage\'s rules, left for the garage, a race or the map, started again, or the page closed mid-run.'],
       [fmt(S.reset), 'R in a run', 'Times a driver went back to a spot of the run with R (+5 s each).'],
       [fmt(S.crash), 'hard crashes in a run', 'Crashes into a wall or a tree that cost seconds on the run.'],
-    ].map(function (x) { return '<div data-tip="' + esc(x[2]) + '"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>', true);
-    if (!start && !S.line) return h;
+      [secs ? dur(secs) : '–', 'driven on runs', 'Time on runs, from green to the end. Counted from ' + NEW + '.'],
+      [dist ? km(dist) : '–', 'on runs', 'Distance driven on runs. Counted from ' + NEW + '.'],
+    ]), true);
+    if (!start && !S.line) return h + (B ? boardCard('Majoraadi board, all time', B, name, C.orange, 'runs') : '');
     h += card('How Majoraadi runs ended', fmt(start) + ' runs started.', bars([
       ['finished', fin], ['short cut', S['x:cut'] || 0], ['off the stage', S['x:off'] || 0], ['wrong way', S['x:wrong'] || 0], ['missed a corner', S['x:corner'] || 0],
       ['to the garage', S['x:garage'] || 0], ['left for a race', S['x:race'] || 0], ['map or a jump', S['x:moved'] || 0], ['back to the start (H)', S['x:restart'] || 0],
@@ -446,6 +527,7 @@
     h += card('Majoraadi runs finished per car', null, bars(rowsOf(t.stageCar, name), { colour: C.orange, top: 12 }));
     h += card('Majoraadi penalties and tyres', 'Finished runs.', '<h3>Penalty seconds</h3>' + bars([['none', S['pen:0'] || 0], ['1 to 4 s', S['pen:1-4'] || 0], ['5 to 9 s', S['pen:5-9'] || 0], ['10 s or more', S['pen:10+'] || 0]], { keep: true, colour: C.orange }) +
       '<h3>Tyres</h3>' + bars([['gravel', S['ty:gravel'] || 0], ['road', S['ty:road'] || 0]], { keep: true, colour: C.sun }));
+    if (B) h += boardCard('Majoraadi board, all time', B, name, C.orange, 'runs');
     return h;
   }
 
@@ -733,17 +815,18 @@
   addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { if (lastHeat) drawMap(lastHeat[0], lastHeat[1]); }, 150); });
 
   // ---- period
+  // (0: all time, every day kept, Martin 27 Nov)
   var days = 1;
-  try { var m = /days=(\d+)/.exec(location.hash); if (m) days = +m[1]; } catch (e) {}
+  try { var m = /days=(\d+|all)/.exec(location.hash); if (m) days = m[1] === 'all' ? 0 : +m[1]; } catch (e) {}
   function load(n) {
     days = n;
     document.querySelectorAll('.range button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.days === n)); });
-    try { history.replaceState(null, '', n === 1 ? location.pathname : '#days=' + n); } catch (e) {}
-    fetch('/api/stats?' + (n === 1 ? 'hours=24' : 'days=' + n), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    try { history.replaceState(null, '', n === 1 ? location.pathname : '#days=' + (n || 'all')); } catch (e) {}
+    fetch('/api/stats?' + (n === 1 ? 'hours=24' : 'days=' + (n || 'all')), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(render, function () { out.innerHTML = '<p class="status">Could not load the stats just now. Try again in a minute.</p>'; });
   }
   document.querySelectorAll('.range button').forEach(function (b) { b.addEventListener('click', function () { load(+b.dataset.days); }); });
-  load([1, 7, 30, 90].indexOf(days) >= 0 ? days : 1);
+  load([1, 7, 30, 90, 0].indexOf(days) >= 0 ? days : 1);
 })();
 </script>
 </body>

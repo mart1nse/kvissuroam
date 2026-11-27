@@ -31,6 +31,7 @@ import { carLimitsSteps, judgeDrive, OVER_MAX, GAS_OVER } from '../src/race/plau
 import { OLD_PAGES_UNTIL, LIVE_FROM } from './cutover.js';
 import { liveCheck, liveOk, LIVE_MS, LIVE_MIN, LIVE_MAX, LIVE_MISS } from './livecheck.js';
 import { makeTops, addTop, newDay, topOf, placeOf } from './tops.js';
+import { makeSum, addSum, sumView } from './lapsum.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
@@ -401,6 +402,7 @@ export class Lobby extends DurableObject {
     this.sql.exec('DROP TABLE IF EXISTS lines');
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     this.tops = null;             // the five best drivers per car, made when first asked for (worker/tops.js, topsNow)
+    this.lapSum = null;           // the boards' laps in a few numbers for /stats, made with it (worker/lapsum.js, lapSummary)
     this.limits = new Map();      // car -> what it can do (a promise: see carLimit)
     this.limitNow = new Map();    // ... and the same once worked out (the race desk judges a finish without waiting)
     // One-off (Martin, 24 Nov 2026, there being no ADMIN_KEY): the 42 Toomemägi laps driven up Kroonuaia and back
@@ -938,6 +940,7 @@ export class Lobby extends DurableObject {
   // each stage's part hangs under its name.
   rebuildBoard() {
     this.tops = null;              // (made again from the table when next asked for)
+    this.lapSum = null; this.lapSumView = null;
     const day = tartuDay();
     // the fastest lap with split times per car and checkpoint layout: what a driver with no lap of
     // their own in that car compares their checkpoint times with
@@ -1012,6 +1015,7 @@ export class Lobby extends DurableObject {
       if (i !== null) b.refs[i] = { car: l.car, cp: l.cp, name: l.name, ms: l.ms, splits: l.splits };
     }
     if (this.tops) { newDay(this.tops, day); addTop(this.tops, l); }
+    if (this.lapSum) addSum(this.lapSum, l);
   }
 
   // The five best drivers per car on each circuit, of all time and of today (Martin 26 Nov 2026; worker/tops.js):
@@ -1019,9 +1023,23 @@ export class Lobby extends DurableObject {
   // lap a car, as every page is sent them on every new lap; these are asked for when LAP TIMES is open.
   topsNow() {
     const day = this.board().day;              // (moves the board on past midnight first)
-    if (!this.tops) this.tops = makeTops(this.sql.exec('SELECT track, car, name, ms, at, day, inp, ty, pen FROM laps WHERE hold IS NULL').toArray(), day);
+    if (!this.tops) this.readBoardLaps(day);
     newDay(this.tops, day);
     return this.tops;
+  }
+  // every lap on the board read once, for whichever of the two is not made yet
+  readBoardLaps(day) {
+    const rows = this.sql.exec('SELECT track, car, name, ms, at, day, inp, ty, pen FROM laps WHERE hold IS NULL').toArray();
+    if (!this.tops) this.tops = makeTops(rows, day);
+    if (!this.lapSum) this.lapSum = makeSum(rows);
+  }
+  // The laps on the boards in a few numbers (worker/lapsum.js), for /stats: the stats object asks by RPC at most once a
+  // minute, and the answer is kept a minute here too.
+  lapSummary() {
+    const day = this.board().day;
+    if (!this.lapSum) this.readBoardLaps(day);
+    if (!this.lapSumView || Date.now() - this.lapSumView.at > 60000) this.lapSumView = { at: Date.now(), v: sumView(this.lapSum) };
+    return this.lapSumView.v;
   }
 
   // ---- Replays (Martin 2026-11-24): the record lap of each car, as movement (src/race/replay.js). A browser sends

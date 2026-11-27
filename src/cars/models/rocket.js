@@ -27,21 +27,22 @@ const ZF = -2.1, ZR = 2.2, HZ = DIMS.wheelbase / 2;
 const ROCKET_NOZZLES = NOZZLES;
 
 // ---------------------------------------------------------------- wheel
-// Tesla's photos: six slim gloss-black spokes standing over a flat silver aero cover, a black rim lip, low tyres
-// (22 inch in front, 23 at the back since 27 Nov). Axis on X, outer face +X.
-function aeroSix(R, width, rimR) {
-  const s = tyreAndRim(R, width, rimR, { lip: 'gloss', disc: 0.72 });
-  const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.78, x0 = x1 - 0.026;
+// Light silver, five broad spokes that narrow only a touch toward the rim, dark between them (Martin 27 Nov: "make
+// the tesla wheels also light silver, with the 5 spokes a bit larger and narrowing like the slightest degree to the
+// outside"; before, six slim gloss-black blades over a silver aero cover). Low tyres, 22 inch in front and 23 at the
+// back. Axis on X, outer face +X.
+function fiveSpoke(R, width, rimR) {
+  const s = tyreAndRim(R, width, rimR, { lip: 'silver', disc: 0.72 });
+  const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.78, x0 = x1 - 0.012;
   // (the face dishes in from the rim to the hub: x at radius r)
   const dish = (r) => x0 + (x1 - x0) * Math.pow(Math.min(1, r / rf), 1.6);
-  const cover = [];
-  for (let k = 0; k <= 10; k++) { const r = rf * (1 - k / 10); cover.push([Math.max(r, 0.001), dish(r) - 0.004]); }
-  s.add(lathe([[rf + 0.004, x1 - 0.012], ...cover], 'silver', 48));
-  // six blades, each a little swept and narrowing to the rim, a few millimetres proud of the cover
-  const N = 6, r0 = rf * 0.16, r1 = rf * 0.99, steps = 8, shapes = [];
+  // the rim's face: a silver ring the spokes run into
+  s.add(lathe([[rf + 0.006, x1 - 0.012], [rf * 0.9, dish(rf * 0.9) - 0.002], [rf * 0.9, dish(rf * 0.9) - 0.02]], 'silver', 48));
+  // five spokes, as wide at the hub as a hand (half-width W0) and a little narrower at the rim (W1)
+  const N = 5, r0 = rf * 0.2, r1 = rf * 0.93, steps = 8, shapes = [], W0 = 0.038, W1 = 0.033;
   for (let i = 0; i < N; i++) {
     const at = (t, e) => {
-      const r = r0 + (r1 - r0) * t, a = Math.PI / 2 + i * Math.PI * 2 / N + 0.07 * t * t + e * (0.026 - 0.012 * t) / r;
+      const r = r0 + (r1 - r0) * t, a = Math.PI / 2 + i * Math.PI * 2 / N + e * (W0 + (W1 - W0) * t) / r;
       return new THREE.Vector2(r * Math.cos(a), r * Math.sin(a));
     };
     const pts = [];
@@ -49,14 +50,15 @@ function aeroSix(R, width, rimR) {
     for (let k = steps; k >= 0; k--) pts.push(at(k / steps, 1));
     shapes.push(new THREE.Shape(pts));
   }
-  const g = new THREE.ExtrudeGeometry(shapes, { depth: 0.01, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.0015, bevelSegments: 1, curveSegments: 4 });
+  const g = new THREE.ExtrudeGeometry(shapes, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 1, curveSegments: 4 });
   g.rotateY(Math.PI / 2);
-  const f = fromGeo(g, null, 'gloss'), P = f.p;
-  for (let i = 0; i < P.length; i += 3) P[i] += dish(Math.hypot(P[i + 1], P[i + 2])) - 0.006;
+  const f = fromGeo(g, null, 'silver'), P = f.p;
+  for (let i = 0; i < P.length; i += 3) P[i] += dish(Math.hypot(P[i + 1], P[i + 2])) - 0.022;
   s.add(f);
-  // the hub: a black cap with a small silver centre
-  s.add(cyl(rf * 0.2, rf * 0.22, 0.016, 24, { p: [dish(0) + 0.004, 0, 0], r: [0, 0, -Math.PI / 2] }, 'gloss'));
-  s.add(cyl(rf * 0.07, rf * 0.07, 0.004, 16, { p: [dish(0) + 0.013, 0, 0], r: [0, 0, -Math.PI / 2] }, 'silver'));
+  // the hub: a silver boss, a small dark cap with a silver centre
+  s.add(cyl(rf * 0.24, rf * 0.27, 0.024, 30, { p: [dish(0) - 0.004, 0, 0], r: [0, 0, -Math.PI / 2] }, 'silver'));
+  s.add(cyl(rf * 0.1, rf * 0.1, 0.006, 20, { p: [dish(0) + 0.009, 0, 0], r: [0, 0, -Math.PI / 2] }, 'gloss'));
+  s.add(cyl(rf * 0.035, rf * 0.035, 0.004, 12, { p: [dish(0) + 0.013, 0, 0], r: [0, 0, -Math.PI / 2] }, 'silver'));
   return s;
 }
 
@@ -153,7 +155,7 @@ export function buildRocket({ scan = true } = {}) {
   // (the shroud the four tail nozzles sit in)
   pal.add(box(0.94, 0.17, 0.05, { p: [0, 0.36, pr.rearZ(0, 0.36) - 0.02] }, 'gloss'));
 
-  const wheel = { soup: aeroSix(DIMS.wheelRadius, 0.325, 0.2921) }, wheelFront = { soup: aeroSix(DIMS.wheelRadiusFront, 0.245, 0.2794) };
+  const wheel = { soup: fiveSpoke(DIMS.wheelRadius, 0.325, 0.2921) }, wheelFront = { soup: fiveSpoke(DIMS.wheelRadiusFront, 0.245, 0.2794) };
   const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   tintPaint(car, 'rocket', 0xdadde0, { metalness: 0.6, roughness: 0.26, clearcoatRoughness: 0.04 });
   if (!scan) return car;

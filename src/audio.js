@@ -451,7 +451,8 @@ export function createAudio() {
     windGain.gain.setTargetAtTime(dead ? 0 : windLevel, t, flying ? 0.03 : 0.1);
     fanSound(car, dead, v);
     // a Rocket's nozzles (told only while they change), the burst of a lift-off and the tyres meeting the road again
-    const jl = jetLevels(dead ? null : car.rocket?.noz);
+    // (and under water too, where BOOST still blows: src/cars/swim.js)
+    const jl = jetLevels(dead && !(active && car.inWater) ? null : car.rocket?.noz);
     if (jl[0] !== jetS || jl[1] !== jetR) {
       jetS = jl[0]; jetR = jl[1];
       jetGain.gain.setTargetAtTime(Math.pow(jetS, 0.7) * 0.13 + jetR * JET_HISS, t, 0.03);

@@ -26,11 +26,12 @@ export const REFILL_S = 10;        // an empty tank is full again after this lon
 export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (tests only; ?off=100 had it until Martin 27 Nov)
 
 const G = 9.81;
-// The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
-// all, which is the tail's 80 kN for 2 s and no more. So BOOST's push follows the pressure, the share of the gas
+// The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 114 kN s of push in
+// all, which is the tail's 45 kN for 2.5 s and no more. So BOOST's push follows the pressure, the share of the gas
 // still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
-// quite done; at EMPTY of a tank nothing useful is left and the valves shut. A FLIP is its fixed half tank.
-export const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
+// quite done; at EMPTY of a tank nothing useful is left and the valves shut, 7 s of holding from full (Martin 27 Nov:
+// "reduce the length of thrust to 7 s at a time"; 10 s at 650 m/s). A FLIP is its fixed half tank: two to a tank.
+export const GAS_V = 455;                 // cold gas leaves a nozzle at about this speed (m/s)
 const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
 export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
@@ -59,12 +60,24 @@ const ROLL_T0 = 0.65;              // the roll starts this long after lift-off (
 const ROLL_T = 1.7;                // ...and takes this long (s), or what there is before the landing burn...
 const ROLL_MIN = 1.1;              // ...which is never less than this (s)
 // A flight from a bend (Martin 27 Nov: "should the rotation somewhat continue when clicking flip during a turn? maybe
-// start turning but reduce the amount of turn progressively"; he picked "carry on, then line up"). In the air nothing
-// bends the path, so the car flies straight on along the line it had; the body keeps the turning it had and the nose
-// jets ease it out over YAW_TAU (it was 0.12 s: the turn seemed to stop dead), and then, before the landing burn, turn
-// the nose onto the line the car travels along, so it comes down straight whatever it was doing at the press.
-const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s; a turn's 0.5 rad/s carries on 11 degrees)
-const YAW_LINE0 = 1.3;             // the nose is turned onto the line of travel from this long into the flight...
+// start turning but reduce the amount of turn progressively"; he picked "carry on, then line up"). The body keeps the
+// turning it had and the nose jets ease it out over YAW_TAU (it was 0.12 s: the turn seemed to stop dead); the corner
+// jets bend the path round with it, so the car travels on the way its nose has come to point (until 27 Nov evening the
+// path ran straight on and the line-up below turned the nose back to it before landing, undoing the turn: Martin, "before
+// landing it turns itself back exactly as it would have jumped from the straight line"). Then, before the landing
+// burn, the nose is turned onto the line it travels along: that takes out only the slide it had at the press, so it
+// comes down straight whatever it was doing, and as far round as the bend took it. The line-up starts at the press,
+// alongside the swing easing out (until 27 Nov night it started 1.3 s in, after the swing: a car pressed from a
+// power slide, its tail out and the nose turning fast, swung on 40 to 50 degrees and then all the way back, Martin:
+// "if you just finish a flip and do it then it sort of goes crazy and turns itself around back straight").
+const YAW_TAU = 0.4;               // the nose's swing at the press eases out over about this long (s)...
+// ...but a bend's own turn, up to YAW_HOLD_R of it, is held on for longer (Martin 27 Nov, "increase the length of the turn it
+// holds once X during turn", then "let the turn last 4 more sec, with slowly dying out the turn"): it fades out smoothly
+// over YAW_HOLD_T, so a bend at 0.6 rad/s carries the nose on about 35 degrees (the car's way bends only at first, PATH_HOLD_T
+// below). A spin's turn past that still eases out over YAW_TAU, so a FLIP from a power slide does not whirl.
+const YAW_HOLD_R = 0.6;            // rad/s
+export const YAW_HOLD_T = 2;       // s: the held turn is gone by this long after the press (5 s, then 3, then 2 with the path apart: "reduce the angle it turns")
+const YAW_LINE = 1.2;              // the nose is turned onto the line of travel over this long from the press...
 const YAW_MIN_V = 4;               // ...when the car travels faster than this (m/s)
 const MAX_T = 6;                   // no flight longer than this (s)
 const LOW_WALL = 1.5;              // a wall that belongs to no house stops the car only this low over the ground (m)
@@ -83,31 +96,71 @@ export const NOZ_REAR = 0, NOZ_DOWN = 4, NOZ_YAW = 8;
 // the rear pair further in; one each side of the nose ahead of the front wheels. The body marks them
 // (src/cars/models/rocket.js: the scan, and its stand-in) and the jets are drawn from them (src/cars/plumes.js).
 export const NOZZLES = [
-  [-0.394, 0.375, 1.909, 0, 0, 1], [-0.124, 0.375, 1.909, 0, 0, 1], [0.14, 0.375, 1.909, 0, 0, 1], [0.409, 0.375, 1.909, 0, 0, 1],
-  [-0.87, 0.163, -0.878, 0, -1, 0], [0.874, 0.163, -0.878, 0, -1, 0], [-0.695, 0.16, 1.708, 0, -1, 0], [0.704, 0.16, 1.708, 0, -1, 0],
-  [-0.789, 0.246, -1.869, -1, 0, 0], [0.789, 0.246, -1.869, 1, 0, 0],
+  [-0.394, 0.3895, 1.909, 0, 0, 1], [-0.124, 0.3895, 1.909, 0, 0, 1], [0.14, 0.3895, 1.909, 0, 0, 1], [0.409, 0.3895, 1.909, 0, 0, 1],
+  [-0.87, 0.1775, -0.878, 0, -1, 0], [0.874, 0.1775, -0.878, 0, -1, 0], [-0.695, 0.1745, 1.708, 0, -1, 0], [0.704, 0.1745, 1.708, 0, -1, 0],
+  [-0.789, 0.2605, -1.869, -1, 0, 0], [0.789, 0.2605, -1.869, 1, 0, 0],
 ];
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
 
-// The nose at time t of a flight, and how fast it turns (rad, rad/s): the swing it had eases out, and from YAW_LINE0
-// to the landing burn it is brought onto the line of travel (lineTurn: the shortest way round from where the swing
-// ends; worked out from the plan's own numbers, so the other players' pages fly the same)
-const yawCarry = (p, t) => p.yawR * YAW_TAU * (1 - Math.exp(-t / YAW_TAU));
+// The nose at time t of a flight, and how fast it turns (rad, rad/s): the swing it had eases out, and over the first
+// YAW_LINE (or to the landing burn, if sooner) it is brought onto the line of travel (lineTurn: the shortest way
+// round from where the swing ends; worked out from the plan's own numbers, so the other players' pages fly the same)
+const yawHeld = (p) => Math.max(-YAW_HOLD_R, Math.min(YAW_HOLD_R, p.yawR));
+// (the held turn's rate is h * (1 - smooth(t / YAW_HOLD_T)); summed, h * T * (u - u^3 + u^4 / 2) with u = t / T, at most 1)
+const holdSum = (t, T) => { const u = clamp01(t / T); return T * (u - u * u * u + (u * u * u * u) / 2); };
+// (the nose: the held turn over YAW_HOLD_T. The path only over PATH_HOLD_T: Martin 27 Nov, "make the initial turn as is,
+// then slow out the turning of the car quicker and replace it with turning around on its axis, so the forward motions
+// and car rotations are differentiated". The car goes on round on its own axis while its way bends no further, and
+// comes down pointing further round than it travels: the tyres take that as a slide. Then "make the car rotate around
+// its axis even pretty much right from the start, but reduce the angle it turns": the way stops bending within 0.3 s.)
+export const PATH_HOLD_T = 0.3;
+const carry = (p, t, T) => { const h = yawHeld(p); return h * holdSum(t, T) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
+const yawCarry = (p, t) => carry(p, t, YAW_HOLD_T);
+const pathCarry = (p, t) => carry(p, t, PATH_HOLD_T);
+// (the nose is lined up with the line of travel at the press: the slide it had then is taken out)
 function lineTurn(p) {
   if (Math.hypot(p.vx, p.vz) <= YAW_MIN_V) return 0;
-  const d = Math.atan2(p.vx, -p.vz) - (p.yaw0 + p.yawR * YAW_TAU);
+  const d = Math.atan2(p.vx, -p.vz) - p.yaw0;
   return Math.atan2(Math.sin(d), Math.cos(d));
 }
-const lineSpan = (p) => { const a = Math.min(YAW_LINE0, 0.6 * p.tb); return [a, Math.max(a + 0.3, p.tb)]; };
+// The path over the ground: the speed at the press, its heading turned by pathCarry (the corner jets push it round as the
+// nose swings: at 30 m/s and a turn of 0.5 rad/s 15 m/s2 at first, a tenth of what they have). Summed once a plan in
+// steps of PATH_DT (the other players' pages from the same numbers), read between them.
+const PATH_DT = 1 / 60, paths = new WeakMap();
+function pathOf(p) {
+  let a = paths.get(p);
+  if (a) return a;
+  const n = Math.ceil(MAX_T / PATH_DT) + 2;
+  a = new Float64Array(2 * n);
+  for (let i = 1; i < n; i++) {
+    const c = pathCarry(p, (i - 0.5) * PATH_DT), cs = Math.cos(c), sn = Math.sin(c);
+    a[2 * i] = a[2 * i - 2] + (p.vx * cs - p.vz * sn) * PATH_DT;
+    a[2 * i + 1] = a[2 * i - 1] + (p.vz * cs + p.vx * sn) * PATH_DT;
+  }
+  paths.set(p, a);
+  return a;
+}
+// where the plan's path is at time t (out[0], out[1]: x, z) and how fast it goes there (out[2], out[3]: m/s along x, z)
+export function flightPath(p, t, out) {
+  const a = pathOf(p), u = Math.max(0, Math.min(MAX_T, t)) / PATH_DT, i = Math.min(Math.floor(u), a.length / 2 - 2), f = u - i;
+  out[0] = p.x0 + a[2 * i] + (a[2 * i + 2] - a[2 * i]) * f;
+  out[1] = p.z0 + a[2 * i + 1] + (a[2 * i + 3] - a[2 * i + 1]) * f;
+  const c = pathCarry(p, t), cs = Math.cos(c), sn = Math.sin(c);
+  out[2] = p.vx * cs - p.vz * sn; out[3] = p.vz * cs + p.vx * sn;
+  return out;
+}
+const tmpP = [0, 0, 0, 0];
+const lineSpan = (p) => [0, Math.max(0.3, Math.min(YAW_LINE, p.tb))];
 function yawAt(p, t) {
   const [a, b] = lineSpan(p);
   return p.yaw0 + yawCarry(p, t) + lineTurn(p) * smooth((t - a) / (b - a));
 }
 function yawRateAt(p, t) {
   const [a, b] = lineSpan(p), u = (t - a) / (b - a);
-  return p.yawR * Math.exp(-t / YAW_TAU) + (u > 0 && u < 1 ? (lineTurn(p) * 6 * u * (1 - u)) / (b - a) : 0);
+  const h = yawHeld(p);
+  return h * (1 - smooth(t / YAW_HOLD_T)) + (p.yawR - h) * Math.exp(-t / YAW_TAU) + (u > 0 && u < 1 ? (lineTurn(p) * 6 * u * (1 - u)) / (b - a) : 0);
 }
 
 // The tank belongs to the car, not to one drive in it: back from the garage it is as full as it was left.
@@ -138,9 +191,10 @@ export function rocketStep(car, input, world, dt, droop = 0) {
   // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
   car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
   if (r.flight) { fly(car, world, dt, droop); return !!r.flight; }
-  const off = !!input.rocketOff || car.inWater;
+  // (in the water BOOST still blows, src/cars/swim.js; a kickflip does not lift off from there)
+  const off = !!input.rocketOff;
   const flip = !!input.flip;
-  if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && r.tank >= JUMP_S - 1e-6) {
+  if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && !car.inWater && r.tank >= JUMP_S - 1e-6) {
     const steer = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
     const plan = planFlip(car, world, steer < -0.3 ? -1 : 1);
     use(r, JUMP_S);
@@ -267,7 +321,14 @@ const KICK_C = 1 / (Math.exp(-Math.atan(KICK_W * KICK_TAU) / (KICK_W * KICK_TAU)
 const HALF_BASE = 1.5;                            // metres from the middle to an axle, and a little: the nose wheels stay over the ground
 const FIGHTS = new WeakMap();
 // the three trembles of one axis: [amplitude, turns a second, phase] each
-const trio = (h, i, amp, f0, f1) => [0, 1, 2].map((k) => [amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
+// (a touch slower, Martin 27 Nov: "the shudders left right etc, make them just a touch slower": the side to side swing
+// and the nodding at SHAKE_K of what they were, the roll's trembling at ROLL_SHAKE_K)
+const SHAKE_K = 0.85, ROLL_SHAKE_K = 0.9;
+// (ka, kf: the flight's own measure, Martin 27 Nov: "add some variance from jump to jump how it behaves, so the amplitude
+// and frequency of the rolls moves just a touch here and there": up to 20 % bigger or smaller, 8 % quicker or slower, the
+// same for all three axes; from the plan, so the other players see the same)
+const FLIP_AMP = 0.2, FLIP_FREQ = 0.08;
+const trio = (h, i, amp, f0, f1, sk = SHAKE_K, ka = 1, kf = 1) => [0, 1, 2].map((k) => [ka * amp[k] * (0.7 + 0.6 * rnd(h, i + k * 3)), TURN * kf * sk * (f0[k] + f1[k] * rnd(h, i + k * 3 + 1)), TURN * rnd(h, i + k * 3 + 2)]);
 const sum3 = (w, t) => w[0][0] * Math.sin(w[0][1] * t + w[0][2]) + w[1][0] * Math.sin(w[1][1] * t + w[1][2]) + w[2][0] * Math.sin(w[2][1] * t + w[2][2]);
 function fight(p) {
   let f = FIGHTS.get(p);
@@ -276,13 +337,14 @@ function fight(p) {
   const T = Math.min(ROLL_T, p.tb - ROLL_T0), tE = ROLL_T0 + T;
   // (the time there is for catching the roll: a landing right after it gets a smaller overshoot)
   const room = Math.max(0.05, p.tl - tE);
+  const ka = 1 + FLIP_AMP * (2 * rnd(h, 90) - 1), kf = 1 + FLIP_FREQ * (2 * rnd(h, 91) - 1);
   f = {
     T, tE, room, tb: p.tb, tl: p.tl,
     over: (OVER_MIN + OVER_MORE * rnd(h, 0)) * Math.min(1, room / 0.5),
     hunt: [],
-    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9]),    // turns
-    pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8]),  // radians
-    yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8]),
+    roll: trio(h, 10, [1.5 / 360, 1 / 360, 0.5 / 360], [1.3, 2.3, 3.9], [0.5, 0.7, 0.9], ROLL_SHAKE_K, ka, kf),    // turns
+    pitch: trio(h, 20, [0.7 * DEG, 0.5 * DEG, 0.3 * DEG], [1.1, 2, 3.4], [0.4, 0.6, 0.8], SHAKE_K, ka, kf),  // radians
+    yaw: trio(h, 30, [0.6 * DEG, 0.4 * DEG, 0.2 * DEG], [0.9, 1.7, 3], [0.4, 0.6, 0.8], SHAKE_K, ka, kf),
     kick: (3.2 + 1.4 * rnd(h, 4)) * DEG,          // the nose dips this far as the tail kicks up first
     nose: (1 + 0.8 * rnd(h, 5)) * DEG,            // ...and is held this far up in the landing burn
     flut: [0, 1, 2, 3].map((i) => TURN * (5 + 4 * rnd(h, 40 + i))), drift: [0, 1, 2, 3].map((i) => TURN * (0.6 + 0.9 * rnd(h, 44 + i))),
@@ -342,6 +404,11 @@ function rollPlay(f, t) {
 }
 // how far round the roll is (0..1; a little over or under 1 while it hunts for level)
 const rollFrac = (p, t) => { const f = fight(p); return rollMain(f, t) + rollPlay(f, t); };
+// The car moves over sideways as it rolls, to the side it rolls to, half its width by the end of the turn (Martin 27
+// Nov, from stills of Tesla's film: "if you take the car movement as straight on an axis, then the flip moves it like
+// half a car width to the side"). Metres, + to its right.
+const SIDE_STEP = 1.0;
+const sideStep = (p, t) => { const f = fight(p), u = (t - ROLL_T0) / f.T; return p.side * SIDE_STEP * (u <= 0 ? 0 : u < 1 ? S5(u) : 1); };
 // The nose's nodding (radians, + up) apart from the lift-off kick: the trembling, stronger while the landing burn
 // holds the car up, and the nose held a little high in that burn
 function pitchPlay(f, t) {
@@ -378,8 +445,10 @@ export function flightPose(p, t, out) {
   const k = smooth(t / p.tl);
   const turn = p.side * TURN * (rollMain(f, t) + rollPlay(f, t));
   const h = p.cg, sn = Math.sin(turn);
-  out.x = p.x0 + p.vx * t - Math.cos(yaw) * h * sn;
-  out.z = p.z0 + p.vz * t - Math.sin(yaw) * h * sn;
+  flightPath(p, t, tmpP);
+  const step = sideStep(p, t) - h * sn;
+  out.x = tmpP[0] + Math.cos(yaw) * step;
+  out.z = tmpP[1] + Math.sin(yaw) * step;
   out.y = tmpY[0] + h * (1 - Math.cos(turn));
   out.vy = tmpY[1];
   out.yaw = yaw + yawPlay(f, t);
@@ -399,6 +468,14 @@ const TAB_DT = 0.01;                               // the valves' table has a ro
 const SLIVER = 2, GAP = 1;                         // a valve never opens for less than twice this many rows, nor shuts for less than twice this many
 const FAINT = 0.26;                                // ...nor opens at all for less than this at its most
 const LONGER = 2;                                  // ...and every opening lasts this many rows longer at each end (Martin 26 Nov: "a bit more length to the existing ones")
+// The four corner jets are cleaned harder (Martin 27 Nov: "reducing short ones and making the ones left a touch
+// longer"): a jet that dwindles under STUB shuts rather than showing a stub, an opening must reach C_FAINT and last
+// twice C_SLIVER rows, a shorter gap is filled, and each opening lasts a row longer at each end. (The nose pair keeps
+// the plain rules: its openings are short by their nature.) Over 90 flights: a lit corner jet was a stub under 60 %
+// of its length for 18 % of its time, now 9 %; as many openings as before (6 a flight). The jets drawn are longer
+// too (src/cars/plumes.js). More than this here breaks the quiet moment before the roll and the jets' timing with
+// the body (tools/rocket-test.mjs).
+const STUB = 0.25, C_SLIVER = 3, C_GAP = 4, C_FAINT = 0.5, C_LONGER = 3;
 const CALM = 0.3;                                  // before the roll the bursts are this much of themselves ("do not add side thrusts that much")
 const LAND_K = 0.7, LAND_K1 = 0.96;                // on the way down the four corner jets blow at least this hard, and this hard over the last metre
 const LAND_EVEN = 0.6;                             // ...and this much of the hunt's play between them is gone (nearly all of it over the last metre)
@@ -436,16 +513,17 @@ function valveTable(p, f, spec) {
     }
   };
   for (let i = 0; i < 6; i++) {
-    for (let k = 0; k < n; k++) a[k] = tab[k * TAB_W + i];
-    pass(a, b, SLIVER, false); pass(b, a, SLIVER, true);
-    pass(a, b, GAP, true); pass(b, a, GAP, false);
+    const corner = i < 4, sliver = corner ? C_SLIVER : SLIVER, gap = corner ? C_GAP : GAP, faint = corner ? C_FAINT : FAINT;
+    for (let k = 0; k < n; k++) { const v = tab[k * TAB_W + i]; a[k] = corner && v < STUB ? 0 : v; }
+    pass(a, b, sliver, false); pass(b, a, sliver, true);
+    pass(a, b, gap, true); pass(b, a, gap, false);
     // (and an opening that never gets anywhere, a faint flicker, is no opening)
     for (let k = 0, from = -1, top = 0; k <= n; k++) {
       const v = k < n ? a[k] : 0;
-      if (v > 0.02) { if (from < 0) from = k; top = Math.max(top, v); } else if (from >= 0) { if (top < FAINT) a.fill(0, from, k); from = -1; top = 0; }
+      if (v > 0.02) { if (from < 0) from = k; top = Math.max(top, v); } else if (from >= 0) { if (top < faint) a.fill(0, from, k); from = -1; top = 0; }
     }
     // (what is left lasts a little longer)
-    pass(a, b, LONGER, true); a.set(b);
+    pass(a, b, corner ? C_LONGER : LONGER, true); a.set(b);
     for (let k = 0; k < n; k++) tab[k * TAB_W + i] = a[k];
   }
   return tab;
@@ -505,7 +583,9 @@ function valves(p, f, t, noz, spec, lean) {
   // the two at the nose stop it swinging in the first moment of the flight (the right one pushes the nose left),
   // and after that answer its trembling
   // (and turn it onto the line of travel before the landing: + is to the right, which the left one pushes)
-  if (t < 2 * YAW_TAU && Math.abs(p.yawR) > 0.05) noz[p.yawR > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6 * Math.exp(-t / YAW_TAU) / Math.exp(-0.5);
+  // (only the swing past the bend's own turn, which is held on: yawHeld)
+  const past = p.yawR - yawHeld(p);
+  if (t < 2 * YAW_TAU && Math.abs(past) > 0.05) noz[past > 0 ? NOZ_YAW + 1 : NOZ_YAW] = 0.6 * Math.exp(-t / YAW_TAU) / Math.exp(-0.5);
   const yt = lineTurn(p);
   if (Math.abs(yt) > 0.03) {
     const [a, b] = lineSpan(p), u = (t - a) / (b - a);
@@ -538,7 +618,7 @@ export function planFlip(car, world, side = 1) {
     v0: Math.max(-1, Math.min(2, car.vyUp || 0)), yaw0: car.yaw, yawR: Math.max(-3, Math.min(3, car.yawRate || 0)),
     p0: car.pitch, r0: car.roll, cg: car.spec.cgHeight, side, vl: LIFT_V, tb: 0, tl: 0, yl: 0, vland: 0, pl: 0, rl: 0, t: 0,
   };
-  const gAt = (t, y) => ground(world, p.x0 + p.vx * t, p.z0 + p.vz * t, y);
+  const gAt = (t, y) => (flightPath(p, t, tmpP), ground(world, tmpP[0], tmpP[1], y));
   // (the way down that starts with a burn at tb: how long it takes, where it ends, and how far above the ground
   // there. Heights and speeds are taken against the ground's own line, which rises or falls along the flight)
   let tl = 0, vland = 0, yEnd = 0;
@@ -570,8 +650,9 @@ export function planFlip(car, world, side = 1) {
   miss(lo);
   p.tb = lo; p.tl = tl; p.vland = vland;
   // the spot: the ground under the four wheels as the car will stand on it
-  const yawL = yawAt(p, tl);
-  stand(car.spec, world, p.x0 + p.vx * tl, p.z0 + p.vz * tl, yawL, yEnd, tmpG);
+  const yawL = yawAt(p, tl), stepL = sideStep(p, tl);
+  flightPath(p, tl, tmpP);
+  stand(car.spec, world, tmpP[0] + Math.cos(yawL) * stepL, tmpP[1] + Math.sin(yawL) * stepL, yawL, yEnd, tmpG);
   const lim = (v) => Math.max(-0.6, Math.min(0.6, v));
   p.yl = Math.abs(tmpG[0] - yEnd) < 0.5 ? tmpG[0] : yEnd; p.pl = lim(tmpG[1]); p.rl = lim(tmpG[2]);
   return p;
@@ -665,7 +746,8 @@ function fly(car, world, dt, droop = 0) {
   car.x = pose.x; car.z = pose.z; car.yaw = pose.yaw; car.pitch = pose.pitch;
   car.y = car.hy = pose.y; car.vyUp = pose.vy;
   const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = Math.sin(car.yaw);
-  car.vx = p.vx * fx + p.vz * fz; car.vy = p.vx * rx + p.vz * rz;
+  flightPath(p, p.t, tmpP);
+  car.vx = tmpP[2] * fx + tmpP[3] * fz; car.vy = tmpP[2] * rx + tmpP[3] * rz;
   car.yawRate = done ? 0 : yawRateAt(p, p.t);
   car.pitchRate = car.rollRate = 0;
   car.throttle = 0; car.brake = 0; car.ax = car.ay = 0; car.thrustN = 0;

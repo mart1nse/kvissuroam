@@ -522,7 +522,7 @@ export const CARS = {
     short: 'Focus WRC',
     tag: 'WRC',
     year: 2003,
-    blurb: 'WRC 03 · 2.0 Duratec R turbo on a 34 mm restrictor · 300 bhp, 550 Nm · 6-speed Xtrac sequential · four-wheel drive, three active diffs',
+    blurb: 'WRC 03 · 2.0 Duratec R turbo · 300 bhp, 550 Nm · 6-speed Xtrac sequential · four-wheel drive, three active diffs',
     mass: 1310,                 // the WRC minimum of 1230 kg, which it ran at ("right on the weight limit", crash.net), + driver
     wheelbase: 2.615,
     track: 1.55,                // 1550 front and rear
@@ -543,7 +543,7 @@ export const CARS = {
     // drive where the grip is: a tenth more grip and traction on gravel, dirt and grass, whichever tyres are on. On
     // paper (tools/car-pace.mjs) that is about 4 % quicker than the 22B on Majoraadi, as it is round Toomemägi
     looseGrip: 1.1,
-    abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
+    abs: 0,                     // none: WRC cars ran without ABS (Martin 2026-11-27, "the focus does not have abs"; it had a tad as the 22B has)
     bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
     // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js: the big
     // bangs of engine-sounds.js antilag), the flames a touch bigger than the 22B's (Martin 2026-11-27)
@@ -557,6 +557,7 @@ export const CARS = {
       pulses: 2,
       revDrop: 5200,            // a light flywheel and a carbon clutch (rallycars): the revs fall fast
       revCut: 0.04, revCutDrop: 350,
+      revCutEarly: 220,         // (now and then the cut comes in a little early: 1st on Majoraadi spends long on the limiter, Martin 2026-11-27)
       // off the throttle: a 2.0 race engine's friction and pumping through three differentials, about 50 Nm at 6000 rpm
       // (anti-lag cracks the throttle on a lift to keep the turbine spinning, not to drive): a lift tucks the nose in
       brakeTorque: [28, 0.0038],
@@ -602,24 +603,18 @@ export const CARS = {
     short: 'Roadster Rocket',
     tag: 'Rocket',
     year: 2028,
-    blurb: 'Air Ready · three electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
+    blurb: 'two electric motors · 4 suction fans · 10 cold-gas thrusters · not road-legal',
     mass: 2100,                 // estimate, with driver and both gas tanks full (Martin 25 Nov: 250 kg on the first 1950, "some data predicts it being higher"; 26 Nov: "reduce tesla weight again, by 100kg")
     wheelbase: 2.65,
     track: 1.64,
     cgFront: 0.52,
     cgHeight: 0.42,             // battery in the floor
-    wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
+    wheelRadius: 0.34,          // (the drive's rolling radius, kept with Martin's figures; the drawn tyres are 0.341 front, 0.369 rear since 27 Nov)
     cdA: 0.31 * 1.95,
     // Rear-wheel drive: two motors, both on the rear axle (the production car revealed in 2026: Top Gear, "two motors,
     // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
     // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
     drive: 'rwd',
-    // ...with a small front motor that pulls only while the car is pointed and rolling straight (Martin 27 Nov: "what
-    // would it need to still get the 1.7 to a hundred without thrusters ... I like how if i step on it and it is at the
-    // littlest of angles it wants to step out"): 30 % of the drive at the front from a standstill, gone with the wheel
-    // turned past 0.04 or the tail 5 degrees out (physics.js FA_STEER, FA_SLIP). The rears still spin up off the line.
-    // (Two motors on the rear axle can only pass on what two tyres hold: 2.4 s at best with all the traction control.)
-    frontAssist: 0.3,
     // A light traction control, the same on a straight as in a bend (tcEven; Martin 27 Nov: "if i floor it, it would not
     // kick the tail out much", "what about rwd with a bit of traction control?", then "straight line does not need full
     // traction control. thats the best part when the back steps out a bit. lets try it constant"; then "lets try 70% up to
@@ -636,13 +631,21 @@ export const CARS = {
     // what other cars' do; 0.5 until then, "ducks and dives also quite a bit". At the 2100 kg of later that day:
     // 1.67 s, 21.5 m, 1.9 g)
     fanDown: 12000, squat: 0.3,
+    // (launch suction: floored, the wheel straight and the car rolling straight, the fans suck 3.3 times as hard, about
+    // twice the car's weight, up to 40 km/h and back to 12 kN by 60; the least turn of the wheel and they are back at once.
+    // Martin 27 Nov: "if you add for straight line launch a lot more suction from the fans up to lets say 40kmh". Two
+    // rear tyres then hold 1000 kW for 1.9 s to 100, 1.7 with a foot of rollout as Tesla times it, and still spin up)
+    fanLaunch: 3.3,
     // lean: the body rolls this much of what other cars' do in a bend (Martin 27 Nov: "when cornering car leans over a
     // lot, I think there should be a lot less roll side to side": 6 degrees at 1 g, 11 at its 1.9 g; now 2 and 3.5)
     lean: 0.3,
-    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail (Tesla: 80 kN), 4 under the
-    // corners (a lift-off and a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two
-    // tanks when full (600 litres at about 380 bar), which the car is lighter by when they are empty
-    thrusters: { rear: 80000, down: 72000, yaw: 20000, gasKg: 250 },
+    // cold-gas thrusters (N, all the nozzles of a kind together): 4 at the tail, 4 under the corners (a lift-off and
+    // a landing burn of 3.3 g), 2 at the nose that turn it. gasKg: the air in the two tanks when full (600 litres at
+    // about 380 bar), which the car is lighter by when they are empty. The tail's push: 45 kN, for 0.64 s to 100 on
+    // THRUST and the gas pedal with a foot of rollout as Tesla times it, 0.8 s from a standstill (Martin 27 Nov: "keep
+    // the fans, but reduce the overall level of boost on all speeds so that the 0-100 would be 0.64 with rollout").
+    // It was 80 kN: 0.42 s.
+    thrusters: { rear: 45000, down: 72000, yaw: 20000, gasKg: 250 },
     engine: {
       type: 'ev',
       maxPowerKw: 1000,
@@ -661,7 +664,7 @@ export const CARS = {
     // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
     limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 1.7, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. Martin 27 Nov: 1.7 s, with frontAssist; rear-driven alone it was 2.6 s)
+    ref: { zeroTo100: 1.9, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 1.9 s from a standstill, 1.7 s with a foot of rollout as Tesla times its cars (Martin 27 Nov), on the launch suction, fanLaunch; 2.6 s without it)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks
@@ -726,7 +729,7 @@ export const CAR_ORDER = ['w201', 'audi200', 'passat', 'crv', 'enyaq', 'rav4', '
 
 // Cars nobody is shown yet (Martin 2026-11-25: the Rocket is hidden from all until he says): not in the garage,
 // not on the lap board, not accepted by the server. Stealth mode (?off=100, src/net/stealth.js) drives them.
-export const HIDDEN_CARS = ['rocket', 'focus'];   // (the Focus WRC: Martin 26 Nov, behind ?off=100 until he says)
+export const HIDDEN_CARS = ['focus'];   // (the Focus WRC: Martin 26 Nov, behind ?off=100 until he says; the Rocket live for everyone since 27 Nov)
 
 // The garage menu shows these side by side, each as a stack the player slides through.
 export const CAR_GROUPS = [

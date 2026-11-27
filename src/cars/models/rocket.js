@@ -15,9 +15,12 @@ import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, b
 import { lathe, tyreAndRim } from './parts.js';
 import { useGlbBody } from './glbbody.js';
 
-// (Tesla has published no size: these are the scan's at the 2.65 m wheelbase. Its tyres are about 245/35 R19 in front
-// and 325/30 R20 behind, their outer walls where the model's were: flush with the arches)
-const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.619, trackFront: 1.601, wheelRadius: 0.356, wheelRadiusFront: 0.326 };
+// (Tesla has published no size: these are the scan's at the 2.65 m wheelbase. The tyres fill the arches, about 1 cm
+// short of the lip, on big rims with thin walls (Martin 27 Nov: "increase the wheel size a lot", "tire profile can be
+// smaller aswell"): 22 inch in front, 23 behind, 6 and 8 cm of sidewall. Their outer walls are where the model's were:
+// flush with the arches. The body sits RAISE higher than the scan had it, so each hub is at its arch's middle.)
+const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.619, trackFront: 1.601, wheelRadius: 0.369, wheelRadiusFront: 0.341 };
+const RAISE = 0.0145;
 const ZF = -2.1, ZR = 2.2, HZ = DIMS.wheelbase / 2;
 
 // (the nozzles are marked where src/cars/plumes.js draws their jets: where the scanned body has them)
@@ -25,7 +28,8 @@ const ROCKET_NOZZLES = NOZZLES;
 
 // ---------------------------------------------------------------- wheel
 // Tesla's photos: six slim gloss-black spokes standing over a flat silver aero cover, a black rim lip, low tyres
-// (19 inch in front, 20 at the back). Axis on X, outer face +X.
+// (22 inch in front, 23 at the back since 27 Nov). The spokes a touch wider since 27 Nov (Martin, after trying five
+// silver ones: "use the same wheel design as earlier and make the black spokes just a touch wider"). Axis on X, outer face +X.
 function aeroSix(R, width, rimR) {
   const s = tyreAndRim(R, width, rimR, { lip: 'gloss', disc: 0.72 });
   const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.78, x0 = x1 - 0.026;
@@ -38,7 +42,7 @@ function aeroSix(R, width, rimR) {
   const N = 6, r0 = rf * 0.16, r1 = rf * 0.99, steps = 8, shapes = [];
   for (let i = 0; i < N; i++) {
     const at = (t, e) => {
-      const r = r0 + (r1 - r0) * t, a = Math.PI / 2 + i * Math.PI * 2 / N + 0.07 * t * t + e * (0.026 - 0.012 * t) / r;
+      const r = r0 + (r1 - r0) * t, a = Math.PI / 2 + i * Math.PI * 2 / N + 0.07 * t * t + e * (0.031 - 0.013 * t) / r;
       return new THREE.Vector2(r * Math.cos(a), r * Math.sin(a));
     };
     const pts = [];
@@ -150,11 +154,11 @@ export function buildRocket({ scan = true } = {}) {
   // (the shroud the four tail nozzles sit in)
   pal.add(box(0.94, 0.17, 0.05, { p: [0, 0.36, pr.rearZ(0, 0.36) - 0.02] }, 'gloss'));
 
-  const wheel = { soup: aeroSix(DIMS.wheelRadius, 0.325, 0.254) }, wheelFront = { soup: aeroSix(DIMS.wheelRadiusFront, 0.245, 0.2413) };
+  const wheel = { soup: aeroSix(DIMS.wheelRadius, 0.325, 0.2921) }, wheelFront = { soup: aeroSix(DIMS.wheelRadiusFront, 0.245, 0.2794) };
   const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
   tintPaint(car, 'rocket', 0xdadde0, { metalness: 0.6, roughness: 0.26, clearcoatRoughness: 0.04 });
   if (!scan) return car;
   // the scan's wells are open on the inside where its tyres were fused to the floor: the arch liners close them.
   // The red light bar glows a little with the lights on (Tesla's photo), brightly on the brakes.
-  return useGlbBody(car, 'rocket.glb', { liner: { r: 0.5, len: 0.4, inset: 0.1, gap: 0.02 }, tail: 0.45, brake: 2.2 });
+  return useGlbBody(car, 'rocket.glb', { liner: { r: 0.5, len: 0.4, inset: 0.1, gap: 0.02 }, tail: 0.45, brake: 2.2, lower: -RAISE });
 }

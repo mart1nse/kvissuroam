@@ -928,11 +928,11 @@ body.touch:has(#options:not(.hidden)) #touch { visibility: hidden; }
    right points down when shut and up when open; which are open is remembered (main.js, kvissuroam.optopen) */
 #options .opthead { position: relative; margin: 0; padding: 11px 22px 11px 0; border-top: 1px solid rgba(255, 95, 162, .3); font-size: 10px; letter-spacing: .26em;
   color: var(--pink); cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-#options h3 + .optsec .opthead { border-top: 0; padding-top: 4px; }
+#options h3 + .optsec .opthead, body.touch #options h3 + .desktop-only + .optsec .opthead { border-top: 0; padding-top: 4px; }
 #options .opthead::after { content: ''; position: absolute; right: 5px; top: 50%; width: 6px; height: 6px; border: solid currentColor; border-width: 0 2px 2px 0;
   transform: translateY(-75%) rotate(45deg); transition: transform .15s ease; }
 #options .optsec.open .opthead::after { transform: translateY(-25%) rotate(-135deg); }
-#options h3 + .optsec .opthead::after { margin-top: -3px; }
+#options h3 + .optsec .opthead::after, body.touch #options h3 + .desktop-only + .optsec .opthead::after { margin-top: -3px; }
 #options .optsec.open .opthead { color: #fff; }
 @media (hover: hover) and (pointer: fine) { #options .opthead:hover { color: #fff; } }
 /* GRAPHICS shut while the browser draws without the graphics card: a yellow mark on its title for the warning inside */
@@ -1558,6 +1558,9 @@ body.touch #trackpick { flex: 1 1 0; min-height: 28px; max-height: 40vh; width: 
 #watch .who b { font: 400 1.12em 'Russo One', var(--font); letter-spacing: .06em; }
 #watch .who .car { font-size: .85em; font-weight: 400; font-style: italic; letter-spacing: .04em; opacity: .85; }
 #watch .who .st:empty { display: none; }
+#watch .who .dev:empty { display: none; }
+#watch .who .dev { align-self: center; display: flex; font-size: .95em; opacity: .85; }
+#watch .who .dev .inp { margin: 0; opacity: 1; }
 #watch .who .st { font-size: .78em; letter-spacing: .16em; color: var(--sun); }
 #watch .who .st.hot { color: #fff; text-shadow: 1px 1px 0 var(--hot), 0 0 6px var(--hot); }
 #watch .back { pointer-events: auto; cursor: pointer; border: none; border-radius: 999px; padding: .62em 1.5em .66em;

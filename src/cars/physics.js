@@ -7,6 +7,7 @@
 
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
+import { swims, swim, swimFloor, swimSunk } from './swim.js';
 import { bonnetStep } from './bonnet.js';
 import { crashHit, crashStep } from './crash.js';
 import { HANG, CLEAR, TIPPED, edgeStart, edgeStep } from './tip.js';
@@ -21,7 +22,7 @@ const TC_BEND_KMH = 90, TC_BEND_SPAN = 30;   // a light setting (spec.tcBend) gr
 const TC_BEND_NOFANS_KMH = 60, TC_NOFANS_SPAN = 60;   // ...and with the fans off from this one to all of it (the Rocket's rears hold far less then: it stepped out and round at 110 to 170)
 const FAST_KEEP_KMH = 150;   // ...and from this speed its stability control keeps the fronts to what the rears balance (see latCapF)
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
-const FA_STEER = [0.01, 0.04], FA_SLIP = [0.03, 0.08], FA_RATE = 8;   // spec.frontAssist: all of it with the wheel inside the first, none past the second (steer share; body slip, rad); eases at this rate (1/s)
+const LAUNCH_FAN_KMH = 40, LAUNCH_FAN_STEER = [0.01, 0.04], LAUNCH_FAN_SLIP = [0.03, 0.08];   // spec.fanLaunch: up to this speed; all of it with the wheel inside the first, none past the second (steer share; body slip, rad)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
 const HB_REV_UP = 9000;         // rpm/s: how fast a free engine (clutch in on the race grid's launch control) revs up at full throttle
@@ -86,6 +87,9 @@ const DONUT_SETTLE = 0.15;       // ...a donut being under way once the tail has
 const KICK_A = 2.2, KICK_BAND = 1.0, KICK_TAU = 0.04;   // ...and it eases off while the car already swings its way faster than KICK_A, gone at KICK_A + KICK_BAND (rad/s2)
 const DONUT_EASE = 4;            // ...its moment changing at most this much a second (share of DONUT)
 const EV_SLIDE_REAR = 0.7;
+const PIVOT_KMH = [10, 20];      // a four-wheel-drive hairpin pivot (handbrake, full lock, floored) is all there with the rear axle slower than this, gone past the second (km/h)
+const PIVOT_PUSH = 0.16, PIVOT_YAW = 2.8, PIVOT_EASE = 0.8;   // ...its push (share of m*g*L as yaw moment), easing off over the last this much (rad/s) before the rate it turns towards
+const PIVOT_FROM = 0.3, PIVOT_REVS = 0.85, PIVOT_RISE = 1.2;   // ...starting at this share of it, then coming in at up to 1.5 x this much a second with the revs up to this share of the shift point, half that from idle
 // The donut helper (the yaw push that holds a donut in its band, with its ease-in, softening and wander, and the
 // twin-motor EVs' rear shift in a slide) is off for every car since Martin drove them without it (2026-11-22: the
 // manual cars light their tyres up, so the driver modulates a donut himself, and it felt more natural). ?donut=1
@@ -150,7 +154,14 @@ const SURF = [
   { mu: 0.4, crr: 0.3, b: 4.0, bump: 0.0, kp: 0.3, tail: 0.9 },        // water (shallows)
 ];
 const WATER = 4;
-const WIDE_LOOSE = 0.5;          // wide road tyres off paving: grip 1 - (spec.grip - 1) x this
+const WIDE_LOOSE = 0.5;
+// Suction fans off paving (Martin 27 Nov: "is the fan system as efficient on lumpy and uneven gravel as it is on
+// tarmac?"; he picked 40 %): the skirts seal against a smooth road only. Over gravel, dirt and grass the air leaks in
+// under them between the stones and ruts (two to three times the gap, and fans of a given power hold a suction that
+// falls with the gap to about the two-thirds power), so each axle gets this share of its part of spec.fanDown there.
+// The server's lap check holds the same share on a stage's gravel (src/race/plausible.js).
+export const FAN_LOOSE = 0.4;
+const FAN_SEAL_RATE = 12;        // ...eased in and out over about a twelfth of a second as an axle crosses the edge          // wide road tyres off paving: grip 1 - (spec.grip - 1) x this
 // Gravel tyres (Martin 2026-11-23: road or gravel, picked in the garage or by the tyre icon on the tach):
 // narrow, soft, deep blocks that dig into loose ground and squirm on tarmac. The same table with more
 // bite on gravel, dirt and grass and less on paving, a softer, later-peaking tread on tarmac, and the
@@ -477,6 +488,10 @@ function engineForce(car, throttle, dt) {
     // way from the drop revs up to the shift point; 22B 0.15, 200 Avant 0.3, Martin 2026-11-23)
     const slipTo = e.clutchSlip === true ? Lslip : e.clutchSlip > 0 ? Math.max(Lslip, L + (e.shiftRpm - L) * e.clutchSlip) : 0;
     if (slipTo > 0 && (car.gear === 1 || wheelRpm < e.idle * 1.3) && !car.reversing && throttle > 0.5) stall = Math.max(stall, e.idle + (slipTo - e.idle) * Math.min(1, (throttle - 0.5) / 0.4));
+    // (and in a hairpin pivot, car.pivot: held by its locked rear wheels the car hardly moves, so the driver keeps the
+    // clutch slipping at the drop revs and the fronts keep spinning, where the engine would otherwise be dragged down
+    // to idle once the launch's slip is over, the CR-V and the RAV4 with it)
+    if (car.pivot > 0 && car.gear === 1 && !car.reversing) stall = Math.max(stall, e.idle + (Lslip - e.idle) * car.pivot);
     // (reversing every car slips its clutch at up to the drop revs as the throttle opens, or it crawled back off
     // idle, Martin 2026-11-23)
     if (car.reversing && throttle > 0) stall = Math.max(stall, e.idle + (L - e.idle) * throttle);
@@ -544,12 +559,16 @@ function engineForce(car, throttle, dt) {
   else if (car.revCut > 0) {
     car.revCut -= dt;
     if (car.revCut <= 0) car.revCut = (launch ? car.free : wheelRpm) > e.redline - car.cutDrop ? 1e-4 : 0;
-  } else if ((launch ? car.free : wheelRpm) >= e.redline) {
+  } else if (launch ? car.free >= e.redline : wheelRpm >= e.redline - (car.cutEarly || 0)) {
     // No two bounces are alike: each cut lasts a little longer or shorter and lets the revs fall a
     // different way before the engine fires again, so the limiter stutters rather than buzzes.
     const r1 = hash(car.time * 7.31 + car.x * 0.13), r2 = hash(car.time * 3.17 + car.z * 0.11 + 5.2);
     car.revCut = (e.revCut ?? REV_CUT_TIME) * (0.7 + 0.9 * r1);
     car.cutDrop = Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) * (0.5 + 2.2 * r2 * r2);
+    // (engine.revCutEarly, rpm: now and then the next cut comes in a little under the redline, mostly only just
+    // under it: a long spell on the limiter, the Focus WRC in 1st on Majoraadi, does not bounce to one beat; revved
+    // free on the grid or in neutral it still goes all the way)
+    if (e.revCutEarly) car.cutEarly = e.revCutEarly * hash(car.time * 5.71 + car.x * 0.07 + 2.9) ** 2;
   }
   // (when the tyres let go the engine is suddenly unloaded and flares up ahead of the wheels a little)
   const rpmTo = Math.min(Math.max(rpm, car.carry, throttle > 0.5 ? stall + 1600 * (car.spin || 0) * throttle : 0), e.redline);
@@ -893,8 +912,12 @@ function substep(car, input, world, dt) {
   // ---- water
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;
   const depth = car.surface === WATER ? wl - groundY : 0;
-  if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
-  if (car.inWater && (car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35) {
+  if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; car.swimIdle = 0; }
+  // (a Rocket pushing its way out, swim.js, keeps to the bed until its driven rear wheels are past the water's edge:
+  // the shallows' mud would hold it on the bank)
+  // (and on land lower than the water beside it, a meadow by the river, it is out once all of it is on land)
+  const ashore = car.inWater && car.rocket && car.swimIdle === 0 && swims(car, input) ? (car.surface !== WATER && surfR !== WATER ? 1 : -1) : 0;
+  if (car.inWater && ((car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35 ? ashore >= 0 : ashore > 0)) {
     // washed or jumped out onto land: drive on from here
     car.inWater = false; car.sunk = false; car.waterTime = 0; car.tipped = 0;
     car.hy = car.y = Math.max(car.y, groundY); car.vyUp = 0; car.lastGround = null;
@@ -906,6 +929,9 @@ function substep(car, input, world, dt) {
     // weak push from the last of the wheelspin, river current
     const still = Math.max(0, 1 - car.waterTime / 2.5);
     car.vx += (up - down) * 1.2 * still * dt;
+    // (the Rocket: its nozzles and fans still work, swim.js, and it keeps to the bed up the bank)
+    const sw = car.rocket && swims(car, input), floorY = sw ? Math.max(world.heightAt(car.x, car.z) + 0.05, groundY) : 0;
+    const pushed = sw && swim(car, input, world, dt, m, floorY, fx, fz, rx, rz);
     const wxv = car.vx * fx + car.vy * rx + 0.08 * dt * 60 * 0.02, wzv = car.vx * fz + car.vy * rz + 0.3 * dt * 60 * 0.02;
     car.x += wxv * dt; car.z += wzv * dt;
     car.yaw += car.yawRate * dt;
@@ -924,8 +950,14 @@ function substep(car, input, world, dt) {
     car.wheelSpin += (car.vx / s.wheelRadius) * dt;
     car.wheelSpinF = car.wheelSpinR = car.wheelSpin; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0;
     car.steer *= Math.exp(-dt * 3);
-    if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
-    if (!car.sunk && car.waterTime > 9) car.sunk = true;
+    if (sw) {
+      swimFloor(car, Math.max(bedY, groundY), dt);
+      if (pushed) car.sunk = false;
+      else if (!car.sunk && swimSunk(car) && car.waterTime > sinkStart + 0.8) car.sunk = true;
+    } else {
+      if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
+      if (!car.sunk && car.waterTime > 9) car.sunk = true;
+    }
     car.ax = 0; car.ay = 0;
     car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1; car.airborne = false; car.airTime = 0;
     return;
@@ -988,8 +1020,26 @@ function substep(car, input, world, dt) {
   const vS = Math.max(Math.abs(car.vx), 1);
   // (suction fans, spec.fanDown: that much more weight on the tyres, so that much more lock at speed; none of it
   // with the fans switched off, car.fanOff: Martin 25 Nov, the fan icon is a switch)
-  const fanN = s.fanDown && !car.fanOff ? s.fanDown : 0;
-  const fanK = 1 + fanN / (m * G);
+  let fanN = s.fanDown && !car.fanOff ? s.fanDown : 0;
+  // (s.fanLaunch: floored with the wheel straight and the car rolling straight, the fans suck this many times harder
+  // up to LAUNCH_FAN_KMH, back to their own by 20 km/h more; the wheel turned the least bit or the tail out and they
+  // are back at once, so the car steps out as ever. The Rocket, Martin 27 Nov: "if you add for straight line launch a
+  // lot more suction from the fans up to lets say 40kmh": its rear tyres then hold enough for 1.7 s to 100 with a
+  // foot of rollout, as Tesla times it, 1.9 s from a standstill, and still spin up a little)
+  if (s.fanLaunch && fanN) {
+    const v = Math.hypot(car.vx, car.vy) * 3.6, slip = Math.abs(Math.atan2(car.vy, Math.max(Math.abs(car.vx), 1)));
+    const want = (car.throttle || 0) >= 0.5 && !car.burn && !(car.brake > 0) && !(+input.handbrake) ? Math.min(1, Math.max(0, 1 - (v - LAUNCH_FAN_KMH) / 20)) * Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - LAUNCH_FAN_STEER[0]) / (LAUNCH_FAN_STEER[1] - LAUNCH_FAN_STEER[0]))) * Math.min(1, Math.max(0, 1 - (slip - LAUNCH_FAN_SLIP[0]) / (LAUNCH_FAN_SLIP[1] - LAUNCH_FAN_SLIP[0]))) : 0;
+    car.fanLaunchK = (car.fanLaunchK ?? 0) + (want - (car.fanLaunchK ?? 0)) * Math.min(1, dt * 8);
+    fanN *= 1 + (s.fanLaunch - 1) * car.fanLaunchK;
+  }
+  // (each axle's share of the suction by the ground under it: FAN_LOOSE)
+  if (fanN) {
+    const k = Math.min(1, dt * FAN_SEAL_RATE);
+    car.sealF = (car.sealF ?? 1) + ((surfF === 1 ? 1 : FAN_LOOSE) - (car.sealF ?? 1)) * k;
+    car.sealR = (car.sealR ?? 1) + ((surfR === 1 ? 1 : FAN_LOOSE) - (car.sealR ?? 1)) * k;
+  }
+  const fanF = fanN * (car.sealF ?? 1) * (car.b / L), fanR = fanN * (car.sealR ?? 1) * (car.a / L);
+  const fanK = 1 + (fanF + fanR) / (m * G);
   const gripLock = Math.atan((1.25 * fanK * G * L) / (vS * vS));
   const lock = Math.min(maxLock, gripLock);
   // In a slide the front wheels need the slide angle on top of the usual lock
@@ -1084,9 +1134,9 @@ function substep(car, input, world, dt) {
   // (in the air a trace of load is kept so nothing below divides by zero)
   const tl = Math.max(load, 1e-4);
   // (suction fans press the car down while it is near the road; they add no mass)
-  const fan = fanN * Math.min(1, load * 4);
-  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + (fan * car.b) / L;
-  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + (fan * car.a) / L;
+  const near = Math.min(1, load * 4);
+  const fzF = Math.max(0.1 * m * G, (m * G * car.b) / L - transfer) * tl + fanF * near;
+  const fzR = Math.max(0.1 * m * G, (m * G * car.a) / L + transfer) * tl + fanR * near;
 
   // ---- slip angles
   const v0 = 2.0;
@@ -1100,7 +1150,7 @@ function substep(car, input, world, dt) {
   // ---- longitudinal forces
   const dir = car.reversing ? -1 : 1;
   const hb = +input.handbrake || 0;
-  const drivenF = s.drive !== 'rwd' || !!s.frontAssist, drivenR = s.drive !== 'fwd';
+  const drivenF = s.drive !== 'rwd', drivenR = s.drive !== 'fwd';
   // (wide performance tyres: spec.grip scales every surface; on gravel tyres only a lower figure stays,
   // the bus's hard rubber, since every car gets the same kind of gravel tyre)
   // Wide performance rubber only helps on paving: on loose ground and grass it floats on top instead of
@@ -1122,12 +1172,19 @@ function substep(car, input, world, dt) {
   // traction left on each driven axle once cornering has taken its share
   const lonF = drivenF ? capF * Math.sqrt(1 - LON_SHARE * car.useF * car.useF) : 0;
   const lonR = drivenR ? capR * Math.sqrt(1 - LON_SHARE * car.useR * car.useR) : 0;
+  // The hairpin pivot (Martin 2026-11-27): on a four-wheel-drive car at a crawl or standing still, the handbrake held,
+  // the wheel at full lock and the throttle floored, the locked rear wheels stay about where they are and the spinning
+  // fronts drag the nose round them, as a rally driver turns the car about in a hairpin or a narrow road. The rear axle
+  // barely moving is what tells it from a handbrake turn on the move, which is left as it was.
+  const vRear = Math.hypot(car.vx, car.vy - car.b * car.yawRate) * 3.6;
+  const pivot = s.drive === 'awd' && hb > 0 && !car.reversing ? Math.min(1, Math.max(0, (throttle - 0.5) / 0.4)) * Math.min(1, Math.max(0, (Math.abs(steerIn) - 0.6) / 0.3)) * Math.min(1, Math.max(0, (PIVOT_KMH[1] - vRear) / (PIVOT_KMH[1] - PIVOT_KMH[0]))) : 0;
+  car.pivot = pivot;
   const drive = engineForce(car, throttle, dt);
   const vSign = Math.abs(car.vx) > 0.05 ? Math.sign(car.vx) : 0;
   // (held on the brakes at a standstill, as in a burnout, the pads grip like static friction: whatever
   // pushes the car is met up to the brakes' and tyres' limit, so it creeps at most a few cm a second)
   const bSign = Math.max(-1, Math.min(1, car.vx / 0.05));
-  const brakeTotal = brake * (s.brakeG ?? 1.05) * (m * G + fan) * Math.min(1, load * 4);
+  const brakeTotal = brake * (s.brakeG ?? 1.05) * (m * G + (fanF + fanR) * near) * Math.min(1, load * 4);
   // (in a burnout the brake is held just hard enough to pin the front wheels rather than stamped on, so the
   // rear brakes fight the engine a little less: the 190E only just manages it, revs struggling; the front
   // brakes grip like static friction at a standstill, see bSign)
@@ -1149,15 +1206,6 @@ function substep(car, input, world, dt) {
     car.evSlide = (car.evSlide || 0) + (kSlide * throttle - (car.evSlide || 0)) * Math.min(1, dt * 4);
   } else car.evSlide = (car.evSlide || 0) * Math.exp(-dt * 4);
   if (car.evSlide > 0) shareR += (Math.max(shareR, EV_SLIDE_REAR) - shareR) * car.evSlide;
-  // (s.frontAssist: a rear-driven car with a small front motor that only helps while it is pointed straight and
-  // rolling straight, this share of the drive; the wheel turned the least bit or the tail out and it lets go, so the
-  // car is rear-driven in every bend. Not in a burnout, on the brake or on the handbrake. The Rocket, Martin 27 Nov:
-  // 1.7 s to 100 on the motors, and still "at the littlest of angles it wants to step out")
-  if (s.frontAssist) {
-    const straight = hb || car.burn || brake > 0 ? 0 : Math.min(1, Math.max(0, 1 - (Math.abs(steerIn) - FA_STEER[0]) / (FA_STEER[1] - FA_STEER[0]))) * Math.min(1, Math.max(0, 1 - (bodySlip - FA_SLIP[0]) / (FA_SLIP[1] - FA_SLIP[0])));
-    car.faK = (car.faK ?? straight) + (straight - (car.faK ?? straight)) * Math.min(1, dt * FA_RATE);
-    shareR = 1 - s.frontAssist * car.faK;
-  }
   // The handbrake on a four-wheel-drive car works as on a WRC car (Martin 2026-11-26): pulling it opens the
   // centre coupling, so the rear wheels lock on their own while the engine keeps driving the fronts with all of
   // its torque. The throttle sets how fast the front wheels turn through a handbrake turn, pulling the nose
@@ -1205,10 +1253,15 @@ function substep(car, input, world, dt) {
   const vKmh = Math.hypot(car.vx, car.vy) * 3.6;
   const bendTop = car.fanOff ? 1 : s.tcHigh ?? 1;
   const bendK = s.tcBend ? s.tcBend + (bendTop - s.tcBend) * Math.min(1, Math.max(0, car.fanOff ? (vKmh - TC_BEND_NOFANS_KMH) / TC_NOFANS_SPAN : (vKmh - TC_BEND_KMH) / TC_BEND_SPAN)) : 0;
-  const tcWant = s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (bendK && (s.tcEven || Math.abs(steerIn) >= 0.1) ? bendK : 1) : 0;
+  // (BOOST alone, with no gas pedal: the thrusters push and the motors, held at full power with them, are trimmed to what
+  // the tyres take, all of it from a standstill and in a bend: the wheels roll, they do not light up. Martin 27 Nov:
+  // "when I click only on boost, it sometimes shows some wheelspin". With the gas pedal too, the drive is the driver's)
+  const thrustOnly = car.thrustN > 0 && !(+input.up);
+  const tcWant = s.tc && thrustOnly && !hb && !car.burn ? s.tc
+    : s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (bendK && (s.tcEven || Math.abs(steerIn) >= 0.1) ? bendK : 1) : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
-  const evFront = e.type === 'ev' && (s.drive !== 'rwd' || !!s.frontAssist);
+  const evFront = e.type === 'ev' && s.drive !== 'rwd';
   const axle = (front, share, surf, cap, lon, alpha, brakeK) => {
     let slipV = front ? car.slipVF : car.slipVR;
     const kappa = slipV / Math.max(Math.abs(car.vx), 3);
@@ -1216,7 +1269,8 @@ function substep(car, input, world, dt) {
     // A front e-motor's own torque control keeps its wheels near peak grip,
     // as on the real cars (otherwise no AWD EV reaches its factory 0-100).
     // The rear motor gets no such help, so power oversteer stays possible.
-    if (front && evFront && demand > lon) { demand = lon; if (share > 0) drive_cut = true; }
+    // (except in a hairpin pivot, where the driver wants the fronts spinning: the cap gives way as the pivot comes in)
+    if (front && evFront && demand > lon) { demand = lon + (demand - lon) * pivot; if (share > 0 && pivot < 1) drive_cut = true; }
     // Traction control (spec.tc): with the wheel held straight the electronics trim the drive to what the
     // tyres can pass on. It lets go as soon as the driver steers or pulls the handbrake.
     let trimmed = false;
@@ -1244,7 +1298,9 @@ function substep(car, input, world, dt) {
       const sent = (f * sx) / sig;
       fx = dir * sent;
       // (a little sideways bite always remains, so slides stay catchable)
-      fy = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * melt * cap * Math.min(1, sy));
+      // (but not on the fronts of a hairpin pivot: spinning flat out on the spot, their tread is dragged sideways round
+      // the locked rears and keeps only what the slide's direction gives it)
+      fy = -Math.sign(alpha) * Math.max((f * sy) / sig, LAT_KEEP * (front ? 1 - pivot : 1) * melt * cap * Math.min(1, sy));
       // (Above first gear the spin builds more slowly, GEAR_SPIN_LAG per gear up: a tyre spinning faster
       // and faster heats, smears and scrubs more rubber, so a shift up mid donut or burnout drops the
       // revs and lets them climb back gradually instead of flaring straight to the limiter.)
@@ -1278,6 +1334,8 @@ function substep(car, input, world, dt) {
       fx = Math.max(-cap, Math.min(cap, fx));
     }
 
+    // (how hard the fronts pull, for the hairpin pivot: all of it once they spin)
+    if (front) car.pullF = spinning ? 1 : share > 0 && lon > 0 ? Math.max(0, Math.min(1, demand / lon)) : 0;
     if (front) { car.slipVF = slipV; fxF = fx; fySpinF = fy; askF = ask; }
     else { car.slipVR = slipV; fxR = fx; fySpinR = fy; askR = ask; }
     // Tyre heat in a burnout: builds over BURN_HEAT_T while the tread spins well ahead of the road with both
@@ -1350,7 +1408,7 @@ function substep(car, input, world, dt) {
   // (locked once the brake and the cornering together ask more than the tyres have, and only as far as the
   // brake itself has squeezed on: braked at a donut's quickest moment, the wheels' cornering load alone locked
   // them at the first touch, the nose stopped dead and the slide died in a second instead of fading)
-  const lockF = (!drivenF || !!s.frontAssist) && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) * Math.min(1, Math.abs(brakeF) / capF) : 0;
+  const lockF = !drivenF && car.burn > 0 && fySpinF === null ? car.burn * Math.min(1, Math.max(0, (Math.hypot(brakeF, fyF) / capF - 0.9) / 0.2)) * Math.min(1, Math.abs(brakeF) / capF) : 0;
   if (lockF > 0) {
     const ux = car.vx, uy = car.vy + car.a * car.yawRate, un = Math.max(Math.hypot(ux, uy), BURN_SLIDE_V);
     const bx = -capF * ux / un, by = -capF * uy / un;
@@ -1500,6 +1558,23 @@ function substep(car, input, world, dt) {
   { const m0 = car.donutM || 0, dm = want - m0, r = dm * m0 >= 0 && Math.abs(want) > Math.abs(m0) ? rise : DONUT_EASE;
     car.donutM = m0 + Math.max(-r * dt, Math.min(r * dt, dm)); }
   if (car.donutM) MZ += car.donutM * DONUT * m * G * L * load;
+  // The hairpin pivot's pull (see `pivot`): the tyre model has the spinning fronts' sideways bite and the locked rears'
+  // scrub fight the swing more than a real car does, so on the spot it turned only 30 degrees in two seconds. While the
+  // fronts spin, a push helps them round, as much as their ground's grip allows, easing off as the car turns towards
+  // PIVOT_YAW: about half way round in a second from standing still, all the way in under two.
+  // (it eases in, Martin 2026-11-27: the push starts at PIVOT_FROM and builds up over about half a second, slower the
+  // lower the revs: floored from idle it starts gently and quickens as the engine comes up towards PIVOT_REVS of its
+  // shift point. An electric motor counts as revs up. Let go, it is gone in a quarter second.)
+  {
+    const revK = e.type === 'ev' ? 1 : Math.min(1, Math.max(0, (car.rpm - (e.idle ?? 750)) / (PIVOT_REVS * e.shiftRpm - (e.idle ?? 750))));
+    const k0 = car.pivotK || 0;
+    car.pivotK = pivot > k0 ? Math.min(pivot, Math.max(k0, PIVOT_FROM * pivot) + PIVOT_RISE * (0.5 + revK) * dt) : Math.max(pivot, k0 - 4 * dt);
+  }
+  if (car.pivotK > 0 && pivot > 0 && car.pullF > 0) {
+    const turn = Math.sign(steerIn), have = car.yawRate * turn;
+    const room = Math.min(1, Math.max(0, (PIVOT_YAW - have) / PIVOT_EASE));
+    MZ += turn * car.pivotK * car.pullF * room * PIVOT_PUSH * Math.min(1, sf.mu * tyreF) * m * G * L * load;
+  }
   // At walking pace a real car cannot whip its tail round: the tyres scrub, the body has to roll and
   // the driveline winds up first. The slip-angle model overstates the bite there (and the donut hold
   // adds its own push), so below about 30 km/h the swing is damped, more so for the cars not driven
@@ -1510,7 +1585,8 @@ function substep(car, input, world, dt) {
       // (rear-driven cars get less of it; none for the twin-motor EVs, built to hold a donut, or for a
       // bus, which can only just swing its tail on loose ground as it is)
       const weak = (s.ref?.powerKw ?? 100) / s.mass < 0.03;
-      const k = LOW_YAW_DAMP * (weak || s.engine.type === 'ev' ? 0 : s.drive === 'rwd' ? 0.25 : 1) * lowV;
+      // (nor for a hairpin pivot: the driven fronts are what swing the nose round)
+      const k = LOW_YAW_DAMP * (weak || s.engine.type === 'ev' ? 0 : s.drive === 'rwd' ? 0.25 : 1) * lowV * (1 - (car.pivot || 0));
       MZ -= k * car.iz * car.yawRate;
     }
   }
@@ -1534,7 +1610,7 @@ function substep(car, input, world, dt) {
     // (not while the rear wheels spin under throttle: a slide that has swung the car round carries on
     // sideways at a crawl with a little momentum and runs into the drive, rather than stopping dead for a
     // moment first, Martin 2026-11-21)
-    const carry = throttle > 0.5 && !(brake > 0) ? Math.min(1, Math.max(0, (car.slipVR - 2) / 3)) * SPIN_CARRY : 0;
+    const carry = throttle > 0.5 && !(brake > 0) ? Math.max(Math.min(1, Math.max(0, (car.slipVR - 2) / 3)) * SPIN_CARRY, car.pivot || 0) : 0;
     car.vy *= Math.exp(-dt * 6 * (1 - Math.max((car.slideMem || 0) * BURN_SETTLE_DRAG, carry)));
   }
 
@@ -1899,7 +1975,7 @@ export function resetCar(car, pose) {
   car.airborne = false; car.airTime = 0; car.landed = 0; car.pitchRate = car.rollRate = 0;
   car.tip = null; car.tipped = 0; car.roofG?.fill(NaN); car.highAt = undefined; car.onHigh = false; car.rise = 0; car.onTop = car.carriedBy = null;
   car.vx = car.vy = car.yawRate = 0;
-  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.hbOpen = false; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
+  car.steer = 0; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0; car.useF = car.useR = 0; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false; car.reversing = false; car.burnHold = false; car.yawPrev = undefined; car.yawAcc = 0; car.bandT = 0; car.inDonut = false; car.bog = 0; car.donutVmax = 0; car.liftSoft = 0; car.donutYaw = undefined; car.kickSoft = 0; car.boost = 0; car.shaft = 0; car.carry = 0; car.revCut = 0; car.cutEarly = 0; car.csHold = 0; car.slipRPrev = 0; car.evSlide = 0; car.tcK = undefined; car.stabV = 0; car.sootKm = 0; car.free = undefined; car.dump = 0; car.hbOpen = false; car.giveT = 0; car.giveDur = undefined; car.inT = 0; car.inDir = 0;
   car.inWater = false; car.sunk = false; car.waterTime = 0;
   car.pitch = car.roll = 0; car.ax = car.ay = 0; car.hit = 0; car.crash = null; car.kerbHit = 0; car.jolt = 0; car.bite = 0; car.kerbS = null; car.stone = null;
   car.rpm = car.spec.engine.idle ?? 0; car.kw = 0; car.regenIn = car.pedalIn = 0;

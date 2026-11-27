@@ -17,7 +17,7 @@ import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from './kud
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt, turnedAbout } from '../race/replay.js';
-import { flightPose, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
+import { flightPose, flightPath, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
 import { CRASH_FLAG } from '../cars/crash.js';
 import { STANDINS } from './standins.js';
 import { ADJ, NOUN } from './names.js';
@@ -872,7 +872,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // press (the 'jmp' message), not from its positions: ten a second make corners of an arc and of a whole turn
   // about its long axis. And how hard each of its nozzles blows (o.noz), for the jets (src/cars/plumes.js) and
   // the hiss: from the plan in a flight, the four at the tail while it sends the BOOST flag.
-  const flown = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 };
+  const flown = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vy: 0 }, flownV = [0, 0, 0, 0];
   function jets(o, now, dt) {
     const n = o.noz || (o.noz = new Float32Array(NOZ)), p = o.pose;
     if (!o.lean) o.lean = new Float32Array(4);                  // (how far its corner jets are swung out)
@@ -883,7 +883,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (f && p && o.live && t >= 0 && t <= end) {
       flightPose(f.plan, t, flown);
       p[0] = flown.x; p[1] = flown.z; p[2] = flown.y; p[3] = flown.yaw; p[4] = flown.pitch; p[5] = flown.roll;
-      p[6] = f.plan.vx; p[7] = f.plan.vz;
+      flightPath(f.plan, t, flownV); p[6] = flownV[2]; p[7] = flownV[3];
       for (let k = 15; k < 20; k++) p[k] = 0;                    // (in the air: no tyre slides or marks)
       flightNozzles(f.plan, t, n, o.spec, o.lean);
       return;
@@ -1150,7 +1150,11 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (!r.ok) return null;
     const name = decodeURIComponent(r.headers.get('x-name') || ''), ms = Number(r.headers.get('x-ms'));
     const rp = await unpack(new Uint8Array(await r.arrayBuffer()));
-    return { ...rp, track, car, name, lapMs: ms };
+    // what drove it (Martin 27 Nov: "show in small the controller icon too"): the record's line on the board, which
+    // has the lap's `inp` (null on a lap from before 20 Nov: then no mark)
+    const part = track === 'raadi' ? board?.raadi : board;
+    const row = [...(part?.allTime || []), ...(part?.today || []), ...(part?.recent || [])].find((x) => x.car === car && x.ms === ms);
+    return { ...rp, track, car, name, lapMs: ms, inp: row?.inp || null };
   }
 
   // Our record laps' replays: a lap's samples wait here (in memory only, they are big) until the server has the

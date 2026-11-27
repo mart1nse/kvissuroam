@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anderson's in LINNARING</title>
+<meta name="description" content="How often the Anderson's Taproom hologram is seen in LINNARING: views per hour and per day, peaks, time on screen and taps to andersonbeer.com." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  /* Anderson's in LINNARING: how often the taproom's hologram on Küüni is seen (src/adviews.js -> worker/stats.js, GET /api/stats?ads=1) */
+  @font-face { font-family: Montserrat; src: url(/fonts/montserrat-latin.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
+  :root {
+    --bg: #12062b; --panel: #1d0b44; --line: #34186e; --ink: #f6eaff; --ink2: #c7b3ec; --muted: #9581c2;
+    --cyan: #2ff3ff; --hot: #ff2bd6; --est: #6f5aa8;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 22px 16px 60px; }
+  h1 { margin: 0; font: 900 italic clamp(26px, 4.4vw, 40px)/1 Montserrat, system-ui, sans-serif; letter-spacing: .02em;
+       background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 a { color: inherit; text-decoration: none; }
+  .sub { color: var(--ink2); margin: 6px 0 18px; font-size: 14px; max-width: 760px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; margin-bottom: 14px; min-width: 0; }
+  .card h2 { margin: 0 0 2px; font: 800 17px/1.3 Montserrat, system-ui, sans-serif; letter-spacing: .03em; text-transform: uppercase; }
+  .card h3 { margin: 16px 0 6px; color: var(--muted); font: 600 12px/1.3 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+  .note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; margin: 12px 0 4px; }
+  .tile { background: #160836; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile b { display: block; font: 800 26px/1.15 Montserrat, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--ink2); font-size: 13px; }
+  .tile small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 150px; border-bottom: 1px solid var(--line); }
+  .chart .col { flex: 1; max-width: 64px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+  .chart .bar { background: linear-gradient(180deg, var(--cyan), var(--hot)); border-radius: 3px 3px 0 0; min-height: 1px; }
+  .chart .bar.est { background: var(--est); }
+  .axis { display: flex; gap: 3px; color: var(--muted); font-size: 10.5px; margin-top: 3px; }
+  .axis span { flex: 1; max-width: 64px; text-align: center; min-width: 0; overflow: hidden; white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2); margin: 0 0 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: linear-gradient(180deg, var(--cyan), var(--hot)); }
+  .legend i.est { background: var(--est); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.est { color: var(--ink2); font-style: italic; }
+  .scroll { overflow-x: auto; }
+  #tip { position: fixed; pointer-events: none; z-index: 9; background: #0b0320; border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; padding: 6px 9px; border-radius: 8px; display: none; }
+  .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 0 0 14px; }
+  .hero figure { margin: 0; }
+  .hero img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
+  .hero figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .big { padding: 18px 18px 18px; }
+  .big .head { display: flex; flex-wrap: wrap; gap: 8px 40px; margin-bottom: 8px; }
+  .big .stat { display: flex; flex-direction: column; }
+  /* (padding: the italic figures lean out of their box and the gradient clips at its edges) */
+  .big .num { font: 900 italic clamp(46px, 7.5vw, 80px)/1.12 Montserrat, system-ui, sans-serif; letter-spacing: -.01em; padding: 0 .12em 0 .06em; margin-left: -.06em;
+              background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .big .what { font: 700 clamp(15px, 1.8vw, 19px)/1.25 Montserrat, system-ui, sans-serif; color: var(--ink); }
+  .big .more { color: var(--ink2); font-size: 14px; margin: 4px 0 0; }
+  .big .chart { height: 180px; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
+  footer a, .sub a { color: var(--cyan); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ANDERSON'S × <a href="/">LINNARING</a></h1>
+  <p class="sub">LINNARING is a free driving game in the browser, set in the streets of Tartu, where up to a hundred people drive online together. Over the Anderson's Taproom on Küüni hangs a 13 by 16 m hologram of its logo, at the end of the race circuit's start and finish straight: every lap starts by driving straight at it. This page shows how often it is seen, counted by the game itself and anonymously (no names, addresses or cookies). Hours and days are Tallinn time; the figures refresh every minute.</p>
+  <section id="top" class="card big"><p class="note">Loading…</p></section>
+  <section id="live" class="card" hidden></section>
+  <div class="hero">
+    <figure><img src="/adpics/andersons-approach.webp" alt="The Anderson's Taproom hologram over Küüni, as a driver sees it along the start and finish straight" width="1280" height="720" /><figcaption>What a driver sees along the start and finish straight</figcaption></figure>
+    <figure><img src="/adpics/andersons-close.webp" alt="The Anderson's Taproom hologram up close over the taproom on Küüni" width="1280" height="720" loading="lazy" /><figcaption>Up close on Küüni: a tap on the hologram opens andersonbeer.com</figcaption></figure>
+  </div>
+  <main id="out"><p class="note">Loading…</p></main>
+  <footer>The views are counted from 27 November 2026; the days before that are estimates. <a href="https://andersonbeer.com/" rel="noopener">andersonbeer.com</a> · <a href="/stats">Game stats</a> · <a href="/">Play LINNARING</a></footer>
+</div>
+<div id="tip"></div>
+<script>
+(() => {
+  const out = document.getElementById('out'), top = document.getElementById('top'), live = document.getElementById('live'), tip = document.getElementById('tip');
+  const fmt = (n) => Math.round(n).toLocaleString('en-GB');
+  const hrs = (s) => s >= 3600 ? `${(s / 3600).toFixed(1)} h` : `${Math.round(s / 60)} min`;
+  const tz = { timeZone: 'Europe/Tallinn' };
+  const hourOf = (t) => +new Intl.DateTimeFormat('en-GB', { ...tz, hour: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const dayName = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // bars: [{ v, est, label, tip }]
+  function chart(bars, every = 1) {
+    const max = Math.max(1, ...bars.map((b) => b.v));
+    return `<div class="chart">${bars.map((b) => `<div class="col" data-tip="${esc(b.tip)}"><div class="bar${b.est ? ' est' : ''}" style="height:${(b.v / max) * 100}%"></div></div>`).join('')}</div>
+      <div class="axis">${bars.map((b, i) => `<span>${i % every ? '' : esc(b.label)}</span>`).join('')}</div>`;
+  }
+
+  function draw(all) {
+    // the hologram's own figures (an) out of all the adverts'
+    // Before the counter there is no count of the hologram, so a day or an hour then is estimated from the laps started
+    // (every lap starts down the straight at it) times the views per lap started that the counter has measured since it
+    // counts within 200 m (27 Nov, from 12:00 Tallinn, #852). A count is taken as real once it is a quarter of that or more.
+    const FROM = Date.UTC(2026, 10, 27, 10, 0);
+    const base = all.hours.filter((x) => x.at >= FROM && x.ls > 0);
+    const lsB = base.reduce((a, x) => a + x.ls, 0), K = lsB >= 100 ? Math.max(0.5, base.reduce((a, x) => a + x.ads.an.v, 0) / lsB) : 1;
+    const d = { ...all, days: all.days.map((x) => ({ day: x.day, ...x.ads.an, ls: x.ls * K })), hours: all.hours.map((x) => ({ at: x.at, ...x.ads.an, ls: x.ls * K })) };
+    const real = (x) => x.v > 0 && x.v >= 0.25 * x.ls;
+    const today = d.today, counted = d.days.find(real)?.day || null;
+    // a day's figure: the counted views, or before the counter the estimate from the laps started
+    const days = d.days.filter((x) => x.v > 0 || x.ls > 0).map((x) => ({ ...x, est: !real(x), n: real(x) ? x.v : x.ls, part: x.day === today }));
+    // (the full days since the game went public on 24 Nov 2026: the quiet test days before it are no measure)
+    const full = days.filter((x) => !x.part && x.day >= '2026-11-24');
+    const fullM = full.filter((x) => !x.est), use = fullM.length ? fullM : full;
+    const avgDay = use.length ? use.reduce((a, x) => a + x.n, 0) / use.length : 0;
+    const peakDay = full.reduce((a, x) => (!a || x.n > a.n ? x : a), null);
+    // hours: the counted ones, per Tallinn hour of each day
+    let peakHour = null;
+    for (const x of days) if (!x.est) x.h.forEach((v, h) => { if (!peakHour || v > peakHour.v) peakHour = { v, h, day: x.day }; });
+    const h24 = d.hours.map((x) => ({ ...x, est: !real(x), n: real(x) ? x.v : x.ls }));
+    const last24 = h24.reduce((a, x) => a + x.n, 0), est24 = h24.some((x) => x.est);
+    const sec24 = d.hours.reduce((a, x) => a + x.s, 0), u24 = d.hours.reduce((a, x) => a + x.u, 0);
+    const c24 = d.hours.reduce((a, x) => a + (x.c || 0), 0), cAll = d.days.reduce((a, x) => a + (x.c || 0), 0);
+    if (!peakHour) for (const x of h24) if (!peakHour || x.n > peakHour.v) peakHour = { v: x.n, h: hourOf(x.at), est: x.est };
+    // the average day's shape: views per Tallinn hour over the counted full days
+    const prof = Array.from({ length: 24 }, (_, h) => fullM.length ? fullM.reduce((a, x) => a + x.h[h], 0) / fullM.length : 0);
+
+    const E = (b) => (b ? ' <small>(estimate)</small>' : '');
+    // the headline (Martin 27 Nov: the average hour as one big number first, then a typical day hour by hour): the
+    // counted days' hours once there are any, before that the last 24 hours' estimate
+    const typ = fullM.length ? prof.map((v, h) => ({ h, v, est: false }))
+      : h24.map((x) => ({ h: hourOf(x.at), v: x.n, est: x.est })).sort((a, b) => a.h - b.h);
+    const busy = typ.filter((x) => x.h >= 18 && x.h <= 22), busyAvg = busy.length ? busy.reduce((a, x) => a + x.v, 0) / busy.length : 0;
+    const typEst = typ.some((x) => x.est);
+    // What the counter has counted since it started (27 Nov, 11:00 Tallinn), as it is, beside the estimate: hour by
+    // hour from each day's Tallinn hours, and per day. (The first hours are low: only pages loaded after the update count.)
+    const LIVE = Date.UTC(2026, 10, 27, 9, 0);   // the Tallinn hour 11:00-12:00 on 27 Nov
+    const tallinnStart = (day, h) => { const t = Date.parse(`${day}T${String(h).padStart(2, '0')}:00:00Z`); return t - (hourOf(t) - h + 24) % 24 * 3600000; };
+    const liveDays = d.days.filter((x) => x.day >= '2026-11-27');
+    const liveHours = [];
+    for (const x of liveDays) for (let h = 0; h < 24; h++) { const at = tallinnStart(x.day, h); if (at >= LIVE && at <= Date.now()) liveHours.push({ at, h, v: x.h[h] || 0, s: x.hs?.[h] || 0, c: x.hc?.[h] || 0, day: x.day }); }
+    const shownHours = liveHours.slice(-72);
+    const tot = (k) => liveDays.reduce((a, x) => a + (x[k] || 0), 0);
+    if (liveHours.length) {
+      live.hidden = false;
+      live.innerHTML = `
+        <h2>Counted since the counter started</h2>
+        <p class="note">The game has counted the hologram's views since 27 Nov, about 11:00, and within its full 200 m since about 11:30. These are the views counted since then, as they come in; the figure above stays the estimate until there are full days to average. The first hours read low, as only games opened after the update count.</p>
+        <div class="tiles">
+          <div class="tile"><span>Views counted</span><b>${fmt(tot('v'))}</b><small>since the counter started</small></div>
+          <div class="tile"><span>Time on screen</span><b>${hrs(tot('s'))}</b><small>${tot('v') ? `about ${Math.round(tot('s') / tot('v'))} s a view` : ''}</small></div>
+          <div class="tile"><span>Visits that saw it</span><b>${fmt(tot('u'))}</b><small>games that passed it once or more</small></div>
+          <div class="tile"><span>Taps to andersonbeer.com</span><b>${fmt(tot('c'))}</b><small>since the counter started</small></div>
+        </div>
+        <h3>Hour by hour${liveHours.length > shownHours.length ? ', the last 72 hours' : ''}</h3>
+        ${chart(shownHours.map((x) => ({ v: x.v, label: hh(x.h).slice(0, 2), tip: `${dayName(x.day)} ${hh(x.h)}–${hh((x.h + 1) % 24)}: ${fmt(x.v)} views counted${x.c ? `, ${x.c} taps` : ''}` })), shownHours.length > 36 ? 6 : 3)}
+        ${liveDays.length > 1 ? `<h3>Day by day</h3>${chart(liveDays.map((x) => ({ v: x.v, label: x.day.slice(8), tip: `${dayName(x.day)}: ${fmt(x.v)} views counted${x.day === today ? ', so far today' : ''}` })), 1)}` : ''}`;
+    }
+    top.innerHTML = `
+      <div class="head">
+        <div class="stat"><span class="num">${fmt(avgDay / 24)}</span><span class="what">views an hour</span></div>
+        <div class="stat"><span class="num">${fmt(avgDay)}</span><span class="what">views a day</span></div>
+      </div>
+      <p class="more">Views of the Anderson's hologram on average${fullM.length ? '' : ' (estimates until the counter has full days)'}, day and night together. In the evening, from 18:00 to 23:00, about ${fmt(busyAvg)} an hour.</p>
+      <h3>A typical day, hour by hour${typEst ? ' <span style="text-transform:none;letter-spacing:0">(estimate)</span>' : ''}</h3>
+      ${chart(typ.map((x) => ({ v: x.v, est: x.est, label: hh(x.h).slice(0, 2), tip: `${hh(x.h)}–${hh((x.h + 1) % 24)}: about ${fmt(x.v)} views${x.est ? ' (estimate)' : ''}` })), 3)}`;
+    out.innerHTML = `
+      <section class="card">
+        <h2>Views of the Anderson's hologram</h2>
+        <p class="note">A view is the hologram on screen within 200 m for half a second in all (it reads well from the start line and from the Winbaum cabin, 203 m away); a car must lose sight of it for 5 seconds before it counts again, so every lap driven down the straight is one view. The time on screen is counted to the second too, also while a car stands still on the straight or at the start.${counted ? ` Counted since ${dayName(counted)}.` : ' Until the counter has full days, the figures here are estimates from the laps started (the counted ones are above).'}</p>
+        <div class="tiles">
+          <div class="tile"><span>Last 24 hours</span><b>${fmt(last24)}</b><small>views${est24 ? ' (estimate)' : ''}</small></div>
+          <div class="tile"><span>Average day</span><b>${fmt(avgDay)}</b><small>views a day${fullM.length ? ` over ${fullM.length} counted day${fullM.length > 1 ? 's' : ''}` : ' (estimate)'}</small></div>
+          <div class="tile"><span>Average hour</span><b>${fmt(avgDay / 24)}</b><small>views an hour, day and night</small></div>
+          <div class="tile"><span>Peak hour</span><b>${peakHour ? fmt(peakHour.v) : '–'}</b><small>${peakHour ? `${hh(peakHour.h)}–${hh((peakHour.h + 1) % 24)}${peakHour.day ? `, ${dayName(peakHour.day)}` : ''}${peakHour.est ? ' (estimate)' : ''}` : ''}</small></div>
+          <div class="tile"><span>Peak day</span><b>${peakDay ? fmt(peakDay.n) : '–'}</b><small>${peakDay ? `${dayName(peakDay.day)}${peakDay.est ? ' (estimate)' : ''}` : ''}</small></div>
+          <div class="tile"><span>On screen, 24 h</span><b>${sec24 && counted ? hrs(sec24) : '–'}</b><small>${u24 && counted ? `in ${fmt(u24)} visits that saw it${last24 && !est24 ? `, about ${Math.round(sec24 / last24)} s a view` : ''}` : 'counted from the counter\'s start'}</small></div>
+          <div class="tile"><span>Taps to andersonbeer.com</span><b>${counted ? fmt(c24) : '–'}</b><small>in the last 24 hours${cAll ? `, ${fmt(cAll)} in all` : ''}</small></div>
+        </div>
+        <h3>The last 24 hours, hour by hour</h3>
+        <div class="legend"><span><i></i>views counted</span>${est24 ? '<span><i class="est"></i>estimate (from the laps started)</span>' : ''}</div>
+        ${chart(h24.map((x) => { const h = hourOf(x.at); return { v: x.n, est: x.est, label: hh(h).slice(0, 2), tip: `${hh(h)}–${hh((h + 1) % 24)}: ${fmt(x.n)} views${x.est ? ' (estimate)' : ''}${x.s ? `, ${hrs(x.s)} on screen` : ''}${x.c ? `, ${x.c} taps` : ''}` }; }), 3)}
+        <h3>Per day</h3>
+        <div class="legend"><span><i></i>views counted</span><span><i class="est"></i>estimate, before the counter</span></div>
+        ${chart(days.slice(-30).map((x) => ({ v: x.n, est: x.est, label: x.day.slice(8), tip: `${dayName(x.day)}: ${fmt(x.n)} views${x.est ? ' (estimate)' : ''}${x.part ? ', so far today' : ''}` })), 1)}
+        ${fullM.length ? `<h3>An average day's hours</h3>${chart(prof.map((v, h) => ({ v, label: hh(h).slice(0, 2), tip: `${hh(h)}–${hh((h + 1) % 24)}: ${fmt(v)} views on average` })), 3)}` : ''}
+        <h3>Day by day</h3>
+        <div class="scroll"><table>
+          <tr><th>Day</th><th>Views</th><th>On screen</th><th>Visits that saw it</th><th>Taps to the site</th><th>Busiest hour</th></tr>
+          ${days.slice().reverse().map((x) => {
+            const bi = x.est ? -1 : x.h.indexOf(Math.max(...x.h));
+            return `<tr><td>${dayName(x.day)}${x.part ? ' (today so far)' : ''}</td><td class="${x.est ? 'est' : ''}">${fmt(x.n)}${x.est ? ' est.' : ''}</td><td>${x.s && !x.est ? hrs(x.s) : '–'}</td><td>${x.u && !x.est ? fmt(x.u) : '–'}</td><td>${x.c && !x.est ? fmt(x.c) : '–'}</td><td>${bi >= 0 && x.h[bi] ? `${hh(bi)} · ${fmt(x.h[bi])}` : '–'}</td></tr>`;
+          }).join('')}
+        </table></div>
+        <p class="note" style="margin-top:10px">Estimates: before the counter, a day's views are the laps started on the Toomemägi circuit, each of which begins by driving down the straight at the hologram, times the views per lap started that the counter has measured since (now ${K.toFixed(2)}, as cars also see it while passing by on Küüni and the streets around).</p>
+      </section>`;
+  }
+
+  addEventListener('pointermove', (e) => {
+    const c = e.target.closest?.('[data-tip]');
+    if (!c) { tip.style.display = 'none'; return; }
+    tip.textContent = c.dataset.tip; tip.style.display = 'block';
+    const w = tip.offsetWidth;
+    tip.style.left = Math.min(innerWidth - w - 6, e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+  });
+  const load = () => fetch('/api/stats?ads=1').then((r) => r.json()).then(draw).catch(() => { top.innerHTML = ''; out.innerHTML = '<p class="note">The figures could not be loaded. Try again in a minute.</p>'; });
+  load();
+  setInterval(() => { if (!document.hidden) load(); }, 60000);
+})();
+</script>
+</body>
+</html>

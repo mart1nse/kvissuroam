@@ -23,6 +23,9 @@ const PARK = 41, PARKBIN = 42;
 // its island, and the blue and white striped post that carries a round blue sign on a traffic island's nose
 // (keep right, pass either side)
 const ROADLAMP = 43, CROSSLAMP = 44, ISLELAMP = 45, KEEPPOST = 46, EITHERPOST = 47;
+// Küüni's park stretch past the first corner (Martin 27 Nov, "make them hittable", src/world/kuuni.js): the street's
+// benches, the yellow kvass trailer by the Poe corner, the umbrella over its table and the stools under it
+const KUUNIBENCH = 48, KVASS = 49, PARASOL = 50, STOOL = 51;
 const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
@@ -64,6 +67,19 @@ SOLID[ISLELAMP] = [cyl(0.075, 6, 0, 3, 0, GALV, 8), box(0.2, 0.09, 0.62, 0, 6.03
 // (seven bands of 0.17 m and a dark cap: 1.25 m, the round plate sits on top of it)
 const stripedPost = [...Array.from({ length: 7 }, (_, k) => box(0.11, 0.17, 0.11, 0, 0.085 + k * 0.17, 0, k % 2 ? 0xf6f5f9 : 0x2a5cc0)), box(0.05, 0.3, 0.05, 0, 1.33, 0, 0x8a8a94)];
 SOLID[KEEPPOST] = stripedPost; SOLID[EITHERPOST] = stripedPost;
+// (the bench faces +z, its length along x; the trailer's and the umbrella's +z points to the Poe corner)
+SOLID[KUUNIBENCH] = [box(2.0, 0.06, 0.45, 0, 0.45, 0.05, 0xa8806e), box(2.0, 0.44, 0.06, 0, 0.7, -0.2, 0xa8806e), box(0.08, 0.44, 0.5, -0.85, 0.22, 0, 0x34313f), box(0.08, 0.44, 0.5, 0.85, 0.22, 0, 0x34313f)];
+SOLID[KVASS] = [
+  part(new THREE.CylinderGeometry(1.0, 1.0, 3.4, 20, 1, true).rotateX(Math.PI / 2).translate(0, 1.55, 0), 0xf6c048),
+  ...[-1.7, 1.7].map((z) => part(new THREE.SphereGeometry(1.0, 16, 10).scale(1, 1, 0.35).translate(0, 1.55, z), 0xf6c048)),
+  box(1.6, 0.15, 3.6, 0, 0.525, 0, 0x4a4652),                                       // the chassis
+  ...[-0.85, 0.85].map((x) => part(new THREE.CylinderGeometry(0.36, 0.36, 0.18, 14).rotateZ(Math.PI / 2).translate(x, 0.36, 0), 0x2a2830)),
+  box(0.12, 0.1, 1.6, 0, 0.5, 2.6, 0x4a4652),                                       // the drawbar
+  box(0.12, 0.6, 0.6, 0.95, 1.4, -1.2, 0xd9d4e0),                                   // the tap box
+];
+SOLID[PARASOL] = [part(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 6, 1, true).translate(0, 1.2, 0), 0xe8e4ee), part(new THREE.ConeGeometry(1.5, 0.55, 8).translate(0, 2.45, 0), 0xe84a4a),
+  box(0.7, 0.04, 0.7, 0, 0.74, 0, 0xe8e4ee), box(0.36, 0.04, 0.36, 0, 0.02, 0, 0x4c4858)];
+SOLID[STOOL] = [box(0.42, 0.04, 0.42, 0, 0.46, 0, 0x4c4858), part(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 6, 1, true).translate(0, 0.22, 0), 0x4c4858), box(0.3, 0.03, 0.3, 0, 0.015, 0, 0x4c4858)];
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
   [LANTERN]: box(0.16, 0.16, 0.16, 0, 3.5, 0, 0xffe2a8),
@@ -201,8 +217,18 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, sign: 10 };
-const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, sign: 0.08 };
+const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, [KUUNIBENCH]: 45, [KVASS]: 600, [PARASOL]: 20, [STOOL]: 6, sign: 10 };
+const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, [PARASOL]: 0.35, [STOOL]: 0.21, sign: 0.08 };
+// long things the car meets along their length, not only at their middle: points in the prop's own frame
+// [x, z, reach] (a 4 m trailer would otherwise be touched as a square)
+const SPAN = {
+  [KUUNIBENCH]: [[-0.6, 0, 0.4], [0.6, 0, 0.4]],
+  [KVASS]: [[0, -1.3, 1.0], [0, 0, 1.0], [0, 1.3, 1.0], [0, 2.9, 0.2]],
+};
+// heavy and low on its wheels: a knock low down turns it over less than it would a bench (1 = as a bench)
+const TUMBLE = { [KVASS]: 0.35 };
+// a point of a span, in the world, for a prop standing at (x, z) turned by (cs, sn)
+const spanX = (x, cs, sn, q) => x + q[0] * cs + q[1] * sn, spanZ = (z, cs, sn, q) => z - q[0] * sn + q[1] * cs;
 // thin poles that snap on most hits (the Raadi park lamps, Martin 24 Nov: "should then break. Not very thick posts")
 const THIN = { [PARK]: 1, [PARKBIN]: 1 };
 const KNOCK_KEY = 'streetlap.knocked';
@@ -369,6 +395,8 @@ export function createProps(world, opts = {}) {
     const body = {
       id: e.id, kind, e, rec, c, obj, geos, corners, mass, inertia: mass * (L * L) / 10 + 0.5,
       v: new THREE.Vector3(), w: new THREE.Vector3(), asleep: false, still: 0, reach: (isSign(kind) ? REACH.sign : REACH[kind] || 0.3) + Math.min(size.x, size.z) * 0.5,
+      // a long thing's span points about its centre, at bumper height (see SPAN)
+      span: SPAN[kind] && !piece ? SPAN[kind].map((q) => [new THREE.Vector3(spanX(0, cs, sn, q) - c.x, 0.5 - c.y, spanZ(0, cs, sn, q) - c.z), q[2]]) : null,
       // the shaft's centre line, for driving over it when it lies on the ground
       seg: sh ? [new THREE.Vector3(0, y0, 0).sub(c), new THREE.Vector3(0, y1, 0).sub(c)] : null, r: sh ? sh.r : 0,
       idx: piece ? piece.idx : -1, under: 0, lastPass: -9,
@@ -414,7 +442,7 @@ export function createProps(world, opts = {}) {
     // the bumper meets it about half a metre above the ground
     const p = b.obj.position;
     const gy = world.heightAt(p.x, p.z);
-    tmpR.set(0, Math.min(0.55 + gy - p.y, 0), 0);
+    tmpR.set(0, Math.min(0.55 + gy - p.y, 0) * (TUMBLE[b.kind] ?? 1), 0);
     tmpT.crossVectors(tmpR, tmpN);
     const k = 1 / b.mass + tmpT.lengthSq() / b.inertia + 1 / M;
     const j = (1.25 * sp) / k;
@@ -541,7 +569,7 @@ export function createProps(world, opts = {}) {
 
   // A pole lying on the road is driven over, not pushed: each wheel that rolls onto it gives the car a
   // small knock upwards and rolls the pole a little, and a pass over it may snap it.
-  const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+  const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpS = new THREE.Vector3();
   function lying(b) {
     return b.seg && Math.abs(tmpV.set(0, 1, 0).applyQuaternion(b.obj.quaternion).y) < 0.8;
   }
@@ -608,6 +636,22 @@ export function createProps(world, opts = {}) {
         if (dx * dx + dz * dz > 49) return false;
         return Math.abs(dx * fx + dz * fz) < car.halfLen + reach && Math.abs(dx * rx + dz * rz) < car.halfWid + reach;
       };
+      // a standing prop: its middle, or any point of its span
+      const touchesProp = (e, reach) => {
+        const sp = SPAN[e.kind];
+        if (!sp) return touches(e.x, e.z, reach);
+        for (let k = 0; k < sp.length; k++) if (touches(spanX(e.x, e.cs, e.sn, sp[k]), spanZ(e.z, e.cs, e.sn, sp[k]), sp[k][2])) return true;
+        return false;
+      };
+      // a loose one, wherever it lies and however it is turned
+      const touchesBody = (b) => {
+        if (!b.span) return touches(b.obj.position.x, b.obj.position.z, b.reach);
+        for (let k = 0; k < b.span.length; k++) {
+          tmpS.copy(b.span[k][0]).applyQuaternion(b.obj.quaternion).add(b.obj.position);
+          if (touches(tmpS.x, tmpS.z, b.span[k][1])) return true;
+        }
+        return false;
+      };
       for (let ax = sx - 1; ax <= sx + 1; ax++) for (let az = sz - 1; az <= sz + 1; az++) {
         const rec = live.get(`${ax}_${az}`);
         if (!rec) continue;
@@ -616,7 +660,7 @@ export function createProps(world, opts = {}) {
         for (const e of rec.entries) {
           if (e.gone) continue;
           const reach = isSign(e.kind) ? REACH.sign : REACH[e.kind] || 0.3;
-          if (Math.abs(e.y - car.y) > 3 || !touches(e.x, e.z, reach)) continue;
+          if (Math.abs(e.y - car.y) > 3 || !touchesProp(e, reach)) continue;
           hide(rec, e);
           const b = makeBody(e, rec);
           knocked[e.id] = 1;
@@ -636,7 +680,7 @@ export function createProps(world, opts = {}) {
             if (dx * dx + dz * dz < 64 + 25) driveOver(b, car, wheels, fx, fz, speed);
             continue;
           }
-          if (!touches(p.x, p.z, b.reach)) continue;
+          if (!touchesBody(b)) continue;
           const side = sideOf(p.x, p.z);
           if (clock - (b.hitT ?? -9) < 1.5) {
             const j = shove(b, car, fx, fz, rx, rz, side);

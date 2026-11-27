@@ -10,22 +10,27 @@
 // lift. When the last of it is past the edge the car is let go into the air with the turning it has, lands on
 // its nose and drops back onto its wheels. The same for the tail of a car reversing off, and for a side.
 //
-// Only below V_NONE: fast, the time from one axle to the other is too short for any of it (50 km/h: 0.19 s, 4
-// degrees) and the car flies as it did. Nothing here runs unless the ground under the four wheels differs by
-// more than HANG, which no road, kerb or bank does.
+// Fast, the time from one axle to the other is short (50 km/h: 0.19 s, 4 degrees), and the pull is faded too, from
+// all of it below V_FULL to LEAST of it from V_NONE on, never none (Martin, 27 Nov 2026: "let it act also on higher
+// speeds as well, just a very very small nose dive until the end"): off an 8 m edge the nose dips about 4 degrees
+// in the air at 60 km/h, 2 at 100, 1.5 at 160, and the car comes down on its wheels as from any jump (physics.js
+// TIP_SMALL). Nothing here runs unless the ground under the four wheels differs by more than HANG, which no road,
+// kerb or bank does, nor anywhere on the Toomemägi lap's or the Raadi stage's line at 40 to 130 km/h.
 
 const G = 9.81;
 export const HANG = 0.55;                    // m a wheel's ground lies below the others' for it to hang
-const V_FULL = 30 / 3.6, V_NONE = 55 / 3.6;  // full below, none above (m/s)
+const V_FULL = 30 / 3.6, V_NONE = 55 / 3.6;  // full below, down to the least by V_NONE (m/s)
+const LEAST = 0.2;                           // and that much of it at any speed above
 export const CLEAR = 0.16;                          // m from the ground to the car's belly
 const LET_GO = 0.08;                         // m of car still over the edge when it is let go
 const D_MAX = 1.3, W_MAX = 3.5;              // most it tips before the air has it (rad), fastest (rad/s)
+export const TIPPED = 0.3;                   // car.tipped as it is let go (physics.js: and the pace it starts to fall back at)
 const STEEP = 1.0;                           // the top's steepest slope along the car (a 45 degree roof)
 
 const at = (world, x, z, y) => (world.groundAt ? world.groundAt(x, z, y) : world.heightAt(x, z));
 export function edgeFade(car) {
   const v = Math.hypot(car.vx, car.vy);
-  return v <= V_FULL ? 1 : v >= V_NONE ? 0 : (V_NONE - v) / (V_NONE - V_FULL);
+  return v <= V_FULL ? 1 : v >= V_NONE ? LEAST : LEAST + ((1 - LEAST) * (V_NONE - v)) / (V_NONE - V_FULL);
 }
 
 // the wheels that carry and the wheels that hang, as places in h = [FL, FR, RL, RR]: pitch with the front
@@ -80,7 +85,7 @@ function letGo(car, t, below) {
   if (car.hy - below < reach) { if (t.ax === 0) car.pitchRate = 0; else car.rollRate = 0; return null; }
   const w = Math.min(W_MAX, Math.max(0, t.w));
   if (t.ax === 0) car.pitchRate = -t.sg * w; else car.rollRate = t.sg * w;
-  car.tipped = 0.3;      // (tipped: also the pace it falls back at once down, physics.js)
+  car.tipped = TIPPED;
   return null;
 }
 

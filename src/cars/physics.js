@@ -9,7 +9,7 @@ import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
 import { bonnetStep } from './bonnet.js';
 import { crashHit, crashStep } from './crash.js';
-import { HANG, CLEAR, edgeStart, edgeStep } from './tip.js';
+import { HANG, CLEAR, TIPPED, edgeStart, edgeStep } from './tip.js';
 
 const G = 9.81;
 const LAT_KEEP = 0.4;            // sideways grip a spinning tyre always keeps (share of peak)
@@ -124,6 +124,7 @@ const FLOOR = 0.13;              // the body never sits lower than this below it
 const TIP_AIR_T = 0.6;           // its turning in the air dies away in this time (s)
 const TIP_AIR_MAX = 1.25;        // and it leans no further than this (rad)
 const TIP_BACK = 3.5, TIP_BACK_A = 7;   // down on its nose, it falls back onto its wheels: fastest (rad/s), gathering pace (rad/s2)
+const TIP_SMALL = 0.12;          // come down leaning less than this (rad), the small dip of a fast car: it lands as from any jump
 const RAIL_IN = 2.5;              // a car come onto a deck from beside it, past its railing, is eased inside it at this pace (m/s)
 const TIP_WALL = 2.5;             // falling past the wall it went over, its tail is eased clear of it at this pace (m/s)
 const LEAN_FREE = 0.2;           // m of lean the springs take before the body's end is what meets the ground
@@ -832,7 +833,7 @@ function substep(car, input, world, dt) {
     stn = stoneWheels(car, world, s, fx, fz, rx, rz, tmpW, dt);
     if (stn) { hFL += stn.lift[0]; hFR += stn.lift[1]; hRL += stn.lift[2]; hRR += stn.lift[3]; }
   }
-  // an edge under a slow car (tip.js): the wheels still on top carry it and the end that hangs tips down, where
+  // an edge under a car (tip.js; fast, only a little): the wheels still on top carry it and the end that hangs tips down, where
   // the mean of the four would have the whole car fall at once. Looked at only when the ground under the wheels
   // differs by more than any road's does.
   let tip = null;
@@ -934,7 +935,9 @@ function substep(car, input, world, dt) {
   // (a car that went over an edge nose first, tip.js, comes down on its nose, not through the ground up to its
   // wheels: the ground is that much higher for it while it leans)
   // (only on ground that is a slope a car stands on: with its wheels on two levels, on a roof's edge, there is no such ground to lean against)
-  let restY = car.tipped && Math.abs(car.groundPitch) < 0.7 && Math.abs(car.groundRoll) < 0.7 ? groundY + Math.max(0, car.halfLen * Math.abs(Math.sin(car.pitch - car.groundPitch)) + car.halfWid * Math.abs(Math.sin(car.roll - car.groundRoll)) - LEAN_FREE) : groundY;
+  // (not a fast car's small dip, TIP_SMALL: that comes down on its wheels as from any jump)
+  const dipOnly = car.tipped === TIPPED && Math.abs(car.pitch) < TIP_SMALL && Math.abs(car.roll) < TIP_SMALL;
+  let restY = car.tipped && !dipOnly && Math.abs(car.groundPitch) < 0.7 && Math.abs(car.groundRoll) < 0.7 ? groundY + Math.max(0, car.halfLen * Math.abs(Math.sin(car.pitch - car.groundPitch)) + car.halfWid * Math.abs(Math.sin(car.roll - car.groundRoll)) - LEAN_FREE) : groundY;
   // (up among roofs the ground under a car can be another all at once: a wheel past a dormer, the end of a tip
   // over an edge, levels a step apart. The body is let up to it at ROOF_LIFT, not put there; at pace a roof
   // rising under the car is not that)
@@ -1838,6 +1841,9 @@ function substep(car, input, world, dt) {
     // (just after a wheel has rolled up a kerb the body follows the ground at once: the knock)
     const follow = Math.min(1, dt * (9 + 16 * Math.max(car.jolt || 0, car.bite || 0)));
     let dp = (tPitch - car.pitch) * follow, dr = (tRoll - car.roll) * follow;
+    // (a fast car's small dip over an edge, tip.js: on the ground it is a car down from a jump, its body follows
+    // the ground as ever; a slow fall back from it would lag behind a slope it lands on and throw it up off that)
+    if (dipOnly) car.tipped = 0;
     if (car.tipped) {
       // (down on its nose or its side after an edge: it drops back onto its wheels, no faster than a car falls over)
       // (it starts to fall from rest and gathers pace)

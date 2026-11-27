@@ -608,7 +608,7 @@ export const CARS = {
     track: 1.64,
     cgFront: 0.52,
     cgHeight: 0.42,             // battery in the floor
-    wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
+    wheelRadius: 0.34,          // (the drive's rolling radius, kept with Martin's figures; the drawn tyres are 0.341 front, 0.369 rear since 27 Nov)
     cdA: 0.31 * 1.95,
     // Rear-wheel drive: two motors, both on the rear axle (the production car revealed in 2026: Top Gear, "two motors,
     // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its

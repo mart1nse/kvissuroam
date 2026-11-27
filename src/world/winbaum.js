@@ -4,7 +4,7 @@
 //   - after their photo, floor plan and their own render of it in the game, drawn 1.4 times its real size
 //     (Martin: "I know the scale is off, but let's try"): 9.0 x 3.3 m, black-stained timber boards all round,
 //     a deep frame round the glazed front whose flared reveals are lined with slats, seven tall panes with the
-//     sliding door, a flat roof with the stove's chimney, a wooden deck along the front with a step, a lounger
+//     sliding door, a flat roof, a wooden deck along the front with a step, a lounger
 //     and two deck lights, a service box and pipes on the right end, lavender and a gnarled olive tree on a gravel bed
 //   - lit like their render: uplights wash the slatted reveals, the warm light from inside spills onto the
 //     sill, the deck and the soffit, the deck lights throw pools (all painted light, no lamps for the shader)
@@ -33,6 +33,7 @@ import { still } from '../still.js';
 
 const FLAG = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('winbaum') : null;
 export const WINBAUM = !!FLAG && FLAG !== '0';
+const SITE = 'https://www.winbaum.ee/';               // where a tap on the cabin or its sign goes
 
 // the Kaubamaja frame (kaubamaja.js): a along Küüni from the roof's west corner (towards the board, south-east),
 // b along the park face (away from the start/finish straight, north-east). The LAP START board stands at
@@ -53,6 +54,7 @@ const WY0 = 0.1, WY1 = YT - 0.05;                                // the boards r
 const DECK = 2.3, DECK_R = 0.8, DY = 0.3;                        // the deck: depth, how far it runs past the right end, top
 const PANES = 7;
 const OLIVE = [X1 + DECK_R + 0.75, ZF + 1.0], OC = [OLIVE[0] + 0.05, 1.8, OLIVE[1] - 0.05], ORX = 0.95, ORY = 0.62;   // the olive: foot, crown
+const SW = 7.4, SH = 1.46, SY = YT + 0.32 + SH / 2, SZ = 0.25;                  // the roof sign: size, middle, depth
 const SPOT = (() => { const [x, z] = at(PLACE.a, PLACE.b); return { x, z, yaw: YAW, c: Math.cos(YAW), s: Math.sin(YAW) }; })();
 // a point of the cabin's frame in the world, and back
 const toWorld = (lx, lz) => [SPOT.x + S * (SPOT.c * lx + SPOT.s * lz), SPOT.z + S * (-SPOT.s * lx + SPOT.c * lz)];
@@ -267,7 +269,7 @@ function shadeOnce(geo) {
 }
 
 export function createWinbaum(scene, world, { shadows = true } = {}) {
-  if (!WINBAUM) return { update() {} };
+  if (!WINBAUM) return { update() {}, bindClicks() {}, hitAt: () => false };
   const group = still(new THREE.Group());
   group.name = 'winbaum';
   let built = false;
@@ -293,9 +295,7 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
     p.box(GX1 - GX0, 0.05, 0.09, DARK, 0, Y0 + 0.025, ZG);
     p.box(0.055, YG - Y0, 0.07, DARK, GX0 + 4 * pw + 0.06, (Y0 + YG) / 2, ZG + 0.08);
     p.box(0.02, 0.32, 0.03, 0x9a9aa2, GX0 + 4 * pw + 0.14, Y0 + 1.05, ZG + 0.13);                                // its handle
-    // the chimney
-    p.add(new THREE.CylinderGeometry(0.12, 0.12, 1.0, 10), 0x151518, -0.35, YT + 0.5, -0.45);
-    p.add(new THREE.CylinderGeometry(0.17, 0.17, 0.07, 10), 0x2a2a30, -0.35, YT + 1.02, -0.45);
+    // (no chimney on the roof: seen from behind it stood across the sign, Martin 27 Nov)
     // the service box and its pipes on the right end
     p.box(0.16, 0.72, 0.52, 0x9da0a8, X1 + 0.1, 1.75, 0.35);
     p.box(0.02, 0.6, 0.42, 0xb4b7be, X1 + 0.19, 1.75, 0.35);
@@ -334,7 +334,6 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
       limb([[0.03, 1.1, 0, 0.06], [0.0, 1.5, -0.25, 0.045], [0.08, 1.85, -0.4, 0.03], [0.1, 2.15, -0.42, 0.02]], 0x5c564e);
     }
     // the sign's back board and posts (the sign itself comes with its picture)
-    const SW = 7.4, SH = 1.46, SY = YT + 0.32 + SH / 2, SZ = 0.25;
     p.box(SW + 0.14, SH + 0.14, 0.12, 0x15101f, 0, SY, SZ);
     for (const x of [-SW * 0.33, SW * 0.33]) p.box(0.12, 0.34, 0.12, 0x101014, x, YT + 0.17, SZ);
     const outside = p.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
@@ -558,6 +557,63 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
     while (!done && performance.now() - t0 < 3000) yield 'frame';
   }
 
+  // Any part of the cabin, its deck, garden and roof sign opens winbaum.ee (Martin, 27 Nov), the same way as the
+  // TOREPOOD poster (busstops.js) and the Anderson's hologram: a short press that does not move, on the 3D view,
+  // worked out by hand against a few boxes in the cabin's own frame (no ray-casting of meshes); the player's own
+  // car in front of it takes the tap; a mouse over it shows a hand.
+  const REACH = 60, caster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const BOXES = [
+    [X0, X1, 0, YT + 0.05, ZB, ZF],                                               // the cabin
+    [X0, X1 + DECK_R, 0, DY + 0.95, ZF, ZF + DECK],                              // the deck, the lounger
+    [-SW / 2 - 0.05, SW / 2 + 0.05, YT, SY + SH / 2 + 0.05, SZ - 0.2, SZ + 0.2],  // the sign and its posts
+    [OC[0] - ORX - 0.3, OC[0] + ORX + 0.3, 0, OC[1] + ORY + 0.6, OC[2] - ORX - 0.3, OC[2] + ORX + 0.3],   // the olive
+    [LOT.x0, LOT.x1, 0, 0.85, LOT.z0, LOT.z1],                                   // the lavender
+  ];
+  let gy0 = 0;
+  function hitAt(camera, el, cx, cy, carNow) {
+    if (!built || !group.visible || !group.parent) return false;
+    const r = el.getBoundingClientRect();
+    ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    caster.setFromCamera(ndc, camera);
+    const o = caster.ray.origin, d = caster.ray.direction;
+    if (Math.hypot(o.x - SPOT.x, o.z - SPOT.z) > REACH + 12) return false;
+    // the ray in the cabin's frame (in its own metres), t still in metres of the world
+    const [ox, oz] = toLocal(o.x, o.z), oy = (o.y - gy0) / S;
+    const dx = (SPOT.c * d.x - SPOT.s * d.z) / S, dz = (SPOT.s * d.x + SPOT.c * d.z) / S, dy = d.y / S;
+    let best = REACH;
+    for (const [x0, x1, y0, y1, z0, z1] of BOXES) {
+      let t0 = 0, t1 = best;
+      for (const [p, v, a, b] of [[ox, dx, x0, x1], [oy, dy, y0, y1], [oz, dz, z0, z1]]) {
+        if (Math.abs(v) < 1e-9) { if (p < a || p > b) { t0 = Infinity; break; } continue; }
+        let ta = (a - p) / v, tb = (b - p) / v;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        if (t0 > t1) break;
+      }
+      if (t0 <= t1 && t0 < best) best = t0;
+    }
+    if (best >= REACH) return false;
+    if (carNow) {
+      const vx = carNow.x - o.x, vy = (carNow.y ?? 0) + 0.7 - o.y, vz = carNow.z - o.z, tc = vx * d.x + vy * d.y + vz * d.z;
+      if (tc > 0 && tc < best && vx * vx + vy * vy + vz * vz - tc * tc < 1.1 * 1.1) return false;
+    }
+    return true;
+  }
+  function bindClicks(camera, el, getCar = () => null) {
+    let down = null, hoverT = 0, over = false;
+    el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; }, { passive: true });
+    el.addEventListener('click', (e) => {
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12 || performance.now() - down.t > 800) return;
+      if (hitAt(camera, el, e.clientX, e.clientY, getCar())) window.open(SITE, '_blank', 'noopener');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const now = performance.now();
+      if (now - hoverT > 120) { hoverT = now; const was = over; over = hitAt(camera, el, e.clientX, e.clientY, getCar()); if (was && !over) el.style.cursor = ''; }
+      if (over) el.style.cursor = 'pointer';                   // (after the hologram's and the posters' own hover)
+    }, { passive: true });
+  }
+
   return {
     group,
     spot: SPOT,
@@ -574,6 +630,7 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
       for (const [lx, lz] of [[LOT.x0, LOT.z0], [LOT.x1, LOT.z0], [LOT.x0, LOT.z1], [LOT.x1, LOT.z1], [0, 0]]) {
         const [x, z] = toWorld(lx, lz); gy = Math.min(gy, world.heightAt(x, z));
       }
+      gy0 = gy;
       group.position.set(SPOT.x, gy, SPOT.z);
       group.rotation.y = SPOT.yaw;
       group.scale.setScalar(S);
@@ -583,5 +640,7 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
       world.addSolids([{ x: cx, z: cz, yaw: SPOT.yaw, hx: (S * (X1 - X0 + DECK_R)) / 2, hz: (S * (ZF - ZB + DECK)) / 2 }]);
       jobs.add(build, 'winbaum');
     },
+    bindClicks,
+    hitAt,
   };
 }

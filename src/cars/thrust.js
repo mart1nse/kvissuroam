@@ -27,7 +27,7 @@ export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefi
 
 const G = 9.81;
 // The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
-// all, which is the tail's 80 kN for 2 s and no more. So BOOST's push follows the pressure, the share of the gas
+// all, which is the tail's 60 kN for 2.7 s and no more. So BOOST's push follows the pressure, the share of the gas
 // still in the tank, and so does the gas it spends: strong on a full tank, weaker with every second, and never
 // quite done; at EMPTY of a tank nothing useful is left and the valves shut. A FLIP is its fixed half tank.
 export const GAS_V = 650;                 // cold gas leaves a nozzle at about this speed (m/s)
@@ -376,6 +376,11 @@ function rollPlay(f, t) {
 }
 // how far round the roll is (0..1; a little over or under 1 while it hunts for level)
 const rollFrac = (p, t) => { const f = fight(p); return rollMain(f, t) + rollPlay(f, t); };
+// The car moves over sideways as it rolls, to the side it rolls to, half its width by the end of the turn (Martin 27
+// Nov, from stills of Tesla's film: "if you take the car movement as straight on an axis, then the flip moves it like
+// half a car width to the side"). Metres, + to its right.
+const SIDE_STEP = 1.0;
+const sideStep = (p, t) => { const f = fight(p), u = (t - ROLL_T0) / f.T; return p.side * SIDE_STEP * (u <= 0 ? 0 : u < 1 ? S5(u) : 1); };
 // The nose's nodding (radians, + up) apart from the lift-off kick: the trembling, stronger while the landing burn
 // holds the car up, and the nose held a little high in that burn
 function pitchPlay(f, t) {
@@ -413,8 +418,9 @@ export function flightPose(p, t, out) {
   const turn = p.side * TURN * (rollMain(f, t) + rollPlay(f, t));
   const h = p.cg, sn = Math.sin(turn);
   flightPath(p, t, tmpP);
-  out.x = tmpP[0] - Math.cos(yaw) * h * sn;
-  out.z = tmpP[1] - Math.sin(yaw) * h * sn;
+  const step = sideStep(p, t) - h * sn;
+  out.x = tmpP[0] + Math.cos(yaw) * step;
+  out.z = tmpP[1] + Math.sin(yaw) * step;
   out.y = tmpY[0] + h * (1 - Math.cos(turn));
   out.vy = tmpY[1];
   out.yaw = yaw + yawPlay(f, t);
@@ -605,9 +611,9 @@ export function planFlip(car, world, side = 1) {
   miss(lo);
   p.tb = lo; p.tl = tl; p.vland = vland;
   // the spot: the ground under the four wheels as the car will stand on it
-  const yawL = yawAt(p, tl);
+  const yawL = yawAt(p, tl), stepL = sideStep(p, tl);
   flightPath(p, tl, tmpP);
-  stand(car.spec, world, tmpP[0], tmpP[1], yawL, yEnd, tmpG);
+  stand(car.spec, world, tmpP[0] + Math.cos(yawL) * stepL, tmpP[1] + Math.sin(yawL) * stepL, yawL, yEnd, tmpG);
   const lim = (v) => Math.max(-0.6, Math.min(0.6, v));
   p.yl = Math.abs(tmpG[0] - yEnd) < 0.5 ? tmpG[0] : yEnd; p.pl = lim(tmpG[1]); p.rl = lim(tmpG[2]);
   return p;

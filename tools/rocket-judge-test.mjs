@@ -181,6 +181,62 @@ for (const [name, s, plan, opt, want] of TIMED_CHEATS) {
 }
 console.log(`ok  ${TIMED_CHEATS.length} changed cars and BOOST on a timed run: every one refused (twice the motors too, which the gas let by)`);
 
+// ---- a Majoraadi run past its tarmac start: on gravel (Martin 27 Nov: the fans hold 40 % there, physics.js FAN_LOOSE,
+// "and modify the check to be as fool proof as possible"). The server knows the gravel from where the car is on the
+// stage (worker/stagecheck.js), not from the page: judged there against the gravel's grip, brakes and pull.
+const gravel = { ...road, surfaceAt: () => 2 }, gravelHills = { ...hills, surfaceAt: () => 2 };
+const onGravel = (d, l = lim) => judgeDrive(d.xs, d.zs, d.ys, l, { roll: d.roll, noGas: true, loose: new Uint8Array(d.xs.length).fill(1) });
+const STAGE_HONEST = [
+  ['gravel tyres: round and round 30 to 160 km/h', [[150, off(laps(30 / 3.6, 160 / 3.6))]], { world: gravel, tyres: 'gravel' }],
+  ['road tyres: round and round 30 to 160 km/h', [[150, off(laps(30 / 3.6, 160 / 3.6))]], { world: gravel }],
+  ['gravel tyres: from a standstill, floored, a stop', [[25, (t, car) => ({ up: 1, steer: straight(car) })], [6, { down: 1 }]], { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: round at 50 km/h, full lock', [[6, (t, car) => ({ up: car.vx * 3.6 < 50 ? 1 : 0 })], [12, (t, car) => ({ up: car.vx * 3.6 < 50 ? 0.7 : 0.2, steer: 1 })]], { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: floored on full lock', [[3, { up: 1 }], [14, { up: 1, steer: 1 }]], { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: braking into bends, flat out of them', Array.from({ length: 8 }, (_, i) => [[5, { up: 1 }], [1.6, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat(), { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: over the hills', [[60, off(laps(40 / 3.6, 150 / 3.6))]], { world: gravelHills, tyres: 'gravel' }],
+  ['gravel tyres, fans off', [[120, off(laps(30 / 3.6, 150 / 3.6))]], { world: gravel, tyres: 'gravel', fanOff: true }],
+  ['a slalom at 80 km/h', [[5, { up: 1 }], [12, (t) => ({ up: 0.6, steer: Math.sin(t * 2.5) })]], { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: round at 90 km/h, 0.5 lock', [[8, (t, car) => ({ up: car.vx * 3.6 < 90 ? 1 : 0 })], [14, (t, car) => ({ up: car.vx * 3.6 < 90 ? 0.8 : 0.3, steer: 0.5 })]], { world: gravel, tyres: 'gravel' }],
+  ['gravel tyres: round at 120 km/h, 0.3 lock', [[8, (t, car) => ({ up: car.vx * 3.6 < 120 ? 1 : 0 })], [14, (t, car) => ({ up: car.vx * 3.6 < 120 ? 0.8 : 0.3, steer: 0.3 })]], { world: gravel, tyres: 'gravel' }],
+  ['road tyres: five stops from 60 to 200 km/h', [60, 120, 200, 90, 160].flatMap((v) => [[25, (t, car) => ({ up: car.vx * 3.6 < v ? 1 : 0, steer: straight(car) })], [6, (t, car) => ({ down: 1, steer: straight(car) })], [3, { up: 1 }]]), { world: gravel }],
+];
+worst = { pull: 0, grip: 0, stop: 0, top: 0, gas: 0, air: 0 };
+for (const [name, plan, opt] of STAGE_HONEST) {
+  const d = drive(spec, plan, opt), j = onGravel(d);
+  if (verbose) console.log(`gravel  ${name.padEnd(64)} ${show(j)}  (top ${d.top.toFixed(0)} km/h)`);
+  for (const k of Object.keys(worst)) worst[k] = Math.max(worst[k], j[k]);
+  assert.equal(j.why, '', `gravel, ${name}: refused (${show(j)})`);
+  assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1 && j.air === 0, `gravel, ${name}: too near a limit (${show(j)})`);
+}
+console.log(`ok  ${STAGE_HONEST.length} honest drives on gravel, judged as a stage's gravel: at most ${JSON.stringify(worst)}`);
+// (driven as a stage is: at the limit round bends, braking into them and floored out)
+const gravelLaps = [[60, off(laps(30 / 3.6, 160 / 3.6))], [8, (t, car) => ({ up: car.vx * 3.6 < 90 ? 1 : 0 })], [14, (t, car) => ({ up: car.vx * 3.6 < 90 ? 0.8 : 0.3, steer: 0.5 })],
+  ...Array.from({ length: 6 }, (_, i) => [[5, { up: 1 }], [1.6, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat()], hard = { world: gravel, tyres: 'gravel' };
+const STAGE_CHEATS = [
+  ['the page says paving where the stage is gravel', spec, gravelLaps, { tyres: 'gravel' }, ''],
+  ['the fans sealed on gravel as on paving', spec, gravelLaps, { ...hard, each: (car) => { car.sealF = car.sealR = 1; } }, ''],
+  ['the launch suction on at every speed on gravel', spec, gravelLaps, { ...hard, each: (car) => { car.fanLaunchK = 1; } }, ''],
+];
+if (process.argv.includes('--sweep')) {
+  // (how near each drive comes: the smallest leeway on gravel grip, brakes and pull at which it reads nothing over)
+  const near = (d) => Object.fromEntries(['looseGrip', 'stop', 'loosePull'].map((key) => {
+    let k = 0.5; while (k < 2 && (judgeDrive(d.xs, d.zs, d.ys, lim, { roll: d.roll, noGas: true, loose: new Uint8Array(d.xs.length).fill(1), [key]: k })[{ looseGrip: 'grip', loosePull: 'pull' }[key] || key] > 0)) k += 0.01;
+    return [key, +k.toFixed(2)];
+  }));
+  for (const [name, plan, opt] of STAGE_HONEST) console.log('honest', name.padEnd(56), JSON.stringify(near(drive(spec, plan, opt))));
+  for (const [name, s, plan, opt] of [...STAGE_CHEATS, ['(passes) the fans at 1.5 times on gravel', copy((s) => { s.fanDown *= 1.5; }), gravelLaps, hard], ['(passes) grip at 1.15 times on gravel', copy((s) => { s.grip = (s.grip ?? 1) * 1.15; s.looseGrip = (s.looseGrip ?? 1) * 1.15; }), gravelLaps, hard]]) console.log('cheat ', name.padEnd(56), JSON.stringify(near(drive(s, plan, opt))));
+}
+// (what still passes, as on paving: a tune inside the gravel's own spread from patch to patch: its fans at 1.5 times
+// there, 60 % of their suction on paving where the game gives 40 %, or 1.15 times the grip; and 1.3 times the motors,
+// which the tyres hold back on gravel below 200 km/h. Shown with --sweep.)
+for (const [name, s, plan, opt, want] of STAGE_CHEATS) {
+  const d = drive(s, plan, opt), j = onGravel(d);
+  if (verbose) console.log(`gcheat  ${name.padEnd(64)} ${show(j)}  (top ${d.top.toFixed(0)} km/h)`);
+  assert.ok(j.why, `gravel, ${name}: must be refused (${show(j)})`);
+  if (want) assert.equal(j.why, want);
+}
+console.log(`ok  ${STAGE_CHEATS.length} changed cars on a stage's gravel: every one refused (the page's word for the ground too)`);
+
 // ---- a kickflip inside the drive (the game allows none once a lap or a stage run is on)
 const downs = { ...road, heightAt: (x, z) => 5 * Math.sin(z / 90) };   // (long gentle hills: on the steep ones a bank ends the flight at once)
 for (const [kmh, world] of [[60, road], [140, road], [280, road], [90, downs], [200, downs]]) {

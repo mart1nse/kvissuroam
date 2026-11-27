@@ -161,6 +161,7 @@ function drive(T, spec, grip, brake, opts = {}) {
     const down = err < -0.6 ? Math.min(BK, -err * 0.25) * Math.max(0.25, slideK) * steerK : 0;
     const input = { steer, steerDirect: true, up, down };
     stepCar(car, input, world, DT);
+    opts.trace?.(car, t, prog);
     if (Math.abs(Math.atan2(car.vy, Math.max(1, car.vx))) > 0.6 && sp > 8) slide++;
     t += DT;
     if (startT !== null && step % 6 === 0) v.push(sp);

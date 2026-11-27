@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { CARS } from '../src/cars/specs.js';
-import { createCar, stepCar } from '../src/cars/physics.js';
+import { createCar, stepCar, FAN_LOOSE } from '../src/cars/physics.js';
 import { carLimits, carLimitsSteps, judgeDrive, STEP, OVER_MAX } from '../src/race/plausible.js';
 
 const show = (j) => `pull ${j.pull} grip ${j.grip} stop ${j.stop} top ${j.top}${j.spent || j.gas ? ` gas ${j.gas}` : ''}`;
@@ -155,7 +155,8 @@ for (const spec of Object.values(CARS)) {
       worstG = Math.max(worstG, j.pull, j.grip, j.stop, j.top);
       assert.equal(j.why, '', `${spec.id} on ${tyres} tyres on gravel: an honest drive refused (${show(j)})`);
     }
-    const sticky = copy(spec, (s) => { s.fanDown = (s.fanDown || 0) + (STICKY - 1) * s.mass * 9.81; });
+    // (as fans: they hold FAN_LOOSE of their suction on gravel, physics.js, so as much more again as that leaves out)
+    const sticky = copy(spec, (s) => { s.fanDown = (s.fanDown || 0) + ((STICKY - 1) * s.mass * 9.81) / FAN_LOOSE; });
     const d = drive(sticky, 'gravel', PLAN, gravel), loose = new Uint8Array(d[0].length).fill(1);
     const g = judgeDrive(...d, lim, { loose }), t = judgeDrive(...d, lim);
     n++; if (g.why) caught++; if (t.why) before++;

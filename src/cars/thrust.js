@@ -449,6 +449,14 @@ const TAB_DT = 0.01;                               // the valves' table has a ro
 const SLIVER = 2, GAP = 1;                         // a valve never opens for less than twice this many rows, nor shuts for less than twice this many
 const FAINT = 0.26;                                // ...nor opens at all for less than this at its most
 const LONGER = 2;                                  // ...and every opening lasts this many rows longer at each end (Martin 26 Nov: "a bit more length to the existing ones")
+// The four corner jets are cleaned harder (Martin 27 Nov: "reducing short ones and making the ones left a touch
+// longer"): a jet that dwindles under STUB shuts rather than showing a stub, an opening must reach C_FAINT and last
+// twice C_SLIVER rows, a shorter gap is filled, and each opening lasts a row longer at each end. (The nose pair keeps
+// the plain rules: its openings are short by their nature.) Over 90 flights: a lit corner jet was a stub under 60 %
+// of its length for 18 % of its time, now 9 %; as many openings as before (6 a flight). The jets drawn are longer
+// too (src/cars/plumes.js). More than this here breaks the quiet moment before the roll and the jets' timing with
+// the body (tools/rocket-test.mjs).
+const STUB = 0.25, C_SLIVER = 3, C_GAP = 4, C_FAINT = 0.5, C_LONGER = 3;
 const CALM = 0.3;                                  // before the roll the bursts are this much of themselves ("do not add side thrusts that much")
 const LAND_K = 0.7, LAND_K1 = 0.96;                // on the way down the four corner jets blow at least this hard, and this hard over the last metre
 const LAND_EVEN = 0.6;                             // ...and this much of the hunt's play between them is gone (nearly all of it over the last metre)
@@ -486,16 +494,17 @@ function valveTable(p, f, spec) {
     }
   };
   for (let i = 0; i < 6; i++) {
-    for (let k = 0; k < n; k++) a[k] = tab[k * TAB_W + i];
-    pass(a, b, SLIVER, false); pass(b, a, SLIVER, true);
-    pass(a, b, GAP, true); pass(b, a, GAP, false);
+    const corner = i < 4, sliver = corner ? C_SLIVER : SLIVER, gap = corner ? C_GAP : GAP, faint = corner ? C_FAINT : FAINT;
+    for (let k = 0; k < n; k++) { const v = tab[k * TAB_W + i]; a[k] = corner && v < STUB ? 0 : v; }
+    pass(a, b, sliver, false); pass(b, a, sliver, true);
+    pass(a, b, gap, true); pass(b, a, gap, false);
     // (and an opening that never gets anywhere, a faint flicker, is no opening)
     for (let k = 0, from = -1, top = 0; k <= n; k++) {
       const v = k < n ? a[k] : 0;
-      if (v > 0.02) { if (from < 0) from = k; top = Math.max(top, v); } else if (from >= 0) { if (top < FAINT) a.fill(0, from, k); from = -1; top = 0; }
+      if (v > 0.02) { if (from < 0) from = k; top = Math.max(top, v); } else if (from >= 0) { if (top < faint) a.fill(0, from, k); from = -1; top = 0; }
     }
     // (what is left lasts a little longer)
-    pass(a, b, LONGER, true); a.set(b);
+    pass(a, b, corner ? C_LONGER : LONGER, true); a.set(b);
     for (let k = 0; k < n; k++) tab[k * TAB_W + i] = a[k];
   }
   return tab;

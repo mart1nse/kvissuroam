@@ -24,6 +24,10 @@
 // yank, yankHz: size (x the revs still to come down) and rate of the swing as an upshift's gear wrenches
 //          the revs down (defaults 0.55 and 8.2 Hz; Martin 2026-11-19 found 1 too much beside the
 //          softer hit); yankFirst: the size of 1st to 2nd's, x (default 1).
+// idleUp: the idle heard (rpm), higher than the physics' (a hot race engine): lifted at idle, gone 2000 rpm above it;
+//          lopeFast: a quicker wander of the idle (rpm); roughIdle: extra firing-to-firing roughness at idle (wild cams);
+//          raspIdle: the share of the rasp left at idle (default 0.3); pulseMax: the longest a pulse lasts (s, default
+//          0.004: an open race pipe's stays short, a hard bright idle); crack: an anti-lag bang's snap (default 0.9).
 // antilag: a rally car's anti-lag on a lift (from alsRpm, default 3000, fully 1500 above): the chance of a bang
 //          per firing, the bangs coming in runs with a crack on each, the firings between them spitting; alsRattle
 //          (default 1): the metallic rattle and clicking between the bangs, rattleF its pitch (Hz, default 2500).
@@ -180,21 +184,27 @@ export const ENGINE_SOUNDS = {
   // Garrett TR30R behind the 34 mm restrictor, a short open rally exhaust with hardly a silencer. Even beats, so no
   // burble: a hard, buzzy, rasping drone that the turbine only partly softens, the straight-cut gears whining under it,
   // and anti-lag banging and spitting in the pipe on every lift.
-  // (Martin 2026-11-27: "more robust, more free", the off-throttle clicking and rattling more pronounced: a fuller
-  // body down low, the turbine muffling less, revving up quicker, rougher, and the anti-lag of its own below)
+  // (Martin 2026-11-27: "more robust, more free", the off-throttle clicking and rattling more pronounced: revving up
+  // quicker, rougher, and the anti-lag of its own below. Then his recording of a Focus WRC 04 at Goodwood, "very loud
+  // and rough idle (somewhat higher revs too)", "hardly any muffling", matched by measure: it idles at about 1820 rpm,
+  // wandering 1750-1900 (idleUp, lope, lopeFast), each firing up to 1.5 dB unlike the last (roughIdle), its idle only
+  // 3 dB darker from 200 Hz to 1 kHz and 10 dB more to 1-3 kHz (lp0, pulseMax, dry, raspIdle, tick); flat out the 1-3
+  // and 3-8 kHz bands sit 3.5 and 9 dB under the 200 Hz-1 kHz one (rasp, raspF, edge); a lift bangs 11-18 times a
+  // second, each 16-21 dB over the rattle in the upper band (antilag, crack, pops down to leave them room))
   focus: {
     revUp: 56000, blipLag: 0.014,
     seed: 3, order: [1, 3, 4, 2], banks: [0, 0, 0, 0], stagger: 2,
-    pipes: [{ len: 0.62, fb: -0.56, damp: 0.6 }],
-    res: [[108, 1.2, 0.72], [250, 1.8, 0.52], [620, 2.2, 0.36], [1400, 2.6, 0.18]], dry: 0.6,
-    lp0: 650, lpRpm: 300, lpLoad: 2300, hp: 34,
-    base: 0.5, overrun: 0.8, pulseDeg: 24, noise: 0.18, rough: 0.1, bias: 0.05,
-    intake: 0.45, intakeF: 900, intakeQ: 1.1, tick: 0.05, tickF: 3400,
-    jitter: 1.8, lope: 10, drive: 2.75, gain: 0.92, idleVol: 0.36,
-    edge: 0.62, rasp: 0.58,
-    turbo: true, turboMuffle: 190, hiss: 0.03, whistle: 1.0, whistleF: 1.05,
-    pops: 0.12, crackle: 0.3, smoothTop: true,
-    antilag: 0.1, alsRattle: 1, rattleF: 2500,
+    pipes: [{ len: 0.62, fb: -0.45, damp: 0.6 }],
+    res: [[108, 1.2, 0.4], [250, 1.8, 0.52], [620, 2.2, 0.45], [1400, 2.6, 0.45]], dry: 1.0,
+    lp0: 3000, lpRpm: 300, lpLoad: 2600, hp: 34,
+    base: 0.6, overrun: 0.8, pulseDeg: 24, noise: 0.18, rough: 0.1, bias: 0.05,
+    intake: 0.45, intakeF: 900, intakeQ: 1.1, tick: 0.14, tickF: 3400,
+    jitter: 1.8, lope: 40, drive: 2.75, gain: 0.88, idleVol: 0.5,
+    idleUp: 1800, lopeFast: 20, roughIdle: 0.12, pulseMax: 0.0006,
+    edge: 0.75, rasp: 0.85, raspF: 800, raspIdle: 0.9,
+    turbo: true, turboMuffle: 100, hiss: 0.03, whistle: 1.0, whistleF: 1.05,
+    pops: 0.04, crackle: 0.3, smoothTop: true,
+    antilag: 0.03, crack: 1.4, alsRattle: 1, rattleF: 2500,
   },
   // BMW S65B40: 4.0 litre 90 degree V8, cross-plane crank, firing order 1-5-4-8-7-2-6-3, eight individual
   // throttle butterflies, 8400 rpm. A cross-plane burble at low revs that hardens into a metallic, raspy

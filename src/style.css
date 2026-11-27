@@ -1690,9 +1690,14 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #dragslip button.x { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%;
   background: rgba(0, 0, 0, .08); color: #1b1822; font: 700 12px/1 var(--font); letter-spacing: 0; }
 #dragslip button.x:hover { background: rgba(0, 0, 0, .18); }
-#dragsliptab { right: 0; top: 50%; transform: translateY(-50%); z-index: 6; pointer-events: auto; padding: 16px 8px; border: none; border-radius: 8px 0 0 8px; cursor: pointer;
+/* (folded: a tab on the right edge that opens it again, its ✕ above it puts it away) */
+#dragsliptab { right: 0; top: 50%; transform: translateY(-50%); z-index: 6; pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#dragsliptab .open { padding: 16px 8px; border: none; border-radius: 8px 0 0 8px; cursor: pointer;
   background: #f4f1e8; color: #1b1822; font: 400 12px 'Russo One', var(--font); letter-spacing: .22em; box-shadow: -4px 8px 20px rgba(0, 0, 0, .45); }
-#dragsliptab span { display: block; writing-mode: vertical-rl; transform: rotate(180deg); }
-#dragsliptab:hover { background: #fff; }
-#dragsliptab:focus-visible, #dragslip button.x:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+#dragsliptab .open span { display: block; writing-mode: vertical-rl; transform: rotate(180deg); }
+#dragsliptab .open:hover { background: #fff; }
+#dragsliptab .x { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 4px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+  background: #f4f1e8; color: #1b1822; font: 700 12px/1 var(--font); box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+#dragsliptab .x:hover { background: #fff; }
+#dragsliptab button:focus-visible, #dragslip button.x:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 #trackpills [data-act="track-drag"] span { letter-spacing: .1em; }

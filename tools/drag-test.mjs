@@ -131,20 +131,21 @@ assert.ok(Math.abs(s.res.tot - (s.res.rt + s.res.et)) < 1e-6, 'R/T + ET is the t
 assert.ok(/R\/T \+ ET\s+[\d.]+/.test(s.slipText), `R/T + ET on the slip:\n${s.slipText}`);
 console.log(s.slipText.replace(/\n+/g, ' | '));
 if (shots) await A.screenshot({ path: `${shots}/drag-slip.png` });
-// the slip stays up until it is closed (Martin 27 Nov): a click elsewhere folds it into the TIMESLIP tab on the right
-// edge, the tab opens it again with BACK TO THE LINE, and the ✕ folds it too
+// the slip stays up until its ✕ (Martin 27 Nov): a click elsewhere folds it into the TIMESLIP tab on the right edge,
+// and the tab opens it again with BACK TO THE LINE
 await A.waitForTimeout(1500);
 assert.ok((await state(A)).slip, 'the slip stays up');
 const vp = A.viewportSize();
+const folded = () => A.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
 await A.mouse.click(Math.round(vp.width * 0.3), Math.round(vp.height * 0.55));
-await A.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
+await folded();
 if (shots) await A.screenshot({ path: `${shots}/drag-slip-folded.png` });
-await A.click('#dragsliptab');
+await A.click('#dragsliptab .open');
 await A.waitForFunction(() => !document.querySelector('#dragslip').classList.contains('hidden') && document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
 assert.ok(await A.evaluate(() => !!document.querySelector('#dragslip [data-drag="again"]') && /R\/T \+ ET/.test(document.querySelector('#dragslip').innerText)), 'the same slip again, with its button');
-await A.click('#dragslip button.x');
-await A.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
-console.log('slip: stays, folds on a click elsewhere and on ✕, opens again from its tab');
+await A.mouse.click(Math.round(vp.width * 0.3), Math.round(vp.height * 0.55));
+await folded();
+console.log('slip: stays, folds on a click elsewhere, opens again from its tab');
 // on the board (Martin 27 Nov: the strip's own tab on LAP TIMES): the server took the clean run, and the Ülenurme tab
 // has it in its car's row, as ET in seconds
 const etMs = Math.round(s.res.et * 1000), carId = await A.evaluate(() => __game.car.spec.id);
@@ -184,6 +185,20 @@ await A.evaluate(() => { const D = __game.drag().strip.frame, c = __game.car, w 
 await A.keyboard.press('h');
 await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 60000 });
 console.log('H 1.2 km from the strip: on the line again');
+// the folded slip goes with the car (Martin 27 Nov: "it needs to survive moving between worlds"): not in a lane, there
+// at Toomemägi, and only its ✕ puts it away; then back into the lane for the race of two
+assert.ok(await A.evaluate(() => document.querySelector('#dragsliptab').classList.contains('hidden')), 'no tab in a lane');
+await A.keyboard.press('Backspace');
+await A.waitForFunction(() => __game.drag().phase === 'off', null, { timeout: 10000 });
+await A.evaluate(() => document.querySelector('[data-act="track-toome"]').click());
+await A.waitForFunction(() => !__game.drag().here && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 60000 });
+if (shots) await A.screenshot({ path: `${shots}/drag-slip-tab-toomemagi.png` });
+await A.click('#dragsliptab .x');
+await A.waitForFunction(() => document.querySelector('#dragsliptab').classList.contains('hidden') && document.querySelector('#dragslip').classList.contains('hidden'), null, { timeout: 5000 });
+await A.waitForTimeout(500);
+assert.ok(await A.evaluate(() => document.querySelector('#dragsliptab').classList.contains('hidden')), 'put away by its ✕');
+console.log('slip tab: at Toomemägi too, gone after its ✕');
+await toLine(A);
 }
 
 // ---- 3) a second page pulls into the other lane: the race of two

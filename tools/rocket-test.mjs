@@ -534,4 +534,29 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     res.map((r) => `${r.kmh} km/h: lands ${Math.abs(r.nose).toFixed(0)} deg round, swung ${r.carried.toFixed(0)}`).join('; '));
 }
 
+// ---- FLIP from a power slide, just after a landing (Martin 27 Nov night: "if you just finish a flip and do it then it
+// sort of goes crazy and turns itself around back straight"): the tail out and the nose turning fast, the nose swings
+// on and is lined up as it eases out, instead of swinging 40 to 50 degrees on and then back
+{
+  const res = [];
+  for (const kmh of [50, 80]) {
+    const w = world(), c = fresh(w, kmh);
+    for (let t = 0; t < 2; t += dt) stepCar(c, { up: c.vx * 3.6 < kmh ? 0.5 : 0, steer: 1 }, w, dt);
+    let flights = 0, landed = null, y0 = 0, most = 0, rate = 0, end = null;
+    for (let t = 0; t < 14 && end === null; t += dt) {
+      const fl = !!c.rocket.flight;
+      const press = (flights === 0 && t < 0.02) || (flights === 1 && landed !== null && t >= landed + 1 && t < landed + 1.03);
+      if (press && flights === 1) rate = c.yawRate;
+      stepCar(c, { flip: press ? 1 : 0, steer: 1, up: 1 }, w, dt);
+      if (!fl && c.rocket.flight) { flights++; y0 = c.yaw; most = 0; }
+      if (c.rocket.flight && flights === 2) most = Math.max(most, Math.sign(rate) * (c.yaw - y0));
+      if (fl && !c.rocket.flight) { if (flights === 1) landed = t; else end = Math.sign(rate) * (c.yaw - y0); }
+    }
+    res.push({ kmh, rate, most: most * 57.3, back: end === null ? 99 : (most - end) * 57.3 });
+  }
+  check('FLIP from a power slide after a landing: the nose does not swing on and then back',
+    res.every((r) => Math.abs(r.rate) > 1 && r.back < 14),
+    res.map((r) => `${r.kmh} km/h, turning ${r.rate.toFixed(1)} rad/s: on ${r.most.toFixed(0)} deg, back ${r.back.toFixed(0)}`).join('; '));
+}
+
 process.exit(ok ? 0 : 1);

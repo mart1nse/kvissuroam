@@ -45,16 +45,16 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
     for (let t = 0; t < 2.5; t += dt) { stepCar(car, { up: 1, steer: 0.05 }, w, dt); most = Math.max(most, Math.abs(Math.atan2(car.vy, Math.max(car.vx, 1)))); }
     check('...and with the wheel turned the least bit the launch suction is off: floored from 20 km/h at 0.05 lock the tail steps out', most * 57.3 > 3.5 && car.fanLaunchK < 0.05, `${(most * 57.3).toFixed(1)} deg, launch suction at ${(car.fanLaunchK * 100).toFixed(0)} %`);
   }
-  // (Martin 26 Nov: "with fan on cap it at 389 and without fans on let it ride to 405", the 405 an easter egg; it
-  // was 340 on the motors)
-  check('top speed on the motors is 389 km/h', Math.abs(base.top - 389) < 0.3, `${base.top.toFixed(1)} km/h`);
+  // (Martin 27 Nov: "no thrust, fan on: maximum capped to 376 / no thrust, fan off: maximum capped to 391 / thrust on,
+  // fan off: maximum 405 / thrust on, fan on: maximum 387", the 405 an easter egg; 389 and 405 on the motors before)
+  check('top speed on the motors is 376 km/h', Math.abs(base.top - 376) < 0.3, `${base.top.toFixed(1)} km/h`);
   {
     const w = world(), car = fresh(w); car.fanOff = true;
     let top = 0;
     // (a driver holding it straight: with the fans off the launch lights the rears up and the tail wanders out a little
     // as the light traction control lets it, which wants a touch of opposite lock, 27 Nov)
     for (let t = 0; t < 60; t += dt) { stepCar(car, { up: 1, steer: Math.max(-1, Math.min(1, -car.yaw * 2 - car.yawRate * 0.3)) }, w, dt); top = Math.max(top, speedKmh(car)); }
-    check('...and 405 km/h with the fans switched off, straight on (the stability control holds it there)', Math.abs(top - 405) < 0.3 && Math.abs(car.yaw) < 0.05, `${top.toFixed(1)} km/h, ${(car.yaw * 57.3).toFixed(1)} deg off its line`);
+    check('...and 391 km/h with the fans switched off, straight on (the stability control holds it there)', Math.abs(top - 391) < 0.3 && Math.abs(car.yaw) < 0.05, `${top.toFixed(1)} km/h, ${(car.yaw * 57.3).toFixed(1)} deg off its line`);
   }
   const b = run({ up: 1, boost: 1 });
   // (Martin 27 Nov: "reduce the overall level of boost on all speeds so that the 0-100 would be 0.64 with rollout")
@@ -62,13 +62,38 @@ const check = (name, pass, detail = '') => { ok &&= !!pass; console.log(`${pass 
   // (the tank blows down: the push follows the gas left, 45 kN on a full tank; 250 kg at 455 m/s is 114 kN s.
   // Martin 27 Nov: "reduce the length of thrust to 7 s at a time")
   check('BOOST blows a full tank down in 7 s, then its valves shut', b.t > 6.7 && b.t < 7.4 && b.car.rocket.dry && !b.car.rocket.on, `${b.t.toFixed(2)} s`);
-  // (one tank takes it nearly there; the motors do the rest, and BOOST's push ends where theirs does)
-  check('BOOST takes it to about 360 km/h on one tank, and never past 389', b.top > 350 && b.top < 389.3, `${b.top.toFixed(0)} km/h`);
+  // (one tank takes it nearly there; the motors do the rest)
+  check('BOOST takes it to about 360 km/h on one tank, and never past 387', b.top > 350 && b.top < 387.3, `${b.top.toFixed(0)} km/h`);
   {
-    const w = world(), car = fresh(w, 387);
+    const w = world(), car = fresh(w, 386);
     let top = 0;
     for (let t = 0; t < 12; t += dt) { if (car.rocket.tank < 5) refillTank('rocket'); stepCar(car, { up: 1, boost: 1 }, w, dt); top = Math.max(top, speedKmh(car)); }
-    check('...however much gas there is', top < 389.3, `${top.toFixed(1)} km/h`);
+    check('...however much gas there is', top < 387.3, `${top.toFixed(1)} km/h`);
+  }
+  // (Martin 27 Nov: "if i am at full speed already with fan off and i push the thrust, then there is some slow gain")
+  // flat out on the motors with the fans off, then THRUST held: up to 405 over a few seconds, then back as the gas goes
+  {
+    const w = world(), car = fresh(w, 391); car.fanOff = true;
+    for (let t = 0; t < 5; t += dt) stepCar(car, { up: 1 }, w, dt);
+    const v0 = speedKmh(car);
+    let t400 = null, t404 = null, top = 0, back = 0;
+    for (let t = 0; t < 16; t += dt) {
+      stepCar(car, { up: 1, boost: 1 }, w, dt);
+      const v = speedKmh(car); top = Math.max(top, v);
+      if (t400 === null && v >= 400) t400 = t; if (t404 === null && v >= 404.5) t404 = t;
+      back = v;
+    }
+    check('THRUST from 391 km/h with the fans off: a slow gain (about 0.14 g), to 400 in 1.5 to 3 s and 405 in under 5', Math.abs(v0 - 391) < 0.5 && t400 > 1.5 && t400 < 3 && t404 < 5, `from ${v0.toFixed(1)}: 400 after ${t400?.toFixed(1)} s, 404.5 after ${t404?.toFixed(1)} s`);
+    check('...never past 405, and back to 391 once the gas is gone', top < 405.3 && Math.abs(back - 391) < 0.5, `top ${top.toFixed(1)}, ${back.toFixed(1)} km/h at the end`);
+  }
+  // the fans switched on at 405 with THRUST held: down to 387 gently, no step
+  {
+    const w = world(), car = fresh(w, 405); car.fanOff = true;
+    for (let t = 0; t < 1; t += dt) stepCar(car, { up: 1, boost: 1 }, w, dt);
+    car.fanOff = false;
+    let most = 0, was = speedKmh(car);
+    for (let t = 0; t < 2.5; t += dt) { stepCar(car, { up: 1, boost: 1 }, w, dt); const v = speedKmh(car); most = Math.max(most, (was - v) / 3.6 / dt); was = v; }
+    check('the fans switched on at 405 with THRUST held: slows towards 387 at no more than 0.15 g', most < 1.5 && was < 400, `at most ${most.toFixed(2)} m/s2, ${was.toFixed(1)} km/h after 2.5 s`);
   }
   {
     const wi = world(), ci = fresh(wi);

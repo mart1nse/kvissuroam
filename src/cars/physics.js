@@ -1425,6 +1425,7 @@ function substep(car, input, world, dt) {
 
   // (rear thrusters, thrust.js: a push on the body itself, whatever the tyres are doing)
   const FX = fxF * cd - fyF * sd + fxR - drag - roll + slopeX + (car.thrustN || 0);
+  car.fxOwn = FX - (car.thrustN || 0);     // (the push along the car without its thrusters: thrust.js gives what is missing near the top)
   const FY = fyF * cd + fxF * sd + fyR + slopeY - 0.5 * RHO * s.cdA * 1.6 * car.vy * Math.abs(car.vy);
   let MZ = car.a * (fyF * cd + fxF * sd) - car.b * fyR;
   // Spinning wheels never bite evenly left and right, so a hard launch tugs

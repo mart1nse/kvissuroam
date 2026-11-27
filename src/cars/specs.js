@@ -601,13 +601,16 @@ export const CARS = {
     cgHeight: 0.42,             // battery in the floor
     wheelRadius: 0.34,          // 245/35 R19 front, 325/30 R20 rear
     cdA: 0.31 * 1.95,
-    drive: 'awd',
-    // one motor in front, two behind. With the wheel turned the rear pair gets more of it (Martin 27 Nov: "if i floor
-    // it, it would not kick the tail out much": at 0.6 it hardly stepped out at all; at 0.75 a floored bend swings the
-    // tail out up to about 100 km/h, more than the F40's or the M3's), with the wheel straight two thirds, which keeps
-    // the launch's 1.67 s to 100 (0.75 all the time spins the rears: 1.9 s). No traction control ("if there is a
-    // traction control, then lets try to remove it": it was tc 1, tcSlip 1.5, and the split 0.6).
-    rearShare: 0.66, rearShareBend: 0.75,
+    // Rear-wheel drive: two motors, both on the rear axle (the production car revealed in 2026: Top Gear, "two motors,
+    // both nestled in-board on the rear axle ... All are rear-wheel drive only"; Martin 27 Nov, "something tells its
+    // rwd"). It was AWD, one motor in front and two behind, as announced in 2017.
+    drive: 'rwd',
+    // The motors keep the rears at their grip with the wheel straight, so it launches straight (without: 0-100 in 2.9 s
+    // and 20 degrees sideways off the line), and in a bend lightly, at tcBend of that (Martin 27 Nov: "if i floor it,
+    // it would not kick the tail out much", then on RWD "what about rwd with a bit of traction control?"): floored in
+    // a bend the tail steps out 25 to 45 degrees, about as the Carrera GT's does; with none it swung right round up to
+    // 140 km/h, at 0.5 up to 100.
+    tc: 1, tcSlip: 1.5, tcBend: 0.8,
     grip: 1.2,
     // suction fans: this much more weight on the tyres (N) at any speed, with no more mass to move
     // (12 kN gave Tesla's 1.6 s at the first 1950 kg. With the 250 kg added the fans were made 16 kN to keep that
@@ -642,7 +645,7 @@ export const CARS = {
     // km/h under the limiter, so each limiter stands that much over the figure the car reaches.
     limiter: 390.1, limiterNoFans: 406.2,
     abs: 0.5,
-    ref: { zeroTo100: 1.6, top: 389, powerKw: 1000 },
+    ref: { zeroTo100: 2.6, top: 389, powerKw: 1000 },   // (Tesla gives no figure without the thrusters; Top Gear guesses under 2 s to 60 mph. 2.6 s is what the rears' grip allows at 2100 kg on 12 kN of fans; AWD did 1.67 s)
   },
   bus: {
     tyreWidth: [0.275, 0.55],   // m, front and rear (twin tyres at the back) for the tyre marks

@@ -17,6 +17,8 @@ const SHAFT_DECAY = 0.8;         // turbine spin-down after a lift (1/s)
 const CATCH = 0.55;               // how much of the opposite lock eases off as a caught slide swings back
 const CATCH_T = 0.3;             // ...looking this far ahead (s)
 const CATCH_FLICK_KMH = 45;      // ...but not below about this speed on spinning rear wheels under throttle (a figure eight)
+const TC_BEND_KMH = 120;   // a light setting in a bend (spec.tcBend) is all there again from this speed on, fully 60 km/h higher
+const FAST_KEEP_KMH = 150;   // ...and from this speed its stability control keeps the fronts to what the rears balance (see latCapF)
 const TC_FLOOR_KMH = 40;          // traction control lets the floored tyres spin below this speed (fully back 10 km/h higher)
 const RECOVER = 0.8;             // how much of the automatic opposite lock goes once a slide starts coming back
 const CASTER = 0.45;             // how far a released wheel follows the slide
@@ -1126,10 +1128,7 @@ function substep(car, input, world, dt) {
   // only once the front wheels start to spin. Nothing moves torque towards
   // the axle with grip to spare, so a rear-biased car that floors it on a
   // loaded rear axle can break the tail loose while the front still grips.
-  const base0 = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
-  // (s.rearShareBend: a split set in software that sends more to the rear the more the wheel is turned, so a floored
-  // bend kicks the tail out while a straight launch keeps the drive where the tyres take it: the Roadster Rocket)
-  const base = s.rearShareBend ? base0 + (s.rearShareBend - base0) * Math.min(1, Math.abs(steerIn) / 0.25) : base0;
+  const base = s.drive === 'rwd' ? 1 : s.drive === 'fwd' ? 0 : s.rearShare ?? 0.5;
   let shareR = s.rearShareMax ? base + (s.rearShareMax - base) * Math.min(1, car.slipVF / 2) : base;
   // A two-motor EV sets its split in software. Floored in a slide at modest
   // speed it lets the rear motor do more of the work, so the front wheels stop
@@ -1182,7 +1181,12 @@ function substep(car, input, world, dt) {
   // and a flick where the wheel passes the centre or the car swings round backwards keeps its wheelspin
   // instead of the tyres being pulled back to grip mid swing; Martin 2026-11-21)
   const tcLow = throttle >= 0.9 ? Math.min(1, Math.max(0, (Math.hypot(car.vx, car.vy) * 3.6 - TC_FLOOR_KMH) / 10)) : 1;
-  const tcWant = s.tc && Math.abs(steerIn) < 0.1 && !hb && !car.burn ? s.tc * tcLow : 0;
+  // (s.tcBend: a light setting that stays on in a bend at this share of its strength, letting that much less of the
+  // drive past what the rear tyres can take: the tail steps out, but not round. Fast it is all there again, TC_BEND_KMH:
+  // a thousand kW on two tyres would spin the car at 300 km/h with the fans off)
+  const vKmh = Math.hypot(car.vx, car.vy) * 3.6;
+  const bendK = s.tcBend ? s.tcBend + (1 - s.tcBend) * Math.min(1, Math.max(0, (vKmh - TC_BEND_KMH) / 60)) : 0;
+  const tcWant = s.tc && (Math.abs(steerIn) < 0.1 || bendK) && !hb && !car.burn ? s.tc * tcLow * (Math.abs(steerIn) < 0.1 ? 1 : bendK) : 0;
   const tcNow = car.tcK ?? tcWant;
   car.tcK = Math.max(0, Math.min(1, tcNow + Math.max(-dt * 8, Math.min(dt * 4, tcWant - tcNow))));
   const evFront = e.type === 'ev' && s.drive !== 'rwd';
@@ -1291,6 +1295,17 @@ function substep(car, input, world, dt) {
     const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock), 0.85 * car.abs);
     const balanced = (latCapR * car.b) / car.a;
     if (balanced < latCapF) latCapF += (balanced - latCapF) * straight * brake;
+  }
+  // The same at speed under power for a car with a light traction control in bends (s.tcBend, the Roadster Rocket: a
+  // thousand kW on the rear tyres alone leaves them little sideways bite, and from about 270 km/h with the fans off the
+  // tail wandered out on a straight road with nothing to catch it, the steering's lock being a few thousandths there).
+  // Its stability control trims the fronts to what the rears balance while the wheel is about straight, fading in
+  // from FAST_KEEP_KMH.
+  if (s.tcBend && throttle > 0 && !hb && brake === 0) {
+    const fast = Math.min(1, Math.max(0, (speed * 3.6 - FAST_KEEP_KMH) / 50));
+    const straight = Math.max(0, 1 - Math.abs(car.steer) / (0.5 * lock));
+    const balanced = (latCapR * car.b) / car.a;
+    if (fast > 0 && balanced < latCapF) latCapF += (balanced - latCapF) * straight * fast;
   }
   if (hb) latCapR *= 0.45;
 

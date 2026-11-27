@@ -2,7 +2,7 @@
 // first flat out (A at green), shifted up at its shift point, timed to 60 ft, 1/8 and 1/4 mile. A good launch must
 // be worth something: some revs between idle and the limiter give a better 60 ft than both a bog off idle and a
 // launch off the limiter (unless the car is four-wheel drive with grip to spare, where more revs only ever help a little).
-// Run: node tools/drag-launch-test.mjs [car]
+// Run: node tools/drag-launch-test.mjs [car]   (band: the launch revs' green arc; limits: the board's limits per car)
 import { CARS } from '../src/cars/specs.js';
 import { createCar, stepCar, speedKmh, stickShift } from '../src/cars/physics.js';
 const world = { meta: { riverLevel: -10 }, heightAt: () => 0, surfaceAt: () => 1, sdfAt: () => 100, sdfGrad: (x, z, o) => o };
@@ -61,6 +61,22 @@ if (process.argv.includes('band')) {
     const best = Math.min(...res.map((x) => x.tq));
     const good = res.filter((x) => x.tq <= best + 0.05).map((x) => x.r);
     out[spec.id] = [Math.min(...good), Math.max(...good)];
+  }
+  console.log(JSON.stringify(out));
+}
+
+// with `limits`: each car's quickest quarter mile here less 5 % and its trap speed there and 8 % more: what the server
+// believes of a drag time on the board (DRAG_LIMITS in src/race/dragrules.js)
+if (process.argv.includes('limits')) {
+  const out = {};
+  for (const spec of Object.values(CARS)) {
+    const e = spec.engine;
+    if (spec.thrusters) continue;
+    const revs = [];
+    if (e.type === 'ev') revs.push(0); else for (let r = e.idle; r <= e.redline; r += 250) revs.push(r);
+    const res = revs.map((r) => run(spec, r));
+    const tq = Math.min(...res.map((x) => x.tq)), vq = Math.max(...res.map((x) => x.vq));
+    out[spec.id] = [Math.floor(tq * 0.95 * 100) / 100, Math.ceil(vq * 1.08)];
   }
   console.log(JSON.stringify(out));
 }

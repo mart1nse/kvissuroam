@@ -29,7 +29,7 @@ const state = (page) => page.evaluate(() => {
   const g = __game, d = g.drag(), c = g.car;
   return { phase: d.phase, stick: c.stick, neutral: !!c.neutral, gear: c.gear, rpm: Math.round(c.rpm), v: +c.vx.toFixed(2), x: c.x, z: c.z, lanes: d.lanes, res: d.result,
     ask: !document.querySelector('#dragask').classList.contains('hidden'), slip: !document.querySelector('#dragslip').classList.contains('hidden'),
-    slipText: document.querySelector('#dragslip').innerText, panel: document.querySelector('#drag').innerText, toast: document.querySelector('#toast')?.textContent || '' };
+    slipText: document.querySelector('#dragslip').innerText, verdict: document.querySelector('#dragslip h3')?.textContent || '', panel: document.querySelector('#drag').innerText, toast: document.querySelector('#toast')?.textContent || '' };
 });
 // to the line by the DRAG STRIP button, and wait there until the strip is built and the place is ready
 async function toLine(page) {
@@ -89,21 +89,39 @@ assert.ok(Math.hypot(s.x - p0[0], s.z - p0[1]) < 0.05, 'the car does not roll');
 await A.keyboard.press('a');
 await A.waitForFunction(() => /PRACTICE/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 8000 });
 s = await state(A); assert.ok(s.neutral && s.phase === 'line', 'still in neutral');
+// waiting on the line (Martin 27 Nov): the view rises and looks slowly round, our car and the other lane's spot in it
+await A.waitForFunction(() => __game.camera.position.y - __game.car.y > 4, null, { timeout: 60000 });
+await A.waitForTimeout(4000);                    // (all the way up)
+const seen = [];
+for (let i = 0; i < 4; i++) {
+  seen.push(await A.evaluate(() => {
+    const c = __game.camera, w = __game.drag().waitView, V = c.position.constructor, y = __game.car.y + 0.6;
+    return [new V(w.ox, y, w.oz).project(c), new V(w.x, y, w.z).project(c)].flatMap((p) => [+p.x.toFixed(2), +p.y.toFixed(2)]);
+  }));
+  await A.waitForTimeout(1500);
+}
+console.log('waiting view, the other lane\'s spot and ours on screen (-1..1):', JSON.stringify(seen));
+assert.ok(seen.every((p) => p.every((v) => Math.abs(v) < 0.9) && p[1] > -0.15 && p[3] > -0.15), 'both lanes in the picture while waiting, above the map and the question');
+if (shots) await A.screenshot({ path: `${shots}/drag-waiting.png` });
 // a false start
 await A.keyboard.press('p');
 await A.waitForFunction(() => __game.drag().phase === 'tree', null, { timeout: 8000 });
 s = await run(A, 1.2);
-console.log('false start:', s.slipText.split('\n')[0], '| R/T', s.res.rt?.toFixed(3));
+console.log('false start:', s.verdict, '| R/T', s.res.rt?.toFixed(3));
 assert.ok(s.res.red && s.res.rt < 0, 'a red light');
 assert.ok(s.slip, 'timeslip shown');
 // R: back on the line at once
 await A.keyboard.press('r');
 await A.waitForFunction(() => __game.drag().phase === 'line' && __game.drag().lanes.some((l) => l?.id === __game.mp().id), null, { timeout: 15000 });
 s = await state(A); assert.ok(s.neutral && !s.slip, 'back on the line in neutral');
-// a clean practice run
+// a clean practice run (and the view back down behind the car by green: where it is then, above the car)
 await A.keyboard.press('p');
 await A.waitForFunction(() => __game.drag().phase === 'tree', null, { timeout: 8000 });
+await A.evaluate(() => { window.__camGo = null; const f = () => { const d = __game.drag(); if (d.phase === 'tree' && performance.now() < d.go) requestAnimationFrame(f); else window.__camGo = __game.camera.position.y - __game.car.y; }; requestAnimationFrame(f); });
 s = await run(A);
+const camGo = await A.evaluate(() => window.__camGo);
+console.log(`the view at green: ${camGo?.toFixed(2)} m over the car`);
+assert.ok(camGo != null && camGo < 3.3, 'the usual driving view by green');
 console.log('practice:', JSON.stringify(s.res));
 assert.ok(!s.res.red && !s.res.dnf && s.res.et > 8 && s.res.et < 25 && s.res.vq > 100, 'a clean quarter mile');
 for (const k of ['t60', 't330', 't8', 'v8', 't1000']) assert.ok(Number.isFinite(s.res[k]), `${k} timed`);
@@ -113,6 +131,38 @@ assert.ok(Math.abs(s.res.tot - (s.res.rt + s.res.et)) < 1e-6, 'R/T + ET is the t
 assert.ok(/R\/T \+ ET\s+[\d.]+/.test(s.slipText), `R/T + ET on the slip:\n${s.slipText}`);
 console.log(s.slipText.replace(/\n+/g, ' | '));
 if (shots) await A.screenshot({ path: `${shots}/drag-slip.png` });
+// the slip stays up until it is closed (Martin 27 Nov): a click elsewhere folds it into the TIMESLIP tab on the right
+// edge, the tab opens it again with BACK TO THE LINE, and the ✕ folds it too
+await A.waitForTimeout(1500);
+assert.ok((await state(A)).slip, 'the slip stays up');
+const vp = A.viewportSize();
+await A.mouse.click(Math.round(vp.width * 0.3), Math.round(vp.height * 0.55));
+await A.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
+if (shots) await A.screenshot({ path: `${shots}/drag-slip-folded.png` });
+await A.click('#dragsliptab');
+await A.waitForFunction(() => !document.querySelector('#dragslip').classList.contains('hidden') && document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
+assert.ok(await A.evaluate(() => !!document.querySelector('#dragslip [data-drag="again"]') && /R\/T \+ ET/.test(document.querySelector('#dragslip').innerText)), 'the same slip again, with its button');
+await A.click('#dragslip button.x');
+await A.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
+console.log('slip: stays, folds on a click elsewhere and on ✕, opens again from its tab');
+// on the board (Martin 27 Nov: the strip's own tab on LAP TIMES): the server took the clean run, and the Ülenurme tab
+// has it in its car's row, as ET in seconds
+const etMs = Math.round(s.res.et * 1000), carId = await A.evaluate(() => __game.car.spec.id);
+// (asked in a loop: waitForFunction does not wait for an async function's answer, a promise passes at once)
+for (let i = 0; ; i++) {
+  const on = await A.evaluate(async ([c, ms]) => ((await (await fetch('/api/board')).json()).drag?.allTime || []).some((r) => r.car === c && Math.abs(r.ms - ms) <= 2 && r.name === 'Ann'), [carId, etMs]);
+  if (on) break;
+  assert.ok(i < 20, 'the server took the clean run for the board');
+  await A.waitForTimeout(1000);
+}
+await A.evaluate(() => { __game.board().show(); document.querySelector('#board [data-tab="drag"]').click(); });
+await A.waitForFunction((t) => document.querySelector('#board .bcol .ev')?.textContent.includes(t), (etMs / 1000).toFixed(3), { timeout: 10000 }).catch(() => {});
+const tabText = await A.evaluate(() => [document.querySelector('#board .btabs').innerText, document.querySelector('#board .bcol').innerText]);
+console.log('LAP TIMES tabs:', tabText[0].replace(/\s+/g, ' '));
+assert.ok(/ÜLENURME/.test(tabText[0]) && /TOOMEMÄGI/.test(tabText[0]) && /MAJORAADI/.test(tabText[0]), 'a tab a track');
+assert.ok(tabText[1].includes((etMs / 1000).toFixed(3)) && /Ann/.test(tabText[1]), `the run on the Ülenurme tab:\n${tabText[1].slice(0, 600)}`);
+if (shots) await A.screenshot({ path: `${shots}/drag-board.png` });
+await A.evaluate(() => __game.board().hide());
 // the boxes after a run (Martin 27 Nov): back into the lane's box, the car is on the line again (the car moved there by
 // hand, as driving back the quarter mile would take this machine minutes)
 await A.evaluate(() => {
@@ -153,7 +203,7 @@ console.log('Ann:', JSON.stringify(ra.res));
 console.log('Bob:', JSON.stringify(rb.res));
 assert.ok(dp[0].n > 20 && dp[1].n > 20, 'the place feed came');
 await Promise.all([A, B].map((p) => p.waitForFunction(() => /WIN|LOSS/.test(document.querySelector('#dragslip h3')?.textContent || ''), null, { timeout: 25000 })));
-const va = (await state(A)).slipText.split('\n')[0], vb = (await state(B)).slipText.split('\n')[0];
+const va = (await state(A)).verdict, vb = (await state(B)).verdict;
 console.log('Ann:', va, '| Bob:', vb);
 assert.ok(/WIN/.test(va) !== /WIN/.test(vb), 'one wins, the other loses');
 // (red light loses, then out of lane, then no time, then reaction + run: the crown can take a car out of its lane)

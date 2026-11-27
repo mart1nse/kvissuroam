@@ -1,14 +1,15 @@
 // The drag strip's two lanes on the server (worker/drag.js, behind ?drag=1 from 27 Nov 2026): who holds which lane,
 // the race of two starting by itself when both are in, a practice on one's own, the results passed on, the 30 Hz
-// place feed going to the other driver only, and a lane freed when its page goes.
+// place feed going to the other driver only, a lane freed when its page goes, and which runs go on the board.
 //   node tools/drag-desk-test.mjs
 import assert from 'node:assert/strict';
 import { DragDesk } from '../worker/drag.js';
 
 const all = [], socks = [];
-const lobby = { broadcast: (m) => all.push(m), ctx: { getWebSockets: () => socks } };
+const kept = [], refused = [];
+const lobby = { broadcast: (m) => all.push(m), ctx: { getWebSockets: () => socks }, dragTime: (t) => kept.push(t), dragRefused: (m, r, why) => refused.push(why) };
 const sock = (id, name) => {
-  let att = JSON.stringify({ id, name });
+  let att = JSON.stringify({ id, name, car: 'f40', ip: `ip-${id}` });
   const ws = { got: [], send: (s) => ws.got.push(JSON.parse(s)), deserializeAttachment: () => JSON.parse(att), serializeAttachment: (a) => { att = JSON.stringify(a); } };
   socks.push(ws);
   return ws;
@@ -37,18 +38,54 @@ assert.equal(last('lanes').l[0].run, 1, 'lane on a run');
 const goes = all.filter((m) => m.op === 'go').length;
 say(B, { op: 'in', l: 1 });
 assert.equal(all.filter((m) => m.op === 'go').length, goes, 'no race of two during a practice');
-// Ann's practice ends, she leaves and comes back: the race of two starts by itself
-say(A, { op: 'end', run: solo.run, r: { rt: 0.31, et: 12.4, t330: 5.2, t1000: 10.1, vq: 180, red: 0, foul: 0, dnf: 0, tot: 12.9, junk: 'x' } });
-assert.equal(last('res').id, 'a');
-assert.equal(last('res').r.et, 12.4);
-assert.equal(last('res').r.t330, 5.2); assert.equal(last('res').r.t1000, 10.1);
-assert.equal(last('res').r.junk, undefined, 'only the timeslip figures passed on');
+// Ann's practice ends at once, before its green has come here: not on the board (and a practice's figures go to nobody)
+const run1 = { rt: 0.31, et: 12.4, t60: 2.4, t330: 5.2, t8: 8.1, t1000: 10.1, v8: 160, vq: 200, red: 0, foul: 0, dnf: 0, tot: 12.71 };
+say(A, { op: 'end', run: solo.run, r: run1, inp: 'kb' });
+assert.equal(all.filter((m) => m.op === 'res').length, 0, 'a practice run is told to nobody');
+assert.deepEqual(kept, []); assert.deepEqual(refused, ['clock'], 'a time faster than the server\'s own clock is refused');
+say(A, { op: 'end', run: solo.run, r: run1 });
+assert.equal(refused.length, 1, 'a run is judged once');
+// the next practice, its figures after its R/T + ET has passed here: on the board (Bob out of his lane meanwhile, or
+// Ann back in hers would race him)
+say(B, { op: 'out' });
+const practise = (r, ago = 20000, slow = false) => { say(A, { op: 'out' }); say(A, { op: 'in', l: 0 }); say(A, { op: 'solo', go: Date.now() + 1000 }); const g = last('go'); desk.lanes[0].go = Date.now() - ago; if (slow) desk.lanes[0].at = desk.lanes[0].go - 1000; say(A, { op: 'end', run: g.run, r, inp: 'pad' }); };
+practise(run1);
+assert.equal(kept.length, 1, 'a clean run on the board');
+assert.deepEqual([kept[0].name, kept[0].car, kept[0].inp, kept[0].r.et, kept[0].r.vq], ['Ann', 'f40', 'pad', 12.4, 200]);
+// what an F40 cannot do, and runs that were not clean: none on the board
+practise({ ...run1, et: 9.9, tot: 10.21 });
+practise({ ...run1, vq: 260 });
+practise({ ...run1, t330: 11 });
+practise({ ...run1, red: 1, rt: -0.2 });
+practise({ ...run1, foul: 1 });
+practise({ ...run1, dnf: 1, et: null });
+practise(run1, 150000);
+assert.equal(kept.length, 1, 'nothing more on the board');
+assert.deepEqual(refused.slice(1), ['et', 'trap', 'splits', 'clock'], 'too quick, too fast through the trap, splits out of order, figures far too late');
+// a page under 20 frames a second drives in slow motion: a run whose green was 90 s ago (an 18 s quarter mile took 87 s
+// on a test machine) still has its lane, and goes on the board
+practise(run1, 90000, true);
+assert.equal(kept.length, 2, 'a slow-motion run on the board');
+// a car with no limits worked out (a new one) puts nothing on the board
+A.serializeAttachment({ ...me(A), car: 'rocket' });
+practise(run1);
+assert.equal(kept.length, 2); assert.equal(refused.at(-1), 'car');
+A.serializeAttachment({ ...me(A), car: 'f40' });
+// Bob back in the left lane, Ann out and in again: the race of two starts by itself
+say(A, { op: 'out' });
+say(B, { op: 'in', l: 1 });
 say(A, { op: 'out' });
 assert.equal(last('lanes').l[0], null);
 say(A, { op: 'in', l: 0 });
 const duel = last('go');
 assert.deepEqual(duel.l, ['a', 'b']);
 assert.ok(duel.go - Date.now() >= 2500 && duel.go - Date.now() <= 3600, 'green 2.6 to 3.5 s ahead');
+// a race of two's figures go to everyone (each page judges the race), only the timeslip's
+say(B, { op: 'end', run: duel.run, r: { ...run1, junk: 'x' } });
+assert.equal(last('res').id, 'b');
+assert.equal(last('res').r.et, 12.4);
+assert.equal(last('res').r.t330, 5.2); assert.equal(last('res').r.t1000, 10.1);
+assert.equal(last('res').r.junk, undefined, 'only the timeslip figures passed on');
 // the place feed goes to Bob only, and only well-formed
 const n = B.got.length;
 desk.feed(A, JSON.stringify({ t: 'dp', a: [12.5, 5.5, 8, 9.1, Date.now(), 0] }));
@@ -75,8 +112,8 @@ assert.equal(last('lanes').l[1], null);
 // a ghost (spectator) cannot take a lane
 desk.message(C, { id: 'c', ghost: true }, { t: 'drag', op: 'in', l: 1 });
 assert.equal(last('lanes').l[1], null);
-// a lane on a run for over a minute is freed by the next message
-desk.lanes[0].at -= 61000;
+// a lane on a run for over two minutes is freed by the next message
+desk.lanes[0].at -= 129000;
 say(C, { op: 'in', l: 1 });
 assert.equal(last('lanes').l[0], null, 'a run gone quiet is freed');
 // a late joiner hears who holds the lanes
@@ -91,4 +128,4 @@ assert.equal(all.length, nl, 'nothing new to tell');
 say(C, { op: 'out' });
 assert.deepEqual(new DragDesk(lobby).view(), [null, null], 'no lanes after all are out');
 assert.equal(C.deserializeAttachment().dl, undefined);
-console.log('OK: the drag desk holds the lanes, starts the race of two, passes on results and the feed');
+console.log('OK: the drag desk holds the lanes, starts the race of two, passes on results and the feed, and puts clean runs on the board');

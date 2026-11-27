@@ -30,6 +30,8 @@ const raadi = stagePath();
 export const TRACK_ICON = {
   toome: `<svg class="trk" viewBox="0 0 ${toome.w} ${toome.h}" role="img" aria-label="TOOMEMÄGI"><title>TOOMEMÄGI</title><path d="${toome.d}"/></svg>`,
   raadi: `<svg class="trk rd" viewBox="0 0 ${raadi.w} ${raadi.h}" role="img" aria-label="MAJORAADI"><title>MAJORAADI</title><path d="${raadi.d}"/></svg>`,
+  // (the drag strip: its quarter mile, the start line across its foot)
+  drag: '<svg class="trk dg" viewBox="0 0 1000 1000" role="img" aria-label="ÜLENURME"><title>ÜLENURME</title><path d="M500 940L500 60M330 940H670"/></svg>',
 };
 
 // (The stage is MAJORAADI to the players since 26 Nov 2026, Martin: "rename raadi to majoraadi all across (except the
@@ -45,7 +47,7 @@ export const TRACKS = [
 const DRAG_PATH = { d: 'M150 960L150 40', w: '300', h: '1000', sf: ['40', '960', '260', '960'],
   // (both of the dot's animations: three quarters of the time to the end, speeding up all the way, then a rest)
   motion: 'calcMode="spline" keyTimes="0;0.75;1" keySplines="0.6 0 0.9 0.55;0 0 1 1"' };
-export const DRAG_TRACK = { id: 'drag', name: 'ÜLENURME', km: '0.4', surface: 'ASPHALT', meta: 'DRAG STRIP · 1/4 MILE', modes: [['race', 'DRAG RACE'], ['', 'PRACTICE']], path: DRAG_PATH, secs: 3.2,
+export const DRAG_CARD = { id: 'drag', name: 'ÜLENURME', km: '0.4', surface: 'ASPHALT', meta: 'DRAG STRIP · 1/4 MILE', modes: [['race', 'DRAG RACE'], ['', 'PRACTICE']], path: DRAG_PATH, secs: 3.2,
   // (a drag strip's time is seconds and thousandths, not a lap's minutes)
   fmt: (ms) => (ms / 1000).toFixed(3) };
 
@@ -59,7 +61,7 @@ export function pickedTrack(drag = false) {
 // record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null;
 // drag: the drag strip's card too, first in the row
 export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, drag = false }) {
-  const cards = drag ? [DRAG_TRACK, ...TRACKS] : TRACKS;
+  const cards = drag ? [DRAG_CARD, ...TRACKS] : TRACKS;
   let picked = pickedTrack(drag);
   const el = document.createElement('div');
   el.id = 'trackpick';

@@ -19,6 +19,7 @@ export { Stats } from './stats.js';
 import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
 import { RaceDesk, SEEN_EARLY } from './race.js';
 import { DragDesk } from './drag.js';
+import { DRAG_TRACK } from '../src/race/dragrules.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { throughGate } from '../src/race/lapgates.js';
@@ -165,7 +166,7 @@ const LOOSE_MS = 20 * 60000;
 // minute from one sender, and from one internet address to one receiver KUDOS_ADDR an hour (several tabs or
 // private windows, each a new player)
 const KUDOS_GAP = KUDOS_GAP_S * 1000, KUDOS_MAX = 8, KUDOS_ADDR = KUDOS_PAIR * 2;
-const BOARD_V = 4;                // raise when the stored lap board gets a new shape, so it is worked out afresh
+const BOARD_V = 5;                // raise when the stored lap board gets a new shape, so it is worked out afresh
 // what drove a lap: keyboard, gamepad, steering wheel, touch screen. Laps from before this was kept
 // have none and count as keyboard.
 const INPUTS = ['kb', 'pad', 'wheel', 'touch'];
@@ -634,6 +635,30 @@ export class Lobby extends DurableObject {
     }
     if (!this.timer) this.timer = setInterval(() => { try { this.bundle(); } catch (err) { console.error('bundle', err); } }, TICK);
   }
+  // A clean quarter mile of the drag strip, as worker/drag.js took it (Martin 27 Nov 2026: its own tab on LAP TIMES,
+  // "same logic as previous results"): on the board by its ET, the reaction and the splits kept beside it. Everyone
+  // is sent the board only when it changed a car's best of all time or of today (a drag run takes 15 s, a lap 2 min).
+  dragTime({ name, car, ip, inp, r }) {
+    if (!cleanCar(car) || !name) return;
+    if (this.over(`D|${ip}`, 240, 3600000)) return;       // (a household behind one address, a run every 15 s)
+    const ms = Math.round(r.et * 1000), at = new Date().toISOString(), day = tartuDay();
+    const sp = {};
+    for (const k of ['rt', 't60', 't330', 't8', 't1000']) if (Number.isFinite(r[k])) sp[k] = Math.round(r[k] * 1000);
+    for (const k of ['v8', 'vq']) if (Number.isFinite(r[k])) sp[k] = Math.round(r[k] * 10) / 10;
+    const row = { track: DRAG_TRACK, name, car, ms, at, day, inp: cleanInp(inp), ty: null };
+    this.sql.exec('INSERT INTO laps (track, name, car, ms, at, day, splits, inp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', DRAG_TRACK, name, car, ms, at, day, JSON.stringify(sp), row.inp);
+    const b = this.board(), part = b[DRAG_TRACK];
+    const best = (list) => list.find((x) => x.car === car)?.ms ?? Infinity;
+    const lead = ms < best(part.allTime) || ms < best(part.today);
+    this.addToBoard(row);
+    this.saveBoard();
+    if (lead) this.broadcast({ t: 'board', board: this.board() });
+  }
+  // a drag time the desk did not believe: kept with the refused replays (GET /api/replay?refused=1)
+  dragRefused(me, r, why) {
+    this.sql.exec('INSERT INTO replay_refused (at, track, car, ms, name, why, bytes) VALUES (?, ?, ?, ?, ?, ?, 0)', new Date().toISOString(), DRAG_TRACK, me.car || '?', Math.round((r.et || 0) * 1000), me.name || '', `drag: ${why}`);
+    this.sql.exec('DELETE FROM replay_refused WHERE id <= (SELECT MAX(id) FROM replay_refused) - 50');
+  }
   // a finish the race desk did not take (the car was not followed round the lap): kept with the refused replays,
   // so a racer who asks why can be told (GET /api/replay?refused=1)
   raceRefused(r, ms, why) {
@@ -921,6 +946,7 @@ export class Lobby extends DurableObject {
       .toArray().map((r) => ({ ...r, splits: JSON.parse(r.splits) }));
     const b = { v: BOARD_V, track: TRACK, day, ...this.boardOf(TRACK, day), refs };
     for (const t of Object.keys(STAGES)) b[t] = this.boardOf(t, day);
+    b[DRAG_TRACK] = this.boardOf(DRAG_TRACK, day);         // (the drag strip's quarter miles, ET: worker/drag.js)
     return b;
   }
   saveBoard() { this.setMeta('board', JSON.stringify(this.cache)); }
@@ -932,7 +958,7 @@ export class Lobby extends DurableObject {
     const day = tartuDay();
     if (this.cache.day !== day) {                                 // past midnight in Tartu
       this.cache.day = day; this.cache.today = [];
-      for (const t of Object.keys(STAGES)) this.cache[t].today = [];
+      for (const t of [...Object.keys(STAGES), DRAG_TRACK]) this.cache[t].today = [];
       this.saveBoard();
     }
     // which records can be watched: { toomemagi: { car: ms }, raadi: {...} } (a replay whose ms is no longer the
@@ -1286,11 +1312,11 @@ export class Lobby extends DurableObject {
     if (path === '/api/top' && req.method === 'GET') {
       // LAP TIMES with a car opened: its five best drivers of all time and of today, on each circuit, and the place
       // the page's own best in each car would have among that car's drivers: ?me=<name>&toomemagi=car.ms,car.ms
-      // &raadi=... (the page's own laps; me's own times on the board do not count against them). Only read.
+      // &raadi=...&drag=... (the page's own laps; me's own times on the board do not count against them). Only read.
       if (this.over(`T|${ip}`, 40, 60000)) return busy();
       const t = this.topsNow(), me = cleanName(url.searchParams.get('me'));
       const out = { day: t.day };
-      for (const track of [TRACK, ...Object.keys(STAGES)]) {
+      for (const track of [TRACK, ...Object.keys(STAGES), DRAG_TRACK]) {
         const cars = t.tracks[track] || {}, top = {}, place = {};
         for (const [car, c] of Object.entries(cars)) {
           if (!cleanCar(car)) continue;                    // (a car not shown to anyone yet)
@@ -1379,7 +1405,7 @@ export class Lobby extends DurableObject {
         // (enough new laps from this address this hour, or under this name today: not kept, and not sent again)
         if (this.over(`L|${ip}`, LAPS_IP_HOUR, 3600000)) { ok.push(ms); continue; }
         const at = new Date(end), day = tartuDay(at);
-        if (this.sql.exec('SELECT COUNT(*) AS n FROM laps WHERE name = ? COLLATE NOCASE AND day = ?', name, day).one().n >= LAPS_NAME_DAY) { ok.push(ms); continue; }
+        if (this.sql.exec("SELECT COUNT(*) AS n FROM laps WHERE name = ? COLLATE NOCASE AND day = ? AND track <> 'drag'", name, day).one().n >= LAPS_NAME_DAY) { ok.push(ms); continue; }
         ok.push(ms);
         // split times: rising whole milliseconds inside the lap, with the checkpoint list they are for
         const sp = Array.isArray(l?.splits) && l.splits.length && l.splits.length <= 12 ? l.splits.map((v) => Math.round(Number(v))) : null;

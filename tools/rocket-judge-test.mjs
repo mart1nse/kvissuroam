@@ -211,9 +211,11 @@ for (const [name, plan, opt] of STAGE_HONEST) {
   assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1 && j.air === 0, `gravel, ${name}: too near a limit (${show(j)})`);
 }
 console.log(`ok  ${STAGE_HONEST.length} honest drives on gravel, judged as a stage's gravel: at most ${JSON.stringify(worst)}`);
-// (driven as a stage is: at the limit round bends, braking into them and floored out)
+// (driven as a stage is: at the limit round bends, braking into them and floored out. The braking is 1.2 s: at 1.6 the
+// car with its fans sealed stopped and backed away from each bend, and only the 1000 kW it had in reverse until 27 Nov
+// got it refused; a stage is not driven backwards. With the gentle reverse it reads burst 1.6, pull 2.3, grip 1.8)
 const gravelLaps = [[60, off(laps(30 / 3.6, 160 / 3.6))], [8, (t, car) => ({ up: car.vx * 3.6 < 90 ? 1 : 0 })], [14, (t, car) => ({ up: car.vx * 3.6 < 90 ? 0.8 : 0.3, steer: 0.5 })],
-  ...Array.from({ length: 6 }, (_, i) => [[5, { up: 1 }], [1.6, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat()], hard = { world: gravel, tyres: 'gravel' };
+  ...Array.from({ length: 6 }, (_, i) => [[5, { up: 1 }], [1.2, { down: 1 }], [3, { up: 0.6, steer: i % 2 ? 0.7 : -0.7 }]]).flat()], hard = { world: gravel, tyres: 'gravel' };
 const STAGE_CHEATS = [
   ['the page says paving where the stage is gravel', spec, gravelLaps, { tyres: 'gravel' }, ''],
   ['the fans sealed on gravel as on paving', spec, gravelLaps, { ...hard, each: (car) => { car.sealF = car.sealR = 1; } }, ''],

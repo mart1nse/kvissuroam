@@ -134,6 +134,7 @@ const PALETTE = {
   darkglass: ['#07090b', 0.05, 0.9],
   gold: ['#c9a452', 0.34, 1.0],
   polished: ['#cfd2d6', 0.2, 1.0],
+  whitealloy: ['#eceeee', 0.32, 0.15],     // (painted white rally wheels: the Focus WRC's OZs)
 };
 const PAL_NAMES = Object.keys(PALETTE);
 export function palUV(name) {

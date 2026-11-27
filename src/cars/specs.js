@@ -537,6 +537,12 @@ export const CARS = {
     // power: 45 : 55 here, and the centre sends more back as the fronts start to slip, up to 35 : 65 (estimated)
     rearShare: 0.55, rearShareMax: 0.65,
     grip: 1.2,                  // tarmac rally rubber under 1230 kg (gravel tyres are gravel tyres, as on every car)
+    // ...but off the tarmac it is a car built for the gravel (Martin 2026-11-27: a works rally car should be quicker on
+    // the stage than the road 22B, which it was not: the same tyres, the same grip). About 300 mm of travel on Reiger
+    // dampers keeps the tyres in the gravel over ruts and crests where a road car's skip, and the active diffs put the
+    // drive where the grip is: a tenth more grip and traction on gravel, dirt and grass, whichever tyres are on. On
+    // paper (tools/car-pace.mjs) that is about 4 % quicker than the 22B on Majoraadi, as it is round Toomemägi
+    looseGrip: 1.1,
     abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
     bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
     // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js: the big

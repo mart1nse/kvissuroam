@@ -119,7 +119,8 @@ export function* carLimitsSteps(spec, every = 0) {
   // times the grip and brakes passed there): the better tyre on gravel, the wide rubber's rule off paving
   // (physics.js WIDE_LOOSE), the loose ground's patches (13 % either way); braking by the same share
   const wide = spec.grip ?? 1, looseWide = wide > 1 ? 1 - (wide - 1) * 0.5 : wide;
-  const gripLoose = G * Math.max(TYRE_GRIP('gravel', 2) * Math.min(1, wide), TYRE_GRIP('road', 2) * looseWide) * 1.13 * fans;
+  // (and a car built for loose ground holds its own share more there: physics.js spec.looseGrip, the Focus WRC)
+  const gripLoose = G * Math.max(TYRE_GRIP('gravel', 2) * Math.min(1, wide), TYRE_GRIP('road', 2) * looseWide) * (spec.looseGrip ?? 1) * 1.13 * fans;
   const stopAll = Math.max(stop, 0.5 * G);
   lim = { top, pull, stop: stopAll, grip, loose: { grip: gripLoose, stop: Math.max(0.4 * G, stopAll * (gripLoose / grip)) } };
   // thrusters: dv, the speed a full tank can add (m/s: all its gas out at GAS_V, the car growing lighter as it

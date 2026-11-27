@@ -56,6 +56,21 @@ for (const file of readdirSync(dir).sort()) {
       console.log(`raadi ${car.padEnd(8)}${tuned ? ' tuned' : '      '} ${show(j)}${j.why ? `  REFUSED (${j.why})` : ''}`);
       if (tuned) assert.equal(j.why, 'grip', `${folder}/${file}: the tuned stage record must be refused for its grip`);
       else assert.ok(Math.max(j.pull, j.grip, j.stop, j.top) <= 1, `${folder}/${file}: an honest stage record reads ${show(j)}`);
+      // The Focus WRC holds a tenth more on gravel (spec.looseGrip, 27 Nov 2026): the 22B's honest record driven 5 %
+      // quicker all the way (a tenth more in its bends, the gap tools/car-pace.mjs gives the two cars and a little
+      // over) must stand as a Focus record.
+      if (!tuned && car === 'impreza') {
+        const quick = (k) => {
+          const m = Math.floor((n - 1) / k), o = [xs, zs, ys, roll].map(() => new Float64Array(m));
+          for (let i = 0; i < m; i++) { const t = i * k, a = Math.floor(t), f = t - a; [xs, zs, ys, roll].forEach((s, q) => { o[q][i] = s[a] + (s[Math.min(n - 1, a + 1)] - s[a]) * f; }); }
+          return o;
+        };
+        const [qx, qz, qy, qr] = quick(1.05), w5 = {};
+        stageCheck(qx, qz, 0, undefined, w5);
+        const asFocus = judgeDrive(qx, qz, qy, carLimits(CARS.focus), { roll: qr, loose: w5.loose });
+        console.log(`raadi impreza 5 % quicker, as the Focus: ${show(asFocus)}`);
+        assert.equal(asFocus.why, '', `the 22B's record 5 % quicker must stand as a Focus record (${show(asFocus)})`);
+      }
     }
   }
 }

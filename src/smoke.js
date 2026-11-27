@@ -153,23 +153,34 @@ export function createSmoke(world) {
   // a downshift's crackle seen: licks of flame at the tailpipe, more of them the louder it crackles, and one
   // bigger burp as it starts. Each lick is a few small hot balls blown back out of the pipe that shrink and
   // cool within a tenth of a second. Only the player's own car (the crackle is not sent to other players).
-  let popOwed = 0, popWas = 0;
+  // A rally car's anti-lag bangs on a lift (engine-worklet.js, cfg.antilag) are seen too: each big bang the engine
+  // tells of (car.exhaustBangs, a count) blows a ball of flame out, as big as the burp. spec.exhaust.flameSize
+  // scales every flame (the Focus WRC's a touch bigger than the 22B's, Martin 2026-11-27).
+  let popOwed = 0, popWas = 0, bangWas = 0, bangOwed = 0;
   function flames(car, dt) {
-    const ex = car.spec.exhaust, pop = car.exhaustPop || 0;
+    const ex = car.spec.exhaust, pop = car.exhaustPop || 0, bangs = car.exhaustBangs || 0;
     const start = pop >= POP0 && popWas < POP0;
     popWas = pop;
-    if (pop < POP0 || car.reversing) { popOwed = 0; return; }
-    popOwed += POP_RATE * (pop - POP0) / (1 - POP0) * Math.max(0.5, thinK) * dt + (start ? 1 : 0);
-    if (popOwed < 1) return;
+    // (at most two at once: a frame that came late, or a new car, does not empty a backlog)
+    if (bangs > bangWas && !car.reversing) bangOwed = Math.min(2, bangOwed + bangs - bangWas);
+    bangWas = bangs;
+    if (pop < POP0 || car.reversing) popOwed = 0;
+    else popOwed += POP_RATE * (pop - POP0) / (1 - POP0) * Math.max(0.5, thinK) * dt + (start ? 1 : 0);
+    if (popOwed < 1 && bangOwed < 1) return;
+    const fs = ex.flameSize || 1;
     // the pipe's end in the world: the model stands on the middle of the wheelbase, pitched with the body
     const fx = Math.sin(car.yaw), fz = -Math.cos(car.yaw), sx = Math.cos(car.yaw), sz = Math.sin(car.yaw);
     const cp = Math.cos(car.pitch || 0), sp = Math.sin(car.pitch || 0), lz = car.spec.wheelbase / 2 + ex.back;
     const along = car.a - car.spec.wheelbase / 2 - (ex.y * sp + lz * cp);
     const x = car.x + fx * along + sx * ex.x, z = car.z + fz * along + sz * ex.x, y = car.y + ex.y * cp - lz * sp;
     const wvx = fx * car.vx + sx * car.vy, wvz = fz * car.vx + sz * car.vy;
-    while (popOwed >= 1) {
-      popOwed -= 1;
-      const big = start ? 1.5 : 0.75 + 0.5 * Math.random(), n = start ? 4 : 2, jet = 1.5 + 1.5 * Math.random();
+    while (popOwed >= 1 || bangOwed >= 1) {
+      // (a bang: the size of the burp, give or take, and blown out harder)
+      const bang = popOwed < 1;
+      if (bang) bangOwed -= 1; else popOwed -= 1;
+      const burp = start || bang;
+      const big = fs * (bang ? 1.25 + 0.45 * Math.random() : start ? 1.5 : 0.75 + 0.5 * Math.random()), n = burp ? 4 : 2;
+      const jet = (bang ? 2.5 : 1.5) + 1.5 * Math.random();
       for (let k = 0; k < n; k++) {
         const i = next; next = (next + 1) % MAX; fresh = true;
         const r = () => (Math.random() - 0.5) * 0.02, back = 0.02 + k * 0.03 * big;
@@ -180,7 +191,7 @@ export function createSmoke(world) {
         // (update() below moves it a step in this same frame: start it the car's own step back, or at
         // speed its first frame is drawn half a metre ahead of the pipe, inside the car)
         pos[i * 3] -= wvx * dt; pos[i * 3 + 2] -= wvz * dt;
-        age[i] = 0; life[i] = (0.05 + 0.04 * Math.random()) * (start ? 1.3 : 1);
+        age[i] = 0; life[i] = (0.05 + 0.04 * Math.random()) * (burp ? 1.3 : 1) * Math.sqrt(fs);
         s0[i] = (0.13 - 0.022 * k) * big; s1[i] = s0[i] * 0.45; a0[i] = 0.92 - 0.12 * k;
       }
     }

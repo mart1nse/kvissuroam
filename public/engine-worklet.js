@@ -76,6 +76,9 @@ export class EngineCore {
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
     this.pulses = []; this.clicks = 0; this.clickAmp = 0; this.noise = rng(12345);
     this.n = 0; this.cfg = null; this.cutN = 0;
+    // anti-lag (cfg.antilag): how long the throttle has been shut, the run of bangs going, the crack of the
+    // last one and the rattle's tick; bangs counts the big ones (the processor tells the page: a flame each)
+    this.liftT = 0; this.alsRun = 0; this.alsK = 0; this.crack = 0; this.rtl = 0; this.bangs = 0;
   }
 
   setConfig(c) {
@@ -112,6 +115,11 @@ export class EngineCore {
     // turbo whistle: level (0 = none) and pitch scale (a small turbo spins faster and sings higher)
     this.wh = c.turbo ? c.whistle ?? 1 : 0; this.whF = c.whistleF ?? 1;
     this.airBp = new Biquad().set('bp', 1500, 1.6, sr); this.bladeBp = new Biquad().set('bp', 3000, 7, sr);
+    // anti-lag: the crack of a bang (broadband, its lowest part cut so it snaps rather than thumps) and the
+    // rattle between them, ticks rung through two narrow bands (the hot manifold and its heat shield)
+    this.als = c.antilag || 0; this.alsRattle = c.alsRattle ?? 1;
+    this.crackHp = new Biquad().set('hp', c.crackF || 900, 0.7, sr);
+    this.rtlBp1 = new Biquad().set('bp', c.rattleF || 2500, 5, sr); this.rtlBp2 = new Biquad().set('bp', (c.rattleF || 2500) * 1.62, 7, sr);
     this.pulses.length = 0;
   }
 
@@ -135,6 +143,8 @@ export class EngineCore {
       this.cutN++;
       amp *= c.cutAmp ?? 0.35; nz *= 0.7;
       if (c.pops && n() < c.pops * (this.in.shift ? 3 : 0.8)) { amp = 1.3 + n() * 1.2; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
+      // (anti-lag keeps firing into the pipe through an upshift's cut: it bangs in the gap)
+      if (this.als && this.in.shift && n() < this.als * 0.9) ({ amp, nz, tauDeg } = this.bang());
     } else if (this.cutN) {
       // the first firings after the cut light what collected meanwhile: the bark of an engine on its limiter
       amp *= 1 + (c.limBark ?? 0.5) * Math.min(1, this.cutN / 3); this.cutN = Math.max(0, this.cutN - 3);
@@ -147,6 +157,14 @@ export class EngineCore {
       const pop = (pp * (1 + 5 * cr) + (c.crackle ?? 0.06) * cr + (pp ? 0.12 : 0.04) * ov) * clamp((rpm - 2500) / 3000, 0, 1);
       if (pop > 0 && n() < pop) { amp = 1.6 + n() * 1.4; nz = 0.7; tauDeg = c.pulseDeg * 0.6; }
     } else if (ov > 0.05 && n() < 0.08 * ov) amp *= 0.3;          // (a misfire)
+    // anti-lag (a rally engine's misfiring system): from the moment of a lift the throttle is held cracked and
+    // the ignition retarded far past the top, so the charge burns in the manifold to keep the turbine spinning.
+    // Bangs, coming in runs (one hot bang lights the next), and now and then a firing between them spits
+    const a = this.alsK;
+    if (a > 0.01 && !this.in.shift) {
+      if (n() < this.als * a * (1 + 1.6 * this.alsRun)) ({ amp, nz, tauDeg } = this.bang());
+      else { this.alsRun *= 0.55; if (n() < 0.3 * a) { amp = 0.8 + n() * 0.6; nz = 0.6; tauDeg = c.pulseDeg * 0.5; } }
+    }
     const tau = clamp(tauDeg / (rpm * 6) * this.sr, this.sr * 0.00022, this.sr * 0.004);
     // no two combustions are alike: the pulse also lands a fraction of a degree early or late
     const late = Math.max(0, (n() * 2 - 1) * c.jitter * (1 + 3 * ov) / (rpm * 6) * this.sr);
@@ -159,6 +177,16 @@ export class EngineCore {
     const quiet = clamp(1 - (rpm - this.in.idle) / (0.3 * this.in.redline), 0, 1);
     this.clicks = Math.round(this.sr * 0.00035);
     this.clickAmp = c.tick * (this.smooth ? 0.12 + 0.88 * quiet : 0.4 + 0.6 * rpm / this.in.redline);
+  }
+
+  // one anti-lag bang: a hard, short pulse, its crack on top, and the run it starts
+  bang() {
+    const n = this.noise, k = n(), amp = 2.3 + 2.2 * k;
+    this.alsRun = Math.min(1, this.alsRun + 0.5);
+    // (the crack: a snap of noise over the pulse, louder for the bigger bangs; the biggest are seen, a flame)
+    this.crack = Math.max(this.crack, 0.45 + 0.75 * k);
+    if (k > 0.6) this.bangs++;
+    return { amp, nz: 0.75, tauDeg: this.cfg.pulseDeg * (0.4 + 0.2 * n()) };
   }
 
   process(out) {
@@ -201,6 +229,13 @@ export class EngineCore {
     this.boost += (I.boost - this.boost) * kl;
     this.shaft += ((I.shaft >= 0 ? I.shaft : I.boost) - this.shaft) * kl;
     this.on += ((I.on ? 1 : 0) - this.on) * (1 - Math.exp(-len / (sr * 0.05)));
+    // anti-lag is armed on a lift from 3000 rpm, fully from 4500 (it would only stall the idle); after a few
+    // seconds of coasting it eases off (a works car's system has a timer, to save the turbine and the pipe)
+    if (this.als) {
+      this.liftT = I.throttle <= 0.02 && I.on ? this.liftT + len / sr : 0;
+      const lo = this.cfg.alsRpm || 3000, want = this.liftT > 0 ? clamp((this.rpmE - lo) / 1500, 0, 1) * (this.liftT < 3 ? 1 : Math.max(0.35, 1 - (this.liftT - 3) / 3)) : 0;
+      this.alsK += (want - this.alsK) * (1 - Math.exp(-len / (sr * (want > this.alsK ? 0.03 : 0.08))));
+    }
     const rpm = this.rpmE, load = this.ld, rr = rpm / I.redline, ov = this.ovr, bl = this.blip;
     const bright = c.lp0 + c.lpRpm * rpm / 1000 + c.lpLoad * load - (c.turbo ? c.turboMuffle * (1 - this.boost * 0.5) : 0);
     this.lp1.set('lp', bright, 0.6, sr); this.lp2.set('lp', bright * 1.6, 0.5, sr);
@@ -241,6 +276,12 @@ export class EngineCore {
       wsp = spin;
     }
 
+    // (the crack falls away in about two milliseconds, a rattle tick in under half of one; ticks come at random,
+    // more of them the harder the anti-lag works. A bang is as loud as the engine flat out, not as the closed
+    // throttle's quieter note: c.gain, not gain)
+    const crackFall = Math.exp(-1 / (sr * 0.0022)), rtlFall = Math.exp(-1 / (sr * 0.00035));
+    const rtlRate = this.als ? this.alsK * (60 + 160 * this.alsRun) * this.alsRattle / sr : 0;
+    const crackLv = 0.9 * c.gain * this.on, rtlLv = 0.2 * c.gain * this.on * this.alsRattle;
     for (let s = 0; s < len; s++) {
       const th0 = this.theta; let th1 = th0 + dTheta;
       for (let k = 0; k < ev.length; k++) {
@@ -281,6 +322,14 @@ export class EngineCore {
       if (hiss > 0) y += this.hissBp.run(n() * 2 - 1) * hiss;
       y = this.hp.run(y);
       let o = Math.tanh(drive * y) / dn * gain;
+      if (this.crack > 1e-3 || this.rtl > 1e-3 || rtlRate > 0) {
+        // anti-lag's crack (after the saturation: a snap the engine's own drive would round off) and rattle
+        const w = n() * 2 - 1;
+        if (this.crack > 1e-3) { o += this.crackHp.run(w * this.crack) * crackLv; this.crack *= crackFall; }
+        if (rtlRate > 0 && n() < rtlRate) this.rtl = 0.35 + 0.65 * n();
+        const tk = this.rtl > 1e-3 ? w * this.rtl : 0;
+        o += (this.rtlBp1.run(tk) + 0.7 * this.rtlBp2.run(tk)) * rtlLv; this.rtl *= rtlFall;
+      }
       if (hl > 1e-4) {
         this.hp0 += hf; if (this.hp0 > 1) this.hp0 -= 1;
         o += (Math.sin(6.2832 * this.hp0) + 0.35 * Math.sin(12.566 * this.hp0)) * hl * (0.75 + 0.25 * Math.sin(6.2832 * this.theta / 720 * ev.length));
@@ -306,15 +355,20 @@ if (typeof AudioWorkletProcessor === 'function') {
       const po = opts && opts.processorOptions;
       if (po && po.config) this.core.setConfig(reviveConfig(po.config));
       if (po && po.state) this.core.set(po.state);
+      this.tell = false; this.told = 0; this.wait = 0;
       this.port.onmessage = (e) => {
         const d = e.data;
         if (d.config) this.core.setConfig(reviveConfig(d.config));
         if (d.state) this.core.set(d.state);
+        if (d.tell !== undefined) this.tell = !!d.tell;
       };
     }
     process(_in, outputs) {
       const o = outputs[0];
       this.core.process(o[0]);
+      // (the player's own engine tells the page of its anti-lag bangs, for the flame at the pipe: at most
+      // one message every 8 blocks, about 20 ms, with the count so far)
+      if (this.tell && --this.wait <= 0 && this.core.bangs !== this.told) { this.told = this.core.bangs; this.wait = 8; this.port.postMessage({ bangs: this.told }); }
       for (let ch = 1; ch < o.length; ch++) o[ch].set(o[0]);
       return true;
     }

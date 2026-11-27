@@ -97,10 +97,8 @@ export function createSigns(world) {
     // faces: a wall sign has one, a pylon two (front and back)
     const faces = [];
     const frames = [], poles = [];
-    for (let i = 0; i < a.length; i += st) {
-      const kind = a[i], x = a[i + 1], y = a[i + 2], z = a[i + 3], yaw = a[i + 4] * Math.PI / 180;
-      if (world.signSkip && world.signSkip(x, z)) continue;          // drawn by hand instead (e.g. a name painted on the wall)
-      const w = a[i + 5], h = a[i + 6], text = data.texts[a[i + 7]], style = a[i + 8];
+    const one = (kind, x, y, z, yawDeg, w, h, text, style) => {
+      const yaw = yawDeg * Math.PI / 180;
       const nx = Math.sin(yaw), nz = Math.cos(yaw);
       if (kind === 0) {
         boxGeo(frames, w + 0.12, h + 0.12, 0.14, x - nx * 0.02, y, z - nz * 0.02, yaw);
@@ -112,21 +110,36 @@ export function createSigns(world) {
         faces.push({ x: x + nx * 0.165, y: top, z: z + nz * 0.165, nx, nz, w, h, text, style });
         faces.push({ x: x - nx * 0.165, y: top, z: z - nz * 0.165, nx: -nx, nz: -nz, w, h, text, style });
       }
+    };
+    for (let i = 0; i < a.length; i += st) {
+      if (world.signSkip && world.signSkip(a[i + 1], a[i + 3])) continue;   // drawn by hand instead (e.g. a name painted on the wall)
+      one(a[i], a[i + 1], a[i + 2], a[i + 3], a[i + 4], a[i + 5], a[i + 6], data.texts[a[i + 7]], a[i + 8]);
+    }
+    // more of a shop's signs than the map has, put up by hand (world.signMore, e.g. kuuni.js: the taproom's on two
+    // more sides of its kiosk): { x, y, z, yaw (degrees), w, h, text, style, kind }
+    for (const e of world.signMore?.(`${sector.sx}_${sector.sz}`) || []) one(e.kind || 0, e.x, e.y, e.z, e.yaw, e.w, e.h, e.text, e.style || 0);
+    // faces alike (a pylon's back, a shop's sign on two walls) share one picture: only the first of them is packed,
+    // and the others are drawn with its picture, in its texture
+    const firsts = [], alike = new Map();
+    for (const f of faces) {
+      f.pw = Math.min(ATLAS_W, Math.max(ROW, Math.round(ROW * f.w / f.h)));
+      const key = `${f.style}|${f.pw}|${f.text}`, same = alike.get(key);
+      if (same) same.copies.push(f);
+      else { f.copies = []; alike.set(key, f); firsts.push(f); }
     }
     // shelf-pack the faces into textures of ROW px high rows
     let k = 0;
-    while (k < faces.length) {
+    while (k < firsts.length) {
       const rows = [];
       let cx = ATLAS_W;
       const start = k;
-      for (; k < faces.length; k++) {
-        const f = faces[k];
-        const pw = Math.min(ATLAS_W, Math.max(ROW, Math.round(ROW * f.w / f.h)));
+      for (; k < firsts.length; k++) {
+        const f = firsts[k], pw = f.pw;
         if (cx + pw > ATLAS_W) {
           if (rows.length >= MAX_ROWS) break;
           rows.push([]); cx = 0;
         }
-        f.px = cx; f.pw = pw; f.row = rows.length - 1;
+        f.px = cx; f.row = rows.length - 1;
         rows[rows.length - 1].push(f);
         cx += pw + 2;
       }
@@ -135,11 +148,11 @@ export function createSigns(world) {
       const c = cv.getContext('2d');
       const P = [], U = [];
       for (let j = start; j < k; j++) {
-        const f = faces[j];
+        const f = firsts[j];
         drawFace(c, f.px, f.row * ROW, f.pw, ROW, f.text, f.style);
         const u0 = (f.px + 0.5) / ATLAS_W, u1 = (f.px + f.pw - 0.5) / ATLAS_W;
         const v1 = 1 - (f.row * ROW + 0.5) / cv.height, v0 = 1 - ((f.row + 1) * ROW - 0.5) / cv.height;
-        quad(P, U, f.x, f.y, f.z, f.nx, f.nz, f.w, f.h, u0, v0, u1, v1);
+        for (const q of [f, ...f.copies]) quad(P, U, q.x, q.y, q.z, q.nx, q.nz, q.w, q.h, u0, v0, u1, v1);
       }
       const tex = new THREE.CanvasTexture(cv);
       tex.colorSpace = THREE.SRGBColorSpace;

@@ -46,6 +46,35 @@ export function kuuniVectors(vectors) {
 export const HOLOGRAM = { x: 1487.0, z: 2939.0, url: 'https://andersonbeer.com/' };
 const CENTRE = [1480, 2915];
 
+// ---- the taproom kiosk (LOD base 529): its long side towards Poe and its end towards the hologram, as the map's
+// walls stand (a: the left end seen from outside, n: outwards)
+const SIDE = { a: [1472.22, 2942.57], b: [1465.19, 2948.38], n: [-0.637, -0.771] };
+const END = { a: [1476.85, 2943.65], b: [1472.25, 2942.61], n: [0.22, -0.975] };
+for (const W of [SIDE, END]) W.len = Math.hypot(W.b[0] - W.a[0], W.b[1] - W.a[1]);
+const along = (W, s, out = 0) => { const k = s / W.len; return [W.a[0] + (W.b[0] - W.a[0]) * k + W.n[0] * out, W.a[1] + (W.b[1] - W.a[1]) * k + W.n[1] * out]; };
+// a door painted at the far end of the long side, where the last window was (Martin, 27 Nov)
+const DOOR = SIDE.len - 1.14;
+// holographic footprints from the hologram's pad round the corner and along the long side to that door
+// (Martin's blue line, 27 Nov): drawn by the hologram's halo (hologram.js), no draw of their own
+const STEPS = [[1484.9, 2939.4], [1478.6, 2940.1], along(SIDE, -0.6, 1.9), along(SIDE, 2.5, 1.6), along(SIDE, 6.2, 1.55), along(SIDE, DOOR, 0.45)];
+// the box sign over the back (OpenStreetMap's, signs.js) on two more sides too: over the windows of the long side
+// and on the end towards the hologram (Martin, 27 Nov), at one height round the corner; the same picture, so
+// they cost no more than the quads
+export function kuuniSigns(world) {
+  const prev = world.signMore;
+  world.signMore = (key) => {
+    const more = (prev && prev(key)) || [];
+    if (key !== '3_5') return more;
+    let g = -1e9;                                         // the long side's ground line (houseskin.js: its highest point)
+    for (let k = 0; k <= 4; k++) { const [x, z] = along(SIDE, SIDE.len * k / 4, 0.6); g = Math.max(g, world.heightAt(x, z)); }
+    for (const W of [SIDE, END]) {
+      const [x, z] = along(W, W.len / 2, 0.14);
+      more.push({ x, y: g + 2.89, z, yaw: Math.atan2(W.n[0], W.n[1]) * 180 / Math.PI, w: 4.09, h: 0.42, text: "Anderson's Taproom", style: 0 });
+    }
+    return more;
+  };
+}
+
 // house colours for the LOD walls the paintings do not cover (sides, backs, roofs)
 export function kuuniWalls(walls) {
   setHouseColours(walls, '3_5', 1120, 2400, [
@@ -124,7 +153,8 @@ const HOUSES = [
     spec: SPEC.shops2, walls: [{ near: [1467.35, 2872.0], within: 6, draw: (P, W) => shopFronts(P, W, { seed: 7, bay: 4.8 }) }] },
   { name: 'kiosk', sec: '3_5', base: 529, at: [1470.5, 2948.3], r: 9, spec: SPEC.kiosk,
     walls: [{ near: [1476.3, 2946.1], within: 2.5, doors: [{ x: 2.6, w: 1.0, h: 2.2, col: '#5a463c', frame: '#5a463c', light: 0.5, panels: 1 }],
-      draw: (P) => { P.r(0.5, 2.75, 4.6, 3.25, '#1e1c26'); P.text("ANDERSON'S TAPROOM", 2.55, 3.0, 0.3, '#7fe8ff', '800 %px Arial, sans-serif'); } }] },
+      draw: (P) => { P.r(0.5, 2.75, 4.6, 3.25, '#1e1c26'); P.text("ANDERSON'S TAPROOM", 2.55, 3.0, 0.3, '#7fe8ff', '800 %px Arial, sans-serif'); } },
+    { near: along(SIDE, SIDE.len / 2), within: 2.5, doors: [{ x: DOOR, w: 1.4, h: 2.45, col: '#5a463c', frame: '#5a463c', light: 0.45, panels: 1 }] }] },
 ];
 
 // the map's trees pick their species from a hash of where they stand: nudge each one a few centimetres until it
@@ -220,7 +250,7 @@ export function createKuuni(scene, world, { shadows = true } = {}) {
   const group = new THREE.Group();
   scene.add(group);
   let built = false;
-  const holo = createHologram(scene, world, { ...HOLOGRAM });
+  const holo = createHologram(scene, world, { ...HOLOGRAM, steps: STEPS });
 
   // the lindens the map has no trees for: the row in the gravel beds on the park stretch, the planters up the street
   const PARK_TREES = ROW_T.map((t, k) => lime(S(t, ROW(t)), 16 + (k % 3) * 1.6, 8.5 + (k % 2)));

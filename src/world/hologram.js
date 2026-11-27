@@ -105,7 +105,76 @@ const FRAG = /* glsl */`
     gl_FragColor = vec4(min(c * vec3(0.9, 1.0, 1.12) * 1.35, vec3(1.0)) * k, a);
   }`;
 
-export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6 }) {
+// Footprints from the pad to a door (Martin, 27 Nov: kuuni.js passes the way, steps): drawn by the halo's shader,
+// in the halo's one draw. Each print is a quad laid on the ground with its own number along the way (aStep, from 1;
+// the halo's own vertices have none, 0); the shader draws the foot, and the prints light up one after another
+// from the hologram to the door, the trail fading behind.
+const FOOT_W = 0.2, FOOT_L = 0.4, FOOT = 1.25, PACE = 0.44;          // (the foot drawn 1.25 times life size: it reads from a car)
+const HALO_VERT = /* glsl */`
+  attribute float aStep;
+  varying vec2 vUv; varying float vStep;
+  void main() { vUv = uv; vStep = aStep; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const HALO_FRAG = /* glsl */`
+  uniform float uTime; uniform float uSteps;
+  varying vec2 vUv; varying float vStep;
+  float ell(vec2 p, vec2 c, vec2 r) { return (length((p - c) / r) - 1.0) * min(r.x, r.y); }
+  float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+  void main() {
+    if (vStep < 0.5) {
+      // the halo round the pad (added onto the scene: no alpha)
+      float r = length(vUv - 0.5) * 2.0; float a = smoothstep(1.0, 0.4, r) * (0.18 + 0.05 * sin(uTime * 2.0));
+      gl_FragColor = vec4(vec3(0.2, 1.0, 0.8) * a, 0.0);
+      return;
+    }
+    // a right foot seen from above, toes up, the big toe on the left (a left foot comes with its u turned round), in metres
+    vec2 p = vec2((vUv.x - 0.5) * ${FOOT_W.toFixed(2)}, vUv.y * ${FOOT_L.toFixed(2)} - 0.02);   // (the quad is FOOT times this)
+    float d = smin(ell(p, vec2(0.0, 0.075), vec2(0.042, 0.058)), ell(p, vec2(0.01, 0.205), vec2(0.054, 0.098)), 0.035);
+    d = min(d, ell(p, vec2(-0.03, 0.335), vec2(0.021, 0.026)));
+    d = min(d, length(p - vec2(0.003, 0.34)) - 0.0145);
+    d = min(d, length(p - vec2(0.027, 0.331)) - 0.0125);
+    d = min(d, length(p - vec2(0.047, 0.316)) - 0.011);
+    d = min(d, length(p - vec2(0.063, 0.296)) - 0.0095);
+    float aa = fwidth(d) + 1e-4;
+    float fill = 1.0 - smoothstep(-aa, aa, d);
+    float rim = 1.0 - smoothstep(0.0, 0.009 + aa, abs(d + 0.007));
+    float edge = min(min(vUv.x, 1.0 - vUv.x) * ${FOOT_W.toFixed(2)}, min(vUv.y, 1.0 - vUv.y) * ${FOOT_L.toFixed(2)});
+    float glow = exp(-max(d, 0.0) / 0.018) * smoothstep(0.0, 0.03, edge) * 0.5;
+    // walking: the prints light up in turn, at a walker's pace, and fade behind
+    float ph = mod(uTime * 2.2, uSteps + 8.0) - (vStep - 1.0);
+    float walk = ph >= 0.0 ? exp(-ph * 0.3) : 0.0;
+    float k = (0.7 + 0.8 * walk) * (0.86 + 0.14 * sin(vUv.y * 70.0 - uTime * 9.0)) * (0.92 + 0.08 * sin(uTime * 23.0) * sin(uTime * 3.1));
+    vec3 col = mix(vec3(0.24, 1.0, 0.82), vec3(0.85, 1.0, 0.97), rim * 0.8);
+    // the print covers the ground (so the cyan holds on pale paving), its glow is only added
+    gl_FragColor = vec4(col * k * max(fill * 0.75 + rim * 0.5, glow), clamp((fill * 0.6 + rim * 0.3) * k, 0.0, 0.92));
+  }`;
+
+// the prints' quads along the way through pts ([[x, z]...]), in the halo's own frame (origin: its world position)
+function footprints(world, pts, origin) {
+  const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
+  const L = curve.getLength(), pos = [], uv = [], step = [], index = [];
+  const at = new THREE.Vector3(), dir = new THREE.Vector3();
+  let n = 0;
+  const print = (d, side, num) => {
+    curve.getPointAt(Math.min(1, d / L), at); curve.getTangentAt(Math.min(1, d / L), dir);
+    const fx = dir.x, fz = dir.z, rx = -fz, rz = fx;          // the walker's way, and their right hand
+    const cx = at.x + rx * side, cz = at.z + rz * side, flip = side < 0;
+    const base = pos.length / 3;
+    const hw = FOOT_W * FOOT / 2, hl = FOOT_L * FOOT / 2;
+    for (const [lx, ly, u, v] of [[-hw, -hl, 0, 0], [hw, -hl, 1, 0], [hw, hl, 1, 1], [-hw, hl, 0, 1]]) {
+      const wx = cx + rx * lx + fx * ly, wz = cz + rz * lx + fz * ly;
+      pos.push(wx - origin.x, world.heightAt(wx, wz) + 0.12 - origin.y, wz - origin.z);
+      uv.push(flip ? 1 - u : u, v); step.push(num);
+    }
+    index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  // walking from the pad, a print each pace, left and right; both feet side by side at the door
+  for (let d = PACE * 0.5; d < L - 0.65; d += PACE) print(d, (n % 2 ? 0.12 : -0.12), ++n);
+  n++;
+  print(L - FOOT_L * FOOT / 2, -0.13, n); print(L - FOOT_L * FOOT / 2, 0.13, n);
+  return { pos, uv, step, index, n };
+}
+
+export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6, steps = null }) {
   const group = new THREE.Group();
   group.visible = false;
   scene.add(group);
@@ -139,10 +208,10 @@ export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6
   const lens = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x9effea, ...add }));
   lens.position.y = 0.24;
   group.add(lens);
+  // (premultiplied 'over' since the footprints, 27 Nov: the halo writes no alpha, so it is still only added)
   const halo = new THREE.Mesh(new THREE.RingGeometry(1.7, 4.2, 48).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-    uniforms: { uTime: uniforms.uTime }, ...add,
-    vertexShader: VERT,
-    fragmentShader: `uniform float uTime; varying vec2 vUv; void main() { float r = length(vUv - 0.5) * 2.0; float a = smoothstep(1.0, 0.4, r) * (0.18 + 0.05 * sin(uTime * 2.0)); gl_FragColor = vec4(vec3(0.2, 1.0, 0.8) * a, 1.0); }`,
+    uniforms: { uTime: uniforms.uTime, uSteps: { value: 1 } }, ...over,
+    vertexShader: HALO_VERT, fragmentShader: HALO_FRAG,
   }));
   halo.position.y = 0.05;
   group.add(halo);
@@ -167,6 +236,19 @@ export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6
   function build() {
     built = true;
     group.position.set(x, world.heightAt(x, z), z);
+    if (steps) {
+      // the footprints join the halo's ring in one geometry
+      const f = footprints(world, steps, { x, y: group.position.y + halo.position.y, z });
+      const ring = halo.geometry, rn = ring.attributes.position.count;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute([...ring.attributes.position.array, ...f.pos], 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute([...ring.attributes.uv.array, ...f.uv], 2));
+      g.setAttribute('aStep', new THREE.Float32BufferAttribute([...new Array(rn).fill(0), ...f.step], 1));
+      g.setIndex([...ring.index.array, ...f.index.map((i) => i + rn)]);
+      halo.geometry = g;
+      ring.dispose();
+      halo.material.uniforms.uSteps.value = f.n;
+    }
     group.visible = true;
   }
 
@@ -203,7 +285,7 @@ export function createHologram(scene, world, { x, z, url, width = 13, lift = 1.6
     group, bindClicks,
     update(dt, camera) {
       if (!built) {
-        if (world.ready(x, z)) build();
+        if (world.ready(x, z) && (!steps || steps.every(([sx, sz]) => world.ready(sx, sz)))) build();
         else return;
       }
       t += dt;

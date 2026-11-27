@@ -9,6 +9,7 @@
 import { CARS } from './cars/specs.js';
 import { evKw } from './cars/physics.js';
 import { THUMB } from './net/people.js';
+import { inpIcon } from './race/inpicons.js';
 
 const LOST_S = 30;                 // a watched player in the garage this long: on to the next player (or back to your car)
 const QUIET_S = 6;                 // and gone quiet any other way (another tab, app or lost signal; Martin 2026-11-24:
@@ -32,7 +33,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
   const el = document.createElement('div');
   el.id = 'watch';
   el.className = 'hidden';
-  el.innerHTML = '<div class="who"><span class="eye"></span><i></i><b></b><small class="car"></small><small class="st"></small>'
+  el.innerHTML = '<div class="who"><span class="eye"></span><i></i><b></b><small class="car"></small><small class="dev"></small><small class="st"></small>'
     // a thumbs up for the watched player (Martin, 2026-11-24), as the one in front of their name in the list
     + `<button class="ku" data-act="watch-ku" title="Thumbs up">${THUMB}</button></div>`
     // a lap record replay's slider (Martin, 2026-11-26): see scrubbing below
@@ -40,7 +41,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     + '<button class="back" data-act="watch-back" title="Back to your own car (Esc)">BACK TO MY CAR <kbd>ESC</kbd></button>'
     + '<div class="hint"><kbd>←</kbd><kbd>→</kbd> OTHER PLAYERS</div>';
   document.querySelector('#hud').appendChild(el);
-  const elDot = el.querySelector('.who i'), elName = el.querySelector('.who b'), elCar = el.querySelector('.who .car'), elSt = el.querySelector('.who .st');
+  const elDot = el.querySelector('.who i'), elName = el.querySelector('.who b'), elCar = el.querySelector('.who .car'), elDev = el.querySelector('.who .dev'), elSt = el.querySelector('.who .st');
   const elHint = el.querySelector('.hint');
   el.querySelector('.back').addEventListener('click', (e) => { e.stopPropagation(); stop(); });
   const elKu = el.querySelector('.ku');
@@ -238,7 +239,7 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     const st = o.rp ? (wait ? 'LOADING…' : `${o.rp.track === 'raadi' ? 'STAGE' : 'LAP'} RECORD REPLAY`) : !p || o.held ? (o.w === 'garage' ? 'IN THE GARAGE' : o.w === 'away' ? 'AWAY' : o.w === 'watch' ? 'WATCHING TOO' : 'NO SIGNAL') : !shown ? 'LOADING…' : race ? 'IN THE RACE' : hot ? (Math.hypot(p[0] - 2660, p[1] - 470) < 600 ? 'ON THE STAGE' : 'ON A HOTLAP')
       : lap ? `LAST LAP ${fmt(lap.ms)}` : '';
     const kuWait = mp.kudosWait(id) > 0;
-    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${kuWait}|${mp.stealth}|${!!o.rp}`;
+    const key = `${o.name}|${o.colour}|${o.car}|${st}|${order().length}|${kuWait}|${mp.stealth}|${!!o.rp}|${o.rp?.inp || ''}`;
     if (key === uiKey) return;
     uiKey = key;
     elScrub.classList.toggle('hidden', !o.rp);
@@ -246,6 +247,8 @@ export function createSpectate({ mp, world, toast, canStart, busy, onStart, onSt
     elDot.style.setProperty('--c', o.colour);
     elName.textContent = o.name.toUpperCase();
     elCar.textContent = CARS[o.car]?.short || '';
+    // (a record's replay: a small mark of what it was driven with, after the car; none for a lap from before that was kept)
+    elDev.innerHTML = o.rp?.inp ? inpIcon(o.rp.inp, (n) => `DRIVEN WITH ${n === 'TOUCH SCREEN' ? 'A TOUCH SCREEN' : `A ${n}`}`) : '';
     elSt.textContent = st;
     elSt.classList.toggle('hot', !!(hot || race || o.rp));
     elHint.classList.toggle('hidden', order().length < 2 || !!o.rp);

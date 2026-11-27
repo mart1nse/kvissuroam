@@ -2505,6 +2505,8 @@ function frame(ts) {
     race.update(car, carId, s0Short(), inpNow());
     stage?.update(car, carId, s0Short(), dt, inpNow(), watch?.focus);   // (and the stage round a car being watched)
     drag?.update(car, dt, watch?.focus);
+    // (the drag strip's timeslip goes with the car until its ✕, or until a timed lap, a stage run or a race starts: Martin 27 Nov)
+    if (race?.running || stage?.running || raceMode?.ghost) drag?.closeSlip();
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,

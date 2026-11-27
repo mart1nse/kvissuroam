@@ -36,7 +36,6 @@ const AMBER_S = 0.5;                        // the sportsman's tree: each amber 
 const PRACTICE_WAIT = [1.4, 2.4];           // s from PRACTICE to the first amber (a random wait, as the tree's own)
 const NO_START_S = 8;                       // past green with no clutch drop: the run is off
 const ROLLOUT_MS = 10000;                   // after the finish: others still pass through the car this long
-const HERE_M = 250;                         // the TIMESLIP tab shows this far past either end of the strip
 // 'at the strip' within this of its middle: H puts the car back on the line from anywhere in it (Martin 27 Nov: "put to
 // the drag strip if i am in a 2km circle around it"; at 250 m past the ends a car rolled out after a quick run was out
 // of it, and H took it to Toomemägi). The garage's card and LAP TIMES's tab follow the same circle.
@@ -127,17 +126,25 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   slip.className = 'hidden';
   hudEl.appendChild(slip);
   // The timeslip stays up until it is closed (Martin 27 Nov: "let the results stay up until someone closes them, clicks
-  // somewhere else for instance, also always allow to reopen the slip, sort of fold it down when near drag"): ✕ or a
-  // click anywhere else folds it into a tab on the screen's right edge, there while the car is at the strip (not
-  // during a tree or a run); the tab opens the last slip again.
-  const slipTab = document.createElement('button');
+  // somewhere else for instance, also always allow to reopen the slip, sort of fold it down when near drag"): a click
+  // anywhere else folds it into a tab on the screen's right edge (not shown during a tree or a run), which opens it again.
+  // Since Martin's word later that day ("keep the timeslip up. if i click anywhere else it minimizes it to the side, add
+  // an x button on the side minimized view. i can only get rid of the drag slip by clicking the x. it needs to survive
+  // moving between worlds"): only a ✕, on the slip or on its tab, puts it away; the tab goes wherever the car goes (H,
+  // the track buttons, another circuit); and the start of a Majoraadi stage run, of a timed Toomemägi lap or of a race
+  // puts it away too (closeSlip, from main.js).
+  const slipTab = document.createElement('div');
   slipTab.id = 'dragsliptab';
   slipTab.className = 'hidden';
-  slipTab.title = 'The last timeslip';
-  slipTab.innerHTML = '<span>TIMESLIP</span>';
+  slipTab.innerHTML = '<button class="x" data-tab="close" aria-label="Close the timeslip" title="Close the timeslip">✕</button><button class="open" data-tab="open" title="The last timeslip"><span>TIMESLIP</span></button>';
   hudEl.appendChild(slipTab);
   let lastSlip = '';
-  slipTab.addEventListener('click', () => { slipTab.blur(); openSlip(); });
+  slipTab.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    b.blur();
+    if (b.dataset.tab === 'open') openSlip(); else closeSlip();
+  });
   addEventListener('pointerdown', (e) => { if (!slip.classList.contains('hidden') && !slip.contains(e.target) && !slipTab.contains(e.target)) foldSlip(); }, true);
   for (const el of [ask, slip]) el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-drag]');
@@ -146,7 +153,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     if (b.dataset.drag === 'practice') practice();
     else if (b.dataset.drag === 'leave') leave();
     else if (b.dataset.drag === 'again') again();
-    else if (b.dataset.drag === 'fold') foldSlip();
+    else if (b.dataset.drag === 'close') closeSlip();
   });
   const fader = document.createElement('div');
   fader.style.cssText = `position:fixed;inset:0;background:#0b0420;opacity:0;pointer-events:none;z-index:9000;transition:opacity ${FADE_S}s ease`;
@@ -273,6 +280,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   function startTree(go, duel, run) {
     st.phase = 'tree'; st.go = go; st.duel = duel; st.run = run;
     st.beepK = -1; showRt(null);
+    foldSlip();                // (the tree where the slip was)
     st.red = false; st.tA = 0; st.rt = null; st.leave = null; st.prev = null; st.t = {}; st.v = {}; st.foul = false; st.dnf = false; st.res = null; st.win = false;
     hideAsk();
     elMsg.textContent = duel ? `VS ${duel.name || 'THE OTHER LANE'}` : 'PRACTICE';
@@ -358,7 +366,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // (the 1/4 mile's ET runs from the car leaving the line, as on a real slip; with the reaction: green to the finish,
     // what decides a race of two)
     const sum = (x) => (x.tot == null || x.dnf ? '–' : x.tot.toFixed(3));
-    slip.innerHTML = lastSlip = `<button class="x" data-drag="fold" aria-label="Fold the timeslip" title="Fold (it stays on the right edge while you are at the strip)">✕</button><h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
+    slip.innerHTML = lastSlip = `<button class="x" data-drag="close" aria-label="Close the timeslip" title="Close (a click anywhere else folds it to the right edge)">✕</button><h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
       <table><thead><tr><th></th><th>YOU</th>${st.duel ? `<th>${name}</th>` : ''}</tr></thead><tbody>
       ${slipRow('R/T', rt(r), rt(o))}
       ${slipRow('60 FT', fmt(r.t60), fmt(o.t60))}
@@ -374,6 +382,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     slip.classList.remove('hidden');
   }
   function foldSlip() { slip.classList.add('hidden'); }
+  // put away for good: no tab either, until the next run's slip
+  function closeSlip() { if (!lastSlip) return; lastSlip = ''; slip.classList.add('hidden'); slipTab.classList.add('hidden'); }
   // the last slip again (its BACK TO THE LINE only while that run is the one just over)
   function openSlip() {
     if (!lastSlip) return;
@@ -409,7 +419,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     st.pin = null;
     if (was !== 'done') { unstick(); mp?.dragSend({ t: 'drag', op: 'out' }); }
     st.phase = 'off';
-    hideAsk(); foldSlip();
+    hideAsk();                 // (the timeslip stays as it is: it goes with the car)
     if (why && was !== 'done') toast(why, 2200);
   }
 
@@ -506,7 +516,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     get result() { return st.res; },
     get best() { return best; },
     get runs() { return runs; },
-    shift, practice, leave, again, cancel, message, heard, dragPose,
+    shift, practice, leave, again, cancel, message, heard, dragPose, closeSlip,
     // the DRAG STRIP button: straight onto the line of a free lane
     goLine(car = st.car) {
       if (car) st.car = car;          // (DRIVE with ÜLENURME picked: before the first frame of driving)
@@ -608,9 +618,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         if (st.duel && !st.duel.res && now - st.doneAt > 20000) { st.duel.res = { dnf: 1, red: 0, foul: 0, rt: null, tot: null }; judge(); showSlip(); }
         if (Math.hypot(car.x - MID[0], car.z - MID[1]) > QUARTER / 2 + DONE_GONE) st.phase = 'off';      // (the slip stays up till closed)
       }
-      // the folded slip's tab: at the strip, not while a tree or a run is on
-      const tabOn = !!lastSlip && canDrive && slip.classList.contains('hidden') && st.phase !== 'tree' && st.phase !== 'run'
-        && (st.phase !== 'off' || Math.hypot(car.x - MID[0], car.z - MID[1]) < QUARTER / 2 + HERE_M);
+      // the folded slip's tab: wherever the car is, but not in a lane (the tree has that edge of the screen then)
+      const tabOn = !!lastSlip && canDrive && slip.classList.contains('hidden') && st.phase !== 'line' && st.phase !== 'tree' && st.phase !== 'run';
       if (tabOn === slipTab.classList.contains('hidden')) slipTab.classList.toggle('hidden', !tabOn);
       // ---- our place to the other driver, 30 times a second
       if (st.duel && (st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && now - st.doneAt < 2500)) && mp) {

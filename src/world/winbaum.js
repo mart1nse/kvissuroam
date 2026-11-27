@@ -1,6 +1,6 @@
 // An advert for winbaum.ee, a maker of modular houses (Martin, 26 Nov: for a possible advertiser): their Winbaum L
 // cabin on the Kaubamaja plaza just to the left of the LAP START billboard as one comes from the start, with
-// WINBAUM.EE on its roof in a cyan to purple gradient. Only with ?winbaum=1 for now.
+// WINBAUM.EE on its roof in a cyan to purple gradient. Shown to everyone since 27 Nov; ?winbaum=0 hides it.
 //   - after their photo, floor plan and their own render of it in the game, drawn 1.4 times its real size
 //     (Martin: "I know the scale is off, but let's try"): 9.0 x 3.3 m, black-stained timber boards all round,
 //     a deep frame round the glazed front whose flared reveals are lined with slats, seven tall panes with the
@@ -10,7 +10,7 @@
 //     sill, the deck and the soffit, the deck lights throw pools (all painted light, no lamps for the shader)
 //   - inside, seen through the glass: a low upholstered bed under a glowing shelf with bedside lamps, sheer
 //     curtains, a round black wood stove with its fire and logs, a boucle lounge chair, a stone coffee table on a
-//     rug, a plant, the oak kitchen with a stone top and lit open shelves, the oak dining table with four chairs
+//     rug, a fiddle-leaf fig in a tall pot, the oak kitchen with a stone top and lit open shelves, the oak dining table with four chairs
 //     under a cluster of glass globes, downlights in the slatted ceiling; shaded once when built (a warm light
 //     from above), so it reads as lit rooms and not as flat paint
 //   - the sign on the roof: a black panel with a gradient frame, the W/M mark and the name, readable from both
@@ -32,7 +32,7 @@ import { jobs } from '../jobs.js';
 import { still } from '../still.js';
 
 const FLAG = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('winbaum') : null;
-export const WINBAUM = !!FLAG && FLAG !== '0';
+export const WINBAUM = FLAG !== '0';                // shown to everyone since 27 Nov (Martin); ?winbaum=0 hides it
 const SITE = 'https://www.winbaum.ee/';               // where a tap on the cabin or its sign goes
 
 // the Kaubamaja frame (kaubamaja.js): a along Küüni from the roof's west corner (towards the board, south-east),
@@ -416,8 +416,72 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
     rb(0.95, 0.46, 0.24, 0.12, 0xece3d3, chX + 0.02, Y0 + 0.52, chZ - 0.34, 0.12);
     for (const dx of [-0.42, 0.42]) rb(0.2, 0.3, 0.74, 0.09, 0xece3d3, chX + dx, Y0 + 0.42, chZ + 0.02);
     rb(0.5, 0.1, 0.42, 0.05, 0xf4eee4, chX, Y0 + 0.42, chZ + 0.08);
-    q.add(new THREE.CylinderGeometry(0.17, 0.13, 0.42, 16), 0xcdbfae, 1.85, Y0 + 0.21, IZ0 + 1.65);     // the plant in its pot
-    for (const [dx, dy, dz, r] of [[0, 0.75, 0, 0.3], [0.14, 0.95, 0.06, 0.22], [-0.12, 1.05, -0.04, 0.2], [0.02, 1.25, 0.02, 0.16]]) q.add(new THREE.IcosahedronGeometry(r, 1).scale(1, 1.15, 1), 0x3f6a3a, 1.85 + dx, Y0 + dy, IZ0 + 1.65 + dz);
+    // a fiddle-leaf fig in a tall cream pot: a slim stem with three side shoots, broad violin-shaped leaves folded
+    // along the midrib and arching over, glossy dark green above and paler beneath (each leaf drawn both ways)
+    {
+      const px = 1.85, pz = IZ0 + 1.65, r = rng(77), BARK = 0x6b5a45;
+      q.add(new THREE.CylinderGeometry(0.2, 0.15, 0.46, 24), 0xd9d0c3, px, Y0 + 0.23, pz);                 // the pot
+      q.add(new THREE.TorusGeometry(0.192, 0.014, 6, 24).rotateX(Math.PI / 2), 0xe6dfd3, px, Y0 + 0.46, pz);
+      q.add(new THREE.CylinderGeometry(0.185, 0.185, 0.01, 20), 0x3a2b20, px, Y0 + 0.445, pz);              // its soil
+      const up = new THREE.Vector3(0, 1, 0), dv = new THREE.Vector3(), qt = new THREE.Quaternion();
+      const stem = (a, b, ra, rb) => {
+        dv.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        const L = dv.length();
+        q.add(new THREE.CylinderGeometry(rb, ra, L, 6, 1, true).applyQuaternion(qt.setFromUnitVectors(up, dv.normalize())), BARK, px + (a[0] + b[0]) / 2, Y0 + (a[1] + b[1]) / 2, pz + (a[2] + b[2]) / 2);
+      };
+      const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
+      // (in the pot's frame, y up from the floor)
+      const trunk = [[0, 0.44, 0], [0.03, 0.9, 0.01], [-0.02, 1.3, 0.03], [0.01, 1.7, 0]];
+      for (let k = 0; k + 1 < trunk.length; k++) stem(trunk[k], trunk[k + 1], 0.028 - k * 0.005, 0.023 - k * 0.005);
+      const shoots = [[[0.02, 0.98, 0.01], [0.27, 1.2, 0.09]], [[-0.01, 1.14, 0.02], [-0.25, 1.36, -0.05]], [[0, 1.3, 0.03], [0.09, 1.5, -0.22]]];
+      for (const [a, b] of shoots) stem(a, b, 0.012, 0.008);
+      // a leaf from `at`, heading out at azimuth az and rising by pitch, drooping towards its tip
+      const N = 5;
+      const leaf = (at, az, pitch, len, wid, top, under) => {
+        const droop = 0.6 + r() * 0.5, fold = 0.14 + r() * 0.08, roll = (r() - 0.5) * 1.3, cr = Math.cos(roll), sr = Math.sin(roll);
+        const C = [], Lf = [], Rt = [];
+        let c = at.slice(), pt = pitch;
+        for (let k = 0; k <= N; k++) {
+          const t = k / N, w = (wid / 2) * Math.pow(Math.sin(Math.PI * Math.min(0.985, 0.04 + t * 0.95)), 0.65) * (0.42 + 0.58 * t);
+          const fx = Math.cos(az) * Math.cos(pt), fy = Math.sin(pt), fz = Math.sin(az) * Math.cos(pt);
+          // the leaf's own up: square to its length and to the level side
+          const ux = -fy * Math.cos(az), uy = Math.cos(pt), uz = -fy * Math.sin(az), vx = -Math.sin(az), vz = Math.cos(az);
+          // turned about its own length by `roll`, so some leaves face out and not only up
+          const sx = vx * cr + ux * sr, sy = uy * sr, sz = vz * cr + uz * sr, nx = ux * cr - vx * sr, ny = uy * cr, nz = uz * cr - vz * sr;
+          C.push(c.slice());
+          Lf.push([c[0] + sx * w + nx * w * fold, c[1] + sy * w + ny * w * fold, c[2] + sz * w + nz * w * fold]);
+          Rt.push([c[0] - sx * w + nx * w * fold, c[1] - sy * w + ny * w * fold, c[2] - sz * w + nz * w * fold]);
+          c = [c[0] + fx * (len / N), c[1] + fy * (len / N), c[2] + fz * (len / N)];
+          pt -= droop / N;
+        }
+        const tri = [];
+        for (let k = 0; k < N; k++) tri.push(C[k], Lf[k], Lf[k + 1], C[k], Lf[k + 1], C[k + 1], C[k], C[k + 1], Rt[k + 1], C[k], Rt[k + 1], Rt[k]);
+        // which way round faces up: the first triangle's normal against the leaf's up
+        const [a, b, d] = tri, e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        const ny0 = e1[2] * e2[0] - e1[0] * e2[2];
+        const faceUp = ny0 >= 0 ? tri : tri.map((_, k) => tri[k - (k % 3) + [0, 2, 1][k % 3]]);
+        const faceDown = faceUp.map((_, k) => faceUp[k - (k % 3) + [0, 2, 1][k % 3]]);
+        for (const [list, hex] of [[faceUp, top], [faceDown, under]]) {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.Float32BufferAttribute(list.flat(), 3));
+          g.computeVertexNormals();
+          q.add(g, hex, px, Y0, pz);
+          g.dispose();
+        }
+      };
+      const tops = [0x2e6b28, 0x357a2e, 0x285f24, 0x3f8034, 0x30702a], unders = [0x7c9a5e, 0x86a366, 0x6f8f55];
+      const grow = (at, az, s) => leaf(at, az, 0.6 + r() * 0.6, (0.3 + r() * 0.1) * s, (0.25 + r() * 0.05) * s, tops[(r() * 5) | 0], unders[(r() * 3) | 0]);
+      for (let k = 0; k < 18; k++) {                                       // up the stem, round it by the golden angle
+        const t = k / 17, y = 0.8 + t * 0.9, seg = Math.min(2, Math.floor((y - 0.44) / 0.42));
+        const at = lerp(trunk[seg], trunk[seg + 1], Math.min(1, (y - trunk[seg][1]) / (trunk[seg + 1][1] - trunk[seg][1])));
+        grow(at, k * 2.39996 + r() * 0.4, 1 - 0.25 * t);
+      }
+      for (const [a, b] of shoots) for (let k = 0; k < 5; k++) {            // and along the shoots, the last at the tip
+        const at = lerp(a, b, 0.3 + k * 0.175), az = Math.atan2(b[2] - a[2], b[0] - a[0]);
+        grow(at, az + (k % 2 ? 0.9 : -0.9) * (k < 4 ? 1 : 0.1), 0.9);
+      }
+      grow(trunk[3], r() * 6.283, 0.75);
+    }
     // -- the kitchen at the back right: handleless oak fronts, a light stone top with the sink, open shelves with
     // their lights, a tall unit with the oven
     const kx0 = 1.35, kx1 = 3.55, kw = kx1 - kx0, kxm = (kx0 + kx1) / 2;

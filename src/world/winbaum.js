@@ -268,6 +268,40 @@ function shadeOnce(geo) {
   }
 }
 
+// the lowest ground under the lot: where the gravel bed, and the cabin on it, stand
+export function lotFoot(world) {
+  let gy = Infinity;
+  for (const [lx, lz] of [[LOT.x0, LOT.z0], [LOT.x1, LOT.z0], [LOT.x0, LOT.z1], [LOT.x1, LOT.z1], [0, 0]]) {
+    const [x, z] = toWorld(lx, lz); gy = Math.min(gy, world.heightAt(x, z));
+  }
+  return gy;
+}
+// What the cars feel of the cabin standing at height gy: solids (the cabin up to its roof, the sign on it up to its
+// top, the lounger and the olive's trunk) and tops (the deck and the roof, ground to drive and land on: Martin, 27
+// Nov, "make the porch so that you can drive on top of it. Also want to jump on it with the Tesla"; tops as a bus
+// shelter's roof is, src/cars/tops.js). The deck's rim eases down so a wheel takes its step at any speed.
+export function cabinGround(world, gy) {
+  const box = (x0, x1, z0, z1, y1) => {
+    const [x, z] = toWorld((x0 + x1) / 2, (z0 + z1) / 2);
+    return { x, z, yaw: SPOT.yaw, hx: (S * (x1 - x0)) / 2, hz: (S * (z1 - z0)) / 2, tall: gy + S * y1 - world.floorAt(x, z, gy) };
+  };
+  const top = (x0, x1, z0, z1, y, bevel = 0, drop = 0) => {
+    const [x, z] = toWorld((x0 + x1) / 2, (z0 + z1) / 2);
+    return { x, z, y: gy, yaw: -SPOT.yaw, hl: (S * (z1 - z0)) / 2, hw: (S * (x1 - x0)) / 2, h: S * y, flat: true, bevel, drop, dx: 0, dz: 0, dyaw: 0, vx: 0, vz: 0 };
+  };
+  return {
+    solids: [
+      box(X0, X1, ZB, ZF, YT),
+      box(-SW / 2, SW / 2, SZ - 0.12, SZ + 0.12, SY + SH / 2),
+      box(2.68, 4.4, ZF + 0.87, ZF + 1.53, DY + 0.85),
+      box(OLIVE[0] - 0.13, OLIVE[0] + 0.13, OLIVE[1] - 0.13, OLIVE[1] + 0.13, 1.4),
+    ],
+    tops: [top(X0, X1 + DECK_R, ZF, ZF + DECK, DY, 0.25, 0.36), top(X0 - 0.02, X1 + 0.02, ZB - 0.02, ZF + 0.02, YT)],
+  };
+}
+// (for the tests: the cabin's frame, a point of it in the world)
+export const CABIN = { S, X0, X1, ZB, ZF, DECK, DECK_R, DY, YT, SZ, OLIVE, LOT, toWorld, toLocal, spot: SPOT };
+
 export function createWinbaum(scene, world, { shadows = true } = {}) {
   if (!WINBAUM) return { update() {}, bindClicks() {}, hitAt: () => false };
   const group = still(new THREE.Group());
@@ -633,7 +667,7 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
     [OC[0] - ORX - 0.3, OC[0] + ORX + 0.3, 0, OC[1] + ORY + 0.6, OC[2] - ORX - 0.3, OC[2] + ORX + 0.3],   // the olive
     [LOT.x0, LOT.x1, 0, 0.85, LOT.z0, LOT.z1],                                   // the lavender
   ];
-  let gy0 = 0;
+  let gy0 = 0, tops = [], topsOn = false;
   function hitAt(camera, el, cx, cy, carNow) {
     if (!built || !group.visible || !group.parent) return false;
     const r = el.getBoundingClientRect();
@@ -684,24 +718,27 @@ export function createWinbaum(scene, world, { shadows = true } = {}) {
     update(car) {
       if (!car) return;
       const d = Math.hypot(car.x - SPOT.x, car.z - SPOT.z);
-      if (built) { group.visible = d < 500; return; }
+      if (built) {
+        group.visible = d < 500;
+        // (its deck and roof are ground only near it, so groundAt elsewhere has nothing more to look at)
+        const near = d < 80;
+        if (near !== topsOn) { topsOn = near; world.setTops?.('winbaum', near ? tops : []); }
+        return;
+      }
       if (d > 900) return;
       const [ax, az] = toWorld(LOT.x0, LOT.z0), [bx, bz] = toWorld(LOT.x1, LOT.z1);
       if (!world.ready(ax, az) || !world.ready(bx, bz)) return;
       built = true;
       // (placed before it joins the scene: a still group works out where it is once)
-      let gy = Infinity;          // the gravel bed sits at the lowest ground under the lot, so nothing floats
-      for (const [lx, lz] of [[LOT.x0, LOT.z0], [LOT.x1, LOT.z0], [LOT.x0, LOT.z1], [LOT.x1, LOT.z1], [0, 0]]) {
-        const [x, z] = toWorld(lx, lz); gy = Math.min(gy, world.heightAt(x, z));
-      }
+      const gy = lotFoot(world);  // the gravel bed sits at the lowest ground under the lot, so nothing floats
       gy0 = gy;
       group.position.set(SPOT.x, gy, SPOT.z);
       group.rotation.y = SPOT.yaw;
       group.scale.setScalar(S);
       scene.add(group);
-      // the cabin and its deck stop the cars
-      const [cx, cz] = toWorld((X0 + X1 + DECK_R) / 2, (ZB + ZF + DECK) / 2);
-      world.addSolids([{ x: cx, z: cz, yaw: SPOT.yaw, hx: (S * (X1 - X0 + DECK_R)) / 2, hz: (S * (ZF - ZB + DECK)) / 2 }]);
+      const ground = cabinGround(world, gy);
+      world.addSolids(ground.solids);
+      tops = ground.tops;
       jobs.add(build, 'winbaum');
     },
     bindClicks,

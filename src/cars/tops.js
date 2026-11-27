@@ -11,7 +11,8 @@
 // there, and one driven forward or back goes down the bonnet or over the end as off any edge (tip.js).
 // Nothing here is drawn; the parked cars (src/world/parked.js) and the other players' cars
 // (src/net/multiplayer.js) give the world the ones near the car each frame (world.setTops). A bus shelter's roof
-// is such a top too, flat (src/world/busstops.js: Martin, 26 Nov: "I would like to land on bus shelters too").
+// is such a top too, flat (src/world/busstops.js: Martin, 26 Nov: "I would like to land on bus shelters too"), and the
+// Winbaum cabin's deck and roof (src/world/winbaum.js: Martin, 27 Nov: "make the porch so that you can drive on top of it").
 
 // a car's top along its length, from the front (0) to the back (1): [where, the share of its height]
 const CAR = [[0, 0.6], [0.06, 0.66], [0.3, 0.7], [0.47, 1], [0.78, 1], [0.95, 0.72], [1, 0.62]];
@@ -21,7 +22,13 @@ const CAR = [[0, 0.6], [0.06, 0.66], [0.3, 0.7], [0.47, 1], [0.78, 1], [0.95, 0.
 export function topOver(v, l, w) {
   if (!(Math.abs(l) <= v.hl && Math.abs(w) <= v.hw)) return -Infinity;
   const f = (v.hl - l) / (2 * v.hl), q = Math.abs(w) / v.hw;
-  if (v.flat) return v.h;
+  if (v.flat) {
+    if (!v.bevel) return v.h;
+    // (a deck to drive up onto, the Winbaum cabin's: its rim eases down by `drop` over `bevel` metres, so a wheel
+    // takes the step at any speed, as up a kerb)
+    const e = Math.min(v.hl - Math.abs(l), v.hw - Math.abs(w));
+    return e >= v.bevel ? v.h : v.h - v.drop * (1 - e / v.bevel);
+  }
   if (v.bus) return v.h * (f < 0.02 || f > 0.98 || q > 0.94 ? 0.92 : 1);
   let k = 1;
   while (k < CAR.length - 1 && CAR[k][0] < f) k++;

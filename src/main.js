@@ -179,6 +179,7 @@ import { stats } from './stats.js';
 import { createAdViews } from './adviews.js';
 import { createRaceMode } from './race/racemode.js';
 import { createStage, onStage } from './race/raadi.js';
+import { createDrag } from './race/drag.js';
 import { stageGravel } from './race/raadi-edge.js';
 import { setUnrutted } from './world/roadtex.js';
 import { setPaintScale } from './world/paintscale.js';
@@ -481,6 +482,9 @@ const spot = { x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, yawRate: 0, hit: 0, halfL
 // the Raadi rally stage (src/race/raadi.js), MAJORAADI to the players: tried out behind ?raadi=1 from 23 Nov 2026 and
 // open to everyone since 26 Nov (Martin: "merge to prod"). ?raadi=0 leaves it out (the old single-circuit game).
 const RAADI = params.get('raadi') !== '0';
+// the drag strip at Ülenurme (src/race/drag.js): tried out behind ?drag=1 from 27 Nov 2026
+const DRAG = params.get('drag') === '1';
+let drag = null;
 let stage = null;
 let droveOnce = false;                  // DRIVE pressed since the page opened: the first puts the car at a circuit,
                                         // so that circuit's tyres go on (the stored choice of a last visit, gravel, had
@@ -1013,7 +1017,8 @@ async function boot() {
     hotlap: () => ((!!race?.running || !!stage?.running || stage?.phase === 'count') && mode === 'drive') || !!raceMode?.ghost,
     // just put on the start and still on the lap's road before the line: the same, without the glow (Martin 25 Nov)
     // (or put somewhere a moment ago, by R, the map or a start: nobody is bumped by a car that appears beside them)
-    fresh: () => (!!lane?.on || performance.now() - placedAt < 2000) && mode === 'drive',
+    // (and on the drag strip's line or on a run there: nobody bumps a drag racer, src/race/drag.js)
+    fresh: () => (!!lane?.on || performance.now() - placedAt < 2000 || !!drag?.busy) && mode === 'drive',
     racing: (id) => !!raceMode?.racing(id),
     place: (id) => raceMode?.place(id) || 0,
     winner: (id) => !!raceMode?.winner(id),
@@ -1035,6 +1040,9 @@ async function boot() {
     lean: () => isTouch,
     dropModel: (id) => carModels?.dropCarModel(id, freeModel),
     onPlate: (p) => { if (model) setCarPlate(model, p); },
+    // the drag strip: its lanes and runs, and the other driver's place 30 times a second (src/race/drag.js)
+    onDrag: (m) => (m.t === 'dp' ? drag?.heard(m.id, m.a) : drag?.message(m)),
+    dragPose: DRAG ? (id, p) => drag?.dragPose(id, p) : null,
   });
   if (tabAside) mp.rest();                      // (taken over by another tab while this one loaded)
   people = createPeople({ mp, onFocus: (x, z) => bigmap.focus(x, z), votes: () => raceMode?.voteMarks(),
@@ -1058,6 +1066,7 @@ async function boot() {
         car.vx = car.vy = car.yawRate = 0;
         race?.cancel('LAP CANCELLED');
         stage?.rest();
+        drag?.cancel();
         closeOverlays();
       }
       shrinker?.jump(scene, o.pose[0], o.pose[1]);
@@ -1098,7 +1107,8 @@ async function boot() {
     // (from further than the stage is built from, or before it was: GETTING READY stays until the stage and the
     // places round its start are built and on the graphics card, and the start lights wait for it. Martin 26 Nov,
     // short hitches in the first seconds of a run after MAJORAADI: "load a bit longer before you show the car")
-    place: (pose) => { const far = Math.hypot(car.x - pose.x, car.z - pose.z) > 400; history.length = 0; place(pose); if (far && mode === 'drive') getReady(true); },
+    place: (pose) => { const far = Math.hypot(car.x - pose.x, car.z - pose.z) > 900;   // (back from the far end: all still there)
+      history.length = 0; place(pose); if (far && mode === 'drive') getReady(true); },
     readying: () => readyOn > 0, wood: (kind, level) => audio.wood?.(kind, level),
     beep: (kind) => audio.beep?.(kind),
     // a finished run goes to the server like a lap does (Martin 23 Nov: "the server side of this track, keeping
@@ -1121,6 +1131,14 @@ async function boot() {
       return net && (!mine || net.ms <= mine.ms) ? net : mine;
     },
   });
+  if (DRAG) drag = createDrag({
+    world, scene, mp, canDrive: !isTouch, shadows: !isTouch, toast: (t, ms) => hud.toast(t, ms), wasd: () => input.wasd,
+    place: (pose) => { const far = Math.hypot(car.x - pose.x, car.z - pose.z) > 900;   // (back from the far end: all still there)
+      history.length = 0; place(pose); if (far && mode === 'drive') getReady(true); },
+    free: () => mode === 'drive' && !watch?.active && !raceMode?.holding && !raceMode?.ghost && !stageBusy(),
+    // (GETTING READY over: the lane is taken only then, so a race does not start while the place still loads)
+    ready: () => !readyOn,
+  });
   if (stage) {
     // short buttons to either circuit's start, straight from the driving screen
     const tp = document.createElement('div');
@@ -1129,7 +1147,7 @@ async function boot() {
     // minioutline of the track and stage as an icon before the text"): the lists' marks (trackpick.js), drawn in
     // the button's cyan, left out of what a screen reader says (the name follows)
     const mark = (id) => TRACK_ICON[id].replace(/ role="img" aria-label="[^"]*"><title>[^<]*<\/title>/, ' aria-hidden="true">');
-    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>`;
+    tp.innerHTML = `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button><button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme"><span>DRAG STRIP</span></button>' : ''}`;
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId });
@@ -1327,6 +1345,7 @@ function setCar(id, now = false) {
   raceMode?.out('car');                            // after the lights another car means out of the race
   race?.cancel('LAP CANCELLED');
   stage?.cancel('STAGE CANCELLED');
+  drag?.cancel('DRAG RUN CANCELLED');
   layoutMenu();
 }
 
@@ -1487,6 +1506,7 @@ function openGarage() {
   // lights, the car keeps its speed instead: the race's clock is the server's, and a stop is no gain then.
   race?.cancel('LAP CANCELLED · GARAGE', false, 'jump');
   if (stage?.phase === 'run') stage.cancel('STAGE CANCELLED · GARAGE');
+  drag?.cancel('DRAG RUN CANCELLED');
   if (!(raceMode?.ghost && !raceMode?.holding)) car.vx = car.vy = car.yawRate = 0;
   // the track picker on the track the car is at, so that DRIVE leaves it there (a pick in the garage still moves it)
   if (stage && !trackPicked) { board?.follow(atRaadi() ? 'raadi' : 'toome'); layoutMenu(); }
@@ -1591,6 +1611,7 @@ async function watchReplay(track, carOf) {
 
 let placedAt = -1e9;               // when the car was last put somewhere (ms)
 function place(pose) {
+  drag?.placed();                                  // (put anywhere but onto the drag strip's line: a drag run is off)
   watch?.stop();                                   // (put somewhere: back in your own car)
   placedAt = performance.now();
   if (Math.hypot(pose.x - car.x, pose.z - car.z) > 200) fixBonnet(car);   // (put somewhere far off, home or the stage's start: a fresh bonnet; R keeps it as it is)
@@ -1647,6 +1668,7 @@ let roofPut = null;                // where R last put the car back on a roof
 let respawning = false;
 async function goLastSpot() {
   if (respawning) return;
+  if (drag?.again()) return;                       // (after a drag run: straight back onto the line)
   respawning = true;
   try {
     const sx = wetAt ? wetAt.x : car.x, sz = wetAt ? wetAt.z : car.z;
@@ -1815,7 +1837,10 @@ input.on('KeyN', toggleSound);
 input.on('KeyF', () => { if (canFull) toggleFull(); });
 input.on('KeyL', () => showOverlay('laps'));
 // A / Z: one gear up / down by hand; the automatic takes over again at the shift point
-const shiftBy = (dir) => unlessMap(() => { if (mode === 'drive' && !board.open && !input.wasd) shiftGear(car, dir); });
+const shiftBy = (dir) => unlessMap(() => {
+  if (mode !== 'drive' || board.open || input.wasd) return;
+  if (drag?.stick) drag.shift(dir); else shiftGear(car, dir);       // (the drag strip's gearbox: src/race/drag.js)
+});
 // Options (O): WASD driving, which turns the A / Z gear keys off. Off by default; remembered per browser.
 const optEl = $('#options'), optKeys = $('#opt-keys');
 let wasdSaved = false;
@@ -1955,12 +1980,23 @@ input.on('Digit1', () => raceMode?.act());
 input.on('Numpad1', () => raceMode?.act());
 input.on('KeyA', shiftBy(1));
 input.on('KeyZ', shiftBy(-1));
+// the drag strip (src/race/drag.js): P practice, Backspace off the line; with WASD driving its gears are E and Q
+// (A steers there; Q, BOOST's key, is read before the key list so it shifts down on the strip)
+if (DRAG) {
+  input.on('KeyP', () => { if (mode === 'drive') drag?.practice(); });
+  input.on('Backspace', () => { if (mode === 'drive') drag?.leave(); });
+  addEventListener('keydown', (e) => {
+    if (e.repeat || (e.code !== 'KeyE' && e.code !== 'KeyQ') || !input.wasd || mode !== 'drive' || !drag?.stick || overlayOpen()) return;
+    drag.shift(e.code === 'KeyE' ? 1 : -1);
+    e.preventDefault();
+  }, true);
+}
 
 // ---- controllers: the buttons do what the keys do (gears work in WASD mode too: a pad has no A key
 // to clash with), the garage can be driven with the d-pad or the stick, and the options pick the input
 const padDrive = (fn) => () => { if (mode === 'drive' && !setup.isOpen) fn(); };
-pads.on('gearUp', padDrive(unlessMap(() => { if (!board.open) shiftGear(car, 1); })));
-pads.on('gearDown', padDrive(unlessMap(() => { if (!board.open) shiftGear(car, -1); })));
+pads.on('gearUp', padDrive(unlessMap(() => { if (!board.open) { if (drag?.stick) drag.shift(1); else shiftGear(car, 1); } })));
+pads.on('gearDown', padDrive(unlessMap(() => { if (!board.open) { if (drag?.stick) drag.shift(-1); else shiftGear(car, -1); } })));
 pads.on('view', padDrive(() => input.press('KeyC')));
 pads.on('reset', padDrive(() => input.press('KeyR')));
 pads.on('home', padDrive(() => input.press('KeyH')));
@@ -2086,6 +2122,7 @@ document.addEventListener('click', (e) => {
   if (act === 'reset') goLastSpot();
   else if (act === 'home') homeHere();
   else if (act === 'track-toome') { goHome(); if (mode === 'drive') tyrePending = { k: 'road', t: performance.now() }; }
+  else if (act === 'track-drag') { if (mode === 'drive' && drag) { raceMode?.out('map'); stage?.teleported(); if (drag.goLine() && tyres === 'gravel') tyrePending = { k: 'road', t: performance.now() }; } }
   else if (act === 'track-raadi') { if (mode === 'drive' && stage) { raceMode?.out('map'); stage.goStart(); tyrePending = { k: 'gravel', t: performance.now() }; } }
   else if (act === 'garage') openGarage();
   else if (act === 'map') { if (!bigmap.isOpen) showOverlay('map'); }
@@ -2293,7 +2330,7 @@ function frame(ts) {
       car.x = x; car.z = z; car.yaw = yaw; car.vx = car.vy = car.yawRate = 0;
     }
     // on the race grid: held on the spot until the lights go out (the wheels may spin)
-    const pin = raceMode?.pin || stage?.pin;
+    const pin = raceMode?.pin || stage?.pin || drag?.pin;
     if (pin) { car.x = pin.x; car.z = pin.z; car.yaw = pin.yaw; car.vx = car.vy = car.yawRate = 0; }
     lane?.update(car);
     // (a kickflip in flight, src/cars/thrust.js: the car is over the things it would knock into, which only
@@ -2398,6 +2435,7 @@ function frame(ts) {
     if (launch?.done && kmh < 1) launch = null;
     race.update(car, carId, s0Short(), inpNow());
     stage?.update(car, carId, s0Short(), dt, inpNow(), watch?.focus);   // (and the stage round a car being watched)
+    drag?.update(car, dt, watch?.focus);
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,
@@ -2698,7 +2736,7 @@ window.__game = !devHook ? { hitches } : {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, kudos: () => kudos, sideCam };
+  skins: () => skinLog, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

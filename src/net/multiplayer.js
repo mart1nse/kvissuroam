@@ -325,7 +325,7 @@ function paintOf(model) {
 }
 
 // stage: true where the Raadi rally stage is on (everywhere unless ?raadi=0): only then are its records announced
-export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null }) {
+export function createMultiplayer({ scene, camera, buildModel, modelReady = () => true, toast, onBoard, onPeople, onRace, onRecord, onKudos, onRefused = null, hotlap = () => false, fresh = () => false, racing = () => false, place = () => 0, winner = () => false, stage = false, low = () => false, lean = () => false, warm = null, samples = 0, dropModel = () => {}, onPlate = null, onDrag = null, dragPose = null }) {
   const others = new Map();      // id -> remote player
   // every id this page has had: after a reconnect the server may still hold our old connection for a
   // while, and must not show up as another driver (or later as "left", with the chime)
@@ -678,6 +678,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         for (const p of Array.isArray(m.players) ? m.players : []) add(p);
         onPeople?.('count');
         if (m.board) setBoard(m.board);
+        onDrag?.({ t: 'drag', op: 'welcome' });       // (on the drag strip's line: say so again, src/race/drag.js)
         break;
       case 'room':
         tight = m.tight === 1;
@@ -745,6 +746,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       }
       case 'race':
         if (m.r && typeof m.r === 'object') { raceSeen = true; onRace?.(m.r); }
+        break;
+      case 'drag':           // the drag strip's lanes, a tree's green, a run's figures (src/race/drag.js)
+      case 'dp':             // ...and the other driver's place on the strip, 30 times a second in a race of two
+        onDrag?.(m);
         break;
       case 'board':
         if (!m.board) break;
@@ -1244,6 +1249,8 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     const ds = dsBuf;
     for (const o of replay ? [...others.values(), replay] : others.values()) {
       o.pose = o.rp ? replayPose(o, dt) : sample(o, now);
+      // (the other driver in a drag race: where their own feed says the car is now, src/race/drag.js)
+      if (o.pose && !o.rp && dragPose) dragPose(o.id, o.pose);
       if (o.spec.thrusters && !o.rp) jets(o, now, dt);
       // (the car we spectate, gone quiet (another tab, lost signal): parked where it was last heard of, engine
       // off, so the camera is not left on an empty road; spectate.js moves on after a while)
@@ -1521,6 +1528,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     get id() { return myId; },
     serverNow: () => Date.now() + clockOff,
     raceSend(m) { if (!STEALTH) send(m); },
+    // the drag strip (src/race/drag.js, worker/drag.js): its messages, and our place to the other driver
+    dragSend(m) { if (!STEALTH) send(m); },
+    dragFeed(a) { if (!STEALTH && ws && ws.readyState === 1) ws.send(`{"t":"dp","a":${JSON.stringify(a)}}`); },
     // our Rocket has left the ground on a kickflip: the plan of the whole flight, for the others to fly it by
     sendFlip(plan) {
       if (STEALTH || !others.size) return;

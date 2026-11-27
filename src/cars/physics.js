@@ -242,6 +242,41 @@ export function shiftGear(car, dir) {
   return true;
 }
 
+// The drag strip's gearbox (Martin 24 Nov 2026: manual gears in drag mode only): car.stick on, the automatic never
+// shifts, and the lever goes R - N - 1 - 2 - ... with A up (into gear from neutral) and Z down (1 to neutral, neutral to
+// reverse). In neutral the engine revs freely; the clutch is dropped the moment A puts it into first, at the revs it
+// has then (car.dropRpm): too few and it bogs, too many and the tyres go up in smoke. An electric car's lever is
+// R - N - D. Returns the lever's new place ('R', 'N', 'D' or the gear), or false when it cannot go there (reverse
+// only at a crawl).
+export function stickShift(car, dir) {
+  const s = car.spec, e = s.engine, ev = e.type === 'ev';
+  if (dir > 0) {
+    if (car.stickRev) { car.stickRev = false; car.reversing = false; car.neutral = true; return 'N'; }
+    if (car.neutral) {
+      car.neutral = false; car.gear = 1; car.shiftTimer = 0; car.manual = 0; car.locked = false;
+      if (!ev) car.dropRpm = car.free ?? car.rpm;
+      return ev ? 'D' : 1;
+    }
+    if (ev || car.gear >= s.gears.length) return false;
+    car.gear++; car.shiftUp = true; car.locked = true; car.carry = 0;
+    car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
+    return car.gear;
+  }
+  if (car.stickRev) return false;
+  if (car.neutral) {
+    if (Math.abs(car.vx) > 1.5) return false;
+    car.neutral = false; car.stickRev = true; car.reversing = true; car.gear = 1;
+    return 'R';
+  }
+  if (ev || car.gear === 1) { car.neutral = true; car.free = car.rpm; car.dropRpm = undefined; return 'N'; }
+  const rpmIn = (k) => (Math.abs(car.vx) / s.wheelRadius) * s.gears[k - 1] * s.finalDrive * (60 / (2 * Math.PI));
+  if (rpmIn(car.gear - 1) > e.redline * 1.15) return false;
+  car.gear--; car.shiftUp = false; car.shiftTimer = Math.min(s.shiftTime, SHIFT_TIME); car.shiftLen = car.shiftTimer;
+  return car.gear;
+}
+// the lever's place for the dial: 'R', 'N', 'D' (an electric car) or the gear
+export const stickAt = (car) => (car.stickRev ? 'R' : car.neutral ? 'N' : car.spec.engine.type === 'ev' ? 'D' : car.gear);
+
 // rev limiter: the shortest ignition cut (s) and how far the revs must fall before it returns (rpm);
 // an engine can set its own with revCut and revCutDrop
 const SHIFT_TIME = 0.25;         // a quick manual change: clutch, lever, clutch (s)
@@ -317,7 +352,7 @@ function engineForce(car, throttle, dt) {
     car.gear = 1;
     // (held on the race grid: a four-wheel-drive EV has no clutch to slip, so it waits with its power held
     // back, launch mode, and goes at the lights)
-    if (car.gridHold && s.drive === 'awd') { car.kw = 0; return 0; }
+    if ((car.gridHold && s.drive === 'awd') || car.neutral) { car.kw = 0; return 0; }
     // (for the power dial: what the battery gives, or takes back when slowing)
     const use = Math.max(car.useF, car.useR);
     car.regenIn = throttle <= 0 ? Math.min(1, (car.regenIn || 0) + dt / REGEN_IN) : 0;
@@ -333,7 +368,7 @@ function engineForce(car, throttle, dt) {
   // shift point, so second or third can be picked mid burnout or donut and kept while the tyres spin.
   // A downshift on the engine brake waits for the throttle. The gear is given up a second after the car
   // has come to a stop off the throttle.
-  if (car.manual) {
+  if (car.manual && !car.stick) {
     const road = rpmAt(car.gear);
     // (stopped off the throttle for a second, the gearbox goes back to automatic)
     car.manualStop = throttle <= 0 && vAbs < 1.5 ? (car.manualStop || 0) + dt : 0;
@@ -348,7 +383,7 @@ function engineForce(car, throttle, dt) {
         (due && road <= e.redline && (car.manual > 0 || throttle > 0.3))) car.manual = 0;
   }
   if (car.reversing) car.gear = 1;
-  else if (car.shiftTimer <= 0 && !car.manual) {
+  else if (car.shiftTimer <= 0 && !car.manual && !car.stick) {
     // kick-down automatic: lowest gear that stays below the shift point
     let g = car.gear;
     // (it also shifts a little early rather than run into the rev limiter when the tyres are only just slipping)
@@ -416,11 +451,13 @@ function engineForce(car, throttle, dt) {
     // (the clutch is dropped at a third of the way up; the slipping clutch below holds a turbo engine where its
     // boost is full, or it bogs off boost: the F40 at 4300 rpm, Martin 2026-11-22)
     const third = e.idle + (e.redline - e.idle) * LAUNCH_SHARE;
-    const L = launchRpm ?? third, Lslip = launchRpm ?? Math.max(third, e.turbo?.fullRpm ?? 0);
+    // (on the drag strip the driver revs it in neutral and drops the clutch at the lights: the clutch slips at the
+    // revs it was dropped at, car.dropRpm, so the launch is as good as the revs picked; see stickShift)
+    const L = car.dropRpm ?? launchRpm ?? third, Lslip = car.dropRpm ?? launchRpm ?? Math.max(third, e.turbo?.fullRpm ?? 0);
     // (held on the race grid the driver keeps the clutch slipping at those revs, wheels spinning as they did
     // with the converter, and drops it at the lights; four-wheel-drive cars wait clutch in, car.free below)
-    if (car.gridHold) { car.launchT = undefined; if (throttle > 0.5) stall = Math.max(stall, Lslip); }
-    else if (throttle < 0.5 || car.reversing || car.gear !== 1) car.launchT = undefined;
+    if (car.gridHold || car.neutral) { car.launchT = undefined; if (car.gridHold && throttle > 0.5) stall = Math.max(stall, Lslip); }
+    else if (throttle < 0.5 || car.reversing || car.gear !== 1) { car.launchT = undefined; car.dropRpm = undefined; }
     else if (car.launchT === undefined && (car.stabV ?? 0) < 2) {
       car.launchT = 0;
       if (L > wheelRpm) car.dump = Math.min(HB_DUMP_MAX, HB_DUMP * throttle * (L - wheelRpm) / ratioOf(car.gear) * (2 * Math.PI / 60) * s.wheelRadius);
@@ -447,7 +484,8 @@ function engineForce(car, throttle, dt) {
   // the lights go out (main.js lets go of car.gridHold) the clutch drops: the revs stored in the flywheel
   // come back as a kick that lights the tyres (car.dump, below). Rear- and front-driven cars keep their
   // burnouts on the grid.
-  const launch = car.gridHold && s.drive === 'awd' && !car.reversing;
+  // (and in neutral on the drag strip, car.neutral, every car with an engine revs freely the same way)
+  const launch = ((car.gridHold && s.drive === 'awd') || car.neutral) && !car.reversing;
   const free = launch;
   if (launch) {
     // (towards a little past the redline, so the limiter cuts it and it bounces; falling while cut)
@@ -515,7 +553,7 @@ function engineForce(car, throttle, dt) {
   car.shiftCut = car.shiftTimer > 0 && car.shiftUp && throttle > 0;
   // Shifted down by hand past the redline: the engine is held on its limiter and the gearbox drags the
   // car down to the speed the redline allows in that gear, harder the further over it is.
-  const overRev = !car.reversing && wheelRpm > e.redline + 30 ? (wheelRpm - e.redline) / e.redline : 0;
+  const overRev = !car.reversing && !car.neutral && wheelRpm > e.redline + 30 ? (wheelRpm - e.redline) / e.redline : 0;
   car.overRev = overRev;           // (the sound: an engine dragged past its redline howls and misfires)
   if (overRev > 0) {
     car.revCut = 0;
@@ -704,7 +742,12 @@ function substep(car, input, world, dt) {
   // (from a standstill the brake pedal alone holds the car for REV_WAIT before reverse goes in, as an
   // automatic takes a moment to select R; so brake first, then throttle, is a burnout too, not a reverse)
   car.revWait = !car.reversing && down > 0 && up === 0 && car.vx <= 0.6 ? (car.revWait || 0) + dt : 0;
-  if (!car.reversing) {
+  // (the drag strip's gearbox, car.stick: the pedal drives whichever way the lever is, the brake only brakes)
+  if (car.stick) {
+    car.reversing = !!car.stickRev;
+    throttle = up;
+    if (down > 0) brake = down;
+  } else if (!car.reversing) {
     throttle = up;
     if (down > 0) {
       // (both pedals in a car swung round and sliding backwards faster than a burnout, as a bare donut can, is
@@ -713,14 +756,14 @@ function substep(car, input, world, dt) {
       else if (up === 0) { if (!car.burnHold && (car.revWait > REV_WAIT || s.drive !== 'rwd')) car.reversing = true; else brake = down; }
     }
   }
-  if (car.reversing) {
+  if (car.reversing && !car.stick) {
     throttle = down;
     if (up > 0) {
       if (car.vx < -0.6) brake = up;
       else if (down === 0) { car.reversing = false; throttle = 0; }
     }
   }
-  if (car.reversing && down === 0 && up === 0 && Math.abs(car.vx) < 0.2) car.reversing = false;
+  if (car.reversing && !car.stick && down === 0 && up === 0 && Math.abs(car.vx) < 0.2) car.reversing = false;
   // (a burnout's brake is squeezed on rather than stamped: pressed together with the throttle the car jumps
   // forward a little before the fronts take hold, and on the move it comes to a halt gradually, rears
   // smoking; a brake already held when the throttle goes down holds at once)

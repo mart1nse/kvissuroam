@@ -516,20 +516,20 @@ body.touch #kofipanel { font-size: 8.5px; }
 body.touch #kofipanel .head :is(a, .x) { width: 3em; height: 3em; }
 
 /* ---- race: lap panel, names over other cars, driver name, lap times board */
-:is(#lap, #stage) {
+:is(#lap, #stage, #drag) {
   left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); min-width: 190px; padding: 6px 12px 7px;
   background: rgba(18, 6, 43, .55); border: none; border-radius: 26px;   /* no border or glow, round corners like START RACE (Martin 22 Nov) */
   font-variant-numeric: tabular-nums; text-align: center;
 }
-:is(#lap, #stage) .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
-:is(#lap, #stage) .lt b { font-size: clamp(36px, 5.6vw, 66px); line-height: 1; font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
-:is(#lap, #stage).idle .lt b { opacity: .45; }
-:is(#lap, #stage) .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
-:is(#lap, #stage) .lb b { font-weight: 800; }
-:is(#lap, #stage) small { font-size: .8em; color: #fff; opacity: .85; margin-left: 4px; letter-spacing: .04em; }
-:is(#lap, #stage) ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 8px; justify-content: center; font-size: 10px; opacity: .85; }
-:is(#lap, #stage) ol li span { display: none; }
-:is(#lap, #stage) ol li:first-child b { color: var(--sun); }
+:is(#lap, #stage, #drag) .lbl { font-size: 9px; letter-spacing: .2em; color: var(--pink); margin-right: 6px; }
+:is(#lap, #stage, #drag) .lt b { font-size: clamp(36px, 5.6vw, 66px); line-height: 1; font-style: italic; font-weight: 900; color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); }
+:is(#lap, #stage, #drag).idle .lt b { opacity: .45; }
+:is(#lap, #stage, #drag) .lb { font-size: clamp(11px, 1.4vw, 14px); color: var(--cyan); margin-top: 1px; }
+:is(#lap, #stage, #drag) .lb b { font-weight: 800; }
+:is(#lap, #stage, #drag) small { font-size: .8em; color: #fff; opacity: .85; margin-left: 4px; letter-spacing: .04em; }
+:is(#lap, #stage, #drag) ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 8px; justify-content: center; font-size: 10px; opacity: .85; }
+:is(#lap, #stage, #drag) ol li span { display: none; }
+:is(#lap, #stage, #drag) ol li:first-child b { color: var(--sun); }
 #lapmsg { font-size: 8px; letter-spacing: .16em; color: var(--sun); margin-top: 3px; }
 /* desktop: checkpoint splits large enough to read at a glance (Martin, 2026-11-17) */
 body:not(.touch) #lapmsg { font-size: clamp(12px, 1.3vw, 16px); font-weight: 800; letter-spacing: .1em; margin-top: 5px; }
@@ -537,13 +537,13 @@ body:not(.touch) #lapsplit { top: calc(max(8px, env(safe-area-inset-top)) + 170p
 body:not(.touch) #lapsplit span { font-size: clamp(13px, 1.4vw, 17px); font-weight: 800; }
 body:not(.touch) #lapsplit b { font-size: clamp(26px, 3.2vw, 40px); }
 body:not(.touch) #lapsplit i { font-size: clamp(24px, 3vw, 38px); }
-body.touch :is(#lap, #stage) { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); transform: none; min-width: 0; width: var(--lapw); }
-body.touch :is(#lap, #stage) ol { display: none; }
-body.touch :is(#lap, #stage) { background: none; border: none; box-shadow: none; padding: 0; text-align: center; }
-body.touch :is(#lap, #stage) .lbl { margin-right: 4px; }
-body.touch :is(#lap, #stage) .lb small { display: block; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body.touch :is(#lap, #stage) .lt b { font-size: clamp(26px, 4.6vw, 40px); }
-body.touch :is(#lap, #stage) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
+body.touch :is(#lap, #stage, #drag) { left: auto; right: var(--lapr); top: max(6px, env(safe-area-inset-top)); transform: none; min-width: 0; width: var(--lapw); }
+body.touch :is(#lap, #stage, #drag) ol { display: none; }
+body.touch :is(#lap, #stage, #drag) { background: none; border: none; box-shadow: none; padding: 0; text-align: center; }
+body.touch :is(#lap, #stage, #drag) .lbl { margin-right: 4px; }
+body.touch :is(#lap, #stage, #drag) .lb small { display: block; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch :is(#lap, #stage, #drag) .lt b { font-size: clamp(26px, 4.6vw, 40px); }
+body.touch :is(#lap, #stage, #drag) .lb, body.touch #lapmsg { text-shadow: 1px 1px 0 var(--ink), 0 0 6px rgba(18, 6, 43, .9); }
 
 #names { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
 .pname {
@@ -717,10 +717,10 @@ body.touch #board { padding-top: max(16px, env(safe-area-inset-top)); }
 /* desktop: a bigger map in the bottom left corner, the street name above it, a bigger lap panel */
 body:not(.touch) #minimap { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: clamp(170px, 24vw, 280px); height: clamp(170px, 24vw, 280px); }
 body:not(.touch) #street { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(170px, 24vw, 280px) + 10px); left: max(14px, env(safe-area-inset-left)); }
-body:not(.touch) :is(#lap, #stage) { min-width: 260px; padding: 8px 28px 10px; }
-body:not(.touch) :is(#lap, #stage) .lb { font-size: clamp(13px, 1.6vw, 17px); }
-body:not(.touch) :is(#lap, #stage) ol { font-size: 12px; }
-:is(#lap, #stage) .lt .lbl { vertical-align: 60%; }
+body:not(.touch) :is(#lap, #stage, #drag) { min-width: 260px; padding: 8px 28px 10px; }
+body:not(.touch) :is(#lap, #stage, #drag) .lb { font-size: clamp(13px, 1.6vw, 17px); }
+body:not(.touch) :is(#lap, #stage, #drag) ol { font-size: 12px; }
+:is(#lap, #stage, #drag) .lt .lbl { vertical-align: 60%; }
 
 /* return-to-start offer after an off-track cancel, flies into the START button */
 #lapback { left: 50%; top: calc(16% + clamp(30px, 4.4vw, 44px)); transform: translateX(-50%); pointer-events: auto; z-index: 6; white-space: nowrap;
@@ -787,7 +787,7 @@ body.touch #lapsplit { left: calc(100% - var(--lapr) - var(--lapw) / 2); top: ma
 #lapmsg i { font-style: normal; font-weight: 900; }
 #lapmsg i.ahead { color: #5dff9b; }
 #lapmsg i.behind { color: #ff5a6e; }
-:is(#lap, #stage) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
+:is(#lap, #stage, #drag) ol li em { font-style: normal; font-size: 8px; letter-spacing: .2em; color: var(--pink); margin-right: 4px; }
 #people .who { display: none; }
 /* desktop: from the minimap up, the count, your line, the names (A to Z read down, Z just over your line, those in
    the garage or watching at the top: Martin 27 Nov), "+N MORE" and the notes on top. The rows go in from your line
@@ -1216,7 +1216,7 @@ body.touch #rcount .btns { gap: 10px; }
 body.touch #rcount .btns button { font-size: 16px; padding: .72em 1.4em .76em; }
 /* a short phone (800x304): the card goes up a little so it ends above the pedals */
 @media (max-height: 340px) { body.touch #rcount { top: 9%; } }
-body.racegrid :is(#lap, #stage), body.touch.racelist :is(#lap, #stage), body.touch.racelist #lapmsg { visibility: hidden; }
+body.racegrid :is(#lap, #stage, #drag), body.touch.racelist :is(#lap, #stage, #drag), body.touch.racelist #lapmsg { visibility: hidden; }
 body.touch #rlights { top: 30%; font-size: 13px; }
 /* a phone with its address bar still on screen: no room for the street name under the minimap, so it goes
    above the right steering button, and the rev counter takes the room up to the minimap */
@@ -1593,3 +1593,60 @@ body.touch #people .ku { width: 1.3em; height: 1.3em; padding: 7px 6px; margin: 
 #kudopop b, #kudopop div { font-weight: 700; }
 #kudopop small { margin-left: .5em; opacity: .7; font-weight: 400; }
 #kudopop .more { opacity: .6; font-size: .9em; }
+
+/* ---- the drag strip (src/race/drag.js, ?drag=1): the panel takes the lap panel's look (above), the shift light,
+   the two cars' progress, the christmas tree with the launch revs, the question on the line, the timeslip */
+#drag .shift { display: flex; justify-content: center; gap: 6px; margin: 4px 0 3px; }
+#drag .shift i { width: 14px; height: 14px; border-radius: 50%; background: #2a2236; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+#drag .shift i.on.k0, #drag .shift i.on.k1 { background: #3dff6a; box-shadow: 0 0 10px #3dff6a; }
+#drag .shift i.on.k2, #drag .shift i.on.k3 { background: #ffd23a; box-shadow: 0 0 10px #ffd23a; }
+#drag .shift i.on.k4 { background: #ff2a2a; box-shadow: 0 0 10px #ff2a2a; }
+#drag .shift i.on.max { background: #2ff3ff; box-shadow: 0 0 14px #2ff3ff, 0 0 26px rgba(47, 243, 255, .7); }
+#drag .bars { display: flex; flex-direction: column; gap: 3px; margin: 2px 6px 4px; }
+#drag .bars > div { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+#drag .bars i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 3px; background: linear-gradient(90deg, var(--hot), var(--cyan)); }
+#drag .bars .op i { background: linear-gradient(90deg, var(--violet), var(--sun)); }
+#drag .bars .op span { position: absolute; right: 4px; top: -1px; font-size: 7px; letter-spacing: .12em; color: #fff; opacity: .8; }
+#drag .msg { font-size: clamp(11px, 1.2vw, 14px); font-weight: 800; letter-spacing: .14em; color: var(--sun); margin-top: 3px; }
+#dragtree { right: max(18px, env(safe-area-inset-right)); top: 42%; transform: translateY(-50%); z-index: 2; pointer-events: none;
+  display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: .5em 1em; align-items: center; padding: .6em 1.1em;
+  border-radius: 22px; background: rgba(10, 4, 24, .62); font-size: clamp(11px, 1.05vw, 16px); }
+#dragtree .tree { grid-column: 1; grid-row: 1; display: flex; gap: .5em; padding: .45em .55em; border-radius: 12px; background: rgba(7, 2, 15, .9); }
+#dragtree .col { display: flex; flex-direction: column; align-items: center; gap: .32em; }
+#dragtree .col b { width: 1.1em; height: .55em; border-radius: 3px; background: #2e2a24; }
+#dragtree .col i { width: 1.9em; height: 1.9em; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3348, #17121f 70%); }
+#dragtree .col b.on { background: #fff3c4; box-shadow: 0 0 8px #fff3c4; }
+#dragtree .col i.a.on { background: radial-gradient(circle at 40% 35%, #fff6d0, #ffa51f 45%, #8a5a00); box-shadow: 0 0 14px #ffa51f; }
+#dragtree .col i.g.on { background: radial-gradient(circle at 40% 35%, #e0ffe0, #29ff6a 45%, #00701e); box-shadow: 0 0 16px #29ff6a, 0 0 34px rgba(41, 255, 106, .55); }
+#dragtree .col i.r.on { background: radial-gradient(circle at 40% 35%, #ffd0d0, #ff2a2a 45%, #8a0000); box-shadow: 0 0 16px #ff2a2a; }
+#dragtree .gear { grid-column: 2; grid-row: 1; font: 400 3.4em/1 'Russo One', var(--font); color: #fff; text-shadow: 2px 2px 0 var(--hot), 0 0 12px rgba(255, 43, 214, .6); min-width: 1.2em; text-align: center; }
+#dragtree .rev { grid-column: 1 / 3; grid-row: 2; min-width: 10em; position: relative; height: 1em; border-radius: .5em; background: rgba(255, 255, 255, .1); margin-bottom: 1em; }
+#dragtree .rev .band { position: absolute; top: 0; bottom: 0; border-radius: .5em; background: rgba(61, 255, 106, .45); box-shadow: 0 0 8px rgba(61, 255, 106, .5); }
+#dragtree .rev .needle { position: absolute; top: -.25em; bottom: -.25em; width: 3px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 6px #fff; }
+#dragtree .rev span { position: absolute; left: 0; right: 0; top: 1.25em; text-align: center; font-size: .7em; letter-spacing: .22em; color: var(--pink); }
+#dragask { left: 50%; bottom: max(14px, 4%); transform: translateX(-50%); z-index: 6; pointer-events: auto; text-align: center; width: min(560px, 86vw);
+  padding: 14px 22px 12px; border-radius: 24px; background: rgba(18, 6, 43, .78); color: #fff; }
+#dragask h3 { margin: 0 0 10px; font: 400 clamp(16px, 1.8vw, 22px) 'Russo One', var(--font); letter-spacing: .12em; color: var(--sun); }
+#dragask .btns { display: flex; gap: 10px; justify-content: center; }
+#dragask button, #dragslip button { padding: 9px 18px; border: none; border-radius: 999px; font-weight: 800; letter-spacing: .12em; font-size: 14px; color: #fff; cursor: pointer;
+  background: linear-gradient(100deg, var(--hot), var(--violet)); }
+#dragask button[data-drag="leave"] { background: rgba(255, 255, 255, .12); }
+#dragask kbd, #dragslip kbd { margin-left: 6px; padding: 0 5px; border-radius: 4px; font: inherit; font-size: .8em; background: rgba(0, 0, 0, .3); }
+#dragask p { margin: 10px 0 0; font-size: 12px; letter-spacing: .1em; line-height: 1.5; color: var(--cyan); }
+#dragask p.how { color: #fff; opacity: .85; }
+@media (max-height: 560px) { #dragtree { font-size: 9px; top: 46%; } #dragask { padding: 10px 18px 9px; } #dragask p { margin-top: 6px; font-size: 11px; } }
+#dragask p b { color: var(--sun); }
+#dragslip { right: max(18px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 6; pointer-events: auto; min-width: 230px;
+  padding: 12px 16px 14px; border-radius: 6px; background: #f4f1e8; color: #1b1822; font: 500 13px/1.35 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+#dragslip h3 { margin: 0 0 8px; font: 400 20px 'Russo One', var(--font); letter-spacing: .12em; color: #1b1822; text-align: center; }
+#dragslip h3.win { color: #12a04a; }
+#dragslip h3.red { color: #d0161e; }
+#dragslip h3 small { font: 500 12px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0; color: #555; }
+#dragslip table { width: 100%; border-collapse: collapse; }
+#dragslip th, #dragslip td { padding: 2px 4px; text-align: right; border-bottom: 1px dashed rgba(0, 0, 0, .15); white-space: nowrap; }
+#dragslip th:first-child { text-align: left; font-weight: 700; letter-spacing: .06em; }
+#dragslip thead th { font-size: 11px; letter-spacing: .1em; max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+#dragslip p.pb { margin: 8px 0 10px; font-size: 11px; letter-spacing: .06em; text-align: center; color: #444; }
+#dragslip button { display: block; width: 100%; font-size: 13px; }
+#trackpills [data-act="track-drag"] span { letter-spacing: .1em; }

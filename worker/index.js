@@ -18,6 +18,7 @@ import { moved } from './moved.js';
 export { Stats } from './stats.js';
 import { CARS, HIDDEN_CARS } from '../src/cars/specs.js';
 import { RaceDesk, SEEN_EARLY } from './race.js';
+import { DragDesk } from './drag.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { throughGate } from '../src/race/lapgates.js';
@@ -448,6 +449,7 @@ export class Lobby extends DurableObject {
     this.cache = null;            // the lap board
     this.hmac = null;
     this.race = new RaceDesk(this);   // the online race (worker/race.js)
+    this.drag = new DragDesk(this);   // the drag strip's two lanes (worker/drag.js)
     this.initPoses();
     this.initLoad();
   }
@@ -806,7 +808,7 @@ export class Lobby extends DurableObject {
     try { ws.close(code, why); } catch { /* already closed */ }
     this.dropPose(ws, a?.id);
     this.shut(ws, a);
-    if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); if (a.on) this.watchTold([a.on], ws); }
+    if (a?.id && !a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); this.drag.gone(a); if (a.on) this.watchTold([a.on], ws); }
   }
   // A socket the server has closed can stay in getWebSockets until the other end answers the close (never,
   // for a phone that lost its network). Marked x and stripped of its id, so it holds no place, is not
@@ -1482,11 +1484,13 @@ export class Lobby extends DurableObject {
     r.shut = true;
     const a = ws.deserializeAttachment();
     try { ws.close(1008, 'too many messages'); } catch { /* already closed */ }
-    if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); } this.shut(ws, a); }
+    if (a?.id) { this.dropPose(ws, a.id); if (!a.ghost) { this.broadcast({ t: 'leave', id: a.id }, ws); this.race.gone(a, ws); this.drag.gone(a); } this.shut(ws, a); }
   }
 
   async webSocketMessage(ws, raw) {
     if (typeof raw !== 'string' || raw.length > 2000) return;
+    // (a drag racer's place, 30 times a second to the other driver: its own allowance, worker/drag.js)
+    if (raw.startsWith('{"t":"dp"')) { this.drag.feed(ws, raw); return; }
     // a socket that talks far faster than the game does is shut
     const now = Date.now();
     let r = this.rate.get(ws);
@@ -1565,10 +1569,13 @@ export class Lobby extends DurableObject {
       // (a spectator back on: the count of whom they watch)
       if (!ghost && (me?.on || '') !== on) this.watchTold([me?.on, on]);
       this.race.sendTo(ws);
+      this.drag.back(id, ws);
+      this.drag.sendTo(ws);
       return;
     }
     if (!me?.id) return;
     if (this.race.message(ws, me, m)) return;
+    if (this.drag.message(ws, me, m)) return;
     // a lap's start or finish, as it happens (see lapMark)
     if (m.t === 'lm') { this.lapMark(me.sid, m.e, m.ms, now, me.id); return; }
     if (m.t === 'name') {
@@ -1642,7 +1649,7 @@ export class Lobby extends DurableObject {
     const me = ws.deserializeAttachment();
     try { ws.close(); } catch { /* already closed */ }
     this.dropPose(ws, me?.id);
-    if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); if (me.on) this.watchTold([me.on], ws); }
+    if (me?.id && !me.ghost) { this.broadcast({ t: 'leave', id: me.id }, ws); this.race.gone(me, ws); this.drag.gone(me); if (me.on) this.watchTold([me.on], ws); }
     this.room(ws);                        // (a place freed: room again?)
   }
 

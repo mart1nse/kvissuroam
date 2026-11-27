@@ -543,7 +543,7 @@ export const CARS = {
     // drive where the grip is: a tenth more grip and traction on gravel, dirt and grass, whichever tyres are on. On
     // paper (tools/car-pace.mjs) that is about 4 % quicker than the 22B on Majoraadi, as it is round Toomemägi
     looseGrip: 1.1,
-    abs: 0.2,                   // a WRC car has none; a tad is left so a full stop still steers a little, as on the 22B (Martin 2026-11-22)
+    abs: 0,                     // none: WRC cars ran without ABS (Martin 2026-11-27, "the focus does not have abs"; it had a tad as the 22B has)
     bonnet: true,               // a hit of 50 km/h or more throws the bonnet up against the windscreen, over 100 km/h it flies off (src/cars/bonnet.js)
     // the pipe comes out under the right of the rear bumper; anti-lag lights it on every lift (smoke.js: the big
     // bangs of engine-sounds.js antilag), the flames a touch bigger than the 22B's (Martin 2026-11-27)

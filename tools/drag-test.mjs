@@ -68,19 +68,15 @@ if (!DUEL_ONLY) {
 assert.equal(s.phase, 'line'); assert.ok(s.stick && s.neutral, 'on the line in neutral'); assert.ok(s.ask, 'asked: practice or leave');
 assert.ok(s.lanes[0]?.name === 'Ann', `the server holds the lane for her (${JSON.stringify(s.lanes)})`);
 console.log('on the line:', s.panel.replace(/\s+/g, ' '));
-// the strip level from side to side (the map's runway has a crown: 1 to 2 % down to each edge, Martin 27 Nov)
+// the runway's crown kept under the lanes (Martin 27 Nov: the tilt makes the launch and holding the lane count)
 const tilt = await A.evaluate(() => {
-  const D = __game.drag().strip.frame, w = __game.world, h = (d, v) => w.heightAt(...D.at(d, v)), raw = (d, v) => w.rawHeightAt(...D.at(d, v));
-  let across = 0, rawAcross = 0, up = 0;
-  for (let d = -10; d <= 440; d += 10) {
-    for (const v of [5.5, -5.5]) { across = Math.max(across, Math.abs(h(d, v + 2.5) - h(d, v - 2.5)) / 5); rawAcross = Math.max(rawAcross, Math.abs(raw(d, v + 2.5) - raw(d, v - 2.5)) / 5); }
-    for (let v = -15; v <= 15; v += 1) up = Math.max(up, h(d, v) - raw(d, v));
-  }
-  return { across: across * 100, rawAcross: rawAcross * 100, up };
+  const D = __game.drag().strip.frame, w = __game.world, h = (d, v) => w.heightAt(...D.at(d, v));
+  let across = 0;
+  for (let d = -10; d <= 440; d += 10) for (const v of [5.5, -5.5]) across = Math.max(across, Math.abs(h(d, v + 2.5) - h(d, v - 2.5)) / 5);
+  return across * 100;
 });
-console.log(`across a lane: the map's ground up to ${tilt.rawAcross.toFixed(2)} %, the strip's ${tilt.across.toFixed(3)} %; ground raised by up to ${(tilt.up * 100).toFixed(0)} cm`);
-assert.ok(tilt.across < 0.05, 'the lanes level from side to side');
-assert.ok(tilt.up < 0.4, 'raised by little');
+console.log(`across a lane: the runway's crown up to ${tilt.toFixed(2)} %`);
+assert.ok(tilt > 0.3, 'the crown is there');
 if (shots) await A.screenshot({ path: `${shots}/drag-line.png` });
 // the throttle in neutral: revs up, the car stays put
 const p0 = [s.x, s.z];
@@ -145,11 +141,13 @@ await Promise.all([A, B].map((p) => p.waitForFunction(() => /WIN|LOSS/.test(docu
 const va = (await state(A)).slipText.split('\n')[0], vb = (await state(B)).slipText.split('\n')[0];
 console.log('Ann:', va, '| Bob:', vb);
 assert.ok(/WIN/.test(va) !== /WIN/.test(vb), 'one wins, the other loses');
-const aWon = !ra.res.dnf && (rb.res.dnf || ra.res.tot < rb.res.tot);
+// (red light loses, then out of lane, then no time, then reaction + run: the crown can take a car out of its lane)
+const bad = (r) => (r.red ? 3 : 0) + (r.foul ? 2 : 0) + (r.dnf ? 1 : 0);
+const aWon = bad(ra.res) < bad(rb.res) || (bad(ra.res) === bad(rb.res) && !ra.res.dnf && ra.res.tot < rb.res.tot);
 assert.ok(!ra.res.dnf && !rb.res.dnf, 'both ran the quarter mile');
 const slipB = (await state(A)).slipText;
 assert.ok(!/\t–/.test(slipB.split('\n').filter((l) => /FT|MILE/.test(l)).join('\n')), `every split of the other car on the timeslip:\n${slipB}`);
-assert.equal(/WIN/.test(va), aWon, 'the first over the line wins');
+assert.equal(/WIN/.test(va), aWon, 'the verdict by the rules');
 if (shots) await A.screenshot({ path: `${shots}/drag-duel-slip.png` });
 console.log('OK: the line, the tree, a false start, a practice run and a race of two');
 await browser.close();

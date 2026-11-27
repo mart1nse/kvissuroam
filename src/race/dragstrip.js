@@ -36,43 +36,11 @@ const FENCE_W = 24, FENCE_D0 = -45, FENCE_D1 = 215;
 export const MID = D.at(QUARTER / 2, 0);    // the strip's middle on the map
 const BUILD_R = 900, SHOW_R = 1600;
 
-// ---- the pictures
-// The strip level from side to side (Martin 27 Nov 2026: "is there a small tilt on the track? that would impact the
-// start when wheelspin is happening"). The map's runway has a crown: each lane falls 1 to 2 % to its outer edge, which
-// pulled a car with spinning wheels and nobody steering out of its lane in a quarter mile. Across the runway the ground
-// is raised to the crown's top at that point (never lowered: the map's own ground stays under the runway's surface,
-// which is draped on the raised one, lennujaam.js); eased back to the map's over the runway's last few metres and the
-// strip's ends. Along the strip it keeps the map's gentle rise and fall (1.2 m up over the first 150 m, down to the
-// finish), the same in both lanes. Added before the runway is built (createDragStrip runs at the start), so its
-// surface, the strip's paint and the physics all stand on the same ground.
-const LV_D0 = -70, LV_D1 = 600, LV_W = 12, LV_EDGE = 15.5, LV_END = 12, LV_STEP = 1;
-function levelStrip(world) {
-  if (!world.addBump || !world.rawHeightAt) return;
-  const n = Math.ceil((LV_D1 - LV_D0) / LV_STEP) + 1, top = new Float32Array(n).fill(NaN);
-  // (the crown's top across the runway at one row: read once, when the map's ground there is in)
-  const rowTop = (i) => {
-    if (top[i] === top[i]) return top[i];
-    const d = LV_D0 + i * LV_STEP;
-    let t = -Infinity;
-    for (let w = -LV_W; w <= LV_W; w += 1) { const [x, z] = D.at(d, w); if (!world.ready(x, z)) return NaN; t = Math.max(t, world.rawHeightAt(x, z)); }
-    return (top[i] = t);
-  };
-  const cs = [D.at(LV_D0, -LV_EDGE), D.at(LV_D0, LV_EDGE), D.at(LV_D1, -LV_EDGE), D.at(LV_D1, LV_EDGE)];
-  world.addBump({
-    x0: Math.min(...cs.map((c) => c[0])), x1: Math.max(...cs.map((c) => c[0])), z0: Math.min(...cs.map((c) => c[1])), z1: Math.max(...cs.map((c) => c[1])),
-    at(x, z) {
-      const [d, w] = D.sv(x, z), aw = Math.abs(w);
-      if (d <= LV_D0 || d >= LV_D1 || aw >= LV_EDGE) return 0;
-      const f = (d - LV_D0) / LV_STEP, i = Math.min(n - 2, Math.floor(f)), a = rowTop(i), b = rowTop(i + 1);
-      if (a !== a || b !== b) return 0;
-      const up = a + (b - a) * (f - i) - world.rawHeightAt(x, z);
-      if (up <= 0) return 0;
-      const e = Math.min(1, (LV_EDGE - aw) / (LV_EDGE - LV_W), (d - LV_D0) / LV_END, (LV_D1 - d) / LV_END);
-      return up * e * e * (3 - 2 * e);
-    },
-  });
-}
+// The strip keeps the runway's crown on purpose (Martin 27 Nov 2026: "the tilt was actually good ... it's there in
+// real life, this will make the starts and direction holding important"): each lane falls 1 to 2 % to its outer edge,
+// so a car with spinning wheels and nobody steering drifts towards the outside of its lane.
 
+// ---- the pictures
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 function tex(c, repeat = false) {
   const t = new THREE.CanvasTexture(c);
@@ -179,7 +147,6 @@ const ON = { pre: 0xfff3c4, stage: 0xfff3c4, amber: 0xffa51f, green: 0x3dff6a, r
 const OFF = { pre: 0x3a372c, stage: 0x3a372c, amber: 0x3d2a10, green: 0x123a1c, red: 0x3a1212, win: 0x3a3418 };
 
 export function createDragStrip({ world, scene, shadows = true }) {
-  levelStrip(world);
   const group = still(new THREE.Group());
   group.visible = false;
   scene.add(group);

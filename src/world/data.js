@@ -852,11 +852,6 @@ export async function loadWorldData(onProgress = () => {}) {
 
     // Terrain height (river bed included) at world x,z.
     heightAt(x, z) {
-      const h = this.rawHeightAt(x, z);
-      return bumps.length === 0 ? h : h + bumpAt(x, z);
-    },
-    // The map's own height there, without the raised shapes (a bump that reshapes the ground reads it, see addBump)
-    rawHeightAt(x, z) {
       const s = find(x, z);
       if (s === null) return this.coarseHeight(x, z);
       let fx = (x - s.x0) / hres, fz = (z - s.z0) / hres;
@@ -866,7 +861,8 @@ export async function loadWorldData(onProgress = () => {}) {
       fx -= c; fz -= r;
       const H = s.H, i = r * hn + c;
       const a = H[i], b = H[i + 1], d = H[i + hn], e = H[i + hn + 1];
-      return ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      const h = ((a * (1 - fx) + b * fx) * (1 - fz) + (d * (1 - fx) + e * fx) * fz) * hs + hoff;
+      return bumps.length === 0 ? h : h + bumpAt(x, z);
     },
 
     // Small raised shapes on top of the height field (kerbs finer than its 2 m grid): each is

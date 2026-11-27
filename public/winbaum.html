@@ -112,14 +112,14 @@
     out.innerHTML = `
       <section class="card">
         <h2>Views of the WINBAUM.EE sign</h2>
-        <p class="note">A view is the sign on screen within 60 m for a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view.${counted ? ` Counted since ${dayName(counted)}.` : ' The counter has not seen a view yet: the figures are estimates from the laps started past the sign.'}</p>
+        <p class="note">A view is the sign on screen within 60 m for a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view. The time on screen is counted to the second too, also while a car stands still beside it.${counted ? ` Counted since ${dayName(counted)}.` : ' The counter has not seen a view yet: the figures are estimates from the laps started past the sign.'}</p>
         <div class="tiles">
           <div class="tile"><span>Last 24 hours</span><b>${fmt(last24)}</b><small>views${est24 ? ' (estimate)' : ''}</small></div>
           <div class="tile"><span>Average day</span><b>${fmt(avgDay)}</b><small>views a day${fullM.length ? ` over ${fullM.length} counted day${fullM.length > 1 ? 's' : ''}` : ' (estimate)'}</small></div>
           <div class="tile"><span>Average hour</span><b>${fmt(avgDay / 24)}</b><small>views an hour, day and night</small></div>
           <div class="tile"><span>Peak hour</span><b>${peakHour ? fmt(peakHour.v) : '–'}</b><small>${peakHour ? `${hh(peakHour.h)}–${hh((peakHour.h + 1) % 24)}${peakHour.day ? `, ${dayName(peakHour.day)}` : ''}${peakHour.est ? ' (estimate)' : ''}` : ''}</small></div>
           <div class="tile"><span>Peak day</span><b>${peakDay ? fmt(peakDay.n) : '–'}</b><small>${peakDay ? `${dayName(peakDay.day)}${peakDay.est ? ' (estimate)' : ''}` : ''}</small></div>
-          <div class="tile"><span>On screen, 24 h</span><b>${sec24 ? hrs(sec24) : '–'}</b><small>${u24 ? `in ${fmt(u24)} visits that saw it` : 'counted from the counter\'s start'}</small></div>
+          <div class="tile"><span>On screen, 24 h</span><b>${sec24 ? hrs(sec24) : '–'}</b><small>${u24 ? `in ${fmt(u24)} visits that saw it${last24 && !est24 ? `, about ${Math.round(sec24 / last24)} s a view` : ''}` : 'counted from the counter\'s start'}</small></div>
           <div class="tile"><span>Taps to winbaum.ee</span><b>${counted ? fmt(c24) : '–'}</b><small>in the last 24 hours${cAll ? `, ${fmt(cAll)} in all` : ''}</small></div>
         </div>
         <h3>The last 24 hours, hour by hour</h3>

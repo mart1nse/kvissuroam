@@ -88,9 +88,10 @@
   }
   // one advert's figures: a day is its counted views, or (the Winbaum sign, before its counter) the lap starts
   function figures(d, ad) {
-    const counted = d.counted?.[ad.id] || null;
+    const counted = ad.est ? d.days.find((x) => { const a = x.ads[ad.id]; return a.v > 0 && a.v >= 0.25 * x.ls; })?.day || null : d.counted?.[ad.id] || null;
     const days = d.days.map((x) => ({ day: x.day, ls: x.ls, ...x.ads[ad.id] }))
-      .map((x) => ({ ...x, est: !(x.v > 0) && ad.est && (!counted || x.day < counted), part: x.day === d.today }))
+      // (the Winbaum sign: its own count only once it is near the laps started past it, see winbaum.html)
+      .map((x) => ({ ...x, est: ad.est && !(x.v > 0 && x.v >= 0.25 * x.ls), part: x.day === d.today }))
       .map((x) => ({ ...x, n: x.est ? x.ls : x.v }))
       .filter((x) => x.n > 0 || (counted && x.day >= counted));
     const full = days.filter((x) => !x.part && x.day >= '2026-11-24'), fullM = full.filter((x) => !x.est), use = fullM.length ? fullM : full;
@@ -98,8 +99,8 @@
     const peakDay = full.reduce((a, x) => (!a || x.n > a.n ? x : a), null);
     let peakHour = null;
     for (const x of days) if (!x.est) x.h.forEach((v, h) => { if (v && (!peakHour || v > peakHour.v)) peakHour = { v, h, day: x.day }; });
-    const hours = d.hours.map((x) => { const a = x.ads[ad.id]; const est = ad.est && !counted; return { at: x.at, est, n: est ? x.ls : a.v, ...a }; });
-    if (!peakHour && ad.est && !counted) for (const x of hours) if (!peakHour || x.n > peakHour.v) peakHour = { v: x.n, h: hourOf(x.at), est: true };
+    const hours = d.hours.map((x) => { const a = x.ads[ad.id]; const est = ad.est && !(a.v > 0 && a.v >= 0.25 * x.ls); return { at: x.at, est, n: est ? x.ls : a.v, ...a }; });
+    if (!peakHour && hours.some((x) => x.est)) for (const x of hours) if (!peakHour || x.n > peakHour.v) peakHour = { v: x.n, h: hourOf(x.at), est: true };
     const sum = (k) => hours.reduce((a, x) => a + (x[k] || 0), 0);
     return { counted, days, avgDay, avgEst: !fullM.length, peakDay, peakHour, v24: sum('n'), est24: hours.some((x) => x.est), s24: sum('s'), u24: sum('u'), c24: sum('c'), cAll: days.reduce((a, x) => a + (x.c || 0), 0), hours };
   }

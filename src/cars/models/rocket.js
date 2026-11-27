@@ -1,15 +1,59 @@
-// 2028 Tesla Roadster Rocket: a stand-in body until the scanned one arrives (Martin 2026-11-25). A low
-// two-seater drawn in the kit's way: long nose, short cabin under a dark glass roof, a fastback tail
-// with a full-width light bar. The ten cold-gas nozzles are marked where src/cars/plumes.js puts their
-// jets (NOZZLES in src/cars/thrust.js): four in a row in the diffuser, one under each corner, one each side of the nose.
+// 2028 Tesla Roadster Rocket (Martin 2026-11-25). The body is Martin's scanned model (public/models/rocket.glb, his
+// Tripo model of 27 Nov, 2.4 million triangles in one piece with the wheels fused on, made light with
+// glb-tools/highpoly: the scan's tyres cut out, what is never seen taken away, brought down to some 45 thousand
+// triangles; paint a very light whitish silver, glass dark, black parts evened, the full-width red light bar of
+// Tesla's photo drawn in the black band at the back, gold rims on the four tail nozzles, plates).
+// What is built here is the light stand-in that shows until the scan has loaded (a low two-seater drawn in the
+// kit's way), plus the wheels. The ten cold-gas nozzles are where the scan has them (NOZZLES in src/cars/thrust.js:
+// four in a row in the diffuser, one under each sill just behind each wheel, one each side of the nose); the
+// stand-in marks them there too.
+import * as THREE from 'three';
 import { NOZZLES } from '../thrust.js';
-import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, buildWheel, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
+import { Soup, buildBody, cutArches, decals, probe, rpoly, rect, stroke, grow, box, blob, cyl, fromGeo, canvasTex, drawPlate, plate, assembleCar, frontYaw, tintPaint } from './kit.js';
+import { lathe, tyreAndRim } from './parts.js';
+import { useGlbBody } from './glbbody.js';
 
-const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.64, wheelRadius: 0.34 };
+// (Tesla has published no size: these are the scan's at the 2.65 m wheelbase. Its tyres are about 245/35 R19 in front
+// and 325/30 R20 behind, their outer walls where the scan's were: flush with the arches)
+const DIMS = { length: 4.3, width: 1.96, height: 1.14, wheelbase: 2.65, track: 1.611, trackFront: 1.669, wheelRadius: 0.356, wheelRadiusFront: 0.326 };
 const ZF = -2.1, ZR = 2.2, HZ = DIMS.wheelbase / 2;
 
-// (the nozzles are marked where src/cars/plumes.js draws their jets; the scanned body will bring its own places)
+// (the nozzles are marked where src/cars/plumes.js draws their jets: where the scanned body has them)
 const ROCKET_NOZZLES = NOZZLES;
+
+// ---------------------------------------------------------------- wheel
+// Tesla's photos: six slim gloss-black spokes standing over a flat silver aero cover, a black rim lip, low tyres
+// (19 inch in front, 20 at the back). Axis on X, outer face +X.
+function aeroSix(R, width, rimR) {
+  const s = tyreAndRim(R, width, rimR, { lip: 'gloss', disc: 0.72 });
+  const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.78, x0 = x1 - 0.026;
+  // (the face dishes in from the rim to the hub: x at radius r)
+  const dish = (r) => x0 + (x1 - x0) * Math.pow(Math.min(1, r / rf), 1.6);
+  const cover = [];
+  for (let k = 0; k <= 10; k++) { const r = rf * (1 - k / 10); cover.push([Math.max(r, 0.001), dish(r) - 0.004]); }
+  s.add(lathe([[rf + 0.004, x1 - 0.012], ...cover], 'silver', 48));
+  // six blades, each a little swept and narrowing to the rim, a few millimetres proud of the cover
+  const N = 6, r0 = rf * 0.16, r1 = rf * 0.99, steps = 8, shapes = [];
+  for (let i = 0; i < N; i++) {
+    const at = (t, e) => {
+      const r = r0 + (r1 - r0) * t, a = Math.PI / 2 + i * Math.PI * 2 / N + 0.07 * t * t + e * (0.026 - 0.012 * t) / r;
+      return new THREE.Vector2(r * Math.cos(a), r * Math.sin(a));
+    };
+    const pts = [];
+    for (let k = 0; k <= steps; k++) pts.push(at(k / steps, -1));
+    for (let k = steps; k >= 0; k--) pts.push(at(k / steps, 1));
+    shapes.push(new THREE.Shape(pts));
+  }
+  const g = new THREE.ExtrudeGeometry(shapes, { depth: 0.01, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.0015, bevelSegments: 1, curveSegments: 4 });
+  g.rotateY(Math.PI / 2);
+  const f = fromGeo(g, null, 'gloss'), P = f.p;
+  for (let i = 0; i < P.length; i += 3) P[i] += dish(Math.hypot(P[i + 1], P[i + 2])) - 0.006;
+  s.add(f);
+  // the hub: a black cap with a small silver centre
+  s.add(cyl(rf * 0.2, rf * 0.22, 0.016, 24, { p: [dish(0) + 0.004, 0, 0], r: [0, 0, -Math.PI / 2] }, 'gloss'));
+  s.add(cyl(rf * 0.07, rf * 0.07, 0.004, 16, { p: [dish(0) + 0.013, 0, 0], r: [0, 0, -Math.PI / 2] }, 'silver'));
+  return s;
+}
 
 function lampTextures() {
   const tail = (glow) => (g, w, h) => {
@@ -34,7 +78,7 @@ function atlasTex() {
   });
 }
 
-export function buildRocket() {
+export function buildRocket({ scan = true } = {}) {
   const body = buildBody({
     top: [[ZF, 0.4], [ZF + 0.006, 0.47, 0.03], [ZF + 0.12, 0.56, 0.08], [-1.6, 0.67, 0.4], [-0.9, 0.79, 0.2], [-0.76, 0.82, 0.05],
       [0.02, 1.105, 0.2], [0.4, 1.135, 0.6], [1.2, 1.04, 0.5], [1.92, 0.9, 0.2], [ZR - 0.1, 0.87, 0.03], [ZR - 0.03, 0.82, 0.02], [ZR - 0.012, 0.56, 0.05], [ZR, 0.43]],
@@ -92,8 +136,10 @@ export function buildRocket() {
   const mx = pr.sideX(-0.62, 0.9);
   pal.add(blob(0.2, 0.09, 0.09, { p: [mx + 0.09, 0.93, -0.62] }, 'gloss', 3.5).sym());
 
-  // --- the nozzles: a dark bell for each, set into the tail, the floor and the sills
-  for (const [x, y, z, dx, dy] of ROCKET_NOZZLES) {
+  // --- the nozzles: a dark bell for each, set into the tail, the floor and the sills (on this body's own skin: the
+  // scan's tail is longer and its sills higher)
+  for (const [x, y0, z0, dx, dy] of ROCKET_NOZZLES) {
+    const y = dy ? Math.min(y0, 0.15) : y0, z = !dx && !dy ? pr.rearZ(x, y) - 0.03 : z0;
     const r = dy ? [0, 0, 0] : dx ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0];
     const big = !dx && !dy;
     pal.add(cyl(big ? 0.075 : 0.05, big ? 0.05 : 0.035, 0.06, 14, { p: [x - dx * 0.01, y - dy * 0.01, z - (big ? 0.01 : 0)], r }, 'darkalloy', true));
@@ -102,7 +148,11 @@ export function buildRocket() {
   // (the shroud the four tail nozzles sit in)
   pal.add(box(0.94, 0.17, 0.05, { p: [0, 0.36, pr.rearZ(0, 0.36) - 0.02] }, 'gloss'));
 
-  const wheel = { soup: buildWheel({ R: DIMS.wheelRadius, width: 0.27, rimR: 0.262, style: 'aero' }) };
-  const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel });
-  return tintPaint(car, 'rocket', 0xc3c7cc, { metalness: 0.8, roughness: 0.26, clearcoatRoughness: 0.04 });
+  const wheel = { soup: aeroSix(DIMS.wheelRadius, 0.325, 0.254) }, wheelFront = { soup: aeroSix(DIMS.wheelRadiusFront, 0.245, 0.2413) };
+  const car = assembleCar({ id: 'rocket', dims: DIMS, parts: { paint, glass, pal, tail, chmsl, reverse, head, atlas }, tex: { ...lampTextures(), atlas: atlasTex() }, wheel, wheelFront });
+  tintPaint(car, 'rocket', 0xdadde0, { metalness: 0.6, roughness: 0.26, clearcoatRoughness: 0.04 });
+  if (!scan) return car;
+  // the scan's wells are open on the inside where its tyres were fused to the floor: the arch liners close them.
+  // The red light bar glows a little with the lights on (Tesla's photo), brightly on the brakes.
+  return useGlbBody(car, 'rocket.glb', { liner: { r: 0.5, len: 0.4, inset: 0.1, gap: 0.02 }, tail: 0.45, brake: 2.2 });
 }

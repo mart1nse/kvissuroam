@@ -69,14 +69,16 @@ const ROOF_STEP = 0.3;             // a roof this far over the wheels is still c
 export const NOZ = 10;
 export const NOZ_REAR = 0, NOZ_DOWN = 4, NOZ_YAW = 8;
 
-// Where the nozzles are on the stand-in body and which way their gas goes: [x, y, z, dx, dy, dz] from the middle
-// of the wheelbase at road height, x to the right, z to the tail, in the order above (the four at the tail close
-// together in a row in the diffuser, as in Tesla's film). The body marks them
-// (src/cars/models/rocket.js) and the jets are drawn from them (src/cars/plumes.js).
+// Where the nozzles are on the body and which way their gas goes: [x, y, z, dx, dy, dz] from the middle of the
+// wheelbase at road height, x to the right, z to the tail, in the order above. They are where Martin's scanned body
+// has them (27 Nov, measured from public/models/rocket.glb): the four at the tail in a row in the diffuser, a little
+// way in from its end (the scan is not quite even across: as it is); one under each sill just behind each wheel,
+// the rear pair further in; one each side of the nose ahead of the front wheels. The body marks them
+// (src/cars/models/rocket.js: the scan, and its stand-in) and the jets are drawn from them (src/cars/plumes.js).
 export const NOZZLES = [
-  [-0.36, 0.36, 2.18, 0, 0, 1], [-0.12, 0.36, 2.18, 0, 0, 1], [0.12, 0.36, 2.18, 0, 0, 1], [0.36, 0.36, 2.18, 0, 0, 1],
-  [-0.62, 0.14, -0.705, 0, -1, 0], [0.62, 0.14, -0.705, 0, -1, 0], [-0.62, 0.14, 0.705, 0, -1, 0], [0.62, 0.14, 0.705, 0, -1, 0],
-  [-0.86, 0.36, -1.82, -1, 0, 0], [0.86, 0.36, -1.82, 1, 0, 0],
+  [-0.411, 0.371, 1.839, 0, 0, 1], [-0.13, 0.371, 1.839, 0, 0, 1], [0.146, 0.371, 1.839, 0, 0, 1], [0.427, 0.371, 1.839, 0, 0, 1],
+  [-0.882, 0.143, -0.898, 0, -1, 0], [0.887, 0.143, -0.898, 0, -1, 0], [-0.719, 0.215, 1.793, 0, -1, 0], [0.722, 0.215, 1.793, 0, -1, 0],
+  [-0.844, 0.361, -1.821, -1, 0, 0], [0.844, 0.361, -1.821, 1, 0, 0],
 ];
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);

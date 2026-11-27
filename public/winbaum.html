@@ -69,6 +69,7 @@
   <h1>WINBAUM.EE × <a href="/">LINNARING</a></h1>
   <p class="sub">LINNARING is a free driving game in the browser, set in the streets of Tartu, where up to a hundred people drive online together. A Winbaum L cabin with WINBAUM.EE on its roof stands beside the start and finish line of its race circuit, a few seconds' drive from where every game begins. This page shows how often it is seen, counted by the game itself and anonymously (no names, addresses or cookies). Hours and days are Tallinn time; the figures refresh every minute.</p>
   <section id="top" class="card big"><p class="note">Loading…</p></section>
+  <section id="live" class="card" hidden></section>
   <div class="hero">
     <figure><img src="/adpics/winbaum-approach.webp" alt="The Winbaum cabin and its roof sign beside the LAP START board, as a driver sees it on the way to the start line" width="1280" height="720" /><figcaption>What a driver sees on the way to the start line</figcaption></figure>
     <figure><img src="/adpics/winbaum-front.webp" alt="The Winbaum L cabin in the game, lit inside, with the WINBAUM.EE sign on its roof" width="1280" height="720" loading="lazy" /><figcaption>The cabin up close: a tap on it or its sign opens winbaum.ee</figcaption></figure>
@@ -79,7 +80,7 @@
 <div id="tip"></div>
 <script>
 (() => {
-  const out = document.getElementById('out'), top = document.getElementById('top'), tip = document.getElementById('tip');
+  const out = document.getElementById('out'), top = document.getElementById('top'), live = document.getElementById('live'), tip = document.getElementById('tip');
   const fmt = (n) => Math.round(n).toLocaleString('en-GB');
   const hrs = (s) => s >= 3600 ? `${(s / 3600).toFixed(1)} h` : `${Math.round(s / 60)} min`;
   const tz = { timeZone: 'Europe/Tallinn' };
@@ -127,6 +128,31 @@
       : h24.map((x) => ({ h: hourOf(x.at), v: x.n, est: x.est })).sort((a, b) => a.h - b.h);
     const busy = typ.filter((x) => x.h >= 18 && x.h <= 22), busyAvg = busy.length ? busy.reduce((a, x) => a + x.v, 0) / busy.length : 0;
     const typEst = typ.some((x) => x.est);
+    // What the counter has counted since the cabin went live for everyone (Martin 27 Nov, ~10:40 Tallinn, #848), as it
+    // is, beside the estimate: hour by hour from each day's Tallinn hours, and per day. (The first hours are low: only
+    // pages loaded after the update count.)
+    const LIVE = Date.UTC(2026, 10, 27, 8, 0);   // the Tallinn hour 10:00-11:00 on 27 Nov
+    const tallinnStart = (day, h) => { const t = Date.parse(`${day}T${String(h).padStart(2, '0')}:00:00Z`); return t - (hourOf(t) - h + 24) % 24 * 3600000; };
+    const liveDays = d.days.filter((x) => x.day >= '2026-11-27');
+    const liveHours = [];
+    for (const x of liveDays) for (let h = 0; h < 24; h++) { const at = tallinnStart(x.day, h); if (at >= LIVE && at <= Date.now()) liveHours.push({ at, h, v: x.h[h] || 0, s: x.hs?.[h] || 0, c: x.hc?.[h] || 0, day: x.day }); }
+    const shownHours = liveHours.slice(-72);
+    const tot = (k) => liveDays.reduce((a, x) => a + (x[k] || 0), 0);
+    if (liveHours.length) {
+      live.hidden = false;
+      live.innerHTML = `
+        <h2>Counted since going live</h2>
+        <p class="note">The cabin has been in the game for everyone since 27 Nov, about 10:40. These are the views the game itself has counted since then, as they come in; the figure above stays the estimate until there are full days to average. The first hours read low, as only games opened after the update count.</p>
+        <div class="tiles">
+          <div class="tile"><span>Views counted</span><b>${fmt(tot('v'))}</b><small>since going live</small></div>
+          <div class="tile"><span>Time on screen</span><b>${hrs(tot('s'))}</b><small>${tot('v') ? `about ${Math.round(tot('s') / tot('v'))} s a view` : ''}</small></div>
+          <div class="tile"><span>Visits that saw it</span><b>${fmt(tot('u'))}</b><small>games that passed it once or more</small></div>
+          <div class="tile"><span>Taps to winbaum.ee</span><b>${fmt(tot('c'))}</b><small>since going live</small></div>
+        </div>
+        <h3>Hour by hour${liveHours.length > shownHours.length ? ', the last 72 hours' : ''}</h3>
+        ${chart(shownHours.map((x) => ({ v: x.v, label: hh(x.h).slice(0, 2), tip: `${dayName(x.day)} ${hh(x.h)}–${hh((x.h + 1) % 24)}: ${fmt(x.v)} views counted${x.c ? `, ${x.c} taps` : ''}` })), shownHours.length > 36 ? 6 : 3)}
+        ${liveDays.length > 1 ? `<h3>Day by day</h3>${chart(liveDays.map((x) => ({ v: x.v, label: x.day.slice(8), tip: `${dayName(x.day)}: ${fmt(x.v)} views counted${x.day === today ? ', so far today' : ''}` })), 1)}` : ''}`;
+    }
     top.innerHTML = `
       <div class="head">
         <div class="stat"><span class="num">${fmt(avgDay / 24)}</span><span class="what">views an hour</span></div>
@@ -138,7 +164,7 @@
     out.innerHTML = `
       <section class="card">
         <h2>Views of the WINBAUM.EE sign</h2>
-        <p class="note">A view is the sign on screen within 60 m for a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view. The time on screen is counted to the second too, also while a car stands still beside it.${counted ? ` Counted since ${dayName(counted)}.` : ' The counter has not seen a view yet: the figures are estimates from the laps started past the sign.'}</p>
+        <p class="note">A view is the sign on screen within 60 m for a second in all; a car must lose sight of it for 5 seconds before it counts again, so every lap driven past it is one view. The time on screen is counted to the second too, also while a car stands still beside it.${counted ? ` Counted since ${dayName(counted)}.` : ' Until the counted views catch up with the laps started past the sign, the figures here are estimates from those laps (the counted ones are above).'}</p>
         <div class="tiles">
           <div class="tile"><span>Last 24 hours</span><b>${fmt(last24)}</b><small>views${est24 ? ' (estimate)' : ''}</small></div>
           <div class="tile"><span>Average day</span><b>${fmt(avgDay)}</b><small>views a day${fullM.length ? ` over ${fullM.length} counted day${fullM.length > 1 ? 's' : ''}` : ' (estimate)'}</small></div>

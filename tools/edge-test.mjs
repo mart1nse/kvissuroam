@@ -7,7 +7,7 @@
 //
 // Slow, the nose must be well down by the time the rear wheels reach the edge, the tail must not sink through
 // the top it is still over, the car must end on its wheels on the ground below, and it must never be moved more
-// than it drives in a step. Fast, it must fly as it did before: level.
+// than it drives in a step. Fast, the nose dips only a little, less the faster, and the car lands on its wheels.
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
@@ -32,7 +32,7 @@ function drive(world, spec, start, kmh, top, { time = 14, steer = 0 } = {}) {
   const v0 = kmh / 3.6, L = spec.wheelbase;
   car.vx = v0;
   const y0 = start.y;
-  const r = { tip: false, tipped: false, pitchAtEdge: null, rollMost: 0, pitchMost: 0, sink: 0, jump: 0, nan: false, landed: null, upright: null, car, lowest: y0, air: 0 };
+  const r = { tip: false, tipped: false, pitchAtEdge: null, rollMost: 0, pitchMost: 0, sink: 0, jump: 0, nan: false, landed: null, upright: null, car, lowest: y0, air: 0, flight: 0 };
   let t = 0, px = car.x, pz = car.z, gone = false;
   while (t < time) {
     const v = car.vx;
@@ -61,6 +61,7 @@ function drive(world, spec, start, kmh, top, { time = 14, steer = 0 } = {}) {
       }
       if (!over[0] && !over[1]) { gone = true; r.pitchAtEdge = car.pitch; r.rollAtEdge = car.roll; r.fallenAtEdge = y0 - car.y; }
     } else if (r.landed === null && !car.airborne && !car.tip && car.y < y0 - 0.5) r.landed = t;
+    else if (r.landed === null && Math.abs(car.pitch) > Math.abs(r.flight)) r.flight = car.pitch;     // (off the edge, until down)
     if (r.landed !== null && r.upright === null && !car.tipped && Math.abs(car.pitch) < 0.12 && Math.abs(car.roll) < 0.12) r.upright = t;
     if (r.upright !== null && t > r.upright + 0.5) break;
   }
@@ -88,9 +89,17 @@ const flatWorld = (h) => ({
     check(r.sink < 0.06, `8 m edge at ${kmh} km/h: the tail does not sink through the top`, d);
     check(r.upright !== null && r.upright - r.landed < 2 && r.jump < 0.02, `8 m edge at ${kmh} km/h: lands and stands on its wheels`, d);
   }
+  // fast, the nose dips only a little, less the faster, and never stops dipping at all (Martin, 27 Nov 2026: "a very
+  // very small nose dive until the end"); it lands on its wheels at once, and no slower than it went off
+  let dip = -1;
   for (const kmh of [56, 70, 100, 160]) {
     const r = drive(cliff, spec, { x: 0, z: 0, yaw: 0, y: H }, kmh, top);
-    check(!r.tip && !r.tipped && Math.abs(r.pitchAtEdge) < 0.5 / DEG, `8 m edge at ${kmh} km/h: flies level as before`, `nose ${(r.pitchAtEdge * DEG).toFixed(2)} deg at the edge`);
+    const v = Math.hypot(r.car.vx, r.car.vy) * 3.6;
+    const d = `nose ${(r.pitchAtEdge * DEG).toFixed(2)} deg at the edge, most ${(r.pitchMost * DEG).toFixed(1)}, on its wheels ${r.upright ? (r.upright - r.landed).toFixed(2) + ' s after landing' : 'never'}, ${v.toFixed(0)} km/h after`;
+    check(!r.nan && Math.abs(r.pitchAtEdge) < 1.5 / DEG && r.pitchMost < -0.5 / DEG && r.pitchMost > -6 / DEG, `8 m edge at ${kmh} km/h: a small nose dip in the air`, d);
+    check(r.pitchMost > dip - 0.3 / DEG, `8 m edge at ${kmh} km/h: less dip the faster`, d);
+    check(r.upright !== null && r.upright - r.landed < 0.3 && r.jump < 0.02 && v > kmh * 0.94, `8 m edge at ${kmh} km/h: lands on its wheels and drives on`, d);
+    dip = r.pitchMost;
   }
   // (between the two the tipping fades out: never more than slow, never a jump in what the car does)
   let last = -1;
@@ -182,7 +191,7 @@ const flatWorld = (h) => ({
       check(r.upright !== null && r.jump < 0.03 && r.car.y < roofY - UP + 1.5, `roof with walls, off the ${kmh > 0 ? name : 'far'} side at ${kmh} km/h: down and on its wheels, never put elsewhere`, d);
     }
     const r = drive(world, spec, { x: C[0], z: C[1], yaw, y: roofY }, 90, inRoof, { time: 6 });
-    check(!r.tip && !r.tipped && Math.abs(r.pitchAtEdge) < 1 / DEG, `roof with walls, off the ${name} side at 90 km/h: flies level`, `nose ${(r.pitchAtEdge * DEG).toFixed(2)} deg`);
+    check(!r.nan && Math.abs(r.pitchAtEdge) < 1.5 / DEG && Math.abs(r.flight) < 6 / DEG && r.jump < 0.03, `roof with walls, off the ${name} side at 90 km/h: flies all but level`, `nose ${(r.pitchAtEdge * DEG).toFixed(2)} deg, most ${(r.flight * DEG).toFixed(1)} until down`);
   }
 
   // bridge spans: off the side that has no railing; and nosed against a railing, where the front wheels were past

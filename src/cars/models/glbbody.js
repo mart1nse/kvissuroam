@@ -17,12 +17,12 @@ function load(url) {
       // the textured body gets a clear coat like the procedural paint; the glass keeps its own material
       for (const m of meshes) {
         if (!m.material.map) continue;
-        const s = m.material;
+        const s = m.material, matt = s.name.startsWith('ov_') || s.name === 'bay';   // (bay: the Focus WRC's engine bay, seen with its bonnet up)
         m.material = new THREE.MeshPhysicalMaterial({
           map: s.map, metalnessMap: s.metalnessMap, roughnessMap: s.roughnessMap, normalMap: s.normalMap,
           emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0,
-          metalness: s.metalness, roughness: s.roughness, clearcoat: s.name.startsWith('ov_') ? 0 : 0.5, clearcoatRoughness: 0.08, side: s.side,
-          alphaTest: s.alphaTest, name: s.name, specularIntensity: s.name.startsWith('ov_') ? 0.15 : 1,   // matt plates: sky glare greys the lettering
+          metalness: s.metalness, roughness: s.roughness, clearcoat: matt ? 0 : 0.5, clearcoatRoughness: 0.08, side: s.side,
+          alphaTest: s.alphaTest, name: s.name, specularIntensity: matt ? 0.15 : 1,   // matt plates: sky glare greys the lettering
           // plates and badges are flat quads a few mm proud of the body: keep them from z-fighting at a distance
           polygonOffset: s.name.startsWith('ov_'), polygonOffsetFactor: -2, polygonOffsetUnits: -2,
         });

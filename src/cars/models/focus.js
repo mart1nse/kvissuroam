@@ -193,7 +193,7 @@ export function buildFocus({ scan = true } = {}) {
 
 // The scan's bonnet on the hinge: where build2.py cut it (game axes, metres), the hinge at the foot of the windscreen,
 // a point high on the windscreen it comes to lie against, and the middle of its front edge.
-const SCAN_BONNET = { hinge: [0, 0.872, -1.083], ws: [0, 1.277, -0.122], front: [0, 0.63, -1.875] };
+const SCAN_BONNET = { hinge: [0, 0.872, -1.083], ws: [0, 1.277, -0.122], front: [0, 0.58, -1.949] };
 // Once the scan is on: its bonnet goes into the pivot in place of the stand-in's, which bonnet.js swings and throws.
 // (Only a car built on the page has car.bonnet: other players' Focuses keep the scan's bonnet shut on the body.)
 glbHooks.focusBonnet = (meshes, car) => {

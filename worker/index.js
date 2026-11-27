@@ -36,6 +36,7 @@ import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
 import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from '../src/net/kudosrules.js';
+import { LINE_TRACK, LINES_MAX, lineWorth } from '../src/race/laplines.js';
 
 const TRACK = 'toomemagi';
 const TOP_N = 10;                 // a lap among its car's ten best waits for its drive to be judged (wouldLead)
@@ -400,6 +401,10 @@ export class Lobby extends DurableObject {
     // the page's src/race/linelog.js). Martin at the launch, the same day: the logging goes, the line stays as it is.
     // Every run it held is in the project's raadi-lines/runs.ndjson (tools/race/raadi-lines.py reads it).
     this.sql.exec('DROP TABLE IF EXISTS lines');
+    // Where the fast drivers go round Toomemägi (src/race/laplines.js; Martin 27 Nov 2026): a lap's drive, as its
+    // replay is packed, for a lap within 5 % of its car's record; one row a lap (lap: its id in laps), nameless
+    this.sql.exec('CREATE TABLE IF NOT EXISTS lap_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, lap INTEGER NOT NULL UNIQUE, car TEXT NOT NULL, ms INTEGER NOT NULL, best INTEGER NOT NULL, n INTEGER NOT NULL, data BLOB NOT NULL)');
+    this.lineN = null;            // drives kept in lap_lines
     this.rpIndex = null;          // track -> { car: ms } of the replays kept (with the board)
     this.tops = null;             // the five best drivers per car, made when first asked for (worker/tops.js, topsNow)
     this.lapSum = null;           // the boards' laps in a few numbers for /stats, made with it (worker/lapsum.js, lapSummary)
@@ -1186,6 +1191,56 @@ export class Lobby extends DurableObject {
     return p;
   }
 
+  // ---- Lap lines (src/race/laplines.js): POST /api/line { k: the lap's ticket, car, ms: its board time, z: its drive
+  // packed as a replay }. Only for a lap the server has from that ticket, on the board, at most 5 % slower than its
+  // car's best; one drive a lap. 410 once LINES_MAX are kept (the page then sends no more).
+  linesKept() { return (this.lineN ??= this.sql.exec('SELECT COUNT(*) AS n FROM lap_lines').one().n); }
+  async takeLine(req, ip) {
+    if (this.over(`ln|${ip}`, 20, 3600000)) return json({ error: 'too many requests' }, 429);
+    if (this.linesKept() >= LINES_MAX) return json({ error: 'enough' }, 410);
+    const text = await req.text();
+    if (text.length > 300000) return json({ error: 'too big' }, 413);
+    let b;
+    try { b = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
+    if (b?.track === 'raadi') return json({ error: 'gone' }, 410);   // (a page from before 26 Nov 19:20: its Raadi logging stops)
+    const car = cleanCar(b?.car), ms = Math.round(Number(b?.ms)), tk = await this.readTicket(b?.k);
+    if (!car || !tk || !(ms >= LAP_MIN && ms <= 900000) || typeof b?.z !== 'string' || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
+    const lap = this.sql.exec('SELECT id, pen, hold FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, LINE_TRACK).toArray()[0];
+    if (!lap || lap.hold === 2) return json({ error: 'no such lap' }, 400);
+    const best = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL', LINE_TRACK, car).one().m;
+    if (!lineWorth(ms, Math.min(best ?? ms, ms))) return json({ error: 'not fast enough' }, 400);
+    if (this.sql.exec('SELECT 1 FROM lap_lines WHERE lap = ?', lap.id).toArray().length) return json({ ok: true });
+    // (the drive's own head: a replay of this lap's length, "1,21,<ms>,<n>")
+    let bytes, n;
+    try {
+      bytes = Uint8Array.from(atob(b.z), (c) => c.charCodeAt(0));
+      const head = (await gunzip(bytes, 1500000)).slice(0, 40).split(',').map(Number);
+      n = head[3];
+      if (head[0] !== 1 || head[1] !== 21 || Math.abs(head[2] - (ms - (lap.pen || 0) * 1000)) > 1000 || !(n >= 100 && n <= 9001)) throw new Error('head');
+    } catch { return json({ error: 'invalid' }, 400); }
+    this.sql.exec('INSERT INTO lap_lines (at, lap, car, ms, best, n, data) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), lap.id, car, ms, Math.min(best ?? ms, ms), n, bytes);
+    this.lineN++;
+    return json({ ok: true });
+  }
+  // GET /api/lines: how many drives are kept (and per car); ?after=<id>&limit=<n>: the drives after that id, oldest
+  // first, each { id, at, lap, car, ms, best, n, z }
+  readLines(url) {
+    const total = this.linesKept();
+    if (!url.searchParams.has('after')) {
+      const cars = Object.fromEntries(this.sql.exec('SELECT car, COUNT(*) AS n FROM lap_lines GROUP BY car').toArray().map((r) => [r.car, r.n]));
+      const last = this.sql.exec('SELECT MAX(at) AS at FROM lap_lines').one().at || null;
+      return json({ track: LINE_TRACK, total, max: LINES_MAX, cars, last });
+    }
+    const after = Math.max(0, Math.round(Number(url.searchParams.get('after'))) || 0), limit = Math.max(1, Math.min(60, Math.round(Number(url.searchParams.get('limit'))) || 40));
+    const rows = this.sql.exec('SELECT id, at, lap, car, ms, best, n, data FROM lap_lines WHERE id > ? ORDER BY id LIMIT ?', after, limit).toArray();
+    return json({ track: LINE_TRACK, total, rows: rows.map((r) => {
+      const u = new Uint8Array(r.data);
+      let s = '';
+      for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      return { id: r.id, at: r.at, lap: r.lap, car: r.car, ms: r.ms, best: r.best, n: r.n, z: btoa(s) };
+    }) });
+  }
+
   async takeReplay(req, ip) {
     if (this.over(`r|${ip}`, 6, 60000)) return json({ error: 'too many requests' }, 429);
     const text = await req.text();
@@ -1467,8 +1522,9 @@ export class Lobby extends DurableObject {
       return json({ ok: true });
     }
 
-    // (a page opened before the logging was taken out still sends its runs: 410 tells it to stop writing them down)
-    if (path === '/api/line' && req.method === 'POST') return json({ error: 'gone' }, 410);
+    // (a Toomemägi lap's drive, src/race/laplines.js; a page from before 26 Nov 19:20 sending a Raadi run is told 410)
+    if (path === '/api/line' && req.method === 'POST') return this.takeLine(req, ip);
+    if (path === '/api/lines') { if (this.over(`L|${ip}`, 40, 60000)) return busy(); return this.readLines(url); }
     if (path === '/api/replay' && req.method === 'POST') return this.takeReplay(req, ip);
     if (path === '/api/margins') { if (this.over(`M|${ip}`, 20, 60000)) return busy(); return json(this.margins()); }
     if (path === '/api/replay' && url.searchParams.get('refused')) {

@@ -51,6 +51,13 @@
   .hero figure { margin: 0; }
   .hero img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
   .hero figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .big { padding: 18px 18px 18px; }
+  .big .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 4px; }
+  .big .num { font: 900 italic clamp(64px, 12vw, 112px)/1 Montserrat, system-ui, sans-serif; letter-spacing: -.01em;
+              background: linear-gradient(90deg, var(--cyan), var(--hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .big .what { font: 800 clamp(18px, 2.6vw, 26px)/1.2 Montserrat, system-ui, sans-serif; color: var(--ink); }
+  .big .what small { display: block; font: 400 14px/1.4 system-ui, sans-serif; color: var(--ink2); margin-top: 4px; }
+  .big .chart { height: 180px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
   footer a, .sub a { color: var(--cyan); }
 </style>
@@ -59,6 +66,7 @@
 <div class="wrap">
   <h1>WINBAUM.EE × <a href="/">LINNARING</a></h1>
   <p class="sub">LINNARING is a free driving game in the browser, set in the streets of Tartu, where up to a hundred people drive online together. A Winbaum L cabin with WINBAUM.EE on its roof stands beside the start and finish line of its race circuit, a few seconds' drive from where every game begins. This page shows how often it is seen, counted by the game itself and anonymously (no names, addresses or cookies). Hours and days are Tallinn time; the figures refresh every minute.</p>
+  <section id="top" class="card big"><p class="note">Loading…</p></section>
   <div class="hero">
     <figure><img src="/adpics/winbaum-approach.webp" alt="The Winbaum cabin and its roof sign beside the LAP START board, as a driver sees it on the way to the start line" width="1280" height="720" /><figcaption>What a driver sees on the way to the start line</figcaption></figure>
     <figure><img src="/adpics/winbaum-front.webp" alt="The Winbaum L cabin in the game, lit inside, with the WINBAUM.EE sign on its roof" width="1280" height="720" loading="lazy" /><figcaption>The cabin up close: a tap on it or its sign opens winbaum.ee</figcaption></figure>
@@ -69,7 +77,7 @@
 <div id="tip"></div>
 <script>
 (() => {
-  const out = document.getElementById('out'), tip = document.getElementById('tip');
+  const out = document.getElementById('out'), top = document.getElementById('top'), tip = document.getElementById('tip');
   const fmt = (n) => Math.round(n).toLocaleString('en-GB');
   const hrs = (s) => s >= 3600 ? `${(s / 3600).toFixed(1)} h` : `${Math.round(s / 60)} min`;
   const tz = { timeZone: 'Europe/Tallinn' };
@@ -87,11 +95,13 @@
 
   function draw(all) {
     // the Winbaum sign's own figures (wb) out of all the adverts'
-    const d = { ...all, counted: all.counted?.wb || null, days: all.days.map((x) => ({ day: x.day, ls: x.ls, ...x.ads.wb })),
-      hours: all.hours.map((x) => ({ at: x.at, ls: x.ls, ...x.ads.wb })) };
-    const today = d.today, counted = d.counted;
+    // A count is taken as the sign's own only once it is near what the laps started past it say (a quarter of them or
+    // more): while the cabin is shown only with ?winbaum=1, the few views counted are no measure, and the estimate stands.
+    const real = (x) => x.v > 0 && x.v >= 0.25 * x.ls;
+    const d = { ...all, days: all.days.map((x) => ({ day: x.day, ls: x.ls, ...x.ads.wb })), hours: all.hours.map((x) => ({ at: x.at, ls: x.ls, ...x.ads.wb })) };
+    const today = d.today, counted = d.days.find(real)?.day || null;
     // a day's figure: the counted views, or before the counter the lap starts (every lap starts past the sign)
-    const days = d.days.filter((x) => x.v > 0 || x.ls > 0).map((x) => ({ ...x, est: !(x.v > 0), n: x.v > 0 ? x.v : x.ls, part: x.day === today }));
+    const days = d.days.filter((x) => x.v > 0 || x.ls > 0).map((x) => ({ ...x, est: !real(x), n: real(x) ? x.v : x.ls, part: x.day === today }));
     // (the full days since the game went public on 24 Nov 2026: the quiet test days before it are no measure)
     const full = days.filter((x) => !x.part && x.day >= '2026-11-24');
     const fullM = full.filter((x) => !x.est), use = fullM.length ? fullM : full;
@@ -100,7 +110,7 @@
     // hours: the counted ones, per Tallinn hour of each day
     let peakHour = null;
     for (const x of days) if (!x.est) x.h.forEach((v, h) => { if (!peakHour || v > peakHour.v) peakHour = { v, h, day: x.day }; });
-    const h24 = d.hours.map((x) => ({ ...x, est: !(x.v > 0) && !counted, n: x.v > 0 || counted ? x.v : x.ls }));
+    const h24 = d.hours.map((x) => ({ ...x, est: !real(x), n: real(x) ? x.v : x.ls }));
     const last24 = h24.reduce((a, x) => a + x.n, 0), est24 = h24.some((x) => x.est);
     const sec24 = d.hours.reduce((a, x) => a + x.s, 0), u24 = d.hours.reduce((a, x) => a + x.u, 0);
     const c24 = d.hours.reduce((a, x) => a + (x.c || 0), 0), cAll = d.days.reduce((a, x) => a + (x.c || 0), 0);
@@ -109,6 +119,18 @@
     const prof = Array.from({ length: 24 }, (_, h) => fullM.length ? fullM.reduce((a, x) => a + x.h[h], 0) / fullM.length : 0);
 
     const E = (b) => (b ? ' <small>(estimate)</small>' : '');
+    // the headline (Martin 27 Nov: the average hour as one big number first, then a typical day hour by hour): the
+    // counted days' hours once there are any, before that the last 24 hours' laps started past the sign
+    const typ = fullM.length ? prof.map((v, h) => ({ h, v, est: false }))
+      : h24.map((x) => ({ h: hourOf(x.at), v: x.n, est: x.est })).sort((a, b) => a.h - b.h);
+    const busy = typ.filter((x) => x.h >= 18 && x.h <= 22), busyAvg = busy.length ? busy.reduce((a, x) => a + x.v, 0) / busy.length : 0;
+    const typEst = typ.some((x) => x.est);
+    top.innerHTML = `
+      <div class="head"><span class="num">${fmt(avgDay / 24)}</span>
+        <span class="what">views of the WINBAUM.EE sign every hour, on average${fullM.length ? '' : ' (estimate)'}
+          <small>About ${fmt(avgDay)} a day, day and night together. In the evening, from 18:00 to 23:00, about ${fmt(busyAvg)} an hour.</small></span></div>
+      <h3>A typical day, hour by hour${typEst ? ' <span style="text-transform:none;letter-spacing:0">(estimate)</span>' : ''}</h3>
+      ${chart(typ.map((x) => ({ v: x.v, est: x.est, label: hh(x.h).slice(0, 2), tip: `${hh(x.h)}–${hh((x.h + 1) % 24)}: about ${fmt(x.v)} views${x.est ? ' (estimate)' : ''}` })), 3)}`;
     out.innerHTML = `
       <section class="card">
         <h2>Views of the WINBAUM.EE sign</h2>
@@ -119,7 +141,7 @@
           <div class="tile"><span>Average hour</span><b>${fmt(avgDay / 24)}</b><small>views an hour, day and night</small></div>
           <div class="tile"><span>Peak hour</span><b>${peakHour ? fmt(peakHour.v) : '–'}</b><small>${peakHour ? `${hh(peakHour.h)}–${hh((peakHour.h + 1) % 24)}${peakHour.day ? `, ${dayName(peakHour.day)}` : ''}${peakHour.est ? ' (estimate)' : ''}` : ''}</small></div>
           <div class="tile"><span>Peak day</span><b>${peakDay ? fmt(peakDay.n) : '–'}</b><small>${peakDay ? `${dayName(peakDay.day)}${peakDay.est ? ' (estimate)' : ''}` : ''}</small></div>
-          <div class="tile"><span>On screen, 24 h</span><b>${sec24 ? hrs(sec24) : '–'}</b><small>${u24 ? `in ${fmt(u24)} visits that saw it${last24 && !est24 ? `, about ${Math.round(sec24 / last24)} s a view` : ''}` : 'counted from the counter\'s start'}</small></div>
+          <div class="tile"><span>On screen, 24 h</span><b>${sec24 && counted ? hrs(sec24) : '–'}</b><small>${u24 && counted ? `in ${fmt(u24)} visits that saw it${last24 && !est24 ? `, about ${Math.round(sec24 / last24)} s a view` : ''}` : 'counted from the counter\'s start'}</small></div>
           <div class="tile"><span>Taps to winbaum.ee</span><b>${counted ? fmt(c24) : '–'}</b><small>in the last 24 hours${cAll ? `, ${fmt(cAll)} in all` : ''}</small></div>
         </div>
         <h3>The last 24 hours, hour by hour</h3>
@@ -134,7 +156,7 @@
           <tr><th>Day</th><th>Views</th><th>On screen</th><th>Visits that saw it</th><th>Taps to the site</th><th>Busiest hour</th></tr>
           ${days.slice().reverse().map((x) => {
             const bi = x.est ? -1 : x.h.indexOf(Math.max(...x.h));
-            return `<tr><td>${dayName(x.day)}${x.part ? ' (today so far)' : ''}</td><td class="${x.est ? 'est' : ''}">${fmt(x.n)}${x.est ? ' est.' : ''}</td><td>${x.s ? hrs(x.s) : '–'}</td><td>${x.u ? fmt(x.u) : '–'}</td><td>${x.c ? fmt(x.c) : '–'}</td><td>${bi >= 0 && x.h[bi] ? `${hh(bi)} · ${fmt(x.h[bi])}` : '–'}</td></tr>`;
+            return `<tr><td>${dayName(x.day)}${x.part ? ' (today so far)' : ''}</td><td class="${x.est ? 'est' : ''}">${fmt(x.n)}${x.est ? ' est.' : ''}</td><td>${x.s && !x.est ? hrs(x.s) : '–'}</td><td>${x.u && !x.est ? fmt(x.u) : '–'}</td><td>${x.c && !x.est ? fmt(x.c) : '–'}</td><td>${bi >= 0 && x.h[bi] ? `${hh(bi)} · ${fmt(x.h[bi])}` : '–'}</td></tr>`;
           }).join('')}
         </table></div>
         <p class="note" style="margin-top:10px">Estimates: before the counter, each lap started on the Toomemägi circuit counts as one view, since every lap begins by driving straight at the sign. That leaves out cars only passing by, so the counted views run a little higher.</p>
@@ -148,7 +170,7 @@
     const w = tip.offsetWidth;
     tip.style.left = Math.min(innerWidth - w - 6, e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
   });
-  const load = () => fetch('/api/stats?ads=1').then((r) => r.json()).then(draw).catch(() => { out.innerHTML = '<p class="note">The figures could not be loaded. Try again in a minute.</p>'; });
+  const load = () => fetch('/api/stats?ads=1').then((r) => r.json()).then(draw).catch(() => { top.innerHTML = ''; out.innerHTML = '<p class="note">The figures could not be loaded. Try again in a minute.</p>'; });
   load();
   setInterval(() => { if (!document.hidden) load(); }, 60000);
 })();

@@ -23,7 +23,7 @@
 export const TANK_S = 10;          // seconds of thrust in a full tank
 export const JUMP_S = 5;           // ...of which one FLIP takes this much
 export const REFILL_S = 10;        // an empty tank is full again after this long (it fills whenever it is not full, 10 % a second: Martin 27 Nov, "for real players"; a minute from 26 Nov, two before)
-export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (offline testing, ?off=100: Martin 2026-11-25)
+export const QUICK_REFILL_S = 2;   // ...or after this long with input.quickRefill (tests only; ?off=100 had it until Martin 27 Nov)
 
 const G = 9.81;
 // The tank blows down (Martin 25 Nov, the gas budget): 250 kg of cold gas leaving at GAS_V is 163 kN s of push in
@@ -99,7 +99,7 @@ const use = (r, s) => { r.tank -= s; if (r.tank <= 1e-6) r.tank = 0; };
 // One frame of the thrusters. Returns true while a kickflip is flying (the car has been moved along its
 // plan and the tyre physics must be left out). input: boost (held), flip (pressed), steer or left/right (the
 // roll goes the way the wheel is held), rocketOff (the buttons do nothing: waiting for a start), flipOff (no
-// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not a minute).
+// kickflip: a race, a timed lap, the Raadi stage), quickRefill (an empty tank is full again in 2 s, not 10: tests only).
 // r.on: BOOST's valves are open; r.dry: they shut for want of gas with the button still held (it must be let go).
 // droop: how far the wheels hang below the body in the air (m, the physics' own spring travel at rest): a flight
 // ends where they first touch, see fly.

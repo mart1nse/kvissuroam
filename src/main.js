@@ -2380,8 +2380,7 @@ function frame(ts) {
     if (car.rocket) {
       ctl.rocketOff = rocketOff = !!(raceMode?.holding || raceMode?.pin || stage?.phase === 'count' || stage?.pin);
       ctl.flipOff = flipOff = !!(raceMode?.ghost || race?.running || stage?.running || rocketOff);
-      // (offline, ?off=100: an empty tank is full again in 2 s, for trying things out; Martin 2026-11-25)
-      ctl.quickRefill = STEALTH;
+      // (no quick refill under ?off=100 any more: Martin 27 Nov, "so it will behave the same as prod will"; it was 2 s)
       if (raceMode?.pin || stage?.pin) refillTank(car.spec.id);
     }
     if (mode === 'drive' && !watch?.active) {

@@ -46,6 +46,13 @@
   th { color: var(--muted); font-weight: 600; }
   td.est { color: var(--ink2); font-style: italic; }
   .scroll { overflow-x: auto; }
+  /* (the summary fits its card: headers wrap, and on narrow screens seconds a view and visits step out) */
+  .sum th, .sum td { padding: 6px 5px; }
+  .sum th { white-space: normal; vertical-align: bottom; line-height: 1.25; }
+  .sum td:first-child { white-space: normal; min-width: 130px; }
+  @media (max-width: 1000px) { .sum th:nth-child(7), .sum td:nth-child(7), .sum th:nth-child(8), .sum td:nth-child(8) { display: none; } }
+  @media (max-width: 480px) { .sum th:nth-child(6), .sum td:nth-child(6) { display: none; } }
+  @media (max-width: 640px) { .sum th:nth-child(5), .sum td:nth-child(5), .sum th:nth-child(4), .sum td:nth-child(4) { display: none; } }
   #tip { position: fixed; pointer-events: none; z-index: 9; background: #0b0320; border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; padding: 6px 9px; border-radius: 8px; display: none; }
   .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 0 0 14px; }
   .hero figure { margin: 0; }
@@ -61,7 +68,7 @@
 <body>
 <div class="wrap">
   <h1><a href="/">LINNARING</a> · ADVERTS</h1>
-  <p class="sub">How often the adverts in the game are seen and tapped by the people driving it. Counted by the game itself, anonymously (no names, addresses or cookies). A view is an advert on screen, within 100 m, for half a second in all; it counts again after 5 seconds out of sight, so every lap driven past is one more. The time on screen is counted to the second as well, also while a car stands still (resting after a finish, waiting at the start), but only while the game is open and in front. Hours and days are Tallinn time; the figures refresh every minute.</p>
+  <p class="sub">How often the adverts in the game are seen and tapped by the people driving it. Counted by the game itself, anonymously (no names, addresses or cookies). A view is an advert on screen, near enough to read (the Winbaum sign within 100 m, the larger Tasku banner 130 m, the Anderson's hologram over the roofs 200 m), for half a second in all; it counts again after 5 seconds out of sight, so every lap driven past is one more. The time on screen is counted to the second as well, also while a car stands still (resting after a finish, waiting at the start), but only while the game is open and in front. Hours and days are Tallinn time; the figures refresh every minute.</p>
   <main id="out"><p class="note">Loading…</p></main>
   <footer>Counted from 27 November 2026. <a href="/winbaum">Winbaum's own page</a> · <a href="/stats">Game stats</a> · <a href="/">Play LINNARING</a></footer>
 </div>
@@ -70,8 +77,8 @@
 (() => {
   const ADS = [
     { id: 'wb', name: 'WINBAUM.EE roof sign', where: 'On the Winbaum cabin beside the LAP START board, Toomemägi circuit start line', site: 'winbaum.ee', page: '/winbaum', reach: 100, est: true },
-    { id: 'an', name: "Anderson's hologram", where: 'Over the taproom on Küüni street', site: 'andersonbeer.com', reach: 100 },
-    { id: 'tp', name: 'TOREPOOD banner on Tasku', where: 'On Tasku over the Narva mnt junction (taps: every TOREPOOD poster, the bus shelters and Kaubamaja too)', site: 'yaga.ee/torepood-2', reach: 100 },
+    { id: 'an', name: "Anderson's hologram", where: 'Over the taproom on Küüni street', site: 'andersonbeer.com', reach: 200 },
+    { id: 'tp', name: 'TOREPOOD banner on Tasku', where: 'On Tasku over the Narva mnt junction (taps: every TOREPOOD poster, the bus shelters and Kaubamaja too)', site: 'yaga.ee/torepood-2', reach: 130 },
   ];
   const out = document.getElementById('out'), tip = document.getElementById('tip');
   const fmt = (n) => Math.round(n).toLocaleString('en-GB');

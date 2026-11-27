@@ -5,7 +5,9 @@
 //   wb  the WINBAUM.EE roof sign on the Winbaum cabin by LAP START (src/world/winbaum.js), only while it is shown
 //   an  the Anderson's hologram over the taproom on Küüni (src/world/kuuni.js, hologram.js)
 //   tp  the TOREPOOD banner on Tasku over the Narva mnt junction (src/world/keskus.js, a posterPlane)
-// An advert is seen while the camera is within its reach (100 m: each is a few metres across and big on screen from there) and its middle is inside the picture (for the one-sided Tasku banner, from its front). One view: on screen
+// An advert is seen while the camera is within its reach, by its size (the Winbaum sign
+// 100 m, the 9 x 12.8 m Tasku banner 130 m, the 13 x 16 m Anderson's hologram over the roofs 200 m: Martin 27 Nov, it reads
+// well from the Winbaum cabin, 203 m away) and its middle is inside the picture (for the one-sided Tasku banner, from its front). One view: on screen
 // for half a second in all (a shorter glimpse is none); a new view needs it off the screen for 5 s first, so a car standing
 // by it is one view, and each lap driven past is one more. The seconds on screen are counted too, and a visit's first
 // view of each ('u'). What is in the way (a house, a bus) is not looked at.
@@ -30,8 +32,8 @@ export function createAdViews({ winbaum, holo, posters }) {
   const ads = [
     { id: 'wb', reach: 100, at: () => { const g = winbaum?.group; if (!g || !shown(g)) return false; p.set(0, 4.35, 0.25); g.localToWorld(p); return true; } },
     // (the hologram turns to the camera; its board is 13 x 16.25 m, from 1.6 m over the ground)
-    { id: 'an', reach: 100, at: () => { const g = holo?.group; if (!g || !shown(g)) return false; p.copy(g.position); p.y += 9.7; return true; } },
-    { id: 'tp', reach: 100, front: true, at: () => {
+    { id: 'an', reach: 200, at: () => { const g = holo?.group; if (!g || !shown(g)) return false; p.copy(g.position); p.y += 9.7; return true; } },
+    { id: 'tp', reach: 130, front: true, at: () => {
       const m = posters?.find((x) => x.mesh?.userData.tasku)?.mesh;
       if (!m || !shown(m)) return false;
       m.getWorldPosition(p); n.set(0, 0, 1).transformDirection(m.matrixWorld); return true;

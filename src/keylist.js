@@ -17,7 +17,7 @@ export function keyListHtml(o) {
   groups.push(['DRIVING', drive, o.wasd ? 'WASD drives with an automatic gearbox (CONTROLS, KEYS).' : '']);
   if (o.boost || o.fans) {
     const c = [];
-    if (o.boost) c.push(['Shift Q', 'BOOST while held'], ['X', 'kickflip']);
+    if (o.boost) c.push(['Shift Q', 'THRUST while held'], ['X', 'kickflip']);
     if (o.fans) c.push(['U', 'suction fans off / on']);
     groups.push(['THIS CAR', c]);
   }

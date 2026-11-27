@@ -7,6 +7,7 @@
 
 import { stoneWheels, stoneForces, stoneEdges, stoneKick } from './stones.js';
 import { rocketState, rocketStep } from './thrust.js';
+import { swims, swim, swimFloor, swimSunk } from './swim.js';
 import { bonnetStep } from './bonnet.js';
 import { crashHit, crashStep } from './crash.js';
 import { HANG, CLEAR, TIPPED, edgeStart, edgeStep } from './tip.js';
@@ -907,8 +908,12 @@ function substep(car, input, world, dt) {
   // ---- water
   const wl = world.waterLevelAt ? world.waterLevelAt(car.x, car.z) : world.meta.riverLevel;
   const depth = car.surface === WATER ? wl - groundY : 0;
-  if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; }
-  if (car.inWater && (car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35) {
+  if (!car.inWater && depth > 0.55 && car.hy < wl + 0.4) { car.inWater = true; car.waterTime = 0; car.waterLevel = wl; car.swimIdle = 0; }
+  // (a Rocket pushing its way out, swim.js, keeps to the bed until its driven rear wheels are past the water's edge:
+  // the shallows' mud would hold it on the bank)
+  // (and on land lower than the water beside it, a meadow by the river, it is out once all of it is on land)
+  const ashore = car.inWater && car.rocket && car.swimIdle === 0 && swims(car, input) ? (car.surface !== WATER && surfR !== WATER ? 1 : -1) : 0;
+  if (car.inWater && ((car.surface === WATER ? wl - groundY : wl - groundY + 0.25) < 0.35 ? ashore >= 0 : ashore > 0)) {
     // washed or jumped out onto land: drive on from here
     car.inWater = false; car.sunk = false; car.waterTime = 0; car.tipped = 0;
     car.hy = car.y = Math.max(car.y, groundY); car.vyUp = 0; car.lastGround = null;
@@ -920,6 +925,9 @@ function substep(car, input, world, dt) {
     // weak push from the last of the wheelspin, river current
     const still = Math.max(0, 1 - car.waterTime / 2.5);
     car.vx += (up - down) * 1.2 * still * dt;
+    // (the Rocket: its nozzles and fans still work, swim.js, and it keeps to the bed up the bank)
+    const sw = car.rocket && swims(car, input), floorY = sw ? Math.max(world.heightAt(car.x, car.z) + 0.05, groundY) : 0;
+    const pushed = sw && swim(car, input, world, dt, m, floorY, fx, fz, rx, rz);
     const wxv = car.vx * fx + car.vy * rx + 0.08 * dt * 60 * 0.02, wzv = car.vx * fz + car.vy * rz + 0.3 * dt * 60 * 0.02;
     car.x += wxv * dt; car.z += wzv * dt;
     car.yaw += car.yawRate * dt;
@@ -938,8 +946,14 @@ function substep(car, input, world, dt) {
     car.wheelSpin += (car.vx / s.wheelRadius) * dt;
     car.wheelSpinF = car.wheelSpinR = car.wheelSpin; car.slipV = car.slipVF = car.slipVR = 0; car.spin = 0;
     car.steer *= Math.exp(-dt * 3);
-    if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
-    if (!car.sunk && car.waterTime > 9) car.sunk = true;
+    if (sw) {
+      swimFloor(car, Math.max(bedY, groundY), dt);
+      if (pushed) car.sunk = false;
+      else if (!car.sunk && swimSunk(car) && car.waterTime > sinkStart + 0.8) car.sunk = true;
+    } else {
+      if (!car.sunk && car.y <= Math.max(bedY + 0.2, car.waterLevel - 1.3) + 0.01 && car.waterTime > sinkStart + 0.8) car.sunk = true;
+      if (!car.sunk && car.waterTime > 9) car.sunk = true;
+    }
     car.ax = 0; car.ay = 0;
     car.hy = car.y; car.vyUp = 0; car.lastGround = null; car.load = 1; car.airborne = false; car.airTime = 0;
     return;

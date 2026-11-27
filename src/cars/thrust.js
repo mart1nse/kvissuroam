@@ -173,9 +173,10 @@ export function rocketStep(car, input, world, dt, droop = 0) {
   // the gas is weight too (Martin 2026-11-25: about 250 kg of air in the two tanks): what has been used is off the car
   car.gasOut = (T.gasKg || 0) * (1 - r.tank / TANK_S);
   if (r.flight) { fly(car, world, dt, droop); return !!r.flight; }
-  const off = !!input.rocketOff || car.inWater;
+  // (in the water BOOST still blows, src/cars/swim.js; a kickflip does not lift off from there)
+  const off = !!input.rocketOff;
   const flip = !!input.flip;
-  if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && r.tank >= JUMP_S - 1e-6) {
+  if (flip && !r.flipHeld && !off && !input.flipOff && !car.airborne && !car.inWater && r.tank >= JUMP_S - 1e-6) {
     const steer = input.steer !== undefined ? input.steer : (+input.right || 0) - (+input.left || 0);
     const plan = planFlip(car, world, steer < -0.3 ? -1 : 1);
     use(r, JUMP_S);

@@ -5,9 +5,10 @@
 // button (its vote line and chip). While the race list or results show there, the race panel comes first (down
 // to your line at most) and the names fill what is left under it (Martin, 24 Nov).
 // The names go from A to Z whatever their letters' case, read from the top down on every list (Martin, 26 Nov:
-// "helps to find people to watch"; on desktop they were in order from your line up, so Z to A read down): on
-// desktop the wheel scrolls down to the rest, and "+N MORE" over your line says how many are under the view.
-// The drivers on the map come first, then those in the garage or watching (greyed).
+// "helps to find people to watch"). Those in the garage or watching (greyed) go at the far end from your line, the
+// end that is cut off when not all fit (Martin, 27 Nov: "so if it is cut they are in the cut part"): on desktop at
+// the top, over the drivers, the list resting at its bottom end next to your line, the wheel scrolling up to the
+// rest and "+N MORE" over the names saying how many are above the view; on phones at the bottom, before "+N MORE".
 // On phones (Martin, 2026-11-24) the list sits on the right, beside the race button and down to the gas pedal:
 // the count, your line, then as many names as fit there (a name with a lap record takes its line and a bit),
 // then "+N MORE". No joined/left notes on phones (no room there for them).
@@ -63,10 +64,10 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
   const box = document.createElement('div');
   box.id = 'people';
   // (Martin, 2026-11-23: the count on top, then you, then the others; no light before the count)
-  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><div class="up hidden"></div><ul class="who hidden"></ul><ul class="feed"></ul><ul class="who st hidden"></ul>';
+  box.innerHTML = '<div class="count hidden"><span></span></div><div class="me"></div><ul class="who hidden"></ul><div class="up hidden"></div><ul class="feed"></ul><ul class="who st hidden"></ul>';
   document.querySelector('#hud').appendChild(box);
   const elCount = box.querySelector('.count'), elNum = elCount.querySelector('span'), feed = box.querySelector('.feed');
-  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" under the names)
+  const elWho = box.querySelector('.who'), elUp = box.querySelector('.up');   // (desktop: "+N MORE" over the names)
   const elSt = box.querySelector('.who.st');      // (desktop: those on a Majoraadi run, under its pill: src/style.css)
 
   const list = document.createElement('div');
@@ -143,28 +144,32 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
       rl.style.maxHeight = `${Math.max(fs * 10, mp.online && mp.count > 0 ? room * 0.6 : room)}px`;
     }
     const top = raceList ? rl.getBoundingClientRect().bottom + 10 : rb ? rb.getBoundingClientRect().bottom + 12 : 12;
-    fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top) / rowH)));
+    // (whole rows with the 1px gaps between them, so no row stands half cut at rest and "+N MORE" counts them all:
+    // on 27 Nov a 1280x720 window said +16 MORE with 18 out of view)
+    fitRows = Math.max(0, Math.min(LIST_MAX, Math.floor((bottom - under - top + 1) / rowPx)));
     // (Martin, 2026-11-24: all names listed, the mouse wheel scrolls those that do not fit; no scrollbar)
     // (Martin, 24 Nov: "+N MORE" kept when they do not all fit, on the side where the names out of view are,
-    // under them since 26 Nov; it takes one row)
-    const mh = `${Math.round((nNames > fitRows ? fitRows - 1 : fitRows) * rowH)}px`;
+    // over them; it takes one row)
+    viewPx = Math.ceil((nNames > fitRows ? fitRows - 1 : fitRows) * rowPx - 1);
+    const mh = `${viewPx}px`;
     if (elWho.style.maxHeight !== mh) { elWho.style.maxHeight = mh; edges(); }
   }
-  // a soft fade at the end that has more names past it (desktop: A at the top, scrollTop 0 there and growing as
-  // the wheel goes down to Z)
+  // a soft fade at the end that has more names past it (desktop: the list rests at its bottom end, next to your
+  // line, scrollTop 0 there and below 0 as the wheel goes up to the top)
   // (Martin 2026-11-24, 55 online: reading the list's height straight after changing it made the browser lay the
   // page out there and then, 5 to 15 ms each time somebody came, went or voted. The fade and the "+N MORE" go by
   // the rows' count and height and by where the wheel left the list, which the scroll event gives when it is laid out.)
-  let scrolled = 0, rowPx = 0, upN = -1;
+  let scrolled = 0, rowPx = 0, viewPx = 0, upN = -1;
   function edges() {
-    const step = rowPx || 16, room = nNames > fitRows ? fitRows - 1 : fitRows;
-    const over = elWho.classList.contains('hidden') ? 0 : (rowCount - room) * step;
-    const down = Math.max(0, scrolled);
-    const a = over > 2 && down > 2, b = over > 2 && down < over - 2;
+    // (how far the names reach past the view: the rows with their gaps less the view's height)
+    const step = rowPx || 16;
+    const over = elWho.classList.contains('hidden') || !viewPx ? 0 : rowCount * step - 1 - viewPx;
+    const up = Math.max(0, -scrolled);
+    const a = over > 2 && up < over - 2, b = over > 2 && up > 2;
     if (a !== elWho.classList.contains('more-up')) elWho.classList.toggle('more-up', a);
     if (b !== elWho.classList.contains('more-down')) elWho.classList.toggle('more-down', b);
-    // the names out of view below (all rows are the same height)
-    const n = over > 2 ? Math.ceil((over - down - 2) / step) : 0;
+    // the names out of view above (all rows are the same height)
+    const n = over > 2 ? Math.ceil((over - up - 2) / step) : 0;
     if (n !== upN) { upN = n; elUp.textContent = `+${n} MORE`; elUp.classList.toggle('hidden', n <= 0); }
   }
   if (!touch) elWho.addEventListener('scroll', () => { scrolled = elWho.scrollTop; edges(); }, { passive: true });
@@ -223,19 +228,24 @@ export function createPeople({ mp, onFocus, votes, onWatch, watching = () => nul
     elCount.classList.toggle('solo', n === 1);
     // each name's dot has the colour of that player's arrow on the maps (Martin, 2026-11-21)
     const ids = new Set(drivers.map((p) => p.id));
-    const all = n < 2 && !inGarage.length ? [] : [...drivers.filter((p) => !idle(p)).sort(byName), ...drivers.filter(idle).sort(byName), ...inGarage.filter((p) => !ids.has(p.id)).sort(byName)];
+    const drive = drivers.filter((p) => !idle(p)).sort(byName);
+    const grey = [...drivers.filter(idle), ...inGarage.filter((p) => !ids.has(p.id))].sort(byName);
     const rowOf = (p) => {
       const r = mp.recordOf(p.name), g = idle(p), cls = `${g ? 'gar' : ''}${p.id === sp ? ' on' : ''}`.trim();
       const at = p.w === 'watch' ? '(watching)' : '(garage)';
       return { id: p.id, cls, html: row(`${mark(vm, p.id)}${g ? '' : kuBtn(p)}`, `<i style="--c:${p.colour}"></i>`, `${escapeHtml(p.name)}${carTag(p.car)}${g ? ` <small class="at">${at}</small>` : ''}${p.wn && !g ? ` <small class="wn">WATCHED · ${p.wn}</small>` : ''}`, r && !g ? ` ${recTag(r, mp.recordTime(p.name))}` : '') };
     };
-    // (desktop: those on a Majoraadi run under its pill, out of the list here)
-    const st = onRun?.size ? all.filter(run) : [];
+    // (desktop: those on a Majoraadi run under its pill, A to Z down, out of the list here)
+    const st = onRun?.size ? drive.filter(run) : [];
     place(st.map(rowOf), elSt, stRows);
     elSt.classList.toggle('hidden', !st.length);
-    const sorted = st.length ? all.filter((p) => !run(p)) : all;
+    // the list, in order from your line outward: the drivers, then those in the garage or watching at the far end,
+    // the end that is cut off (Martin, 27 Nov). Phones: down from your line, each A to Z. Desktop: up from your line
+    // (src/style.css lays the rows from the bottom up), each Z to A, so it reads A to Z down there too, greyed on top.
+    const left = st.length ? drive.filter((p) => !run(p)) : drive;
+    const sorted = touch ? [...left, ...grey] : [...left].reverse().concat([...grey].reverse());
     // the list of drivers, shown once somebody else is driving
-    if (!sorted.length || !listMax) { elWho.classList.add('hidden'); clearRows(); if (!touch) edges(); return; }
+    if (!sorted.length || !listMax) { elWho.classList.add('hidden'); clearRows(); scrolled = 0; if (!touch) edges(); return; }
     // (desktop: every name, scrolled with the wheel; phones: as many as fit, then "+N MORE")
     const cap = touch ? phoneCap(sorted) : LIST_ALL;
     const more = sorted.length > cap ? sorted.length - cap + 1 : 0;

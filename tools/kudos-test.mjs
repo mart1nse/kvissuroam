@@ -1,6 +1,6 @@
 // Thumbs up between players (src/kudos.js): A and C both tap the thumb in front of B's name in the online list.
 // B's car shows A's big sign in its back window first, C's waits its turn (one at a time, 5 s each); each then
-// shrinks into a small thumb at the top of the window. Checked: B's note, A's faint button and a second tap
+// shrinks into a small thumb at the top of the window. Checked: B's THUMBS UP FROM note (src/kudonote.js), A's faint button and a second tap
 // sending nothing (30 s), the small thumbs on B's car as B, A and a player D who joins later see them, and how
 // long B's page was busy while the sign was painted and put up (render stubbed: the page's own work only).
 // Needs the game with its server on :8787 (npx wrangler dev --port 8787) and Playwright. About 6 min.
@@ -49,7 +49,7 @@ const t0 = await B.evaluate(() => performance.now());
 console.log('A taps', await toB(A), '· C taps', await toB(C));
 await B.waitForFunction(() => __game.kudos().showing > 0, null, { timeout: 20000 });
 await B.waitForTimeout(1500);
-console.log('B at 1.5 s (one big, one waiting):', JSON.stringify(await signs(B)), '· notes:', await B.evaluate(() => [...document.querySelectorAll('#people .feed li')].map((l) => l.textContent).join(' | ')));
+console.log('B at 1.5 s (one big, one waiting):', JSON.stringify(await signs(B)), '· note:', await B.evaluate(() => document.querySelector('#kudonote')?.textContent));
 console.log('A sees:', JSON.stringify(await signs(A)), '· A button', await A.evaluate(() => [...document.querySelectorAll('#people li[data-id]')].find((l) => l.textContent.includes('TESTB'))?.querySelector('[data-ku]')?.className));
 const gaps = await B.evaluate((t0) => { const g = window.__gaps; const before = g.filter(([t]) => t < t0).map(([, d]) => d), after = g.filter(([t]) => t >= t0).map(([, d]) => d);
   const st = (a) => ({ n: a.length, max: Math.round(Math.max(...a)), p95: Math.round(a.sort((x, y) => x - y)[Math.floor(a.length * 0.95)]) }); return { before: st(before), after: st(after), slow: __game.jobs.slow.filter((s) => /thumbs/.test(s[0])) }; }, t0);

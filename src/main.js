@@ -159,6 +159,7 @@ import { createMultiplayer } from './net/multiplayer.js';
 import { setCarPlate } from './cars/plate.js';
 import { createPeople, ME_COLOUR } from './net/people.js';
 import { createKudos } from './kudos.js';
+import { createKudoNote } from './kudonote.js';
 import { createBoard } from './race/board.js';
 import { TRACK_ICON } from './race/trackpick.js';
 import { createTrackside, clearProps, extraProps } from './race/trackside.js';
@@ -465,6 +466,7 @@ let rocketUi = null, plumes = null;               // the thrusters' tank on scre
 // thumbs up between players: a neon sign in the receiver's back window, then a small thumb in its row there
 // (bags: the cars near with thumbs received this session, ours too; colours as each sender's dot in our list)
 const kudosBags = [];
+const kudoNote = createKudoNote($('#hud'));
 const kudosColour = (id) => (id === mp?.id ? ME_COLOUR : mp?.colourOf(id) || '#ffffff');
 const kudos = createKudos({ bags: () => {
   kudosBags.length = 0;
@@ -1036,7 +1038,8 @@ async function boot() {
       const on = to === mp.id ? (model ? { group: model.group, car: carId } : null) : mp.carOf(to);
       // (ours: the airy chord as the big sign goes up, one at a time, see kudos.show)
       if (on && who.name) kudos.show(on.group, on.car, who, to === mp.id ? () => audio.chime?.('kudos') : null);
-      if (to === mp.id && who.name) people?.event('kudos', who.name);
+      // (and who it was, a moment on the right of the screen: src/kudonote.js, Martin 2026-11-27)
+      if (to === mp.id && who.name) kudoNote.show(who.name, who.colour);
     },
     // phones, old computers and the low graphics levels draw other cars whole only nearer
     low: () => isTouch || !!xlow || lowRung(),

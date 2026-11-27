@@ -19,12 +19,14 @@ const PAINT = 0xf3f4f1;                      // white
 const BON = { z0: -2.04, z1: -1.03, w0: 0.6, w1: 0.7 };
 
 // ---------------------------------------------------------------- wheel
-// white OZ rally wheel, sixteen slim spokes as on the scan, big discs behind it with red eight-pot calipers. Axis on X, outer face +X.
+// OZ rally wheel painted white, sixteen slim spokes as on the scan and Martin's photos, a gold centre-lock nut, big
+// discs behind it with red eight-pot calipers. Axis on X, outer face +X.
 function ozWheel(R, width, rimR) {
-  const s = tyreAndRim(R, width, rimR, { lip: 'alloy', caliper: 'reflector', disc: 0.8 });
+  const s = tyreAndRim(R, width, rimR, { lip: 'whitealloy', caliper: 'reflector', disc: 0.8 });
   const hw = width / 2, rf = rimR - 0.012, x1 = hw * 0.8, x0 = x1 - 0.022;
-  s.add(spokeFace({ n: 16, rf, r1: rf * 0.3, r2: rf * 0.92, big: 0.14, round: 0.008, depth: 0.018, x0, x1, pal: 'alloy' }));
-  s.add(lathe([[rf * 0.26, x0 - 0.01], [rf * 0.26, x0 + 0.012], [rf * 0.15, x0 + 0.018], [0.001, x0 + 0.02]], 'darkalloy', 20));
+  s.add(spokeFace({ n: 16, rf, r1: rf * 0.3, r2: rf * 0.92, big: 0.14, round: 0.008, depth: 0.018, x0, x1, pal: 'whitealloy' }));
+  s.add(lathe([[rf * 0.26, x0 - 0.01], [rf * 0.26, x0 + 0.012], [rf * 0.15, x0 + 0.018], [0.001, x0 + 0.02]], 'whitealloy', 20));
+  s.add(lathe([[rf * 0.1, x0 + 0.018], [rf * 0.1, x0 + 0.03], [0.001, x0 + 0.032]], 'gold', 12));
   return s;
 }
 

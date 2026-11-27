@@ -117,7 +117,9 @@ export const ROUND = TARTU ? [[628, 9, 1], [1035, 8, -1]] : [];
 function createEdges(track, world) {
   const group = new THREE.Group();
   group.visible = false;
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+  // (drawn in one go from the start, as src/still.js makes every flat see-through sheet: until its turn came there, the
+  // bands' shaders were made ready for two goes and then built again, mid-drive, for one. 27 Nov, the iPhone check)
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true, forceSinglePass: true });
   // The bands are straight, but the ground under them is a grid of triangles that steps up at the
   // kerb, and wherever a triangle pokes through a band it bites a notch out of it: seen along the
   // street the glow zigzags. Pull the bands' depth (not their place on screen) half a metre towards

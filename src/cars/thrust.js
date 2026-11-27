@@ -35,8 +35,17 @@ export const GAS_V = 455;                 // cold gas leaves a nozzle at about t
 const EMPTY = 0.06;                // BOOST has blown the tank down to this share: its valves shut...
 export const BOOST_MIN = 0.1;      // ...and open again with this share in the tank, at a new press of the button
 const OPEN_T = 0.05;               // a nozzle's valve opens and shuts in about this long (s)
-const TOP_SHORT = 1.2 / 3.6;       // the motors' push meets the air's a little under the limiter: BOOST's ends there too
-export const FADE = 30 / 3.6;             // BOOST eases off over this much speed, to nothing at the car's top speed (m/s)
+export const FADE = 30 / 3.6;             // (the gas account's room for BOOST fades over this much speed past the motors' top speed: plausible.js)
+// BOOST's own top speeds (Martin 27 Nov: "no thrust, fan on: 376 / no thrust, fan off: 391 / thrust on, fan off: 405 /
+// thrust on, fan on: 387 ... make the transitions smooth. if i am at full speed already with fan off and i push the
+// thrust, then there is some slow gain"): spec.thrustTop and thrustTopNoFans, over the motors' limiter. Near them the
+// nozzles give only what the car needs, with the tyres' and the air's push, to gain at TOP_GAIN over the last TOP_BAND
+// (the motors' own top speed is in it), easing to nothing at the cap over the last TOP_EASE (by the root of the speed
+// still to come, as a car brakes to a standstill: the cap is reached, not crept up on); further below, the wanted
+// gain grows by TOP_K per m/s, so lower down they give all they have. Over the cap (the fans switched on at 405) they
+// give a little less than the air takes, at most TOP_DROP, so the car settles to it.
+const TOP_BAND = 20 / 3.6, TOP_EASE = 6 / 3.6, TOP_GAIN = 1.4, TOP_K = 3, TOP_DROP = 1.0;
+const ease01 = (u) => u * u * (3 - 2 * u);
 // (Martin 26 Nov: "the ground launch acceleration curve just a tad slower": the push was 0.45 s to 10.6 m/s, 2.4 g;
 // now 2 g for a little longer, to the same height)
 const LIFT_T = 0.52;               // the lift-off push lasts this long (s)...
@@ -217,8 +226,14 @@ export function rocketStep(car, input, world, dt, droop = 0) {
     const blowS = (GAS_V * (T.gasKg || 250)) / T.rear;
     use(r, (dt * r.tank) / blowS);
   }
-  // (to nothing where the motors stop pushing too, a little under the car's limiter: 389 km/h, and 405 with the fans off)
-  const want = on ? full * clamp01((((car.fanOff && car.spec.limiterNoFans) || car.spec.limiter || 400) / 3.6 - TOP_SHORT - car.vx) / FADE) : 0;
+  // (all the pressure gives, but near its top speed only what the car needs to gain gently: see TOP_BAND)
+  let want = 0;
+  if (on) {
+    const S = car.spec, cap = ((car.fanOff && S.thrustTopNoFans) || S.thrustTop || ((car.fanOff && S.limiterNoFans) || S.limiter || 400)) / 3.6;
+    const d = cap - car.vx;
+    const aWant = d >= 0 ? TOP_GAIN * Math.sqrt(Math.min(1, d / TOP_EASE)) + TOP_K * Math.max(0, d - TOP_BAND) : -TOP_DROP * ease01(Math.min(1, -d / TOP_EASE));
+    want = Math.min(full, Math.max(0, (S.mass - (car.gasOut || 0)) * aWant - (car.fxOwn || 0)) / T.rear);
+  }
   r.boost += (want - r.boost) * Math.min(1, dt / OPEN_T);
   if (r.boost < 0.002) r.boost = 0;
   car.thrustN = r.boost * T.rear;

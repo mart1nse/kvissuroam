@@ -82,8 +82,10 @@ for (const l of [...records.values()].sort((a, b) => a.track.localeCompare(b.tra
   if (!limits.has(l.car)) limits.set(l.car, carLimits(spec));
   const lim = limits.get(l.car), where = {};
   // (a car with thrusters: BOOST worked on timed runs until Martin's 27 Nov "lets remove boost option from timed
-  // efforts", live that evening; its laps since are judged by the motors alone, as the server does)
-  const boosted = !!lim?.gas && l.at < '2026-11-28';
+  // efforts" (#891, live 27 Nov 16:51 UTC); its laps since are judged by the motors alone, as the server does. Until
+  // 28 Nov this said '2026-11-28', so the Rocket's first evening on the board, live from 21:25 UTC (#925), was judged
+  // with a tank of gas as leeway, twice its motors' pull)
+  const boosted = !!lim?.gas && l.at < '2026-11-27T16:51';
   if (l.track === 'raadi') {
     // (a car with thrusters leaves the start line harder than the others: on BOOST, and since 27 Nov on its motors)
     row.stage = stageCheck(xs, zs, l.pen || 0, boosted ? lim.gas.launch : lim?.full?.pull?.[0] || 0, where);

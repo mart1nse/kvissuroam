@@ -103,7 +103,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   const me = () => r?.racers?.find((x) => x.id === mp.id) || null;
   const active = (x) => x && !x.out && x.ms == null;
 
-  const lp = { hd: null, tb: null, ft: null };          // the list's three parts (see render)
+  const lp = { hd: null, tb: null, ft: null, body: null, head: '', rows: [], key: '' };   // the list's three parts (see render) and its table's rows (putRows)
   function setText(el, html) { if (el._h !== html) { el._h = html; el.innerHTML = html; } }
   function show(el, on) { el.classList.toggle('hidden', !on); }
   // (in a car that does not race, noRace: a vote or a join says which car it races in instead, swapTo, the last one
@@ -263,13 +263,14 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   // a thumbs up right after a driver's name in the results (Martin 2026-11-26), the same as the one in the online
   // list (src/kudos.js): for a driver still online, never on your own row; faint for 30 s after one, and for the
   // rest of the day once KUDOS_PAIR went to them (src/net/kudosrules.js, the server holds to the same). The thumb
-  // is a picture in style.css, not markup: the table is written anew whenever a gap changes.
+  // is a picture in style.css, not markup: a row is written anew whenever its gap changes.
   const kuBtn = (x) => {
     if (mp.stealth || !x.id || x.id === mp.id || mp.nameOf(x.id) == null) return '';
     const w = mp.kudosWait(x.id);
     return `<b class="ku${w > 0 ? ' wait' : ''}" data-ku="${escapeHtml(x.id)}" title="${w === Infinity ? `Thumbs up: ${KUDOS_PAIR} given today` : 'Thumbs up'}"></b>`;
   };
   // compact (the live list in a race, Martin 2026-11-21): position, name, car and gap only (no thumbs up while racing)
+  // (one string a row: putRows writes again only the rows that changed)
   function rowsHtml(rows, compact) {
     let pos = 0, prevMs = null;
     return rows.map((x, i) => {
@@ -278,7 +279,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       const carShort = cars[x.car]?.short || x.car;
       const name = `${escapeHtml(x.name)}${x.id === mp.id && !compact ? ' (you)' : ''}`;
       return `<tr class="${x.id === mp.id ? 'me' : ''}${x.out ? ' out' : ''}${x.fin ? ' fin' : ''}"><td class="p">${x.out ? '–' : pos}</td><td class="f">${x.fin ? '<i></i>' : ''}</td><td class="n"${onWatch && x.id && x.id !== mp.id ? ` data-id="${escapeHtml(x.id)}"${watching() === x.id ? ' data-on="1"' : ''}` : ''}>${compact ? name : `<span class="nm">${name}</span>${kuBtn(x)}`}</td><td class="c">${escapeHtml(carShort)}</td><td class="g">${x.gap}</td>${compact ? '' : `<td class="w">${x.where}</td>`}</tr>`;
-    }).join('');
+    });
   }
 
   // the list scrolls inside its box (the phones' live standings over the gas pedal, Martin 2026-11-22; the results
@@ -297,7 +298,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
   // (any scroll the list did not make itself: the scroll bar dragged, a flick still running after the finger is off)
   list.addEventListener('scroll', (e) => { if (e.target === lp.tb && Math.abs(lp.tb.scrollTop - ownTop) > 1) byHand(); }, { capture: true, passive: true });
   const handHeld = () => performance.now() - handAt < HAND_MS;
-  function keepScroll(top) {
+  function keepScroll(top = lp.tb.scrollTop) {
     const tb = lp.tb;
     if (tb.scrollHeight > tb.clientHeight + 1) {
       if (handHeld()) tb.scrollTop = top;
@@ -313,6 +314,30 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
       }
     }
     ownTop = tb.scrollTop;
+  }
+  // The table: its rows are kept, only those that changed are written again, and your row is looked for again only
+  // when it moved or rows came or went (27 Nov, a race of 30: the whole table was written whenever a gap changed and
+  // read back at once for its scroll, which made the page lay it out there and then, 4 to 6 ms each time on a slow
+  // computer. A gap changing leaves every row's height and place as it was, so the scroll needs nothing then.)
+  const HEAD_ROW = '<tr class="th"><td></td><td class="f"></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>';
+  function putRows(rows, compact) {
+    const tb = lp.tb, html = rowsHtml(rows, compact), head = compact ? '' : HEAD_ROW;
+    let top;
+    if (!lp.body || lp.body.parentNode?.parentNode !== tb || lp.head !== head) {
+      top = tb.scrollTop;
+      tb.innerHTML = `<table><tbody>${head}</tbody></table>`;
+      lp.body = tb.querySelector('tbody'); lp.head = head; lp.rows = []; lp.key = '';
+    }
+    const body = lp.body, had = lp.rows, off = head ? 1 : 0;
+    for (let i = 0; i < html.length; i++) {
+      if (had[i] === html[i]) continue;
+      if (i < had.length) body.rows[i + off].outerHTML = html[i]; else body.insertAdjacentHTML('beforeend', html[i]);
+    }
+    for (let i = had.length; i > html.length; i--) body.lastElementChild.remove();
+    lp.rows = html;
+    const key = `${html.length}:${rows.findIndex((x) => x.id === mp.id)}`;
+    if (key !== lp.key) { lp.key = key; keepScroll(top); }
+    else if (handBack && !handHeld()) keepScroll();   // (30 s after a scroll by hand, back to your row)
   }
 
   // ---- drawn four times a second (and at once after a click or a message)
@@ -455,12 +480,10 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
         lp.hd = list.querySelector('.hd'); lp.tb = list.querySelector('.tb'); lp.ft = list.querySelector('.ft');
         // (the box's height is set from the online list's room after it shows, and changes with it: your row put
         // back in the middle then, unless it was scrolled by hand)
-        if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (!handHeld()) keepScroll(lp.tb.scrollTop); }).observe(lp.tb);
+        if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (!handHeld()) keepScroll(); }).observe(lp.tb);
       }
       setText(lp.hd, `${head}${xBtn}`);
-      const tb = `<table>${compact ? '' : '<tr class="th"><td></td><td class="f"></td><td>DRIVER</td><td>CAR</td><td>GAP</td><td class="w">WHERE</td></tr>'}${rowsHtml(rows, compact)}</table>`;
-      if (lp.tb._h !== tb) { const top = lp.tb.scrollTop; setText(lp.tb, tb); keepScroll(top); }
-      else if (handBack && !handHeld()) keepScroll(lp.tb.scrollTop);   // (30 s after a scroll by hand, back to your row)
+      putRows(rows, compact);
       setText(lp.ft, foot);
       lp.ft.style.display = foot ? '' : 'none';
     }

@@ -522,7 +522,7 @@ export const CARS = {
     short: 'Focus WRC',
     tag: 'WRC',
     year: 2003,
-    blurb: 'WRC 03 · 2.0 Duratec R turbo on a 34 mm restrictor · 300 bhp, 550 Nm · 6-speed Xtrac sequential · four-wheel drive, three active diffs',
+    blurb: 'WRC 03 · 2.0 Duratec R turbo · 300 bhp, 550 Nm · 6-speed Xtrac sequential · four-wheel drive, three active diffs',
     mass: 1310,                 // the WRC minimum of 1230 kg, which it ran at ("right on the weight limit", crash.net), + driver
     wheelbase: 2.615,
     track: 1.55,                // 1550 front and rear

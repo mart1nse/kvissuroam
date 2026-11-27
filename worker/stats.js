@@ -450,7 +450,7 @@ export class Stats extends DurableObject {
           return { at: a, ...loadView(r.data.load, loadSpan(r.data.load, a, Math.min(now, a + HOUR))) };
         });
         // visits hour by hour, the 24 h tab's columns (the other tabs have them per day)
-        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0 }));
+        const visits = hrs.map((r) => ({ at: Date.parse(r.hour + ':00:00Z'), sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0 }));
         const body = { days: 1, hours: 24, from: from + ':00Z', to: new Date(now).toISOString(), heat: HEAT, total, daily: [], names,
           load: loadView(total.load, loadSpan(total.load, t0, now)), hourly, visits, drivers: this.topDrivers('drive_hours', 'hour', from) };
         this.cache.set('h24', { at: Date.now(), body });
@@ -466,7 +466,7 @@ export class Stats extends DurableObject {
       const daySpan = (day, L) => { const a = tartuStart(day); return loadSpan(L, a, Math.min(now, a + 86400000)); };
       const daily = rows.map((r) => {
         const lv = loadView(r.data.load, daySpan(r.day, r.data.load));
-        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
+        return { day: r.day, sessions: r.data.sessions || 0, drove: r.data.drove || 0, drive: r.data.drive || 0, km: r.data.km || 0, laps: r.data.laps?.finish || 0, stage: r.data.stage?.finish || 0, races: r.data.race?.n || 0, peak: r.data.peak || 0,
           load: lv && { on: lv.on, onMax: lv.onMax, wait: lv.wait, waitMax: lv.waitMax, tot: lv.tot, totMax: lv.totMax, away: lv.away } };
       });
       const names = Object.fromEntries(Object.entries(CARS).map(([id, c]) => [id, c.short || c.name || id]));

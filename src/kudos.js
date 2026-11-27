@@ -36,7 +36,7 @@ const SPOTS = {
   focus: { y: 1.24, z: 1.6, s: 0.5, tilt: 1.0 },
   f40: { y: 1.06, z: 1.15, s: 0.72, tilt: 1.47 },
   cgt: { y: 0.99, z: 1.35, s: 0.72, tilt: 1.45, dark: true },
-  rocket: { y: 1.012, z: 1.48, s: 0.52, tilt: 1.14, grid: [4, 2] },   // (on the scan's rear glass since 27 Nov: it was the stand-in's engine cover, and sank half into the glass)
+  rocket: { y: 1.054, z: 1.389, s: 0.52, tilt: 1.14, grid: [4, 2] },   // (on the scan's rear glass since 27 Nov: it was the stand-in's engine cover, and sank half into the glass; 10 cm up the glass so the name clears its lower edge, Martin 27 Nov)
   bus: { y: 1.95, z: 6.36, s: 1.0, tilt: 0, grid: [6, 3] },
 };
 // small thumbs in a row across the top of the window, rows downwards: [columns, rows] (default 6 x 2)

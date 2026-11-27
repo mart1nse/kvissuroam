@@ -62,7 +62,7 @@ console.log('after the deploy:', count('toomemagi'), 'Toomemägi laps,', count('
 
 // the racing-line logging is gone (Martin at the launch): its table dropped, an old page told to stop sending
 assert.equal(sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'lines'").toArray().length, 0, 'no lines table');
-assert.equal((await L.fetch(new Request('https://www.linnaring.com/api/line', { method: 'POST', body: '{}', headers: { 'cf-connecting-ip': '10.0.0.2' } }))).status, 410, 'an old page is told to stop');
+assert.equal((await L.fetch(new Request('https://www.linnaring.com/api/line', { method: 'POST', body: '{"v":1,"track":"raadi"}', headers: { 'cf-connecting-ip': '10.0.0.2' } }))).status, 410, 'an old page is told to stop');
 
 // a run after the launch stays through the next wake-ups (the one-off is done once)
 sql.exec("INSERT INTO laps (track, name, car, ms, at, day, inp, ty) VALUES ('raadi', 'Player', 'impreza', 118000, '2026-11-26T17:00:00Z', '2026-11-26', 'kb', 'gravel')");

@@ -17,6 +17,7 @@ import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from './kud
 import { jobs } from '../jobs.js';
 import { outside } from '../hitches.js';
 import { POSE_DEC, pack, unpack, replayAt, turnedAbout } from '../race/replay.js';
+import { LINE_TRACK, lineWorth } from '../race/laplines.js';
 import { flightPose, flightPath, flightNozzles, touchTime, packPlan, unpackPlan, NOZ, NOZ_DOWN } from '../cars/thrust.js';
 import { CRASH_FLAG } from '../cars/crash.js';
 import { STANDINS } from './standins.js';
@@ -1185,9 +1186,14 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (!sent.has(lapKey(lap))) continue;                       // (not answered yet)
       traces.splice(i, 1);
       const best = (lap.track ? board?.[lap.track] : board)?.allTime?.find((r) => r.car === lap.car);
-      if (!held.delete(lapKey(lap)) && (!best || best.ms !== lap.ms || best.name !== name)) continue;
+      // (a fast Toomemägi lap's drive goes as well, for the painted racing line: src/race/laplines.js)
+      const line = lineOn && !lap.track && (board?.track || LINE_TRACK) === LINE_TRACK && lineWorth(lap.ms, Math.min(best?.ms ?? Infinity, lap.ms));
+      const record = held.delete(lapKey(lap)) || (best && best.ms === lap.ms && best.name === name);
+      if (!record && !line) continue;
       try {
         const z = await pack(trace, jobs);
+        if (line) sendLine(lap, z);
+        if (!record) continue;
         const r = await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, track: lap.track || undefined, z }) });
         // (the server did not believe the drive: the driver is told, Martin 26 Nov: "just a 'time not saved'".
@@ -1197,6 +1203,18 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       } catch { /* the lap stands without a replay */ }
     }
   }
+  // Fast Toomemägi laps' drives (src/race/laplines.js): from the game's own address only (?linelog=1 anywhere,
+  // ?linelog=0 nowhere); off for good on this page once the server has enough (410)
+  const lineQ = new URLSearchParams(location.search).get('linelog');
+  let lineOn = !STEALTH && lineQ !== '0' && (lineQ === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver));
+  async function sendLine(lap, z) {
+    try {
+      const r = await fetch('/api/line', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, z }) });
+      if (r.status === 410) lineOn = false;
+      linesSent += r.ok ? 1 : 0;
+    } catch { /* that lap's drive is lost: the next one counts as much */ }
+  }
+  let linesSent = 0;
   function refreshBoard() {
     fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
   }
@@ -1606,6 +1624,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     playReplay,
     stopReplay,
     get replay() { return replay; },
+    get linesSent() { return linesSent; },
     get board() { return board; },
     // the record in this car: of Toomemägi's lap, or of a stage (track 'raadi')
     bestFor(id, track) {

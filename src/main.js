@@ -188,6 +188,7 @@ import { createSideCam } from './sidecam.js';
 import { createIdlePark, alwaysJudged, REST_S } from './idlepark.js';
 import { createRecorder } from './race/replay.js';
 import { createOneTab } from './onetab.js';
+import { keyListHtml } from './keylist.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 
 const $ = (s) => document.querySelector(s);
@@ -1820,7 +1821,7 @@ function showOverlay(name) {
   if (was === name || mode !== 'drive') return;
   if (name === 'map') openMap();
   else if (name === 'laps') board.show();
-  else if (name === 'options') { optEl.classList.remove('hidden'); showGfx(true); showInput(); }
+  else if (name === 'options') { optEl.classList.remove('hidden'); showGfx(true); showInput(); showKeyList(); }
   else if (name === 'controls') setup.open();
 }
 const unlessMap = (fn) => () => { if (!overlayOpen()) fn(); };
@@ -1846,7 +1847,37 @@ const optEl = $('#options'), optKeys = $('#opt-keys');
 let wasdSaved = false;
 try { wasdSaved = localStorage.getItem('kvissuroam.wasd') === '1'; } catch {}
 input.setWasd(wasdSaved);
-const showKeys = () => { for (const b of optKeys.children) b.classList.toggle('on', (b.dataset.keys === 'wasd') === input.wasd); };
+const showKeys = () => { for (const b of optKeys.children) b.classList.toggle('on', (b.dataset.keys === 'wasd') === input.wasd); showKeyList(); };
+// Each section of the options folds open and shut by its title (Martin 2026-11-27: "make them expandable on both
+// showing initially only the titles, perhaps remember what i had open"): all shut at first, and which are open is
+// remembered per browser (kvissuroam.optopen: the sections' names). Phones have SOUND and GRAPHICS only.
+const optOpen = new Set((stored('kvissuroam.optopen') || '').split(',').filter(Boolean));
+function showSections() {
+  for (const s of optEl.querySelectorAll('.optsec')) {
+    const on = optOpen.has(s.dataset.sec);
+    s.classList.toggle('open', on);
+    s.firstElementChild.setAttribute('aria-expanded', on ? 'true' : 'false');
+  }
+}
+optEl.addEventListener('click', (e) => {
+  const h = e.target.closest('.opthead');
+  if (!h) return;
+  const k = h.parentNode.dataset.sec;
+  if (optOpen.has(k)) optOpen.delete(k); else optOpen.add(k);
+  try { localStorage.setItem('kvissuroam.optopen', [...optOpen].join(',')); } catch {}
+  showSections();
+  showKeyList();
+});
+// KEYBOARD (desktop): every key and what it does, for the keys chosen in CONTROLS and the car driven (src/keylist.js);
+// written only while that section is open, and only when it changed
+const keyListEl = $('#opt-keylist');
+let keyListShown = '';
+function showKeyList() {
+  if (isTouch || !keyListEl || !optOpen.has('keys') || optEl.classList.contains('hidden')) return;
+  const html = keyListHtml({ wasd: input.wasd, drag: DRAG, boost: !!car?.spec.thrusters, fans: !!car?.spec.fanDown, full: canFull });
+  if (html !== keyListShown) keyListEl.innerHTML = keyListShown = html;
+}
+showSections();
 showKeys();
 optKeys.addEventListener('click', (e) => {
   const b = e.target.closest('[data-keys]');
@@ -1949,6 +1980,8 @@ document.getElementById('opt-gfx').addEventListener('click', (e) => {
 });
 if (gpu.software) {
   const el = $('#opt-gpu');
+  // (a yellow ! on the GRAPHICS title while that section is shut, so the warning in it is not missed)
+  optEl.querySelector('[data-sec="gfx"] .opthead')?.insertAdjacentHTML('beforeend', '<span class="warnmark" title="The graphics card is not in use">!</span>');
   el.textContent = gpu.brave
     ? 'Your browser is drawing the game without the graphics card, so it runs slowly. In Brave: Settings → System → turn on "Use graphics acceleration when available", then restart Brave.'
     : 'Your browser is drawing the game without the graphics card, so it runs slowly. Turn on hardware (graphics) acceleration in the browser settings and restart it.';

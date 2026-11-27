@@ -893,10 +893,8 @@ body.touch #people .who:not(.hidden) { display: flex; flex-direction: column; li
    top buttons (clamp(44px, 6vw, 60px) tall), and the pedals step aside while the panel is open so taps reach it */
 body.touch #options { top: calc(max(8px, env(safe-area-inset-top)) + clamp(44px, 6vw, 60px) + 6px); width: min(300px, 60vw); padding: 8px 12px;
   max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - clamp(44px, 6vw, 60px) - 6px - max(6px, env(safe-area-inset-bottom))); }
-body.touch #options .optctl { display: none; }
-body.touch #options h3 + h4 { display: none; }
-body.touch #options h3 { margin-bottom: 6px; font-size: 12px; }
-body.touch #options h4 { margin-bottom: 4px; }
+body.touch #options h3 { margin-bottom: 4px; font-size: 12px; }
+body.touch #options .opthead { padding: 9px 22px 9px 0; }
 body.touch #options .opt small { margin-top: 2px; font-size: 10px; line-height: 1.3; }
 body.touch #options .seg { margin-top: 6px; }
 body.touch #options .seg + .opt { margin-top: 9px; }
@@ -912,8 +910,31 @@ body.touch:has(#options:not(.hidden)) #touch { visibility: hidden; }
 #options .optkeys { margin: 10px 0 10px 28px; font-size: 11px; opacity: .6; }
 #options button { padding: 6px 16px; font-size: 11px; letter-spacing: .2em; }
 #options .gfx { margin-top: 4px; cursor: default; }
-#options h4 { margin: 14px 0 8px; padding-top: 10px; border-top: 1px solid rgba(255, 95, 162, .3); font-size: 10px; letter-spacing: .26em; color: var(--pink); }
-#options h3 + h4 { margin-top: 0; padding-top: 0; border-top: 0; }
+/* sections that fold open and shut by their titles (Martin 2026-11-27): only the titles at first; a chevron at the
+   right points down when shut and up when open; which are open is remembered (main.js, kvissuroam.optopen) */
+#options .opthead { position: relative; margin: 0; padding: 11px 22px 11px 0; border-top: 1px solid rgba(255, 95, 162, .3); font-size: 10px; letter-spacing: .26em;
+  color: var(--pink); cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+#options h3 + .optsec .opthead { border-top: 0; padding-top: 4px; }
+#options .opthead::after { content: ''; position: absolute; right: 5px; top: 50%; width: 6px; height: 6px; border: solid currentColor; border-width: 0 2px 2px 0;
+  transform: translateY(-75%) rotate(45deg); transition: transform .15s ease; }
+#options .optsec.open .opthead::after { transform: translateY(-25%) rotate(-135deg); }
+#options h3 + .optsec .opthead::after { margin-top: -3px; }
+#options .optsec.open .opthead { color: #fff; }
+@media (hover: hover) and (pointer: fine) { #options .opthead:hover { color: #fff; } }
+/* GRAPHICS shut while the browser draws without the graphics card: a yellow mark on its title for the warning inside */
+#options .opthead .warnmark { display: inline-block; margin-left: .7em; padding: 0 .45em; border-radius: 999px; background: #ffd36b; color: #12062b; font-weight: 900; letter-spacing: 0; }
+#options .optsec.open .opthead .warnmark { display: none; }
+#options .optbody { display: none; padding-bottom: 12px; }
+#options .optsec.open .optbody { display: block; }
+#options > [data-act="options-close"] { margin-top: 10px; }
+/* KEYBOARD: every key and what it does (src/keylist.js) */
+#options .keylist h5 { margin: 10px 0 5px; font-size: 9px; letter-spacing: .22em; color: var(--cyan); }
+#options .keylist h5:first-child { margin-top: 0; }
+#options .keylist dl { display: grid; grid-template-columns: 86px 1fr; gap: 5px 10px; margin: 0; align-items: baseline; }
+#options .keylist dt { display: flex; flex-wrap: wrap; gap: 3px; }
+#options .keylist dd { margin: 0; font-size: 11px; line-height: 1.35; opacity: .85; }
+#options .keylist kbd { min-width: 1.9em; padding: 2px 5px; border-radius: 5px; background: rgba(47, 243, 255, .16); color: #fff; font: 700 10px var(--font); letter-spacing: .04em; text-align: center; box-sizing: border-box; }
+#options .keylist p { margin: 6px 0 0; font-size: 10px; line-height: 1.35; opacity: .6; }
 #options .opt { cursor: default; }
 /* a small gap between one option's buttons and the next option's name in the same section (Martin 2026-11-26) */
 #options .seg + .opt { margin-top: 12px; }

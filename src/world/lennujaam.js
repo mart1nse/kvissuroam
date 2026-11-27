@@ -151,8 +151,8 @@ const PAINT = { term, termw: term, vest, hangar, lhall, garage };
 
 // ---------------------------------------------------------------- the runway
 // s along the runway from the west threshold to the east, v across it (+ = south)
-const RW = frame([-1231.9, 11083.2], [558.3 + 1231.9, 10962.2 - 11083.2]);
-const RL = 1794.3, RH = 15.5;
+export const RW = frame([-1231.9, 11083.2], [558.3 + 1231.9, 10962.2 - 11083.2]);
+export const RL = 1794.3, RH = 15.5;
 const S_IN = 0;                       // (196 while the map's edge crossed the runway, before 23 Nov)
 // draped strips: quads s0..s1 x v0..v1 cut every ds and dv metres, onto the ground
 function strip(out, s0, s1, v0, v1, ds, dv, lift, h, uv = null) {

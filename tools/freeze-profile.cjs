@@ -1,4 +1,5 @@
-// Where does the game stand still during a drive?   node tools/freeze-profile.cjs [route=centre] [step=0.8] [touch] [slow=5] [port=5198] [out=file.json]
+// Where does the game stand still during a drive?   node tools/freeze-profile.cjs [route=centre] [step=0.8] [touch] [slow=5] [port=5198] [out=file.json] [q=drag=1]
+// (q: more of the page's address, for a part behind a flag: q=drag=1 drives the airport with the drag strip on)
 //
 // Needs the dev server (npx vite --port 5198). Drawing is switched off, so frames run at 60 a second even
 // without a graphics card, and the car is moved along a line of map points (no physics), `step` metres a
@@ -24,7 +25,7 @@ const FLY = require('./freeze-fly.cjs');
 
 // One test drive. Returns { errs, slow, profile, fr, tStart, stat }: page errors, the queue's slow steps, the
 // CPU profile, each frame as [time, game code ms, x, z], and how far it got.
-async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = false, slow: slowBy = 0 } = {}) {
+async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = false, slow: slowBy = 0, extra = '' } = {}) {
   const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await b.newContext(touch ? { ...devices['Pixel 7'], viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 } : { viewport: { width: 640, height: 360 } });
@@ -65,7 +66,7 @@ async function drive({ port = 5198, route: name = 'centre', step = 0.8, touch = 
       wrap('texSubImage2D', (a) => note(a, 4));
       wrap('linkProgram', () => { sent.link++; });
     });
-    const STAGE = name === 'stage', q = [slowBy && 'lite&xlow', STAGE && 'raadi=1'].filter(Boolean).join('&');
+    const STAGE = name === 'stage', q = [slowBy && 'lite&xlow', STAGE && 'raadi=1', extra].filter(Boolean).join('&');
     await p.goto(`http://localhost:${port}/${q ? '?' + q : ''}`, { timeout: 180000 });
     await p.waitForFunction(() => window.__game?.car && __game.world?.ready(__game.car.x, __game.car.z), null, { timeout: 180000 });
     await p.waitForTimeout(2000);
@@ -173,9 +174,9 @@ function summarise({ fr, stat, profile, runs, skins }) {
 }
 
 if (require.main === module) (async () => {
-  const step = +arg('step', 0.8), touch = process.argv.includes('touch'), port = arg('port', 5198), name = arg('route', 'centre'), slow = +arg('slow', 0);
+  const step = +arg('step', 0.8), touch = process.argv.includes('touch'), port = arg('port', 5198), name = arg('route', 'centre'), slow = +arg('slow', 0), extra = arg('q', '');
   const out = arg('out', path.join(os.tmpdir(), `freeze-${name}${touch ? '-phone' : ''}.json`));
-  const r = await drive({ port, route: name, step, touch, slow });
+  const r = await drive({ port, route: name, step, touch, slow, extra });
   fs.writeFileSync(out, JSON.stringify({ profile: r.profile, fr: r.fr, tStart: r.tStart, stat: r.stat, skins: r.skins, slow: r.slow, pics: r.pics }));
   if (r.run) console.log(`the stage run: ${JSON.stringify(r.run)}`);
   console.log(`${touch ? 'phone' : 'desktop'}, route ${name}: ${(r.stat.dist / 1000).toFixed(2)} km, errors ${r.errs.length} ${r.errs.slice(0, 3).join(' | ')}`);

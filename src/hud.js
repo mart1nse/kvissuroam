@@ -1,4 +1,4 @@
-import { speedKmh } from './cars/physics.js';
+import { speedKmh, stickAt } from './cars/physics.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -230,7 +230,8 @@ export function createHud(world) {
       elSpeed.textContent = Math.round(speedKmh(car));
       const ev = spec.engine.type === 'ev';
       // (M: a gear picked by hand with A / Z, held until the shift point)
-      elGear.textContent = car.reversing ? 'R' : ev ? 'D' : `${car.manual ? 'M' : 'D'}${car.gear}`;
+      // (the drag strip's gearbox, src/race/drag.js: the lever's place, N among them)
+      elGear.textContent = car.stick ? String(stickAt(car)) : car.reversing ? 'R' : ev ? 'D' : `${car.manual ? 'M' : 'D'}${car.gear}`;
       if (kwText) {
         const kw = Math.round(car.kw || 0);
         if (kw !== kwShown) { kwShown = kw; kwText.textContent = `${kw < 0 ? '\u2212' + -kw : kw} kW`; }

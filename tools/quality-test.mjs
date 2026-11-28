@@ -185,7 +185,47 @@ function runSharp(start, card, seconds = 300, timed = true) {
   check(!mem.get('kvissuroam.alive2') && !tab.get('kvissuroam.alive2'), 'a tab aside keeps no mark');
   q.setAside(false);
   check(!!mem.get('kvissuroam.alive2') && !!tab.get('kvissuroam.alive2'), 'and marks again when it plays');
+  // Android (Martin 2026-11-28): a mark found only in the browser's store, with little script memory, is Android
+  // closing the browser, not a crash; one in this tab, or with a lot held, still is. iPhones and desktops as before.
+  mem.clear(); tab.clear();
+  const droid = (o) => { const q = createQuality(hooks(), caps, { android: true, ...o }); mem.delete('kvissuroam.alive2'); tab.delete('kvissuroam.alive2'); return q; };
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, heap: 150, t: Date.now() - 60000 }));
+  const a1 = droid();
+  check(a1.cap === null && !a1.crashed && a1.death?.doubtful, `Android: a mark left in the browser's store with 150 MB is no crash (cap ${a1.cap})`);
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, heap: 520, t: Date.now() - 60000 }));
+  const a2 = droid();
+  check(a2.cap === 5 && a2.crashed, `Android: with 520 MB held it is (cap ${a2.cap})`);
+  mem.clear(); tab.clear();
+  tab.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, heap: 150 }));
+  const a3 = droid();
+  check(a3.cap === 5 && a3.crashed, `Android: a page that reloaded in its own tab is (cap ${a3.cap})`);
+  mem.clear(); tab.clear();
+  mem.set('kvissuroam.alive2', JSON.stringify({ ladder: id, level: 6, heap: 150, t: Date.now() - 60000 }));
+  const a4 = visit();
+  check(a4.cap === 5, `not Android: the same mark still caps (cap ${a4.cap})`);
+  // a phone seen for the first time starts on the 4th rung; with a saved level, there
+  mem.clear(); tab.clear();
+  const p1 = createQuality(hooks(), caps, { phone: true });
+  check(p1.level === 3, `a new phone starts on the 4th rung (${p1.level})`);
+  mem.delete('kvissuroam.alive2'); tab.delete('kvissuroam.alive2');
+  mem.set('kvissuroam.gfxAuto3', JSON.stringify({ ladder: id, level: 6 }));
+  const p2 = createQuality(hooks(), caps, { phone: true });
+  check(p2.level === 6, `a phone with a steady level saved starts there (${p2.level})`);
   delete globalThis.localStorage; delete globalThis.sessionStorage;
+}
+
+// 14. phones climb one rung per 30 s of room at most (Martin 2026-11-28: raise carefully, not quickly)
+{
+  const g = createGovernor({ levels: 8, start: 3, slow: true });
+  const ups = [];
+  let t = 0;
+  while (t < 200000) { t += 16.7; const ch = g.feed(16.7); if (ch) ups.push(Math.round(t / 1000)); }
+  const gaps = ups.slice(1).map((u, i) => u - ups[i]);
+  check(ups.length === 4 && ups[0] >= 30 && gaps.every((x) => x >= 29), `a phone climbs a rung per 30 s (${ups.join(', ')} s)`);
+  const fast = createGovernor({ levels: 8, start: 3 });
+  let t2 = 0, n = 0;
+  while (t2 < 30000) { t2 += 16.7; if (fast.feed(16.7)) n++; }
+  check(n === 4, `a desktop still climbs within seconds (${n} rungs in 30 s)`);
 }
 
 process.exit(failed ? 1 : 0);

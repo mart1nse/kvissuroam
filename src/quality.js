@@ -59,7 +59,9 @@ export function deviceLadder(caps) {
 // The governor. feed(ms) once per drawn frame with that frame's length; it returns the new level
 // index when it decides to move, else -1. hold(s) pauses judging (after a change, a tab switch).
 // sharp: the first of the sharpest rungs (see above), or levels when there is none
-export function createGovernor({ levels, start = levels - 1, top = levels - 1, sharp = levels }) {
+// slow: climb one rung per 30 s of room at most (phones, Martin 2026-11-28: low detail is preferred, and any
+// raising must be careful, not quick)
+export function createGovernor({ levels, start = levels - 1, top = levels - 1, sharp = levels, slow = false }) {
   const WINDOW = 2000;              // ms of frames per verdict
   // (a start on a sharpest rung begins one below it, and climbs when the card shows room)
   let level = Math.max(0, Math.min(levels - 1, top, start, sharp > 0 ? sharp - 1 : levels));
@@ -146,7 +148,7 @@ export function createGovernor({ levels, start = levels - 1, top = levels - 1, s
       const cardRoom = next >= sharp ? load != null && gpu * (ratio[next] || 1.4) < budget * SHARP_CLIMB
         : load == null || next >= levels || gpu * (ratio[next] || 1.4) < budget * 0.9;
       // the first minute (a fresh start, or AUTO picked again) climbs after 4 s with room, later after 8 s
-      if (highRun >= (clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
+      if (highRun >= (slow ? 15 : clock < 60000 ? 2 : 4) && next <= ceiling && clock >= barredUntil[next] && cardRoom) { flat = 0; return move(next, 'room'); }
     } else { lowRun = 0; highRun = 0; }
     return null;
   }
@@ -316,10 +318,14 @@ export function createQuality(hooks, caps, opts = {}) {
   // minute. What is saved is the highest level that held 30 s without stepping down, not the last
   // one: a slow spell (a tab or app switch, a heavy corner) must not make the next visit start low.
   // Only a level kept lower for two minutes running replaces it.
+  // A phone or tablet seen for the first time starts on the 4th rung and works its way up, 30 s a rung (Martin
+  // 2026-11-28, from the logs of 24 to 28 Nov: 534 iPhones died within their first minute on screen, most on the
+  // top two rungs, where a new device used to start).
   let start = top;
   try {
     const saved = readLevel(AUTOKEY, true);
     if (saved && saved.ladder === ladderId && saved.level >= 0) start = Math.min(top, saved.level);
+    else if (opts.phone) start = Math.min(start, 3);
   } catch {}
   if (opts.software) start = Math.min(start, 2);
   const auto = !opts.headless;
@@ -343,10 +349,21 @@ export function createQuality(hooks, caps, opts = {}) {
   try {
     const c = readLevel(CAPKEY, true);
     if (c && c.ladder === ladderId && c.level >= 0) cap = Math.min(top, c.level);
-    let alive = null;
-    try { alive = JSON.parse(sess()?.getItem(ALIVE) || 'null'); } catch {}
+    let alive = null, ownTab = false;
+    try { alive = JSON.parse(sess()?.getItem(ALIVE) || 'null'); ownTab = !!alive; } catch {}
     if (!alive) { const shared = readLevel(ALIVE); if (shared && shared.t > 0 && Date.now() - shared.t > 25000) alive = shared; }
-    if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
+    // Android: a mark left only in the browser's storage, with the scripts holding under 400 MB, is not taken
+    // for a crash (Martin 2026-11-28). The logs of 24 to 28 Nov: of 457 such "deaths" on 8 GB Android phones
+    // 95% were found in a new tab, not in the tab reloading itself as it does after running out of memory, 83%
+    // under 200 MB, 45 already on the lowest rung. Android stops Chrome in the background before the removal of
+    // the mark is saved, and the cap then took the detail away for nothing. A page that reloads in its own tab,
+    // or held a lot, still counts; iPhones and desktops keep the rule as it was.
+    const android = opts.android ?? (typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent || ''));
+    const doubtful = android && !ownTab && !(alive?.heap >= 400);
+    if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless && doubtful) {
+      death = { level: alive.level, cap, s: alive.s ?? null, heap: alive.heap ?? null, tex: alive.tex ?? null, doubtful: true };
+      console.info(`The last visit's mark was left at level ${alive.level + 1}, most likely by Android closing the browser: not taken for a crash`);
+    } else if (alive && alive.ladder === ladderId && alive.level >= 0 && !opts.headless) {
       crashed = true;
       // (two levels down when the last one was under half an hour ago: a phone far above what its memory
       // holds otherwise needs a crash for every level on the way down)
@@ -388,7 +405,7 @@ export function createQuality(hooks, caps, opts = {}) {
   }
   let capMs = 0;                   // time on screen at the cap this visit (lifts it by one for the next)
 
-  let gov = createGovernor({ levels: levels.length, start, top: cap, sharp });
+  let gov = createGovernor({ levels: levels.length, start, top: cap, sharp, slow: !!opts.phone });
   // the readout: averages, plus the frames that came more than half again later than the screen's
   // rate in the last two seconds (stutter the average hides) and the longest of them
   const meter = { frame: 16.7, js: 0, late: 0, worst: 0 };
@@ -488,7 +505,7 @@ export function createQuality(hooks, caps, opts = {}) {
       if (!MODES.includes(m) || mode === 'locked') return;
       mode = m;
       store(KEY, m);
-      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap, sharp });
+      if (m === 'auto') gov = createGovernor({ levels: levels.length, start: Math.max(heldBest, savedLevel), top: cap, sharp, slow: !!opts.phone });
       apply(m === 'auto' ? (auto ? gov.level : top) : levelFor(m));
     },
   };

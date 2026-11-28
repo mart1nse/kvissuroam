@@ -37,7 +37,7 @@ def get(url):
 
 def main():
     out_path = sys.argv[1]
-    b = json.load(open(os.path.join(ROOT, 'tools/bake/boundary.json')))
+    b = json.load(open(os.environ.get('AREA') or os.path.join(ROOT, 'tools/bake/boundary' + ('_' + os.environ['CITY'] if os.environ.get('CITY', 'tartu') != 'tartu' else '') + '.json')))   # CITY=tallinn, AREA=<L-EST97 outline> for a part
     area = Polygon(b).buffer(60)
     lons, lats = zip(*[TO_LL.transform(e, n) for e, n in b])
     w, e, s, n = min(lons) - 0.001, max(lons) + 0.001, min(lats) - 0.0005, max(lats) + 0.0005

@@ -12,7 +12,13 @@ import json, math, os, sys, time, urllib.request
 from pyproj import Transformer
 
 ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-E0, N0 = 657800.0, 6477150.0
+# Tallinn (28 Nov 2026): CITY=tallinn uses its origin, boundary and public/data/tln/. AREA=<json of L-EST97 points>
+# limits the features to a part of the map (the Pirita-Kose lap has its own hand-placed lamps and signs).
+CITY = os.environ.get('CITY', 'tartu')
+E0, N0 = (548000.0, 6592000.0) if CITY == 'tallinn' else (657800.0, 6477150.0)
+BOUNDARY = 'tools/bake/boundary' + ('' if CITY == 'tartu' else '_' + CITY) + '.json'
+DATA = 'public/data/' + ('tln/' if CITY == 'tallinn' else '')
+AREA = os.environ.get('AREA')
 SECTOR, GRID0 = 640.0, -800.0
 API = 'https://graph.mapillary.com'
 TOKEN = os.environ.get('MAPILLARY_TOKEN')
@@ -49,6 +55,28 @@ def classify(v):
     return None
 
 
+# the Old Town inside its walls (lon, lat): lamps there are the lantern posts
+OLD_TOWN = [(24.7370, 59.4395), (24.7400, 59.4420), (24.7440, 59.4440), (24.7480, 59.4447), (24.7510, 59.4430),
+            (24.7525, 59.4395), (24.7515, 59.4365), (24.7490, 59.4348), (24.7445, 59.4342), (24.7400, 59.4345),
+            (24.7360, 59.4358), (24.7350, 59.4375)]
+LANTERN, BOLLARD = 9, 8
+
+
+def osm_kind(t):
+    if t.get('highway') == 'street_lamp': return LIGHT
+    a = t.get('amenity')
+    if a == 'bench': return BENCH
+    if a == 'waste_basket': return BIN
+    if a == 'bicycle_parking': return RACK
+    if t.get('barrier') == 'bollard': return BOLLARD
+    if t.get('man_made') == 'street_cabinet': return BOX
+    if t.get('highway') == 'crossing' or 'crossing' in t:
+        c = t.get('crossing') or ''
+        if c == 'traffic_signals' or t.get('crossing_ref') == 'pelican': return SIGNAL
+        if c in ('marked', 'zebra', 'uncontrolled') or t.get('crossing:markings') in ('zebra', 'yes'): return ZEBRA
+    return None
+
+
 def get(url):
     req = urllib.request.Request(url)
     if TOKEN: req.add_header('Authorization', 'OAuth ' + TOKEN)
@@ -64,7 +92,7 @@ def get(url):
 
 
 def download(cache):
-    b = json.load(open(os.path.join(ROOT, 'tools/bake/boundary.json')))
+    b = json.load(open(AREA or os.path.join(ROOT, BOUNDARY)))
     lons, lats = zip(*[TO_LL.transform(e, n) for e, n in b])
     w, e, s, n = min(lons), max(lons), min(lats), max(lats)
     out = {}
@@ -106,8 +134,8 @@ def main():
     if not os.path.exists(cache):
         download(cache)
     raw = json.load(open(cache))
-    boundary = json.load(open(os.path.join(ROOT, 'tools/bake/boundary.json')))
-    roads = json.load(open(os.path.join(ROOT, 'public/data/vectors.json')))['roads']
+    boundary = json.load(open(AREA or os.path.join(ROOT, BOUNDARY)))
+    roads = json.load(open(os.path.join(ROOT, DATA + 'vectors.json')))['roads']
     # road segments in a 40 m grid: (x1, z1, x2, z2, width, drivable)
     grid = {}
     for r in roads:
@@ -134,9 +162,26 @@ def main():
         return best
 
     sectors, counts, seen = {}, {}, {}
-    for v, lon, lat, direction in raw.values():
-        kind = classify(v)
+    # OSM=<clip json from osm nodes> (Tallinn centre, 28 Nov 2026): OpenStreetMap's mapped lamps, benches, bins,
+    # bike racks, bollards, cabinets, crossings and crossing lights go first (they sit where they are, a detection
+    # in a photo can be metres off); Mapillary then adds what is not mapped (the signs above all)
+    rows = []
+    if os.environ.get('OSM'):
+        old_town = [TO_EST.transform(lo, la) for lo, la in OLD_TOWN]
+        for nd in json.load(open(os.environ['OSM']))['nodes']:
+            t = nd['t']
+            kind = osm_kind(t)
+            if kind is None: continue
+            E, N = TO_EST.transform(*nd['ll'])
+            if kind == LIGHT and inside(old_town, E, N): kind = LANTERN
+            d = t.get('direction')
+            try: d = float(d)
+            except (TypeError, ValueError): d = None
+            rows.append(('osm', kind, nd['ll'][0], nd['ll'][1], d, t))
+    rows += [('mly', classify(v), lon, lat, direction, None) for v, lon, lat, direction in raw.values()]
+    for src, kind, lon, lat, direction, tags in rows:
         if kind is None: continue
+        if src == 'mly' and kind in (LIGHT, POLE, BENCH, BIN, RACK, BOX, ZEBRA, SIGNAL) and os.environ.get('OSM'): continue
         E, N = TO_EST.transform(lon, lat)
         if not inside(boundary, E, N): continue
         x, z = E - E0, N0 - N
@@ -145,12 +190,44 @@ def main():
         yaw = ((direction if direction is not None else 0) + conv) % 360      # compass bearing in the game grid
         near = nearest(x, z)
         extra = 0
+        if kind == SIGNAL and src == 'osm':
+            # a crossing with lights: a post at each kerb, its head turned to the road
+            if not near or near[0] > 6: continue
+            _, px, pz, dx, dz, w = near
+            for side in (1, -1):
+                sx_, sz_ = px - dz * side * (w / 2 + 0.7), pz + dx * side * (w / 2 + 0.7)
+                yaw2 = math.degrees(math.atan2(px - sx_, -(pz - sz_))) % 360
+                cell = (SIGNAL, round(sx_ / 3), round(sz_ / 3))
+                if cell in seen: continue
+                seen[cell] = 1
+                key = f'{int((sx_ - GRID0) // SECTOR)}_{int((sz_ - GRID0) // SECTOR)}'
+                sectors.setdefault(key, []).extend([SIGNAL, round(sx_, 1), round(sz_, 1), round(yaw2), 0])
+                counts[SIGNAL] = counts.get(SIGNAL, 0) + 1
+            # and the crossing's stripes
+            cell = (ZEBRA, round(px / 5), round(pz / 5))
+            if cell not in seen:
+                seen[cell] = 1
+                key = f'{int((px - GRID0) // SECTOR)}_{int((pz - GRID0) // SECTOR)}'
+                sectors.setdefault(key, []).extend([ZEBRA, round(px, 1), round(pz, 1), round(math.degrees(math.atan2(dx, -dz)) % 360), round(min(w, 16), 1)])
+                counts[ZEBRA] = counts.get(ZEBRA, 0) + 1
+            continue
+        if kind in (BENCH, BIN, RACK, BOLLARD, BOX) and src == 'osm':
+            # where it is mapped; turned to face the nearest street (a bench's seat towards it)
+            if near and near[0] < 25: yaw = math.degrees(math.atan2(near[1] - x, -(near[2] - z))) % 360
+            if near and near[0] < near[5] / 2 + 0.4: continue        # (mapped on the carriageway itself: a mistake)
+            cell = (kind, round(x / 1.5), round(z / 1.5))
+            if cell in seen: continue
+            seen[cell] = 1
+            key = f'{int((x - GRID0) // SECTOR)}_{int((z - GRID0) // SECTOR)}'
+            sectors.setdefault(key, []).extend([kind, round(x, 1), round(z, 1), round(yaw), 0])
+            counts[kind] = counts.get(kind, 0) + 1
+            continue
         if kind == ZEBRA:
-            if not near or near[0] > 9: continue
+            if not near or near[0] > (4 if src == 'osm' else 9): continue
             _, x, z, dx, dz, w = near
             yaw = math.degrees(math.atan2(dx, -dz)) % 360                      # along the road
             extra = round(min(w, 16), 1)
-        if kind == LIGHT and near and near[0] < 30:
+        if kind in (LIGHT, LANTERN) and near and near[0] < 30:
             yaw = math.degrees(math.atan2(near[1] - x, -(near[2] - z))) % 360   # the arm reaches over the road
         if kind == ZEBRA:
             pass
@@ -167,7 +244,7 @@ def main():
         sectors.setdefault(key, []).extend([kind, round(x, 1), round(z, 1), round(yaw), extra])
         counts[kind] = counts.get(kind, 0) + 1
     json.dump({'faces': FACES, 'stride': 5, 'sectors': sectors},
-              open(os.path.join(ROOT, 'public/data/props.json'), 'w'), separators=(',', ':'))
+              open(os.path.join(ROOT, DATA + 'props.json'), 'w'), separators=(',', ':'))
     print(sorted(counts.items()), sum(counts.values()))
 
 

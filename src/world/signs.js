@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { paintScale } from './paintscale.js';
 import { DATA } from '../city.js';
+import { jobs } from '../jobs.js';
 
 // [background, text, glow]: rough brand colours, a neon look for everything else
 const STYLES = [
@@ -29,7 +30,9 @@ const STYLES = [
   ['#ffffff', '#d4001a'],              // 18 hardware stores
   ['#ffffff', '#e50010'],              // 19 H&M
 ];
-const MAX_ROWS = 50;
+// (12 rows: a page of 1024 x 960 at most. With 50, a sector of the Tallinn Old Town with some 300 shop signs had pages of
+// 1024 x 4000, 4 megapixels sent to the graphics card in one frame, and was drawn in one piece of 40 ms: 28 Nov 2026)
+const MAX_ROWS = 12;
 let ROW = 80, ATLAS_W = 1024;           // (smaller on phones: see paintscale.js)
 
 // draws one sign face into the rectangle (x, y, w, h) of the canvas
@@ -89,7 +92,8 @@ export function createSigns(world) {
     return geo;
   }
 
-  function build(sector) {
+  // (a generator: queued work, a page of sign faces at a time; see src/jobs.js)
+  function* build(sector) {
     const a = data.sectors[`${sector.sx}_${sector.sz}`];
     if (!a) return null;
     const st = data.stride;
@@ -166,6 +170,7 @@ export function createSigns(world) {
       mesh.matrixAutoUpdate = false;
       group.add(mesh);
       owned.push(geo, mat, tex);
+      if (k < firsts.length) yield;
     }
     for (const [list, mat] of [[frames, boxMat], [poles, poleMat]]) {
       const geo = merge(list);
@@ -186,7 +191,14 @@ export function createSigns(world) {
 
   // attach(sector, add) calls add(group) once the sector's signs exist (now, or when the data arrives)
   return (sector, add) => {
-    const run = () => { if (sector.state === 'ready') { const g = build(sector); if (g) add(g); } };
+    const run = () => {
+      if (sector.state !== 'ready' || !data.sectors[`${sector.sx}_${sector.sz}`]) return;
+      jobs.add(function* () {
+        const g = yield* build(sector);
+        if (!g) return;
+        if (sector.state === 'ready') add(g); else g.userData.dispose();
+      }, 'shop signs');
+    };
     if (data) run(); else waiting.push(run);
   };
 }

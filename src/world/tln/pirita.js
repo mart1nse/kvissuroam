@@ -296,7 +296,13 @@ export function piritaVectors(vectors) {
 // ---------------------------------------------------------------------------------------------------------------------
 // Props: [kind, x, z, bearing, extra] (src/world/props.js). Signs face the traffic they are for; a lamp's arm reaches
 // along its bearing.
-const LIGHT = 0, ZEBRA = 7, SIGN0 = 10, ROADLAMP = 43;
+const LIGHT = 0, ZEBRA = 7, SIGN0 = 10, ROADLAMP = 43, CHEVL = 52, CHEVR = 53;
+// The yellow corner boards of the 2000s races (the onboard lap of the 2005 race Martin found, 28 Nov 2026: a tall yellow
+// board with a black hooked line on the outside of the road before the big corners; seen before Kose kurv, the bends
+// down Lükati, the S by the Kloostrimetsa houses). [lap point where the corner begins, which way it goes (-1 left,
+// 1 right), metres before it]. The video shows a few of them clearly; the rest are put by the same rule (guessed).
+const CORNER_BOARDS = [[375, -1, 100], [505, 1, 90], [625, -1, 90], [765, -1, 100], [995, -1, 90], [1085, 1, 90], [1895, 1, 90],
+  [2195, -1, 110], [2505, -1, 25]];
 const SIGN = { speed: 0, warning: 4, yield: 5, priority: 6, crossing: 7, speed40: 10, parking: 11, busStop: 20 };
 // the crossings, measured on the orthophoto: centre, the road's bearing, the crossing's width
 const ZEBRAS = [[281.3, 491.3, 99.9, 8], [320.9, 435.5, 10.4, 8], [-1126.9, -19.5, 225, 10], [-1107.1, 1.5, 45, 9],
@@ -342,6 +348,11 @@ export function piritaPropsFor(vectors) {
   sign(2722, 1, SIGN.parking); sign(2752, -1, SIGN.parking, 0, false);   // the car parks by the underpass on Rummu tee
   sign(2030, -1, SIGN.busStop, 0, false); sign(2460, -1, SIGN.busStop, 0, false);
 
+  // the yellow boards before the corners, on the outside, facing the lap's drivers (2.5 m clear of the road's edge)
+  for (const [i, turn, before] of CORNER_BOARDS) {
+    const sb = SS[i] - before, ib = iOf(sb), p = clear(sb, -turn * (L.W[ib] / 2 + 2.5), 0.3);
+    if (p) out.push([turn < 0 ? CHEVL : CHEVR, p[0], p[1], bearing(p[2], p[3]) + 180, 0]);
+  }
   // lamps: one side, a pole every 38 to 46 m; on Pirita tee along its outer edge, the arm over the carriageway
   for (const z of ZONES) {
     const gap = z.lampGap || 40, side = z.lampSide || 1;
@@ -469,20 +480,80 @@ export function createPirita(scene, world, { shadows = true } = {}) {
 
   // guard rails (Street View and the photo: Lükati down to the river and up from it, Rummu tee over the underpass) and
   // the concrete gutter round the inside of Kloostrimetsa's bend
-  const RAILS = [[502, 527, 4.7], [552, 582, 4.7], [552, 582, -5.6], [2696, 2718, 5.0], [2696, 2718, -5.0]];
+  // (Lükati's are painted in black and white blocks, as in the onboard lap of the 2005 race Martin found, 28 Nov 2026; the
+  // same video has one more along the outside of the long left-hander further down Lükati, lap points 735 to 795: gone
+  // today, put by the video only, its ends guessed)
+  const RAILS = [[502, 527, 4.7, 1], [552, 582, 4.7, 1], [552, 582, -5.6, 1], [2696, 2718, 5.0], [2696, 2718, -5.0]];
+  const RAIL_2005 = [735, 795, 5.2, 1];
   const GUTTER = [1938, 1986, -1];
   const parts = [{ i: 540, built: false, make: (A) => RAILS.slice(0, 3).forEach(rail(A)) },
+    { i: 765, built: false, make: (A) => rail(A)(RAIL_2005) },
     { i: 2707, built: false, make: (A) => RAILS.slice(3).forEach(rail(A)) },
     { i: 1962, built: false, make: (A) => gutter(A) }];
+  // the spectators' tape: a yellow tape at hip height on thin stakes 4 m back from the road's edge, in long runs both sides
+  // through the woods and past the Kloostrimetsa houses (the 2005 onboard lap; where each run begins and ends is guessed)
+  for (let c = 0; c * CHUNK < N; c++) {
+    const i0 = c * CHUNK, i1 = Math.min(N, (c + 1) * CHUNK), z = zoneAt((i0 + i1) >> 1);
+    if (z && (z.woods || z.id === 'kloosU')) parts.push({ i: Math.min(N - 1, (i0 + i1) >> 1), built: false, make: (A) => tape(A, i0, i1) });
+  }
+  function tape(A, i0, i1) {
+    const R = rng(7000 + i0);
+    for (const side of [1, -1]) {
+      let run = [];
+      const flush = () => {
+        if (run.length > 2) {
+          for (let k = 0; k < run.length; k++) {
+            const [x, z] = run[k], g = A.h(x, z);
+            A.p.box(0.05, 1.1, 0.05, 0x5a4a3a, x, g + 0.55, z);
+            if (k) A.bar(run[k - 1], run[k], 0.012, 0.86, 0.93, 0xf2d23c);
+          }
+        }
+        run = [];
+      };
+      // runs of 40 to 160 m with gaps of 15 to 60 m, stakes every 5.5 to 7 m
+      let s = SS[i0] + R() * 30, end = s + 40 + R() * 120;
+      while (s < SS[i1 === N ? N - 1 : i1]) {
+        const i = iOf(s), zz = zoneAt(i);
+        const p = at(s, side * (L.W[i] / 2 + 4.0 + R() * 0.6));
+        const off = !zz || !(zz.woods || zz.id === 'kloosU') || inBox(i) || L.LV[i] === 1 || (i >= 2540 && i < 2610) || L.onRoad(p[0], p[1], 0.8) || L.onPath(p[0], p[1], 0.6) || L.joins(s, side * (L.W[i] / 2 + 0.6), 1.5);
+        if (off) flush(); else run.push([p[0], p[1]]);
+        s += 5.5 + R() * 1.5;
+        if (s > end) { flush(); s += 15 + R() * 45; end = s + 40 + R() * 120; }
+      }
+      flush();
+    }
+  }
+  // a W-beam rail in black and white blocks on white posts (the old style of the race years)
+  function stripedRail(A, pts) {
+    let along = 0, k = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (let t = 0; t < len - 1e-3; ) {
+        const step = Math.min(len - t, 1.0 - (along % 1.0));
+        const p = [a[0] + (b[0] - a[0]) * (t / len), a[1] + (b[1] - a[1]) * (t / len)], q = [a[0] + (b[0] - a[0]) * ((t + step) / len), a[1] + (b[1] - a[1]) * ((t + step) / len)];
+        k = Math.floor(along / 1.0 + 1e-6);
+        A.bar(p, q, 0.07, 0.42, 0.76, k % 2 ? 0x18171b : 0xeeedea);
+        t += step; along += step;
+      }
+    }
+    let last = -9;
+    for (let i = 0, d = 0; i < pts.length; i++) {
+      if (i) d += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (d - last < 1.95 && i < pts.length - 1) continue;
+      last = d;
+      const [x, z] = pts[i];
+      A.p.box(0.12, 0.8, 0.1, 0xe4e3e0, x, A.h(x, z) + 0.4, z);
+    }
+  }
   function rail(A) {
-    return ([i0, i1, o]) => {
+    return ([i0, i1, o, bw]) => {
       const pts = [];
       for (let i = i0; i <= i1; i += 2) {
         // (the ends bend away from the road, as the real ones are)
         const t = Math.min(1, (i - i0) / 4, (i1 - i) / 4);
         pts.push(at(SS[i], o + Math.sign(o) * (1 - t) * 0.8).slice(0, 2));
       }
-      A.guardrail(pts);
+      if (bw) stripedRail(A, pts); else A.guardrail(pts);
     };
   }
   function gutter(A) {

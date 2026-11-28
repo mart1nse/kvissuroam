@@ -195,6 +195,7 @@ import { TARTU, TALLINN, TLN_FLAG, goCity } from './city.js';
 import { piritaVectors, piritaPropsFor, createPirita } from './world/tln/pirita.js';
 import { centreVectors, centreLines, inOldTown } from './world/tln/centre.js';
 import { createCentreMarks } from './world/tln/centremarks.js';
+import { createCityWalls } from './world/tln/citywalls.js';
 
 // Tallinn (?tln=1, src/city.js): none of Tartu's hand-built places, its trackside and kerbs along Toomemägi, its parked
 // cars or its bus stops are made there. Each is this stand-in, which takes any call or property and gives itself back
@@ -534,7 +535,7 @@ function groundHold() {
   return stageHold;
 }
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
-let pirita = null, centreMarks = null;
+let pirita = null, centreMarks = null, cityWalls = null;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = TARTU && params.get('busstops') !== '0';
@@ -879,6 +880,7 @@ async function boot() {
   korve4 = hand(createKorvekula4)(scene, world, { shadows: !isTouch });
   pirita = TALLINN ? createPirita(scene, world, { shadows: !isTouch }) : null;     // the lap's patches, rails and gutter as the car comes
   centreMarks = TALLINN ? createCentreMarks(scene, world) : null;               // the centre's worn tarmac, lids, grates and tram rails (src/world/tln/centremarks.js)
+  cityWalls = TALLINN ? createCityWalls(scene, world, buildBuildings.material) : null;     // the Old Town's walls between the map's towers
   haridus10 = hand(createHariduse10)(scene, world, { shadows: !isTouch });
   katoliku = hand(createKatoliku)(scene, world, { shadows: !isTouch });
   katoliku2 = hand(createKatoliku2)(scene, world, { shadows: !isTouch });
@@ -2632,7 +2634,7 @@ function frame(ts) {
     // (the places build around the watched car while spectating: a copy, so nothing they do moves it)
     const placeCar = watch?.active ? Object.assign(spot, WF, { y: WV?.y ?? car.y }) : car;
     if (!jobs.resting) {
-      PLACES ||= !TARTU ? [pirita, centreMarks] : [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, winbaum, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
+      PLACES ||= !TARTU ? [pirita, centreMarks, cityWalls] : [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, winbaum, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];
@@ -3037,7 +3039,7 @@ window.__game = !devHook ? { hitches } : {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get camera() { return camera; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, pirita: () => pirita, centreMarks: () => centreMarks, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, pirita: () => pirita, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
+  skins: () => skinLog, pirita: () => pirita, centreMarks: () => centreMarks, cityWalls: () => cityWalls, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, pirita: () => pirita, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

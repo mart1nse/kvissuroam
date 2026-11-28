@@ -290,6 +290,7 @@ export function createBuildings(walls) {
   }
   const build = (sector) => jobs.run(steps(sector));
   build.steps = steps;
+  build.material = mat;          // (for walls made elsewhere in the same look: src/world/tln/citywalls.js)
   return build;
 }
 

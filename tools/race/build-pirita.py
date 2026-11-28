@@ -144,8 +144,11 @@ total = sum(math.dist(c[i - 1], c[i]) for i in range(1, N)) + math.dist(c[-1], c
 
 def near(p):
     return min(range(N), key=lambda i: math.dist(c[i], p))
-# checkpoints: over the Lükati bridge, the top of Lükati tee, Kloostrimetsa tee's west end, the Pirita bridge
-cps = sorted(near(p) for p in [(700, 330), (1240, -350), (-500, -600), (-833, -301)])
+# checkpoints, at the lap's own places and not by distance (Martin 28 Nov 2026: "add 3 checkpoints ... in some nice
+# logical places. does not need to be just based on distance"; four until then): out of Kose kurv onto Lükati tee,
+# over the Lükati bridge, the top of Lükati tee, onto Kloostrimetsa tee, out of the big S, the Pirita bridge, out of
+# Rummu kurv onto the finish straight
+cps = [395, 638, 1134, 1360, 1990, 2342, 2590]
 # spawn: back up Rummu tee, about 620 m before the line, past the setts by the Pirita tee lights, facing along the
 # lap (Martin 28 Nov 2026: "bring the spawning area back so i can get a faster speed right away over the line";
 # it was 200 m, as Toomemägi's is)

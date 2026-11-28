@@ -180,6 +180,18 @@
       <p lang="en">Drive and race through Tartu, rebuilt in 3D from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit and the Majoraadi gravel rally stage, roam the city freely and race other players online. Free in the browser on a computer or phone, nothing to install.</p>
       <p lang="et">Sõida ja võistle Tartu tänavatel: linn on 3D-s üles ehitatud päris kaardi-, lidari- ja aerofotoandmetest. Sõida aja peale Toomemäe tänavaringil ja Majoraadi kruusasel rallikatsel, avasta linna vabalt ja võistle teistega võrgus. Tasuta otse brauseris arvutis või telefonis, midagi pole vaja paigaldada.</p>
     </div>
+  <script>
+    // Come from the other city (?go=1, src/main.js offTo): the loading screen says where to from its first paint,
+    // as the screen before the reload did, so the change of city reads as one loading and not as a restart
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (q.get('go') !== '1') return;
+      var tln = q.get('tln') === '1' && q.get('city') === 'tallinn';
+      document.documentElement.classList.add('go');
+      document.querySelector('#loading .tag').textContent = tln ? 'TALLINN · PIRITA-KOSE' : q.get('track') === 'raadi' ? 'TARTU · MAJORAADI' : 'TARTU · TOOMEMÄGI';
+      document.getElementById('loadmsg').textContent = 'Off to ' + (tln ? 'Tallinn' : 'Tartu') + '…';
+    })();
+  </script>
   </div>
 
   <div id="menu" class="screen hidden">

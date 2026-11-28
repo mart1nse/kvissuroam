@@ -1,11 +1,11 @@
 // Garage additions: the driver name (changeable, never required) and the lap times board,
 // best lap per car of all time and of today, plus this browser's last laps.
-import { api, TALLINN } from '../city.js';
+import { api, TALLINN, TLN_FLAG, CITY, OTHER, apiOf, LAPS_KEY, fetchAhead } from '../city.js';
 import { CIRCUIT_NAME } from './circuit.js';
 import { tyreIcon } from '../hud.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
-import { createTrackPicker, TRACK_ICON, TRACKS, DRAG_CARD } from './trackpick.js';
+import { createTrackPicker, TRACK_ICON, TRACKS, DRAG_CARD, CITY_TRACKS } from './trackpick.js';
 import { DRAG_LIMITS } from './dragrules.js';
 import { cleanPlate, typedPlate } from '../net/plates.js';
 import { OWN_PLATE } from '../cars/plate.js';
@@ -23,7 +23,7 @@ const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="
 // carNow(): the car picked in the garage, whose row is open when the board opens
 // drag: the drag strip (src/race/drag.js) when its card is in the garage (?drag=1 on a desktop), else null
 // nearTrack(): the track the car is at ('toome', 'raadi', 'drag') or null, which LAP TIMES opens on
-export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car, drag = null, nearTrack = null }) {
+export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = null, carNow = () => mp.car, drag = null, nearTrack = null, onAway = null }) {
   const menu = document.querySelector('#menu');
   const drive = document.querySelector('#drive');
 
@@ -220,8 +220,60 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   // a circuit's record over all cars: the time (its replay where there is one), the driver and the car
   const rec = (r, track, ic, label = 'RECORD') => (r ? `<span class="rec"><u>${label}</u>${ic(r)}${time(track, r)}<i>${escapeHtml(r.name)}</i><em>${escapeHtml(cars[r.car]?.short || r.car)}</em></span>` : '');
 
+  // The other city's times (?tln=1; Martin 28 Nov 2026: "ideally laptimes also could be seen from both garages"): its
+  // board and how many are online there, asked of its own room when its card or its times are looked at (at most
+  // every 20 s), and this browser's own laps there from their own keys. Shown by the TARTU / TALLINN switch at the
+  // top of LAP TIMES, a tab a track, one line a car.
+  let other = null, otherOnline = null, otherAt = -1e9, cityView = CITY, otab = null;
+  function loadOther() {
+    if (!TLN_FLAG || performance.now() - otherAt < 20000) return;
+    otherAt = performance.now();
+    fetch(apiOf(OTHER, '/api/board'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) { other = b; picker?.render(); render(); } }).catch(() => {});
+    askOnline(true);
+  }
+  // (the count alone, at most every 30 s: the city button while driving shows it, main.js cityCounts)
+  let onlineAt = -1e9;
+  function askOnline(now = false) {
+    if (!TLN_FLAG || (!now && performance.now() - onlineAt < 30000)) return;
+    onlineAt = performance.now();
+    fetch(apiOf(OTHER, '/api/online'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && Number.isFinite(j.total)) { otherOnline = j.total; picker?.render(); } }).catch(() => {});
+  }
+  const saved = (key) => { try { const l = JSON.parse(localStorage.getItem(key)); return Array.isArray(l) ? l.filter((r) => r && Number.isFinite(r.ms)) : []; } catch { return []; } };
+  // (the Majoraadi stage's own runs, as src/race/raadi.js keeps them: the ones that count carry their controller)
+  const otherOwn = (id) => (id === 'raadi' ? saved('kvissuroam.raadi').filter((r) => r.inp && r.at >= '2026-11-26T17:20:00.000Z') : saved(LAPS_KEY[OTHER]));
+  const otherPart = (id) => (id === 'raadi' ? other?.raadi : other);
+  function renderOther() {
+    const tracks = CITY_TRACKS[OTHER];
+    const t = tracks.find((x) => x.id === otab) || tracks[0], part = otherPart(t.id), own1 = otherOwn(t.id), srvName = t.id === 'raadi' ? 'other-raadi' : 'other-lap';
+    const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
+    const meName = (mp.name || '').toLowerCase();
+    const cell = (r, dated) => (r ? `<b>${fmtTime(r.ms / 1000)}</b><small class="nm${r.name && r.name.toLowerCase() === meName ? ' me' : ''}">${escapeHtml(r.name || '')}</small>${dated && r.at ? `<small class="date">${day(r.at)}</small>` : ''}` : '<small class="none">–</small>');
+    const pick = (list, id) => list?.find((r) => r.car === id);
+    const rows = order.map((id) => { const e = pick(part?.allTime, id), d = pick(part?.today, id); return carRows(id, srvName, e ? [e] : [], d ? [d] : [], own(own1, id, () => '', srvName), cell); }).join('');
+    const line = (l, who) => `<li><b>${fmtTime(l.ms / 1000)}</b> ${who ? `<i>${escapeHtml(l.name || '')}</i> ` : ''}${escapeHtml(cars[l.car]?.short || l.car)} <small>${l.at ? day(l.at) : ''}</small></li>`;
+    const mine = own1.slice().sort((p, q) => (p.at < q.at ? 1 : -1)).slice(0, 5).map((l) => line(l)).join('');
+    const recent = (part?.recent || []).slice(0, 20).map((l) => line(l, true)).join('');
+    const r = least(part?.allTime || []), what = t.id === 'raadi' ? 'RUNS' : 'LAPS';
+    const bar = tracks.length > 1 ? `<div class="btabs" role="tablist">${tracks.map((x) => `<button class="btab${x === t ? ' on' : ''}" data-otab="${x.id}" role="tab" aria-selected="${x === t}"><span>${x.name}</span></button>`).join('')}</div>` : '';
+    panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>${OTHER.toUpperCase()} · LAP TIMES</h2>
+      ${bar}
+      <p class="small">${part ? `${part.laps} ${t.id === 'raadi' ? 'run' : 'lap'}${part.laps === 1 ? '' : 's'} of ${t.name[0]}${t.name.slice(1).toLowerCase()} driven` : other ? 'no times yet' : 'asking for the times…'} · DRIVE with this track picked in the garage takes you there</p>
+      <div class="boards"><div class="bcol"><h3>${t.name} <small>${t.km} KM · ${t.surface}</small>${r ? `<span class="rec"><u>RECORD</u><b>${fmtTime(r.ms / 1000)}</b><i>${escapeHtml(r.name || '')}</i><em>${escapeHtml(cars[r.car]?.short || r.car)}</em></span>` : ''}</h3>
+      <table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>
+      ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST ${what}</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST ${what} · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}</div></div>
+      <div class="row"><button class="neon" data-board="close">BACK</button></div>`;
+  }
+  // the switch between the cities' times, under the board's title
+  function citySwitch() {
+    if (!TLN_FLAG) return;
+    panel.querySelector('h2')?.insertAdjacentHTML('afterend', `<div class="btabs bcity" role="tablist" aria-label="City">${['tartu', 'tallinn'].map((c) => `<button class="btab${c === cityView ? ' on' : ''}" data-bcity="${c}" role="tab" aria-selected="${c === cityView}"><span>${c.toUpperCase()}</span></button>`).join('')}</div>`);
+  }
   function render() {
     if (panel.classList.contains('hidden')) return;
+    if (cityView !== CITY) renderOther(); else renderOwn();
+    citySwitch();
+  }
+  function renderOwn() {
     const b = mp.board;
     const pick = (list, id) => list?.find((r) => r.car === id);
     const day = (at) => new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
@@ -319,6 +371,11 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   function show() {
     opened.add(carNow());
     tab = nearTrack?.() || picker?.picked || 'toome';     // (the track the car is at, else the one picked in the garage)
+    // (with the other city's track picked in the garage: on that city's times, on that track)
+    const aw = picker?.away;
+    cityView = aw ? aw.city : CITY;
+    if (aw) otab = aw.track;
+    if (TLN_FLAG) loadOther();
     panel.classList.remove('hidden');
     render();
     mp?.refreshBoard?.();        // the live updates may have missed a lap (a dropped connection)
@@ -339,12 +396,24 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   const dragBest = () => { const l = Object.values(drag?.best || {}).filter((b) => Number.isFinite(b?.et)); return l.length ? { ms: Math.min(...l.map((b) => b.et)) * 1000 } : null; };
   const mine = (id) => (id === 'raadi' ? stage.best().any : id === 'drag' ? dragBest() : least(race.laps));
   // (Tallinn, src/city.js: its one circuit's card, with the way back to the choice of city)
-  const picker = stage || TALLINN ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
+  // the other city's tracks, shown in this garage too: its records from its own room, your best from this browser
+  const recordOf = (city, id) => { const r = least(otherPart(id)?.allTime || []); return r ? { ms: r.ms, name: r.name, car: cars[r.car]?.short } : null; };
+  const mineOf = (city, id) => least(otherOwn(id));
+  const online = (city) => (city !== CITY ? otherOnline : mp.online ? mp.drivers().length + (mp.stealth ? 0 : 1) : null);
+  // (its cards looked at: its times asked for, its map's first files fetched ahead; the line under DRIVE follows)
+  const onView = (city) => { if (city !== CITY) { loadOther(); fetchAhead(city); } onAway?.(); };
+  const picker = stage || TALLINN ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack, drag: !!drag, recordOf, mineOf, online, onView, onCities: loadOther }) : null;
+  // (the cities' cards say how many are online in each: asked when they are the first thing shown)
+  if (TLN_FLAG && picker && !new URLSearchParams(location.search).get('city')) setTimeout(loadOther, 1500);
   if (!picker) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden');
     const tb = e.target.closest('[data-tab]');
     if (tb) { tab = tb.dataset.tab; render(); return; }
+    const bc = e.target.closest('[data-bcity]');
+    if (bc) { cityView = bc.dataset.bcity; if (cityView !== CITY) loadOther(); render(); return; }
+    const ot = e.target.closest('[data-otab]');
+    if (ot) { otab = ot.dataset.otab; render(); return; }
     const rp = e.target.closest('[data-rp]');
     if (rp) { const [track, car] = rp.dataset.rp.split('|'); onWatch(track, car); return; }
     // a car's row opens or closes, in both circuits' tables at once
@@ -356,5 +425,5 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   });
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); e.stopImmediatePropagation(); } }, true);
 
-  return { render: () => { render(); picker?.render(); topSoon(); }, get track() { return picker?.picked || 'toome'; }, follow: (id) => picker?.follow(id), show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
+  return { render: () => { render(); picker?.render(); topSoon(); }, get track() { return picker?.picked || 'toome'; }, get away() { return picker?.away || null; }, online: (city) => online(city), askOnline: () => askOnline(), follow: (id) => picker?.follow(id), show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
 }

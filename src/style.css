@@ -1368,6 +1368,7 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
   background: linear-gradient(135deg, rgba(47, 243, 255, .2), rgba(90, 40, 170, .45)); box-shadow: 0 0 26px rgba(47, 243, 255, .35); }
 #trackpick .tcard.on .nm { font-size: 2.12em; text-shadow: 2px 2px 0 var(--hot); }
 #trackpick .tcard.on .meta { letter-spacing: .16em; }
+#trackpick .tcard.on svg { max-width: 34%; }   /* (a wide lap, Pirita-Kose: room for the words, Martin 28 Nov "goes over a bit") */
 #trackpick .tcard.on .halo { display: inline; }
 #trackpick .tcard.on .tube { stroke: var(--pink); stroke-width: 24; filter: drop-shadow(0 0 9px var(--hot)); }
 #trackpick .tcard.on .core { stroke: #ffe3f4; stroke-width: 7; opacity: 1; }

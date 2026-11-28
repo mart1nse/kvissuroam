@@ -44,7 +44,7 @@ export const TRACK_ICON = {
 const TOOME_CARD = { id: 'toome', name: 'TOOMEMÄGI', km: (TRACK.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'OLD TOWN · START ON KÜÜNI', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: toome, loop: true, secs: 7 };
 const RAADI_CARD = { id: 'raadi', name: 'MAJORAADI', km: STAGE_KM, surface: 'GRAVEL', meta: 'RALLY ESTONIA SS16', modes: [['', 'RALLY STAGE']], path: raadi, secs: 5 };
 // Tallinn's one circuit (Martin 28 Nov 2026), under Toomemägi's id; the dot takes as long a lap as Toomemägi's per km
-const PIRITA_CARD = TLN_FLAG && { id: 'toome', name: 'PIRITA-KOSE', km: (PIRITA.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'KLOOSTRIMETSA · START ON RUMMU TEE', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: pirita, loop: true, secs: 8 };
+const PIRITA_CARD = TLN_FLAG && { id: 'toome', name: 'PIRITA-KOSE', km: (PIRITA.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'START ON RUMMU TEE', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: pirita, loop: true, secs: 8 };
 export const TRACKS = TALLINN ? [PIRITA_CARD] : [TOOME_CARD, RAADI_CARD];
 
 // The choice of city (?tln=1, Martin 28 Nov 2026: "opening with this flag will instead of the track options, show two

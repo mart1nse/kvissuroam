@@ -9,8 +9,9 @@
 // the street has none).
 import { DATA } from '../../city.js';
 
-// west of Kadriorg (the Pirita-Kose lap and its streets are dressed by src/world/tln/pirita.js)
-const IN_CENTRE = (x) => x < -2600;
+// the yellow and lilac areas: west of Kadriorg, or south of the Pirita-Kose lap (its streets are dressed by
+// src/world/tln/pirita.js)
+const IN_CENTRE = (x, z) => x < -2600 || z > 1200;
 const CLEAR = 0.45;            // a street whose photo was at least this clear (not shadow nor trees) was read
 
 // the Old Town and Toompea inside their walls, roughly (game x, z): src/world/scenery.js gives their houses the
@@ -98,30 +99,38 @@ export function facadeIn(grid, x0, x1, z0, z1) {
 
 // OpenStreetMap's hedges and shrubbery as bushes on the map's 0.5 m cells (world.addBushes, drawn with the map's own
 // leafy lumps, src/world/scenery.js createLowObjects): a hedge every 0.7 m along its line at its height (1.3 m where
-// not tagged), shrubbery a lump on about half the points of a 1.6 m grid, 1.2 to 2.8 m high. The same every visit.
+// not tagged), shrubbery a lump on about half the points of a 1.6 m grid (fewer in big stretches), 1.2 to 2.8 m high.
+// The same every visit.
 export function centreBushes() {
   const out = [];
+  const put = (x, z, h) => out.push(x, z, h);           // (flat: x, z, h, ...)
   let seed = 4711;
   const R = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
   for (const [h, P] of marks?.hedges || []) {
     for (let i = 0; i + 1 < P.length; i++) {
       const [ax, az] = P[i], [bx, bz] = P[i + 1], l = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(l / 0.7));
-      for (let k = 0; k < n; k++) out.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n, h * (0.92 + R() * 0.16)]);
+      for (let k = 0; k < n; k++) put(ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n, h * (0.92 + R() * 0.16));
     }
   }
   for (const ring of marks?.shrubs || []) {
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    let area = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += (ring[j][0] - ring[i][0]) * (ring[j][1] + ring[i][1]) / 2;
     for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    // (a big stretch of scrub, Paljassaare's or a park's, in clumps: thinner the bigger it is, so the lilac area's
+    // 156 ha come to about 110,000 lumps rather than 340,000)
+    area = Math.abs(area);
+    const p = area < 2000 ? 0.55 : Math.max(0.08, 0.55 * Math.sqrt(2000 / area));
     for (let x = x0 + 0.8; x < x1; x += 1.6) {
       for (let z = z0 + 0.8; z < z1; z += 1.6) {
-        const px = x + (R() - 0.5) * 1.2, pz = z + (R() - 0.5) * 1.2, keep = R() < 0.55, hh = 1.2 + R() * 1.6;
+        const px = x + (R() - 0.5) * 1.2, pz = z + (R() - 0.5) * 1.2, keep = R() < p, hh = 1.2 + R() * 1.6;
         if (!keep) continue;
         let inside = false;
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
           const [xi, zi] = ring[i], [xj, zj] = ring[j];
           if ((zi > pz) !== (zj > pz) && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside;
         }
-        if (inside) out.push([px, pz, hh]);
+        if (inside) put(px, pz, hh);
       }
     }
   }
@@ -139,7 +148,7 @@ export function centreVectors(vectors, lines = null) {
     if (!r.pts.length) continue;
     const key = keyOf(r);
     if (stone.size && !r.s && stone.has(key)) r.s = 1;
-    if (r.s === 1 && IN_CENTRE(r.pts[0][0])) { r.nomark = true; continue; }
+    if (r.s === 1 && IN_CENTRE(r.pts[0][0], r.pts[0][1])) { r.nomark = true; continue; }
     const k = seen[key];
     // (all lines found: they replace the made-up ones; some found (-1): the made-up ones stay. None found: believed only on a narrower street seen clearly, as the
     // side streets of Kalamaja and Kesklinn have none; on a wide one the photo more likely hid them, 28 Nov checks)

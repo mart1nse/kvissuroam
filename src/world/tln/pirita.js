@@ -31,6 +31,8 @@ import { multiplyMaterial } from './multiply.js';
 import { createRummuKurv } from './rummukurv.js';
 import { createPiritaKeskus } from './piritakeskus.js';
 import { createKoseKurv } from './kosekurv.js';
+import { createRaiduriKurv } from './raidurikurv.js';
+import { MERI_IN, meriIn } from '../../race/piritaedge.js';
 import { race2005Parts, merivaljaBarriers } from './race2005.js';
 
 const P = LAP.pts, N = P.length;
@@ -230,7 +232,8 @@ export function piritaVectors(vectors) {
     // edges, out from the middle by the zone's measure (further where the road widens for turning lanes)
     for (const side of [1, -1]) {
       const off = (s) => side * Math.max(z.edge, half(s) - 1.2);
-      const keep = (s) => !L.joins(s, off(s));
+      // (the inside of the turn onto Merivälja tee has its own line along the round kerb, below)
+      const keep = (s) => !L.joins(s, off(s)) && !(side < 0 && iOf(s) >= MERI_IN.i0 && iOf(s) < MERI_IN.i1);
       // (an edge walked at a fixed offset: the widening approaches ease out over the smoothed width)
       const walk = (on, gap) => {
         for (let s = s0; s + on <= end; s += on + gap) {
@@ -241,6 +244,12 @@ export function piritaVectors(vectors) {
       };
       if (z.edgeDash) walk(...z.edgeDash); else walk(2, 0);
     }
+  }
+  // the white line round the inside of the turn onto Merivälja tee: along the round kerb (src/race/piritaedge.js),
+  // 1.2 m out from it where it meets the lap's own edge lines and nearer the stone round the apex
+  for (let k = 0; k < 30; k++) {
+    const o = (t) => 1.2 - 0.5 * Math.sin(Math.PI * t) ** 2;
+    bar(meriIn(k / 30, o(k / 30)), meriIn((k + 1) / 30, o((k + 1) / 30)), 0.13, 0);
   }
   // the median's two sides on Rummu tee: solid lines, and the setts between them
   const mS0 = SS[MEDIAN[0]], mS1 = SS[MEDIAN[1]];
@@ -397,6 +406,8 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   const keskus = createPiritaKeskus(scene, world, { at, SS }, L, { shadows });
   // the inside of the left from Kose tee onto Lükati tee: three trees and shrubbery (kosekurv.js)
   const kose = createKoseKurv(scene, world, { shadows });
+  // the way out of the left bend before Raiduri tee: a kerb along the grass strip, tyres across the drive (raidurikurv.js)
+  const raiduri = createRaiduriKurv(scene, world);
   const chunks = [];
   for (let c = 0; c * CHUNK < N; c++) chunks.push({ c, i0: c * CHUNK, i1: Math.min(N, (c + 1) * CHUNK), built: false, mesh: null });
 
@@ -582,10 +593,10 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   return {
     // (for the tests: how much is built)
     info: () => ({ marks: chunks.filter((c) => c.mesh).length, parts: parts.filter((q) => q.built).length, children: group.children.map((o) => o.children.length || 1) }),
-    kurv, keskus,
+    kurv, keskus, raiduri, lay: L, at,
     update(car) {
       if (!car) return;
-      kurv.update(car); keskus.update(car); kose.update(car);
+      kurv.update(car); keskus.update(car); kose.update(car); raiduri.update(car);
       for (const ch of chunks) {
         const m = P[Math.min(N - 1, (ch.i0 + ch.i1) >> 1)], d = Math.hypot(m[0] - car.x, m[1] - car.z);
         if (!ch.built && d < 360) { ch.built = true; jobs.add(function* piritaMarks() { yield* buildChunk(ch); }, 'pirita marks'); }

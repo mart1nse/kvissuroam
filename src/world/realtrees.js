@@ -5,6 +5,7 @@
 // A species is built once as a unit tree (height 1, crown diameter 1) like the simple trees in
 // scenery.js, so the same per-tree instance matrices place both.
 import * as THREE from 'three';
+import { TALLINN } from '../city.js';
 
 const AW = 1024, AH = 512;          // a species' atlas: four foliage cards (2 x 2, 256 px), stem bark, limb bark
 const BARK = 544, DARK = 800;      // bark columns start clear of the leaf cells, so no bark creeps onto a card's edge
@@ -539,9 +540,12 @@ function crownGeometry(c) {
 
 // Norway spruce: a straight stem to the tip, whorls of boughs that droop and lift at the ends,
 // short curtains of twigs hanging from them. Green to the ground.
-function spruceGeometry() {
+// road: the spruce that stands by a road (Tallinn's lap, Martin 28 Nov 2026: "make the branches start a bit higher up
+// and perhaps more reduced on the side of the road"): the stem bare for its lowest third, and the boughs on its +x
+// side, which scenery.js turns to the road, cut to two fifths of their length.
+function spruceGeometry(road = false) {
   const H = 18, C = 7, b = builder(H, C), r = rng(2024);
-  const base = 1.2;
+  const base = road ? 5.6 : 1.2;
   const coneR = (y) => Math.max(0.15, 3.3 * Math.pow(Math.max(0, 1 - (y - base) / (H - base)), 0.82));
   const shadeAt = (x, y, z) => Math.min(1, 0.42 + 0.42 * Math.min(1, Math.hypot(x, z) / coneR(y)) + 0.18 * Math.min(1, y / H));
   const normalOf = (x, y, z) => {
@@ -558,7 +562,8 @@ function spruceGeometry() {
     const n = t > 0.8 ? 4 : 7, turn = r() * 6.283;
     for (let k = 0; k < n; k++) {
       const az = turn + (k / n) * 6.283 + (r() - 0.5) * 0.4, dx = Math.cos(az), dz = Math.sin(az);
-      const len = R * (0.95 + r() * 0.2), w = Math.max(0.9, len * (0.95 + r() * 0.3));
+      const cut = road ? 1 - 0.6 * Math.max(0, dx) : 1;
+      const len = R * (0.95 + r() * 0.2) * cut, w = Math.max(0.9, len * (0.95 + r() * 0.3));
       // the bough: a card from the stem outwards, drooping
       b.card(dx * 0.1, y + 0.25, dz * 0.1, w, len * 1.12, az - 1.571, 1.08 + r() * 0.22, (variant++ % 4) + (r() < 0.5 ? 4 : 0), normalOf, shadeAt, 0.05, 0);
       // and a curtain of twigs hanging across it, which is what you see from the side
@@ -776,7 +781,7 @@ const SPECIES = {
       furrowBark(g, BARK, 224, AH, 61, '#5a4840', '24,18,16', '140,118,104', 260);
       furrowBark(g, DARK, 224, AH, 62, '#3a2e2a', '14,11,10', '110,92,82', 160);
     },
-    geo: spruceGeometry,
+    geo: () => spruceGeometry(),
   },
   // Scots pine: a long bare stem, orange towards the top, under a flat ragged crown
   5: {
@@ -790,6 +795,11 @@ const SPECIES = {
       // grey and plated below, the orange showing from half way up
       stemShade: (y) => (y < 0.4 ? 0.35 : y < 9 ? 0.45 + 0.05 * y : 1), limbs: 8, rise: 0.5, droop: 0.4, limbR: 0.13, crook: 0.18, shell: 58, inner: 10, card: [3.3, 1.0], squat: 0.72 }),
   },
+  // the spruce by the lap's road in Tallinn (scenery.js ROADSIDE): the spruce's own pictures, its lower stem bare
+  6: {
+    fill: [30, 58, 36], halfW: 0.56, sway: 0.07, through: 0.14, like: 4, tallinn: true,
+    geo: () => spruceGeometry(true),
+  },
 };
 
 // Returns species { n: { near, nearMat, far, farMat } } keyed by the species numbers of scenery.js,
@@ -798,11 +808,14 @@ const SPECIES = {
 // only: a list of species to build (the lab page); cards false leaves out the close trees.
 export function createRealTrees(renderer, { cards = true, lod = LOD, only = null } = {}) {
   const uniforms = { uTime: { value: 0 }, uLod: { value: lod } };
-  const species = {};
+  const species = {}, atlases = {};
   for (const id in SPECIES) {
     if (only && !only.includes(+id)) continue;
     const sp = SPECIES[id];
-    const atlas = makeAtlas(sp.draw, sp.fill);
+    if (sp.tallinn && !TALLINN) continue;
+    // (like: the foliage and bark of another species, already made)
+    const atlas = sp.like != null && atlases[sp.like] ? atlases[sp.like] : makeAtlas(sp.draw || SPECIES[sp.like].draw, sp.fill);
+    atlases[id] = atlas;
     const near = sp.geo();
     const picture = snapshot(renderer, near, atlas, sp.halfW, sp.fill);
     species[id] = {

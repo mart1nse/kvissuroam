@@ -23,7 +23,7 @@ import { DRAG_TRACK } from '../src/race/dragrules.js';
 import LAP from '../src/race/track.json';
 import STAGE from '../src/race/raadi.json';
 import { throughGate } from '../src/race/lapgates.js';
-import { LAP_GATES, MAX_SKIPS } from './follow.js';
+import { LAP_GATES, MAX_SKIPS, courseOf } from './follow.js';
 import { ADJ, NOUN } from '../src/net/names.js';
 import { badName } from './badnames.js';
 import { cleanPlate } from '../src/net/plates.js';
@@ -197,16 +197,19 @@ const sameText = (a, b) => {
 };
 
 // Lap tickets made in the Worker, signed like the lobby's own (Lobby.newTicket), the secret fetched once per isolate
-let tkKey = null;
+// (each city's lobby has its own secret: the key of each, by the lobby's name)
+const tkKeys = new Map();
 const tkRate = new Map();
-async function edgeTicket(env, ip) {
+async function edgeTicket(env, ip, room) {
   const now = Date.now();
   let e = tkRate.get(ip);
   if (!e || now - e.t > 600000) { if (tkRate.size > 20000) tkRate.clear(); e = { t: now, n: 0 }; tkRate.set(ip, e); }
   if (++e.n > 30) return json({ error: 'too many requests' }, 429);
+  let tkKey = tkKeys.get(room);
   if (!tkKey) {
-    const secret = await env.LOBBY.get(env.LOBBY.idFromName('lobby')).ticketSecret();
+    const secret = await env.LOBBY.get(env.LOBBY.idFromName(room)).ticketSecret();
     tkKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    tkKeys.set(room, tkKey);
   }
   const body = `${now.toString(36)}.${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   const sig = b64(await crypto.subtle.sign('HMAC', tkKey, new TextEncoder().encode(body))).slice(0, 27);
@@ -245,14 +248,18 @@ export default {
       fwd.headers.set('x-country', String(req.cf?.country || ''));
       return env.STATS.get(env.STATS.idFromName('stats')).fetch(fwd);
     }
+    // the city's lobby (src/city.js api(): ?city=tallinn on every call from a Tallinn page; Tartu's is 'lobby', as ever)
+    const room = url.searchParams.get('city') === 'tallinn' ? 'tallinn' : 'lobby';
     if (url.pathname === '/api/ticket') {
-      try { return await edgeTicket(env, ip); } catch { tkKey = null; /* the lobby makes it then */ }
+      try { return await edgeTicket(env, ip, room); } catch { tkKeys.delete(room); /* the lobby makes it then */ }
     }
-    const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'));
+    const stub = env.LOBBY.get(env.LOBBY.idFromName(room));
     // The lap board and the online list are the same for everyone: kept a few seconds in Cloudflare's cache at
     // each data centre, so thousands of pages opening at once (a surge, 25 Nov) ask the one lobby only now and
     // then. (The full list behind /stats' "more" too.)
-    const shared = req.method === 'GET' && (url.pathname === '/api/board' || url.pathname === '/api/online') && !url.search.replace(/^\?all=1$/, '');
+    const rest = new URLSearchParams(url.search);
+    rest.delete('city');
+    const shared = req.method === 'GET' && (url.pathname === '/api/board' || url.pathname === '/api/online') && (rest.toString() === '' || rest.toString() === 'all=1');
     if (shared && typeof caches !== 'undefined') {
       const key = new Request(`${url.origin}${url.pathname}${url.search}`);
       try { const hit = await caches.default.match(key); if (hit) return hit; } catch { /* no cache here */ }
@@ -291,8 +298,9 @@ async function gunzip(bytes, max) {
 // own, src/race/lapgates.js) and its start/finish line (the lap is flying: it starts and ends there); the Raadi
 // stage's start, a point every 80 along it, its finish
 const near = (i, P, r) => ({ x: P[i][0], z: P[i][1], r });
+const lapGatesOf = (lap, gates) => ({ first: near(0, lap.pts, 30), pass: [...gates, near(0, lap.pts, 30)] });
 const GATES = {
-  toomemagi: { first: near(0, LAP.pts, 30), pass: [...LAP_GATES, near(0, LAP.pts, 30)] },
+  toomemagi: lapGatesOf(LAP, LAP_GATES),
   raadi: { first: near(STAGE.start, STAGE.pts, 30),
     pass: [...Array.from({ length: Math.floor((STAGE.finish - STAGE.start - 80) / 80) }, (_, k) => near(STAGE.start + 80 * (k + 1), STAGE.pts, STAGE.hw[STAGE.start + 80 * (k + 1)] + 45)), near(STAGE.finish, STAGE.pts, 30)] },
 };
@@ -305,13 +313,13 @@ function thru(q, ax, az, bx, bz) {
 }
 // what is wrong with a replay's samples ('' for nothing): driving ms is the time without penalty seconds
 // (drive: given the samples' places, xs, zs and heights ys, for the judging of the car itself: src/race/plausible.js)
-function checkTrace(text, track, driving, drive = {}) {
+function checkTrace(text, track, driving, drive = {}, gates = GATES) {
   const a = text.split(',').map(Number);
   const [v, f, ms, n] = a;
   if (v !== 1 || f !== 21 || !Number.isInteger(n) || a.length !== 4 + n * f || !a.every(Number.isInteger)) return 'shape';
   if (Math.abs(ms - driving) > 2) return 'time';
   if (Math.abs(n - (Math.ceil(ms / 100) + 1)) > 1) return 'samples';
-  const g = GATES[track];
+  const g = gates[track];
   let x = 0, z = 0, y = 0, px = 0, pz = 0, gate = 0, hops = 0, fl = 0;
   const xs = drive.xs = new Float64Array(n), zs = drive.zs = new Float64Array(n), ys = drive.ys = new Float64Array(n);
   // (and how far the car is rolled over, rad: a car with thrusters that turns over in the air has flown a kickflip)
@@ -456,6 +464,15 @@ export class Lobby extends DurableObject {
     this.rate = new WeakMap();    // messages per socket
     this.cache = null;            // the lap board
     this.hmac = null;
+    // Which city's lobby this is (src/city.js, Martin 28 Nov 2026): Tartu's ('lobby', every page without ?city=) or
+    // Tallinn's ('tallinn'). Each keeps its own laps, races, board and online list in its own storage; Tallinn's circuit
+    // is Pirita-Kose-Kloostrimetsa, kept under the same track name ('toomemagi') in its own tables, so everything that
+    // judges a Toomemägi lap judges it the same way against its own lap (follow.js courseOf, the replay gates, the least
+    // lap time: Toomemägi's 2:00 is 40.7 m/s on average, the same pace for Pirita-Kose's length).
+    this.city = env?.LOBBY && ctx.id && env.LOBBY.idFromName('tallinn').equals(ctx.id) ? 'tallinn' : 'tartu';
+    this.course = courseOf(this.city);
+    this.gates = this.city === 'tartu' ? GATES : { ...GATES, toomemagi: lapGatesOf(this.course.LAP, this.course.LAP_GATES) };
+    this.lapMin = this.city === 'tartu' ? LAP_MIN : Math.round(this.course.LAP.length / 40.7) * 1000;
     this.race = new RaceDesk(this);   // the online race (worker/race.js)
     this.drag = new DragDesk(this);   // the drag strip's two lanes (worker/drag.js)
     this.initPoses();
@@ -521,7 +538,7 @@ export class Lobby extends DurableObject {
     if (min === this.loadMin) return;
     this.loadMin = min;
     try { this.restOld(now); } catch (err) { console.error('restOld', err); }
-    const st = this.env?.STATS;
+    const st = this.city === 'tartu' ? this.env?.STATS : null;      // (Tallinn's lobby: not on /stats yet)
     if (!st) return;
     this.waitClean(now);
     let on = 0, drv = 0;
@@ -735,7 +752,7 @@ export class Lobby extends DurableObject {
   // a race that closed (or start votes that lapsed) for the stats page: a call to the stats object,
   // not waited for, so a slow or failing stats object never holds the race up
   raceStat(r) {
-    const st = this.env?.STATS;
+    const st = this.city === 'tartu' ? this.env?.STATS : null;      // (Tallinn's lobby: not on /stats yet)
     if (!st) return;
     const p = st.get(st.idFromName('stats')).addRace(r).catch(() => {});
     this.ctx.waitUntil?.(p);
@@ -1270,7 +1287,7 @@ export class Lobby extends DurableObject {
     try {
       bytes = Uint8Array.from(atob(body.z), (c) => c.charCodeAt(0));
       const drive = {};
-      why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive);
+      why = checkTrace(await gunzip(bytes, 2000000), track, ms - (lap.pen || 0) * 1000, drive, this.gates);
       // the seconds for its hard crashes into walls must be in its time (the page adds them; one that left them out)
       const crashPen = (drive.crashes || 0) * CRASH_PEN;
       if (!why && crashPen > (lap.pen || 0)) { why = `crash: the drive has ${drive.crashes} of them, its time ${lap.pen || 0} s of penalty`; told = 'crash'; }
@@ -1463,7 +1480,7 @@ export class Lobby extends DurableObject {
         // (penalty seconds: whole, and the driving itself must still be a believable time)
         // (a stage's own, and on any track CRASH_PEN for each hard crash into a wall: the replay is asked again)
         const pen = Number.isInteger(l?.pen) && l.pen > 0 && l.pen <= 600 ? l.pen : 0;
-        if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || LAP_MIN) && ms <= 3600000)) continue;
+        if (!name || !car || !(ms - pen * 1000 >= (STAGES[track] || this.lapMin) && ms <= 3600000)) continue;
         // a time under a racist slur: answered as saved, so the browser stops sending it, and not kept
         if (badName(name)) { ok.push(ms); continue; }
         if (!tickets.has(l.k)) tickets.set(l.k, await this.readTicket(l.k));

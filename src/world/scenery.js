@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createRealTrees } from './realtrees.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { jobs } from '../jobs.js';
+import { TALLINN } from '../city.js';
 
 // ---------------------------------------------------------------- buildings
 // The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
@@ -291,7 +292,9 @@ function treeGeometries(detail) {
 
 // species from what the lidar tells us: conifer or not, height, and how slim the crown is
 function treeSpecies(type, h, crown, r) {
-  if (type === 1) return h > 13 && r < 0.45 ? 5 : 4;
+  // (Tallinn: the conifers round Pirita, Kose and Kloostrimetsa are Scots pines, a spruce here and there: Martin's
+  // Street View shots along the lap, 28 Nov 2026)
+  if (type === 1) return TALLINN ? (h > 8 && r < 0.85 ? 5 : 4) : h > 13 && r < 0.45 ? 5 : 4;
   const slim = crown / h;
   if (slim < 0.3) return r < 0.4 ? 3 : 1;
   if (slim > 0.62 && h > 9) return 2;

@@ -10,13 +10,13 @@ export function createRoadMarkings(world) {
   const bySector = new Map();           // "sx_sz" -> [x1, z1, x2, z2, ...]
   const skip = world.vectors.markSkip;   // stretches that paint their own lines (src/race/emajoe.js)
   let keep = null;                      // a road's own filter while its lines are walked (noCentre)
-  const put = (x1, z1, x2, z2) => {
+  const put = (x1, z1, x2, z2, w = WIDTH) => {
     if (skip && skip((x1 + x2) / 2, (z1 + z2) / 2)) return;
     if (keep && !keep((x1 + x2) / 2, (z1 + z2) / 2)) return;
     const k = `${Math.floor(((x1 + x2) / 2 - G0) / S)}_${Math.floor(((z1 + z2) / 2 - G0) / S)}`;
     let a = bySector.get(k);
     if (!a) bySector.set(k, (a = []));
-    a.push(x1, z1, x2, z2, level);
+    a.push(x1, z1, x2, z2, level, w);
   };
   let level = 0;                        // of the road being walked: 1 on a bridge, -1 in a tunnel
 
@@ -78,16 +78,29 @@ export function createRoadMarkings(world) {
     };
     for (const r of edged) {
       level = r.e || 0;
-      const off = r.w / 2 - 0.45;
+      const off = r.w / 2 - (r.edgeIn ?? 0.45);
+      // (edgeDash [on, off]: a broken edge line, as on the roads through Pirita's woods, src/world/tln/pirita.js;
+      // the dashes run on from one piece of the road to the next)
+      const [on, gap] = r.edgeDash || [0, 0];
+      let walked = 0;
       for (let i = 0; i < r.pts.length - 1; i++) {
         const [ax, az] = r.pts[i], [bx, bz] = r.pts[i + 1], l = Math.hypot(bx - ax, bz - az);
         if (l < 0.05) continue;
         const ux = (bx - ax) / l, uz = (bz - az) / l, n = Math.max(1, Math.round(l / 4));
-        for (let j = 0; j < n; j++) {
-          const t0 = l * j / n, t1 = l * (j + 1) / n, tm = (t0 + t1) / 2;
+        const pieces = [];
+        if (on) {
+          for (let d = Math.ceil(walked / (on + gap)) * (on + gap) - walked - (on + gap); d < l; d += on + gap) {
+            const t0 = Math.max(0, d), t1 = Math.min(l, d + on);
+            if (t1 - t0 > 0.3) pieces.push([t0, t1]);
+          }
+        } else for (let j = 0; j < n; j++) pieces.push([l * j / n, l * (j + 1) / n]);
+        walked += l;
+        for (const [t0, t1] of pieces) {
+          const tm = (t0 + t1) / 2;
           for (const side of [off, -off]) {
             const mx = ax + ux * tm - uz * side, mz = az + uz * tm + ux * side;
             if (onOther(r, mx, mz, ux, uz)) continue;
+            if (r.edgeKeep && !r.edgeKeep(mx, mz)) continue;
             put(ax + ux * t0 - uz * side, az + uz * t0 + ux * side, ax + ux * t1 - uz * side, az + uz * t1 + ux * side);
           }
         }
@@ -111,7 +124,8 @@ export function createRoadMarkings(world) {
       strokes(r.pts, -r.w / 4, DASH, GAP, 12);
     } else {
       keep = only;
-      strokes(r.pts, r.mark || 0, DASH, GAP, 9);          // mark: a lane line moved off the centre
+      const [on, off] = r.dash || [DASH, GAP];             // dash: the road's own pattern (3 m and 9 m through Pirita's woods)
+      strokes(r.pts, r.mark || 0, on, off, 9);            // mark: a lane line moved off the centre
     }
     keep = null;
   }
@@ -119,6 +133,11 @@ export function createRoadMarkings(world) {
   // lines an area draws itself, such as hatched islands: [x1, z1, x2, z2, ...] on the ground
   const extra = world.vectors.extraLines;
   if (extra) { level = 0; for (let i = 0; i + 3 < extra.length; i += 4) put(extra[i], extra[i + 1], extra[i + 2], extra[i + 3]); }
+  // and any width on any level, [x1, z1, x2, z2, width, level, ...]: lines a place draws along its own roads, stop
+  // lines, give-way lines (src/world/tln/pirita.js; level 1 on a bridge)
+  const bars = world.vectors.extraBars;
+  if (bars) for (let i = 0; i + 5 < bars.length; i += 6) { level = bars[i + 5]; put(bars[i], bars[i + 1], bars[i + 2], bars[i + 3], bars[i + 4]); }
+  level = 0;
 
   const mat = new THREE.MeshLambertMaterial({ color: 0xdedbe6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 
@@ -126,11 +145,11 @@ export function createRoadMarkings(world) {
   return (sector) => {
     const a = bySector.get(`${sector.sx}_${sector.sz}`);
     if (!a) return null;
-    const n = a.length / 5;
+    const n = a.length / 6;
     const pos = new Float32Array(n * 12), nor = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
     for (let i = 0; i < n; i++) {
-      const x1 = a[i * 5], z1 = a[i * 5 + 1], x2 = a[i * 5 + 2], z2 = a[i * 5 + 3], lv = a[i * 5 + 4];
-      const l = Math.hypot(x2 - x1, z2 - z1) || 1, nx = -(z2 - z1) / l * WIDTH / 2, nz = (x2 - x1) / l * WIDTH / 2;
+      const x1 = a[i * 6], z1 = a[i * 6 + 1], x2 = a[i * 6 + 2], z2 = a[i * 6 + 3], lv = a[i * 6 + 4], w = a[i * 6 + 5];
+      const l = Math.hypot(x2 - x1, z2 - z1) || 1, nx = -(z2 - z1) / l * w / 2, nz = (x2 - x1) / l * w / 2;
       const cl = (v, lo) => Math.min(Math.max(v, lo + 0.01), lo + S - 0.01);     // stay on this sector's height grid
       const y1 = world.topAt(cl(x1, sector.x0), cl(z1, sector.z0), lv) + 0.06, y2 = world.topAt(cl(x2, sector.x0), cl(z2, sector.z0), lv) + 0.06;
       pos.set([x1 - nx, y1, z1 - nz, x1 + nx, y1, z1 + nz, x2 - nx, y2, z2 - nz, x2 + nx, y2, z2 + nz], i * 12);

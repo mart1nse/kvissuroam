@@ -1,5 +1,7 @@
 // Garage additions: the driver name (changeable, never required) and the lap times board,
 // best lap per car of all time and of today, plus this browser's last laps.
+import { api, TALLINN } from '../city.js';
+import { CIRCUIT_NAME } from './circuit.js';
 import { tyreIcon } from '../hud.js';
 import { fmtTime, escapeHtml } from './race.js';
 import { createOutline } from './outline.js';
@@ -178,7 +180,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
     const q = new URLSearchParams({ me: mp.name || '', toomemagi: bests(race.laps) });
     if (stage) q.set('raadi', bests(stage.runs.filter((r) => r.inp)));
     if (drag) q.set('drag', bests(dragOwn()));
-    fetch(`/api/top?${q}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+    fetch(api(`/api/top?${q}`), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (j?.toomemagi) { top = j; render(); } }).catch(() => {})
       .finally(() => { topBusy = false; if (topAgain) { topAgain = false; topSoon(); } });
   }
@@ -245,13 +247,13 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       .map((l) => `<li>${ic(l)}${time('toomemagi', l)} <i>${escapeHtml(l.name)}</i> ${escapeHtml(cars[l.car]?.short || l.car)} <small>${day(l.at)}</small></li>`).join('');
     if (stage) { renderTabs({ b, pick, day, ic, cell, when, both }); return; }
     // (a close button that stays in the corner while the board scrolls; BACK is at the very bottom)
-    panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>TOOMEMÄGI · LAP TIMES</h2>
-      <p class="small">${(race.track.length / 1000).toFixed(1)} km around Toomemägi · start and finish on Küüni${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
+    panel.innerHTML = `<button class="bclose" data-board="close" aria-label="Back">✕</button><h2>${CIRCUIT_NAME} · LAP TIMES</h2>
+      <p class="small">${(race.track.length / 1000).toFixed(1)} km ${TALLINN ? 'round Pirita, Kose and Kloostrimetsa · start and finish on Rummu tee' : 'around Toomemägi · start and finish on Küüni'}${b ? ` · ${b.laps} lap${b.laps === 1 ? "" : "s"} driven` : ' · lap times are offline'}</p>
       ${b?.allTime?.length ? `<p class="today lr">${rec(least(b.allTime), 'toomemagi', ic, 'LAP RECORD')}</p>` : ''}
       ${todayBest ? `<p class="today">FASTEST TODAY ${ic(todayBest)}${time('toomemagi', todayBest)} ${escapeHtml(todayBest.name)} · ${escapeHtml(cars[todayBest.car]?.short || todayBest.car)}</p>` : ''}
       <div class="tablelaps"><table><thead><tr><th colspan="2">CAR</th><th>BEST EVER</th><th>BEST TODAY</th><th class="you">YOUR BEST</th></tr></thead>${rows}</table>
       ${mine || recent ? `<div class="lastlaps">${mine ? `<div class="mine"><span>YOUR LAST LAPS</span><ol>${mine}</ol></div>` : ''}${recent ? `<div class="mine recent"><span>LATEST LAPS · EVERYONE</span><ol>${recent}</ol></div>` : ''}</div>` : ''}</div>
-      <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
+      <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="' + api('/api/laps.csv') + '" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
 
   // One tab a track (Martin, 27 Nov 2026: "perhaps worth putting the results page in tabs based on track"; until then
@@ -309,7 +311,7 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
       <div class="btabs" role="tablist">${bar}</div>
       <p class="small">${count}</p>
       <div class="boards"><div class="bcol">${body}</div></div>
-      <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="/api/laps.csv" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
+      <div class="row"><button class="neon" data-board="close">BACK</button>${b ? '<a class="small dl" href="' + api('/api/laps.csv') + '" target="_blank" rel="noopener">ALL LAPS (CSV)</a>' : ''}</div>`;
   }
   // this browser's best on the strip per car, as the board's laps are
   const dragOwn = () => Object.entries(drag?.best || {}).filter(([, v]) => Number.isFinite(v?.et)).map(([car, v]) => ({ car, ms: Math.round(v.et * 1000), at: v.at, inp: v.inp }));
@@ -336,8 +338,9 @@ export function createBoard({ mp, race, cars, order, stage, onTrack, onWatch = n
   // (the drag strip's best: this browser's quickest clean quarter mile in any car)
   const dragBest = () => { const l = Object.values(drag?.best || {}).filter((b) => Number.isFinite(b?.et)); return l.length ? { ms: Math.min(...l.map((b) => b.et)) * 1000 } : null; };
   const mine = (id) => (id === 'raadi' ? stage.best().any : id === 'drag' ? dragBest() : least(race.laps));
-  const picker = stage ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
-  if (!stage) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
+  // (Tallinn, src/city.js: its one circuit's card, with the way back to the choice of city)
+  const picker = stage || TALLINN ? createTrackPicker({ after: menu.querySelector('.tag'), record, mine, onOpenBoard: show, onPick: onTrack, drag: !!drag }) : null;
+  if (!picker) createOutline({ after: menu.querySelector('.tag'), onOpen: show });
   panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-board="close"]')) panel.classList.add('hidden');
     const tb = e.target.closest('[data-tab]');

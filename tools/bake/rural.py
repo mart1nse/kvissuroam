@@ -17,12 +17,12 @@ from config import *  # noqa
 MIN_BUILDINGS = 12
 SRC = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
-ortho = os.path.join(here, '..', '..', 'public', 'data', 'ortho')
+ortho = os.path.join(here, '..', '..', 'public', 'data', *(['tln'] if CITY == 'tallinn' else []), 'ortho')
 n = Counter()
 for f in json.load(open(f'{SRC}/etak_bbox.json'))['E_401_hoone_ka']:
     c = shape(f['g']).representative_point()
     n[(int((c.x - E0 - GRID0) // SECTOR), int((N0 - c.y - GRID0) // SECTOR))] += 1
 rural = [s for s in sectors() if n[s] < MIN_BUILDINGS and s not in HI_SECTORS
          and not os.path.exists(f'{ortho}/{s[0]}_{s[1]}_1_1.jpg')]
-json.dump(sorted(rural), open(os.path.join(here, 'rural_sectors.json'), 'w'))
+json.dump(sorted(rural), open(os.path.join(here, f'rural_sectors{SFX}.json'), 'w'))
 print('sectors', len(sectors()), 'open country', len(rural))

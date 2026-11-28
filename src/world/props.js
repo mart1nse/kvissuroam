@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { stats } from '../stats.js';
 import { greyBack } from './signback.js';
 import { jobs } from '../jobs.js';
+import { DATA } from '../city.js';
 
 const LIGHT = 0, POLE = 1, SIGNAL = 2, BENCH = 3, BIN = 4, RACK = 5, BOX = 6, ZEBRA = 7, BOLLARD = 8, LANTERN = 9, SIGN0 = 10;
 const FACES = 24;
@@ -705,7 +706,7 @@ export function createProps(world, opts = {}) {
     }
   }
 
-  fetch(`${import.meta.env.BASE_URL}data/props.json`).then((r) => r.json()).then((d) => {
+  fetch(`${DATA}props.json`).then((r) => r.json()).then((d) => {
     data = d;
     if (opts.clear) cleared = opts.clear(d);
     // hand-placed extras ([kind, x, z, bearing in degrees]) go at the end of their sector's list,

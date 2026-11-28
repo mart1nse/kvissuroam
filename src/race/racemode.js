@@ -5,6 +5,7 @@
 // Light on purpose: a few DOM boxes whose text is only rewritten when it changes (four times a
 // second at most), positions looked up ten times a second with a hint, no canvas, no 3D.
 import { fmtTime, escapeHtml } from './race.js';
+import { CIRCUIT_NAME } from './circuit.js';
 import { KUDOS_PAIR } from '../net/kudosrules.js';
 
 const STEP = 100;                 // metres between the timing points the gaps are measured at
@@ -463,7 +464,7 @@ export function createRaceMode({ mp, track, cars, isTouch, toast, chime, place, 
     } else if (listOpen && r.last) {
       rows = standings(r.last.racers, false);
       head = '<h3><i class="flag"></i> RACE RESULTS</h3>';
-      foot = `TOOMEMÄGI · 1 LAP · ${new Date(r.last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+      foot = `${CIRCUIT_NAME} · 1 LAP · ${new Date(r.last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     }
     show(list, !!rows);
     document.body.classList.toggle('racelist', !!rows);

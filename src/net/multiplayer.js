@@ -9,6 +9,7 @@
 // running tells the others so (flag 8), wears a glow and a HOTLAP tag on their screens, and no car
 // bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress. The same for a car
 // just put on the start, while it stays in the start lane (flag 64, src/race/startlane.js), without glow or tag.
+import { api, TARTU } from '../city.js';
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml, fmtTime } from '../race/race.js';
@@ -372,13 +373,13 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   const labels = document.createElement('div');
   labels.id = 'names';
   document.body.appendChild(labels);
-  const nameReady = name ? Promise.resolve(name) : fetch('/api/name', { cache: 'no-store' })
+  const nameReady = name ? Promise.resolve(name) : fetch(api('/api/name'), { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((j) => j.name)
     .catch(() => `${ADJ[Math.floor(Math.random() * ADJ.length)]}${NOUN[Math.floor(Math.random() * NOUN.length)]}${Math.floor(Math.random() * 90 + 10)}`)
     .then((n) => { if (!name) { name = n; lsSet(NAME_KEY, n); } return name; });
 
-  fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b && !board) setBoard(b); }).catch(() => {});
+  fetch(api('/api/board'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b && !board) setBoard(b); }).catch(() => {});
 
   // the lap ticket the page asked for as it opened (index.html); without one the first hello gets one
   const ticketReady = Promise.resolve(window.__lapTicket).then((k) => { if (typeof k === 'string' && !ticket) ticket = k; }).catch(() => {});
@@ -432,7 +433,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     // i: this page sends its own idle car to the garage (src/idlepark.js), so the server does not judge it
     // r: and goes offline by itself with nobody there (rest), so the server does not release it from the garage
     if (resting) return;
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}&i=1&r=1`;
+    const url = api(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?w=${PAGE_W}&i=1&r=1`);
     let sock;
     try { sock = new WebSocket(url); } catch { return schedule(); }
     ws = sock;
@@ -811,7 +812,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       // (ago: how long since the lap ended by this browser's clock, which is what the server goes by)
       const batch = queue.slice(0, 50).map((l) => ({ ...l, name: l.name || name, ago: Math.max(0, Date.now() - Date.parse(l.at)) || 0 }));
       try {
-        const r = await fetch('/api/lap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ laps: batch }) });
+        const r = await fetch(api('/api/lap'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ laps: batch }) });
         if (r.ok || (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429)) {
           // stored, already there, or refused as invalid: either way not worth sending again
           markSent(batch);
@@ -1151,7 +1152,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
   // the record lap of a car on a circuit, from the server (null: none kept)
   async function loadReplay(track, car) {
-    const r = await fetch(`/api/replay?track=${encodeURIComponent(track)}&car=${encodeURIComponent(car)}`, { cache: 'no-store' });
+    const r = await fetch(api(`/api/replay?track=${encodeURIComponent(track)}&car=${encodeURIComponent(car)}`), { cache: 'no-store' });
     if (!r.ok) return null;
     const name = decodeURIComponent(r.headers.get('x-name') || ''), ms = Number(r.headers.get('x-ms'));
     const rp = await unpack(new Uint8Array(await r.arrayBuffer()));
@@ -1176,7 +1177,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
     if (STEALTH) return;
     if (ws && ws.readyState === 1 && myId) { send(e === 'f' ? { t: 'lm', e, ms } : { t: 'lm', e }); return; }
     if (!ticket) return;
-    const p = fetch('/api/mark', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e, ms }) }).catch(() => {});
+    const p = fetch(api('/api/mark'), { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e, ms }) }).catch(() => {});
     marksDone = marksDone.then(() => p);
   }
   async function sendReplays() {
@@ -1194,7 +1195,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
         const z = await pack(trace, jobs);
         if (line) sendLine(lap, z);
         if (!record) continue;
-        const r = await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' },
+        const r = await fetch(api('/api/replay'), { method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, track: lap.track || undefined, z }) });
         // (the server did not believe the drive: the driver is told, Martin 26 Nov: "just a 'time not saved'".
         // Until then the page had shown its record and the board simply never got it.)
@@ -1206,7 +1207,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // Fast Toomemägi laps' drives (src/race/laplines.js): from the game's own address only (?linelog=1 anywhere,
   // ?linelog=0 nowhere); off for good on this page once the server has enough (410)
   const lineQ = new URLSearchParams(location.search).get('linelog');
-  let lineOn = !STEALTH && lineQ !== '0' && (lineQ === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver));
+  let lineOn = TARTU && !STEALTH && lineQ !== '0' && (lineQ === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver));
   async function sendLine(lap, z) {
     try {
       const r = await fetch('/api/line', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, z }) });
@@ -1216,7 +1217,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   }
   let linesSent = 0;
   function refreshBoard() {
-    fetch('/api/board', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
+    fetch(api('/api/board'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b) setBoard(b); }).catch(() => {});
   }
 
   // Our car as a position for the others (and for a lap's replay, src/race/replay.js): the first STAMP values of
@@ -1267,7 +1268,7 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       placeTimer -= dt;
       if (placeTimer <= 0) {
         placeTimer = 3;
-        fetch('/api/mark', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e: 'p', x: Math.round(car.x), z: Math.round(car.z) }) }).catch(() => {});
+        fetch(api('/api/mark'), { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: ticket, e: 'p', x: Math.round(car.x), z: Math.round(car.z) }) }).catch(() => {});
       }
     } else placeTimer = 0;
     const W = innerWidth, H = innerHeight;

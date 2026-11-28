@@ -13,6 +13,19 @@ import { DATA } from '../../city.js';
 const IN_CENTRE = (x) => x < -2600;
 const CLEAR = 0.45;            // a street whose photo was at least this clear (not shadow nor trees) was read
 
+// the Old Town and Toompea inside their walls, roughly (game x, z): src/world/scenery.js gives their houses the
+// medieval town house look and their churches and towers limestone
+const OLD = [[-6182, 2696], [-6014, 2415], [-5790, 2190], [-5564, 2110], [-5392, 2297], [-5302, 2686], [-5355, 3021],
+  [-5495, 3212], [-5750, 3281], [-6005, 3251], [-6234, 3108], [-6293, 2920]];
+export function inOldTown(x, z) {
+  let inside = false;
+  for (let i = 0, j = OLD.length - 1; i < OLD.length; j = i++) {
+    const [xi, zi] = OLD[i], [xj, zj] = OLD[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 const get = async (f) => { try { return await (await fetch(`${DATA}${f}`)).json(); } catch { return null; } };
 // lines.json (tools/tln/lines.py) and marks.json (tools/tln/marks.py: arrows, manhole lids and drains, tram lines)
 let marks = null;

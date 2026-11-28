@@ -95,12 +95,27 @@ export const multiplyMaterial = () => (markMat ||= new THREE.ShaderMaterial({
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog]), vertexShader: VERT, fragmentShader: FRAG, ...MULTIPLY,
 }));
 
+// a growing array of floats (or indices), so a mesh's numbers are not first held as JS arrays (less for the garbage
+// collector: the centre's squares build tens of thousands of corners)
+function grow(Type, n0) {
+  let a = new Type(n0), n = 0;
+  return {
+    room(k) { if (n + k > a.length) { const b = new Type(Math.max(a.length * 2, n + k)); b.set(a); a = b; } },
+    push(x) { this.room(1); a[n++] = x; },
+    push2(x, y) { this.room(2); a[n++] = x; a[n++] = y; },
+    push3(x, y, z) { this.room(3); a[n++] = x; a[n++] = y; a[n++] = z; },
+    push6(p, q, r, s, u, v) { this.room(6); a[n++] = p; a[n++] = q; a[n++] = r; a[n++] = s; a[n++] = u; a[n++] = v; },
+    get n() { return n; },
+    out() { return a.slice(0, n); },
+  };
+}
+
 // Collects ribbons and squares and makes one mesh of them. y(x, z) is the ground under a point.
 export function markMesh(y) {
-  const pos = [], uv = [], fa = [], ka = [], idx = [];
+  const pos = grow(Float32Array, 6144), uv = grow(Float32Array, 4096), fa = grow(Float32Array, 6144), ka = grow(Float32Array, 2048), idx = grow(Uint32Array, 6144);
   let n = 0;
   return {
-    get empty() { return !idx.length; },
+    get empty() { return !idx.n; },
     // a ribbon w wide along centre points [x, z, ...] (only the first two of each are used)
     ribbon(pts, w, F, kind, lift = 0.03) {
       if (pts.length < 2) return;
@@ -109,36 +124,37 @@ export function markMesh(y) {
         const a = pts[Math.max(0, k - 1)], b = pts[Math.min(pts.length - 1, k + 1)];
         const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
         if (k) along += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
-        for (const sd of [-1, 1]) {
+        for (let sd = -1; sd <= 1; sd += 2) {
           const x = pts[k][0] - (dz / l) * (w / 2) * sd, z = pts[k][1] + (dx / l) * (w / 2) * sd;
-          pos.push(x, y(x, z) + lift, z);
-          uv.push(sd < 0 ? 0 : 1, along);
-          fa.push(...F); ka.push(kind);
+          pos.push3(x, y(x, z) + lift, z);
+          uv.push2(sd < 0 ? 0 : 1, along);
+          fa.push3(F[0], F[1], F[2]); ka.push(kind);
         }
-        if (k) idx.push(n - 2, n - 1, n, n, n - 1, n + 1);
+        if (k) idx.push6(n - 2, n - 1, n, n, n - 1, n + 1);
         n += 2;
       }
     },
     // a square a by b metres at (x, z), turned by yaw (a along the yaw's direction), uv 0..1 both ways
     square(x, z, yaw, a, b, F, kind, lift = 0.035) {
       const c = Math.cos(yaw), s = Math.sin(yaw);
-      for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      for (let q = 0; q < 4; q++) {
+        const u = q & 1, v = q >> 1;
         const da = (u - 0.5) * a, db = (v - 0.5) * b;
         const px = x + c * da - s * db, pz = z + s * da + c * db;
-        pos.push(px, y(px, pz) + lift, pz);
-        uv.push(u, v); fa.push(...F); ka.push(kind);
+        pos.push3(px, y(px, pz) + lift, pz);
+        uv.push2(u, v); fa.push3(F[0], F[1], F[2]); ka.push(kind);
       }
-      idx.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
+      idx.push6(n, n + 2, n + 1, n + 1, n + 2, n + 3);
       n += 4;
     },
     mesh() {
-      if (!idx.length) return null;
+      if (!idx.n) return null;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      geo.setAttribute('f', new THREE.Float32BufferAttribute(fa, 3));
-      geo.setAttribute('k', new THREE.Float32BufferAttribute(ka, 1));
-      geo.setIndex(idx);
+      geo.setAttribute('position', new THREE.BufferAttribute(pos.out(), 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv.out(), 2));
+      geo.setAttribute('f', new THREE.BufferAttribute(fa.out(), 3));
+      geo.setAttribute('k', new THREE.BufferAttribute(ka.out(), 1));
+      geo.setIndex(new THREE.BufferAttribute(idx.out(), 1));
       geo.computeBoundingSphere();
       const mesh = new THREE.Mesh(geo, multiplyMaterial());
       mesh.renderOrder = 2;

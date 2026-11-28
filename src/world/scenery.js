@@ -18,6 +18,12 @@ const BRICK = [
   [1458, 3075],        // Vallikraavi 4, the red brick house with the statue
 ];
 
+// Tallinn's Old Town and Toompea (src/world/tln/centre.js sets the test, game x, z): their houses get style 3, the
+// medieval town house (plaster in the Old Town's colours, small deep windows with white frames, a limestone plinth,
+// clay tile roofs) and their churches, towers and halls (eaves 14 m up or more) style 3.4, limestone
+let oldTown = null;
+export function setOldTown(test) { oldTown = test; }
+
 // what three.js makes of each of the 256 steps of a colour channel
 const LIN = Float64Array.from({ length: 256 }, (_, v) => new THREE.Color().setRGB(v / 255, 0, 0, THREE.SRGBColorSpace).r);
 // (in steps: a square of the centre is 60 to 100 thousand corners, 20 ms on a fast processor and 100 on an
@@ -88,6 +94,7 @@ function* buildingGeometrySteps(sector, walls) {
     g.style = (h >= 10.5 ? 1 : area > 420 ? 2 : 0) + g.real * 4;      // +4: the wall colour is the real one
     if (g.brick) g.style = 5;                                           // red brick with a real colour
     if (g.plain) g.style = 4;                                           // smooth render in its real colour, windows added by hand
+    if (oldTown && !g.plain && oldTown(sector.x0 + (g.x0 + g.x1) / 2, sector.z0 + (g.z0 + g.z1) / 2)) g.style = (h >= 24 && g.eavesH >= 12 ? 3.4 : 3) + g.real * 4;     // (24 m: the churches, towers and the town hall, not the tall 19th-century houses)
     g.seed = g.plain ? 0 : Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
   const brick = new THREE.Color().setRGB(0.55, 0.25, 0.18, THREE.SRGBColorSpace);
@@ -140,7 +147,9 @@ export function createBuildings(walls) {
           // ---- roof: seams or tiles running down the slope, plain felt when flat
           if (wn.y < 0.985) {
             vec2 across = normalize(vec2(-wn.z, wn.x) + vec2(1e-5));
-            float tile = step(0.5, seed);
+            float old = step(2.9, style) * step(style, 3.2);           // (an Old Town house: clay tiles)
+            float tile = max(step(0.5, seed), old);
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.13, 0.07) * (0.85 + 0.3 * seed), old * 0.55);
             float seam = bLine(dot(vWP.xz, across), mix(0.48, 0.24, tile), 0.06);
             float rows = bLine(vWP.y / max(1.0 - wn.y * wn.y, 0.05), 0.34, 0.07) * tile;
             diffuseColor.rgb *= 1.0 - 0.28 * max(seam, rows);
@@ -152,7 +161,28 @@ export function createBuildings(walls) {
           float u = dot(vWP.xz, tg);
           vec3 wall = diffuseColor.rgb;
           // wall material
-          if (style < 0.5) {
+          if (style > 3.2) {
+            // limestone: courses of grey-beige blocks, each a little different, weathered darker low down
+            // (rubble laid in rough courses: each course its own height, each stone its own length and shade)
+            float row = floor(h / 0.36);
+            float rh = 0.75 + 0.5 * bHash(vec2(row, mod(sq, 5.0)));
+            float r2 = floor(h / (0.36 * rh));
+            float sl = 0.45 + 0.5 * bHash(vec2(r2, 3.0));
+            float blk = floor((u + r2 * 0.61) / sl);
+            float n = bHash(vec2(blk, r2) + mod(sq, 7.0));
+            vec3 stone = mix(vec3(0.55, 0.55, 0.52), vec3(0.66, 0.63, 0.55), n) * (0.9 + 0.12 * bHash(floor(vec2(u, h) * 3.0)));
+            wall = mix(stone, wall * 1.05, 0.25 * real);
+            wall *= 1.0 - 0.13 * max(bLine(h, 0.36 * rh, 0.05), bLine(u + r2 * 0.61, sl, 0.04));
+            wall *= 0.86 + 0.14 * smoothstep(0.0, 6.0, h);
+          } else if (style > 2.5) {
+            // plaster in the Old Town's colours (the real one where Mapillary saw it), patchy with age
+            float pick = floor(seed * 8.0);
+            vec3 pal = pick < 1.0 ? vec3(0.86, 0.72, 0.46) : pick < 2.0 ? vec3(0.9, 0.86, 0.74) : pick < 3.0 ? vec3(0.86, 0.62, 0.52)
+              : pick < 4.0 ? vec3(0.72, 0.78, 0.62) : pick < 5.0 ? vec3(0.7, 0.77, 0.82) : pick < 6.0 ? vec3(0.92, 0.9, 0.85)
+              : pick < 7.0 ? vec3(0.93, 0.8, 0.46) : vec3(0.78, 0.55, 0.42);
+            wall = mix(pal, wall, real * 0.85);
+            wall *= 0.93 + 0.1 * bHash(floor(vec2(u, h) * 1.3) + mod(sq, 11.0)) - 0.05 * bHash(floor(vec2(u, h) * 0.4));
+          } else if (style < 0.5) {
             // houses: pastel paint over boards, or plaster
             vec3 tint = 0.5 + 0.5 * cos(6.2831 * (seed * 3.0 + vec3(0.0, 0.33, 0.67)));
             wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6 * (1.0 - real));
@@ -181,38 +211,44 @@ export function createBuildings(walls) {
             kRough = -0.3;
           }
           // plinth, grime at the ground, shade under the eaves
-          wall = mix(wall, vec3(0.3, 0.29, 0.3), (1.0 - smoothstep(0.42, 0.46, h)) * 0.75);
+          float oldT = step(2.5, style);
+          wall = mix(wall, mix(vec3(0.3, 0.29, 0.3), vec3(0.58, 0.56, 0.5), oldT), (1.0 - smoothstep(mix(0.42, 0.72, oldT), mix(0.46, 0.76, oldT), h)) * 0.75);
+          // a cornice under the eaves of an Old Town house
+          wall = mix(wall, vec3(0.9, 0.88, 0.82), oldT * step(style, 3.2) * bBox(h, eaves - 0.55, eaves - 0.2, 0.02) * 0.7);
           wall *= 0.8 + 0.2 * smoothstep(0.0, 1.6, h);
           wall *= 0.86 + 0.14 * (1.0 - smoothstep(eaves - 0.5, eaves - 0.05, h) * step(h, eaves));
           diffuseColor.rgb = wall;
 
           if (vKind > 1.5) {
             // ---- windows and doors on a grid that follows the storeys
-            vec2 size = style < 0.5 ? vec2(2.5, 2.8) : style < 1.5 ? vec2(3.0, 2.8) : vec2(4.2, 3.6);
+            float old = step(2.5, style), stoneW = step(3.2, style);
+            vec2 size = style > 3.2 ? vec2(4.5, 5.0) : style > 2.5 ? vec2(2.2 + 0.5 * seed, 3.1) : style < 0.5 ? vec2(2.5, 2.8) : style < 1.5 ? vec2(3.0, 2.8) : vec2(4.2, 3.6);
             vec2 cell = vec2(floor(u / size.x), floor((h - 0.45) / size.y));
             vec2 f = vec2(fract(u / size.x), fract((h - 0.45) / size.y)) * size;      // metres inside the cell
             float rnd = bHash(cell + mod(sq, 61.0));
             vec2 e = vec2(fwidth(u), fwidth(h)) + 0.004;
-            vec2 wc = vec2(size.x * 0.5, style < 1.5 ? 1.6 : 1.9);                   // window centre
-            vec2 wh = style < 0.5 ? vec2(0.55, 0.65) : style < 1.5 ? vec2(0.85, 0.7) : vec2(1.75, 0.75);
-            float have = style < 0.5 ? step(0.3, rnd) : style < 1.5 ? step(0.06, rnd) : step(0.45, rnd);
+            vec2 wc = vec2(size.x * 0.5, style > 3.2 ? 2.6 : style > 2.5 ? 1.75 : style < 1.5 ? 1.6 : 1.9);                   // window centre
+            vec2 wh = style > 3.2 ? vec2(0.22, 1.1) : style > 2.5 ? vec2(0.42, 0.68) : style < 0.5 ? vec2(0.55, 0.65) : style < 1.5 ? vec2(0.85, 0.7) : vec2(1.75, 0.75);
+            float have = style > 3.2 ? step(0.55, rnd) : style > 2.5 ? step(0.08, rnd) : style < 0.5 ? step(0.3, rnd) : style < 1.5 ? step(0.06, rnd) : step(0.45, rnd);
             float inWall = step(0.45, h) * step(h + 0.25, floor((eaves - 0.45) / size.y + 0.35) * size.y + 0.45);
             have *= inWall;
             float door = step(cell.y, 0.5) * step(0.5, cell.y + 1.0) * step(0.88, rnd) * inWall;
             // door: taller opening that starts at the plinth
-            vec2 dc = vec2(size.x * 0.5, 1.05), dh = vec2(style > 1.5 ? 1.1 : 0.5, 1.05);
+            vec2 dc = vec2(size.x * 0.5, 1.05), dh = vec2(style > 1.5 && style < 2.5 ? 1.1 : 0.5, 1.05);
+            door *= 1.0 - stoneW;
             vec2 c0 = mix(wc, dc, door), hs = mix(wh, dh, door);
             float frame = bBox(f.x, c0.x - hs.x - 0.07, c0.x + hs.x + 0.07, e.x) * bBox(f.y, c0.y - hs.y - 0.07, c0.y + hs.y + 0.07, e.y);
             float glass = bBox(f.x, c0.x - hs.x, c0.x + hs.x, e.x) * bBox(f.y, c0.y - hs.y, c0.y + hs.y, e.y);
             float sill = bBox(f.x, c0.x - hs.x - 0.14, c0.x + hs.x + 0.14, e.x) * bBox(f.y, c0.y - hs.y - 0.13, c0.y - hs.y - 0.06, e.y) * (1.0 - door);
             // glazing bars
-            float bars = max(1.0 - smoothstep(0.0, 0.025 + e.x, abs(f.x - c0.x)), (1.0 - smoothstep(0.0, 0.025 + e.y, abs(f.y - c0.y - hs.y * 0.35))) * step(style, 0.5));
+            float bars = max(1.0 - smoothstep(0.0, 0.025 + e.x, abs(f.x - c0.x)), (1.0 - smoothstep(0.0, 0.025 + e.y, abs(f.y - c0.y - hs.y * 0.35))) * max(step(style, 0.5), old));
+            bars = max(bars, (1.0 - smoothstep(0.0, 0.022 + e.y, abs(f.y - c0.y + hs.y * 0.33))) * old * (1.0 - stoneW));
             frame *= have; glass *= have; sill *= have;
-            vec3 frameCol = mix(vec3(0.93, 0.92, 0.9), vec3(0.2, 0.19, 0.2), step(0.6, fract(seed * 7.3)));
-            vec3 doorCol = 0.35 + 0.3 * cos(6.2831 * (seed * 9.0 + vec3(0.0, 0.2, 0.5)));
+            vec3 frameCol = mix(mix(vec3(0.93, 0.92, 0.9), vec3(0.2, 0.19, 0.2), step(0.6, fract(seed * 7.3))), mix(vec3(0.94, 0.93, 0.88), vec3(0.45, 0.47, 0.44), stoneW), old);
+            vec3 doorCol = mix(0.35 + 0.3 * cos(6.2831 * (seed * 9.0 + vec3(0.0, 0.2, 0.5))), vec3(0.32, 0.2, 0.12) * (0.8 + 0.4 * rnd), old);     // (old doors: oak)
             diffuseColor.rgb = mix(diffuseColor.rgb, frameCol, max(frame, sill));
             float pane = glass * (1.0 - bars * (1.0 - door));
-            float solidDoor = door * step(fract(rnd * 31.0), 0.6) * step(style, 1.5);
+            float solidDoor = door * step(fract(rnd * 31.0), 0.6) * max(step(style, 1.5), old);
             diffuseColor.rgb = mix(diffuseColor.rgb, doorCol, glass * solidDoor);
             kWin = pane * (1.0 - solidDoor);
             // balconies on some columns of apartment blocks

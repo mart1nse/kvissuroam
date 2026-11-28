@@ -8,7 +8,7 @@ import { jobs } from './jobs.js';
 import { createHitches, outside } from './hitches.js';
 import { skinLog } from './world/houseskin.js';
 import { warm as warmer } from './warm.js';
-import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid } from './world/scenery.js';
+import { createBuildings, createTrees, updateTrees, setTreeDistance, createLowObjects, createWater, createEdgeGrid, setOldTown } from './world/scenery.js';
 import { CARS, CAR_ORDER as CAR_ORDER_ALL, CAR_GROUPS as CAR_GROUPS_ALL, HIDDEN_CARS } from './cars/specs.js';
 import { STEALTH } from './net/stealth.js';
 import { createGarage } from './garage.js';
@@ -193,7 +193,7 @@ import { keyListHtml } from './keylist.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 import { TARTU, TALLINN, TLN_FLAG, goCity } from './city.js';
 import { piritaVectors, piritaPropsFor, createPirita } from './world/tln/pirita.js';
-import { centreVectors, centreLines } from './world/tln/centre.js';
+import { centreVectors, centreLines, inOldTown } from './world/tln/centre.js';
 import { createCentreMarks } from './world/tln/centremarks.js';
 
 // Tallinn (?tln=1, src/city.js): none of Tartu's hand-built places, its trackside and kerbs along Toomemägi, its parked
@@ -799,7 +799,7 @@ async function boot() {
   kuperjanovi2Walls(world.walls);               // Kuperjanovi from Veski to Vallikraavi: painted fronts
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
-  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
+  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); setOldTown(inOldTown); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
   quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -2825,7 +2825,8 @@ function frame(ts) {
     // someone has arrived. always try to show at least half of the other car's place too. cam lock to usual driving
     // screen once it is starting"): the view rises behind the two lanes and swings slowly from side to side round a
     // point between our car and the other lane's spot, so both stay in the picture; when the tree starts it is the
-    // chase view again within about half a second.
+    // chase view again within about half a second (a race of two: once its hold is over, Martin 28 Nov, see HOLD_S in
+    // src/race/drag.js).
     const wvw = drag?.waitView, wOn = !!wvw && !(ctl.look && !board?.open) && !WV;
     if (wvw) { dragWait.x = wvw.x; dragWait.z = wvw.z; dragWait.ox = wvw.ox; dragWait.oz = wvw.oz; dragWait.yaw = wvw.yaw; }
     // (eased by the wall clock: on a slow computer the game's own runs slower, and the view must be down by green)

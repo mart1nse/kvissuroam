@@ -70,7 +70,7 @@ function rng(seed) {
 export class EngineCore {
   constructor(sr) {
     this.sr = sr;
-    this.in = { rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0, yank: 0, yankId: 0, yankTight: 0, growl: 0 };
+    this.in = { gear: 0, rpm: 800, throttle: 0, boost: 0, shaft: -1, on: 0, redline: 6500, idle: 800, cut: 0, shift: 0, blip: 0, crackle: 0, over: 0, bark: 0, yank: 0, yankId: 0, yankTight: 0, growl: 0 };
     this.rpm = 800; this.load = 0; this.ld = 0; this.blip = 0; this.crk = 0; this.ovr = 0; this.hp0 = 0; this.brk = 0; this.grw = 0;
     this.rpmE = 800; this.yId = 0; this.yA = 0; this.yT = 9; this.yk = 0; this.boost = 0; this.shaft = 0; this.on = 0; this.theta = 0;
     this.wp0 = 0; this.wp1 = 0; this.wp2 = 0; this.wjit = 0; this.wgPh = 0; this.wgRate = 4.5; this.wspin = 0;
@@ -220,12 +220,15 @@ export class EngineCore {
       const want = I.cut ? 1 : 0, sec = sr;
       if (want !== this.cutW) { this.cutW = want; this.cutAt = this.n + Math.floor(n() * c.limVary * sec); }
       let go = this.cutS !== this.cutW && this.n >= this.cutAt;
+      // (the hold, the long bounces and the early cuts only in the low gears, limGears (default 2), where the
+      // wheels spin on the limiter: in top gear at top speed the cut is heard as the car does it, Martin 2026-11-28)
+      const low = !(I.gear > (c.limGears ?? 2));
       // (the hold: a cut heard is not let go before its time is up, and once let go the engine is heard firing a
       // while before the next, whatever the page does meanwhile)
-      if (go && this.cutS && this.n - this.cutN0 < this.cutHold) go = false;
-      if (go && !this.cutS && this.n < this.fireTo) go = false;
+      if (go && this.cutS && low && this.n - this.cutN0 < this.cutHold) go = false;
+      if (go && !this.cutS && low && this.n < this.fireTo) go = false;
       // (heard early: revs near the redline, rising, on the throttle, and not straight after a cut)
-      if (!go && !this.cutS && c.limEarly && I.throttle > 0.5 && I.rpm >= I.redline - this.early && I.rpm > this.rpmWas && this.n >= this.fireTo) go = true;
+      if (!go && !this.cutS && low && c.limEarly && I.throttle > 0.5 && I.rpm >= I.redline - this.early && I.rpm > this.rpmWas && this.n >= this.fireTo) go = true;
       if (go) {
         this.cutS = this.cutS ? 0 : 1;
         if (this.cutS) {

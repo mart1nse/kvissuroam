@@ -568,6 +568,10 @@ function engineForce(car, throttle, dt) {
     const r1 = hash(car.time * 7.31 + car.x * 0.13), r2 = hash(car.time * 3.17 + car.z * 0.11 + 5.2);
     car.revCut = (e.revCut ?? REV_CUT_TIME) * (0.7 + 0.9 * r1);
     car.cutDrop = Math.max(REV_CUT_DROP, e.revCutDrop ?? REV_CUT_DROP) * (0.5 + 2.2 * r2 * r2);
+    // (engine.revCutTopEven: in top gear at top speed the limiter holds the speed evenly, the shortest cut and the
+    // least fall every time: no bounce that throws 20 km/h away down a long straight. The Focus WRC, whose 6th
+    // tops out at the redline, Martin 2026-11-28)
+    if (e.revCutTopEven && !launch && car.gear >= s.gears.length) { car.revCut = (e.revCut ?? REV_CUT_TIME) * 0.7; car.cutDrop = REV_CUT_DROP; }
   }
   // (when the tyres let go the engine is suddenly unloaded and flares up ahead of the wheels a little)
   const rpmTo = Math.min(Math.max(rpm, car.carry, throttle > 0.5 ? stall + 1600 * (car.spin || 0) * throttle : 0), e.redline);

@@ -1450,6 +1450,7 @@ function layoutMenu() {
   const d = $('#drivecar');
   // (the other city's track picked, ?tln=1: DRIVE says where it goes)
   const aw = board?.away;
+  awayStill(aw?.city || null);
   if (d) d.textContent = aw ? `${CARS[carId].short} · ${aw.name} · ${aw.city.toUpperCase()}` : stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : board?.track === 'drag' ? 'ÜLENURME' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
@@ -1478,6 +1479,23 @@ function buildMenu() {
   });
 }
 
+// The other city's tracks picked in the garage (?tln=1; Martin 28 Nov 2026: "have the background change to a fixed
+// tallinn track drone shot. this way when i actual go drive in tallinn it does not seem to freeze the background"):
+// a still picture of that city's drone shot behind the garage (public/menu-still.jpg, menu-still-tallinn.jpg; style.css
+// body.away), and nothing drawn in 3D behind it. DRIVE carries the same picture over the reload (offTo), so nothing
+// stops moving on the way. Back on this city's own tracks, the moving drone (or the car) again.
+const STILL_PIC = { tartu: 'menu-still.jpg', tallinn: 'menu-still-tallinn.jpg' };
+let awayPic = null;
+// (fetched quietly once the garage is up, so that the first tap on the other city shows it at once)
+if (TLN_FLAG) setTimeout(() => { new Image().src = `${import.meta.env.BASE_URL}${STILL_PIC[TALLINN ? 'tartu' : 'tallinn']}`; }, 4000);
+function awayStill(city) {
+  if (city === awayPic) return;
+  const b = document.body.classList;
+  if (awayPic) b.remove('away', `away-${awayPic}`);
+  awayPic = city;
+  if (city) b.add('away', `away-${city}`);
+}
+
 let softwareTold = false;
 // Off to the other city (?tln=1; Martin 28 Nov 2026: "clicking drive shows you a loading screen until everything is
 // done in the background and you are put on the line"): the loading screen comes up saying where to, and the page
@@ -1494,7 +1512,9 @@ function offTo(city, track, name, garage = false) {
     $('#menu').style.pointerEvents = 'none';
     for (const i of document.querySelectorAll('#menu input')) i.setAttribute('value', i.value);     // (the name and plate typed: in the copy too)
     let shot = '';
-    if (!still) try { renderer.render(scene, camera); shot = $('#view').toDataURL('image/jpeg', 0.72); } catch { /* the plain backdrop */ }
+    // (the other city's still picture, as the garage showed it; the 3D view only where something else is behind it)
+    if (STILL_PIC[city]) shot = new URL(`${import.meta.env.BASE_URL}${STILL_PIC[city]}`, location.href).href;
+    else if (!still) try { renderer.render(scene, camera); shot = $('#view').toDataURL('image/jpeg', 0.72); } catch { /* the plain backdrop */ }
     // (its style sheets by address: the copy is a page of its own, in a frame, so that nothing of it is taken for the
     // real menu; a dev server has none to name and gets the loading screen)
     const css = [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href);
@@ -2951,6 +2971,8 @@ function frame(ts) {
     for (const s of world.sectors.values()) if (s.tree) s.tree.group.visible = !hideTrees;
     treesHidden = hideTrees;
     photos.render(scene, camera, model.group);
+  } else if (awayPic && mode === 'menu' && !still) {
+    // (the other city's still picture is behind the garage: nothing to draw, see awayStill)
   } else if (!still || (warm < WARM_FRAMES && world.ready(car.x, car.z) && (!warmGate || lag.behind === 0) && (readyWait || ++warmSkip % 4 === 0))) {
     // (behind the phones' still menu picture nothing is drawn, but for the warm-up frames: see WARM_FRAMES)
     const far = camera.far;
@@ -2975,7 +2997,7 @@ function frame(ts) {
 
   // ---- graphics quality follows the measured frame rate (src/quality.js)
   // (not judged: a tab coming back, the city loading after a jump, the phones' menu shot drawn at half rate)
-  if (settle > 0 || intro?.fixed || still || !world.ready(car.x, car.z)) gfx.hold(1);   // (nothing is drawn behind the still menu picture)
+  if (settle > 0 || intro?.fixed || still || (awayPic && mode === 'menu') || !world.ready(car.x, car.z)) gfx.hold(1);   // (nothing is drawn behind the still menu picture)
   const jsMs = performance.now() - t0;
   lastFrame.js = jsMs;
   if (stats.on) lastFrame.heap = performance.memory?.usedJSHeapSize || 0;

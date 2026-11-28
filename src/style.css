@@ -391,8 +391,12 @@ body.rocketdial #dial text.kw { transform: translateY(-31px); }   /* (in the dia
 #thrust.use .bar i { background: linear-gradient(to right, var(--hot), #fff 85%); box-shadow: 0 0 6px #fff; }
 body.touch #thrust { display: none; }
 /* phones: a still picture of the drone shot behind the opening menu (nothing is drawn in 3D until DRIVE) */
-body.still #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)),
+body.still #menu, body.away #menu { background: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)),
   url('/menu-still.jpg') center / cover no-repeat, #12062b; }
+/* Tallinn's own (a still of its drone over Lükati tee, the Pirita-Kose lap by the river), and the other city's tracks
+   picked in the garage (?tln=1, src/main.js awayStill): that city's still picture, whatever this page is */
+body.tln.still #menu, body.away.away-tallinn #menu { background-image: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)), url('/menu-still-tallinn.jpg'); }
+body.away.away-tartu #menu { background-image: linear-gradient(to bottom, rgba(18, 6, 43, .82), rgba(18, 6, 43, .15) 42%, rgba(18, 6, 43, .2) 60%, rgba(18, 6, 43, .88)), url('/menu-still.jpg'); }
 .pad button.held { background: rgba(255, 255, 255, .28); transform: scale(.96); }
 /* phones, as Martin drew it (22 Nov 2026): the rev counter bottom left over the steering buttons, the lap
    timer top centre next to the top buttons, the race button under the top buttons on the right. The sizes

@@ -129,8 +129,14 @@ function* buildingGeometrySteps(sector, walls) {
   const styles = (i0, i1) => { for (let i = i0; i < i1; i++) {
     const g = groups.get(gkey[i]);
     if (g.brick && kind[i] !== 1) { col[i * 3] = brick.r; col[i * 3 + 1] = brick.g; col[i * 3 + 2] = brick.b; }
-    const L = g.look, hex = L && (kind[i] === 1 ? L.roof : L.rgb);
-    if (hex !== undefined && hex !== null && L) { col[i * 3] = LIN[(hex >> 16) & 255]; col[i * 3 + 1] = LIN[(hex >> 8) & 255]; col[i * 3 + 2] = LIN[hex & 255]; }
+    const L = g.look;
+    // a spire or a tower's cone (the Old Town's: Oleviste, Niguliste, Pikk Hermann, the gate towers) comes in the 3D
+    // houses as walls that lean in: drawn as roof, in the landmark's roof colour or copper (stone) or tiles (houses)
+    const st = g.style % 4;
+    const spire = kind[i] !== 1 && st > 2.9 && st < 3.8 && nq[i * 3 + 1] > 6;
+    if (spire) aKind[i] = 1;
+    const hex = spire ? (L && L.roof !== undefined ? L.roof : st > 3.2 ? 0x3e4a44 : 0x8a4430) : L && (kind[i] === 1 ? L.roof : L.rgb);
+    if (hex !== undefined && hex !== null && (L || spire)) { col[i * 3] = LIN[(hex >> 16) & 255]; col[i * 3 + 1] = LIN[(hex >> 8) & 255]; col[i * 3 + 2] = LIN[hex & 255]; }
     aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
   } };
   if (jobs.late()) yield;

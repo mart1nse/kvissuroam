@@ -30,6 +30,7 @@ import { areaKit } from '../handbuilt.js';
 import { multiplyMaterial } from './multiply.js';
 import { createRummuKurv } from './rummukurv.js';
 import { createPiritaKeskus } from './piritakeskus.js';
+import { createKoseKurv } from './kosekurv.js';
 import { race2005Parts, merivaljaBarriers } from './race2005.js';
 
 const P = LAP.pts, N = P.length;
@@ -394,6 +395,8 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   const kurv = createRummuKurv(scene, world, { at, SS, iOf }, L);
   // the end of Kloostrimetsa tee: Pirita Keskus, the higher kerbs, the big tree, the turn's greenery (piritakeskus.js)
   const keskus = createPiritaKeskus(scene, world, { at, SS }, L, { shadows });
+  // the inside of the left from Kose tee onto Lükati tee: three trees and shrubbery (kosekurv.js)
+  const kose = createKoseKurv(scene, world, { shadows });
   const chunks = [];
   for (let c = 0; c * CHUNK < N; c++) chunks.push({ c, i0: c * CHUNK, i1: Math.min(N, (c + 1) * CHUNK), built: false, mesh: null });
 
@@ -582,7 +585,7 @@ export function createPirita(scene, world, { shadows = true } = {}) {
     kurv, keskus,
     update(car) {
       if (!car) return;
-      kurv.update(car); keskus.update(car);
+      kurv.update(car); keskus.update(car); kose.update(car);
       for (const ch of chunks) {
         const m = P[Math.min(N - 1, (ch.i0 + ch.i1) >> 1)], d = Math.hypot(m[0] - car.x, m[1] - car.z);
         if (!ch.built && d < 360) { ch.built = true; jobs.add(function* piritaMarks() { yield* buildChunk(ch); }, 'pirita marks'); }

@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { jobs } from '../jobs.js';
 import { TALLINN } from '../city.js';
 import { lapBeside } from './tln/lapnear.js';
+import { treeBags } from './tln/treebags.js';
 
 // ---------------------------------------------------------------- buildings
 // The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
@@ -501,6 +502,11 @@ export function createTrees(opts, renderer, world) {
         group.add(im2);
         nearMeshes.push(im2);
       }
+    }
+    // (Tallinn: the trees by the lap stand in straw sacks, as for the races of the 2000s: tln/treebags.js)
+    if (TALLINN) {
+      const bags = treeBags(rec, n, (i) => !(opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0));
+      if (bags) { group.add(bags); alwaysMeshes.push(bags); }
     }
     let isNear = false;
     return {

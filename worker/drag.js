@@ -15,10 +15,15 @@
 // Who holds a lane (and its run) is also written on that driver's socket (dl, dr, da, dg, do in its attachment), so a
 // lobby woken from hibernation with its pages still connected has its lanes back; after a restart (every socket gone)
 // the pages say 'in' again when they are on a line (on 'welcome').
+// After a race of two either driver may ask the other for a rematch ('re'): passed on to that driver only, and only
+// when they were the asker's last opponent here, at most one a few seconds; 'reno' takes their no back the same way.
+// (The asker is back on their line by then; the other's yes is them pulling into their lane, and the race starts as any.)
 // A clean quarter mile, practice or race, goes on the drag strip's board (the lobby's laps table, track 'drag'; Martin
 // 27 Nov 2026) when it is a run this desk started for that socket, the server's own clock has run at least its
 // R/T + ET since its green, and the car could have done it (src/race/dragrules.js).
-const LEAD_MS = 2600;           // a race of two: green this long after both are in (+ up to RAND_MS), the first amber 1.5 s before it
+// a race of two: green this long after both are in (+ up to RAND_MS), the first amber 1.5 s before it; was 2.6 s until 28 Nov,
+// when the pages began to hold the start a few seconds over both cars first (src/race/drag.js HOLD_S)
+const LEAD_MS = 7000;
 const RAND_MS = 900;
 const SOLO_MIN = 400, SOLO_MAX = 6000;     // a practice's green: this soon and no later
 const FEED_MAX = 45;            // place messages a second a socket may send (it sends 30)
@@ -28,6 +33,7 @@ const TIME_MAX = 120000;        // and no later than this after green
 // under 20 frames a second drives in slow motion (a quarter mile of 18 s took 87 s on a test machine, 27 Nov 2026,
 // and its lane had been freed at 60 s with the run, so the time never reached the board)
 const RUN_MAX = TIME_MAX + SOLO_MAX + 2000;
+const RE_GAP = 4000;            // ms between one driver's rematch questions
 
 import { dragRefused } from '../src/race/dragrules.js';
 
@@ -37,6 +43,7 @@ export class DragDesk {
     this.lanes = [null, null];  // { id, name, ws, run, at, go, opp, kept }
     this.n = 0;
     this.rate = new WeakMap();
+    this.last = new Map();      // id: the id of the last driver they raced, and when they last asked for a rematch { opp, re }
     // (woken from hibernation: the lanes as their sockets hold them)
     for (const ws of lobby.ctx?.getWebSockets?.() || []) {
       let a = null;
@@ -76,6 +83,8 @@ export class DragDesk {
     if (!a || !b || a.run || b.run || a.id === b.id) return;
     const run = `d${++this.n}${now % 100000}`, go = now + LEAD_MS + Math.round(Math.random() * RAND_MS);
     a.run = b.run = run; a.at = b.at = now; a.go = b.go = go; a.kept = b.kept = false; a.opp = b.id; b.opp = a.id;
+    if (this.last.size > 500) this.last.clear();
+    this.last.set(a.id, { opp: b.id, re: 0 }); this.last.set(b.id, { opp: a.id, re: 0 });
     this.mark(a.ws, 0); this.mark(b.ws, 1);
     this.lobby.broadcast({ t: 'drag', op: 'go', run, go, l: [a.id, b.id] });
   }
@@ -114,6 +123,12 @@ export class DragDesk {
         this.lobby.broadcast({ t: 'drag', op: 'go', run: l.run, go, l: ids });
         changed = true;
       }
+    } else if ((m.op === 're' || m.op === 'reno') && typeof m.id === 'string') {
+      const l = this.last.get(me.id);
+      if (l && l.opp === m.id && (m.op === 'reno' || now - l.re > RE_GAP)) {
+        if (m.op === 're') l.re = now;
+        this.to(m.id, { t: 'drag', op: m.op, id: me.id, name: me.name });
+      }
     } else if (m.op === 'end' && typeof m.run === 'string' && m.run.length < 24 && m.r && typeof m.r === 'object') {
       const r = {};
       for (const k of ['rt', 'et', 't60', 't330', 't8', 't1000', 'v8', 'vq', 'tot']) { const v = m.r[k]; r[k] = Number.isFinite(v) && Math.abs(v) < 1000 ? v : null; }
@@ -151,6 +166,15 @@ export class DragDesk {
     const a = m?.a;
     if (!Array.isArray(a) || a.length > 6 || !a.every((v) => typeof v === 'number' && Number.isFinite(v))) return;
     try { o.ws.send(JSON.stringify({ t: 'dp', id: me.id, a })); } catch { /* closing */ }
+  }
+  // a message to one driver, by their id
+  to(id, msg) {
+    const s = JSON.stringify(msg);
+    for (const ws of this.lobby.ctx?.getWebSockets?.() || []) {
+      let a = null;
+      try { a = ws.deserializeAttachment(); } catch { continue; }
+      if (a?.id === id && !a.ghost) { try { ws.send(s); } catch { /* closing */ } }
+    }
   }
   gone(me) { if (me?.id && this.out(me.id)) this.tell(); }
   // the same page on a new connection (a lost one taken over): its lane follows it

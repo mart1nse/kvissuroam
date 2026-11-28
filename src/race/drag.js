@@ -42,7 +42,17 @@ const ROLLOUT_MS = 10000;                   // after the finish: others still pa
 const NEAR_M = 2000;
 const STUCK_S = 4;                          // the clutch dropped and the car not off the line in this long (its own clock): the run is off
 const LANE_OUT = 4.9;                       // m from the lane's middle: out of the lane (over the centre line or the edge)
-const DONE_GONE = 260;                      // m away from the strip after a run: the timeslip goes
+const RE_WAIT = 30000;                       // ms a rematch question stands (asked, or to answer)
+// m away from the strip after a run: its figures on the panel and the race's outcome go (Martin 28 Nov: "let the drag
+// results stay for a longer time", it was 260 m, a few seconds' roll-out past the finish), and half a minute at least
+const DONE_GONE = 1200, DONE_MS = 30000;
+// A race of two's start (Martin 28 Nov: "do not go to the drag line view right away. stall the start for a bit and show
+// the same perspective as when waiting, of the two cars. you can rev your engine. and there is some graphic saying that
+// you should be prepared for the start procedure, move to the car rear view, allow for one more second of wait and then
+// start with the start lights"): the server gives green 7 to 8 s ahead (worker/drag.js LEAD_MS); until this long before
+// it the view stays up over both cars with GET READY, A does not go into gear, then the view goes down behind the car
+// (about half a second), a second more, and the ambers.
+const HOLD_S = 3.2;
 const FEED_HZ = 30;                         // our place to the other driver, in a race of two
 // Launch revs (tools/drag-launch-test.mjs band): the revs whose quarter mile is within 0.05 s of the car's best
 // launch, shown green on the panel's rev bar
@@ -147,6 +157,24 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   slipTab.className = 'hidden';
   slipTab.innerHTML = '<button class="x" data-tab="close" aria-label="Close the timeslip" title="Close the timeslip">✕</button><button class="open" data-tab="open" title="The last timeslip"><span>TIMESLIP</span></button>';
   hudEl.appendChild(slipTab);
+  // The race of two's outcome, big in the middle of the screen once both runs are in, and a REMATCH button (Martin 28
+  // Nov: "when finished a drag race, show in big if you won or lost and by how much and then have a button to restart
+  // with the same opponent"). REMATCH puts us back on our line and asks the other driver (worker/drag.js passes it on
+  // to them only, and only from their last opponent); they get the question here in its place, ACCEPT puts them on
+  // their line and the race of two starts as any does, NO tells the asker.
+  const won = document.createElement('div');
+  won.id = 'dragwin';
+  won.className = 'hidden';
+  hudEl.appendChild(won);
+  let wonKey = '';
+  won.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-re]');
+    if (!b) return;
+    b.blur();
+    if (b.dataset.re === 'ask') rematch();
+    else if (b.dataset.re === 'yes') acceptRematch();
+    else if (b.dataset.re === 'no') declineRematch();
+  });
   let lastSlip = '';
   slipTab.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]');
@@ -162,7 +190,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     if (b.dataset.drag === 'practice') practice();
     else if (b.dataset.drag === 'leave') leave();
     else if (b.dataset.drag === 'again') again();
-    else if (b.dataset.drag === 'close') closeSlip();
+    else if (b.dataset.drag === 'fold') foldSlip();          // (the open slip's ✕ folds it, Martin 28 Nov: only the tab's ✕ puts it away)
   });
   const fader = document.createElement('div');
   fader.style.cssText = `position:fixed;inset:0;background:#0b0420;opacity:0;pointer-events:none;z-index:9000;transition:opacity ${FADE_S}s ease`;
@@ -305,6 +333,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     }
     if (st.phase === 'tree') {
       if (dir < 0 || !c.neutral) return true;
+      if (holding()) { toast('GET READY · WAIT FOR THE LIGHTS', 1600); return true; }
       const now = performance.now();
       stickShift(c, 1);
       // (the red light, if any, comes as the car leaves the stage beam: see the run in update())
@@ -356,6 +385,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   // then not finishing; else the first over the line
   function judge() {
     const me = st.res, op = st.duel?.res;
+    st.why = '';
     if (!st.duel) { st.win = !me.dnf && !me.red; st.verdict = me.dnf ? 'NO TIME' : me.red ? 'RED LIGHT' : st.pb ? 'NEW BEST' : 'PRACTICE'; return; }
     if (!op) { st.verdict = me.red ? 'RED LIGHT' : 'WAITING FOR THE OTHER LANE'; st.win = false; return; }
     const bad = (r) => (r.red ? 3 : 0) + (r.foul ? 2 : 0) + (r.dnf ? 1 : 0);
@@ -366,9 +396,18 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     else win = false;
     st.win = win;
     st.verdict = win ? 'WIN' : me.red ? 'RED LIGHT' : 'LOSS';
+    // (decided by a red light, a car out of its lane or one not finishing, rather than by the clock)
+    const lost = win ? op : me;
+    st.why = bad(me) === bad(op) ? '' : `${win ? 'THEIR ' : ''}${lost.red ? 'RED LIGHT' : lost.foul ? 'OUT OF LANE' : 'NO FINISH'}`;
     st.margin = me.tot != null && op.tot != null ? Math.abs(me.tot - op.tot) : null;
   }
-  function slipRow(lbl, a, b) { return `<tr><th>${lbl}</th><td>${a}</td>${st.duel ? `<td>${b}</td>` : ''}</tr>`; }
+  // The slip's columns are the lanes, the left lane's on the left (Martin 28 Nov: "always show left columns as LEFT LANE
+  // and right column as RIGHT LANE (and highlight which is you)"); a run alone has its own lane's column only.
+  // (lane 1 is the left lane, as the panel says)
+  function slipRow(lbl, a, b) {
+    const me = `<td class="me">${a}</td>`, other = st.duel ? `<td>${b}</td>` : '';
+    return `<tr><th>${lbl}</th>${st.lane === 1 ? me + other : other + me}</tr>`;
+  }
   function showSlip() {
     const r = st.res, o = st.duel?.res || {}, id = st.car.spec.id, b = best[id];
     const name = st.duel ? escapeHtml(st.duel.name || 'OTHER') : '';
@@ -376,8 +415,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // (the 1/4 mile's ET runs from the car leaving the line, as on a real slip; with the reaction: green to the finish,
     // what decides a race of two)
     const sum = (x) => (x.tot == null || x.dnf ? '–' : x.tot.toFixed(3));
-    slip.innerHTML = lastSlip = `<button class="x" data-drag="close" aria-label="Close the timeslip" title="Close (a click anywhere else folds it to the right edge)">✕</button><h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
-      <table><thead><tr><th></th><th>YOU</th>${st.duel ? `<th>${name}</th>` : ''}</tr></thead><tbody>
+    slip.innerHTML = lastSlip = `<button class="x" data-drag="fold" aria-label="Fold the timeslip to the side" title="Fold to the right edge (its ✕ there puts it away)">✕</button><h3 class="${st.win ? 'win' : st.verdict === 'RED LIGHT' ? 'red' : ''}">${st.verdict}${st.margin != null ? ` <small>by ${st.margin.toFixed(3)} s</small>` : ''}</h3>
+      <table><thead>${slipRow('', `${laneName(st.lane)}<small>YOU</small>`, `${laneName(1 - st.lane)}<small>${name}</small>`).replace(/<(\/?)td/g, '<$1th')}</thead><tbody>
       ${slipRow('R/T', rt(r), rt(o))}
       ${slipRow('60 FT', fmt(r.t60), fmt(o.t60))}
       ${slipRow('330 FT', fmt(r.t330), fmt(o.t330))}
@@ -392,6 +431,9 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     slip.classList.remove('hidden');
   }
   function foldSlip() { slip.classList.add('hidden'); }
+  const laneName = (l) => (l === 1 ? 'LEFT LANE' : 'RIGHT LANE');
+  // a race of two about to start, still in its hold (see HOLD_S)
+  const holding = () => st.phase === 'tree' && !!st.duel && performance.now() < st.go - HOLD_S * 1000;
   // put away for good: no tab either, until the next run's slip
   function closeSlip() { if (!lastSlip) return; lastSlip = ''; slip.classList.add('hidden'); slipTab.classList.add('hidden'); }
   // the last slip again (its BACK TO THE LINE only while that run is the one just over)
@@ -401,6 +443,65 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     if (st.phase !== 'done') slip.querySelector('[data-drag="again"]')?.remove();
     slip.classList.remove('hidden');
   }
+  // ---- the rematch
+  // REMATCH: back on our line, and the question to the one we just raced
+  function rematch() {
+    const o = st.duel;
+    if (!o || (st.phase !== 'done' && st.phase !== 'off') || !free()) return;
+    const was = { id: o.id, name: o.name };
+    if (!(st.phase === 'done' ? again() : goLine())) return;
+    if (st.phase !== 'line') return;
+    st.reAsked = { ...was, at: performance.now() };
+    st.reFrom = null;
+    mp?.dragSend({ t: 'drag', op: 're', id: was.id });
+    otherText();
+  }
+  // their question answered: ACCEPT onto our line (the same lane as before when it is free), NO back to them
+  function acceptRematch() {
+    const r = st.reFrom;
+    st.reFrom = null;
+    if (!r || !free()) return;
+    if (!again()) goLine();
+  }
+  function declineRematch() {
+    const r = st.reFrom;
+    st.reFrom = null;
+    if (r) mp?.dragSend({ t: 'drag', op: 'reno', id: r.id });
+  }
+  // the banner: the race just over (YOU WON / YOU LOST, by how much, REMATCH), or the other driver's question
+  function showWon(now) {
+    if (st.reFrom && now - st.reFrom.at > RE_WAIT) st.reFrom = null;
+    if (st.reAsked && now - st.reAsked.at > RE_WAIT) st.reAsked = null;
+    const at = st.car && Math.hypot(st.car.x - MID[0], st.car.z - MID[1]) < NEAR_M;
+    const asked = st.reFrom && canDrive && at && (st.phase === 'done' || st.phase === 'off') && !st.jump;
+    const over = !asked && st.phase === 'done' && st.duel?.res && !st.jump;
+    const ready = holding();
+    let key = '';
+    if (ready) key = `r${st.run}`;
+    else if (asked) key = `q${st.reFrom.id}`;
+    else if (over) key = `w${st.run}${st.win}`;
+    if (key === wonKey) return;
+    wonKey = key;
+    won.classList.toggle('hidden', !key);
+    if (!key) return;
+    if (ready) {
+      won.className = 'ready';
+      won.innerHTML = `<h2>GET READY</h2><p class="by">START PROCEDURE</p>
+        <p class="vs">VS <b>${escapeHtml(st.duel.name || 'THE OTHER LANE')}</b> · REV IT UP IN NEUTRAL</p>`;
+      return;
+    }
+    if (asked) {
+      won.className = 'ask';
+      won.innerHTML = `<p class="vs"><b>${escapeHtml(st.reFrom.name || 'THE OTHER DRIVER')}</b> WANTS A REMATCH</p>
+        <div class="btns"><button data-re="yes">ACCEPT</button><button data-re="no" class="no">NO</button></div>`;
+      return;
+    }
+    won.className = st.win ? 'win' : 'loss';
+    const by = st.why || (st.margin != null ? `BY ${st.margin.toFixed(3)} S` : '');
+    won.innerHTML = `<h2>${st.win ? 'YOU WON' : 'YOU LOST'}</h2>${by ? `<p class="by">${by}</p>` : ''}
+      <p class="vs">VS <b>${escapeHtml(st.duel.name || 'THE OTHER LANE')}</b></p>
+      <div class="btns"><button data-re="ask">↺ REMATCH</button></div>`;
+  }
   function showAsk() {
     ask.classList.remove('hidden');
     const up = wasd() ? 'E' : 'A';
@@ -409,7 +510,8 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
   }
   function hideAsk() { ask.classList.add('hidden'); }
   function otherText() {
-    const o = st.lanes[1 - st.lane];
+    const o = st.lanes[1 - st.lane], r = st.reAsked;
+    if (!o && r) { elOther.innerHTML = `REMATCH ASKED · WAITING FOR <b>${escapeHtml(r.name || 'THE OTHER DRIVER')}</b>`; return; }
     elOther.innerHTML = o ? `<b>${escapeHtml(o.name || 'SOMEBODY')}</b> IS IN THE OTHER LANE` : 'THE OTHER LANE IS FREE · ANYONE WHO PULLS IN THERE RACES YOU';
   }
   // the DRAG STRIP button, H, DRIVE with ÜLENURME picked, BACK TO THE LINE away from the line: onto the line of a free lane
@@ -468,9 +570,16 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       // a race of two that we are in: the tree runs for both of us
       if (mine >= 0 && m.l[1 - mine] && (st.phase === 'line' || (st.phase === 'tree' && !st.duel && !st.tA)) && mine === st.lane) {
         const id = m.l[1 - mine];
+        st.reAsked = null; st.reFrom = null;
         startTree(go, { id, lane: 1 - mine, name: mp?.nameOf(id) || st.lanes[1 - mine]?.name || '', res: null }, m.run);
         toast(`DRAG RACE · ${(st.duel.name || 'THE OTHER LANE').toUpperCase()}`, 2200);
       }
+    } else if (m.op === 're' && typeof m.id === 'string') {
+      // (the one we last raced asks for a rematch; already on the line: nothing to answer, the race starts by itself)
+      if (st.phase === 'line' || st.phase === 'tree' || st.phase === 'run') return;
+      st.reFrom = { id: m.id, name: String(m.name || mp?.nameOf(m.id) || ''), at: now };
+    } else if (m.op === 'reno' && typeof m.id === 'string') {
+      if (st.reAsked?.id === m.id) { st.reAsked = null; toast(`${String(m.name || 'THE OTHER DRIVER').toUpperCase()} SAID NO TO A REMATCH`, 2400); if (st.phase === 'line') otherText(); }
     } else if (m.op === 'res' && m.r && typeof m.r === 'object') {
       const k = shown.findIndex((s) => s && s.id === m.id && s.run === m.run);
       if (k >= 0) { shown[k].red = !!m.r.red; shown[k].res = m.r; }
@@ -530,7 +639,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
     // waiting on the line, before a tree (the camera rises and looks round meanwhile, src/main.js): our car's spot and
     // the other lane's [ox, oz], beside it across the strip, and the way the strip runs; null otherwise
     get waitView() {
-      if (st.phase !== 'line' || !st.pin) return null;
+      if (!(st.phase === 'line' || (st.phase === 'tree' && holding())) || !st.pin) return null;
       const [ax, az] = D.at(0, LANES[st.lane]), [bx, bz] = D.at(0, LANES[1 - st.lane]);
       wv.x = st.pin.x; wv.z = st.pin.z; wv.ox = st.pin.x + bx - ax; wv.oz = st.pin.z + bz - az; wv.yaw = STRIP_YAW;
       return wv;
@@ -628,7 +737,9 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
         elTime.textContent = st.res?.dnf ? 'DNF' : fmt(st.res?.et);
         // (the other driver's figures never came: they left, or their page lost its connection)
         if (st.duel && !st.duel.res && now - st.doneAt > 20000) { st.duel.res = { dnf: 1, red: 0, foul: 0, rt: null, tot: null }; judge(); showSlip(); }
-        if (Math.hypot(car.x - MID[0], car.z - MID[1]) > QUARTER / 2 + DONE_GONE) st.phase = 'off';      // (the slip stays up till closed)
+        // (and not before half a minute: a car let roll after the finish is far down the runway in a few seconds)
+        const far = Math.hypot(car.x - MID[0], car.z - MID[1]);
+        if ((far > QUARTER / 2 + DONE_GONE && now - st.doneAt > DONE_MS) || far > NEAR_M) st.phase = 'off';      // (the slip stays up till closed)
       }
       // the folded slip's tab: wherever the car is, but not in a lane (the tree has that edge of the screen then)
       const tabOn = !!lastSlip && canDrive && slip.classList.contains('hidden') && st.phase !== 'line' && st.phase !== 'tree' && st.phase !== 'run';
@@ -640,6 +751,7 @@ export function createDrag({ world, scene, place, toast, mp = null, canDrive = t
       if (backOn === backBtn.classList.contains('hidden')) backBtn.classList.toggle('hidden', !backOn);
       const key = st.phase === 'done' ? 'R' : 'H';
       if (backOn && key !== backKey) { backKey = key; backBtn.innerHTML = `↺ BACK TO THE LINE <kbd>${key}</kbd>`; }
+      showWon(now);
       // ---- our place to the other driver, 30 times a second
       if (st.duel && (st.phase === 'tree' || st.phase === 'run' || (st.phase === 'done' && now - st.doneAt < 2500)) && mp) {
         st.feedT -= dt;

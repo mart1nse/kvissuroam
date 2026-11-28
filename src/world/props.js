@@ -27,6 +27,10 @@ const ROADLAMP = 43, CROSSLAMP = 44, ISLELAMP = 45, KEEPPOST = 46, EITHERPOST = 
 // Küüni's park stretch past the first corner (Martin 27 Nov, "make them hittable", src/world/kuuni.js): the street's
 // benches, the yellow kvass trailer by the Poe corner, the umbrella over its table and the stools under it
 const KUUNIBENCH = 48, KVASS = 49, PARASOL = 50, STOOL = 51;
+// The Pirita-Kose lap as raced in the 2000s (Martin 28 Nov 2026, an onboard lap of the 2005 race, src/world/tln/pirita.js):
+// a tall yellow board on the outside before each big corner, a black hooked line on it showing which way the road goes
+// (up from the foot and over at the top: CHEVL for a left-hander, CHEVR for a right). Plywood on two stubs: knocked flat.
+const CHEVL = 52, CHEVR = 53;
 const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
@@ -80,6 +84,9 @@ SOLID[KVASS] = [
 ];
 SOLID[PARASOL] = [part(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 6, 1, true).translate(0, 1.2, 0), 0xe8e4ee), part(new THREE.ConeGeometry(1.5, 0.55, 8).translate(0, 2.45, 0), 0xe84a4a),
   box(0.7, 0.04, 0.7, 0, 0.74, 0, 0xe8e4ee), box(0.36, 0.04, 0.36, 0, 0.02, 0, 0x4c4858)];
+const chevron = (side) => [box(0.9, 2.1, 0.05, 0, 1.2, 0, 0xf0b416), box(0.08, 0.16, 0.06, -0.3, 0.08, 0, 0x2a2a2e), box(0.08, 0.16, 0.06, 0.3, 0.08, 0, 0x2a2a2e),
+  box(0.085, 1.5, 0.012, 0.19 * side, 1.18, 0.031, 0x141316), box(0.52, 0.085, 0.012, -0.03 * side, 1.9, 0.031, 0x141316)];
+SOLID[CHEVL] = chevron(1); SOLID[CHEVR] = chevron(-1);
 SOLID[STOOL] = [box(0.42, 0.04, 0.42, 0, 0.46, 0, 0x4c4858), part(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 6, 1, true).translate(0, 0.22, 0), 0x4c4858), box(0.3, 0.03, 0.3, 0, 0.015, 0, 0x4c4858)];
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
@@ -218,13 +225,14 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, [KUUNIBENCH]: 45, [KVASS]: 600, [PARASOL]: 20, [STOOL]: 6, sign: 10 };
-const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, [PARASOL]: 0.35, [STOOL]: 0.21, sign: 0.08 };
+const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, [KUUNIBENCH]: 45, [KVASS]: 600, [PARASOL]: 20, [STOOL]: 6, [CHEVL]: 22, [CHEVR]: 22, sign: 10 };
+const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, [PARASOL]: 0.35, [STOOL]: 0.21, [CHEVL]: 0.12, [CHEVR]: 0.12, sign: 0.08 };
 // long things the car meets along their length, not only at their middle: points in the prop's own frame
 // [x, z, reach] (a 4 m trailer would otherwise be touched as a square)
 const SPAN = {
   [KUUNIBENCH]: [[-0.6, 0, 0.4], [0.6, 0, 0.4]],
   [KVASS]: [[0, -1.3, 1.0], [0, 0, 1.0], [0, 1.3, 1.0], [0, 2.9, 0.2]],
+  [CHEVL]: [[-0.32, 0, 0.12], [0.32, 0, 0.12]], [CHEVR]: [[-0.32, 0, 0.12], [0.32, 0, 0.12]],
 };
 // heavy and low on its wheels: a knock low down turns it over less than it would a bench (1 = as a bench)
 const TUMBLE = { [KVASS]: 0.35 };

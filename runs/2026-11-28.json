@@ -1,0 +1,1068 @@
+{
+ "when": "2026-11-28T01:18:32.665Z",
+ "commit": "0c2d010",
+ "phone": {
+  "menu": {
+   "canvas": 158,
+   "gl": 162,
+   "tex": 129,
+   "buf": 33,
+   "heap": 258,
+   "glPeak": 162
+  },
+  "driveSpike": 624,
+  "drive": {
+   "canvas": 130,
+   "gl": 192,
+   "tex": 153,
+   "buf": 38,
+   "heap": 262,
+   "glPeak": 192
+  },
+  "canvases": [
+   "   23 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:252",
+   "   11 MB  letters (src/world/keskus.js:178 < sign (src/world/keskus.js:251",
+   "    8 MB  facade (src/race/vallistreet.js:124 < skin (src/race/playtech.js:111",
+   "    8 MB  createHologram (src/world/hologram.js:182 < createKuuni (src/world/kuuni.js:253",
+   "    8 MB  facade (src/race/vallistreet.js:124 < skin (src/race/vallistreet.js:221",
+   "    6 MB  painter (src/world/kaubamaja.js:59 < skin (src/world/keskus.js:228",
+   "    6 MB  build (src/world/signs.js:147 < run (src/world/signs.js:189",
+   "    5 MB  facade (src/race/vallistreet.js:124 < skin (src/race/baeristreet.js:341",
+   "    5 MB  src/world/houseskin.js:410 < next (<anonymous>)",
+   "    5 MB  copy (src/world/phonetex.js:56 < step (src/world/phonetex.js:248",
+   "    5 MB  painter (src/world/kaubamaja.js:59 < build (src/world/kaubamaja.js:285",
+   "    4 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:250"
+  ],
+  "cars": {
+   "canvas": 94,
+   "gl": 193,
+   "tex": 153,
+   "buf": 40,
+   "heap": 284,
+   "glPeak": 209
+  },
+  "jump": {
+   "canvas": 91,
+   "gl": 218,
+   "tex": 191,
+   "buf": 27,
+   "heap": 234,
+   "glPeak": 235
+  },
+  "centre": {
+   "canvas": 119,
+   "gl": 399,
+   "tex": 286,
+   "buf": 113,
+   "heap": 365,
+   "glPeak": 433
+  },
+  "centreCanvases": [
+   "   20 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:252",
+   "   20 MB  build (src/world/signs.js:147 < run (src/world/signs.js:189",
+   "   13 MB  copy (src/world/phonetex.js:56 < step (src/world/phonetex.js:248",
+   "   13 MB  src/world/houseskin.js:410 < next (<anonymous>)",
+   "   13 MB  canvas (src/world/roadtex.js:75 < paint.steps (src/world/roadtex.js:101",
+   "   11 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:250",
+   "    4 MB  canvasTex (src/cars/models/kit.js:719 < atlasTex (src/cars/models/f40.js:329",
+   "    4 MB  facade (src/race/vallistreet.js:124 < skin (src/race/baeristreet.js:341",
+   "    3 MB  canvas (src/world/roadtex.js:75 < paint.steps (src/world/roadtex.js:137",
+   "    2 MB  canvasTex (src/cars/models/kit.js:719 < atlasTex (src/cars/models/f31.js:41",
+   "    2 MB  canvasTex (src/cars/models/kit.js:719 < atlasTex (src/cars/models/enyaq.js:212",
+   "    2 MB  canvasTex (src/world/streetkit.js:39 < paverTex (src/world/streetkit.js:55"
+  ],
+  "errors": [],
+  "raadi": {
+   "canvas": 78,
+   "gl": 152,
+   "tex": 117,
+   "buf": 35,
+   "heap": 231,
+   "glPeak": 199,
+   "built": true
+  },
+  "raadiCanvases": [
+   "   19 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:252",
+   "    8 MB  createHologram (src/world/hologram.js:182 < createKuuni (src/world/kuuni.js:253",
+   "    6 MB  facade (src/race/vallistreet.js:124 < skin (src/race/vallistreet.js:221",
+   "    6 MB  build (src/world/signs.js:147 < run (src/world/signs.js:189",
+   "    5 MB  facade (src/race/vallistreet.js:124 < skin (src/race/baeristreet.js:341",
+   "    4 MB  copy (src/world/phonetex.js:56 < step (src/world/phonetex.js:248",
+   "    4 MB  page (src/world/houseskin.js:236 < Object.take (src/world/houseskin.js:250",
+   "    4 MB  src/world/houseskin.js:410 < next (<anonymous>)",
+   "    2 MB  canvasTex (src/world/streetkit.js:39 < paverTex (src/world/streetkit.js:55",
+   "    2 MB  painting (src/world/pepleri.js:98 < build (src/world/pepleri.js:484",
+   "    1 MB  src/world/houseskin.js:410 < Generator.next (<anonymous>)",
+   "    1 MB  canvasTex (src/world/raekoda.js:104 < settTex (src/world/raekoda.js:119"
+  ]
+ },
+ "drive": {
+  "desktop": {
+   "km": 4.51,
+   "seconds": 97,
+   "frames": 5822,
+   "jsMedian": 1.1,
+   "jsP95": 7.4,
+   "jsP99": 11.9,
+   "jsMax": 63,
+   "js17": 21,
+   "js33": 5,
+   "js50": 2,
+   "js100": 0,
+   "busy16": 31,
+   "busy25": 12,
+   "busy33": 6,
+   "busy50": 2,
+   "busy100": 0,
+   "busy200": 0,
+   "busyLongest": 63,
+   "busyS": 0.12,
+   "busyFrom": "profile",
+   "pauses50": 4,
+   "pauses100": 0,
+   "pauses200": 0,
+   "longest": 80,
+   "frozen": 0.3,
+   "queueMean": 0.4,
+   "queueMax": 11,
+   "heldMean": 0.5,
+   "heldMax": 41,
+   "waitedMax": 1.4,
+   "waitedOver4S": 0,
+   "sentMP": 143,
+   "sent11": 6,
+   "sent22": 0,
+   "sentMax": 2.16,
+   "linkFrames": 12,
+   "frontsMP": 30.9,
+   "errors": [],
+   "slow": [
+    [
+     "sector",
+     4,
+     25
+    ],
+    [
+     "picture 2048x2048 (ImageBitmap) map at 0, 0 m3_glb < m3",
+     0,
+     44
+    ],
+    [
+     "keskustee",
+     4,
+     52
+    ],
+    [
+     "parked",
+     1,
+     26
+    ],
+    [
+     "parked",
+     5,
+     24
+    ],
+    [
+     "kaluri",
+     1,
+     62
+    ],
+    [
+     "kaluri",
+     3,
+     27
+    ],
+    [
+     "carve",
+     3,
+     35
+    ],
+    [
+     "sector",
+     2,
+     32
+    ],
+    [
+     "sector",
+     3,
+     45
+    ]
+   ],
+   "doubles": 0
+  },
+  "phone": {
+   "km": 4.51,
+   "seconds": 97,
+   "frames": 5829,
+   "jsMedian": 1.1,
+   "jsP95": 7.3,
+   "jsP99": 11.3,
+   "jsMax": 45,
+   "js17": 15,
+   "js33": 2,
+   "js50": 0,
+   "js100": 0,
+   "busy16": 24,
+   "busy25": 6,
+   "busy33": 1,
+   "busy50": 0,
+   "busy100": 0,
+   "busy200": 0,
+   "busyLongest": 40,
+   "busyS": 0,
+   "busyFrom": "profile",
+   "pauses50": 1,
+   "pauses100": 0,
+   "pauses200": 0,
+   "longest": 66,
+   "frozen": 0.1,
+   "queueMean": 0.3,
+   "queueMax": 11,
+   "heldMean": 0.5,
+   "heldMax": 44,
+   "waitedMax": 0.7,
+   "waitedOver4S": 0,
+   "sentMP": 86,
+   "sent11": 2,
+   "sent22": 0,
+   "sentMax": 2.16,
+   "linkFrames": 9,
+   "frontsMP": 11.4,
+   "errors": [],
+   "slow": [
+    [
+     "keskustee",
+     4,
+     40
+    ],
+    [
+     "carve",
+     1,
+     22
+    ],
+    [
+     "carve",
+     3,
+     22
+    ],
+    [
+     "sector",
+     2,
+     24
+    ],
+    [
+     "baeri",
+     33,
+     24
+    ],
+    [
+     "carve",
+     1,
+     26
+    ]
+   ],
+   "doubles": 0
+  },
+  "lap": {
+   "km": 4.87,
+   "seconds": 105,
+   "frames": 6304,
+   "jsMedian": 1.2,
+   "jsP95": 7.7,
+   "jsP99": 12.4,
+   "jsMax": 30,
+   "js17": 22,
+   "js33": 0,
+   "js50": 0,
+   "js100": 0,
+   "busy16": 36,
+   "busy25": 4,
+   "busy33": 0,
+   "busy50": 0,
+   "busy100": 0,
+   "busy200": 0,
+   "busyLongest": 29,
+   "busyS": 0,
+   "busyFrom": "profile",
+   "pauses50": 1,
+   "pauses100": 0,
+   "pauses200": 0,
+   "longest": 82,
+   "frozen": 0.1,
+   "queueMean": 0.5,
+   "queueMax": 18,
+   "heldMean": 0.5,
+   "heldMax": 29,
+   "waitedMax": 2,
+   "waitedOver4S": 0,
+   "sentMP": 142,
+   "sent11": 3,
+   "sent22": 0,
+   "sentMax": 1.39,
+   "linkFrames": 7,
+   "frontsMP": 31.2,
+   "errors": [],
+   "slow": [
+    [
+     "ground tile",
+     81,
+     25
+    ],
+    [
+     "picture 2048x2048 (ImageBitmap) map at 0, 0 m3_glb < m3",
+     0,
+     64
+    ],
+    [
+     "carve",
+     4,
+     40
+    ],
+    [
+     "sector",
+     2,
+     21
+    ],
+    [
+     "ulikooli",
+     4,
+     23
+    ],
+    [
+     "baeri",
+     1,
+     23
+    ],
+    [
+     "parked",
+     5,
+     22
+    ],
+    [
+     "delta",
+     1,
+     23
+    ]
+   ],
+   "doubles": 0
+  },
+  "stage": {
+   "km": 2.35,
+   "seconds": 57,
+   "frames": 3428,
+   "jsMedian": 1,
+   "jsP95": 3.1,
+   "jsP99": 9.5,
+   "jsMax": 26,
+   "js17": 4,
+   "js33": 0,
+   "js50": 0,
+   "js100": 0,
+   "busy16": 6,
+   "busy25": 1,
+   "busy33": 0,
+   "busy50": 0,
+   "busy100": 0,
+   "busy200": 0,
+   "busyLongest": 31,
+   "busyS": 0,
+   "busyFrom": "profile",
+   "pauses50": 0,
+   "pauses100": 0,
+   "pauses200": 0,
+   "longest": 44,
+   "frozen": 0,
+   "queueMean": 0.5,
+   "queueMax": 20,
+   "heldMean": 0.2,
+   "heldMax": 36,
+   "waitedMax": 1.4,
+   "waitedOver4S": 0,
+   "sentMP": 23,
+   "sent11": 0,
+   "sent22": 0,
+   "sentMax": 1.05,
+   "linkFrames": 5,
+   "frontsMP": 12,
+   "errors": [],
+   "slow": [
+    [
+     "ground tile",
+     1,
+     21
+    ],
+    [
+     "keskustee",
+     4,
+     25
+    ],
+    [
+     "picture 2048x2048 (ImageBitmap) map at 0, 0 m3_glb < m3",
+     0,
+     52
+    ],
+    [
+     "parked",
+     5,
+     21
+    ]
+   ],
+   "doubles": 0,
+   "run": {
+    "finished": true,
+    "ms": 35993,
+    "pen": 0,
+    "msg": "",
+    "inKm": 0.57,
+    "builtBefore": false,
+    "atGreen": {
+     "bales": true,
+     "tape": true
+    }
+   }
+  }
+ },
+ "driveReport": {
+  "desktop": [
+   "queued building work: 0.4 pieces on average, 11 at most; held back from the picture: 0.5 on average, 41 at most; longest wait 1.4 s, 0 s of the drive with something waiting over 4 s",
+   "short hitches: the page busy without a break for over 16 ms: 31, over 25 ms: 12, over 33 ms: 6",
+   "sent to the graphics card: 143 megapixels of pictures; frames with over 1.1 megapixels: 6, over 2.2: 0, most in one frame 2.16; frames that linked new shaders: 12",
+   "   2.16 megapixels in one frame at (1927, 3145): 2.1 Uint8Array",
+   "   1.74 megapixels in one frame at (1979, 3174): 0.52 Uint8Array, 1.05 ImageBitmap",
+   "   1.39 megapixels in one frame at (1989, 3179): 0.52 Uint8Array, 0.52 Uint8Array",
+   "   1.34 megapixels in one frame at (2005, 3204): 0.52 Uint8Array, 0.52 Uint8Array",
+   "   1.3 megapixels in one frame at (2364, 3704): 0.36 HTMLCanvasElement, 0.93 HTMLCanvasElement",
+   "   1.3 megapixels in one frame at (2361, 3701): 0.36 HTMLCanvasElement, 0.93 HTMLCanvasElement",
+   "house fronts painted: 3648 walls, 30.9 megapixels, 1316 ms; most: vanemuise fronts 5.9 MP (longest wall 6 ms), kroonuaia fronts 4.9 MP (longest wall 10 ms), veskifronts fronts 3.5 MP (longest wall 6 ms), laifronts fronts 2.9 MP (longest wall 8 ms), peplerivanemuise fronts 2.0 MP (longest wall 2 ms), riia fronts 1.8 MP (longest wall 3 ms)",
+   "\nbusy stretches of the main thread over 25 ms: 12 (over 50: 2, over 100: 0, over 200: 0); total 0.5 s",
+   "what ran in them (times, total ms, longest):",
+   "   4    101 ms  max   35  (garbage collector)",
+   "   2     87 ms  max   60  build src/world/kaluri.js:329 > asphaltTex src/world/kaluri.js:163",
+   "   2     62 ms  max   37  addSectorSteps src/world/terrain.js:506 > bumpTops src/world/data.js:878",
+   "   1     48 ms  max   48  build src/world/keskustee.js:41 > redCross src/world/keskustee.js:76",
+   "   1     27 ms  max   27  (anon) src/world/data.js:322 > done src/world/data.js:307",
+   "   1     25 ms  max   25  (anon) src/world/parked.js:451 > lighterScan src/world/parked.js:220",
+   "   1     20 ms  max   20  stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736",
+   "   1     14 ms  max   14  (anon) src/world/houseskin.js:338",
+   "   1     13 ms  max   13  (anon) src/world/terrain.js:630 > maskSteps src/world/terrain.js:469",
+   "   1     10 ms  max   10  (anon) src/world/houseskin.js:338 > paintWall src/world/houseskin.js:458",
+   "\nthe 20 longest:",
+   "   63 ms at    7.7 s (2189, 3480)  60 build src/world/kaluri.js:329 > asphaltTex src/world/kaluri.js:163 | 2 (garbage collector) | 1 update src/race/race.js:469 > update src/race/race.js:269",
+   "   58 ms at    0.8 s (2394, 3734)  48 build src/world/keskustee.js:41 > redCross src/world/keskustee.js:76 | 3 (garbage collector) | 2 build src/world/keskustee.js:41 > strip src/world/keskustee.js:48",
+   "   46 ms at   12.0 s (2073, 3309)  27 (anon) src/world/data.js:322 > done src/world/data.js:307 | 16 (garbage collector) | 2 (anon) src/world/data.js:322 > carveSteps src/world/data.js:488",
+   "   46 ms at   12.3 s (2066, 3297)  37 addSectorSteps src/world/terrain.js:506 > bumpTops src/world/data.js:878 | 8 addSectorSteps src/world/terrain.js:506 | 1 update src/world/parked.js:647",
+   "   42 ms at   67.3 s (792, 2917)  34 (garbage collector) | 8 (anon) src/world/terrain.js:630 > maskSteps src/world/terrain.js:469 | 1 out.mark src/quality.js:253",
+   "   41 ms at   88.7 s (1481, 3170)  35 (garbage collector) | 5 (anon) src/world/terrain.js:630 > maskSteps src/world/terrain.js:469 | 1 run :8 > tick :6",
+   "   33 ms at   12.2 s (2070, 3303)  25 addSectorSteps src/world/terrain.js:506 > bumpTops src/world/data.js:878 | 5 addSectorSteps src/world/terrain.js:506 | 1 run :8 > frame src/main.js:2392",
+   "   31 ms at    3.2 s (2312, 3652)  20 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736 | 8 (anon) src/world/parked.js:451 > takePartsSteps src/world/parkedbake.js:18 | 1 (anon) src/world/parked.js:451",
+   "   29 ms at    6.1 s (2230, 3539)  25 (anon) src/world/parked.js:451 > lighterScan src/world/parked.js:220 | 1 (anon) src/world/parked.js:214 | 1 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736",
+   "   29 ms at   59.0 s (847, 2630)  16 (garbage collector) | 13 (anon) src/world/terrain.js:630 > maskSteps src/world/terrain.js:469 | 1 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736",
+   "   28 ms at    8.0 s (2181, 3469)  27 build src/world/kaluri.js:329 > asphaltTex src/world/kaluri.js:163 | 1 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736 | 1 run :8 > frame src/main.js:2392",
+   "   26 ms at    5.7 s (2241, 3555)  14 (anon) src/world/houseskin.js:338 | 10 (anon) src/world/houseskin.js:338 > paintWall src/world/houseskin.js:458 | 1 run :8 > frame src/main.js:2392"
+  ],
+  "phone": [
+   "queued building work: 0.3 pieces on average, 11 at most; held back from the picture: 0.5 on average, 44 at most; longest wait 0.7 s, 0 s of the drive with something waiting over 4 s",
+   "short hitches: the page busy without a break for over 16 ms: 24, over 25 ms: 6, over 33 ms: 1",
+   "sent to the graphics card: 86 megapixels of pictures; frames with over 1.1 megapixels: 2, over 2.2: 0, most in one frame 2.16; frames that linked new shaders: 9",
+   "   2.16 megapixels in one frame at (1892, 3123): 2.1 Uint8Array",
+   "   1.38 megapixels in one frame at (1963, 3165): 0.52 Uint8Array, 0.52 Uint8Array",
+   "house fronts painted: 3648 walls, 11.4 megapixels, 1005 ms; most: vanemuise fronts 2.2 MP (longest wall 3 ms), kroonuaia fronts 1.8 MP (longest wall 13 ms), veskifronts fronts 1.3 MP (longest wall 3 ms), laifronts fronts 1.1 MP (longest wall 10 ms), peplerivanemuise fronts 0.8 MP (longest wall 2 ms), kuuni fronts 0.7 MP (longest wall 4 ms)",
+   "\nbusy stretches of the main thread over 25 ms: 6 (over 50: 0, over 100: 0, over 200: 0); total 0.2 s",
+   "what ran in them (times, total ms, longest):",
+   "   1     35 ms  max   35  stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736",
+   "   1     28 ms  max   28  (anon) src/race/baeristreet.js:970 > build src/race/baeristreet.js:323",
+   "   1     25 ms  max   25  (garbage collector)",
+   "   1     24 ms  max   24  build src/world/keskustee.js:41 > redCross src/world/keskustee.js:76",
+   "   1     22 ms  max   22  addSectorSteps src/world/terrain.js:506 > bumpTops src/world/data.js:878",
+   "   1     22 ms  max   22  (anon) src/world/data.js:322 > done src/world/data.js:307",
+   "\nthe 20 longest:",
+   "   40 ms at    3.2 s (2313, 3653)  35 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736 | 4 run :8 > frame src/main.js:2392 | 1 update src/world/raadistart.js:272",
+   "   32 ms at    4.9 s (2263, 3586)  25 (garbage collector) | 5 tick src/warm.js:173 > sendTex src/main.js:303 | 1 update src/audio.js:352",
+   "   30 ms at   24.7 s (1588, 3000)  28 (anon) src/race/baeristreet.js:970 > build src/race/baeristreet.js:323 | 1 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736 | 1 onePass src/still.js:70 > visit src/still.js:74",
+   "   30 ms at    0.7 s (2395, 3735)  24 build src/world/keskustee.js:41 > redCross src/world/keskustee.js:76 | 5 build src/world/keskustee.js:41 > strip src/world/keskustee.js:48 | 1 update src/net/multiplayer.js:1243",
+   "   26 ms at   23.6 s (1631, 3029)  22 (anon) src/world/data.js:322 > done src/world/data.js:307 | 2 s.promise.fetchBuf.then.s.state src/world/data.js:291 > moveTrees src/world/data.js:335 | 1 s.promise.fetchBuf.then.s.state src/world/data.js:291 > clearTrees src/world/data.js:372",
+   "   26 ms at   24.1 s (1609, 3015)  22 addSectorSteps src/world/terrain.js:506 > bumpTops src/world/data.js:878 | 2 addSectorSteps src/world/terrain.js:506 | 1 run :8 > frame src/main.js:2392"
+  ],
+  "lap": [
+   "queued building work: 0.5 pieces on average, 18 at most; held back from the picture: 0.5 on average, 29 at most; longest wait 2 s, 0 s of the drive with something waiting over 4 s",
+   "short hitches: the page busy without a break for over 16 ms: 36, over 25 ms: 4, over 33 ms: 0",
+   "sent to the graphics card: 142 megapixels of pictures; frames with over 1.1 megapixels: 3, over 2.2: 0, most in one frame 1.39; frames that linked new shaders: 7",
+   "   1.39 megapixels in one frame at (658, 2692): 1.39 HTMLCanvasElement",
+   "   1.27 megapixels in one frame at (1523, 2986): 1.27 HTMLCanvasElement",
+   "   1.25 megapixels in one frame at (1486, 3020): 0.52 Uint8Array, 0.52 Uint8Array",
+   "house fronts painted: 3647 walls, 31.2 megapixels, 1622 ms; most: vanemuise fronts 5.9 MP (longest wall 4 ms), kroonuaia fronts 4.9 MP (longest wall 10 ms), riia fronts 4.3 MP (longest wall 18 ms), veskifronts fronts 3.5 MP (longest wall 7 ms), laifronts fronts 2.9 MP (longest wall 9 ms), peplerivanemuise fronts 2.0 MP (longest wall 2 ms)",
+   "\nbusy stretches of the main thread over 25 ms: 4 (over 50: 0, over 100: 0, over 200: 0); total 0.1 s",
+   "what ran in them (times, total ms, longest):",
+   "   1     29 ms  max   29  (garbage collector)",
+   "   1     24 ms  max   24  build src/world/delta.js:42 > slab src/world/delta.js:55",
+   "   1     18 ms  max   18  tick src/warm.js:173 > sendTex src/main.js:303",
+   "   1     14 ms  max   14  build src/world/ulikooli.js:357 > ball src/world/ulikooli.js:375",
+   "   1      8 ms  max    8  build src/world/ulikooli.js:357 > pot src/world/ulikooli.js:374",
+   "\nthe 20 longest:",
+   "   29 ms at    0.3 s (1575, 3019)  14 build src/world/ulikooli.js:357 > ball src/world/ulikooli.js:375 | 8 build src/world/ulikooli.js:357 > pot src/world/ulikooli.js:374 | 2 stepCar src/cars/physics.js:706",
+   "   29 ms at   18.0 s (860, 3004)  29 (garbage collector)",
+   "   28 ms at   28.2 s (981, 2617)  24 build src/world/delta.js:42 > slab src/world/delta.js:55 | 2 build src/world/delta.js:42 | 1 update src/world/delta.js:146",
+   "   27 ms at   16.2 s (945, 3015)  18 tick src/warm.js:173 > sendTex src/main.js:303 | 8 build src/world/katoliku.js:171 > addSolids src/world/data.js:734 | 1 stepCar src/cars/physics.js:706 > substep src/cars/physics.js:736"
+  ],
+  "stage": [
+   "queued building work: 0.5 pieces on average, 20 at most; held back from the picture: 0.2 on average, 36 at most; longest wait 1.4 s, 0 s of the drive with something waiting over 4 s",
+   "short hitches: the page busy without a break for over 16 ms: 6, over 25 ms: 1, over 33 ms: 0",
+   "sent to the graphics card: 23 megapixels of pictures; frames with over 1.1 megapixels: 0, over 2.2: 0, most in one frame 1.05; frames that linked new shaders: 5",
+   "house fronts painted: 666 walls, 12.0 megapixels, 224 ms; most: vanemuise fronts 5.9 MP (longest wall 6 ms), peplerivanemuise fronts 2.0 MP (longest wall 2 ms), riia fronts 1.8 MP (longest wall 5 ms), kuuni fronts 1.8 MP (longest wall 7 ms), kaupmehe fronts 0.3 MP (longest wall 4 ms), raadi gate 0.1 MP (longest wall 3 ms)",
+   "\nbusy stretches of the main thread over 25 ms: 1 (over 50: 0, over 100: 0, over 200: 0); total 0.0 s",
+   "what ran in them (times, total ms, longest):",
+   "   1     19 ms  max   19  build src/race/raadi.js:490 > buildGlow src/race/raadi.js:335",
+   "\nthe 20 longest:",
+   "   31 ms at    3.9 s (2180, 794)  19 build src/race/raadi.js:490 > buildGlow src/race/raadi.js:335 | 6 update src/world/data.js:811 > load src/world/data.js:288 | 5 (anon) src/world/terrain.js:609"
+  ]
+ },
+ "checks": [
+  {
+   "name": "phone canvases at DRIVE",
+   "figure": 130,
+   "budget": 230,
+   "ok": true
+  },
+  {
+   "name": "phone graphics card at DRIVE",
+   "figure": 192,
+   "budget": 250,
+   "ok": true
+  },
+  {
+   "name": "phone JS heap at DRIVE",
+   "figure": 262,
+   "budget": 420,
+   "ok": true
+  },
+  {
+   "name": "phone total at DRIVE",
+   "figure": 584,
+   "budget": 820,
+   "ok": true
+  },
+  {
+   "name": "phone peak in the 5 s after DRIVE, garbage included",
+   "figure": 624,
+   "budget": 740,
+   "ok": true
+  },
+  {
+   "name": "phone graphics card peak in a map jump",
+   "figure": 235,
+   "budget": 280,
+   "ok": true
+  },
+  {
+   "name": "phone graphics card growth after 3 car changes and back to the first car",
+   "figure": 1,
+   "budget": 20,
+   "ok": true
+  },
+  {
+   "name": "phone graphics card peak during the car changes",
+   "figure": 209,
+   "budget": 250,
+   "ok": true
+  },
+  {
+   "name": "phone total after 2 km through the centre",
+   "figure": 883,
+   "budget": 870,
+   "ok": false
+  },
+  {
+   "name": "phone graphics card peak through the centre",
+   "figure": 433,
+   "budget": 445,
+   "ok": true
+  },
+  {
+   "name": "phone total at the Raadi stage (?raadi=1)",
+   "figure": 461,
+   "budget": 560,
+   "ok": true
+  },
+  {
+   "name": "phone graphics card peak at the Raadi stage",
+   "figure": 199,
+   "budget": 240,
+   "ok": true
+  },
+  {
+   "name": "graphics level tests failing (saved level, crash guard)",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "lowest graphics level at the Riia and Turu junction: pieces drawn in a frame",
+   "figure": 364,
+   "budget": 460,
+   "ok": true
+  },
+  {
+   "name": "lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands)",
+   "figure": 524,
+   "budget": 760,
+   "ok": true
+  },
+  {
+   "name": "lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame",
+   "figure": 137,
+   "budget": 150,
+   "ok": true
+  },
+  {
+   "name": "lowest graphics level along the Raadi stage: triangles in a frame (thousands)",
+   "figure": 345,
+   "budget": 440,
+   "ok": true
+  },
+  {
+   "name": "top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame",
+   "figure": 286,
+   "budget": 800,
+   "ok": true
+  },
+  {
+   "name": "top graphics level along the Raadi stage: triangles in a frame (thousands)",
+   "figure": 1342,
+   "budget": 3200,
+   "ok": true
+  },
+  {
+   "name": "desktop drive through the centre: times the game was busy for over 0.1 s",
+   "figure": 0,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: longest the game was busy without a break (ms)",
+   "figure": 63,
+   "budget": 150,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: time in busy stretches over 50 ms (s)",
+   "figure": 0.12,
+   "budget": 1.2,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: gaps between frames over 0.1 s",
+   "figure": 0,
+   "budget": 3,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: game code per frame, 95th percentile (ms)",
+   "figure": 7.4,
+   "budget": 12,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: building work queued twice",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "desktop drive: longest gap between frames (ms), not judged",
+   "figure": 80,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "phone drive through the centre: times the game was busy for over 0.1 s",
+   "figure": 0,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "phone drive: longest the game was busy without a break (ms)",
+   "figure": 40,
+   "budget": 150,
+   "ok": true
+  },
+  {
+   "name": "phone drive: time in busy stretches over 50 ms (s)",
+   "figure": 0,
+   "budget": 1.2,
+   "ok": true
+  },
+  {
+   "name": "phone drive: gaps between frames over 0.1 s",
+   "figure": 0,
+   "budget": 3,
+   "ok": true
+  },
+  {
+   "name": "phone drive: game code per frame, 95th percentile (ms)",
+   "figure": 7.3,
+   "budget": 10,
+   "ok": true
+  },
+  {
+   "name": "phone drive: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "phone drive: building work queued twice",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "phone drive: longest gap between frames (ms), not judged",
+   "figure": 66,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "lap drive round the race track: times the game was busy for over 25 ms",
+   "figure": 4,
+   "budget": 8,
+   "ok": true
+  },
+  {
+   "name": "lap drive: times the game was busy for over 33 ms",
+   "figure": 0,
+   "budget": 4,
+   "ok": true
+  },
+  {
+   "name": "lap drive: longest the game was busy without a break (ms)",
+   "figure": 29,
+   "budget": 100,
+   "ok": true
+  },
+  {
+   "name": "lap drive: frames whose game code took over 33 ms",
+   "figure": 0,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "lap drive: house fronts painted on the way (megapixels)",
+   "figure": 31.2,
+   "budget": 36,
+   "ok": true
+  },
+  {
+   "name": "lap drive: pictures sent to the graphics card (megapixels)",
+   "figure": 142,
+   "budget": 165,
+   "ok": true
+  },
+  {
+   "name": "lap drive: frames that sent over 1.1 megapixels of pictures",
+   "figure": 3,
+   "budget": 10,
+   "ok": true
+  },
+  {
+   "name": "lap drive: most megapixels of pictures sent in one frame",
+   "figure": 1.39,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "lap drive: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "lap drive: building work queued twice",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "lap drive: times the game was busy for over 16 ms, not judged",
+   "figure": 36,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "lap drive: frames whose game code took over 16.7 ms, not judged",
+   "figure": 22,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "lap drive: game code in a frame, the longest (ms), not judged",
+   "figure": 30,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished)",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "stage drive: times the game was busy for over 25 ms",
+   "figure": 1,
+   "budget": 8,
+   "ok": true
+  },
+  {
+   "name": "stage drive: times the game was busy for over 33 ms",
+   "figure": 0,
+   "budget": 4,
+   "ok": true
+  },
+  {
+   "name": "stage drive: longest the game was busy without a break (ms)",
+   "figure": 31,
+   "budget": 100,
+   "ok": true
+  },
+  {
+   "name": "stage drive: frames whose game code took over 33 ms",
+   "figure": 0,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "stage drive: pictures sent to the graphics card (megapixels)",
+   "figure": 23,
+   "budget": 40,
+   "ok": true
+  },
+  {
+   "name": "stage drive: frames that sent over 1.1 megapixels of pictures",
+   "figure": 0,
+   "budget": 4,
+   "ok": true
+  },
+  {
+   "name": "stage drive: most megapixels of pictures sent in one frame",
+   "figure": 1.05,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "stage drive: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "stage drive: building work queued twice",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "stage drive: times the game was busy for over 16 ms, not judged",
+   "figure": 6,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "stage drive: game code in a frame, the longest (ms), not judged",
+   "figure": 26,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "60 players online: times the online code kept the page busy for over 5 ms in 40 s",
+   "figure": 6,
+   "budget": 10,
+   "ok": true
+  },
+  {
+   "name": "60 players online: the online code's most in one stretch (ms)",
+   "figure": 6.8,
+   "budget": 12,
+   "ok": true
+  },
+  {
+   "name": "60 players online: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "60 players online: the online code per frame (ms), not judged",
+   "figure": 0.63,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "60 players online: times the game was busy for over 25 ms, not judged",
+   "figure": 0,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "a race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s",
+   "figure": 2,
+   "budget": 10,
+   "ok": true
+  },
+  {
+   "name": "a race of 30: the online code's most in one stretch (ms)",
+   "figure": 5.6,
+   "budget": 12,
+   "ok": true
+  },
+  {
+   "name": "a race of 30: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "new kinds of car, 60 online: frames that sent over 3 MB of model to the graphics card",
+   "figure": 0,
+   "budget": 1,
+   "ok": true
+  },
+  {
+   "name": "new kinds of car: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "new kinds of car: most model in one frame (MB), not judged",
+   "figure": 2.16,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "new kinds of car: most pictures in one frame (megapixels), not judged",
+   "figure": 4.19,
+   "budget": null,
+   "ok": true
+  },
+  {
+   "name": "phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE",
+   "figure": 2,
+   "budget": 5,
+   "ok": true
+  },
+  {
+   "name": "phone, shaders built the iPhone way: most such programs in one frame",
+   "figure": 1,
+   "budget": 2,
+   "ok": true
+  },
+  {
+   "name": "phone, shaders built the iPhone way: page errors",
+   "figure": 0,
+   "budget": 0,
+   "ok": true
+  },
+  {
+   "name": "the machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged",
+   "figure": 0.14,
+   "budget": null,
+   "ok": true
+  }
+ ],
+ "over": [
+  "phone total after 2 km through the centre"
+ ],
+ "lowest": {
+  "calls": 364,
+  "ktris": 524,
+  "level": 0,
+  "dpr": 0.5,
+  "far": 1500
+ },
+ "lowestStage": {
+  "calls": 137,
+  "ktris": 345,
+  "level": 0,
+  "dpr": 0.5,
+  "far": 1500,
+  "at": [
+   2382,
+   491
+  ]
+ },
+ "topStage": {
+  "calls": 286,
+  "ktris": 1342,
+  "level": 8,
+  "dpr": 1,
+  "far": 5200,
+  "at": [
+   2755,
+   376
+  ]
+ },
+ "crowd": {
+  "frames": 2403,
+  "secs": 40,
+  "over33": 1,
+  "over50": 0,
+  "longestGap": 41,
+  "p99": 21,
+  "busy25": 0,
+  "busyLongest": 0,
+  "profileOk": true,
+  "online5": 6,
+  "onlineMax": 6.8,
+  "onlineMsPerFrame": 0.63,
+  "frameMsAvg": 1.86,
+  "errors": []
+ },
+ "crowdReport": "the online code over 5 ms in one stretch:\n  6.8 ms of 7.4: update src/net/multiplayer.js:1243 > sample src/net/multiplayer.js:837 6.8\n  6.6 ms of 9.0: updateOthers src/skidmarks.js:393 > update src/skidmarks.js:404 3.7 | update src/net/multiplayer.js:1243 2.3 | setDriving src/net/multiplayer.js:1575 0.6\n  5.9 ms of 8.6: update src/net/multiplayer.js:1243 5.9\n  5.9 ms of 6.5: update src/net/multiplayer.js:1243 5.9\n  5.2 ms of 5.9: updateOthers src/skidmarks.js:393 > update src/skidmarks.js:404 5.2\n  5.1 ms of 13.1: updateOthers src/skidmarks.js:393 > update src/skidmarks.js:404 3.3 | updateRemotes src/audio.js:605 > drive src/audio.js:533 1.3 | collide src/net/multiplayer.js:929 0.6\nbusy stretches over 25 ms, by what ran in them:\n\nlongest ones:\n",
+ "crowdRace": {
+  "frames": 1802,
+  "secs": 30,
+  "over33": 4,
+  "over50": 0,
+  "longestGap": 44,
+  "p99": 21,
+  "busy25": 1,
+  "busyLongest": 28,
+  "profileOk": true,
+  "online5": 2,
+  "onlineMax": 5.6,
+  "onlineMsPerFrame": 0.78,
+  "frameMsAvg": 2.11,
+  "runs": [
+   14.2,
+   5.6
+  ],
+  "errors": []
+ },
+ "crowdRaceReport": "the online code over 5 ms in one stretch:\n  5.6 ms of 9.2: update src/net/multiplayer.js:1243 > sample src/net/multiplayer.js:837 5.6\n  5.3 ms of 6.6: updateOthers src/skidmarks.js:393 > update src/skidmarks.js:404 5.3\nbusy stretches over 25 ms, by what ran in them:\n     28 ms  (garbage collector)\nlongest ones:\n  28 ms: (garbage collector) 28",
+ "newCars": {
+  "framesOver3MB": 0,
+  "mostMBInAFrame": 2.16,
+  "sentMB": 17.7,
+  "mostMPInAFrame": 4.19,
+  "errors": []
+ },
+ "shaders": {
+  "inDrawing": 2,
+  "mostInOneFrame": 1,
+  "ahead": 5,
+  "errors": []
+ },
+ "levelTests": [],
+ "machine": {
+  "cores": 4,
+  "othersAvg": 0.14,
+  "othersMost": 0.52,
+  "busySecs": 0,
+  "busy": false
+ }
+}

@@ -859,3 +859,192 @@ Commits merged in the last 24 h:
 - bed24dd Rocket on phones: FLIP moves right and down, onto BOOST's line (#744)
 - 2ba6698 Rocket: the tank fills by itself whenever it is not full (#743)
 
+
+## 2026-11-28 (main 0c2d010, run 01:19 UTC)
+
+One figure OVER: phone total after 2 km through the centre (883 of 870), lower than last night's 912 and 902. The same container reading as on 26-27 Nov (older commits read 886-904 in that container), not a commit of the last 24 h. Everything else inside. Machine: other work 0.14 of 4 cores, not busy. Run with `--force` (another thread's run at 23:56 UTC was on c0e5d60, before #939).
+
+| Check | Figure | Budget | Result |
+|---|---|---|---|
+| Phone canvases at DRIVE | 130 | 230 | OK |
+| Phone graphics card at DRIVE | 192 | 250 | OK |
+| Phone JS heap at DRIVE | 262 | 420 | OK |
+| Phone total at DRIVE | 584 | 820 | OK |
+| Phone peak in the 5 s after DRIVE, garbage included | 624 | 740 | OK |
+| Phone graphics card peak in a map jump | 235 | 280 | OK |
+| Phone graphics card growth after 3 car changes and back to the first car | 1 | 20 | OK |
+| Phone graphics card peak during the car changes | 209 | 250 | OK |
+| Phone total after 2 km through the centre | 883 | 870 | OVER |
+| Phone graphics card peak through the centre | 433 | 445 | OK |
+| Phone total at the Raadi stage (?raadi=1) | 461 | 560 | OK |
+| Phone graphics card peak at the Raadi stage | 199 | 240 | OK |
+| Graphics level tests failing (saved level, crash guard) | 0 | 0 | OK |
+| Lowest graphics level at the Riia and Turu junction: pieces drawn in a frame | 364 | 460 | OK |
+| Lowest graphics level at the Riia and Turu junction: triangles in a frame (thousands) | 524 | 760 | OK |
+| Lowest graphics level along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 137 | 150 | OK |
+| Lowest graphics level along the Raadi stage: triangles in a frame (thousands) | 345 | 440 | OK |
+| Top graphics level (desktop) along the Raadi stage, the heaviest of three views: pieces drawn in a frame | 286 | 800 | OK |
+| Top graphics level along the Raadi stage: triangles in a frame (thousands) | 1342 | 3200 | OK |
+| Desktop drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Desktop drive: longest the game was busy without a break (ms) | 63 | 150 | OK |
+| Desktop drive: time in busy stretches over 50 ms (s) | 0.12 | 1.2 | OK |
+| Desktop drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Desktop drive: game code per frame, 95th percentile (ms) | 7.4 | 12 | OK |
+| Desktop drive: page errors | 0 | 0 | OK |
+| Desktop drive: building work queued twice | 0 | 0 | OK |
+| Desktop drive: longest gap between frames (ms), not judged | 80 | - | not judged |
+| Phone drive through the centre: times the game was busy for over 0.1 s | 0 | 2 | OK |
+| Phone drive: longest the game was busy without a break (ms) | 40 | 150 | OK |
+| Phone drive: time in busy stretches over 50 ms (s) | 0 | 1.2 | OK |
+| Phone drive: gaps between frames over 0.1 s | 0 | 3 | OK |
+| Phone drive: game code per frame, 95th percentile (ms) | 7.3 | 10 | OK |
+| Phone drive: page errors | 0 | 0 | OK |
+| Phone drive: building work queued twice | 0 | 0 | OK |
+| Phone drive: longest gap between frames (ms), not judged | 66 | - | not judged |
+| Lap drive round the race track: times the game was busy for over 25 ms | 4 | 8 | OK |
+| Lap drive: times the game was busy for over 33 ms | 0 | 4 | OK |
+| Lap drive: longest the game was busy without a break (ms) | 29 | 100 | OK |
+| Lap drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Lap drive: house fronts painted on the way (megapixels) | 31.2 | 36 | OK |
+| Lap drive: pictures sent to the graphics card (megapixels) | 142 | 165 | OK |
+| Lap drive: frames that sent over 1.1 megapixels of pictures | 3 | 10 | OK |
+| Lap drive: most megapixels of pictures sent in one frame | 1.39 | 2 | OK |
+| Lap drive: page errors | 0 | 0 | OK |
+| Lap drive: building work queued twice | 0 | 0 | OK |
+| Lap drive: times the game was busy for over 16 ms, not judged | 36 | - | not judged |
+| Lap drive: frames whose game code took over 16.7 ms, not judged | 22 | - | not judged |
+| Lap drive: game code in a frame, the longest (ms), not judged | 30 | - | not judged |
+| Stage drive, a run of the Raadi rally stage: the stage counted the run as finished (runs not finished) | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 25 ms | 1 | 8 | OK |
+| Stage drive: times the game was busy for over 33 ms | 0 | 4 | OK |
+| Stage drive: longest the game was busy without a break (ms) | 31 | 100 | OK |
+| Stage drive: frames whose game code took over 33 ms | 0 | 2 | OK |
+| Stage drive: pictures sent to the graphics card (megapixels) | 23 | 40 | OK |
+| Stage drive: frames that sent over 1.1 megapixels of pictures | 0 | 4 | OK |
+| Stage drive: most megapixels of pictures sent in one frame | 1.05 | 2 | OK |
+| Stage drive: page errors | 0 | 0 | OK |
+| Stage drive: building work queued twice | 0 | 0 | OK |
+| Stage drive: times the game was busy for over 16 ms, not judged | 6 | - | not judged |
+| Stage drive: game code in a frame, the longest (ms), not judged | 26 | - | not judged |
+| 60 players online: times the online code kept the page busy for over 5 ms in 40 s | 6 | 10 | OK |
+| 60 players online: the online code's most in one stretch (ms) | 6.8 | 12 | OK |
+| 60 players online: page errors | 0 | 0 | OK |
+| 60 players online: the online code per frame (ms), not judged | 0.63 | - | not judged |
+| 60 players online: times the game was busy for over 25 ms, not judged | 0 | - | not judged |
+| A race of 30, 60 online: times the online code kept the page busy for over 5 ms in 30 s | 2 | 10 | OK |
+| A race of 30: the online code's most in one stretch (ms) | 5.6 | 12 | OK |
+| A race of 30: page errors | 0 | 0 | OK |
+| New kinds of car, 60 online: frames that sent over 3 MB of model to the graphics card | 0 | 1 | OK |
+| New kinds of car: page errors | 0 | 0 | OK |
+| New kinds of car: most model in one frame (MB), not judged | 2.16 | - | not judged |
+| New kinds of car: most pictures in one frame (megapixels), not judged | 4.19 | - | not judged |
+| Phone, shaders built the iPhone way: programs first used inside the drawing of a frame after DRIVE | 2 | 5 | OK |
+| Phone, shaders built the iPhone way: most such programs in one frame | 1 | 2 | OK |
+| Phone, shaders built the iPhone way: page errors | 0 | 0 | OK |
+| The machine: processor cores taken by other work during the check, on average (over 0.5: run it again alone), not judged | 0.14 | - | not judged |
+
+Against the 2026-11-27 run: phone total at DRIVE 584 (572), through the centre 883 (902), at the Raadi stage 461 (459). Grew over 10 %: desktop drive time in busy stretches over 50 ms 0.07 -> 0.12 s (budget 1.2); phone drive game code p95 6.6 -> 7.3 ms (budget 10); 60 online over 5 ms 1 -> 6 (budget 10), its most 5.2 -> 6.8 ms (budget 12); not judged: lap frames over 16.7 ms 8 -> 22, lap longest game code 22 -> 30 ms, lap busy over 16 ms 30 -> 36, desktop longest frame gap 69 -> 80 ms.
+
+BOARDS: 28 records (28 drives judged against their car), 6165 laps' split times compared. 1 worth a look: a racer used all 5 gaps in positions a race allows. Refused in the last 24 h (of the last 50): speed 1, race finish 15.
+
+Commits on main in the last 24 h (99):
+
+- 0c2d010 Tallinn behind ?tln=1: its own room, the Pirita-Kose lap, and the lap's roads as they are (#939)
+- 483aa94 Thumbs up on the Rocket: 10 cm up the rear glass so the name shows (#938)
+- 89aec88 Rocket top speeds by state; lighter race list; kerb glow and start column in one pass (#937)
+- ab142d2 Board audit: the Rocket's laps judged by its motors alone (#936)
+- 3dc1d1c Toomemägi: fast laps' drives kept for a painted racing line and lasting skid marks (#935)
+- f0d3cef Rocket: vote then swap car, ON STAGE note, top speed fades in, gentle reverse (#934)
+- 6155eef Rocket fans: small changes every few seconds, peaks when the suction goes, softer whir (#933)
+- 95f4153 Thumbs up: THUMBS UP FROM <name>, a moment, faint, on the right (#932)
+- 037ba15 Watching a player: small mark of what they drive with (#931)
+- 5c02b7a Races: a busy page's wandering stamps no longer read as a tuned car (#930)
+- 50e3ac3 Thumbs up on the Rocket's rear glass, no longer half hidden (#929)
+- 50558a8 Focus WRC: limiter bounces calmer and now and then long, in the sound only (#928)
+- 899fe5b Focus WRC 03: the bonnet's underside as on the real car (#927)
+- a510b7c Focus WRC: no two bounces off the limiter alike (#926)
+- 00d3e21 Tesla Roadster Rocket live for everyone; garage card without Air Ready, two motors (#925)
+- 0cad871 Focus WRC garage card: no "on a 34 mm restrictor" (Martin) (#924)
+- 994afb3 Rocket: a FLIP from a bend turns on its own axis almost from the start, by less (#923)
+- 5846ada Rocket: in a FLIP from a bend the car turns on its own axis while its way straightens (#922)
+- aac2696 Rocket: each FLIP shudders a little differently (#921)
+- 1cdc997 Rocket: the shudders in a FLIP a touch slower (#920)
+- c10e0c4 Rocket: a FLIP's held bend turn fades over 3 s (was 5) (#919)
+- f17cf56 Rocket jets: fewer short stubs, the rest a touch longer (#918)
+- ae012bd Rocket: a FLIP in a bend holds its turn about 4 s longer, fading out slowly (#917)
+- 9c5aa79 Rocket: a FLIP in a bend holds the bend's turn for longer (#916)
+- 5115637 Rocket: 7 s of THRUST per tank, two flips kept; server catches short THRUST taps on timed runs (#915)
+- d9f2727 Rocket: thrusters work under water, up the river bank and out onto land (#914)
+- b17e157 Focus WRC: no ABS at all (abs 0.2 -> 0), as the works cars ran (#913)
+- 4c57474 Focus WRC 03: full headlights and a dark engine bay under the bonnet (#912)
+- 5bfa9aa Rocket: launch suction back under THRUST, tail push 45 kN for 0.64 s to 100 with rollout (#911)
+- 7abce08 Rocket: BOOST is THRUST on screen; THRUST alone does not spin the rear wheels (#910)
+- 6fb0905 Rocket wheels: the earlier six black blades back, a touch wider (#909)
+- f651fac Rocket: fans at 40 % off paving, gravel lap check measured on gravel, FLIP side step, BOOST 0.6 s with rollout (#908)
+- 294d478 Rocket wheels: light silver, five broad spokes narrowing a touch toward the rim (#907)
+- f91ef12 Options: KEYBOARD is the first section on desktop (#906)
+- 88a0969 Record replays: small mark of what the lap was driven with (#905)
+- 0c7e35a Rocket FLIP from a power slide: the nose is lined up from the press, no swing on and back (#904)
+- 7be8f62 Rocket's lap check: judged at its full weight with 8 % leeway on grip and brakes, 15 % on its motors (#903)
+- 82c24cd Rocket: bigger wheels on thin tyres filling the arches, rear window notches filled (#902)
+- f9bfc68 Toomemägi lap: no notice at a wall crash, the +5 s stays on the lap (#901)
+- 4df5651 4WD hairpin pivot eases in: gentler start with the revs low (#900)
+- b224a12 Rocket: a FLIP in a bend keeps its turn: the path bends with the nose; no rollout words on the 0-100 toast (#899)
+- 557f442 4WD hairpin pivot: handbrake + full lock + floored at a crawl swings the nose round quickly (#898)
+- a8c568f Rocket: rear-driven again with launch suction (1.9 s, 1.7 s with rollout), rollout on its 0-100 stopwatch (#897)
+- 9de0e1e Focus bonnet: a fresh one after the garage and every move but R (#896)
+- 36bbe0e Focus WRC: idle 1800 rpm in the physics too, not only in the sound (#895)
+- 54258e4 Rocket: a small front motor that pulls only while straight, 0-100 in 1.7 s on the motors (#894)
+- 580e36e Rocket body: A pillar slat, clean side glass edges, black rear window, skirts joined, even rear fan panels (#893)
+- a68db9a Focus WRC: a tenth more grip and traction on gravel, dirt and grass (looseGrip 1.1) (#892)
+- 03fb4d6 Rocket: no BOOST on a timed lap or the Majoraadi stage; the server judges its runs by the motors alone (#891)
+- d0d681f Edge tipping: a deeper nose dive at middle speeds (Martin at 70 km/h: should dive more) (#890)
+- eda9e08 Focus WRC: sound matched to Martin's Goodwood recording (high rough idle, open pipe, fewer bigger bangs) (#889)
+- 98c5483 Focus WRC 03: no light diagonal in the rear side windows (#888)
+- 2a23605 Rocket: traction control 70% up to 90 km/h, rising to 90% by 120 (#887)
+- 7059e5e Focus WRC: anti-lag bangs, rattle and flames on every lift; a fuller, freer engine note (#886)
+- f1cc7bc Edge tipping: a small nose dip at every speed, no cut-off above 55 km/h (#885)
+- c93d10a Roadster Rocket: light traction control on straights too (#884)
+- b5e465f Focus WRC: a short rally 1st and closing steps (1st tops out at 63 km/h, was 80) (#883)
+- c5ed236 Roadster Rocket: FLIP in a bend carries the turn on, then lines up with the travel (#882)
+- e61f769 Roadster Rocket: the NO FLIP note just above the rev counter, in the dark-pill style (#881)
+- f4df5f4 Focus WRC 03: Martin's notes on the scan (clean white, glass, tail lamps, roof, white wheels) (#880)
+- d591681 Roadster Rocket: rear-wheel drive with a light traction control in bends (#879)
+- d4b3586 Raekoja plats: the Christmas tree (#878)
+- 2dbfdf5 Drag strip: a BACK TO THE LINE button on the screen after a run (#877)
+- 13a4bbb Drag strip: the timeslip goes with the car until its ✕ (#876)
+- 859bf19 Roadster Rocket: a small note when FLIP is pressed during a timed lap (or a race, Majoraadi, before the start) (#875)
+- c35c627 Focus WRC 03: Martin's scan as the body, its bonnet on the hinge (#874)
+- ba837bf Roadster Rocket: no quick refill under ?off=100 (#873)
+- 1f7dc92 Advert pages: no link to the main /stats page (#872)
+- dd3a465 Drag strip: H puts the car back on the line from anywhere within 2 km of it (#871)
+- 47c78ec Roadster Rocket: smart-mesh body with the first scan's diffuser; desktop tach discs with the phone face (#870)
+- 4cfac74 Roadster Rocket: tank full in 10 s, a third of the body roll, no traction control, more drive to the rear in bends (#869)
+- d160237 LAP TIMES opens on the track the car is at (#868)
+- 7f0fe10 /stats: a Toomemägi lap section like Majoraadi's, an All time tab, hours and km on the clock (#867)
+- 71b01cb Drag strip: LAP TIMES in tabs with an Ülenurme board, start beeps, R/T on the clock, a timeslip that folds, the view while waiting (#866)
+- 65db091 Roadster Rocket: Martin's scan as the body, 6-spoke aero wheels, thrusters where the scan has them (#865)
+- e9bbcd4 Drag strip: Ülenurme card in the garage, boxes after a run, H back to the line, a real timeslip (#864)
+- 41869fc Options: sections fold open by their titles, remembered; a KEYBOARD list of every key on desktop (#863)
+- c176e07 Drag strip: keep the runway's crown under the lanes (#862)
+- 673a7d4 Drag strip at Ülenurme behind ?drag=1: tree, Practice, race of two, timeslip (#861)
+- eab7be7 Anderson's Taproom: holographic footprints to a new door, its sign on two more sides (#860)
+- 4531a7d Küüni past the finish: drive through the hedge, knock the benches and the kvass trailer (#859)
+- c4d547b Start lane: keep passing through to the line from the bays, after a slip over a kerb, and after R (#858)
+- 40648a7 Online list: garage players at the top on desktop, in the part that is cut (#857)
+- 5b6fc2f /andersons: a page for Anderson's Taproom (#856)
+- e44a295 NICE CUT! between the two trees on the lawn at the start of Baeri (#855)
+- ab777dc Count the Tasku TOREPOOD banner within 200 m (#854)
+- 18256f0 Count the Winbaum sign within 150 m (#853)
+- 1d6b5e3 Adverts: count each advert from a distance that fits its size; no scrollbar on the /ads summary (#852)
+- 597031c Advert views: count within 100 m and after half a second on screen (#851)
+- 4cdb716 /winbaum: views counted since going live, with their own graphs (#850)
+- 19ca082 /winbaum headline: views an hour and a day side by side, no clipping (#849)
+- 1cb0d8c Winbaum cabin live for everyone, a fiddle-leaf fig indoors, a porch and roof to drive and land on (#848)
+- f89c128 /winbaum opens with the hourly average as a big number and a typical day (#847)
+- c58fc1c Adverts pages: time on screen and seconds per view for every advert (#846)
+- c28e224 Advert view and tap counter: /ads for all adverts, /winbaum for Winbaum (#845)
+- dba25a7 Take Savage's two tuned-grip Majoraadi Impreza runs off the board (#844)
+- 4c99180 Stats: hours and kilometres driven per day (per hour on the 24 h tab) as two graphs (#843)
+- 4d883ab Car check: Majoraadi gravel judged against 1.1x gravel's grip (#842)
+- 6000d5a Winbaum cabin: tap it to open winbaum.ee, no chimney on the roof (#841)

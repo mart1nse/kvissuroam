@@ -33,8 +33,10 @@ START_E, START_N = 657870.0, 6477151.0
 if CITY == 'tallinn':
     # Pirita, Kose and Kloostrimetsa (Martin's first area, 27 Nov 2026): the origin by the Pirita velodrome, sea level 0
     E0, N0, H0 = 548000.0, 6592000.0, 0.0
-    CX0, CX1, CZ0, CZ1 = -8000.0, 12000.0, -8000.0, 12000.0      # the terrain model sheets 6384, 6385, 6394, 6395
-    OVERVIEW_PX = (3048, 3048)
+    # the terrain model sheets 6384, 6385, 6394, 6395, and west to Kopli and Õismäe since the lilac area (28 Nov 2026,
+    # CX0 was -8000): the overview keeps its number of pixels
+    CX0, CX1, CZ0, CZ1 = -13760.0, 12000.0, -8000.0, 12000.0
+    OVERVIEW_PX = (3456, 2688)
     START_E, START_N = 547300.0, 6592300.0
 
 _here = os.path.dirname(os.path.abspath(__file__))

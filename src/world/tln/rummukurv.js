@@ -31,6 +31,27 @@ const PINES = [[-1088.4, -4.4, 19, 6.5], [-1088.0, 0.5, 21, 7.5], [-1085.5, -6.5
 // (a conifer here is a pine or, one in seven, a spruce, by its place: scenery.js treeSpecies. These are pines.)
 const isPine = (x, z) => Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1 < 0.85;
 
+// a stack of five tyres, a metre high: one shape, drawn once per stack
+export function tyreStack() {
+  const pos = [], col = [], idx = [];
+  const SIDES = 10, R = 0.31, HOLE = 0.17, T = 0.2;
+  const ring = (y, r, c) => { const o = pos.length / 3; for (let k = 0; k < SIDES; k++) { const a = (k / SIDES) * Math.PI * 2; pos.push(Math.cos(a) * r, y, Math.sin(a) * r); col.push(c, c, c * 1.06); } return o; };
+  const band = (a, b) => { for (let k = 0; k < SIDES; k++) { const k2 = (k + 1) % SIDES; idx.push(a + k, a + k2, b + k, b + k, a + k2, b + k2); } };
+  for (let t = 0; t < 5; t++) {
+    const y = t * T, tread = 0.055 + (t % 2) * 0.012;
+    // the shoulder, the tread, the shoulder: a tyre's side seen from the road
+    const a = ring(y + 0.01, R - 0.05, 0.03), b = ring(y + 0.05, R, tread), c = ring(y + T - 0.05, R, tread), d = ring(y + T - 0.01, R - 0.05, 0.03);
+    band(a, b); band(b, c); band(c, d);
+    if (t === 4) { const e = ring(y + T - 0.01, HOLE, 0.02), f = ring(y + T - 0.12, HOLE, 0.008); band(d, e); band(e, f); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 // lap: { at(s, o), SS, iOf } of pirita.js; L: its lay() (road widths, bridge levels, joins)
 export function createRummuKurv(scene, world, lap, L) {
   const { at, SS } = lap;
@@ -91,26 +112,6 @@ export function createRummuKurv(scene, world, lap, L) {
   const kerb = createKerb(world, group, runs, { H, name: 'rummu kerb' }), pieces = kerb.pieces;
 
 
-  // a stack of five tyres, a metre high: one shape, drawn once per stack
-  function tyreStack() {
-    const pos = [], col = [], idx = [];
-    const SIDES = 10, R = 0.31, HOLE = 0.17, T = 0.2;
-    const ring = (y, r, c) => { const o = pos.length / 3; for (let k = 0; k < SIDES; k++) { const a = (k / SIDES) * Math.PI * 2; pos.push(Math.cos(a) * r, y, Math.sin(a) * r); col.push(c, c, c * 1.06); } return o; };
-    const band = (a, b) => { for (let k = 0; k < SIDES; k++) { const k2 = (k + 1) % SIDES; idx.push(a + k, a + k2, b + k, b + k, a + k2, b + k2); } };
-    for (let t = 0; t < 5; t++) {
-      const y = t * T, tread = 0.055 + (t % 2) * 0.012;
-      // the shoulder, the tread, the shoulder: a tyre's side seen from the road
-      const a = ring(y + 0.01, R - 0.05, 0.03), b = ring(y + 0.05, R, tread), c = ring(y + T - 0.05, R, tread), d = ring(y + T - 0.01, R - 0.05, 0.03);
-      band(a, b); band(b, c); band(c, d);
-      if (t === 4) { const e = ring(y + T - 0.01, HOLE, 0.02), f = ring(y + T - 0.12, HOLE, 0.008); band(d, e); band(e, f); }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    return g;
-  }
   function* buildWall() {
     const im = new THREE.InstancedMesh(tyreStack(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), wall.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);

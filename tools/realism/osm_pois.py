@@ -49,7 +49,7 @@ class H(osmium.SimpleHandler):
 
 
 def main():
-    b = json.load(open(os.path.join(ROOT, 'tools/bake/boundary.json')))
+    b = json.load(open(os.environ.get('AREA') or os.path.join(ROOT, 'tools/bake/boundary' + ('_' + os.environ['CITY'] if os.environ.get('CITY', 'tartu') != 'tartu' else '') + '.json')))   # CITY=tallinn, AREA=<L-EST97 outline> for a part
     area = Polygon(b).buffer(30)
     lons, lats = TL.transform([p[0] for p in b], [p[1] for p in b])
     h = H(area, (min(lons) - 0.01, min(lats) - 0.01, max(lons) + 0.01, max(lats) + 0.01))

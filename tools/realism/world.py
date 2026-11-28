@@ -3,7 +3,8 @@ import gzip, json, os
 import numpy as np
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
-DATA = os.path.join(ROOT, 'public', 'data')
+CITY = os.environ.get('CITY', 'tartu')          # Tallinn (28 Nov 2026): CITY=tallinn reads public/data/tln/
+DATA = os.path.join(ROOT, 'public', 'data', *(['tln'] if CITY == 'tallinn' else []))
 META = json.load(open(os.path.join(DATA, 'meta.json')))
 S, G0 = META['sector']['size'], META['sector']['grid0']
 CARPORT = (70, 70, 74)

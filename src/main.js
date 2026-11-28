@@ -2825,7 +2825,8 @@ function frame(ts) {
     // someone has arrived. always try to show at least half of the other car's place too. cam lock to usual driving
     // screen once it is starting"): the view rises behind the two lanes and swings slowly from side to side round a
     // point between our car and the other lane's spot, so both stay in the picture; when the tree starts it is the
-    // chase view again within about half a second.
+    // chase view again within about half a second (a race of two: once its hold is over, Martin 28 Nov, see HOLD_S in
+    // src/race/drag.js).
     const wvw = drag?.waitView, wOn = !!wvw && !(ctl.look && !board?.open) && !WV;
     if (wvw) { dragWait.x = wvw.x; dragWait.z = wvw.z; dragWait.ox = wvw.ox; dragWait.oz = wvw.oz; dragWait.yaw = wvw.yaw; }
     // (eased by the wall clock: on a slow computer the game's own runs slower, and the view must be down by green)

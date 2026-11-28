@@ -79,7 +79,7 @@ assert.equal(last('lanes').l[0], null);
 say(A, { op: 'in', l: 0 });
 const duel = last('go');
 assert.deepEqual(duel.l, ['a', 'b']);
-assert.ok(duel.go - Date.now() >= 2500 && duel.go - Date.now() <= 3600, 'green 2.6 to 3.5 s ahead');
+assert.ok(duel.go - Date.now() >= 6900 && duel.go - Date.now() <= 8000, 'green 7 to 7.9 s ahead (the pages hold the start first)');
 // a race of two's figures go to everyone (each page judges the race), only the timeslip's
 say(B, { op: 'end', run: duel.run, r: { ...run1, junk: 'x' } });
 assert.equal(last('res').id, 'b');
@@ -128,4 +128,18 @@ assert.equal(all.length, nl, 'nothing new to tell');
 say(C, { op: 'out' });
 assert.deepEqual(new DragDesk(lobby).view(), [null, null], 'no lanes after all are out');
 assert.equal(C.deserializeAttachment().dl, undefined);
-console.log('OK: the drag desk holds the lanes, starts the race of two, passes on results and the feed, and puts clean runs on the board');
+// a rematch: Ann asks Bob, whom she raced last; only Bob hears it, with her name; Cid, who never raced Ann, cannot ask her
+const reN = all.length;
+say(A, { op: 're', id: 'b' });
+assert.deepEqual(B.got.at(-1), { t: 'drag', op: 're', id: 'a', name: 'Ann' });
+assert.equal(all.length, reN, 'a rematch is told to nobody else');
+const nA = A.got.length;
+say(C, { op: 're', id: 'a' });
+assert.equal(A.got.length, nA, 'only a last opponent may ask');
+// asked again at once: held back (one question in a few seconds); Bob's no goes back to Ann
+const nB = B.got.length;
+say(A, { op: 're', id: 'b' });
+assert.equal(B.got.length, nB, 'one question in a few seconds');
+say(B, { op: 'reno', id: 'a' });
+assert.deepEqual(A.got.at(-1), { t: 'drag', op: 'reno', id: 'b', name: 'Bob' });
+console.log('OK: the drag desk holds the lanes, starts the race of two, passes on results, the feed and the rematch question, and puts clean runs on the board');

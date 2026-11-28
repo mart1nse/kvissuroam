@@ -3,7 +3,8 @@
 //  2) PRACTICE (P): the tree runs; A before green is a red light; a run with A on green and A at the shift light
 //     gives a timeslip with every figure; R puts the car back on the line.
 //  3) Two pages, one in each lane: the tree starts for both by itself, each drives, each gets the other's figures
-//     and the same verdict from both sides; the other car's place comes 30 times a second.
+//     and the same verdict from both sides; the other car's place comes 30 times a second. The outcome big on both,
+//     REMATCH from one, ACCEPT on the other, and the race of two runs again.
 // Needs the game served with its server: npm run build && npx wrangler dev --port 8787 --persist-to <empty dir>
 //   node tools/drag-test.mjs [url] [shots=dir] [duel]     (duel: only part 3, the race of two)
 import { createRequire } from 'module';
@@ -217,7 +218,25 @@ await B.waitForFunction(() => __game.drag().lanes[0]?.name === 'Ann', null, { ti
 await toLine(B);
 s = await state(B);
 assert.equal(s.lanes[1]?.name, 'Bob', 'Bob in the left lane');
-await Promise.all([A, B].map((p) => p.waitForFunction(() => __game.drag().phase === 'tree' && __game.drag().duel, null, { timeout: 15000 })));
+await A.waitForFunction(() => __game.drag().phase === 'tree' && __game.drag().duel, null, { timeout: 15000, polling: 'raf' });
+// the start held a few seconds over both cars first (Martin 28 Nov): the waiting view, GET READY, A not into gear yet
+// (this test machine draws a few frames a second: the tree may be seen here a few seconds late, so the hold is looked
+// at from inside the page, at once when the tree starts)
+const hold = await A.evaluate(() => { window.__down = null; const f = () => { const g = __game.drag(); if (g.waitView) requestAnimationFrame(f); else window.__down = (g.go - performance.now()) / 1000; }; requestAnimationFrame(f); const d = __game.drag(), w = document.querySelector('#dragwin'); return { left: (d.go - performance.now()) / 1000, view: !!d.waitView, ready: !w.classList.contains('hidden') && /GET READY/.test(w.innerText) }; });
+console.log(`the hold: green ${hold.left.toFixed(1)} s ahead, waiting view ${hold.view}, GET READY ${hold.ready}`);
+assert.ok(hold.left > 3.3, 'the tree seen while still in the hold');
+assert.ok(hold.view && hold.ready, 'held over both cars with GET READY before the lights');
+if (shots) await A.screenshot({ path: `${shots}/drag-duel-ready.png` });
+if (await A.evaluate(() => __game.drag().go - performance.now() > 3600)) {
+  await A.keyboard.press('a');
+  await A.waitForTimeout(100);
+  assert.equal(await A.evaluate(() => __game.drag().phase), 'tree', 'A during the hold does not go into gear');
+}
+await A.waitForFunction(() => window.__down != null, null, { timeout: 15000 });
+const down = await A.evaluate(() => window.__down);
+console.log(`the view goes down behind the car ${down.toFixed(1)} s before green`);
+assert.ok(down > 2.4, 'behind the car over a second before the first amber');
+await B.waitForFunction(() => __game.drag().phase === 'tree' && __game.drag().duel, null, { timeout: 15000 });
 // (each page shows green at the server's moment by its own estimate of the server's clock: on this slow test machine
 // a page busy for half a second a frame misjudges it by that much; the result does not hang on it, each car is timed
 // from its own green)
@@ -246,5 +265,34 @@ const slipB = (await state(A)).slipText;
 assert.ok(!/\t–/.test(slipB.split('\n').filter((l) => /FT|MILE/.test(l)).join('\n')), `every split of the other car on the timeslip:\n${slipB}`);
 assert.equal(/WIN/.test(va), aWon, 'the verdict by the rules');
 if (shots) await A.screenshot({ path: `${shots}/drag-duel-slip.png` });
-console.log('OK: the line, the tree, a false start, a practice run and a race of two');
+// the slip's columns by lane, the left lane's first, ours marked (Martin 28 Nov)
+const heads = await A.evaluate(() => [...document.querySelectorAll('#dragslip thead th')].slice(1).map((t) => ({ t: t.innerText.replace(/\s+/g, ' '), me: t.classList.contains('me') })));
+console.log('slip columns:', JSON.stringify(heads));
+assert.ok(/^LEFT LANE/.test(heads[0].t) && /^RIGHT LANE/.test(heads[1].t), 'LEFT LANE then RIGHT LANE');
+assert.ok(heads[0].me === false && heads[1].me === true && /YOU/.test(heads[1].t) && /Bob/.test(heads[0].t), 'Ann (right lane) marked as you');
+// the outcome big on both screens, the right way round (Martin 28 Nov), and a REMATCH
+const big = (p) => p.evaluate(() => { const w = document.querySelector('#dragwin'); return w.classList.contains('hidden') ? '' : w.innerText.replace(/\s+/g, ' '); });
+await Promise.all([A, B].map((p) => p.waitForFunction(() => /YOU (WON|LOST)/.test(document.querySelector('#dragwin').innerText) && !document.querySelector('#dragwin').classList.contains('hidden'), null, { timeout: 10000 })));
+const [bigA, bigB] = [await big(A), await big(B)];
+console.log('Ann sees:', bigA, '| Bob sees:', bigB);
+assert.equal(/YOU WON/.test(bigA), aWon, 'Ann\'s banner by the verdict');
+assert.equal(/YOU WON/.test(bigB), !aWon, 'Bob\'s the other way');
+assert.ok(/BY \d+\.\d{3} S|RED LIGHT|OUT OF LANE|NO FINISH/.test(bigA), 'by how much');
+if (shots) await A.screenshot({ path: `${shots}/drag-duel-won.png` });
+if (shots) await B.screenshot({ path: `${shots}/drag-duel-lost.png` });
+// the open slip's ✕ folds it to the side; only the tab's ✕ puts it away (Martin 28 Nov)
+await B.click('#dragslip .x');
+await B.waitForFunction(() => document.querySelector('#dragslip').classList.contains('hidden') && !document.querySelector('#dragsliptab').classList.contains('hidden'), null, { timeout: 5000 });
+console.log('slip ✕: folds to the tab');
+// Ann asks for a rematch: she is back on her line, Bob gets the question, his ACCEPT puts him on his and the race starts
+await A.click('#dragwin [data-re="ask"]');
+await A.waitForFunction(() => __game.drag().phase === 'line', null, { timeout: 15000 });
+await B.waitForFunction(() => /WANTS A REMATCH/.test(document.querySelector('#dragwin').innerText) && !document.querySelector('#dragwin').classList.contains('hidden'), null, { timeout: 15000 });
+console.log('Bob sees:', await big(B));
+if (shots) await B.screenshot({ path: `${shots}/drag-rematch-ask.png` });
+await B.click('#dragwin [data-re="yes"]');
+await Promise.all([A, B].map((p) => p.waitForFunction(() => __game.drag().phase === 'tree' && __game.drag().duel, null, { timeout: 30000 })));
+assert.equal(await B.evaluate(() => __game.drag().duel.name), 'Ann', 'the rematch is against Ann');
+console.log('rematch: asked, accepted, the race of two on again');
+console.log('OK: the line, the tree, a false start, a practice run, a race of two and its rematch');
 await browser.close();

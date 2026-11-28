@@ -1395,6 +1395,14 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .tcard.on .sf { stroke-width: 13; filter: drop-shadow(0 0 8px var(--cyan)); }
 #trackpick .tcard.on .tail { stroke-width: 24; opacity: 1; filter: drop-shadow(0 0 12px var(--cyan)); }
 #trackpick .tcard.on .dot .glow { display: inline; }
+/* the drag strip's card: its two lanes lit faintly inside, and its two cars, the left one cyan and the right one gold */
+#trackpick .tcard path.lane { fill: var(--pink); stroke: none; opacity: .1; }
+#trackpick .tcard.on path.lane { opacity: .2; }
+#trackpick .dot .streak { fill: var(--cyan); opacity: .7; }
+#trackpick .dot.b .streak { fill: var(--sun); }
+#trackpick .dot.b .glow { fill: var(--sun); }
+#trackpick .tcard.on .dot .streak { opacity: .95; filter: drop-shadow(0 0 14px var(--cyan)); }
+#trackpick .tcard.on .dot.b .streak { filter: drop-shadow(0 0 14px var(--sun)); }
 @media (hover: hover) and (pointer: fine) { #trackpick .tcard:hover { opacity: 1; } }
 #trackpick .tcard:focus-visible { outline: 2px solid var(--sun); outline-offset: 4px; }
 /* the choice of city (?tln=1, src/race/trackpick.js): the pill before a city's tracks that goes back to the cities */
@@ -1741,7 +1749,12 @@ body.touch #kudonote { top: auto; bottom: calc(max(14px, env(safe-area-inset-bot
 #dragslip th, #dragslip td { padding: 2px 4px; text-align: right; border-bottom: 1px dashed rgba(0, 0, 0, .15); white-space: nowrap; }
 #dragslip th:first-child { text-align: left; font-weight: 700; letter-spacing: .06em; }
 #dragslip tbody.sum th, #dragslip tbody.sum td { border-bottom: none; border-top: 1px solid rgba(0, 0, 0, .35); padding-top: 4px; }
-#dragslip thead th { font-size: 11px; letter-spacing: .1em; max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+#dragslip thead th { font-size: 11px; letter-spacing: .1em; max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#dragslip thead th small { display: block; max-width: 8em; margin-left: auto; font-size: 10px; letter-spacing: .04em; font-weight: 500; color: #666; overflow: hidden; text-overflow: ellipsis; }
+/* (your own lane's column, Martin 28 Nov: "highlight which is you") */
+#dragslip th.me, #dragslip td.me { background: rgba(255, 43, 214, .1); }
+#dragslip thead th.me { color: #c2129c; }
+#dragslip thead th.me small { color: #c2129c; font-weight: 800; }
 #dragslip p.pb { margin: 8px 0 10px; font-size: 11px; letter-spacing: .06em; text-align: center; color: #444; }
 #dragslip button { display: block; width: 100%; font-size: 13px; }
 /* (the ✕ folds the slip into the tab on the right edge; the tab opens it again) */
@@ -1750,6 +1763,27 @@ body.touch #kudonote { top: auto; bottom: calc(max(14px, env(safe-area-inset-bot
   background: rgba(0, 0, 0, .08); color: #1b1822; font: 700 12px/1 var(--font); letter-spacing: 0; }
 #dragslip button.x:hover { background: rgba(0, 0, 0, .18); }
 /* after a run: one clean button back onto the start line, bottom middle */
+/* the race of two's outcome, big in the middle (Martin 28 Nov), and the rematch question in its place */
+#dragwin { left: 50%; top: max(24%, 180px); transform: translateX(-50%); z-index: 6; pointer-events: auto; text-align: center; color: #fff; padding: 10px 26px 14px; border-radius: 26px;
+  background: radial-gradient(ellipse at center, rgba(18, 6, 43, .72), rgba(18, 6, 43, .35) 70%, rgba(18, 6, 43, 0)); animation: dragwin .35s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes dragwin { from { transform: translateX(-50%) scale(.6); opacity: 0; } }
+#dragwin h2 { margin: 0; font: 400 clamp(40px, 6.4vw, 92px)/1 'Russo One', var(--font); letter-spacing: .08em; white-space: nowrap; }
+#dragwin.win h2 { color: #eafffb; text-shadow: 0 0 12px var(--cyan), 0 0 34px var(--cyan), 4px 4px 0 #0b7f99; }
+#dragwin.loss h2 { color: #ffe3f4; text-shadow: 0 0 12px var(--hot), 0 0 34px var(--hot), 4px 4px 0 #7a1066; }
+#dragwin.ready { pointer-events: none; }
+#dragwin.ready h2 { color: #fff8e0; text-shadow: 0 0 12px var(--sun), 0 0 34px var(--hot), 4px 4px 0 #7a1066; }
+#dragwin.ready .by { animation: dragready .9s ease-in-out infinite alternate; }
+@keyframes dragready { to { opacity: .45; } }
+#dragwin .by { margin: 6px 0 0; font: 800 clamp(16px, 1.9vw, 26px) ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; letter-spacing: .12em; color: var(--sun); text-shadow: 0 0 10px rgba(255, 212, 94, .6); }
+#dragwin .vs { margin: 6px 0 12px; font-size: 13px; letter-spacing: .2em; color: #e8d9ff; }
+#dragwin.ask .vs { margin: 0 0 12px; font-size: clamp(15px, 1.6vw, 20px); letter-spacing: .14em; }
+#dragwin .vs b { color: #fff; }
+#dragwin .btns { display: flex; gap: 10px; justify-content: center; }
+#dragwin button { padding: 11px 26px; border: none; border-radius: 999px; font-weight: 800; letter-spacing: .14em; font-size: 15px; color: #fff; cursor: pointer;
+  background: linear-gradient(100deg, var(--hot), var(--violet)); box-shadow: 0 0 18px rgba(255, 43, 214, .45); }
+#dragwin button.no { background: rgba(255, 255, 255, .14); box-shadow: none; }
+#dragwin button:hover { filter: brightness(1.12); }
+#dragwin button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 #dragback { left: 50%; bottom: max(16px, 5%); transform: translateX(-50%); z-index: 6; pointer-events: auto; padding: 11px 24px; border: none; border-radius: 999px; cursor: pointer;
   font: 800 14px/1 var(--font); letter-spacing: .14em; color: #fff; white-space: nowrap; background: linear-gradient(100deg, var(--hot), var(--violet));
   box-shadow: 0 8px 24px rgba(0, 0, 0, .45), 0 0 18px rgba(255, 43, 214, .35); }

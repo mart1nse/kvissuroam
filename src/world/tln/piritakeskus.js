@@ -23,7 +23,8 @@ import { still } from '../../still.js';
 import { painter } from '../houseskin.js';
 import { paintScale } from '../paintscale.js';
 import { leafyPlants, setHouseColours } from '../streetkit.js';
-import { createKerb, rounded } from './kerb.js';
+import { createKerb, rounded, shaped } from './kerb.js';
+import { MERI_IN, meriIn } from '../../race/piritaedge.js';
 
 const KERB_H = 0.18;
 const E = (x) => -579.5 - 0.1175 * (x + 670);      // Kloostrimetsa tee's north edge on the air photo (z at x)
@@ -31,8 +32,9 @@ const B = (x) => E(x) - 6.2;                       // the back of the parking ba
 const ISLAND = [-656.5, -653.1];                   // the tree's island between the bays (x from, to)
 const TREE = [-654.8, -583.6];
 // the park side's kerb round the real corner (the road fans out here: the painted edge is 10 m further in)
-const ARC_S = [[-688.8, -565.0], [-691.6, -562.2], [-694.2, -559.6], [-698.1, -556.2], [-701.2, -552.3], [-703.5, -548.8], [-705.2, -545.2], [-706.4, -541.0], [-707.4, -537.0]];
-const I_SOUTH = 2168, I_ARC = 2186, I_BACK = 2214, I_END = 2219;       // lap points: the park kerb's start, where the curve takes over, back on the lap's edge, its end
+// (the inside of the turn onto Merivälja tee is one round curve since 28 Nov, src/race/piritaedge.js; the real kerb's
+// own line, traced from the air photo, was up to 3 m further in and kinked)
+const I_SOUTH = 2168, I_ARC = MERI_IN.i0, I_BACK = MERI_IN.i1, I_END = 2219;       // lap points: the park kerb's start, where the curve takes over, back on the lap's edge, its end
 
 // ---- the house
 const DRUM_C = [-668, -607];
@@ -62,22 +64,6 @@ export function piritaKeskusWalls(walls) {
   setHouseColours(walls, '0_0', -800, -800, [{ base: 523, x: -640, z: -618, wall: 0xf1f0ec, roof: 0x55585c, reach: 75 }]);
 }
 
-// a polyline's sharp corners cut back r metres each way, then no piece longer than `step`
-function shaped(line, r = 0.5, step = 2) {
-  const cut = [line[0]];
-  for (let j = 1; j < line.length - 1; j++) {
-    const a = line[j - 1], v = line[j], b = line[j + 1], la = Math.hypot(a[0] - v[0], a[1] - v[1]), lb = Math.hypot(b[0] - v[0], b[1] - v[1]);
-    const ra = Math.min(r, la / 2.5), rb = Math.min(r, lb / 2.5);
-    cut.push([v[0] + ((a[0] - v[0]) / la) * ra, v[1] + ((a[1] - v[1]) / la) * ra], [v[0] + ((b[0] - v[0]) / lb) * rb, v[1] + ((b[1] - v[1]) / lb) * rb]);
-  }
-  cut.push(line[line.length - 1]);
-  const out = [cut[0]];
-  for (let j = 1; j < cut.length; j++) {
-    const a = cut[j - 1], b = cut[j], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
-    for (let k = 1; k <= n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
-  }
-  return out;
-}
 const cumOf = (line) => { const c = [0]; for (let j = 1; j < line.length; j++) c.push(c[j - 1] + Math.hypot(line[j][0] - line[j - 1][0], line[j][1] - line[j - 1][1])); return c; };
 // the stretch of a polyline between a and b metres along it: [[x, z, metres along], ...]
 function between(line, cum, a, b) {
@@ -102,9 +88,9 @@ export function createPiritaKeskus(scene, world, lap, L, { shadows = true } = {}
     [-590.6, B(-590.6)], [-590.0, B(-590.0) - 4.5],
   ]);
   const south = [];
-  for (let s = SS[I_SOUTH]; s <= SS[I_ARC]; s += 2) { const p = at(s, -L.W[at(s)[4]] / 2); south.push([p[0], p[1]]); }
-  south.push(...ARC_S);
-  for (let s = SS[I_BACK]; s <= SS[I_END] + 2; s += 2) { const p = at(s, -L.W[at(s)[4]] / 2); south.push([p[0], p[1]]); }
+  for (let s = SS[I_SOUTH]; s < SS[I_ARC] - 1; s += 2) { const p = at(s, -L.W[at(s)[4]] / 2); south.push([p[0], p[1]]); }
+  for (let k = 0; k <= 24; k++) south.push(meriIn(k / 24).slice(0, 2));
+  for (let s = SS[I_BACK] + 2; s <= SS[I_END] + 2; s += 2) { const p = at(s, -L.W[at(s)[4]] / 2); south.push([p[0], p[1]]); }
   const kerb = createKerb(world, group, [north, rounded(south, 2)], { H: KERB_H, name: 'kloostrimetsa kerb' });
 
   // ---- the house's lines

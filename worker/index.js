@@ -35,6 +35,7 @@ import { makeSum, addSum, sumView } from './lapsum.js';
 import { stageCheck } from './stagecheck.js';
 import { ROOM_AT, alwaysJudged } from '../src/idlepark.js';
 import { CRASH_PEN, crashesIn } from '../src/cars/crash.js';
+import { CUT_PEN, cutsIn } from '../src/race/piritacuts.js';
 import { KUDOS_GAP_S, KUDOS_PAIR, KUDOS_KEEP, kudosFrom, kudosFair } from '../src/net/kudosrules.js';
 import { LINE_TRACK, LINES_MAX, lineWorth } from '../src/race/laplines.js';
 
@@ -1293,6 +1294,10 @@ export class Lobby extends DurableObject {
       // the seconds for its hard crashes into walls must be in its time (the page adds them; one that left them out)
       const crashPen = (drive.crashes || 0) * CRASH_PEN;
       if (!why && crashPen > (lap.pen || 0)) { why = `crash: the drive has ${drive.crashes} of them, its time ${lap.pen || 0} s of penalty`; told = 'crash'; }
+      // and on Tallinn's lap the seconds for its penalty corners (src/race/piritacuts.js; 0.4 m past the line here, so
+      // a drive the page saw stay just inside is not refused over a centimetre)
+      const cutPen = !why && this.city === 'tallinn' && track === 'toomemagi' && drive.xs ? cutsIn(drive.xs, drive.zs, 0.4) * CUT_PEN : 0;
+      if (!why && crashPen + cutPen > (lap.pen || 0)) { why = `cut: the drive has ${cutPen / CUT_PEN} corner cut and ${drive.crashes || 0} crashes, its time ${lap.pen || 0} s of penalty`; told = 'cut'; }
       if (!why) {
         // the car itself: seconds of the drive over what this car can do (the list of refusals gets the figures,
         // the sender only that it was the car)

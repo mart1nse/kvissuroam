@@ -18,6 +18,8 @@ import { jobs } from '../jobs.js';
 import { warm } from '../warm.js';
 import { lapGates, lapGatesSteps, throughGate } from './lapgates.js';
 import { CRASH_PEN } from '../cars/crash.js';
+import { CUT_PEN, cutAt } from './piritacuts.js';
+import { MERI_IN, meriIn } from './piritaedge.js';
 import { createNiceCut } from './nicecut.js';
 
 const OFF_MARGIN = 9;          // metres beyond the kerb before the car counts as off the track
@@ -152,6 +154,8 @@ function createEdges(track, world) {
       L[(apex + j + N) % N] = [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]];
     }
   }
+  // the Pirita-Kose lap's inside of the turn onto Merivälja tee: its round kerb, not the lap line's sharp corner
+  if (!TARTU) for (let i = MERI_IN.i0; i <= MERI_IN.i1; i++) kerbs[0][i] = meriIn((i - MERI_IN.i0) / (MERI_IN.i1 - MERI_IN.i0), 0.3).slice(0, 2);
   // where the lap passes the same junction twice, a kerb band of one pass would run across the road of
   // the other: fade it out there, so the two passes share one outline
   const grid = new Map(), GC = 20;
@@ -359,6 +363,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
   const st = {
     running: false, t0: 0, clk: 0, wall: null, carT: null, lag: 0, slow: 0, t: 0, off: 0, cps: new Set(), gate: 0, back: 0, along: null, hint: -1, onTrack: false, near: false,
     prev: null, prevTime: 0, splits: [], ref: null, inpT: {}, inpAt: null, tyT: {},
+    cut: 0,           // which of the lap's penalty corners were cut in this lap (bits, piritacuts.js)
     pen: 0,           // penalty seconds in this lap's time: CRASH_PEN for each hard crash into a wall (cars/crash.js)
   };
   const start = { x: track.P[0][0], z: track.P[0][1], tx: track.tan[0][0], tz: track.tan[0][1], hw: track.HW[0] };
@@ -468,6 +473,11 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
     // ('kb' keyboard, 'pad' gamepad, 'wheel', 'touch' phone or tablet)
     update(car, carId, carShort, inp = 'kb') {
       const x = car.x, z = car.z;
+      // a corner cut that costs time on the Pirita-Kose lap (piritacuts.js): CUT_PEN seconds, each corner's once a lap
+      if (st.running && !TARTU) {
+        const k = cutAt(x, z);
+        if (k >= 0 && !(st.cut & (1 << k))) { st.cut |= 1 << k; st.pen += CUT_PEN; toast(`CORNER CUT · +${CUT_PEN} S`, 2600); }
+      }
       // the lap clock: the car's own clock frame by frame, but a gap in the driving (the garage, the menu, the
       // city map, another tab) counts at the wall clock's pace, so a stop on a lap costs its time (Martin,
       // 2026-11-22: the timer stood still in the garage and went on from there). A new car's clock starts at 0.
@@ -557,7 +567,7 @@ export function createRace({ world, scene, toast, onLap, onEvent, bestFor, refFo
                 } else if (missed) { toast('CHECKPOINT MISSED · LAP NOT COUNTED', 2600); onEvent?.('missed'); }
               } else toast('GO!', 1200);
               onEvent?.('start');
-              st.running = true; hideBack(); st.t0 = tc; st.lag = st.slow = 0; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; st.pen = 0; elMsg.textContent = '';
+              st.running = true; hideBack(); st.t0 = tc; st.lag = st.slow = 0; rec?.begin(tc); st.inpT = {}; st.tyT = {}; st.cps.clear(); st.gate = 0; st.back = 0; st.splits = []; st.lastSplit = ''; st.off = 0; st.pen = 0; st.cut = 0; elMsg.textContent = '';
               st.ref = null;   // picked at the first checkpoint, then kept for the whole lap
             }
           }

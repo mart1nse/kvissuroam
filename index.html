@@ -209,6 +209,36 @@
     <p class="small attribution" id="attribution"></p>
   </div>
 
+  <script>
+    // Come from the other city's garage (src/main.js offTo): that garage as it stood, put up again at once, with the
+    // load's progress on its DRIVE button, so that changing city from the garage does not look like a restart.
+    // It is a copy to look at, a page of its own in a frame, so the game never takes a part of it for the real menu.
+    (function () {
+      var raw = null;
+      try { raw = sessionStorage.getItem('kvissuroam.ghost'); sessionStorage.removeItem('kvissuroam.ghost'); } catch (e) { return; }
+      if (!raw || new URLSearchParams(location.search).get('go') !== '1') return;
+      var g; try { g = JSON.parse(raw); } catch (e) { return; }
+      if (!g || !g.html || Date.now() - g.at > 30000) return;
+      if (!g.css || !g.css.length) return;
+      document.documentElement.classList.add('ghosted');
+      var esc = function (t) { return String(t || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
+      var w = document.createElement('iframe'); w.id = 'ghost'; w.title = 'Loading';
+      w.srcdoc = '<!doctype html><html class="' + esc(g.root) + '" style="' + esc(g.rootStyle) + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+        + g.css.map(function (h) { return '<link rel="stylesheet" href="' + esc(h) + '">'; }).join('')
+        + '<style>html, body { margin: 0; height: 100%; overflow: hidden; background: #12062b url("' + esc(g.shot || '/menu-still.jpg') + '") center / cover no-repeat !important; }'
+        + '#menu { pointer-events: none; } #drive { pointer-events: auto; }</style></head><body class="' + esc(g.body) + '"><div id="menu" class="screen">' + g.html + '</div></body></html>';
+      document.body.appendChild(w);
+      var bar = document.getElementById('loadbar'), msg = document.getElementById('loadmsg');
+      var t = setInterval(function () {
+        if (window.__ghostDone || !w.isConnected) { clearInterval(t); return; }
+        // (the load failed: the loading screen says so)
+        if (/^Could not/.test(msg.textContent)) { clearInterval(t); w.remove(); document.documentElement.classList.remove('ghosted'); return; }
+        var b = w.contentDocument && w.contentDocument.querySelector('#drive b');
+        if (b) b.textContent = 'LOADING ' + (parseInt(bar.style.width, 10) || 0) + '%';
+      }, 100);
+    })();
+  </script>
+
   <div id="hud" class="hidden">
     <div id="topbar">
       <button data-act="reset" title="Back to the last intact spot (R)">↺<small>LAST SPOT</small></button>

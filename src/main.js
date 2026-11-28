@@ -1333,7 +1333,23 @@ async function boot() {
   $('#menu').classList.remove('hidden');
   mode = 'menu';
   stats.ready();
-  if (arriving && isTouch) {
+  // (come from the garage: its copy is still up, index.html; DRIVE on it is the phone's button)
+  const ghost = arriving && $('#ghost');
+  if (ghost) {
+    window.__ghostDone = true;
+    $('#loading').classList.add('hidden');
+    const off = () => { ghost.remove(); document.documentElement.classList.remove('ghosted'); };
+    // (a computer: the drive starts under the copy, which stays for a moment more while the first frames, the
+    // camera's swing behind the car and the ground's sharp squares come)
+    const gd = ghost.contentDocument?.querySelector('#drive');
+    if (!isTouch || !gd) { if (gd) gd.querySelector('b').textContent = 'LOADING 100%'; setTimeout(off, gd ? 1400 : 0); if (!gd && isTouch) { startDriving(true); return; } }
+    else {
+      const d = gd;
+      d.querySelector('b').textContent = 'DRIVE';             // (loaded: the button is DRIVE again, and the tap gives full screen and sound)
+      d.addEventListener('click', () => { off(); startDriving(true); }, { once: true });
+      return;
+    }
+  } else if (arriving && isTouch) {
     $('#loadmsg').textContent = 'Ready';
     const go = document.createElement('button');
     go.id = 'gobtn'; go.className = 'neon'; go.innerHTML = '<b>TAP TO DRIVE</b>';
@@ -1460,7 +1476,28 @@ let softwareTold = false;
 // done in the background and you are put on the line"): the loading screen comes up saying where to, and the page
 // loads again there, straight onto the road (src/city.js goCity; the new page shows the same screen from its first
 // paint, index.html). The car picked goes along (it is kept in this browser).
-function offTo(city, track, name) {
+// From the garage the loading screen is left out (Martin 28 Nov: "do not show the main linnaring loading screen in cases
+// when im doing it from the garage. just let the drive button show loading progress"): the garage stays as it looks,
+// DRIVE says LOADING, and the new page puts the same garage up from its first paint (index.html: a copy of the
+// menu as it stood and a picture of what was behind it, kept for the one page load) with the load's progress on
+// DRIVE, until the car is on the road. The city button while driving keeps the loading screen.
+function offTo(city, track, name, garage = false) {
+  if (garage) {
+    $('#drive b').textContent = 'LOADING 0%';
+    $('#menu').style.pointerEvents = 'none';
+    for (const i of document.querySelectorAll('#menu input')) i.setAttribute('value', i.value);     // (the name and plate typed: in the copy too)
+    let shot = '';
+    if (!still) try { renderer.render(scene, camera); shot = $('#view').toDataURL('image/jpeg', 0.72); } catch { /* the plain backdrop */ }
+    // (its style sheets by address: the copy is a page of its own, in a frame, so that nothing of it is taken for the
+    // real menu; a dev server has none to name and gets the loading screen)
+    const css = [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href);
+    const R = document.documentElement;
+    const keep = (pic) => sessionStorage.setItem('kvissuroam.ghost', JSON.stringify({ body: document.body.className, root: R.className, rootStyle: R.getAttribute('style') || '', css, html: $('#menu').innerHTML, shot: pic, at: Date.now() }));
+    if (css.length) try { keep(shot); } catch { try { keep(''); } catch { /* no room: the loading screen shows */ } }
+    audio.setBackground?.(true);
+    setTimeout(() => goCity(city, { drive: true, track: track === 'raadi' ? 'raadi' : '' }), 60);
+    return;
+  }
   const L = $('#loading');
   document.documentElement.classList.add('go');
   L.querySelector('.tag').textContent = `${city.toUpperCase()}${name ? ` · ${name}` : ''}`;
@@ -1473,7 +1510,7 @@ function offTo(city, track, name) {
 
 function startDriving(forced) {
   if (mode === 'drive' || tabAside) return;
-  if (mode === 'menu' && board?.away && !forced && !raceMode?.holding && !raceMode?.ghost) { const a = board.away; offTo(a.city, a.track, a.name); return; }
+  if (mode === 'menu' && board?.away && !forced && !raceMode?.holding && !raceMode?.ghost) { const a = board.away; offTo(a.city, a.track, a.name, true); return; }
   if (still && warmGate && !warmedUp() && !(readyWait && performance.now() - readyWait > 40000)) {
     if (!readyWait) { readyWait = performance.now(); showReady(); }
     return;

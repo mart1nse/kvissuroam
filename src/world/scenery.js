@@ -23,6 +23,10 @@ const BRICK = [
 // clay tile roofs) and their churches, towers and halls (eaves 14 m up or more) style 3.4, limestone
 let oldTown = null;
 export function setOldTown(test) { oldTown = test; }
+// landmarks in their own colours: [{ x, z, style, rgb, roof }] (game x, z inside the building; style as above, 3.6 for
+// whitewashed stone; rgb and roof as 0xrrggbb), src/world/tln/centre.js
+let looks = [];
+export function setTownLooks(list) { looks = list; }
 
 // what three.js makes of each of the 256 steps of a colour channel
 const LIN = Float64Array.from({ length: 256 }, (_, v) => new THREE.Color().setRGB(v / 255, 0, 0, THREE.SRGBColorSpace).r);
@@ -95,12 +99,17 @@ function* buildingGeometrySteps(sector, walls) {
     if (g.brick) g.style = 5;                                           // red brick with a real colour
     if (g.plain) g.style = 4;                                           // smooth render in its real colour, windows added by hand
     if (oldTown && !g.plain && oldTown(sector.x0 + (g.x0 + g.x1) / 2, sector.z0 + (g.z0 + g.z1) / 2)) g.style = (h >= 24 && g.eavesH >= 12 ? 3.4 : 3) + g.real * 4;     // (24 m: the churches, towers and the town hall, not the tall 19th-century houses)
+    for (const L of looks) {
+      if (L.x - sector.x0 > g.x0 && L.x - sector.x0 < g.x1 && L.z - sector.z0 > g.z0 && L.z - sector.z0 < g.z1) { g.look = L; g.style = L.style + 4; break; }
+    }
     g.seed = g.plain ? 0 : Math.round(((Math.abs(Math.sin(b * 12.9898 + g.x0 * 78.233 + g.z0 * 37.719) * 43758.5453)) % 1) * 1023) / 1023;
   }
   const brick = new THREE.Color().setRGB(0.55, 0.25, 0.18, THREE.SRGBColorSpace);
   const styles = (i0, i1) => { for (let i = i0; i < i1; i++) {
     const g = groups.get(gkey[i]);
     if (g.brick && kind[i] !== 1) { col[i * 3] = brick.r; col[i * 3 + 1] = brick.g; col[i * 3 + 2] = brick.b; }
+    const L = g.look, hex = L && (kind[i] === 1 ? L.roof : L.rgb);
+    if (hex !== undefined && hex !== null && L) { col[i * 3] = LIN[(hex >> 16) & 255]; col[i * 3 + 1] = LIN[(hex >> 8) & 255]; col[i * 3 + 2] = LIN[hex & 255]; }
     aInfo[i * 3] = g.eavesH; aInfo[i * 3 + 1] = g.style; aInfo[i * 3 + 2] = g.seed;
   } };
   if (jobs.late()) yield;
@@ -171,8 +180,9 @@ export function createBuildings(walls) {
             float blk = floor((u + r2 * 0.61) / sl);
             float n = bHash(vec2(blk, r2) + mod(sq, 7.0));
             vec3 stone = mix(vec3(0.55, 0.55, 0.52), vec3(0.66, 0.63, 0.55), n) * (0.9 + 0.12 * bHash(floor(vec2(u, h) * 3.0)));
-            wall = mix(stone, wall * 1.05, 0.25 * real);
-            wall *= 1.0 - 0.13 * max(bLine(h, 0.36 * rh, 0.05), bLine(u + r2 * 0.61, sl, 0.04));
+            float white = step(3.5, style);                         // (3.6: whitewashed, the stones only just showing)
+            wall = mix(stone, wall * 1.05, real * mix(0.25, 0.92, white));
+            wall *= 1.0 - mix(0.13, 0.04, white) * max(bLine(h, 0.36 * rh, 0.05), bLine(u + r2 * 0.61, sl, 0.04));
             wall *= 0.86 + 0.14 * smoothstep(0.0, 6.0, h);
           } else if (style > 2.5) {
             // plaster in the Old Town's colours (the real one where Mapillary saw it), patchy with age

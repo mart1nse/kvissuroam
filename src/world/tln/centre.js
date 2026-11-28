@@ -26,6 +26,23 @@ export function inOldTown(x, z) {
   return inside;
 }
 
+// landmarks in their own colours (points inside each from OpenStreetMap's outlines; colours from photos of them):
+// src/world/scenery.js setTownLooks. Style 3 plaster with windows, 3.4 limestone, 3.6 whitewashed stone.
+export const LANDMARKS = [
+  { x: -6041, z: 3112, style: 3, rgb: 0xd99a8c, roof: 0x26262b },        // Aleksander Nevski katedraal: pink, black domes
+  { x: -6053, z: 2972, style: 3.6, rgb: 0xeae6dc, roof: 0x3a3c3f },      // Toomkirik: white, dark roof
+  { x: -6114, z: 3141, style: 3, rgb: 0xe0a3a0, roof: 0x8a3e2c },        // Toompea loss: baroque pink
+  { x: -3114, z: 2771, style: 3, rgb: 0xc4705e, roof: 0x9c4a36 },        // Kadrioru loss: red with white
+  { x: -5415, z: 3245, style: 3, rgb: 0xe6dcc2, roof: 0x3c3e42 },        // Rahvusooper Estonia: cream
+  { x: -5846, z: 3100, style: 3.4, roof: 0x3d4240 },                     // Niguliste kirik
+  { x: -5562, z: 2488, style: 3.4, roof: 0x3a4440 },                     // Oleviste kirik
+  { x: -5673, z: 2844, style: 3.6, rgb: 0xe8e4d8, roof: 0x3a3a3c },      // Pühavaimu kirik: whitewashed
+  { x: -5707, z: 2980, style: 3.4, roof: 0x3a3a3a },                     // Tallinna raekoda
+  { x: -5695, z: 3335, style: 3, rgb: 0xe2cf9a, roof: 0x3f4448 },        // Jaani kirik: pale yellow
+  { x: -6048, z: 3532, style: 3.4, roof: 0x3d3f41 },                     // Kaarli kirik
+  { x: -5871, z: 3194, style: 3.6, rgb: 0xece8de, roof: 0x9a4a32 },      // Rootsi-Mihkli kirik
+];
+
 const get = async (f) => { try { return await (await fetch(`${DATA}${f}`)).json(); } catch { return null; } };
 // lines.json (tools/tln/lines.py) and marks.json (tools/tln/marks.py: arrows, manhole lids and drains, tram lines)
 let marks = null;

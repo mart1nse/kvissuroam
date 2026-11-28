@@ -223,8 +223,30 @@ for w in osm['ways']:
         walls.append([[round(x, 2), round(z, 2)] for x, z in g.simplify(0.3).coords])
 print('city wall pieces', len(walls), 'm', round(sum(LineString(p).length for p in walls)))
 
+# greenery the map's data has none of in Tallinn (no laser-scan bushes): OpenStreetMap's hedges (lines, with their height
+# where tagged) and shrubbery and scrub (areas)
+from shapely.geometry import Polygon as SPoly
+hedges, shrubs = [], []
+for w in osm['ways']:
+    tg = w['t']
+    pts = [game(lon, lat) for lon, lat in w['ll']]
+    if tg.get('barrier') == 'hedge' and len(pts) > 1:
+        try: hgt = float(str(tg.get('height', '1.3')).replace('m', '').strip())
+        except ValueError: hgt = 1.3
+        g = LineString(pts).intersection(area)
+        for q in getattr(g, 'geoms', [g]):
+            if q.is_empty or q.geom_type != 'LineString' or q.length < 1: continue
+            hedges.append([round(min(max(hgt, 0.6), 3.0), 1), [[round(x, 1), round(z, 1)] for x, z in q.simplify(0.2).coords]])
+    elif tg.get('natural') in ('scrub', 'shrubbery') and len(pts) > 3 and pts[0] == pts[-1]:
+        try: poly = SPoly(pts).buffer(0).intersection(area)
+        except Exception: continue
+        for q in getattr(poly, 'geoms', [poly]):
+            if q.is_empty or q.geom_type != 'Polygon' or q.area < 4: continue
+            shrubs.append([[round(x, 1), round(z, 1)] for x, z in q.simplify(0.3).exterior.coords])
+print('hedges', len(hedges), 'm', round(sum(LineString(p).length for _, p in hedges)), 'shrub areas', len(shrubs), 'm2', round(sum(SPoly(p).area for p in shrubs)))
+
 out = {'credit': 'Mapillary detections; OpenStreetMap contributors (ODbL)',
-       'holes': holes, 'bars': bars, 'trams': trams, 'stone': stone, 'walls': walls}
+       'holes': holes, 'bars': bars, 'trams': trams, 'stone': stone, 'walls': walls, 'hedges': hedges, 'shrubs': shrubs}
 json.dump(out, open(os.path.join(DATA, 'marks.json'), 'w'), separators=(',', ':'))
 print('holes', sum(len(v) for v in holes.values()) // 4, 'bars', sum(len(v) for v in bars.values()) // 5,
       'tram lines', sum(len(v) for v in trams.values()), 'size', os.path.getsize(os.path.join(DATA, 'marks.json')))

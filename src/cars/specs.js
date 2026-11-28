@@ -557,6 +557,7 @@ export const CARS = {
       pulses: 2,
       revDrop: 5200,            // a light flywheel and a carbon clutch (rallycars): the revs fall fast
       revCut: 0.04, revCutDrop: 350,
+      revCutTopEven: true,      // (in 6th at top speed the limiter holds the speed evenly, Martin 2026-11-28)
       // off the throttle: a 2.0 race engine's friction and pumping through three differentials, about 50 Nm at 6000 rpm
       // (anti-lag cracks the throttle on a lift to keep the turbine spinning, not to drive): a lift tucks the nose in
       brakeTorque: [28, 0.0038],

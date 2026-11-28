@@ -66,6 +66,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .go #loading .about { display: none; }
 .go #loading .tag { color: var(--cyan); letter-spacing: .3em; }
 .go #loading { z-index: 60; }
+/* the garage of the city just left, shown again while this city loads (index.html) */
+#ghost { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 1000; background: #12062b; }
+.ghosted #loading { display: none; }
 #gobtn { z-index: 1; margin-top: 6px; padding: .7em 2.2em; font-size: clamp(16px, 3.4vw, 26px); }
 #loading .about { max-width: min(620px, 86vw); z-index: 1; margin-top: clamp(4px, 2vh, 18px); }
 #loading .about h2 { margin: 0 0 .5em; font-size: clamp(10px, 1.4vw, 14px); letter-spacing: .14em; text-transform: uppercase; color: var(--sun); text-shadow: 0 0 10px rgba(255, 212, 94, .5); }
@@ -1370,6 +1373,7 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .lt { font-size: .63em; letter-spacing: .24em; color: var(--cyan); margin-top: .2em; text-shadow: 0 0 8px rgba(47, 243, 255, .7); }
 #trackpick .tcard:not(.on) .modes i:nth-child(n+2) { display: none; }
 #trackpick .tcard.city .modes i:nth-child(n+2) { display: inline; }   /* (a city's card: how many are online there) */
+#trackpick .tcard.city .modes { flex-direction: column; align-items: flex-start; gap: .3em; }   /* (on its own row under the other pill, Martin 28 Nov: it was cut off on the smaller card) */
 #trackpick .tcard { overflow: hidden; }
 #trackpick .tcard.on { overflow: visible; height: 98cqh; aspect-ratio: 520 / 210; opacity: 1; padding: .88em 1.5em .88em .88em; gap: 1.4em;
   background: linear-gradient(135deg, rgba(47, 243, 255, .2), rgba(90, 40, 170, .45)); box-shadow: 0 0 26px rgba(47, 243, 255, .35); }

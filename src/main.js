@@ -193,6 +193,7 @@ import { keyListHtml } from './keylist.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 import { TARTU, TALLINN, TLN_FLAG, goCity } from './city.js';
 import { piritaVectors, piritaPropsFor, createPirita } from './world/tln/pirita.js';
+import { piritaKeskusWalls } from './world/tln/piritakeskus.js';
 import { centreVectors, centreLines, inOldTown } from './world/tln/centre.js';
 import { createCentreMarks } from './world/tln/centremarks.js';
 import { createCityWalls } from './world/tln/citywalls.js';
@@ -800,7 +801,7 @@ async function boot() {
   kuperjanovi2Walls(world.walls);               // Kuperjanovi from Veski to Vallikraavi: painted fronts
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
-  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); setOldTown(inOldTown); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
+  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); setOldTown(inOldTown); piritaKeskusWalls(world.walls); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
   quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);

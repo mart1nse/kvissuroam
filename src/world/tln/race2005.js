@@ -161,7 +161,8 @@ export function race2005Parts({ at, SS, LEN, N, L, world }) {
 
 // the Pirita Keskus corner's own things (src/world/tln/piritakeskus.js, the other thread's build of 28 Nov): its sign
 // gantry's two poles and the big tree on the plaza's island, [x, z, keep this far]
-const KEEP_CLEAR = [[-681.6, -579.7, 2.5], [-679.8, -566.8, 2.5], [-654.8, -583.6, 3]];
+const KEEP_CLEAR = [[-681.6, -579.7, 2.5], [-679.8, -566.8, 2.5], [-654.8, -583.6, 3],
+  [-676.0, -583.6, 1.5], [-677.7, -581.6, 1.5], [-679.4, -579.9, 1.5], [-672.3, -583.4, 1.5]];      // and three planters and the advert stand by the road
 // 2. the crowd barriers round the outside of the turn onto Merivälja tee: props [kind, x, z, bearing, 0]
 export function merivaljaBarriers({ at, SS, L }, bearing, clear) {
   const out = [], CROWD = 54;

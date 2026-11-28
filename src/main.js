@@ -193,6 +193,7 @@ import { keyListHtml } from './keylist.js';
 import './kofi.js';                       // the Ko-fi link in the garage (only with ?off=100 for now)
 import { TARTU, TALLINN, TLN_FLAG, goCity } from './city.js';
 import { piritaVectors, piritaPropsFor, createPirita } from './world/tln/pirita.js';
+import { piritaKeskusWalls } from './world/tln/piritakeskus.js';
 import { centreVectors } from './world/tln/centre.js';
 
 // Tallinn (?tln=1, src/city.js): none of Tartu's hand-built places, its trackside and kerbs along Toomemägi, its parked
@@ -798,7 +799,7 @@ async function boot() {
   kuperjanovi2Walls(world.walls);               // Kuperjanovi from Veski to Vallikraavi: painted fronts
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
-  } else { piritaVectors(world.vectors); centreVectors(world.vectors); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); no lines on the centre's stone streets (centre.js)
+  } else { piritaVectors(world.vectors); centreVectors(world.vectors); piritaKeskusWalls(world.walls); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); no lines on the centre's stone streets (centre.js)
   quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);

@@ -67,7 +67,8 @@ export function createCityWalls(scene, world, material) {
           quad(a, b, [a[0], top, a[2]], [b[0], top, b[2]], ux * s, 0, uz * s, STONE, 0, [gy, gy], seed);
         }
         solids.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, yaw: Math.atan2(-uz, ux), hx: (l + e) / 2, hz: T / 2 });
-        if (++count % 60 === 0 && jobs.late()) yield;
+        count++;
+        if (jobs.late()) yield;
       }
     }
     const geo = new THREE.BufferGeometry();
@@ -77,6 +78,7 @@ export function createCityWalls(scene, world, material) {
     geo.setAttribute('aKind', new THREE.Float32BufferAttribute(kind, 1));
     geo.setAttribute('aBase', new THREE.Float32BufferAttribute(base, 1));
     geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 3));
+    yield;
     geo.setIndex(idx);
     geo.computeBoundingSphere();
     yield;
@@ -85,7 +87,8 @@ export function createCityWalls(scene, world, material) {
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
-    world.addSolids(solids);
+    // (solid in parts: each part is stamped into every loaded map square)
+    for (let i = 0; i < solids.length; i += 80) { yield; world.addSolids(solids.slice(i, i + 80)); }
   }
 
   return {

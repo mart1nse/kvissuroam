@@ -53,6 +53,38 @@ export async function centreLines() {
 }
 export const centreMarksData = () => marks;
 
+// OpenStreetMap's hedges and shrubbery as bushes on the map's 0.5 m cells (world.addBushes, drawn with the map's own
+// leafy lumps, src/world/scenery.js createLowObjects): a hedge every 0.7 m along its line at its height (1.3 m where
+// not tagged), shrubbery a lump on about half the points of a 1.6 m grid, 1.2 to 2.8 m high. The same every visit.
+export function centreBushes() {
+  const out = [];
+  let seed = 4711;
+  const R = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  for (const [h, P] of marks?.hedges || []) {
+    for (let i = 0; i + 1 < P.length; i++) {
+      const [ax, az] = P[i], [bx, bz] = P[i + 1], l = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(l / 0.7));
+      for (let k = 0; k < n; k++) out.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n, h * (0.92 + R() * 0.16)]);
+    }
+  }
+  for (const ring of marks?.shrubs || []) {
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    for (let x = x0 + 0.8; x < x1; x += 1.6) {
+      for (let z = z0 + 0.8; z < z1; z += 1.6) {
+        const px = x + (R() - 0.5) * 1.2, pz = z + (R() - 0.5) * 1.2, keep = R() < 0.55, hh = 1.2 + R() * 1.6;
+        if (!keep) continue;
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const [xi, zi] = ring[i], [xj, zj] = ring[j];
+          if ((zi > pz) !== (zj > pz) && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside;
+        }
+        if (inside) out.push([px, pz, hh]);
+      }
+    }
+  }
+  return out;
+}
+
 export function centreVectors(vectors, lines = null) {
   const seen = lines?.seen || {};
   // streets OpenStreetMap has as setts, cobbles or pavers that the map had as asphalt (Vabaduse väljak, Rotermann,

@@ -303,6 +303,7 @@ export async function loadWorldData(onProgress = () => {}) {
       if (clearings.length) s.trees = clearTrees(s.trees, gone);
       if (treeAdds.length) addTreesTo(s);               // after the clearings: planted trees stay
       s.bushes = new Uint16Array(buf.slice(o, o + nb * 6)); o += nb * 6;      // ix, iz, height dm
+      if (bushAdds.size) addBushesTo(s);
       s.fences = new Uint16Array(buf.slice(o, o + nf * 6));                    // ix, iz, height dm | angle << 8
       const done = () => {
         for (const b of solids) stamp(s, b);
@@ -365,6 +366,21 @@ export async function loadWorldData(onProgress = () => {}) {
       out[i++] = x; out[i++] = y; out[i++] = z; out[i++] = height; out[i++] = crown; out[i++] = type;
     }
     s.trees = out;
+  }
+
+  // Hand-placed bushes and hedges (Tallinn's centre has no laser-scan bushes: src/world/tln/centre.js), [x, z, height],
+  // kept by map square and added to its cells as it loads
+  const bushAdds = new Map();
+  function addBushesTo(s) {
+    const add = bushAdds.get(`${s.sx}_${s.sz}`);
+    if (!add) return;
+    const res = meta.lowres || 0.5, out = new Uint16Array(s.bushes.length + add.length);
+    out.set(s.bushes);
+    let i = s.bushes.length;
+    for (let k = 0; k < add.length; k += 3) {
+      out[i++] = Math.max(0, Math.floor((add[k] - s.x0) / res)); out[i++] = Math.max(0, Math.floor((add[k + 1] - s.z0) / res)); out[i++] = Math.min(255, Math.round(add[k + 2] * 10));
+    }
+    s.bushes = out;
   }
 
   // Rectangles kept free of trees (hand-made places such as the Toome tennis courts): { x0, z0, x1, z1 }
@@ -729,6 +745,16 @@ export async function loadWorldData(onProgress = () => {}) {
     addTreeMove(f) { treeMoves.push(f); },
     // Plant trees: [[x, z, height, crown, type]] (call before the sectors load).
     addTrees(list) { treeAdds.push(...list); },
+    // Plant bushes: [[x, z, height]] (call before the sectors load).
+    addBushes(list) {
+      const S = meta.sector.size, G0 = meta.sector.grid0;
+      for (const [x, z, h] of list) {
+        const k = `${Math.floor((x - G0) / S)}_${Math.floor((z - G0) / S)}`;
+        let a = bushAdds.get(k);
+        if (!a) bushAdds.set(k, (a = []));
+        a.push(x, z, h);
+      }
+    },
 
     // Make boxes solid for the cars ({ x, z, yaw, hx, hz }: centre, rotation of the local x axis, half sizes).
     addSolids(list) {

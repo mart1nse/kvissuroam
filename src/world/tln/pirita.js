@@ -27,6 +27,7 @@ import LAP from '../../race/pirita.json';
 import { jobs } from '../../jobs.js';
 import { still } from '../../still.js';
 import { areaKit } from '../handbuilt.js';
+import { createRummuKurv } from './rummukurv.js';
 
 const P = LAP.pts, N = P.length;
 // metres along the lap at each point, and the way it runs there
@@ -426,6 +427,8 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   const L = lay(world.vectors);
   const group = still(new THREE.Group());
   scene.add(group);
+  // the corner onto Rummu tee as it was raced: its kerb, posts, tyre wall and pines (rummukurv.js)
+  const kurv = createRummuKurv(scene, world, { at, SS, iOf }, L);
   const chunks = [];
   for (let c = 0; c * CHUNK < N; c++) chunks.push({ c, i0: c * CHUNK, i1: Math.min(N, (c + 1) * CHUNK), built: false, mesh: null });
 
@@ -549,8 +552,10 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   return {
     // (for the tests: how much is built)
     info: () => ({ marks: chunks.filter((c) => c.mesh).length, parts: parts.filter((q) => q.built).length, children: group.children.map((o) => o.children.length || 1) }),
+    kurv,
     update(car) {
       if (!car) return;
+      kurv.update(car);
       for (const ch of chunks) {
         const m = P[Math.min(N - 1, (ch.i0 + ch.i1) >> 1)], d = Math.hypot(m[0] - car.x, m[1] - car.z);
         if (!ch.built && d < 360) { ch.built = true; jobs.add(function* piritaMarks() { yield* buildChunk(ch); }, 'pirita marks'); }

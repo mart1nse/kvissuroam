@@ -615,6 +615,29 @@ flip('a guard rail under the top of the arc is flown over', { extra: { solidsNea
     res.map((r) => `rolls ${r.side > 0 ? 'right' : 'left'}: lands ${r.off.toFixed(2)} m over`).join('; '));
 }
 
+// ---- FLIP while reversing (Martin 28 Nov, "tesla flip, what about when i am driving backwards?"): it flies backwards
+// and lands still going backwards, the tail lined up with its way, not turned round half a turn in the air as before;
+// straight back and backing round a bend
+{
+  const res = [];
+  for (const steer of [0, 0.6]) {
+    const w = world(), c = fresh(w);
+    for (let t = 0; t < 6; t += dt) stepCar(c, { down: 1, steer }, w, dt);
+    const kmh = c.vx * 3.6, y0 = c.yaw;
+    let most = 0, end = null, vAt = 0;
+    for (let t = 0; t < 8 && end === null; t += dt) {
+      const fl = !!c.rocket.flight;
+      stepCar(c, { flip: t < 0.02 ? 1 : 0, down: 1, steer }, w, dt);
+      if (c.rocket.flight) most = Math.max(most, Math.abs(Math.atan2(Math.sin(c.yaw - y0), Math.cos(c.yaw - y0))));
+      if (fl && !c.rocket.flight) { end = Math.atan2(Math.sin(c.yaw - y0), Math.cos(c.yaw - y0)); vAt = c.vx * 3.6; }
+    }
+    res.push({ steer, kmh, most: most * 57.3, end: end === null ? 999 : end * 57.3, vAt, rev: c.reversing });
+  }
+  check('FLIP while reversing: flies and lands still going backwards, never turned round (straight back, and backing round a bend)',
+    res.every((r) => r.kmh < -20 && r.vAt < -15 && r.rev && r.most < (r.steer ? 60 : 10)),
+    res.map((r) => `${r.steer ? 'bend' : 'straight'} at ${r.kmh.toFixed(0)} km/h: nose swung ${r.most.toFixed(0)} deg at most, lands at ${r.vAt.toFixed(0)} km/h`).join('; '));
+}
+
 // ---- BOOST alone: the wheels roll (see the 0-100 checks above; down here, as these runs use the shared tank)
   {
     const spin = (inp) => { const w = world(), c = fresh(w); let most = 0; for (let t = 0; t < 2; t += dt) { stepCar(c, inp, w, dt); most = Math.max(most, c.slipVR || 0); } return most; };

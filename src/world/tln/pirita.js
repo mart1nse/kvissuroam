@@ -28,6 +28,7 @@ import { jobs } from '../../jobs.js';
 import { still } from '../../still.js';
 import { areaKit } from '../handbuilt.js';
 import { multiplyMaterial } from './multiply.js';
+import { createPiritaLine } from './piritaline.js';
 import { createRummuKurv } from './rummukurv.js';
 import { createPiritaKeskus } from './piritakeskus.js';
 import { createKoseKurv } from './kosekurv.js';
@@ -404,6 +405,8 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   const kurv = createRummuKurv(scene, world, { at, SS, iOf }, L);
   // the end of Kloostrimetsa tee: Pirita Keskus, the higher kerbs, the big tree, the turn's greenery (piritakeskus.js)
   const keskus = createPiritaKeskus(scene, world, { at, SS }, L, { shadows });
+  // the racing line worn darker and the tyre marks, from the laps driven here (piritaline.js)
+  const line = createPiritaLine(group, { y: (x, z, i) => world.topAt(x, z, L.LV[i]), onRoad: L.onRoad });
   // the inside of the left from Kose tee onto Lükati tee: three trees and shrubbery (kosekurv.js)
   const kose = createKoseKurv(scene, world, { shadows });
   // the way out of the left bend before Raiduri tee: a kerb along the grass strip, tyres across the drive (raidurikurv.js)
@@ -593,10 +596,10 @@ export function createPirita(scene, world, { shadows = true } = {}) {
   return {
     // (for the tests: how much is built)
     info: () => ({ marks: chunks.filter((c) => c.mesh).length, parts: parts.filter((q) => q.built).length, children: group.children.map((o) => o.children.length || 1) }),
-    kurv, keskus, raiduri, lay: L, at,
+    kurv, keskus, raiduri, line, lay: L, at,
     update(car) {
       if (!car) return;
-      kurv.update(car); keskus.update(car); kose.update(car); raiduri.update(car);
+      kurv.update(car); keskus.update(car); line.update(car); kose.update(car); raiduri.update(car);
       for (const ch of chunks) {
         const m = P[Math.min(N - 1, (ch.i0 + ch.i1) >> 1)], d = Math.hypot(m[0] - car.x, m[1] - car.z);
         if (!ch.built && d < 360) { ch.built = true; jobs.add(function* piritaMarks() { yield* buildChunk(ch); }, 'pirita marks'); }

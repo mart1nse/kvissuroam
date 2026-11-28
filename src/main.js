@@ -257,6 +257,13 @@ if (!isTouch && !navigator.webdriver && !stored('kvissuroam.guard2')) {
     localStorage.setItem('kvissuroam.guard2', '1');
   } catch {}
 }
+// (28 Nov 2026: an Android mark left only in the browser's store with little script memory is no longer taken for
+// a crash, see src/quality.js. Once, an Android phone's cap from before is dropped: most of them came from such
+// false alarms. The steady level stays, auto climbs from it a rung per 30 s, and a phone that really runs out of
+// memory reloads in its own tab and is capped again.)
+if (isTouch && /Android/.test(navigator.userAgent) && !navigator.webdriver && !stored('kvissuroam.guard3')) {
+  try { localStorage.removeItem('kvissuroam.gfxCap2'); localStorage.setItem('kvissuroam.guard3', '1'); } catch {}
+}
 // One game tab online at a time (src/onetab.js; Martin 26 Nov: "you are online in another tab, continue here?"). A
 // tab opened while another plays asks YOU'RE PLAYING IN ANOTHER TAB · CONTINUE HERE before it loads anything, and the
 // tab it is taken from goes to the garage and offline and draws nothing (standAside, below), with the same question.
@@ -408,7 +415,7 @@ function setFar(m) {
   scene.fog.far = far < quality.far ? far * 0.95 : 2800;
 }
 const gfx = createQuality({ renderer, sun: lights.sun, scene, camera, quality, setTrees: setTreeDistance, setFar, firstUse: (o) => warmer.firstUse(o) }, gfxCaps, {
-  locked: lockedLow, software: gpu.software,
+  locked: lockedLow, software: gpu.software, phone: isTouch,
   headless: navigator.webdriver && params.get('gfx') !== 'auto',   // automated test runs keep the full settings, so their pictures stay comparable
 });
 // Effects follow the graphics level too: once auto has had to go below full sharpness the tyre and

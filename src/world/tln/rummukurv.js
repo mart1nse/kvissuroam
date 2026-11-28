@@ -23,7 +23,8 @@ const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const ARC = [[-1092.6, -2.6], [-1093.0, 0.0], [-1092.7, 2.3], [-1091.7, 5.0], [-1090.0, 7.5], [-1087.5, 9.5], [-1084.0, 11.5], [-1080.0, 13.2]];
 const I_FROM = 2218, I_ARC = 2561, I_RUMMU = 2587, I_END = 2600;      // lap points: the kerb's start, where the curve takes over, Rummu tee
 const ZEBRA = [-763.7, -366.7];                                        // the crossing by the bridge: the kerb is down there
-const WALL_I = 2566, WALL_LEN = 112;                                   // the tyre wall ends at this lap point
+// (the onboard lap of the 2005 race shows the wall from just past the Pirita bridge's end: 150 m, Martin 28 Nov 2026)
+const WALL_I = 2566, WALL_LEN = 150;                                   // the tyre wall ends at this lap point
 // the pines inside the corner: [x, z, height, crown]
 const PINES = [[-1088.4, -4.4, 19, 6.5], [-1088.0, 0.5, 21, 7.5], [-1085.5, -6.5, 18, 6], [-1083.5, -1.5, 20, 7], [-1084.5, 8.2, 19, 6.5], [-1080.0, 9.5, 21, 7], [-1079.0, -4.0, 18, 6]];
 // (a conifer here is a pine or, one in seven, a spruce, by its place: scenery.js treeSpecies. These are pines.)

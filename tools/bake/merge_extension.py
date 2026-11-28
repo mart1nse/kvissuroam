@@ -50,9 +50,25 @@ for sx, sz in secs['touched']:
     open(f'{OUT}/sec/{sx}_{sz}.kvs', 'wb').write(gzip.compress(out, 6))
 print('sectors: new', len(secs['new']), 'touched', len(secs['touched']))
 
-# ---- coarse grid: prepend the northern rows
+# ---- coarse grid: prepend the northern rows (or, when the rectangle grew west, add the western columns)
 co, cn = mo['coarse'], mn['coarse']
-assert co['x0'] == cn['x0'] and co['x1'] == cn['x1'] and co['res'] == cn['res'] and co['z1'] == cn['z1']
+assert co['res'] == cn['res'] and co['z1'] == cn['z1'] and co['x1'] == cn['x1']
+west = int(round((co['x0'] - cn['x0']) / co['res']))
+if west > 0:
+    # Tallinn's lilac area (28 Nov 2026): the new bake's grid in full, the old one pasted over its own part. The old
+    # grid's western columns past its terrain sheets were copies of the last real column: SEAM columns more from
+    # the new bake, which has the sheets there.
+    assert co['z0'] == cn['z0'] and cn['nz'] == co['nz'] and cn['nx'] == co['nx'] + west
+    old = np.fromfile(f'{OUT}/coarse.bin', '<u2').reshape(co['nz'], co['nx'])
+    new = np.fromfile(f'{NEW}/coarse.bin', '<u2').reshape(cn['nz'], cn['nx'])
+    SEAM = 8
+    print('coarse: columns added', west, 'step at the seam (cm)', int(np.abs(new[:, west + SEAM].astype(int) - old[:, SEAM]).mean()))
+    new[:, west + SEAM:] = old[:, SEAM:]
+    new.astype('<u2').tofile(f'{OUT}/coarse.bin')
+    mo['coarse'] = dict(cn)
+    shutil.copy(f'{NEW}/ortho/overview.jpg', f'{OUT}/ortho/overview.jpg')       # (it spans the grid's rectangle)
+    co = mo['coarse']
+assert co['x0'] == cn['x0']
 add = int(round((co['z0'] - cn['z0']) / co['res']))
 if add > 0:
     old = np.fromfile(f'{OUT}/coarse.bin', '<u2').reshape(co['nz'], co['nx'])

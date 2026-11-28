@@ -57,6 +57,9 @@ export const CITY_TRACKS = { tartu: [TOOME_CARD, RAADI_CARD], tallinn: PIRITA_CA
 // other city's cards carry its records, asked of its own room (board.js), and DRIVE then loads the page again there
 // and puts the car on the picked track's start (main.js startDriving, src/city.js goCity). A page opened with ?city=
 // in its address opens on its tracks; a small pill before them goes back to the cities.
+// Since later that day the two cities are a toggle before the tracks, there all the time, and the page opens on its
+// own city's tracks (Martin 28 Nov: "perhaps instead of the back pill, just all the time show the tallinn tartu
+// toggle?"). The cards of the cities are not shown any more.
 const CITIES = TLN_FLAG ? [
   { id: 'tartu', name: 'TARTU', meta: 'TOOMEMÄGI · MAJORAADI', modes: [['race', '2 CIRCUITS']], path: toome, secs: 7 },
   { id: 'tallinn', name: 'TALLINN', meta: 'PIRITA-KOSE', modes: [['race', 'NEW CIRCUIT']], path: pirita, secs: 8 },
@@ -88,7 +91,7 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
   let view = CITY, awayPick = 'toome';           // the city whose tracks are shown, and the track picked of the other city's
   let picked = pickedTrack(drag);
   // the cities first (?tln=1 without a city in the address), else this city's tracks
-  let cities = TLN_FLAG && !new URLSearchParams(location.search).get('city');
+  const cities = false;
   const el = document.createElement('div');
   el.id = 'trackpick';
   el.setAttribute('role', 'radiogroup');
@@ -110,7 +113,7 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
     const html = cities ? CITIES.map((c) => { const n = online?.(c.id); return `<button class="tcard city${c.id === view ? ' on' : ''}" data-city="${c.id}" role="radio" aria-checked="${c.id === view}">
         ${outline(c)}<span class="tx"><b class="nm">${c.name}</b><small class="meta">${c.meta}</small>
         <span class="modes">${c.modes.map(([k, w]) => `<i class="${k}">${w}</i>`).join('')}${n != null ? `<i>${n} ONLINE</i>` : ''}</span></span></button>`; }).join('')
-      : (TLN_FLAG ? `<button class="tcity" data-cities="1" aria-label="Choose the city">‹ ${view.toUpperCase()}</button>` : '') + cards.map((t) => {
+      : (TLN_FLAG ? `<span class="tcity" role="radiogroup" aria-label="City">${CITIES.map((c) => { const n = c.id !== CITY ? online?.(c.id) : null; return `<button class="${c.id === view ? 'on' : ''}" data-city="${c.id}" role="radio" aria-checked="${c.id === view}">${c.name}${n != null ? `<i> (${n})</i>` : ''}</button>`; }).join('')}</span>` : '') + cards.map((t) => {
       const on = t.id === sel, r = away ? recordOf?.(view, t.id) : record(t.id), m = !on ? null : away ? mineOf?.(view, t.id) : mine?.(t.id), fmt = t.fmt || ((ms) => fmtTime(ms / 1000));
       return `<button class="tcard${on ? ' on' : ''}" data-track="${t.id}" role="radio" aria-checked="${on}">
         ${outline(t)}
@@ -127,12 +130,12 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
     const c = e.target.closest('[data-city]');
     if (c) {
       c.blur();
-      view = c.dataset.city; cities = false;
+      if (c.dataset.city === view) return;
+      view = c.dataset.city;
       render();
       onView?.(view);
       return;
     }
-    if (e.target.closest('[data-cities]')) { cities = true; render(); onCities?.(); return; }
     const b = e.target.closest('[data-track]');
     if (!b) return;
     b.blur();
@@ -143,6 +146,8 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
     onPick?.(picked);
   });
   render();
+  // (the other city's records and how many are online there, for its side of the toggle)
+  if (TLN_FLAG) setTimeout(() => onCities?.(), 0);
   // (the garage opens on the track the car is at, Martin 26 Nov: the TOOMEMÄGI button or H, then the garage and
   // DRIVE, took the car back to Raadi because the picker still said Raadi. Not a pick: no tyres change.)
   function follow(id) { if (id !== picked) { picked = id; render(); } }

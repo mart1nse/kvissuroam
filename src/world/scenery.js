@@ -3,6 +3,7 @@ import { createRealTrees } from './realtrees.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { jobs } from '../jobs.js';
 import { TALLINN } from '../city.js';
+import { lapBeside } from './tln/lapnear.js';
 
 // ---------------------------------------------------------------- buildings
 // The bake gives walls, roofs and one base height per building, but no building ids. Triangles that share
@@ -285,11 +286,14 @@ function treeGeometries(detail) {
     mergeGeometries([trunk(0.3, 0.04, 0x4a3528), cone(0.5, 0.5, 0.43, 0x2c5f3a), cone(0.38, 0.42, 0.67, 0x2f6a3e), cone(0.24, 0.34, 0.83, 0x357444)]),
     // 5 pine: long bare reddish stem, flat crown at the top
     mergeGeometries([trunk(0.72, 0.04, 0x9a5a3c), blob(0.42, 0.45, 0, 0.82, 0, 0x2f6642), blob(0.26, 0.5, 0.14, 0.7, -0.05, 0x37714a)]),
+    // 6 a spruce by the road (ROADSIDE): the stem bare below, the cones slimmer
+    mergeGeometries([trunk(0.45, 0.04, 0x4a3528), cone(0.36, 0.38, 0.56, 0x2c5f3a), cone(0.3, 0.36, 0.72, 0x2f6a3e), cone(0.2, 0.3, 0.86, 0x357444)]),
   ];
   for (const g of out) g.computeVertexNormals();
   return out;
 }
 
+const ROADSIDE = 6;              // the spruce by the lap's road (Tallinn): see build() below and realtrees.js
 // species from what the lidar tells us: conifer or not, height, and how slim the crown is
 function treeSpecies(type, h, crown, r) {
   // (Tallinn: the conifers round Pirita, Kose and Kloostrimetsa are Scots pines, a spruce here and there: Martin's
@@ -400,10 +404,19 @@ export function createTrees(opts, renderer, world) {
     const lists = near.map(() => []);
     // what the close-tree pool needs to draw tree i exactly as its flat picture stands: species, turn, tint
     const kind = pools ? new Uint8Array(n).fill(255) : null, look = pools ? new Float32Array(n * 4) : null;
+    const roadTurn = TALLINN ? new Float32Array(n) : null;
     for (let i = 0; i < n; i++) {
       if (opts.thinTrees && rec[i * 6 + 3] < 9 && (i % 3) === 0) continue;
       const pick = Math.abs(Math.sin(rec[i * 6] * 12.9898 + rec[i * 6 + 2] * 78.233) * 43758.5453) % 1;
-      const type = treeSpecies(rec[i * 6 + 5] | 0, rec[i * 6 + 3], rec[i * 6 + 4], pick);
+      let type = treeSpecies(rec[i * 6 + 5] | 0, rec[i * 6 + 3], rec[i * 6 + 4], pick);
+      // A spruce whose boughs would reach over the lap's road (Tallinn; Martin 28 Nov 2026: "a few spruces are in the
+      // road. for these who go over the road, make the branches start a bit higher up and perhaps more reduced on
+      // the side of the road"): the roadside spruce, its cut side turned to the road
+      if (roadTurn) {
+        roadTurn[i] = NaN;
+        const by = type === 4 ? lapBeside(rec[i * 6], rec[i * 6 + 2]) : null;
+        if (by && by[0] < rec[i * 6 + 4] / 2 + 0.8) { type = ROADSIDE; roadTurn[i] = Math.atan2(-by[2], by[1]); }
+      }
       lists[type].push(i);
       if (kind) kind[i] = type;
     }
@@ -417,7 +430,8 @@ export function createTrees(opts, renderer, world) {
       list.forEach((i, k) => {
         const h = rec[i * 6 + 3], c = rec[i * 6 + 4];
         p.set(rec[i * 6], rec[i * 6 + 1] - 0.15, rec[i * 6 + 2]);
-        const turn = rnd() * 6.283;
+        let turn = rnd() * 6.283;
+        if (type === ROADSIDE && roadTurn[i] === roadTurn[i]) turn = roadTurn[i];
         q.setFromAxisAngle(up, turn);
         s.set(c, h, c);
         m.compose(p, q, s);

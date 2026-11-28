@@ -128,11 +128,16 @@ export const PATH_HOLD_T = 0.3;
 const carry = (p, t, T) => { const h = yawHeld(p); return h * holdSum(t, T) + (p.yawR - h) * YAW_TAU * (1 - Math.exp(-t / YAW_TAU)); };
 const yawCarry = (p, t) => carry(p, t, YAW_HOLD_T);
 const pathCarry = (p, t) => carry(p, t, PATH_HOLD_T);
-// (the nose is lined up with the line of travel at the press: the slide it had then is taken out)
+// (the nose is lined up with the line of travel at the press: the slide it had then is taken out. A car going backwards,
+// its tail more than a right angle ahead, has its tail lined up instead and flies and lands still going backwards:
+// Martin 28 Nov, "tesla flip, what about when i am driving backwards?" Until then the line-up turned a reversing car
+// round half a turn in the first second of the flight, and it came down nose first going the other way.)
 function lineTurn(p) {
   if (Math.hypot(p.vx, p.vz) <= YAW_MIN_V) return 0;
-  const d = Math.atan2(p.vx, -p.vz) - p.yaw0;
-  return Math.atan2(Math.sin(d), Math.cos(d));
+  let d = Math.atan2(p.vx, -p.vz) - p.yaw0;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (Math.abs(d) > Math.PI / 2) d -= Math.sign(d) * Math.PI;
+  return d;
 }
 // The path over the ground: the speed at the press, its heading turned by pathCarry (the corner jets push it round as the
 // nose swings: at 30 m/s and a turn of 0.5 rad/s 15 m/s2 at first, a tenth of what they have). Summed once a plan in

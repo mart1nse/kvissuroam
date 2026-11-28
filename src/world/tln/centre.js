@@ -45,13 +45,56 @@ export const LANDMARKS = [
 
 const get = async (f) => { try { return await (await fetch(`${DATA}${f}`)).json(); } catch { return null; } };
 // lines.json (tools/tln/lines.py) and marks.json (tools/tln/marks.py: arrows, manhole lids and drains, tram lines)
-let marks = null;
+let marks = null, facades = null;
 export async function centreLines() {
-  const [lines, m] = await Promise.all([get('lines.json'), get('marks.json')]);
+  const [lines, m, f] = await Promise.all([get('lines.json'), get('marks.json'), get('facades.json')]);
   marks = m;
+  facades = f;
   return lines;
 }
 export const centreMarksData = () => marks;
+
+// What the centre's houses are built of (tools/tln/facades.py -> facades.json: wood in Kalamaja and Kadriorg,
+// limestone works in Rotermann and Kultuurikatel, brick, glass, OpenStreetMap's wall colours): src/world/scenery.js
+// setFacades. Per map square, the points bucketed on a 32 m grid so a house finds its own in a few looks.
+const FCELL = 32;
+const fcache = new Map();
+export function centreFacades(sx, sz) {
+  const key = `${sx}_${sz}`;
+  let g = fcache.get(key);
+  if (g !== undefined) return g;
+  const L = facades && facades[key];
+  g = null;
+  if (L) {
+    g = new Map();
+    for (let i = 0; i < L.length; i += 4) {
+      const c = Math.floor(L[i] / FCELL) + ',' + Math.floor(L[i + 1] / FCELL);
+      let a = g.get(c);
+      if (!a) g.set(c, (a = []));
+      a.push(L[i], L[i + 1], L[i + 2], L[i + 3]);
+    }
+  }
+  fcache.set(key, g);
+  return g;
+}
+// the point of a house inside the box x0..x1, z0..z1 (game metres) nearest its middle: [x, z, kind, rgb] or null
+export function facadeIn(grid, x0, x1, z0, z1) {
+  let best = null, bd = 1e18;
+  const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+  for (let cx = Math.floor(x0 / FCELL); cx <= Math.floor(x1 / FCELL); cx++) {
+    for (let cz = Math.floor(z0 / FCELL); cz <= Math.floor(z1 / FCELL); cz++) {
+      const a = grid.get(cx + ',' + cz);
+      if (!a) continue;
+      for (let i = 0; i < a.length; i += 4) {
+        const x = a[i], z = a[i + 1];
+        if (x < x0 || x > x1 || z < z0 || z > z1) continue;
+        const d = (x - mx) ** 2 + (z - mz) ** 2;
+        if (d < bd) { bd = d; best = a.slice(i, i + 4); }
+      }
+    }
+  }
+  return best;
+}
 
 // OpenStreetMap's hedges and shrubbery as bushes on the map's 0.5 m cells (world.addBushes, drawn with the map's own
 // leafy lumps, src/world/scenery.js createLowObjects): a hedge every 0.7 m along its line at its height (1.3 m where

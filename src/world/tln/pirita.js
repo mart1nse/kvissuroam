@@ -30,6 +30,7 @@ import { areaKit } from '../handbuilt.js';
 import { multiplyMaterial } from './multiply.js';
 import { createRummuKurv } from './rummukurv.js';
 import { createPiritaKeskus } from './piritakeskus.js';
+import { race2005Parts, merivaljaBarriers } from './race2005.js';
 
 const P = LAP.pts, N = P.length;
 // metres along the lap at each point, and the way it runs there
@@ -354,6 +355,8 @@ export function piritaPropsFor(vectors) {
     const sb = SS[i] - before, ib = iOf(sb), p = clear(sb, -turn * (L.W[ib] / 2 + 2.5), 0.3);
     if (p) out.push([turn < 0 ? CHEVL : CHEVR, p[0], p[1], bearing(p[2], p[3]) + 180, 0]);
   }
+  // the 2005 race's red and white crowd barriers round the outside of the turn onto Merivälja tee (race2005.js)
+  out.push(...merivaljaBarriers({ at, SS, L }, bearing, clear));
   // lamps: one side, a pole every 38 to 46 m; on Pirita tee along its outer edge, the arm over the carriageway
   for (const z of ZONES) {
     const gap = z.lampGap || 40, side = z.lampSide || 1;
@@ -493,6 +496,8 @@ export function createPirita(scene, world, { shadows = true } = {}) {
     { i: 765, built: false, make: (A) => rail(A)(RAIL_2005) },
     { i: 2707, built: false, make: (A) => RAILS.slice(3).forEach(rail(A)) },
     { i: 1962, built: false, make: (A) => gutter(A) }];
+  // the 2005 race's start lights and timing tower, billboard, truck and the bridge's red parapet (race2005.js)
+  parts.push(...race2005Parts({ at, SS, LEN, N, L, world }).map((q) => ({ ...q, built: false })));
   // the spectators' tape: a yellow tape at hip height on thin stakes 4 m back from the road's edge, in long runs both sides
   // through the woods and past the Kloostrimetsa houses (the 2005 onboard lap; where each run begins and ends is guessed)
   for (let c = 0; c * CHUNK < N; c++) {
@@ -591,7 +596,7 @@ export function createPirita(scene, world, { shadows = true } = {}) {
         jobs.add(function* piritaParts() {
           const sub = still(new THREE.Group());
           const A = areaKit(world, sub, { shadows });
-          q.make(A);
+          q.make(A, sub);
           yield;
           A.finish();
           group.add(sub);

@@ -25,7 +25,7 @@ const I_FROM = 2218, I_ARC = 2561, I_RUMMU = 2587, I_END = 2600;      // lap poi
 const ZEBRA = [-763.7, -366.7];                                        // the crossing by the bridge: the kerb is down there
 const WALL_I = 2566, WALL_LEN = 112;                                   // the tyre wall ends at this lap point
 // the pines inside the corner: [x, z, height, crown]
-const PINES = [[-1089.5, -3.5, 19, 6.5], [-1088.0, 0.5, 21, 7.5], [-1085.5, -6.5, 18, 6], [-1083.5, -1.5, 20, 7], [-1084.5, 8.2, 19, 6.5], [-1080.0, 9.5, 21, 7], [-1079.0, -4.0, 18, 6]];
+const PINES = [[-1088.4, -4.4, 19, 6.5], [-1088.0, 0.5, 21, 7.5], [-1085.5, -6.5, 18, 6], [-1083.5, -1.5, 20, 7], [-1084.5, 8.2, 19, 6.5], [-1080.0, 9.5, 21, 7], [-1079.0, -4.0, 18, 6]];
 // (a conifer here is a pine or, one in seven, a spruce, by its place: scenery.js treeSpecies. These are pines.)
 const isPine = (x, z) => Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1 < 0.85;
 
@@ -104,7 +104,7 @@ export function createRummuKurv(scene, world, lap, L) {
 
   // ---- the trees and the solid things, known before the map squares come
   world.addTrees(PINES.map(([x, z, h, c]) => { while (!isPine(x, z)) x += 0.1; return [x, z, h, c, 1]; }));
-  // the posts: 0.6 m behind the kerb, where the curve begins and two thirds of the way round
+  // the posts: 1.6 m behind the kerb, where the curve begins and two thirds of the way round
   const bendRun = runs[runs.length - 1];
   const onKerb = (x, z, back) => {
     let bj = 0, bd = Infinity;
@@ -112,7 +112,7 @@ export function createRummuKurv(scene, world, lap, L) {
     const a = bendRun[bj], b = bendRun[bj + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     return [a[0] + ((b[1] - a[1]) / l) * back, a[1] - ((b[0] - a[0]) / l) * back];
   };
-  const posts = [onKerb(-1092.4, -3.4, 0.6), onKerb(-1090.4, 7.0, 0.6)].map(([x, z]) => ({ x, z, tx: 0, tz: 0, hitT: -9, obj: null }));
+  const posts = [onKerb(-1092.4, -3.4, 1.6), onKerb(-1090.4, 7.0, 1.6)].map(([x, z]) => ({ x, z, tx: 0, tz: 0, hitT: -9, obj: null }));
   world.addSolids(posts.map((p) => ({ x: p.x, z: p.z, yaw: 0, hx: 0.17, hz: 0.17 })));
   // the tyre wall's line: 0.5 m outside the road's right edge, its last metres bent a metre in towards the corner
   const wall = [];

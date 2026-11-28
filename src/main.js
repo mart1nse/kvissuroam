@@ -197,6 +197,7 @@ import { piritaKeskusWalls } from './world/tln/piritakeskus.js';
 import { centreVectors, centreLines, inOldTown, LANDMARKS, centreBushes, centreFacades, facadeIn } from './world/tln/centre.js';
 import { createCentreMarks } from './world/tln/centremarks.js';
 import { createCityWalls } from './world/tln/citywalls.js';
+import { raeplatsWalls, raeplatsClear, createRaeplats } from './world/tln/raeplats.js';
 
 // Tallinn (?tln=1, src/city.js): none of Tartu's hand-built places, its trackside and kerbs along Toomemägi, its parked
 // cars or its bus stops are made there. Each is this stand-in, which takes any call or property and gives itself back
@@ -536,7 +537,7 @@ function groundHold() {
   return stageHold;
 }
 const stageBusy = () => !!stage && (stage.phase === 'count' || stage.phase === 'run');
-let pirita = null, centreMarks = null, cityWalls = null;
+let pirita = null, centreMarks = null, cityWalls = null, raeplats = null;
 let world, terrain, water, edge, hud, skids, smoke, bigmap, race, mp, board, props, trackside, trackKerbs, people, janese, aksi, angerja, pootsmani, pootsmani12, kvissentali, raekoda, sireli, coop, jaaaeg, discgolf, janeseMaja, arhitekti, elva, vanemuise, korve, korve2, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, riia, teatri, kontserdimaja, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, kaluri, isaJaPoeg, astelpaju, parked, kuperjanovi2, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa;
 let busStops = null;                 // shelters at every bus stop (src/world/busstops.js)
 const withStops = TARTU && params.get('busstops') !== '0';
@@ -801,7 +802,7 @@ async function boot() {
   kuperjanovi2Walls(world.walls);               // Kuperjanovi from Veski to Vallikraavi: painted fronts
   kuperjanoviWalls(world.walls);                // the white house on the Kuperjanovi corner is built by hand
   pepleriWalls(world.walls);                    // Pepleri: the church is built by hand, the blocks get their colours
-  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); setOldTown(inOldTown); setTownLooks(LANDMARKS); setFacades(centreFacades, facadeIn); world.addBushes(centreBushes()); piritaKeskusWalls(world.walls); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
+  } else { piritaVectors(world.vectors); centreVectors(world.vectors, await centreLines()); setOldTown(inOldTown); setTownLooks(LANDMARKS); setFacades(centreFacades, facadeIn); world.addBushes(centreBushes()); piritaKeskusWalls(world.walls); raeplatsWalls(world.walls); }   // Tallinn: the lap's own tarmac, lines and sandy verges (src/world/tln/pirita.js); the centre's lines as measured on the air photo, none on its stone streets (centre.js)
   quality.coarseStep = coarseStep();
   terrain = createTerrain(world, renderer, quality);
   scene.add(terrain.group);
@@ -829,7 +830,7 @@ async function boot() {
       return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.hypot(x1 - x0, z1 - z0) / 2 + 40 };
     }),
   ];
-  const attachProps = props = createProps(world, { shadows: !isTouch, clear: !TARTU ? () => new Set() : (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of raadiStartClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); for (const id of winbaumClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : []), ...(TALLINN ? piritaPropsFor(world.vectors) : [])] });
+  const attachProps = props = createProps(world, { shadows: !isTouch, clear: !TARTU ? (d) => (TALLINN ? raeplatsClear(d) : new Set()) : (d) => { const out = clearProps(d); for (const id of coopClear(d)) out.add(id); for (const id of kroonuaiaClear(d)) out.add(id); for (const id of kaluriClear(d)) out.add(id); for (const id of riia3Clear(d)) out.add(id); for (const id of ravilaClear(d)) out.add(id); for (const id of ulikooliClear(d)) out.add(id); for (const id of narvaClear(d)) out.add(id); for (const id of raadiClear(d)) out.add(id); for (const id of raadiStartClear(d)) out.add(id); for (const id of aovereClear(d)) out.add(id); for (const id of winbaumClear(d)) out.add(id); if (params.get('roadprops') !== 'old') { roadFix = fixRoadProps(d, world.vectors, out); for (const id of roadFix.cleared) out.add(id); } if (params.get('thin') !== 'off') { propThin = thinProps(d, world.vectors, handZones(keepOutCircles(handExtras())), out); for (const id of propThin.cleared) out.add(id); } if (withStops) for (const id of busStopClear(d)) out.add(id); return out; }, extra: () => [...handExtras(), ...(withStops ? busStopProps() : []), ...(TALLINN ? piritaPropsFor(world.vectors) : [])] });
   if (TARTU) {
   mandelSignSkip(world);                        // Mandel's name is painted on its wall, not a box sign
   coopSignSkip(world);                          // the Coop's letters are built on its walls
@@ -882,6 +883,7 @@ async function boot() {
   pirita = TALLINN ? createPirita(scene, world, { shadows: !isTouch }) : null;     // the lap's patches, rails and gutter as the car comes
   centreMarks = TALLINN ? createCentreMarks(scene, world) : null;               // the centre's worn tarmac, lids, grates and tram rails (src/world/tln/centremarks.js)
   cityWalls = TALLINN ? createCityWalls(scene, world, buildBuildings.material) : null;     // the Old Town's walls between the map's towers
+  raeplats = TALLINN ? createRaeplats(scene, world, { shadows: !isTouch }) : null;     // the town hall's front and tower, the Christmas market (src/world/tln/raeplats.js)
   haridus10 = hand(createHariduse10)(scene, world, { shadows: !isTouch });
   katoliku = hand(createKatoliku)(scene, world, { shadows: !isTouch });
   katoliku2 = hand(createKatoliku2)(scene, world, { shadows: !isTouch });
@@ -2635,7 +2637,7 @@ function frame(ts) {
     // (the places build around the watched car while spectating: a copy, so nothing they do moves it)
     const placeCar = watch?.active ? Object.assign(spot, WF, { y: WV?.y ?? car.y }) : car;
     if (!jobs.resting) {
-      PLACES ||= !TARTU ? [pirita, centreMarks, cityWalls] : [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, winbaum, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
+      PLACES ||= !TARTU ? [pirita, centreMarks, cityWalls, raeplats] : [pootsmani, pootsmani12, angerja, raekoda, kuuni, kuperjanovi, pepleri, kaubamaja, winbaum, keskus, keskusTee, { update: (c) => { if (!orident.info()) orident.update(c); } }, delta, kvissentali, sireli, coop, jaaaeg, janeseMaja, arhitekti, elva, vanemuise, pepVan, korve, korve2, riia, teatri, kontserdimaja, korve3, korve4, haridus10, katoliku, katoliku2, veskiFronts, noela, raadi, raadi2, raadi3, raadi4, louna, louna2, louna3, louna4, louna5, turu, turu2, turu3, turu4, turu5, turu6, laiFronts, kaluri, riia2, riia3, riia4, riia5, riia6, riia7, ravila, ravila2, ravila3, isaJaPoeg, kuperjanovi2, astelpaju, ulikooli, kvissentali2, arukula, ulikooli2, road3, ulikooli3, ulikooli4, ulikooli5, ulikooliPaint, lennujaam, lennuakadeemia, ulenurme, narva, ulenurmeKonsum, ulenurmePaint, erm, kaupmehe, raadiManor, narva2, vaksali, narva3, narva4, narva5, narva6, narva7, raadiPark, raadiStart, aovere, aovere2, aovere3, aoverePaint, rehetare, rattasepa];
       for (let k = 0; k < PLACES.length; k++) {
         const b0 = performance.now();
         const P = PLACES[(placeAt + k) % PLACES.length];
@@ -3040,7 +3042,7 @@ window.__game = !devHook ? { hitches } : {
   // advance the physics without rendering (used by automated tests)
   sim(seconds, inp = {}) { for (let t = 0; t < seconds; t += 1 / 60) stepCar(car, inp, world, 1 / 60); },
   get car() { return car; }, get camera() { return camera; }, get model() { return model; }, get world() { return world; }, jobs, warmer, tex: () => shrinker?.stats, texList: () => shrinker?.list(), get lite() { return liteWhy; }, xlow, lag, get still() { return still; }, get warm() { return warm; }, get mode() { return mode; }, get flying() { return !!flyIn; }, setCar, goHome, place, startDriving, watchReplay, openMap, dropAt, skids: () => skids, smoke: () => smoke, bigmap: () => bigmap, renderer, scene, camera, gfx, gpu, terrain: () => terrain, photos: () => photos,
-  skins: () => skinLog, pirita: () => pirita, centreMarks: () => centreMarks, cityWalls: () => cityWalls, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, pirita: () => pirita, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
+  skins: () => skinLog, pirita: () => pirita, centreMarks: () => centreMarks, cityWalls: () => cityWalls, raeplats: () => raeplats, race: () => race, raceMode: () => raceMode, mp: () => mp, lane: () => lane, watch: () => watch, audio, props: () => props, janese: () => janese, parked: () => parked, busStops: () => busStops, orident: () => orident, aksi: () => aksi, discgolf: () => discgolf, roadFix: () => roadFix, propThin: () => propThin, pads, setup, get ctl() { return ctl; }, board: () => board, pirita: () => pirita, stage: () => stage, drag: () => drag, kudos: () => kudos, sideCam };
 
 boot().then(() => requestAnimationFrame(frame)).catch((err) => {
   console.error(err);

@@ -1499,10 +1499,26 @@ function offTo(city, track, name, garage = false) {
     // real menu; a dev server has none to name and gets the loading screen)
     const css = [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href);
     const R = document.documentElement;
-    const keep = (pic) => sessionStorage.setItem('kvissuroam.ghost', JSON.stringify({ body: document.body.className, root: R.className, rootStyle: R.getAttribute('style') || '', css, html: $('#menu').innerHTML, shot: pic, at: Date.now() }));
-    if (css.length) try { keep(shot); } catch { try { keep(''); } catch { /* no room: the loading screen shows */ } }
+    // The style sheets' own text goes along (Martin 28 Nov: "the very brief black screen during the refresh"): the
+    // new page writes the copy in one go, styles and picture in it, so its very first paint is this garage and not
+    // a dark page that the copy's sheets are still being fetched for. Addresses inside a sheet are made whole, as
+    // its text no longer sits at the sheet's own address. Read from the browser's cache; 1.2 s at most.
+    const keep = (pic, text) => sessionStorage.setItem('kvissuroam.ghost', JSON.stringify({ body: document.body.className, root: R.className, rootStyle: R.getAttribute('style') || '', css, cssText: text, html: $('#menu').innerHTML, shot: pic, at: Date.now() }));
+    const whole = (text, base) => text.replace(/url\(\s*(['"]?)(?!data:|https?:|\/\/|#)([^'")]+)\1\s*\)/g, (m, q, u) => { try { return `url("${new URL(u, base).href}")`; } catch { return m; } });
+    let left = false;
+    const leave = (text) => {
+      if (left) return;
+      left = true;
+      if (css.length) try { keep(shot, text); } catch { try { keep('', text); } catch { try { keep('', ''); } catch { /* no room: the loading screen shows */ } } }
+      // (where the browser can, the old page stays in the picture until the new one has painted, and fades into it)
+      const vt = document.createElement('style');
+      vt.textContent = '@view-transition { navigation: auto; } ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .12s; }';
+      document.head.appendChild(vt);
+      goCity(city, { drive: true, track: track === 'raadi' ? 'raadi' : '' });
+    };
     audio.setBackground?.(true);
-    setTimeout(() => goCity(city, { drive: true, track: track === 'raadi' ? 'raadi' : '' }), 60);
+    Promise.all(css.map((h) => fetch(h, { cache: 'force-cache' }).then((r) => (r.ok ? r.text() : Promise.reject())).then((t) => whole(t, h)))).then((t) => leave(t.join('\n')), () => leave(''));
+    setTimeout(() => leave(''), 1200);
     return;
   }
   const L = $('#loading');

@@ -3,6 +3,47 @@
 <head>
   <meta charset="utf-8" />
   <script>
+    // Come from the other city's garage (src/main.js offTo): that garage as it stood, put up again at once, with the
+    // load's progress on its DRIVE button, so that changing city from the garage does not look like a restart.
+    // (Its own head and body tags are written in two pieces: the build looks for those in this file's text.)
+    // In the head, before the style sheet, so that it does not wait for the sheet and no part of the page is painted
+    // before it (Martin 28 Nov: "the very brief black screen during the refresh": the page's dark ground showed
+    // while the rest was still being read). The frame hangs on the root, as there is no body yet. Where the browser
+    // can, the old page stays in the picture until this one has painted, and fades into it.
+    // It is a copy to look at, a page of its own in a frame, so the game never takes a part of it for the real menu.
+    (function () {
+      var raw = null;
+      try { raw = sessionStorage.getItem('kvissuroam.ghost'); sessionStorage.removeItem('kvissuroam.ghost'); } catch (e) { return; }
+      if (!raw || new URLSearchParams(location.search).get('go') !== '1') return;
+      var g; try { g = JSON.parse(raw); } catch (e) { return; }
+      if (!g || !g.html || Date.now() - g.at > 30000) return;
+      if (!g.css || !g.css.length) return;
+      document.documentElement.classList.add('ghosted');
+      var vt = document.createElement('style'); vt.textContent = '@view-transition { navigation: auto; } ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .12s; }'; document.head.appendChild(vt);
+      var esc = function (t) { return String(t || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
+      var w = document.createElement('iframe'); w.id = 'ghost'; w.title = 'Loading';
+      var back = '#12062b url("' + esc(g.shot || '/menu-still.jpg') + '") center / cover no-repeat';
+      var page = '<!doctype html><html class="' + esc(g.root) + '" style="' + esc(g.rootStyle) + '"><he' + 'ad><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+        + (g.cssText ? '<style>' + String(g.cssText).replace(/<\/style/gi, '<\\/style') + '</style>' : g.css.map(function (h) { return '<link rel="stylesheet" href="' + esc(h) + '">'; }).join(''))
+        + '<style>html, body { margin: 0; height: 100%; overflow: hidden; background: ' + back + ' !important; }'
+        + '#menu { pointer-events: none; } #drive { pointer-events: auto; }</style></he' + 'ad><bo' + 'dy class="' + esc(g.body) + '"><div id="menu" class="screen">' + g.html + '</div></bo' + 'dy></html>';
+      // (what was behind the garage, on the frame itself too, and the copy written into the frame at once and not
+      // loaded as a page of its own: with the styles' text in it, it is all there for this page's first paint)
+      w.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:1000;background:' + back;
+      document.documentElement.appendChild(w);
+      try { var d = w.contentDocument; d.open(); d.write(page); d.close(); } catch (e) { w.srcdoc = page; }
+      var t = setInterval(function () {
+        if (window.__ghostDone || !w.isConnected) { clearInterval(t); return; }
+        // (the load failed: the loading screen says so)
+        var bar = document.getElementById('loadbar'), msg = document.getElementById('loadmsg');
+        if (!bar || !msg) return;
+        if (/^Could not/.test(msg.textContent)) { clearInterval(t); w.remove(); document.documentElement.classList.remove('ghosted'); return; }
+        var b = w.contentDocument && w.contentDocument.querySelector('#drive b');
+        if (b) b.textContent = 'LOADING ' + (parseInt(bar.style.width, 10) || 0) + '%';
+      }, 100);
+    })();
+  </script>
+  <script>
     // The game lives at www.linnaring.com. The old kvissuroam.parttime.workers.dev address and the bare
     // linnaring.com get this same page as a static file (no Worker runs for it, so the page loads even
     // if the Worker is ever stopped by a spending limit). There it reads the driver name, car, queued
@@ -209,35 +250,6 @@
     <p class="small attribution" id="attribution"></p>
   </div>
 
-  <script>
-    // Come from the other city's garage (src/main.js offTo): that garage as it stood, put up again at once, with the
-    // load's progress on its DRIVE button, so that changing city from the garage does not look like a restart.
-    // It is a copy to look at, a page of its own in a frame, so the game never takes a part of it for the real menu.
-    (function () {
-      var raw = null;
-      try { raw = sessionStorage.getItem('kvissuroam.ghost'); sessionStorage.removeItem('kvissuroam.ghost'); } catch (e) { return; }
-      if (!raw || new URLSearchParams(location.search).get('go') !== '1') return;
-      var g; try { g = JSON.parse(raw); } catch (e) { return; }
-      if (!g || !g.html || Date.now() - g.at > 30000) return;
-      if (!g.css || !g.css.length) return;
-      document.documentElement.classList.add('ghosted');
-      var esc = function (t) { return String(t || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
-      var w = document.createElement('iframe'); w.id = 'ghost'; w.title = 'Loading';
-      w.srcdoc = '<!doctype html><html class="' + esc(g.root) + '" style="' + esc(g.rootStyle) + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
-        + g.css.map(function (h) { return '<link rel="stylesheet" href="' + esc(h) + '">'; }).join('')
-        + '<style>html, body { margin: 0; height: 100%; overflow: hidden; background: #12062b url("' + esc(g.shot || '/menu-still.jpg') + '") center / cover no-repeat !important; }'
-        + '#menu { pointer-events: none; } #drive { pointer-events: auto; }</style></head><body class="' + esc(g.body) + '"><div id="menu" class="screen">' + g.html + '</div></body></html>';
-      document.body.appendChild(w);
-      var bar = document.getElementById('loadbar'), msg = document.getElementById('loadmsg');
-      var t = setInterval(function () {
-        if (window.__ghostDone || !w.isConnected) { clearInterval(t); return; }
-        // (the load failed: the loading screen says so)
-        if (/^Could not/.test(msg.textContent)) { clearInterval(t); w.remove(); document.documentElement.classList.remove('ghosted'); return; }
-        var b = w.contentDocument && w.contentDocument.querySelector('#drive b');
-        if (b) b.textContent = 'LOADING ' + (parseInt(bar.style.width, 10) || 0) + '%';
-      }, 100);
-    })();
-  </script>
 
   <div id="hud" class="hidden">
     <div id="topbar">

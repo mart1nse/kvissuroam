@@ -9,7 +9,7 @@
 // running tells the others so (flag 8), wears a glow and a HOTLAP tag on their screens, and no car
 // bumps into it or is bumped by it, on either side, so nobody can spoil a lap in progress. The same for a car
 // just put on the start, while it stays in the start lane (flag 64, src/race/startlane.js), without glow or tag.
-import { api, TARTU } from '../city.js';
+import { api, TARTU, TALLINN } from '../city.js';
 import * as THREE from 'three';
 import { CARS } from '../cars/specs.js';
 import { escapeHtml, fmtTime } from '../race/race.js';
@@ -1187,8 +1187,9 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
       if (!sent.has(lapKey(lap))) continue;                       // (not answered yet)
       traces.splice(i, 1);
       const best = (lap.track ? board?.[lap.track] : board)?.allTime?.find((r) => r.car === lap.car);
-      // (a fast Toomemägi lap's drive goes as well, for the painted racing line: src/race/laplines.js)
-      const line = lineOn && !lap.track && (board?.track || LINE_TRACK) === LINE_TRACK && lineWorth(lap.ms, Math.min(best?.ms ?? Infinity, lap.ms));
+      // (a fast Toomemägi lap's drive goes as well, for the painted racing line: src/race/laplines.js; in Tallinn every
+      // Pirita-Kose lap's, Martin 28 Nov: only his test laps there for now)
+      const line = lineOn && !lap.track && (board?.track || LINE_TRACK) === LINE_TRACK && (TALLINN || lineWorth(lap.ms, Math.min(best?.ms ?? Infinity, lap.ms)));
       const record = held.delete(lapKey(lap)) || (best && best.ms === lap.ms && best.name === name);
       if (!record && !line) continue;
       try {
@@ -1207,10 +1208,10 @@ export function createMultiplayer({ scene, camera, buildModel, modelReady = () =
   // Fast Toomemägi laps' drives (src/race/laplines.js): from the game's own address only (?linelog=1 anywhere,
   // ?linelog=0 nowhere); off for good on this page once the server has enough (410)
   const lineQ = new URLSearchParams(location.search).get('linelog');
-  let lineOn = TARTU && !STEALTH && lineQ !== '0' && (lineQ === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver));
+  let lineOn = !STEALTH && lineQ !== '0' && (lineQ === '1' || (location.hostname === 'www.linnaring.com' && !navigator.webdriver));
   async function sendLine(lap, z) {
     try {
-      const r = await fetch('/api/line', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, z }) });
+      const r = await fetch(api('/api/line'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: lap.k, car: lap.car, ms: lap.ms, z }) });
       if (r.status === 410) lineOn = false;
       linesSent += r.ok ? 1 : 0;
     } catch { /* that lap's drive is lost: the next one counts as much */ }

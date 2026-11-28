@@ -50,7 +50,7 @@ const MAPS = {
   // the Toomemägi lap (src/stats.js lap()); from 27 Nov 2026 also cp1 (reached the first checkpoint), r (R in a lap),
   // crash (a hard crash in a lap) and why a jump ended a lap (j:home START or H, j:map, j:garage, j:other)
   laps: [LIST('start', 'finish', 'missed', 'off', 'cut', 'jump', 'reset', 'quit', 'cp1', 'r', 'crash', 'j:home', 'j:map', 'j:garage', 'j:other'), N],
-  quit: [LIST('0', '1', '2', '3', '4', '5', '6'), N],         // checkpoints passed when a lap was given up
+  quit: [LIST('0', '1', '2', '3', '4', '5', '6', '7'), N],         // checkpoints passed when a lap was given up
   lapCar: [(k) => Object.hasOwn(CARS, k), N],                  // finished laps per car
   // laps per car that reached the first checkpoint, and <car>:f those finished (both from 27 Nov 2026)
   lapTry: [(k) => Object.hasOwn(CARS, k.endsWith(':f') ? k.slice(0, -2) : k), N],

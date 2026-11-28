@@ -5,7 +5,8 @@
 // 2) With the dev server (npx vite --port 5198), unless browser=0: a page with ?linelog=1 drives two Toomemägi laps
 //    through the lap's own timer against a made-up server, one fast and one slow: only the fast one's drive is sent,
 //    once the lap is stored; how long the page was busy packing it.
-//   node tools/laplines-test.mjs [base=http://localhost:5198] [browser=0]
+//    With city=tallinn the page is Tallinn's: both laps' drives go, to Tallinn's lobby.
+//   node tools/laplines-test.mjs [base=http://localhost:5198] [browser=0] [city=tallinn]
 import assert from 'node:assert/strict';
 import { register, createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
@@ -81,13 +82,22 @@ L.lineN = LINES_MAX;
 assert.deepEqual(await post({ k: await ticket(6), car: 'impreza', ms: 158000, z: await pack(drive(158000)) }), [410, 'enough']);
 L.lineN = null;
 assert.ok(lineWorth(164850, 157000) && !lineWorth(164851, 157000) && !lineWorth(160000, undefined));
+// Tallinn's lobby (Pirita-Kose, Martin 28 Nov: every lap of his test runs): a slow lap too, and one the server did not keep
+L.city = 'tallinn';
+assert.deepEqual(await post({ k: await ticket(3), car: 'impreza', ms: 166000, z: await pack(drive(166000)) }), [200, 'ok'], 'Tallinn: 5.7 % slower');
+assert.deepEqual(await post({ k: await ticket(9), car: 'impreza', ms: 200000, z: await pack(drive(200000)) }), [200, 'ok'], 'Tallinn: a lap not kept');
+assert.deepEqual(await post({ k: await ticket(4), car: 'impreza', ms: 150000, z: await pack(drive(150000)) }), [400, 'no such lap'], 'Tallinn: off the board still not');
+assert.deepEqual(await post({ k: await ticket(9), car: 'impreza', ms: 200000, z: await pack(drive(190000)) }), [400, 'invalid'], 'Tallinn: a drive of another length');
+assert.deepEqual((await get('?after=0&limit=60')).rows.slice(-2).map((r) => [r.ms, r.lap < 0]), [[166000, false], [200000, true]]);
+L.city = 'tartu';
 console.log('OK: the server side');
 
 // ---- 2) a page
 if (arg('browser', '1') !== '0') {
   const base = arg('base', 'http://localhost:5198');
   const { chromium } = createRequire(import.meta.url)('playwright');
-  const T = JSON.parse(readFileSync(new URL('../src/race/track.json', import.meta.url))).pts, N = T.length;
+  const TLN = arg('city', 'tartu') === 'tallinn';      // city=tallinn: Pirita-Kose, where every lap's drive goes
+  const T = JSON.parse(readFileSync(new URL(`../src/race/${TLN ? 'pirita' : 'track'}.json`, import.meta.url))).pts, N = T.length;
   const lapPath = []; for (let k = N - 30; k < N + N + 40; k++) lapPath.push(T[k % N]);
   const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const ctx = await b.newContext({ viewport: { width: 1000, height: 600 } });
@@ -95,16 +105,16 @@ if (arg('browser', '1') !== '0') {
   const lines = [], laps = [];
   await ctx.routeWebSocket('**/api/ws**', (ws) => ws.close({ code: 1006 }));
   await ctx.route('**/api/**', async (r) => {
-    const u = new URL(r.request().url()), p = u.pathname;
+    const u = new URL(r.request().url()), p = u.pathname; if (process.env.DBG) console.log('req', r.request().method(), u.pathname + u.search);
     if (p === '/api/ticket') return r.fulfill({ json: { key: `${Date.now().toString(36)}.0123456789abcdef.${'a'.repeat(27)}` } });
     if (p === '/api/board') return r.fulfill({ json: board });
-    if (p === '/api/lap') { const j = r.request().postDataJSON(); laps.push(...(j.laps || [j]).map((l) => l.ms)); return r.fulfill({ json: { ok: true, saved: 1, board } }); }
-    if (p === '/api/line') { lines.push(r.request().postDataJSON()); return r.fulfill({ json: { ok: true } }); }
+    if (p === '/api/lap') { const j = r.request().postDataJSON(); laps.push(...(j.laps || [j]).map((l) => (process.env.DBG ? JSON.stringify({ ...l, splits: undefined }) : l.ms))); return r.fulfill({ json: { ok: true, saved: 1, board } }); }
+    if (p === '/api/line') { lines.push({ ...r.request().postDataJSON(), city: u.searchParams.get('city') }); return r.fulfill({ json: { ok: true } }); }
     return r.fulfill({ json: {} });
   });
   const pg = await ctx.newPage();
-  const errs = []; pg.on('pageerror', (e) => errs.push(e.message));
-  await pg.goto(`${base}/?linelog=1&q=low&trees=old`, { timeout: 180000 });
+  const errs = []; pg.on('pageerror', (e) => errs.push(e.message))
+  await pg.goto(`${base}/?linelog=1&q=low&trees=old${TLN ? '&tln=1&city=tallinn' : ''}`, { timeout: 180000 });
   await pg.waitForFunction(() => window.__game?.race?.(), null, { timeout: 240000 });
   await pg.evaluate(() => { __game.setCar('impreza', true); __game.startDriving(); });
   await pg.waitForFunction(() => __game.mode === 'drive', null, { timeout: 120000 });
@@ -123,12 +133,13 @@ if (arg('browser', '1') !== '0') {
   }
   const jobsBusy = await pg.evaluate(() => __game.jobs?.stats?.() || null);
   console.log(JSON.stringify({ laps: out, stored: laps, lines: lines.map((l) => [l.car, l.ms, l.z.length]), sent: await pg.evaluate(() => __game.mp().linesSent), jobs: jobsBusy, errors: errs.slice(0, 4) }));
-  assert.equal(lines.length, 1, 'one drive sent: the fast lap\'s');
+  assert.equal(lines.length, TLN ? 2 : 1, TLN ? 'Tallinn: both laps\' drives' : 'one drive sent: the fast lap\'s');
+  assert.ok(lines.every((l) => l.city === (TLN ? 'tallinn' : null)), 'to the city\'s own lobby');
   assert.ok(Math.abs(lines[0].ms - out[0][0]) < 1 && lines[0].car === 'impreza' && /^H4sI/.test(lines[0].z) && lines[0].k);
   const back2 = await unpack(unb64(lines[0].z));
   assert.ok(Math.abs(back2.ms - lines[0].ms) <= 1, 'the drive is that lap\'s');
   assert.deepEqual(errs, []);
   await b.close();
-  console.log('OK: the page sends only the fast lap\'s drive');
+  console.log(TLN ? 'OK: a Tallinn page sends every lap\'s drive to its own lobby' : 'OK: the page sends only the fast lap\'s drive');
 }
 process.exit(0);

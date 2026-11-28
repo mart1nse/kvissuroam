@@ -1184,10 +1184,10 @@ async function boot() {
       : `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button>${stage ? `<button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>` : ''}${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme (H there: back on the line)"><span>DRAG STRIP</span></button>' : ''}`;
     // (with ?tln=1, the other city a tap away, Martin 28 Nov: "push a button and go from one to another": the page
     // loads again in that city's world and server room, src/city.js goCity)
-    if (TLN_FLAG) tp.insertAdjacentHTML('beforeend', `<button data-act="city" class="city" title="Drive in ${TALLINN ? 'Tartu' : 'Tallinn'} (its own map, lap board and races)"><span>⇄ ${TALLINN ? 'TARTU' : 'TALLINN'}</span></button>`);
+    if (TLN_FLAG) tp.insertAdjacentHTML('beforeend', `<button data-act="city" class="city" title="Drive in ${TALLINN ? 'Tartu' : 'Tallinn'} (its own map, lap board and races)"><span>${TALLINN ? 'TARTU' : 'TALLINN'}<i data-n="there"></i></span></button>`);
     $('#hud').appendChild(tp);
   }
-  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null,
+  board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onAway: () => layoutMenu(), onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null,
     // (LAP TIMES opens on the track the car is at, Martin 27 Nov: "default open the track that is closest to you ... makes
     // the lap times when finished in raadi for instance more relevant"; near none, or a card just picked in the
     // garage: the garage's pick)
@@ -1321,11 +1321,32 @@ async function boot() {
   bar.style.width = '100%';
   terrain.update(new THREE.Vector3(car.x, 0, car.z));
   shrinker?.scan(scene);
-  $('#loading').classList.add('hidden');
+  // Come from the other city's garage or its city button (?go=1, offTo below): straight onto the road. A phone gives
+  // full screen and sound only from a tap on this page, so there the loading screen ends on a button; a computer
+  // drives off at once and its sound starts with the first key or click.
+  const arriving = params.has('go') && params.has('drive') && !tabAside;
+  if (arriving) {
+    const u = new URL(location.href);
+    u.searchParams.delete('go'); u.searchParams.delete('drive'); u.searchParams.delete('track');
+    window.history.replaceState(null, '', u);                // (a refresh opens this city's garage, not the loading again)
+  }
   $('#menu').classList.remove('hidden');
   mode = 'menu';
   stats.ready();
-  if (params.has('drive') && !tabAside) startDriving();
+  if (arriving && isTouch) {
+    $('#loadmsg').textContent = 'Ready';
+    const go = document.createElement('button');
+    go.id = 'gobtn'; go.className = 'neon'; go.innerHTML = '<b>TAP TO DRIVE</b>';
+    $('#loading .bar').after(go);
+    go.addEventListener('click', () => { $('#loading').classList.add('hidden'); go.remove(); startDriving(true); }, { once: true });
+    return;
+  }
+  $('#loading').classList.add('hidden');
+  if (arriving) {
+    startDriving(true);
+    const wake = () => { audio.start(); removeEventListener('keydown', wake, true); removeEventListener('pointerdown', wake, true); };
+    addEventListener('keydown', wake, true); addEventListener('pointerdown', wake, true);
+  } else if (params.has('drive') && !tabAside) startDriving();
 }
 
 // another player's car on a map: an arrow in their own colour pointing forward (up), drawn around the origin
@@ -1404,7 +1425,9 @@ let garage = null;
 function layoutMenu() {
   garage?.sync(carId);
   const d = $('#drivecar');
-  if (d) d.textContent = stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : board?.track === 'drag' ? 'ÜLENURME' : 'TOOMEMÄGI'}` : CARS[carId].short;
+  // (the other city's track picked, ?tln=1: DRIVE says where it goes)
+  const aw = board?.away;
+  if (d) d.textContent = aw ? `${CARS[carId].short} · ${aw.name} · ${aw.city.toUpperCase()}` : stage ? `${CARS[carId].short} · ${board?.track === 'raadi' ? 'MAJORAADI' : board?.track === 'drag' ? 'ÜLENURME' : 'TOOMEMÄGI'}` : CARS[carId].short;
 }
 
 function buildMenu() {
@@ -1413,7 +1436,7 @@ function buildMenu() {
   const defs = CAR_GROUPS.map((g, i) => ({ name: g.name, ids: [...g.ids, ...(i === CAR_GROUPS.length - 1 ? CAR_ORDER.filter((id) => !listed.has(id)) : [])] }));
   garage = createGarage({ root: $('#cards'), cars: CARS, groups: defs, picked: carId, onPick: (id) => setCar(id) });
   layoutMenu();
-  $('#drive').addEventListener('click', startDriving);
+  $('#drive').addEventListener('click', () => startDriving());
   // (a key typed into the name or the plate never gets here: those boxes keep their keys to themselves)
   addEventListener('keydown', (e) => {
     if (mode !== 'menu') return;
@@ -1433,8 +1456,24 @@ function buildMenu() {
 }
 
 let softwareTold = false;
-function startDriving() {
+// Off to the other city (?tln=1; Martin 28 Nov 2026: "clicking drive shows you a loading screen until everything is
+// done in the background and you are put on the line"): the loading screen comes up saying where to, and the page
+// loads again there, straight onto the road (src/city.js goCity; the new page shows the same screen from its first
+// paint, index.html). The car picked goes along (it is kept in this browser).
+function offTo(city, track, name) {
+  const L = $('#loading');
+  document.documentElement.classList.add('go');
+  L.querySelector('.tag').textContent = `${city.toUpperCase()}${name ? ` · ${name}` : ''}`;
+  $('#loadmsg').textContent = `Off to ${city === 'tallinn' ? 'Tallinn' : 'Tartu'}…`;
+  $('#loadbar').style.width = '4%';
+  L.classList.remove('hidden');
+  audio.setBackground?.(true);
+  setTimeout(() => goCity(city, { drive: true, track: track === 'raadi' ? 'raadi' : '' }), 60);     // (a frame for the screen to show)
+}
+
+function startDriving(forced) {
   if (mode === 'drive' || tabAside) return;
+  if (mode === 'menu' && board?.away && !forced && !raceMode?.holding && !raceMode?.ghost) { const a = board.away; offTo(a.city, a.track, a.name); return; }
   if (still && warmGate && !warmedUp() && !(readyWait && performance.now() - readyWait > 40000)) {
     if (!readyWait) { readyWait = performance.now(); showReady(); }
     return;
@@ -1649,7 +1688,7 @@ async function watchReplay(track, carOf) {
   if (!rp) { hud.toast('REPLAY NOT AVAILABLE', 2200); return; }
   board.hide();
   closeOverlays();
-  if (mode !== 'drive') startDriving();
+  if (mode !== 'drive') startDriving(true);
   let moved = false;
   const t0 = performance.now();
   const go = () => {
@@ -1716,6 +1755,23 @@ function trackPills() {
   b.title = (at ? 'Back to the stage start (H)' : 'Majoraadi rally stage start') + (n ? ` · ${n} on a timed run now` : '');
 }
 
+// How many are online in each city, in brackets on the city button (Martin 28 Nov 2026: "would be cool to see how many
+// people are online (in brackets for both perhaps)", then: "just show the button to be tallinn and only the other
+// cities online players in brackets as you see your own online players in the usual place"): the other city's name
+// and count, asked of its room every half minute while the button shows.
+let cityCountAt = 0;
+function cityCounts() {
+  const now = performance.now();
+  if (!TLN_FLAG || mode !== 'drive' || document.hidden || now - cityCountAt < 2000) return;
+  cityCountAt = now;
+  board?.askOnline();
+  for (const el of document.querySelectorAll('#trackpills [data-n]')) {
+    const n = board?.online(el.dataset.n === 'here' ? (TALLINN ? 'tallinn' : 'tartu') : (TALLINN ? 'tartu' : 'tallinn'));
+    const t = n == null ? '' : ` (${n})`;
+    if (el.textContent !== t) el.textContent = t;
+  }
+}
+
 // the other city (?tln=1): the page loads again there. In a race, a second tap within 3 s, as leaving drops the race
 let cityTap = 0;
 function switchCity(btn) {
@@ -1726,8 +1782,7 @@ function switchCity(btn) {
     hud.toast(`TAP AGAIN TO LEAVE THE RACE FOR ${to.toUpperCase()}`, 3000);
     return;
   }
-  hud.toast(`OFF TO ${to.toUpperCase()}…`, 4000);
-  goCity(to);
+  offTo(to, '', to === 'tallinn' ? 'PIRITA-KOSE' : 'TOOMEMÄGI');
 }
 
 function goHome() {
@@ -2570,6 +2625,7 @@ function frame(ts) {
     drag?.update(car, dt, watch?.focus);
     // (the drag strip's timeslip goes with the car until its ✕, or until a timed lap, a stage run or a race starts: Martin 27 Nov)
     if (race?.running || stage?.running || raceMode?.ghost) drag?.closeSlip();
+    cityCounts();
     if (stage) trackPills();
   }
   stats.frame({ mode, dt, raw: rawDt, felt, car: carId, x: car.x, z: car.z, kmh: Math.abs(speedKmh(car)), inp: inpNow(), view: camView, gfx: gfx.level, others: mp.count, lapCp: race?.passed ?? -1,

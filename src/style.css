@@ -61,10 +61,21 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--hot), var(--sun)); transition: width .2s; }
 /* what the game is, in English and Estonian, under the loading bar: it is also the text that search
    engines read, since everything else is drawn on a canvas */
+/* off to the other city (?tln=1, src/main.js offTo and index.html): the loading screen without the words about the
+   game, the city and track in its tag line, and on phones a button at its end */
+.go #loading .about { display: none; }
+.go #loading .tag { color: var(--cyan); letter-spacing: .3em; }
+.go #loading { z-index: 60; }
+#gobtn { z-index: 1; margin-top: 6px; padding: .7em 2.2em; font-size: clamp(16px, 3.4vw, 26px); }
 #loading .about { max-width: min(620px, 86vw); z-index: 1; margin-top: clamp(4px, 2vh, 18px); }
 #loading .about h2 { margin: 0 0 .5em; font-size: clamp(10px, 1.4vw, 14px); letter-spacing: .14em; text-transform: uppercase; color: var(--sun); text-shadow: 0 0 10px rgba(255, 212, 94, .5); }
 #loading .about p { text-shadow: 0 1px 2px rgba(18, 6, 43, .7); margin: 0 0 .45em; font-size: clamp(9px, 1.15vw, 12px); line-height: 1.45; letter-spacing: .02em; opacity: .78; }
 #loading .about p[lang="et"] { opacity: .6; }
+/* the safe-driving note under the explainer (Martin 28 Nov 2026: so it is on record that the game does not encourage it) */
+#loading .about p.safe { margin-top: .9em; font-style: italic; opacity: .7; }
+#loading .about p.safe + p.safe { margin-top: 0; opacity: .55; }
+/* on a phone it reaches the grid: a dark band behind it keeps it readable there */
+@media (max-height: 430px) { #loading .about p.safe { margin-top: .4em; padding: .25em .8em; border-radius: 8px; background: rgba(18, 6, 43, .6); opacity: .85; } }
 @media (max-height: 430px) { #loading .about p[lang="et"] { display: none; } }
 
 /* ---- garage: the groups side by side, each a reel of cards of one size (garage.js). The group's
@@ -1363,6 +1374,7 @@ body.touch #trackpills button { padding: 5px 10px; font-size: 9px; }
 #trackpick .dl small { opacity: .7; font-size: .85em; }
 #trackpick .lt { font-size: .63em; letter-spacing: .24em; color: var(--cyan); margin-top: .2em; text-shadow: 0 0 8px rgba(47, 243, 255, .7); }
 #trackpick .tcard:not(.on) .modes i:nth-child(n+2) { display: none; }
+#trackpick .tcard.city .modes i:nth-child(n+2) { display: inline; }   /* (a city's card: how many are online there) */
 #trackpick .tcard { overflow: hidden; }
 #trackpick .tcard.on { overflow: visible; height: 98cqh; aspect-ratio: 520 / 210; opacity: 1; padding: .88em 1.5em .88em .88em; gap: 1.4em;
   background: linear-gradient(135deg, rgba(47, 243, 255, .2), rgba(90, 40, 170, .45)); box-shadow: 0 0 26px rgba(47, 243, 255, .35); }

@@ -95,7 +95,7 @@
         "@id": "https://www.linnaring.com/#game",
         "name": "LINNARING",
         "url": "https://www.linnaring.com/",
-        "description": "A free 3D driving and racing game in the browser, set in Tartu, Estonia, built from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit and the Majoraadi gravel rally stage in Raadi manor park, roam the city freely and race other players online.",
+        "description": "A free 3D driving and racing game in the browser, set in Tartu, Estonia, built from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit and the Majoraadi gravel rally stage in Raadi manor park, roam the city freely and drive with other players online.",
         "image": "https://www.linnaring.com/og-image.jpg",
         "genre": ["Racing", "Driving", "Open world"],
         "gamePlatform": ["Web browser", "PC", "Mobile phone"],
@@ -176,10 +176,26 @@
     <div class="bar"><i id="loadbar"></i></div>
     <p id="loadmsg" class="small">Loading the neighbourhood…</p>
     <div class="about">
-      <h2>Free 3D driving game in Tartu, Estonia</h2>
-      <p lang="en">Drive and race through Tartu, rebuilt in 3D from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit and the Majoraadi gravel rally stage, roam the city freely and race other players online. Free in the browser on a computer or phone, nothing to install.</p>
-      <p lang="et">Sõida ja võistle Tartu tänavatel: linn on 3D-s üles ehitatud päris kaardi-, lidari- ja aerofotoandmetest. Sõida aja peale Toomemäe tänavaringil ja Majoraadi kruusasel rallikatsel, avasta linna vabalt ja võistle teistega võrgus. Tasuta otse brauseris arvutis või telefonis, midagi pole vaja paigaldada.</p>
+      <h2>Free 3D driving game</h2>
+      <p lang="en">Drive through Tartu, rebuilt in 3D from real map, lidar and aerial photo data. Time-attack the Toomemägi street circuit and the Majoraadi gravel rally stage, roam the city freely and drive with other players online. Free in the browser on a computer or phone, nothing to install.</p>
+      <p lang="et">Sõida Tartu tänavatel: linn on 3D-s üles ehitatud päris kaardi-, lidari- ja aerofotoandmetest. Sõida aja peale Toomemäe tänavaringil ja Majoraadi kruusasel rallikatsel, avasta linna vabalt ja sõida koos teistega võrgus. Tasuta otse brauseris arvutis või telefonis, midagi pole vaja paigaldada.</p>
+      <p class="safe" lang="en">Only a game. On real roads drive safely, keep to the speed limits and follow the traffic rules. LINNARING does not encourage speeding, stunts or any reckless driving in real life.</p>
+      <p class="safe" lang="et">Ainult mäng. Päris teedel sõida ohutult, pea kinni kiiruspiirangutest ja liikluseeskirjast. LINNARING ei õhuta kiiruse ületamist, trikitamist ega mis tahes hoolimatut sõitu päris elus.</p>
     </div>
+  <script>
+    // Come from the other city (?go=1, src/main.js offTo): the loading screen says where to from its first paint,
+    // as the screen before the reload did, so the change of city reads as one loading and not as a restart
+    (function () {
+      var q = new URLSearchParams(location.search);
+      // Tallinn is named only where it can be reached (behind ?tln=1, src/city.js): without the flag no road leads there yet
+      if (q.get('tln') === '1') document.querySelector('#loading .tag').textContent = 'TARTU · TALLINN · ESTONIA';
+      if (q.get('go') !== '1') return;
+      var tln = q.get('tln') === '1' && q.get('city') === 'tallinn';
+      document.documentElement.classList.add('go');
+      document.querySelector('#loading .tag').textContent = tln ? 'TALLINN · PIRITA-KOSE' : q.get('track') === 'raadi' ? 'TARTU · MAJORAADI' : 'TARTU · TOOMEMÄGI';
+      document.getElementById('loadmsg').textContent = 'Off to ' + (tln ? 'Tallinn' : 'Tartu') + '…';
+    })();
+  </script>
   </div>
 
   <div id="menu" class="screen hidden">

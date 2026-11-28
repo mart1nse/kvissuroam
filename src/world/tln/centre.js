@@ -32,7 +32,7 @@ export function inOldTown(x, z) {
 export const LANDMARKS = [
   { x: -6041, z: 3112, style: 3, rgb: 0xd99a8c, roof: 0x26262b },        // Aleksander Nevski katedraal: pink, black domes
   { x: -6053, z: 2972, style: 3.6, rgb: 0xeae6dc, roof: 0x3a3c3f },      // Toomkirik: white, dark roof
-  { x: -6114, z: 3141, style: 3, rgb: 0xe0a3a0, roof: 0x8a3e2c },        // Toompea loss: baroque pink
+  { x: -6114, z: 3141, style: 3.4, rgb: 0xd8d0c0, roof: 0xc96a44 },      // Toompea loss: limestone walls and towers, orange tiles (its pink front: castle.js)
   { x: -3114, z: 2771, style: 3, rgb: 0xc4705e, roof: 0x9c4a36 },        // Kadrioru loss: red with white
   { x: -5415, z: 3245, style: 3, rgb: 0xe6dcc2, roof: 0x3c3e42 },        // Rahvusooper Estonia: cream
   { x: -5846, z: 3100, style: 3.4, roof: 0x3d4240 },                     // Niguliste kirik

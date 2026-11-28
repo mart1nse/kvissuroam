@@ -33,6 +33,9 @@ const KUUNIBENCH = 48, KVASS = 49, PARASOL = 50, STOOL = 51;
 const CHEVL = 52, CHEVR = 53;
 // the same race's crowd barrier (src/world/tln/race2005.js): a 2 m steel panel, red and white, on two flat feet
 const CROWD = 54;
+// Lossi plats in front of Toompea castle (src/world/tln/castle.js): the black cast iron posts with a ball on top, and the
+// same post with its chain sagging to the next one 1.8 m on along its +x (a knocked post takes its chain with it)
+const IRONPOST = 55, IRONCHAIN = 56;
 const isSign = (kind) => kind >= SIGN0 && kind < SIGN0 + FACES;
 
 function part(geo, hex) {
@@ -92,6 +95,16 @@ SOLID[CHEVL] = chevron(1); SOLID[CHEVR] = chevron(-1);
 SOLID[CROWD] = [box(0.05, 1.1, 0.05, -0.98, 0.6, 0, 0x9a9ca2), box(0.05, 1.1, 0.05, 0.98, 0.6, 0, 0x9a9ca2), box(1.96, 0.05, 0.05, 0, 1.12, 0, 0x9a9ca2),
   ...Array.from({ length: 6 }, (_, k) => box(0.32, 0.82, 0.025, -0.81 + k * 0.324, 0.63, 0, k % 2 ? 0xf2f0ec : 0xc8242c)),
   box(0.08, 0.05, 0.7, -0.98, 0.025, 0, 0x55575d), box(0.08, 0.05, 0.7, 0.98, 0.025, 0, 0x55575d)];
+SOLID[IRONPOST] = [part(new THREE.CylinderGeometry(0.075, 0.1, 0.8, 8, 1, true).translate(0, 0.4, 0), 0x17161b), part(new THREE.CylinderGeometry(0.125, 0.125, 0.07, 8).translate(0, 0.035, 0), 0x17161b),
+  part(new THREE.CylinderGeometry(0.095, 0.095, 0.06, 8).translate(0, 0.78, 0), 0x17161b), part(new THREE.SphereGeometry(0.08, 8, 5).translate(0, 0.88, 0), 0x17161b)];
+{ // the chain: four links' worth of bar along a sag of 0.22 m, from this post to the next
+  const y = (t) => 0.74 - 0.88 * t * (1 - t), x = (t) => 0.08 + 1.64 * t, links = [];
+  for (let k = 0; k < 4; k++) {
+    const t0 = k / 4, t1 = (k + 1) / 4, dx = x(t1) - x(t0), dy = y(t1) - y(t0);
+    links.push(part(new THREE.BoxGeometry(Math.hypot(dx, dy) + 0.02, 0.035, 0.035).rotateZ(Math.atan2(dy, dx)).translate((x(t0) + x(t1)) / 2, (y(t0) + y(t1)) / 2, 0), 0x1d1c22));
+  }
+  SOLID[IRONCHAIN] = [...SOLID[IRONPOST], ...links];
+}
 SOLID[STOOL] = [box(0.42, 0.04, 0.42, 0, 0.46, 0, 0x4c4858), part(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 6, 1, true).translate(0, 0.22, 0), 0x4c4858), box(0.3, 0.03, 0.3, 0, 0.015, 0, 0x4c4858)];
 const GLOW = {
   [LIGHT]: box(0.24, 0.05, 0.6, 0, 8.0, 1.75, 0xffe2a8),
@@ -230,8 +243,8 @@ class Batch {
 }
 
 // physical guesses per kind: mass (kg) and how far from its centre line the car touches it (m)
-const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, [KUUNIBENCH]: 45, [KVASS]: 600, [PARASOL]: 20, [STOOL]: 6, [CHEVL]: 22, [CHEVR]: 22, [CROWD]: 18, sign: 10 };
-const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, [PARASOL]: 0.35, [STOOL]: 0.21, [CHEVL]: 0.12, [CHEVR]: 0.12, [CROWD]: 0.1, sign: 0.08 };
+const MASS = { [ROADLAMP]: 190, [CROSSLAMP]: 195, [ISLELAMP]: 70, [KEEPPOST]: 16, [EITHERPOST]: 16, [LIGHT]: 140, [POLE]: 250, [SIGNAL]: 90, [BENCH]: 45, [BIN]: 20, [RACK]: 30, [BOX]: 70, [BOLLARD]: 12, [LANTERN]: 9, [STRIPED]: 14, [PARK]: 60, [PARKBIN]: 65, [KUUNIBENCH]: 45, [KVASS]: 600, [PARASOL]: 20, [STOOL]: 6, [CHEVL]: 22, [CHEVR]: 22, [CROWD]: 18, [IRONPOST]: 30, [IRONCHAIN]: 32, sign: 10 };
+const REACH = { [ROADLAMP]: 0.13, [CROSSLAMP]: 0.13, [ISLELAMP]: 0.1, [KEEPPOST]: 0.1, [EITHERPOST]: 0.1, [LIGHT]: 0.12, [POLE]: 0.15, [SIGNAL]: 0.12, [BENCH]: 0.75, [BIN]: 0.25, [RACK]: 0.75, [BOX]: 0.4, [BOLLARD]: 0.09, [LANTERN]: 0.09, [STRIPED]: 0.1, [PARK]: 0.08, [PARKBIN]: 0.1, [PARASOL]: 0.35, [STOOL]: 0.21, [CHEVL]: 0.12, [CHEVR]: 0.12, [CROWD]: 0.1, [IRONPOST]: 0.11, [IRONCHAIN]: 0.11, sign: 0.08 };
 // long things the car meets along their length, not only at their middle: points in the prop's own frame
 // [x, z, reach] (a 4 m trailer would otherwise be touched as a square)
 const SPAN = {
@@ -239,6 +252,7 @@ const SPAN = {
   [KVASS]: [[0, -1.3, 1.0], [0, 0, 1.0], [0, 1.3, 1.0], [0, 2.9, 0.2]],
   [CHEVL]: [[-0.32, 0, 0.12], [0.32, 0, 0.12]], [CHEVR]: [[-0.32, 0, 0.12], [0.32, 0, 0.12]],
   [CROWD]: [[-0.8, 0, 0.15], [0, 0, 0.15], [0.8, 0, 0.15]],
+  [IRONCHAIN]: [[0, 0, 0.11], [0.9, 0, 0.06]],
 };
 // heavy and low on its wheels: a knock low down turns it over less than it would a bench (1 = as a bench)
 const TUMBLE = { [KVASS]: 0.35 };

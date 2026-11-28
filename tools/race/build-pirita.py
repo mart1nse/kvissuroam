@@ -146,9 +146,11 @@ def near(p):
     return min(range(N), key=lambda i: math.dist(c[i], p))
 # checkpoints: over the Lükati bridge, the top of Lükati tee, Kloostrimetsa tee's west end, the Pirita bridge
 cps = sorted(near(p) for p in [(700, 330), (1240, -350), (-500, -600), (-833, -301)])
-# spawn: back up Rummu tee, about 200 m before the line (as Toomemägi's is), facing along the lap
+# spawn: back up Rummu tee, about 620 m before the line, past the setts by the Pirita tee lights, facing along the
+# lap (Martin 28 Nov 2026: "bring the spawning area back so i can get a faster speed right away over the line";
+# it was 200 m, as Toomemägi's is)
 back, sp = 0.0, N - 1
-while back < 200:
+while back < 619:
     back += math.dist(c[sp], c[sp - 1]); sp -= 1
 
 out = {

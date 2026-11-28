@@ -27,6 +27,11 @@ export function setOldTown(test) { oldTown = test; }
 // whitewashed stone; rgb and roof as 0xrrggbb), src/world/tln/centre.js
 let looks = [];
 export function setTownLooks(list) { looks = list; }
+// what a town's houses are built of (src/world/tln/centre.js: grid(sx, sz) -> a square's points, find(grid, x0, x1, z0,
+// z1) -> [x, z, kind, rgb] of the house in that box): kind 1 wood (style 0.3), 2 industrial limestone (3.25), 3 red
+// brick, 4 glass, 0 only a colour; rgb its wall colour where OpenStreetMap has one (-1 not), used where no photo did
+let facades = null;
+export function setFacades(grid, find) { facades = { grid, find }; }
 
 // what three.js makes of each of the 256 steps of a colour channel
 const LIN = Float64Array.from({ length: 256 }, (_, v) => new THREE.Color().setRGB(v / 255, 0, 0, THREE.SRGBColorSpace).r);
@@ -90,6 +95,7 @@ function* buildingGeometrySteps(sector, walls) {
   } };
   const PART = 6000;
   for (let t = 0; t < nv; t += PART) { corners(t, Math.min(nv, t + PART)); if (jobs.late()) yield; }
+  const fgrid = facades && facades.grid(sector.sx, sector.sz);
   for (const g of groups.values()) {
     const b = g.b;
     g.brick = BRICK.some(([x, z]) => x - sector.x0 > g.x0 && x - sector.x0 < g.x1 && z - sector.z0 > g.z0 && z - sector.z0 < g.z1);     // vertices are sector-relative
@@ -102,6 +108,17 @@ function* buildingGeometrySteps(sector, walls) {
     if (TALLINN && h >= 45 && !g.plain && !(g.style >= 3 && g.style < 4) && !(g.style >= 7)) {
       g.style = 2.3 + g.real * 4;                                       // (Tallinn's high-rises: glass)
       g.eavesH = h;                                                     // (glass the whole height, not only up to a podium's roof)
+    }
+    const F = fgrid && !g.plain && !(g.style >= 3 && g.style < 4) && facades.find(fgrid, sector.x0 + g.x0, sector.x0 + g.x1, sector.z0 + g.z0, sector.z0 + g.z1);
+    if (F) {
+      const [, , k, rgb] = F, area2 = (g.x1 - g.x0) * (g.z1 - g.z0);
+      const real = rgb >= 0 && !g.real ? 1 : g.real;
+      if (k === 1 && h >= 4 && h <= 14 && area2 < 900) g.style = 0.3 + real * 4;                  // (a tall one is not wood)
+      else if (k === 2) g.style = 3.25 + real * 4;
+      else if (k === 3) { g.brick = true; g.style = 5; }
+      else if (k === 4 && h >= 8) { g.style = 2.3 + real * 4; g.eavesH = h; }
+      // (a kind that does not fit the house keeps only the colour)
+      if (k !== 3 && rgb >= 0 && !g.real) { g.look = { rgb }; if (g.style < 4) g.style += 4; }
     }
     for (const L of looks) {
       if (L.x - sector.x0 > g.x0 && L.x - sector.x0 < g.x1 && L.z - sector.z0 > g.z0 && L.z - sector.z0 < g.z1) { g.look = L; g.style = L.style + 4; break; }
@@ -204,10 +221,21 @@ export function createBuildings(walls) {
             kRough = -0.35;
           } else if (style < 0.5) {
             // houses: pastel paint over boards, or plaster
+            float woodS = step(0.2, style);                   // (0.3: a wooden town house, Kalamaja's and Kadriorg's)
             vec3 tint = 0.5 + 0.5 * cos(6.2831 * (seed * 3.0 + vec3(0.0, 0.33, 0.67)));
-            wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6 * (1.0 - real));
-            float boards = seed > 0.7 ? bLine(u, 0.16, 0.05) : seed > 0.35 ? bLine(h, 0.15, 0.06) : 0.0;
-            wall *= 1.0 - 0.22 * boards;
+            wall = mix(wall, mix(wall, tint, 0.55) * vec3(1.0, 0.94, 0.9), step(0.35, seed) * 0.6 * (1.0 - real) * (1.0 - woodS));
+            // (their paints in the street photos: ochre, pale yellow, sage, grey-blue, salmon, cream, ox red, brown)
+            float wp = floor(seed * 8.0);
+            vec3 wpal = wp < 1.0 ? vec3(0.84, 0.66, 0.36) : wp < 2.0 ? vec3(0.9, 0.82, 0.56) : wp < 3.0 ? vec3(0.64, 0.72, 0.56)
+              : wp < 4.0 ? vec3(0.6, 0.68, 0.74) : wp < 5.0 ? vec3(0.84, 0.6, 0.5) : wp < 6.0 ? vec3(0.9, 0.88, 0.8)
+              : wp < 7.0 ? vec3(0.86, 0.72, 0.4) : vec3(0.52, 0.36, 0.26);
+            wall = mix(wall, wpal, woodS * (1.0 - real * 0.8));
+            float boards = woodS > 0.5 ? (seed < 0.75 ? bLine(h, 0.13, 0.08) : bLine(u, 0.14, 0.07))
+              : seed > 0.7 ? bLine(u, 0.16, 0.05) : seed > 0.35 ? bLine(h, 0.15, 0.06) : 0.0;
+            wall *= 1.0 - mix(0.22, 0.3, woodS) * boards;
+            // a band of boards between the storeys, and the tall ones on a ground floor of plastered stone
+            wall = mix(wall, vec3(0.92, 0.9, 0.85), woodS * bBox(fract((h - 0.45) / 2.8), 0.93, 0.99, 0.01) * step(1.5, h) * step(h, eaves - 0.5) * 0.8);
+            wall = mix(wall, mix(vec3(0.74, 0.71, 0.64), wall, 0.25) * (0.94 + 0.08 * bHash(floor(vec2(u, h) * 2.0))), woodS * step(9.0, eaves) * (1.0 - step(3.1, h)));
           } else if (style < 1.5) {
             // a real colour decides between brick and panels: brick is clearly red-brown
             float bricky = real > 0.5 ? step(0.05, wall.r - wall.b) * step(wall.g, wall.r * 0.8) * step(wall.r, 0.45) : step(0.55, seed);
@@ -244,14 +272,15 @@ export function createBuildings(walls) {
             float old = step(2.5, style), stoneW = step(3.2, style);
             float tower = step(2.2, style) * (1.0 - old);
             kGlass = tower;
-            vec2 size = style > 3.2 ? vec2(4.5, 5.0) : style > 2.5 ? vec2(2.2 + 0.5 * seed, 3.1) : style > 2.2 ? vec2(1.5, 3.6) : style < 0.5 ? vec2(2.5, 2.8) : style < 1.5 ? vec2(3.0, 2.8) : vec2(4.2, 3.6);
+            float woodW = step(0.2, style) * step(style, 0.5);
+            vec2 size = style > 3.3 ? vec2(4.5, 5.0) : style > 3.2 ? vec2(2.3, 3.2) : style > 2.5 ? vec2(2.2 + 0.5 * seed, 3.1) : style > 2.2 ? vec2(1.5, 3.6) : style < 0.5 ? vec2(2.5, 2.8) : style < 1.5 ? vec2(3.0, 2.8) : vec2(4.2, 3.6);
             vec2 cell = vec2(floor(u / size.x), floor((h - 0.45) / size.y));
             vec2 f = vec2(fract(u / size.x), fract((h - 0.45) / size.y)) * size;      // metres inside the cell
             float rnd = bHash(cell + mod(sq, 61.0));
             vec2 e = vec2(fwidth(u), fwidth(h)) + 0.004;
-            vec2 wc = vec2(size.x * 0.5, style > 3.2 ? 2.6 : style > 2.5 ? 1.75 : style > 2.2 ? 1.8 : style < 1.5 ? 1.6 : 1.9);                   // window centre
-            vec2 wh = style > 3.2 ? vec2(0.22, 1.1) : style > 2.5 ? vec2(0.42, 0.68) : style > 2.2 ? vec2(0.66, 1.3) : style < 0.5 ? vec2(0.55, 0.65) : style < 1.5 ? vec2(0.85, 0.7) : vec2(1.75, 0.75);
-            float have = style > 3.2 ? step(0.55, rnd) : style > 2.5 ? step(0.08, rnd) : style > 2.2 ? 1.0 : style < 0.5 ? step(0.3, rnd) : style < 1.5 ? step(0.06, rnd) : step(0.45, rnd);
+            vec2 wc = vec2(size.x * 0.5, style > 3.3 ? 2.6 : style > 3.2 ? 1.75 : style > 2.5 ? 1.75 : style > 2.2 ? 1.8 : style < 1.5 ? 1.6 : 1.9);                   // window centre
+            vec2 wh = style > 3.3 ? vec2(0.22, 1.1) : style > 3.2 ? vec2(0.46, 0.62) : style > 2.5 ? vec2(0.42, 0.68) : style > 2.2 ? vec2(0.66, 1.3) : style < 0.5 ? mix(vec2(0.55, 0.65), vec2(0.5, 0.78), woodW) : style < 1.5 ? vec2(0.85, 0.7) : vec2(1.75, 0.75);
+            float have = style > 3.3 ? step(0.55, rnd) : style > 3.2 ? step(0.05, rnd) : style > 2.5 ? step(0.08, rnd) : style > 2.2 ? 1.0 : style < 0.5 ? step(mix(0.3, 0.1, woodW), rnd) : style < 1.5 ? step(0.06, rnd) : step(0.45, rnd);
             float inWall = step(0.45, h) * step(h + 0.25, floor((eaves - 0.45) / size.y + 0.35) * size.y + 0.45);
             have *= inWall;
             float door = step(cell.y, 0.5) * step(0.5, cell.y + 1.0) * step(0.88, rnd) * inWall;
@@ -259,14 +288,15 @@ export function createBuildings(walls) {
             vec2 dc = vec2(size.x * 0.5, 1.05), dh = vec2(style > 1.5 && style < 2.5 ? 1.1 : 0.5, 1.05);
             door *= 1.0 - stoneW;
             vec2 c0 = mix(wc, dc, door), hs = mix(wh, dh, door);
-            float frame = bBox(f.x, c0.x - hs.x - 0.07, c0.x + hs.x + 0.07, e.x) * bBox(f.y, c0.y - hs.y - 0.07, c0.y + hs.y + 0.07, e.y);
+            float tr = 0.07 + 0.06 * woodW;
+            float frame = bBox(f.x, c0.x - hs.x - tr, c0.x + hs.x + tr, e.x) * bBox(f.y, c0.y - hs.y - tr, c0.y + hs.y + tr * 1.8, e.y);
             float glass = bBox(f.x, c0.x - hs.x, c0.x + hs.x, e.x) * bBox(f.y, c0.y - hs.y, c0.y + hs.y, e.y);
             float sill = bBox(f.x, c0.x - hs.x - 0.14, c0.x + hs.x + 0.14, e.x) * bBox(f.y, c0.y - hs.y - 0.13, c0.y - hs.y - 0.06, e.y) * (1.0 - door);
             // glazing bars
             float bars = max(1.0 - smoothstep(0.0, 0.025 + e.x, abs(f.x - c0.x)), (1.0 - smoothstep(0.0, 0.025 + e.y, abs(f.y - c0.y - hs.y * 0.35))) * max(step(style, 0.5), old));
             bars = max(bars, (1.0 - smoothstep(0.0, 0.022 + e.y, abs(f.y - c0.y + hs.y * 0.33))) * old * (1.0 - stoneW));
             frame *= have; glass *= have; sill *= have;
-            vec3 frameCol = mix(mix(mix(vec3(0.93, 0.92, 0.9), vec3(0.2, 0.19, 0.2), step(0.6, fract(seed * 7.3))), vec3(0.5, 0.54, 0.58), tower), mix(vec3(0.94, 0.93, 0.88), vec3(0.45, 0.47, 0.44), stoneW), old);
+            vec3 frameCol = mix(mix(mix(mix(vec3(0.93, 0.92, 0.9), vec3(0.2, 0.19, 0.2), step(0.6, fract(seed * 7.3))), vec3(0.93, 0.92, 0.88), woodW), vec3(0.5, 0.54, 0.58), tower), mix(vec3(0.94, 0.93, 0.88), vec3(0.45, 0.47, 0.44), stoneW), old);
             vec3 doorCol = mix(0.35 + 0.3 * cos(6.2831 * (seed * 9.0 + vec3(0.0, 0.2, 0.5))), vec3(0.32, 0.2, 0.12) * (0.8 + 0.4 * rnd), old);     // (old doors: oak)
             diffuseColor.rgb = mix(diffuseColor.rgb, frameCol, max(frame, sill));
             float pane = glass * (1.0 - bars * (1.0 - door));

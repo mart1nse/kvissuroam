@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What Tallinn's centre houses are built of (28 Nov 2026), for the building shader (src/world/scenery.js setFacades).
 
-Usage:  python3 tools/tln/facades.py OSM_CLIP.json AREA.json     -> public/data/tln/facades.json
+Usage:  python3 tools/tln/facades.py OSM_CLIP.json AREA.json [AREA2.json ...]     -> public/data/tln/facades.json
 
 Per map square ("sx_sz") a flat list [x, z, kind, rgb, ...]: a point inside each house (game metres, one decimal),
 what it is (below) and its wall colour from OpenStreetMap (-1 when not tagged). Kinds:
@@ -9,7 +9,8 @@ what it is (below) and its wall colour from OpenStreetMap (-1 when not tagged). 
   2  limestone, industrial (rows of small windows: the Rotermann mills, Kultuurikatel)
   3  red brick                           4  glass
 Sources: OpenStreetMap's building:material and building:colour, plus what Mapillary's street photos show by area:
-Kalamaja and Kadriorg are mostly two and three storey wooden houses (photos of Kungla, Vana-Kalamaja and Koidula
+Kalamaja and Kadriorg (and in the lilac area Pelgulinn, Kassisaba and Uus Maailm, Kitseküla and Tondi, the Kopli
+lines) are mostly two and three storey wooden houses (photos of Kungla, Vana-Kalamaja and Koidula
 streets, 2022-2025), so an untagged low house there is taken as wood (the shader also checks its height); the old
 mills and warehouses of Rotermann and the Kalamaja port are limestone (Elevaator, the flour stores, the salt store).
 """
@@ -42,6 +43,11 @@ WOOD = [
           (24.7370, 59.4385), (24.7290, 59.4380), (24.7215, 59.4400)]),                                                  # Kalamaja
     zone([(24.7690, 59.4335), (24.7720, 59.4420), (24.7800, 59.4440), (24.7900, 59.4425), (24.7950, 59.4370), (24.7900, 59.4320),
           (24.7790, 59.4310)]),                                                                                          # Kadriorg
+    # the lilac area (28 Nov 2026): where OpenStreetMap's wood-tagged houses cluster, the old wooden districts
+    zone([(24.6980, 59.4360), (24.6990, 59.4480), (24.7200, 59.4490), (24.7260, 59.4420), (24.7200, 59.4360)]),          # Pelgulinn
+    zone([(24.7140, 59.4270), (24.7150, 59.4370), (24.7300, 59.4385), (24.7400, 59.4330), (24.7360, 59.4270)]),          # Kassisaba, Uus Maailm
+    zone([(24.7380, 59.4100), (24.7370, 59.4200), (24.7520, 59.4280), (24.7600, 59.4240), (24.7560, 59.4110)]),          # Kitseküla, Tondi
+    zone([(24.6780, 59.4570), (24.6790, 59.4660), (24.6960, 59.4660), (24.6950, 59.4570)]),                              # Kopli liinid
 ]
 # old limestone works: Rotermann and the Kalamaja port along Põhja puiestee
 STONE = [
@@ -66,7 +72,8 @@ def colour(t):
 
 
 osm = json.load(open(sys.argv[1]))
-area = Polygon([(e - E0, N0 - n) for e, n in json.load(open(sys.argv[2]))]).buffer(60)
+from shapely.ops import unary_union
+area = unary_union([Polygon([(e - E0, N0 - n) for e, n in json.load(open(f))]).buffer(60) for f in sys.argv[2:]])
 out = defaultdict(list)
 count = defaultdict(int)
 for w in osm['ways']:

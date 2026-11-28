@@ -19,8 +19,9 @@ import { centreMarksData } from './centre.js';
 
 const CELL = 160, NEAR = 340, SHOW = 480, DROP = 700;
 const CAR = new Set(['Tänav', 'Põhimaantee', 'Kõrvalmaantee', 'Tugimaantee', 'Ramp või ühenduste', 'Muu tee']);
-// the yellow area's box (Kalamaja's port edge to Kadriorg, the sea to Liivalaia)
-const inArea = (x, z) => x > -6800 && x < -1800 && z > 900 && z < 4400;
+// the yellow and lilac areas' box (Kopli and Õismäe to Väo, the sea to Peetri), less the Pirita-Kose lap's corner
+// (src/world/tln/pirita.js wears its own roads)
+const inArea = (x, z) => x > -13000 && x < 4000 && z > -3000 && z < 9500 && !(x > -2600 && z < 1200);
 const GAUGE = 1.067 + 0.07;                  // between the rails' middles
 
 function rng(seed) {

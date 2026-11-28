@@ -28,8 +28,8 @@ export function setOldTown(test) { oldTown = test; }
 let looks = [];
 export function setTownLooks(list) { looks = list; }
 // what a town's houses are built of (src/world/tln/centre.js: grid(sx, sz) -> a square's points, find(grid, x0, x1, z0,
-// z1) -> [x, z, kind, rgb] of the house in that box): kind 1 wood (style 0.3), 2 industrial limestone (3.25), 3 red
-// brick, 4 glass, 0 only a colour; rgb its wall colour where OpenStreetMap has one (-1 not), used where no photo did
+// z1) -> [x, z, kind, rgb] of the house in that box): kind 1 wood (style 0.3), 2 industrial limestone (3.25), 3
+// brick (1.3), 4 glass, 0 only a colour; rgb its wall colour where OpenStreetMap has one (-1 not), used where no photo did
 let facades = null;
 export function setFacades(grid, find) { facades = { grid, find }; }
 
@@ -115,10 +115,10 @@ function* buildingGeometrySteps(sector, walls) {
       const real = rgb >= 0 && !g.real ? 1 : g.real;
       if (k === 1 && h >= 4 && h <= 14 && area2 < 900) g.style = 0.3 + real * 4;                  // (a tall one is not wood)
       else if (k === 2) g.style = 3.25 + real * 4;
-      else if (k === 3) { g.brick = true; g.style = 5; }
+      else if (k === 3) g.style = 1.3 + real * 4;                                                // (brick laid in the photo's colour: Mustamäe's is white)
       else if (k === 4 && h >= 8) { g.style = 2.3 + real * 4; g.eavesH = h; }
       // (a kind that does not fit the house keeps only the colour)
-      if (k !== 3 && rgb >= 0 && !g.real) { g.look = { rgb }; if (g.style < 4) g.style += 4; }
+      if (rgb >= 0 && !g.real) { g.look = { rgb }; if (g.style < 4) g.style += 4; }
     }
     for (const L of looks) {
       if (L.x - sector.x0 > g.x0 && L.x - sector.x0 < g.x1 && L.z - sector.z0 > g.z0 && L.z - sector.z0 < g.z1) { g.look = L; g.style = L.style + 4; break; }
@@ -238,7 +238,7 @@ export function createBuildings(walls) {
             wall = mix(wall, mix(vec3(0.74, 0.71, 0.64), wall, 0.25) * (0.94 + 0.08 * bHash(floor(vec2(u, h) * 2.0))), woodS * step(9.0, eaves) * (1.0 - step(3.1, h)));
           } else if (style < 1.5) {
             // a real colour decides between brick and panels: brick is clearly red-brown
-            float bricky = real > 0.5 ? step(0.05, wall.r - wall.b) * step(wall.g, wall.r * 0.8) * step(wall.r, 0.45) : step(0.55, seed);
+            float bricky = style > 1.2 ? 1.0 : real > 0.5 ? step(0.05, wall.r - wall.b) * step(wall.g, wall.r * 0.8) * step(wall.r, 0.45) : step(0.55, seed);
             if (bricky > 0.5) {
               // brick
               float row = floor(h / 0.085);

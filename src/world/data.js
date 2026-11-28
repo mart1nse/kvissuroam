@@ -748,7 +748,9 @@ export async function loadWorldData(onProgress = () => {}) {
     // Plant bushes: [[x, z, height]] (call before the sectors load).
     addBushes(list) {
       const S = meta.sector.size, G0 = meta.sector.grid0;
-      for (const [x, z, h] of list) {
+      const flat = typeof list[0] === 'number';                 // [[x, z, h], ...] or flat [x, z, h, ...]
+      for (let i = 0; i < list.length; i += flat ? 3 : 1) {
+        const x = flat ? list[i] : list[i][0], z = flat ? list[i + 1] : list[i][1], h = flat ? list[i + 2] : list[i][2];
         const k = `${Math.floor((x - G0) / S)}_${Math.floor((z - G0) / S)}`;
         let a = bushAdds.get(k);
         if (!a) bushAdds.set(k, (a = []));

@@ -23,14 +23,19 @@ WAYPOINTS = [
     (1150, 150), (1170, -100), (1240, -350), (1270, -440),        # north up Lükati tee
     (1265, -500), (1100, -495), (960, -490),                      # the link round onto Kloostrimetsa tee
     (700, -390), (560, -370), (300, -420), (100, -520), (-140, -534), (-220, -624), (-500, -600), (-714, -570),
-    (-750, -470), (-800, -360), (-833, -301),                     # Merivälja tee south, the Pirita bridge
-    (-950, -170), (-1095, 5),                                     # Pirita tee
+    (-726, -480), (-763, -366), (-828, -296),                     # Merivälja tee south, the Pirita bridge
+    (-962, -156), (-1030, -78), (-1100, 0),                       # Pirita tee
     (-1050, 40), (-840, 140), (-760, 210), (-600, 310), START,    # Rummu tee
 ]
 # the lap's own streets: waypoints snap only onto these, and the way between them keeps to them (any other street
-# costs four times its length: side streets and the other carriageway of Pirita tee and Merivälja tee, the
-# northbound one, Tallinna-Viimsi-Randvere tee, are only crossed where the lap turns)
-LAP_ROADS = {'Rummu tee', 'Kose tee', 'Lükati tee', 'Lükati tee MS Kloostrimetsa teele', 'Kloostrimetsa tee', 'Merivälja tee 2', 'Pirita tee'}
+# costs four times its length). Along Merivälja tee, over the Pirita bridge and down Pirita tee the lap keeps to
+# the inner carriageway, the one on the left of the green strip as the lap runs (the map's Tallinna-Viimsi-Randvere
+# tee, today's northbound one), so it never crosses the strip (Martin 28 Nov 2026: "move the merivälja tee part to
+# the inside track indeed"; the air photos of 1994 to 2008 show the strip was there in the circuit's last years).
+# Until then it ran on the outer one ('Merivälja tee 2', 'Pirita tee').
+# NB the lap's dressing (src/world/tln/pirita.js) names lap points by number: a rebuild that changes the number of
+# points needs those moved. The change of 28 Nov was spliced in with the count kept.
+LAP_ROADS = {'Rummu tee', 'Kose tee', 'Lükati tee', 'Lükati tee MS Kloostrimetsa teele', 'Kloostrimetsa tee', 'Tallinna-Viimsi-Randvere tee'}
 
 nodes, coords, adj, width, name = {}, [], [], {}, {}
 def nid(p):
@@ -140,6 +145,25 @@ straighten()
 # the start/finish line at index 0
 i0 = min(range(N), key=lambda i: math.dist(c[i], START))
 c = c[i0:] + c[:i0]; hw = hw[i0:] + hw[:i0]
+# the lap keeps its 2941 points: the dressing, the checkpoints and the spawn name them by number. The stretch that
+# moved to the inner carriageway on 28 Nov (points 2192 to 2582, Kloostrimetsa tee's end to Rummu tee) is shorter
+# than the old one, so its points are spread evenly over it, 1.92 m apart instead of 2.06
+KEEP_N, K0, K1 = 2941, 2192, 2582
+if N != KEEP_N:
+    e = K1 + N - KEEP_N
+    seg, sh = c[K0:e + 1], hw[K0:e + 1]
+    cum = [0.0]
+    for a_, b_ in zip(seg, seg[1:]): cum.append(cum[-1] + math.dist(a_, b_))
+    np_, nh, j = [], [], 0
+    for k in range(K1 - K0 + 1):
+        s = cum[-1] * k / (K1 - K0)
+        while j < len(cum) - 2 and cum[j + 1] < s: j += 1
+        t = (s - cum[j]) / (cum[j + 1] - cum[j]) if cum[j + 1] > cum[j] else 0
+        np_.append([seg[j][0] + t * (seg[j + 1][0] - seg[j][0]), seg[j][1] + t * (seg[j + 1][1] - seg[j][1])])
+        nh.append(sh[j] + t * (sh[j + 1] - sh[j]))
+    c = c[:K0] + np_ + c[e + 1:]; hw = hw[:K0] + nh + hw[e + 1:]
+    N = len(c)
+    assert N == KEEP_N
 total = sum(math.dist(c[i - 1], c[i]) for i in range(1, N)) + math.dist(c[-1], c[0])
 
 def near(p):

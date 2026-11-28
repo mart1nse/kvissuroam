@@ -24,12 +24,32 @@ export function api(path) {
   return TALLINN ? `${path}${path.includes('?') ? '&' : '?'}city=tallinn` : path;
 }
 
-// remembered for the next visit with ?tln=1; the page then loads again as that city (its world is another map)
-export function goCity(city) {
+// The other city, seen from this one's garage (Martin 28 Nov 2026: "up until you click drive ... visually sort of the
+// same ... laptimes also could be seen from both garages"): its lap board and online count are asked of its own room
+// with plain requests, its saved laps are in this browser under its own keys. Nothing of its world is loaded.
+export const OTHER = TALLINN ? 'tartu' : 'tallinn';
+export const apiOf = (city, path) => (city === 'tallinn' ? `${path}${path.includes('?') ? '&' : '?'}city=tallinn` : path);
+export const LAPS_KEY = { tartu: 'kvissuroam.laps', tallinn: 'kvissuroam.laps.tallinn' };
+// its map's first files, fetched quietly once it is picked in the garage, so the load after DRIVE has them at hand
+let fetched = false;
+export function fetchAhead(city) {
+  if (fetched || city === CITY) return;
+  fetched = true;
+  const dir = `${import.meta.env.BASE_URL}data/${city === 'tallinn' ? 'tln/' : ''}`;
+  for (const f of ['meta.json', 'vectors.json', 'coarse.bin', 'props.json', 'signs.json']) fetch(dir + f, { priority: 'low' }).then((r) => r.arrayBuffer()).catch(() => {});
+}
+
+// Remembered for the next visit with ?tln=1; the page then loads again as that city (its world is another map).
+// drive: straight onto the road there, no start screen (DRIVE in the garage with the other city's track picked, and
+// the city button while driving): the loading screen says where to (index.html, ?go=1) and the car is put on the
+// track's start (track: 'raadi' for the Majoraadi stage).
+export function goCity(city, { drive = false, track = '' } = {}) {
   try { localStorage.setItem(KEY, city); } catch { /* private mode: the address carries it */ }
   const u = new URL(location.href);
   u.searchParams.set('tln', '1');
   u.searchParams.set('city', city);           // (the city picked: the start screen opens on its tracks, src/race/trackpick.js)
-  u.searchParams.delete('track');
+  u.searchParams.delete('track'); u.searchParams.delete('drive'); u.searchParams.delete('go');
+  if (drive) { u.searchParams.set('go', '1'); u.searchParams.set('drive', '1'); }
+  if (track) u.searchParams.set('track', track);
   location.href = u.toString();
 }

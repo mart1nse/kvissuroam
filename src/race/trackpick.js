@@ -6,7 +6,7 @@
 // across it) with its bright dot and tail going round, Raadi's from the start to the finish and again
 // (Martin 23 Nov: "the same old animation should be there going through the lap ... also the raadi one").
 import { TOOME as TRACK, PIRITA } from './circuit.js';
-import { TALLINN, TLN_FLAG, CITY, goCity } from '../city.js';
+import { TALLINN, TLN_FLAG, CITY } from '../city.js';
 import { stagePath, STAGE_KM } from './raadi.js';
 import { fmtTime, escapeHtml } from './race.js';
 
@@ -46,12 +46,17 @@ const RAADI_CARD = { id: 'raadi', name: 'MAJORAADI', km: STAGE_KM, surface: 'GRA
 // Tallinn's one circuit (Martin 28 Nov 2026), under Toomemägi's id; the dot takes as long a lap as Toomemägi's per km
 const PIRITA_CARD = TLN_FLAG && { id: 'toome', name: 'PIRITA-KOSE', km: (PIRITA.length / 1000).toFixed(1), surface: 'ASPHALT', meta: 'START ON RUMMU TEE', modes: [['race', 'ONLINE RACES'], ['', 'TIME ATTACK']], path: pirita, loop: true, secs: 8 };
 export const TRACKS = TALLINN ? [PIRITA_CARD] : [TOOME_CARD, RAADI_CARD];
+// each city's cards: the other city's are shown in this one's garage too (Martin 28 Nov 2026, see createTrackPicker)
+export const CITY_TRACKS = { tartu: [TOOME_CARD, RAADI_CARD], tallinn: PIRITA_CARD ? [PIRITA_CARD] : [] };
 
 // The choice of city (?tln=1, Martin 28 Nov 2026: "opening with this flag will instead of the track options, show two
 // cities, when clicking on tartu you see the current options and when clicking on tallinna you see the pirita kose
-// kloostrimetsa racetrack option"). A card a city, drawn as the track cards are, with its circuits' names; the other
-// city's card loads the page again in that city (src/city.js goCity), this city's card shows its tracks. A page opened
-// by that choice (?city= in its address) opens on its tracks; a small pill before them goes back to the cities.
+// kloostrimetsa racetrack option"). A card a city, drawn as the track cards are, with its circuits' names. Either
+// city's card shows its tracks, with no reload (Martin 28 Nov: "you are on the tartu garage, go to the city selector,
+// choose tallinn, then you can already choose pirita kose etc and clicking drive shows you a loading screen"): the
+// other city's cards carry its records, asked of its own room (board.js), and DRIVE then loads the page again there
+// and puts the car on the picked track's start (main.js startDriving, src/city.js goCity). A page opened with ?city=
+// in its address opens on its tracks; a small pill before them goes back to the cities.
 const CITIES = TLN_FLAG ? [
   { id: 'tartu', name: 'TARTU', meta: 'TOOMEMÄGI · MAJORAADI', modes: [['race', '2 CIRCUITS']], path: toome, secs: 7 },
   { id: 'tallinn', name: 'TALLINN', meta: 'PIRITA-KOSE', modes: [['race', 'NEW CIRCUIT']], path: pirita, secs: 8 },
@@ -76,8 +81,11 @@ export function pickedTrack(drag = false) {
 
 // record(id): the best time of all { ms, name, car } or null; mine(id): this player's best { ms } or null;
 // drag: the drag strip's card too, first in the row
-export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, drag = false }) {
-  const cards = drag ? [DRAG_CARD, ...TRACKS] : TRACKS;
+// recordOf(city, id), mineOf(city, id): the same of the other city's tracks; online(city): how many are online there
+// (null: not known); onView(city): the city whose tracks are shown changed
+export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, drag = false, recordOf = null, mineOf = null, online = null, onView = null, onCities = null }) {
+  const own = drag ? [DRAG_CARD, ...TRACKS] : TRACKS;
+  let view = CITY, awayPick = 'toome';           // the city whose tracks are shown, and the track picked of the other city's
   let picked = pickedTrack(drag);
   // the cities first (?tln=1 without a city in the address), else this city's tracks
   let cities = TLN_FLAG && !new URLSearchParams(location.search).get('city');
@@ -98,11 +106,12 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
   }
   function render() {
     // (the cities: this one lit, as a picked track is)
-    const html = cities ? CITIES.map((c) => `<button class="tcard city${c.id === CITY ? ' on' : ''}" data-city="${c.id}" role="radio" aria-checked="${c.id === CITY}">
+    const away = view !== CITY, cards = away ? CITY_TRACKS[view] : own, sel = away ? awayPick : picked;
+    const html = cities ? CITIES.map((c) => { const n = online?.(c.id); return `<button class="tcard city${c.id === view ? ' on' : ''}" data-city="${c.id}" role="radio" aria-checked="${c.id === view}">
         ${outline(c)}<span class="tx"><b class="nm">${c.name}</b><small class="meta">${c.meta}</small>
-        <span class="modes">${c.modes.map(([k, w]) => `<i class="${k}">${w}</i>`).join('')}</span></span></button>`).join('')
-      : (TLN_FLAG ? `<button class="tcity" data-cities="1" aria-label="Choose the city">‹ ${CITY.toUpperCase()}</button>` : '') + cards.map((t) => {
-      const on = t.id === picked, r = record(t.id), m = on ? mine?.(t.id) : null, fmt = t.fmt || ((ms) => fmtTime(ms / 1000));
+        <span class="modes">${c.modes.map(([k, w]) => `<i class="${k}">${w}</i>`).join('')}${n != null ? `<i>${n} ONLINE</i>` : ''}</span></span></button>`; }).join('')
+      : (TLN_FLAG ? `<button class="tcity" data-cities="1" aria-label="Choose the city">‹ ${view.toUpperCase()}</button>` : '') + cards.map((t) => {
+      const on = t.id === sel, r = away ? recordOf?.(view, t.id) : record(t.id), m = !on ? null : away ? mineOf?.(view, t.id) : mine?.(t.id), fmt = t.fmt || ((ms) => fmtTime(ms / 1000));
       return `<button class="tcard${on ? ' on' : ''}" data-track="${t.id}" role="radio" aria-checked="${on}">
         ${outline(t)}
         <span class="tx"><b class="nm">${t.name}</b><small class="meta">${t.km} KM · <i>${t.surface}</i>${on ? `<u style="text-decoration:none"> · ${t.meta}</u>` : ''}</small>
@@ -118,14 +127,17 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
     const c = e.target.closest('[data-city]');
     if (c) {
       c.blur();
-      if (c.dataset.city === CITY) { cities = false; render(); } else goCity(c.dataset.city);
+      view = c.dataset.city; cities = false;
+      render();
+      onView?.(view);
       return;
     }
-    if (e.target.closest('[data-cities]')) { cities = true; render(); return; }
+    if (e.target.closest('[data-cities]')) { cities = true; render(); onCities?.(); return; }
     const b = e.target.closest('[data-track]');
     if (!b) return;
     b.blur();
-    if (b.dataset.track === picked) return;          // (a click only picks: the lap times are on their own button, Martin 23 Nov)
+    if (b.dataset.track === (view !== CITY ? awayPick : picked)) return;          // (a click only picks: the lap times are on their own button, Martin 23 Nov)
+    if (view !== CITY) { awayPick = b.dataset.track; render(); onView?.(view); return; }
     picked = b.dataset.track;
     render();
     onPick?.(picked);
@@ -134,5 +146,6 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
   // (the garage opens on the track the car is at, Martin 26 Nov: the TOOMEMÄGI button or H, then the garage and
   // DRIVE, took the car back to Raadi because the picker still said Raadi. Not a pick: no tyres change.)
   function follow(id) { if (id !== picked) { picked = id; render(); } }
-  return { get picked() { return picked; }, follow, render, el };
+  // away: the other city's track picked here, { city, track, name } (null: this city's tracks are the ones shown)
+  return { get picked() { return picked; }, get view() { return view; }, get away() { const t = view !== CITY && (CITY_TRACKS[view].find((x) => x.id === awayPick) || CITY_TRACKS[view][0]); return t ? { city: view, track: t.id, name: t.name } : null; }, follow, render, el };
 }

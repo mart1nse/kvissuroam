@@ -6,9 +6,9 @@
 //                                                    replay; src/race/replay.js unpack reads it); the lap's id
 //                                                    matches /api/laps.json (name, splits, input)
 import fs from 'node:fs';
-const base = process.env.BASE || 'https://www.linnaring.com';
-const [cmd = 'count', dir = '/mnt/project-files/toomemagi-lines'] = process.argv.slice(2);
-const get = async (q) => { const r = await fetch(`${base}/api/lines${q}`); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); };
+const base = process.env.BASE || 'https://www.linnaring.com', tln = process.env.CITY === 'tallinn';   // CITY=tallinn: Pirita-Kose's
+const [cmd = 'count', dir = tln ? '/mnt/project-files/pirita-lines' : '/mnt/project-files/toomemagi-lines'] = process.argv.slice(2);
+const get = async (q) => { const r = await fetch(`${base}/api/lines${q}${tln ? `${q ? '&' : '?'}city=tallinn` : ''}`); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); };
 const c = await get('');
 console.log(JSON.stringify(c));
 if (cmd === 'fetch') {

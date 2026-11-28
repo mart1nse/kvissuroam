@@ -8,6 +8,8 @@
 // within LINE_SHARE of its car's record on the board sends that drive, packed as a replay is (20 to 40 KB), once
 // the server has the lap (src/net/multiplayer.js sendReplays). The server keeps it nameless beside the lap's id
 // (worker/index.js, table lap_lines), at most LINES_MAX, and gives the rows back through GET /api/lines.
+// Tallinn's Pirita-Kose lap (Martin 28 Nov 2026: "start loggin trajectory and skid marks of pirita track. log all the time
+// as my test runs only currently"): every lap's drive goes to Tallinn's own lobby, kept or not (GET /api/lines?city=tallinn).
 // The painted band and the lasting marks are made from them later; nothing in the game reads them yet.
 
 export const LINE_TRACK = 'toomemagi';

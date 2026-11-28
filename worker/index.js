@@ -1221,21 +1221,23 @@ export class Lobby extends DurableObject {
     try { b = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
     if (b?.track === 'raadi') return json({ error: 'gone' }, 410);   // (a page from before 26 Nov 19:20: its Raadi logging stops)
     const car = cleanCar(b?.car), ms = Math.round(Number(b?.ms)), tk = await this.readTicket(b?.k);
-    if (!car || !tk || !(ms >= LAP_MIN && ms <= 900000) || typeof b?.z !== 'string' || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
+    if (!car || !tk || !(ms >= this.lapMin && ms <= 900000) || typeof b?.z !== 'string' || !/^H4sI[A-Za-z0-9+/]+=*$/.test(b.z)) return json({ error: 'invalid' }, 400);
     const lap = this.sql.exec('SELECT id, pen, hold FROM laps WHERE sid = ? AND car = ? AND ms = ? AND track = ? LIMIT 1', tk.sid, car, ms, LINE_TRACK).toArray()[0];
-    if (!lap || lap.hold === 2) return json({ error: 'no such lap' }, 400);
+    // (Tallinn, Martin 28 Nov 2026: "log all the time as my test runs only currently": every lap's drive, kept or not)
+    const all = this.city === 'tallinn';
+    if (lap?.hold === 2 || (!lap && !all)) return json({ error: 'no such lap' }, 400);
     const best = this.sql.exec('SELECT MIN(ms) AS m FROM laps WHERE track = ? AND car = ? AND hold IS NULL', LINE_TRACK, car).one().m;
-    if (!lineWorth(ms, Math.min(best ?? ms, ms))) return json({ error: 'not fast enough' }, 400);
-    if (this.sql.exec('SELECT 1 FROM lap_lines WHERE lap = ?', lap.id).toArray().length) return json({ ok: true });
+    if (!all && !lineWorth(ms, Math.min(best ?? ms, ms))) return json({ error: 'not fast enough' }, 400);
+    if (lap && this.sql.exec('SELECT 1 FROM lap_lines WHERE lap = ?', lap.id).toArray().length) return json({ ok: true });
     // (the drive's own head: a replay of this lap's length, "1,21,<ms>,<n>")
     let bytes, n;
     try {
       bytes = Uint8Array.from(atob(b.z), (c) => c.charCodeAt(0));
       const head = (await gunzip(bytes, 1500000)).slice(0, 40).split(',').map(Number);
       n = head[3];
-      if (head[0] !== 1 || head[1] !== 21 || Math.abs(head[2] - (ms - (lap.pen || 0) * 1000)) > 1000 || !(n >= 100 && n <= 9001)) throw new Error('head');
+      if (head[0] !== 1 || head[1] !== 21 || Math.abs(head[2] - (ms - (lap?.pen || 0) * 1000)) > 1000 || !(n >= 100 && n <= 9001)) throw new Error('head');
     } catch { return json({ error: 'invalid' }, 400); }
-    this.sql.exec('INSERT INTO lap_lines (at, lap, car, ms, best, n, data) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), lap.id, car, ms, Math.min(best ?? ms, ms), n, bytes);
+    this.sql.exec('INSERT INTO lap_lines (at, lap, car, ms, best, n, data) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), lap ? lap.id : -Date.now(), car, ms, Math.min(best ?? ms, ms), n, bytes);   // (lap below 0: a lap the server did not keep, by when its drive came)
     this.lineN++;
     return json({ ok: true });
   }

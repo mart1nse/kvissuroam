@@ -172,7 +172,7 @@
 
   <div id="loading" class="screen">
     <h1 class="logo"><span>LINNA</span><span>RING</span></h1>
-    <p class="tag">TARTU · ESTONIA</p>
+    <p class="tag">TARTU · TALLINN · ESTONIA</p>
     <div class="bar"><i id="loadbar"></i></div>
     <p id="loadmsg" class="small">Loading the neighbourhood…</p>
     <div class="about">
@@ -187,8 +187,6 @@
     // as the screen before the reload did, so the change of city reads as one loading and not as a restart
     (function () {
       var q = new URLSearchParams(location.search);
-      // Tallinn is named only where it can be reached (behind ?tln=1, src/city.js): without the flag no road leads there yet
-      if (q.get('tln') === '1') document.querySelector('#loading .tag').textContent = 'TARTU · TALLINN · ESTONIA';
       if (q.get('go') !== '1') return;
       var tln = q.get('tln') === '1' && q.get('city') === 'tallinn';
       document.documentElement.classList.add('go');

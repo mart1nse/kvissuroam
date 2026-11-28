@@ -208,8 +208,23 @@ for r in roads:
     if sum(hits) >= 0.6 * len(hits): stone.append(f"{r['pts'][0][0]:.1f},{r['pts'][0][1]:.1f},{r['pts'][-1][0]:.1f},{r['pts'][-1][1]:.1f}")
 print('stone streets', len(stone))
 
+# the city walls (OpenStreetMap historic=citywalls / barrier=city_wall), cut where a street goes through a gate
+from shapely.ops import unary_union
+gaps = unary_union([LineString(r['pts']).buffer(r['w'] / 2 + 1.0) for r in roads])
+walls = []
+for w in osm['ways']:
+    tg = w['t']
+    if tg.get('historic') != 'citywalls' and tg.get('barrier') != 'city_wall': continue
+    if tg.get('building'): continue                                     # (a tower: the map has it)
+    line = LineString([game(lon, lat) for lon, lat in w['ll']])
+    rest = line.difference(gaps)
+    for g in getattr(rest, 'geoms', [rest]):
+        if g.is_empty or g.geom_type != 'LineString' or g.length < 3: continue
+        walls.append([[round(x, 2), round(z, 2)] for x, z in g.simplify(0.3).coords])
+print('city wall pieces', len(walls), 'm', round(sum(LineString(p).length for p in walls)))
+
 out = {'credit': 'Mapillary detections; OpenStreetMap contributors (ODbL)',
-       'holes': holes, 'bars': bars, 'trams': trams, 'stone': stone}
+       'holes': holes, 'bars': bars, 'trams': trams, 'stone': stone, 'walls': walls}
 json.dump(out, open(os.path.join(DATA, 'marks.json'), 'w'), separators=(',', ':'))
 print('holes', sum(len(v) for v in holes.values()) // 4, 'bars', sum(len(v) for v in bars.values()) // 5,
       'tram lines', sum(len(v) for v in trams.values()), 'size', os.path.getsize(os.path.join(DATA, 'marks.json')))

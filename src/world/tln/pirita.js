@@ -3,12 +3,14 @@
 //
 // From his Street View shots along the whole lap (June and August 2024) and the Maa-amet orthophoto straightened along the
 // lap line (tools: the shots and strips are in the project's tallinn-plan folder):
-//  - The two-lane roads through the woods and past the houses (Kose, Lükati, Kloostrimetsa, Merivälja, Rummu): a broken
+//  - The two-lane roads through the woods and past the houses (Kose, Lükati, Kloostrimetsa, Rummu): a broken
 //    centre line of long dashes, 3 m with 1 m gaps, and broken edge lines, 3 m and 3 m, 3.1 m out from the middle (the
 //    autocorrelation of the photo along each line: a period of 4.0 m and 5.9 m). The asphalt is about a metre wider than
 //    the edge lines each side and ends in sand and pine needles in the woods, with no kerb.
-//  - Pirita tee, one carriageway of the divided road and its long bridge: a lane line of short dashes (1.3 m, 2.7 m
-//    gaps), solid edge lines, granite kerbs, tall galvanised lamps in the grass median.
+//  - Merivälja tee, the Pirita bridge and Pirita tee: the inner carriageway of the divided road, the one left of the
+//    green strip as the lap runs (Martin 28 Nov: "move the merivälja tee part to the inside track indeed"; the lap ran
+//    on the outer one before). Lane lines of short dashes (1.3 m, 2.7 m gaps), two lanes on the bridge and three
+//    where the road is wider, solid edge lines, granite kerbs, tall galvanised lamps on its outer edge.
 //  - Light grey, slightly cool, much patched old asphalt: dark rectangles of newer tarmac across a lane or along an
 //    edge, black crack seals along the lane joints and across, black tyre marks (Rummu tee has plenty).
 //  - On the bend of Kloostrimetsa past the houses a low concrete gutter of slabs along the inside of the corner.
@@ -65,14 +67,14 @@ const ZONES = [
   { id: 'lukati', i0: 381, i1: 1343, tone: [185, 124], fine: 46, centre: [3, 1], edge: 3.1, edgeDash: [3, 3], woods: true, lamps: 'LIGHT', lampGap: 46 },
   { id: 'kloosF', i0: 1343, i1: 1899, tone: [184, 123], fine: 46, centre: [3, 1], edge: 3.1, edgeDash: [3, 3], woods: true, lamps: 'LIGHT', lampGap: 46 },
   { id: 'kloosU', i0: 1899, i1: 2198, tone: [171, 124], fine: 46, centre: [3, 1], edge: 3.1, edgeDash: [3, 3], kerb: true, lamps: 'LIGHT', lampSide: -1 },
-  { id: 'meri', i0: 2198, i1: 2322, tone: [169, 123], fine: 52, centre: [3, 1], edge: 3.15, edgeDash: [3, 3], kerb: true, lamps: 'LIGHT', lampSide: -1 },
-  { id: 'pirita', i0: 2322, i1: 2573, tone: [161, 122], fine: 56, centre: [1.3, 2.7], edge: 3.25, edgeDash: null, kerb: true, lamps: 'ROADLAMP', lampSide: -1, lampGap: 36 },
+  { id: 'meri', i0: 2198, i1: 2312, tone: [165, 123], fine: 54, centre: [1.3, 2.7], lanes: true, edge: 3.25, edgeDash: null, kerb: true, lamps: 'ROADLAMP', lampSide: -1, lampGap: 36 },
+  { id: 'pirita', i0: 2312, i1: 2573, tone: [161, 122], fine: 56, centre: [1.3, 2.7], lanes: true, edge: 3.25, edgeDash: null, kerb: true, lamps: 'ROADLAMP', lampSide: -1, lampGap: 36 },
   { id: 'rummu', i0: 2573, i1: 75 + N, tone: [173, 123], fine: 46, centre: [3, 1], edge: 3.1, edgeDash: [3, 3], woods: true, lamps: 'LIGHT', lampGap: 38 },
 ];
 const zoneAt = (i) => { i = wrapI(i); return ZONES.find((z) => (i >= z.i0 && i < z.i1) || (i + N >= z.i0 && i + N < z.i1)); };
 const BRIDGE_TONE = [150, 121];          // the decks of the Pirita bridge and Lükati's: darker, newer
 // where the lap turns off one road onto another: no lines of its own across the junction
-const BOXES = [[372, 392], [1333, 1352], [2186, 2216], [2545, 2578]];
+const BOXES = [[372, 392], [1333, 1352], [2186, 2216], [2562, 2578]];
 const inBox = (i) => BOXES.some(([a, b]) => i >= a && i <= b);
 // a paved strip down the middle of Rummu tee from the Pirita tee lights (Street View: grey setts between the lanes)
 const MEDIAN = [2578, 2612];
@@ -210,7 +212,16 @@ export function piritaVectors(vectors) {
       }
     };
     // centre (or Pirita tee's lane line): not through a crossing of a big road nor on Rummu's paved middle
-    line(0, z.centre, (s, i) => !L.crossing(s, 9) && !(i >= MEDIAN[0] && i <= MEDIAN[1]));
+    // (the divided road's carriageway: one lane line down the middle of two lanes, two where it is over 9 m wide)
+    const mid = (s, i) => !L.crossing(s, 9) && !(i >= MEDIAN[0] && i <= MEDIAN[1]);
+    if (z.lanes) {
+      for (let s = s0; s + z.centre[0] <= end; s += z.centre[0] + z.centre[1]) {
+        const sm = s + z.centre[0] / 2, i = iOf(sm);
+        if (inBox(i) || !mid(sm, i)) continue;
+        const h = half(sm), o3 = (h - 0.6) / 3;
+        for (const o of h > 4.5 ? [-o3, o3] : [0]) bar(at(s, o), at(s + z.centre[0], o), 0.13, lvAt(sm));
+      }
+    } else line(0, z.centre, mid);
     // edges, out from the middle by the zone's measure (further where the road widens for turning lanes)
     for (const side of [1, -1]) {
       const off = (s) => side * Math.max(z.edge, half(s) - 1.2);
@@ -235,7 +246,7 @@ export function piritaVectors(vectors) {
   for (let s = mS1; s >= mS0; s -= 2) { const t = Math.min(1, (s - mS0) / 6, (mS1 - s) / 6); ring.push(at(s, 1.05 * Math.max(0.2, t))); }
   tone.push({ outer: ring.map(([x, z]) => [x, z]), tone: 'rgb(150,126,255)' });
 
-  // stop lines (0.5 m) at the two lights, from the middle to the right edge; a give-way line of 1 m dashes where Lükati's
+  // stop lines (0.5 m) at the Kloostrimetsa lights (down the inner carriageway the lap meets the lights from behind), from the middle to the right edge; a give-way line of 1 m dashes where Lükati's
   // link road meets Kloostrimetsa
   const across = (i, o0, o1, w, dash = null) => {
     const s = SS[i];
@@ -246,7 +257,6 @@ export function piritaVectors(vectors) {
   // (a stop line is a bar across the lane: its centre line runs across, its width along the lap)
   const stop = (i) => { const s = SS[i], h = half(s); bar(at(s, 0.1), at(s, h - 0.3), 0.5, 0); };
   stop(2185);
-  stop(2544);
   across(1332, 0.15, half(SS[1332]) - 0.3, 0.4, [1, 0.5]);
 
   // sand and needles along the asphalt in the woods: a strip 0.2 to 1.3 m wide, broken where a road or a drive joins
@@ -328,9 +338,9 @@ export function piritaPropsFor(vectors) {
   sign(1330, 1, SIGN.yield);                       // Lükati's link road gives way to Kloostrimetsa
   sign(1356, 1, SIGN.priority);
   sign(2722, 1, SIGN.parking); sign(2752, -1, SIGN.parking, 0, false);   // the car parks by the underpass on Rummu tee
-  sign(2030, -1, SIGN.busStop, 0, false); sign(2440, 1, SIGN.busStop);
+  sign(2030, -1, SIGN.busStop, 0, false); sign(2460, -1, SIGN.busStop, 0, false);
 
-  // lamps: one side, a pole every 38 to 46 m; on Pirita tee in the median, the arm over the carriageway
+  // lamps: one side, a pole every 38 to 46 m; on Pirita tee along its outer edge, the arm over the carriageway
   for (const z of ZONES) {
     const gap = z.lampGap || 40, side = z.lampSide || 1;
     const s0 = SS[z.i0 % N] + (z.i0 >= N ? LEN : 0);

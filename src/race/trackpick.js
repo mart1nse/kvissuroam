@@ -66,12 +66,27 @@ const CITIES = TLN_FLAG ? [
 ] : [];
 
 // The drag strip at Ülenurme (?drag=1, desktop only, Martin 27 Nov 2026: "ÜLENURME TOOMEMÄE MAJORAADI, toomemäe in
-// the center and default pick"): a card left of Toomemägi. Its outline is the quarter mile seen from above, the start
-// line across its foot; the dot runs it as a car does, slow off the line and faster to the end, then waits there.
-const DRAG_PATH = { d: 'M150 960L150 40', w: '300', h: '1000', sf: ['40', '960', '260', '960'],
-  // (both of the dot's animations: three quarters of the time to the end, speeding up all the way, then a rest)
-  motion: 'calcMode="spline" keyTimes="0;0.75;1" keySplines="0.6 0 0.9 0.55;0 0 1 1"' };
-export const DRAG_CARD = { id: 'drag', name: 'ÜLENURME', km: '0.4', surface: 'ASPHALT', meta: 'DRAG STRIP · 1/4 MILE', modes: [['race', 'DRAG RACE'], ['', 'PRACTICE']], path: DRAG_PATH, secs: 3.2,
+// the center and default pick"): a card left of Toomemägi. Its outline is the quarter mile seen from the start line,
+// two wide lanes running away into the distance as on the motorway sign without its bridge (Martin 28 Nov: "two wide
+// lines going in to the perspective ... still neon and still highlighting two cars going at it"), the start line
+// across both. A car in each lane: off the line together, the left one quicker away, the right one through first by
+// a nose, both smaller as they go, then a rest at the end.
+const DRAG_LANES = 'M50 950L365 950L383 70L318 70Z M435 950L750 950L482 70L417 70Z';
+// (a car: its light and a streak behind it, turned along its lane and shrinking with the distance; keyTimes / keySplines
+// for both its move and its size, so the two keep together)
+function dragCar(cls, path, end, spline, secs) {
+  const keys = `keyTimes="0;${end};1" keySplines="${spline};0 0 1 1"`;
+  // (the streak grows as the car gets going and goes out once it is through)
+  const streak = `<animateTransform attributeName="transform" type="scale" values="0.2 1;1 1;1 1;0 1;0 1" keyTimes="0;0.3;${end};${end + 0.06};1" dur="${secs}s" repeatCount="indefinite"/>`;
+  return `<g class="dot ${cls}"><animateMotion rotate="auto" keyPoints="0;1;1" calcMode="spline" ${keys} dur="${secs}s" repeatCount="indefinite" path="${path}"/>`
+    + `<g><animateTransform attributeName="transform" type="scale" values="1;0.3;0.3" calcMode="spline" ${keys} dur="${secs}s" repeatCount="indefinite"/>`
+    + `<polygon class="streak" points="0,-27 -240,0 0,27">${streak}</polygon><circle r="74" class="glow"/><circle r="30"/></g></g>`;
+}
+const DRAG_PATH = { w: '800', h: '1000', draw: (secs) => `<svg viewBox="0 0 800 1000" aria-hidden="true"><path class="lane" d="${DRAG_LANES}"/>`
+    + `<path class="halo" d="${DRAG_LANES}"/><path class="tube" d="${DRAG_LANES}"/><path class="core" d="${DRAG_LANES}"/><line class="sf" x1="78" y1="860" x2="722" y2="860"/>`
+    + dragCar('a', 'M222 860L342 120', 0.75, '0.4 0.08 0.75 0.75', secs)
+    + dragCar('b', 'M578 860L458 120', 0.735, '0.55 0.02 0.7 0.68', secs) + '</svg>' };
+export const DRAG_CARD = { id: 'drag', name: 'ÜLENURME', km: '0.4', surface: 'ASPHALT', meta: 'DRAG STRIP · 1/4 MILE', modes: [['race', 'DRAG RACE'], ['', 'PRACTICE']], path: DRAG_PATH, secs: 3.6,
   // (a drag strip's time is seconds and thousandths, not a lap's minutes)
   fmt: (ms) => (ms / 1000).toFixed(3) };
 
@@ -99,11 +114,12 @@ export function createTrackPicker({ after, record, mine, onOpenBoard, onPick, dr
   after.after(el);
   let shown = '';
   // a card's outline: the tube, the start line across a lap (a start mark on a stage), the dot and its tail going round
-  // (t.secs a time; p.motion: the drag strip's dot speeding up and then resting at the end, the tail with it)
+  // (t.secs a time; p.draw: a card drawn its own way, the drag strip's)
   function outline(t) {
     const p = t.path;
-    const tail = `<path d="${p.d}" class="tail" pathLength="1000" stroke-dasharray="${TAIL} ${1000 - TAIL}"><animate attributeName="stroke-dashoffset" ${p.motion ? `values="${TAIL};${TAIL - 1000};${TAIL - 1000}" ${p.motion}` : `from="${TAIL}" to="${TAIL - 1000}"`} dur="${t.secs}s" repeatCount="indefinite"/></path>`
-        + `<g class="dot"><circle r="44" class="glow"/><circle r="19"/><animateMotion ${p.motion ? `keyPoints="0;1;1" ${p.motion} ` : ''}dur="${t.secs}s" repeatCount="indefinite" path="${p.d}"/></g>`;
+    if (p.draw) return p.draw(t.secs);               // (the drag strip's own picture: two lanes and two cars)
+    const tail = `<path d="${p.d}" class="tail" pathLength="1000" stroke-dasharray="${TAIL} ${1000 - TAIL}"><animate attributeName="stroke-dashoffset" from="${TAIL}" to="${TAIL - 1000}" dur="${t.secs}s" repeatCount="indefinite"/></path>`
+        + `<g class="dot"><circle r="44" class="glow"/><circle r="19"/><animateMotion dur="${t.secs}s" repeatCount="indefinite" path="${p.d}"/></g>`;
     const sf = p.start ? `<circle class="sf" cx="${p.start[0]}" cy="${p.start[1]}" r="9"/>` : `<line class="sf" x1="${p.sf[0]}" y1="${p.sf[1]}" x2="${p.sf[2]}" y2="${p.sf[3]}"/>`;
     return `<svg viewBox="0 0 ${p.w} ${p.h}" aria-hidden="true"><path class="halo" d="${p.d}"/><path class="tube" d="${p.d}"/><path class="core" d="${p.d}"/>${sf}${tail}</svg>`;
   }

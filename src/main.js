@@ -1184,7 +1184,7 @@ async function boot() {
       : `<button data-act="track-toome" title="Toomemägi lap start">${mark('toome')}<span>TOOMEMÄGI</span></button>${stage ? `<button data-act="track-raadi" title="Majoraadi rally stage start">${mark('raadi')}<span>MAJORAADI</span></button>` : ''}${drag && !isTouch ? '<button data-act="track-drag" title="Drag strip at Ülenurme (H there: back on the line)"><span>DRAG STRIP</span></button>' : ''}`;
     // (with ?tln=1, the other city a tap away, Martin 28 Nov: "push a button and go from one to another": the page
     // loads again in that city's world and server room, src/city.js goCity)
-    if (TLN_FLAG) tp.insertAdjacentHTML('beforeend', `<button data-act="city" class="city" title="Drive in ${TALLINN ? 'Tartu' : 'Tallinn'} (its own map, lap board and races)"><span>${TALLINN ? 'TALLINN' : 'TARTU'}<i data-n="here"></i> ⇄ ${TALLINN ? 'TARTU' : 'TALLINN'}<i data-n="there"></i></span></button>`);
+    if (TLN_FLAG) tp.insertAdjacentHTML('beforeend', `<button data-act="city" class="city" title="Drive in ${TALLINN ? 'Tartu' : 'Tallinn'} (its own map, lap board and races)"><span>${TALLINN ? 'TARTU' : 'TALLINN'}<i data-n="there"></i></span></button>`);
     $('#hud').appendChild(tp);
   }
   board = createBoard({ mp, race, cars: CARS, order: CAR_ORDER, stage, onTrack: () => { trackPicked = true; layoutMenu(); }, onAway: () => layoutMenu(), onWatch: watch ? watchReplay : null, carNow: () => carId, drag: drag && !isTouch ? drag : null,
@@ -1756,8 +1756,9 @@ function trackPills() {
 }
 
 // How many are online in each city, in brackets on the city button (Martin 28 Nov 2026: "would be cool to see how many
-// people are online (in brackets for both perhaps)"): this city's from its room's list, the other's asked of its room
-// every half minute while the button shows.
+// people are online (in brackets for both perhaps)", then: "just show the button to be tallinn and only the other
+// cities online players in brackets as you see your own online players in the usual place"): the other city's name
+// and count, asked of its room every half minute while the button shows.
 let cityCountAt = 0;
 function cityCounts() {
   const now = performance.now();

@@ -885,9 +885,9 @@ async function boot() {
   pirita = TALLINN ? createPirita(scene, world, { shadows: !isTouch }) : null;     // the lap's patches, rails and gutter as the car comes
   centreMarks = TALLINN ? createCentreMarks(scene, world) : null;               // the centre's worn tarmac, lids, grates and tram rails (src/world/tln/centremarks.js)
   cityWalls = TALLINN ? createCityWalls(scene, world, buildBuildings.material) : null;     // the Old Town's walls between the map's towers
-  raeplats = TALLINN ? createRaeplats(scene, world, { shadows: !isTouch }) : null;
-  gates = TALLINN ? createGates(scene, world, { shadows: !isTouch }) : null;
-  toompea = TALLINN ? createToompea(scene, world, { shadows: !isTouch }) : null;  // Nevski cathedral (src/world/tln/toompea.js)      // Viru gate's towers (src/world/tln/gates.js)     // the town hall's front and tower, the Christmas market (src/world/tln/raeplats.js)
+  raeplats = TALLINN ? createRaeplats(scene, world, { shadows: !isTouch }) : null;     // the town hall's front and tower, the Christmas market (src/world/tln/raeplats.js)
+  gates = TALLINN ? createGates(scene, world, { shadows: !isTouch }) : null;           // Viru gate's towers (src/world/tln/gates.js)
+  toompea = TALLINN ? createToompea(scene, world, { shadows: !isTouch }) : null;       // Nevski cathedral (src/world/tln/toompea.js)
   haridus10 = hand(createHariduse10)(scene, world, { shadows: !isTouch });
   katoliku = hand(createKatoliku)(scene, world, { shadows: !isTouch });
   katoliku2 = hand(createKatoliku2)(scene, world, { shadows: !isTouch });

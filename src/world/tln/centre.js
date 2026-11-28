@@ -38,7 +38,7 @@ export const LANDMARKS = [
   { x: -5846, z: 3100, style: 3.4, roof: 0x3d4240 },                     // Niguliste kirik
   { x: -5562, z: 2488, style: 3.4, roof: 0x3a4440 },                     // Oleviste kirik
   { x: -5673, z: 2844, style: 3.6, rgb: 0xe8e4d8, roof: 0x3a3a3c },      // Pühavaimu kirik: whitewashed
-  { x: -5707, z: 2980, style: 3.4, roof: 0x3a3a3a },                     // Tallinna raekoda
+  { x: -5707, z: 2980, style: 3.4, roof: 0x5e413b },                     // Tallinna raekoda: dark brown tiles (src/world/tln/raeplats.js)
   { x: -5695, z: 3335, style: 3, rgb: 0xe2cf9a, roof: 0x3f4448 },        // Jaani kirik: pale yellow
   { x: -6048, z: 3532, style: 3.4, roof: 0x3d3f41 },                     // Kaarli kirik
   { x: -5871, z: 3194, style: 3.6, rgb: 0xece8de, roof: 0x9a4a32 },      // Rootsi-Mihkli kirik
